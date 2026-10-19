@@ -362,9 +362,16 @@ public sealed class BridgeServices
 ///     <see cref="NoSecretPolicy"/> and this is a no-op; the add-in's in-process host
 ///     passes a <see cref="ScopedSecretPolicy"/>, which is where <c>interference</c> is
 ///     actually withheld from general chat.
-///   * <see cref="ReadOnlyGuard"/> is asked about the command name, so a request that names
-///     a mutating API - <c>Save3</c>, <c>FeatureCut4</c> - is refused before anything runs.
-///     Everything the handlers then call goes through <c>SwGate</c>, which asks again.
+///   * the command name is judged against the bridge's own fixed set,
+///     <see cref="AnsweredCommands"/>, so a request that names anything else - a mutating API,
+///     <c>Save3</c> or <c>FeatureCut4</c>, above all - is refused as an unknown command before
+///     anything runs. Everything the handlers then call goes through <c>SwGate</c>, whose guard
+///     judges each interop member: the read-only guard, or for the <c>remodel.*</c> family
+///     <see cref="RemodelGuard"/>. *Amended 2026-10-19 (decision 140A)*: the name was handed to
+///     <see cref="ReadOnlyGuard"/> until then, which judges a qualified name by the part after the
+///     dot, so <c>remodel.close</c>, <c>remodel.save</c> and <c>remodel.rebuild</c> were judged as
+///     <c>Close</c>, <c>Save</c> and <c>Rebuild</c> and none of those members could be denied. A
+///     command name is not an interop member, and no guard sees one now.
 ///   * A <see cref="CircuitOpenError"/> becomes <c>circuit_open</c> rather than an error, so
 ///     the client can stop asking instead of retrying a dead session.
 ///   * The response carries the elapsed milliseconds, because a bridge call that took eight
@@ -392,6 +399,22 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// secret, a missing one, and a valid one asking for a command outside its scope.
     /// </summary>
     public const string UnauthorizedError = "unauthorized";
+
+    /// <summary>
+    /// Decision 140A (2026-10-19): every command this bridge answers - its own fixed set, the six
+    /// of <see cref="BridgeCommands.All"/> and the twelve of <see cref="RemodelCommands.All"/>, in
+    /// that order. <see cref="Dispatch"/> answers a name on this list and refuses any other as an
+    /// unknown command before anything runs.
+    /// </summary>
+    public static readonly IReadOnlyList<string> AnsweredCommands =
+        BridgeCommands.All.Concat(RemodelCommands.All).ToArray();
+
+    /// <summary>
+    /// Whether <paramref name="command"/> is one of <see cref="AnsweredCommands"/>, by exact,
+    /// ordinal name: no other case, no space around it, and no command for null.
+    /// </summary>
+    public static bool Answers(string? command) =>
+        command != null && AnsweredCommands.Contains(command, StringComparer.Ordinal);
 
     private readonly BridgeServices _services;
     private readonly ISecretPolicy _secrets;
@@ -501,11 +524,15 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 // named ever touches SOLIDWORKS. The secret itself is not echoed.
                 response = BridgeResponse.Failed(request.Id, UnauthorizedError);
             }
+            else if (!Answers(request.Command))
+            {
+                // Decision 140A: the name is judged here, against the bridge's own fixed set, and
+                // never handed to a guard - it is not an interop member. Anything else, a mutating
+                // API's name ("Save3") above all, is refused before any handler is looked up.
+                response = UnknownCommand(request);
+            }
             else
             {
-                // The guard sees the command name itself, so "command": "Save3" cannot reach
-                // a handler even if one were ever added for it.
-                ReadOnlyGuard.Assert(request.Command);
                 response = Run(request);
             }
         }
@@ -567,12 +594,18 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                     return Remodel(request);
                 }
 
-                return BridgeResponse.Failed(
-                    request.Id,
-                    $"Unknown command '{request.Command}'. This bridge answers "
-                    + string.Join(", ", BridgeCommands.All) + ".");
+                // Dispatch has refused every name outside AnsweredCommands already; this answers one
+                // of them that has no case above, rather than doing nothing.
+                return UnknownCommand(request);
         }
     }
+
+    /// <summary>The refusal of a name the bridge does not answer, naming the commands it does.</summary>
+    private static BridgeResponse UnknownCommand(BridgeRequest request) =>
+        BridgeResponse.Failed(
+            request.Id,
+            $"Unknown command '{request.Command}'. This bridge answers "
+            + string.Join(", ", BridgeCommands.All) + ".");
 
     private PingResult Ping() => new PingResult
     {

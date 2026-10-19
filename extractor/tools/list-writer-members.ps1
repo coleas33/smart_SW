@@ -64,8 +64,12 @@ $familyCount = $drawingFamilies.Count
 # interop declares - the COM twins (IOpenDoc*, IActivateDoc*, INew*) and bare LoadFile, LoadAddIn and
 # LoadAdminSettingsFile above all - is named below, and DocumentLifecycleFamilyTests (GuardTests.cs)
 # reflects the interop with the family grammar to prove the rows complete. The members left allowed
-# (OpenDoc6, OpenDoc7, CloseDoc, NewDocument, IModelDoc2's Close) are named as well, so the "Not
-# denied" table says why.
+# (OpenDoc6, OpenDoc7, CloseDoc, NewDocument) are named as well, so the "Not denied" table says why.
+#
+# Decision 140A (2026-10-19) refuses IModelDoc2's Close, which 136A had to leave allowed, and Save
+# and Rebuild, IModelDocExtension's Rebuild with them: the bridge judges its commands against its own
+# fixed set and no longer hands their names to ReadOnlyGuard, which had judged remodel.close,
+# remodel.save and remodel.rebuild by their member halves.
 $sharedRows = [ordered]@{
     'ISldWorks' = @(
         'ActivateDoc', 'ActivateDoc2', 'ActivateDoc3', 'DocumentVisible', 'CloseAllDocuments',
@@ -82,12 +86,14 @@ $sharedRows = [ordered]@{
     )
     'IModelDoc2' = @(
         'Close', 'Quit', 'FileReload', 'ReloadOrReplace', 'CloseFamilyTable', 'ClosePrintPreview',
-        'ActivateSelectedFeature', 'ActivateFeatureMgrView', 'DeActivateFeatureMgrView'
+        'ActivateSelectedFeature', 'ActivateFeatureMgrView', 'DeActivateFeatureMgrView',
+        'Save', 'Rebuild'
     )
     'IModelDocExtension' = @(
         'SetUserPreferenceInteger', 'SetUserPreferenceString', 'SetUserPreferenceDouble',
         'SetUserPreferenceTextFormat', 'LoadDraftingStandard', 'ReloadOrReplace', 'CloseMessageBar',
-        'CloseUserNotification'
+        'CloseUserNotification',
+        'Rebuild'
     )
 }
 
@@ -113,7 +119,6 @@ $exclusions = New-GuardExclusions $guard
 $exclusions['OpenDoc6'] = "the console attach's read-only open of a part or assembly (``SwSession.OpenReadOnly``), checked with ``IsOpenedReadOnly`` after it (decision 136A); the confirmed drawing's open calls the qualified key through its own allowlist guard (``contracts/confirmed-open.md``)"
 $exclusions['OpenDoc7'] = "feature 004's open of the re-modeler's own copy (``remodel.open``, a bare read call site under ``RemodelGuard``) and ``probe remodel``'s reopen of its throwaway part; found by the read audit (T003)"
 $exclusions['NewDocument'] = "``probe remodel``'s throwaway part (feature 004 T032, under ``RemodelProbeGuard``, which exempts only the members ``ReadOnlyGuard`` refused when it was written); found by the read audit (T003)"
-$exclusions['Close'] = "the member half of the bridge command ``remodel.close``: ``BridgeDispatcher.Dispatch`` hands every command name to ``ReadOnlyGuard``, which judges a qualified name by its member half, so denying the bare name would refuse that command (decision 136A, found by the remodel tests). No product path calls ``IModelDoc2.Close``; its qualified spelling is refused by the allowlist guards, ``RemodelGuard`` and ``DrawingOpenGuard``"
 
 function Test-AlreadyDenied([string] $name) {
     return (Test-DeniedBy $name $guard.BaseDenied $guard.BasePrefixes)

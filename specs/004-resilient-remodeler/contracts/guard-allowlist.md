@@ -18,7 +18,9 @@ this file enumerates. It is also exactly the workload that finds a denylist's ga
 `FeatureRevolve2`, `InsertMirrorFeature2`, `InsertPart3`, `SetSuppression2` and `IModelDoc2.Save`
 wide open. *Amended 2026-09-25*: the owner's decision 21A (below) closes the creation members among
 them; the argument stands, because a denylist still cannot enumerate a write surface, and
-`IModelDoc2.Save` is still open.
+`IModelDoc2.Save` is still open. *Amended 2026-10-19 (owner decision 140A)*: `IModelDoc2.Save` is
+refused now (feature 011's table, below); the argument still stands - `IFeatureManager.MoveToFolder`
+passes as a bare name - and none of this file's keys moves.
 
 **Stage 1 adds nothing to `ReadOnlyGuard`.** The four narrowing denials
 (`IFeature.SetSuppression2` exempted under `SuppressTestGuard`,
@@ -106,7 +108,7 @@ is the output of `extractor/tools/list-writer-members.ps1` over `SolidWorks.Inte
 with `-CSharp`. `DrawingFamilyDenylistTests` (in `GuardTests.cs`) parses the table below and
 `DrawingFamilyCompletenessTests` reflects the interop to prove it complete. The "Already denied"
 column names members an earlier feature (or a denied prefix) refuses; they are not added twice.
-673 names are new; 646 distinct names match the writer grammar on the 28 families.
+676 names are new; 646 distinct names match the writer grammar on the 28 families.
 
 | Members refused (feature 011) | Interface; already denied |
 |---|---|
@@ -133,15 +135,14 @@ column names members an earlier feature (or a denied prefix) refuses; they are n
 | `set_FitDisplayStyle`, `set_FitTextHeight`, `set_FitTextScale`, `set_FitUseTextScale`, `set_ShaftFit`, `set_ShowParenthesis`, `set_TextHeight`, `set_TextScale`, `set_ToleranceMax`, `set_ToleranceMin`, `set_ToleranceType`, `set_UseTextScale` | `ICalloutVariable`; already denied: `set_FitType`, `set_HoleFit` |
 | `set_Precision`, `set_TolerancePrecision` | `ICalloutLengthVariable`; already denied: - |
 | `ActivateDoc`, `ActivateDoc2`, `ActivateDoc3`, `ActivateTaskPane`, `AddFileOpenItem`, `AddFileOpenItem2`, `AddFileOpenItem3`, `CloseAllDocuments`, `CloseAndReopen`, `CloseAndReopen2`, `CloseUserNotification`, `CreateNewWindow`, `DocumentVisible`, `ExitApp`, `IActivateDoc`, `IActivateDoc2`, `IActivateDoc3`, `INewAssembly`, `INewDocument`, `INewDocument2`, `INewDrawing`, `INewDrawing2`, `INewPart`, `IOpenDoc`, `IOpenDoc2`, `IOpenDoc3`, `IOpenDoc4`, `IOpenDoc5`, `IOpenDocSilent`, `LoadAddIn`, `LoadAdminSettingsFile`, `LoadFile`, `LoadFile2`, `LoadFile3`, `LoadFile4`, `NewAssembly`, `NewDrawing`, `NewDrawing2`, `NewPart`, `OpenDoc`, `OpenDoc2`, `OpenDoc3`, `OpenDoc4`, `OpenDocSilent`, `OpenModelConfiguration`, `PresetNewDrawingParameters`, `QuitDoc`, `RemoveFileOpenItem`, `RemoveFileOpenItem2`, `RunAttachedMacro`, `RunCommand`, `RunJournalCmd`, `RunMacro`, `RunMacro2`, `SetNewFilename`, `UnloadAddIn` | `ISldWorks`; already denied: - |
-| `ActivateFeatureMgrView`, `ActivateSelectedFeature`, `CloseFamilyTable`, `ClosePrintPreview`, `DeActivateFeatureMgrView`, `FileReload`, `Quit`, `ReloadOrReplace` | `IModelDoc2`; already denied: - |
-| `CloseMessageBar`, `CloseUserNotification`, `LoadDraftingStandard`, `ReloadOrReplace`, `SetUserPreferenceDouble`, `SetUserPreferenceInteger`, `SetUserPreferenceString`, `SetUserPreferenceTextFormat` | `IModelDocExtension`; already denied: - |
+| `ActivateFeatureMgrView`, `ActivateSelectedFeature`, `Close`, `CloseFamilyTable`, `ClosePrintPreview`, `DeActivateFeatureMgrView`, `FileReload`, `Quit`, `Rebuild`, `ReloadOrReplace`, `Save` | `IModelDoc2`; already denied: - |
+| `CloseMessageBar`, `CloseUserNotification`, `LoadDraftingStandard`, `Rebuild`, `ReloadOrReplace`, `SetUserPreferenceDouble`, `SetUserPreferenceInteger`, `SetUserPreferenceString`, `SetUserPreferenceTextFormat` | `IModelDocExtension`; already denied: - |
 
 Interfaces of the 28 whose every writer was already denied: `IGtolFrame` (`AddIndicator`, `DeleteIndicator`, `SetFrameToleranceType`, `SetIndicator`, `SetSymbolXml`).
 Interfaces of the 28 with no writer on this interop: `IGeneralTableFeature`, `ITitleBlockTableFeature`, `IMultiJogLeader`, `ICalloutAngleVariable`, `ICalloutStringVariable`.
 
 | Not denied (feature 011) | Why |
 |---|---|
-| `Close` | the member half of the bridge command `remodel.close`: `BridgeDispatcher.Dispatch` hands every command name to `ReadOnlyGuard`, which judges a qualified name by its member half, so denying the bare name would refuse that command (decision 136A, found by the remodel tests). No product path calls `IModelDoc2.Close`; its qualified spelling is refused by the allowlist guards, `RemodelGuard` and `DrawingOpenGuard` |
 | `CloseDoc` | the bare name of feature 004's stage-1 allowlist key `ISldWorks.CloseDoc`; denying it would make that key override a read-only denial and move `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive` |
 | `NewDocument` | `probe remodel`'s throwaway part (feature 004 T032, under `RemodelProbeGuard`, which exempts only the members `ReadOnlyGuard` refused when it was written); found by the read audit (T003) |
 | `OpenDoc6` | the console attach's read-only open of a part or assembly (`SwSession.OpenReadOnly`), checked with `IsOpenedReadOnly` after it (decision 136A); the confirmed drawing's open calls the qualified key through its own allowlist guard (`contracts/confirmed-open.md`) |
@@ -387,7 +388,9 @@ and mates, `IFeature`). Among them, `IModelDoc2.Save`, `Save2`, `SaveAs`, `SaveA
 `SaveToFile2` and `SaveToFile3`, and the rebuilds `IModelDoc2.Rebuild`, `IModelDocExtension.Rebuild`
 and `EditRebuildAll` pass a read-only gate as bare names (`IPartDoc.ForceRebuild` and `EditRebuild`
 do not: feature 011 denies the bare names `IDrawingDoc` shares with them); they are recorded here for
-the owner, not closed. No product literal names one.
+the owner, not closed. No product literal names one. *Amended 2026-10-19 (owner decision 140A)*:
+`IModelDoc2.Save` and the rebuilds `IModelDoc2.Rebuild` and `IModelDocExtension.Rebuild` are
+refused now, by feature 011's table above (`011-drawing-context/research.md` R9).
 
 **None of them widens this allowlist either.** No member of the generated tables is the bare name
 of a stage-1 key or of `RemodelGuard.ExcludedMembers` (the generator excludes both, and the "Not

@@ -68,9 +68,20 @@ compares against.
 Unknown **top-level** fields are rejected (the same `additionalProperties: false` stance as
 the IR schema). Unknown fields inside `params` are ignored.
 
-Every request passes the read-only guard by command name before anything runs, and every
-SOLIDWORKS call underneath goes through `SwGate`, which asks the guard again. A command
-named after a mutating API (`Save3`, `FeatureCut4`, …) is refused with `status: "error"`.
+Every request's `command` is judged, before anything runs, against the host's own fixed set -
+the six commands below and the twelve `remodel.*` - by exact name, and any other is refused as
+an unknown command with `status: "error"` (the last table of this file). Every SOLIDWORKS call
+underneath goes through `SwGate`, whose guard judges the interop member it names: the read-only
+guard, or for the `remodel.*` family the allowlist guard of 004's
+`contracts/guard-allowlist.md`. A command named after a mutating API (`Save3`, `FeatureCut4`, …)
+is no command of the set, so it is refused. *Amended 2026-10-19 (owner decision 140A)*: until
+then the command name itself was handed to the read-only guard, which judges `a.b` by `b`, so
+`remodel.close`, `remodel.save` and `remodel.rebuild` were judged as `Close`, `Save` and
+`Rebuild`; a command name is not an interop member, and no guard sees one now. The commands
+answered are the same eighteen, and every name refused before is refused still; only the answer
+to one differs: "Unknown command", with `result: null`, where a name the guard denied was answered
+as a member that modifies the model - with `error_code: guard_refused` when it began `remodel.` -
+and an empty name with an `ArgumentException`.
 
 ### `secret` and the two scopes
 

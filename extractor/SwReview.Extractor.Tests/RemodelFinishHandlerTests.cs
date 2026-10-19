@@ -553,6 +553,42 @@ public class RemodelFinishHandlerTests : IDisposable
         Assert.Null(_harness.Services.RemodelRunRoot);
     }
 
+    // ---- the three commands named for a denied member (decision 140A) -----------------
+
+    /// <summary>
+    /// Decision 140A (2026-10-19): <c>remodel.rebuild</c>, <c>remodel.save</c> and
+    /// <c>remodel.close</c> end in <c>Rebuild</c>, <c>Save</c> and <c>Close</c>, which the read-only
+    /// guard now refuses. The dispatcher judges a command against its own set and never hands the
+    /// name to that guard, so the three still answer; and each write they make is judged where it
+    /// is made, by the gate the re-modeler calls through, under the stage-1 allowlist key that is the
+    /// 004 exception. The rebuild and the save need that key - the read-only guard refuses both - and
+    /// no write was refused.
+    /// </summary>
+    [Fact]
+    public void TheCommandsNamedForADeniedMemberAnswer_AndTheirWritesAreTheRemodelGuardsToJudge()
+    {
+        foreach (string half in new[] { "Rebuild", "Save", "Close" })
+        {
+            Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(half));
+        }
+
+        RemodelHarness.Ok<RemodelRebuildResult>(_harness.Dispatch(RemodelCommands.Rebuild, "{}"));
+        _harness.GeometryGate();
+        RemodelHarness.Ok<RemodelSaveResult>(
+            _harness.Dispatch(RemodelCommands.Save, RemodelHarness.SaveParams("pass")));
+        RemodelHarness.Ok<RemodelCloseResult>(_harness.Dispatch(RemodelCommands.Close, "{}"));
+
+        Assert.Empty(_harness.Observer.Refusals);
+        foreach (string key in new[] { "IModelDoc2.ForceRebuild3", "IModelDoc2.Save3", "ISldWorks.CloseDoc" })
+        {
+            Assert.Contains(key, _harness.Observer.Members);
+            Assert.Contains(key, RemodelGuard.AllowedKeys);
+        }
+
+        Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert("IModelDoc2.ForceRebuild3"));
+        Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert("IModelDoc2.Save3"));
+    }
+
     private static IReadOnlyDictionary<string, string> Detail(BridgeResponse response) =>
         Assert.IsType<RemodelErrorResult>(response.Result).Detail!;
 

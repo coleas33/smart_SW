@@ -14,8 +14,8 @@ namespace SwReview.Extractor.Guard;
 /// <c>InsertFeature</c> prefix while leaving <c>FeatureFillet3</c>, <c>FeatureRevolve2</c>,
 /// <c>InsertPart3</c> and <c>SetSuppression2</c>'s neighbours wide open. Decision 21A
 /// (2026-09-25) closed that creation family in <see cref="ReadOnlyGuard"/>, but a denylist still
-/// cannot enumerate a write surface: <c>IFeatureManager.MoveToFolder</c> and <c>IModelDoc2.Save</c>
-/// pass it as bare names.
+/// cannot enumerate a write surface: <c>IFeatureManager.MoveToFolder</c> passes it as a bare name,
+/// and so did <c>IModelDoc2.Save</c> until decision 140A (2026-10-19) refused it.
 ///
 /// Three answers, in this order:
 ///   1. a key on <see cref="AllowedKeys"/>, matched <b>ordinally</b> so a mis-spelling fails
