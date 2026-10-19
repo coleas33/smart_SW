@@ -1268,11 +1268,14 @@ public class DrawingFamilyReadAuditTests
             // command names, which the dispatcher judges against its own fixed set and hands to no
             // guard, and a session-end reason spelled as one of them; judged as a qualified key, each
             // matches the member by the part after the dot only.
-            ["remodel.close"] = "Bridge/BridgeProtocol.cs and Rms/RemodelSessionEnd.cs: the bridge command remodel.close "
-                + "and the session-end reason named after it, matching IModelDoc2.Close only by the part after the dot",
-            ["remodel.save"] = "Bridge/BridgeProtocol.cs: the bridge command remodel.save, matching IModelDoc2.Save only "
-                + "by the part after the dot",
-            ["remodel.rebuild"] = "Bridge/BridgeProtocol.cs: the bridge command remodel.rebuild, matching IModelDoc2.Rebuild "
+            ["remodel.close"] = "Bridge/BridgeProtocol.cs, Rms/RemodelSessionEnd.cs and Rms/RemodelInteropSurface.cs: the "
+                + "bridge command remodel.close, the session-end reason named after it, and the frozen interop manifest's "
+                + "used_by column naming that command, matching IModelDoc2.Close only by the part after the dot",
+            ["remodel.save"] = "Bridge/BridgeProtocol.cs and Rms/RemodelInteropSurface.cs: the bridge command remodel.save "
+                + "and the frozen interop manifest's used_by column naming it, matching IModelDoc2.Save only by the part "
+                + "after the dot",
+            ["remodel.rebuild"] = "Bridge/BridgeProtocol.cs and Rms/RemodelInteropSurface.cs: the bridge command "
+                + "remodel.rebuild and the frozen interop manifest's used_by column naming it, matching IModelDoc2.Rebuild "
                 + "and IModelDocExtension.Rebuild only by the part after the dot",
 
             // The same decision: lower-case words the product uses for something else.

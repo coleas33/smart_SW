@@ -511,10 +511,13 @@ public class CreationFamilyReadAuditTests
 
     /// <summary>
     /// Literals the scan finds that the tables refuse and that call nothing, each with where it is and
-    /// why. Keyed case-insensitively, as the guard matches.
+    /// why. Keyed exactly, since decision 140A (2026-10-19; it was case-insensitively, as the guard
+    /// matches): the lower-case <c>scale</c>, a JSON property name, must not exempt a gated
+    /// <c>Scale</c>, which the tables refuse in every case. The key was already a literal spelled
+    /// exactly (<see cref="EveryNamedLiteralIsStillInTheSourceAndStillRefused"/>), so this exempts less.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> NamedLiterals =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["scale"] = "Ir/DrawingSheet.cs: a JSON property name, matching IModelDoc2.Scale only by case (T169)",
         };
