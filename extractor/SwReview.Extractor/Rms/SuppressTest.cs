@@ -303,8 +303,10 @@ public sealed class SuppressTest
     /// <summary>
     /// The refusal for a document the engineer has not opened, said in one place.
     ///
-    /// The extractor's only file-opening call is <c>SwSession.OpenReadOnly</c>, which opens
-    /// read-only and silent so a dump can never change a reviewed model. That is the wrong
+    /// <c>SwSession.Attach</c> opens a named part or assembly that is not open through
+    /// <c>SwSession.OpenReadOnly</c>, read-only and silent so a dump can never change a
+    /// reviewed model; it is one of the extractor's file-opening calls, not the only one
+    /// (decision 137A). That is the wrong
     /// door for this command: a read-only document answers false to every
     /// <c>SetSuppression2</c>, so the run would record <c>not_applied</c> for every planned
     /// feature, rebuild nothing, restore nothing - and it would have opened the engineer's

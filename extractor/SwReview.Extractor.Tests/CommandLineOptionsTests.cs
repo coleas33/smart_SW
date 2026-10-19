@@ -688,8 +688,8 @@ public class CommandLineOptionsTests
     [Fact]
     public void StandardsProbe_RefusesADocumentThatIsNotAlreadyOpen()
     {
-        // SwSession.Attach would otherwise OPEN the named document read-only - the
-        // extractor's one file-opening call - and contracts/cli.md says this run opens no
+        // SwSession.Attach would otherwise OPEN the named document read-only - the console
+        // attach's open, SwSession.OpenReadOnly - and contracts/cli.md says this run opens no
         // document. The refusal names the document and says why, before SOLIDWORKS is asked
         // for anything else.
         string message = Program.StandardsProbeDocumentNotOpenMessage(@"C:\vault\frame.SLDDRW");
