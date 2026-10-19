@@ -461,6 +461,12 @@ public class SwReviewAddIn : ISwAddin
             _pane.ReviewChannel, _backend, UserSettings.DefaultPath)
         {
             CurrentDocument = CurrentDocument,
+
+            // Owner decision 143A: a restart for settings saved during a turn waits for a remodel
+            // run too, which it would end. Read through the field: the Remodel host is built
+            // after these options, and one that has gone runs nothing.
+            BackendBusy = () => _remodelHost?.RunInProgress == true,
+
             DrawingModels = DrawingModels,
             Dump = reviewDump,
             PrepareReview = reviewDump.Prepare,

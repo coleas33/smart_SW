@@ -5,7 +5,8 @@ namespace SwReview.AddIn.Review;
 
 /// <summary>
 /// Owner decision 143A: the backend restart a settings save could not make because a turn was
-/// running, made as soon as no turn runs, with the settings in force at that moment.
+/// running, made as soon as nothing holds it back - no turn runs, and no other work the restart
+/// would end - with the settings in force at that moment.
 ///
 /// <b>Why it exists.</b> `settings.save` asks whether a turn is running before it writes
 /// anything, and <see cref="BackendSupervisor.Restart"/> asks again before it stops the old
@@ -15,7 +16,7 @@ namespace SwReview.AddIn.Review;
 /// engineer the backend restarts when that turn ends; this is what restarts it.
 ///
 /// <b>One restart, whoever asks.</b> Three callers can carry it out, and each goes through
-/// <see cref="Apply"/>: the watcher, which asks every poll whether a turn still runs; a review
+/// <see cref="Apply"/>: the watcher, which looks every poll at what holds it back; a review
 /// the host is about to start, which must run on the restarted backend and never on the old
 /// one; and a page call that would start a turn on a chat of the old backend. <see cref="Apply"/>
 /// holds one lock for the whole restart and asks again, once it has it, whether a restart is
@@ -25,7 +26,7 @@ namespace SwReview.AddIn.Review;
 /// and that restart is the one for the settings in force, so anything still waiting is dropped.
 ///
 /// <b>Nothing waits for a turn.</b> <see cref="Apply"/> answers <see cref="Outcome.TurnRunning"/>
-/// at once while one runs; the only thing a caller waits for is a restart already being made,
+/// at once while something holds the restart back; the only thing a caller waits for is a restart already being made,
 /// which the backend's own start timeouts bound. <see cref="Dispose"/> stops the watcher without
 /// waiting for a restart in flight, and nothing is restarted after it.
 /// </summary>
@@ -43,7 +44,10 @@ internal sealed class DeferredRestart : IDisposable
         /// <summary>This call restarted the backend with the settings in force.</summary>
         Restarted,
 
-        /// <summary>A turn is running: nothing was changed, and the restart still waits.</summary>
+        /// <summary>
+        /// Something holds the restart back - a turn running, or other work the restart would
+        /// end - or the backend's own check found a turn: nothing was changed, and it still waits.
+        /// </summary>
         TurnRunning,
 
         /// <summary>
@@ -62,7 +66,7 @@ internal sealed class DeferredRestart : IDisposable
     /// </summary>
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(2);
 
-    private readonly Func<bool> _anyTurnRunning;
+    private readonly Func<bool> _heldBack;
     private readonly Action _restart;
     private readonly Action _restarted;
     private readonly Action<Exception> _failed;
@@ -81,23 +85,27 @@ internal sealed class DeferredRestart : IDisposable
     private bool _disposed;
     private Thread? _watcher;
 
-    /// <param name="anyTurnRunning">Whether any chat has a turn running; never throws.</param>
+    /// <param name="heldBack">Whether anything holds the restart back - a turn running, or other
+    /// work on the backend the restart would end; never throws.</param>
     /// <param name="restart">Restarts the backend with the settings in force when it is called.
     /// Throws <see cref="TurnRunningException"/> when the backend's own check finds a turn, and
     /// anything else when the restart fails.</param>
     /// <param name="restarted">Tells the page the backend was replaced.</param>
     /// <param name="failed">Tells the engineer why the restart failed.</param>
-    /// <param name="poll">How often the watcher asks whether a turn still runs.</param>
+    /// <param name="poll">How often the watcher looks at what holds the restart back.</param>
     public DeferredRestart(
-        Func<bool> anyTurnRunning, Action restart, Action restarted, Action<Exception> failed, TimeSpan poll)
+        Func<bool> heldBack, Action restart, Action restarted, Action<Exception> failed, TimeSpan poll)
     {
-        _anyTurnRunning = anyTurnRunning ?? throw new ArgumentNullException(nameof(anyTurnRunning));
+        _heldBack = heldBack ?? throw new ArgumentNullException(nameof(heldBack));
         _restart = restart ?? throw new ArgumentNullException(nameof(restart));
         _restarted = restarted ?? throw new ArgumentNullException(nameof(restarted));
         _failed = failed ?? throw new ArgumentNullException(nameof(failed));
-        if (poll <= TimeSpan.Zero)
+        // Refused here rather than met as an exception from Monitor.Wait on the watcher's thread,
+        // where it would end SOLIDWORKS.
+        if (poll <= TimeSpan.Zero || poll.TotalMilliseconds > int.MaxValue)
         {
-            throw new ArgumentOutOfRangeException(nameof(poll), poll, "the poll must be positive");
+            throw new ArgumentOutOfRangeException(
+                nameof(poll), poll, "the poll must be positive and no longer than a wait can take");
         }
 
         _poll = poll;
@@ -176,7 +184,7 @@ internal sealed class DeferredRestart : IDisposable
         bool running;
         try
         {
-            running = _anyTurnRunning();
+            running = _heldBack();
         }
         catch (Exception)
         {

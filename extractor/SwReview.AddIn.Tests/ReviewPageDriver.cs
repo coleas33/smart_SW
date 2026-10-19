@@ -575,14 +575,18 @@ var h = {
     /// <summary>How many `ready` messages are held, unanswered.</summary>
     public int HeldReady => _heldReady.Count;
 
-    /// <summary>Answers every held `ready`, in order, with the `init` the host would give now.</summary>
-    public async Task ReleaseReady()
+    /// <summary>
+    /// Answers every held `ready`, in order, with the `init` the host would give now - or, with
+    /// <paramref name="backendUp"/> false, the one it gives while a restart is being made, when
+    /// there is no backend to name: no endpoint and no token.
+    /// </summary>
+    public async Task ReleaseReady(bool backendUp = true)
     {
         Assert.NotEmpty(_heldReady);
         HoldReady = false;
         while (_heldReady.Count > 0)
         {
-            Reply("init", _heldReady.Dequeue(), Init());
+            Reply("init", _heldReady.Dequeue(), Init(backendUp));
         }
 
         await OffscreenReviewPage.Settled(Page);
@@ -743,10 +747,14 @@ var h = {
     private void Reply(string type, string id, object payload) =>
         Page.PostWebMessageAsJson(JsonSerializer.Serialize(new { type, id, payload }));
 
-    private object Init() => new
+    /// <summary>
+    /// The `init` the host answers `ready` with; with <paramref name="backendUp"/> false, the one
+    /// it answers while a restart is being made, with no backend and no token to name.
+    /// </summary>
+    private object Init(bool backendUp = true) => new
     {
-        backend = new { port = 51999, origin = Origin },
-        token = BackendToken,
+        backend = backendUp ? new { port = 51999, origin = Origin } : null,
+        token = backendUp ? BackendToken : null,
         settings = Settings(),
         key_source = KeySource,
         engineering_context = ContextPrepared != null,

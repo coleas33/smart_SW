@@ -295,9 +295,10 @@ public sealed class BackendProxyHandlerTests
 
     /// <summary>
     /// Nothing else is asked about. Stop must reach the backend while a turn holds a restart back
-    /// - the restart waits for that turn - and a disposition or the timing is a write to the
-    /// review the turn produced, which the restart must not cost the engineer. `POST /sessions`
-    /// starts a turn too, but the host is its only caller and makes it wait itself.
+    /// - the restart waits for that turn - and a disposition or the timing is the engineer's
+    /// write to the review the turn produced: sent now, before the restart, it is recorded, and
+    /// held until after it, it would only be refused. `POST /sessions` starts a turn too, but
+    /// the host is its only caller and makes it wait itself.
     /// </summary>
     [Theory]
     [InlineData("GET", "/sessions/chat-1/snapshot")]

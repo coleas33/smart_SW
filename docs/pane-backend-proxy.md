@@ -157,6 +157,12 @@ Decisions baked into the handler, each with a test:
 - **`/events` is refused with 501 `StreamNotProxyable`** rather than half-served.
 - **No backend yet, and transport failures, answer in the pages' own
   `{error_class, message, retryable}` shape**, so no page needs a new branch.
+- **A call that would start a turn is not sent while the backend waits to be restarted** with
+  settings saved during a turn: a `POST` to `/sessions/{chat_id}/messages`, `/send`,
+  `/evidence` or `/evidence/{request_id}` is for a chat of the backend being replaced, so the
+  review host answers it (`TaskPaneOptions.PageTurnRefusal`), in the same shape and with the
+  status the backend itself would give. Stop and every other call are sent as before (amended
+  2026-10-19, owner decision 143A).
 - **`HttpWebRequest`, not `HttpClient`** - matching `Review/BackendClient.cs`, whose comment
   gives the reason that matters here: it "can be told not to consult the corporate proxy
   for 127.0.0.1". `System.Net.Http` is also not referenced by this project.

@@ -191,7 +191,9 @@
     reconnectDelay: RECONNECT_MIN,
     initPending: false,
     // A `backend.restarted` arrived while an `init` was on its way: ask once more after it.
-    initAgain: false
+    initAgain: false,
+    // A `backend.restarted` arrived and no `init` has named the new backend yet.
+    backendReplaced: false
   };
 
   var ui = {};
@@ -284,6 +286,7 @@
         // so, so the page asks again, as after a save that restarted it at once - after the
         // `init` already on its way, if there is one, since the host may have read that before
         // the new child was up. The banner's sentence that it would restart is done with.
+        state.backendReplaced = true;
         showBanner('');
         if (state.initPending) {
           state.initAgain = true;
@@ -3031,7 +3034,14 @@
       // Another token is another backend (a Settings save, or a restart after it stopped): no
       // chat of the old one survives. A live waiting review on screen is restored from its folder
       // at once, read-only with Send offered (feature 015 FR-042, contracts/pane.md section 7).
-      var restarted = !!heldToken && !!payload.token && payload.token !== heldToken;
+      // `backend.restarted` says so as well (owner decision 143A), and is believed even when the
+      // `init` before this one was read while there was no backend, and so carried no token to
+      // compare: it is kept until an `init` names the new backend.
+      var restarted = !!payload.token
+        && (state.backendReplaced || (!!heldToken && payload.token !== heldToken));
+      if (payload.token) {
+        state.backendReplaced = false;
+      }
       var waiting = restarted && !!state.chatId && state.readOnly === null && waitingForSend()
         && !state.sending && !state.sendPending;
       state.providers = payload.providers || state.providers;
@@ -3055,6 +3065,14 @@
         var shown = state.chatId;
         state.chatId = null;
         showReview(shown);
+      } else if (state.stream && !restarted) {
+        // A `ready` also makes the host close the event reader it holds for this page - that is
+        // how a page that reloads drops a stream it no longer shows - but this page did not
+        // reload. Reading a stream, it asks for it again from the last event it showed, on the
+        // same backend: a re-init while a turn runs - after a save that turn started during
+        // (owner decision 143A) - must not cost the page the rest of the turn. A new backend
+        // does not hold the chat, so nothing is asked of it.
+        openStream();
       }
       // The reviews the host kept for this SOLIDWORKS session, and - a page reloaded with one of
       // them open - that review shown again (contracts/sessions.md sections 5 and 6).
