@@ -120,12 +120,11 @@ from swreview.checks.rms.run import (
     RmsCheckRun,
     RmsRunError,
     RmsScope,
-    is_check_folder,
     read_rms_check,
     run_rms_check,
 )
 from swreview.checks.rules.family import waiver_invalidity
-from swreview.checks.rules.run import CHECK_FILE_NAME, check_record
+from swreview.checks.rules.run import CHECK_FILE_NAME, check_record, is_check_folder
 from swreview.checks.standards.profile import SETTING_NAME, ProfileError, ProfileUnreadable
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
 from swreview.checks.standards.registry import STANDARDS_FAMILY
@@ -227,7 +226,8 @@ class ChatError(Exception):
 
 
 class InvalidRunDir(ChatError):
-    """`run_dir` broke the path rule (`chat-api.md`, Path rule for `run_dir`)."""
+    """`run_dir` broke the path rule (`chat-api.md`, Path rule for `run_dir`), or holds a
+    session this start may not write over: a review's, or a check's (`_claim_run_dir`)."""
 
     error_class = "InvalidRunDir"
 
@@ -2156,6 +2156,14 @@ class ChatServer:
         being written over, and the folder stops answering `GET /checks/{check_id}`
         because its `check.json` no longer names the session that is in it.
 
+        That exception is a start's, and the rms family's alone (owner decision 142A). A
+        Retry is refused on a check's folder of every family, which holds no review session
+        for it to replace, and a start on a Standards check's folder, which feature 007 left
+        unclaimable (its FR-021 names the rms check's folder only): one 400 with one wording
+        from both routes. `is_check_folder` knows every family's folder, and the family is
+        the record's own, as `GET /checks/{check_id}` reads it; the re-modeler's grade is an
+        rms record, so a start claims it as it claims a Model check's folder.
+
         A re-run (feature 015, `recheck`; `contracts/recheck.md` section 2) re-runs a waiting
         review's checks in its own folder, so the session it holds is its point, not a
         refusal. A live chat on the folder that waits for Send is **adopted** and returned,
@@ -2180,7 +2188,18 @@ class ChatServer:
             )
         if recheck:
             return None
-        if retry_of is None and _session_files(run_dir) and not is_check_folder(run_dir):
+        if not _session_files(run_dir):
+            return None
+        if is_check_folder(run_dir):
+            family = self._family_of(run_dir)
+            if retry_of is None and family == RMS_FAMILY.check_file_family:
+                return None
+            raise InvalidRunDir(
+                f"{run_dir} holds the {family} check that ran in it and no review session: "
+                "a Retry replaces only a review's session, and only a Model check's folder "
+                "is handed to a new review; review into a new run folder"
+            )
+        if retry_of is None:
             raise InvalidRunDir(
                 f"{run_dir} already holds a review session; retry it with 'retry_of' or "
                 f"review into a new run folder"

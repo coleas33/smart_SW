@@ -334,3 +334,112 @@ tests and the new `TheFallbackSentenceNamesTheTabsItIsGivenInTheirOrder` - and a
 it. `contracts/pane-host-messages.md` ("The step strip") carries the dated amendment. FR-001
 still names an Ask tab and the step "review or ask"; it predates the 2026-09-19 decision that
 hid the tab and is not amended here.
+
+### 142A. A Retry replaces only the session its folder holds, and never a check's (2026-10-19)
+
+- **Question**: `POST /sessions` refuses a run folder that already holds a session
+  (`events.jsonl` or `session.json`) "unless this request is the Retry that replaces it", and
+  lets a start claim the folder a Model check wrote (feature 003 User Story 6 scenario 11;
+  feature 007 FR-021). Fixing 139A found three gaps in that rule (`chat/server.py`,
+  `_claim_run_dir`): it looked at the folder only when `retry_of` was absent, so any `retry_of`
+  claimed any folder under the run root, rotating the session there aside and writing a review
+  in its place, a check's included; `retry_of` was never compared with the session the folder
+  held, so a Retry could name any chat, or an id no chat ever had; and `is_check_folder` read a
+  folder through the rms record, so a Standards check's folder was no check to it. Before the
+  change (verified by running it at `ca7a720`):
+
+  | Folder | A start, without `retry_of` | A Retry, any `retry_of` |
+  |---|---|---|
+  | A Model check's (rms) | claimed: the check's session rotated aside | claimed |
+  | The re-modeler's grade, `rms-before/` or `rms-after/` (the rms record `run_rms_check` writes) | claimed, as a Model check's | claimed |
+  | A Standards check's | `400 InvalidRunDir`, "already holds a review session; retry it with 'retry_of'" | claimed |
+  | A review's | `400 InvalidRunDir` | claimed, whatever chat it named |
+
+- **Chosen** (the owner's option "Fix, test first"):
+  1. **A Retry is refused on a check's folder of every family, and so is a start on a
+     Standards check's folder**, with one `400 InvalidRunDir` and one wording from both
+     routes: "`<run_dir>` holds the `<family>` check that ran in it and no review session: a
+     Retry replaces only a review's session, and only a Model check's folder is handed to a new
+     review; review into a new run folder". A start still claims an rms check's folder, which
+     features 003 and 007 require. `is_check_folder` moves to `checks/rules/run.py`, the
+     run-folder machinery every family shares, and asks only whether `check.json` names the
+     `session.json` beside it; `checks/rms/run.py` re-exports it. The family comes off the
+     record, as `GET /checks/{check_id}` reads it, so a start's exception is the rms family's
+     by name rather than by which family's record `is_check_folder` happened to read.
+  2. **A Retry claims a folder that holds a session only for the chat that wrote it**
+     (`_require_retried`). `retry_of` is a `chat_id` (`contracts/chat-api.md`), which no file
+     in the folder records, so the chat must be one this backend holds: none by that id is
+     `404 UnknownChat`; one that reviewed another folder, or whose review session a session
+     file in the folder does not belong to (`session.json`'s record, the session
+     `events.jsonl` opens with), is `409 RunDirInUse`, naming each such file. A folder with no
+     session file is claimed by any start, as before.
+
+  After it:
+
+  | Folder | A start, without `retry_of` | A Retry |
+  |---|---|---|
+  | A Model check's | claimed (unchanged) | `400 InvalidRunDir`, the check's wording |
+  | The re-modeler's grade | claimed (unchanged) | `400 InvalidRunDir`, the check's wording |
+  | A Standards check's | `400 InvalidRunDir`, the check's wording | the same body |
+  | A review's | `400 InvalidRunDir` (unchanged) | claimed for the chat that wrote it; `404 UnknownChat` for a chat this backend does not hold; `409 RunDirInUse` for any other |
+  | One that holds no session file | claimed (unchanged) | claimed (unchanged) |
+
+- **Why**: a Retry exists to replace one failed session (FR-028). A check's folder holds no
+  review session, and a review's folder holds one, its own chat's, which is the only one a
+  Retry may move aside. "As any start is", in the decision's words, holds for a Standards
+  check's folder only: a start claims an rms check's folder on purpose, so there a Retry is
+  refused and a start is not.
+- **Why these errors**: the decision named a start's 400 for a check's folder. For the second
+  item `contracts/chat-api.md` named no error, and is amended. Two existing classes were taken
+  rather than a new one: every error class needs a next-step sentence in
+  `report/review_words_v1.yaml` (`test_review_words.py`), whose labels the add-in's pane
+  fixtures carry byte for byte (`test_pane_fixture.py`), and nothing under `extractor/` is
+  changed here. `UnknownChat`'s sentence ("This review is no longer held by the backend. Press
+  Review to start a new one.") is the engineer's next step after a restart, and `RunDirInUse`
+  already says that a folder is another chat's, its sentence ending "or press Review for a new
+  one".
+- **Edge cases**, each decided and tested in `tests/unit/test_chat_server.py`:
+  - a folder holding only `events.jsonl` (its record never written, or removed) or only
+    `session.json` (its stream removed): the file it holds decides, and a Retry of its chat
+    claims it;
+  - a session file that cannot be read, or that belongs to another session: `409
+    RunDirInUse` naming the file; nothing is guessed through and nothing moves;
+  - a folder already rotated, a Retry of a Retry: only the latest attempt's chat can be
+    retried. Naming the attempt it replaced, whose session is `session.1.json` by then, is
+    `409`; the latest still rotates its own to index 2;
+  - concurrent Retries of one chat: the claim runs on the event loop with no await before the
+    folder is reserved, so the second meets the first's reservation or its live chat (`409
+    RunDirInUse`, unchanged), and once that one ends, a folder that holds its session (`409`):
+    the folder rotates once;
+  - case and format of `retry_of`: it is read as a uuid (`_uuid`), so upper case, braces, a
+    `urn:uuid:` prefix or no hyphens name the same chat; a value that is no uuid (blank,
+    padded, a number, a boolean) is `400 InvalidRequest` before the folder is looked at, and an
+    empty string is no Retry, which meets a start's refusal. The ids in the folder's files are
+    compared as this backend writes them, as `_rotate_kept` compares them;
+  - a start that failed after writing its stream (feature 015's cache or finalization
+    failure) registered no chat, so a Retry naming it is `404 UnknownChat` and its stream stays
+    where it is;
+  - a Retry into a folder holding no session file, naming a chat this backend does not hold -
+    the pane's own Retry after a restart - is claimed as before and records no `retry_of`.
+- **What it costs**: chats live only in the backend's memory, so a restarted backend (a
+  settings save restarts it) cannot tie any folder to a chat, and a Retry that reuses its
+  failed chat's folder - a context review's, owner decision 108A - is `404 UnknownChat` after
+  one, with nothing moved; the engineer starts a new review. The pane's own Retry extracts into
+  a new folder and is not affected. Keeping 108A's Retry across a restart needs the folder to
+  record which chat wrote it, or `retry_of` to accept the review session id the folder records,
+  which the add-in would then send; both are left to the owner.
+- **The command line is not changed.** `swreview review --out` has no Retry and no claim rule
+  at all: it writes `session.json` and `report.md` into the directory it is given, and appends
+  to its `events.jsonl`, whether that holds a check's session, a review's or nothing. A refusal
+  for one kind of folder would be a new rule in a command that protects none, so the decision's
+  rule does not plainly belong there; 139A records that the command writes over a standards
+  folder's session (001 `contracts/cli.md`).
+- **Noticed, not changed**: `InvalidRunDir`'s sentence in the words file ("The run folder is not
+  inside the run root. Check the run root in Settings.") fits the path rule and not a folder
+  that holds a session; changing it regenerates the add-in's pane fixtures. A start still claims
+  the re-modeler's grade folders, as rms records: the grade's session rotates aside, its
+  `report.md` is written over by the review's, and the run's `rms-before.json` or
+  `rms-after.json` then names the review's files. `GET /reviews/{run_id}` refuses any folder
+  holding `check.json`, so a review that claimed a Model check's folder is not restored
+  read-only.
+- **Tests**: T074 and T076 in [tasks.md](tasks.md), each written first.
