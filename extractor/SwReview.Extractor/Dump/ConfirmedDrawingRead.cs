@@ -106,16 +106,16 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
 
         // Decision 136A's review, as decision 141A keeps it: once the session's opens that left no
         // record reach the limit on their own it can open nothing more, so a request is refused
-        // before the package is loaded and SOLIDWORKS is asked one thing - whether the drawing beside
-        // the document is open, by the document's path as the session last loaded it. A drawing
-        // already open goes on to be read, since reading it opens nothing, and a document the session
-        // knows no candidate for goes on to every rule below. Below the limit, step 5 counts the
-        // opens with the package's records.
+        // before the package is loaded and SOLIDWORKS is asked one thing - whether the document's
+        // candidate drawing is open, by the very path the seam would look up, as the session last
+        // loaded or merged its package. A drawing already open goes on to be read, since reading it
+        // opens nothing, and a document the session knows no candidate for goes on to every rule
+        // below. Below the limit, step 5 counts the opens with the package's records.
         int unrecorded = session.UnrecordedOpens;
         if (unrecorded >= OpenDrawingDiscovery.MaxAttachedDrawings)
         {
-            string? model = session.CandidateModelPath(documentId);
-            if (model != null && !_open.IsOpen(OpenDrawingDiscovery.CandidatePath(model)))
+            string? drawing = session.CandidateDrawingPath(documentId);
+            if (drawing != null && !_open.IsOpen(drawing))
             {
                 throw new ConfirmedDrawingRefused(LimitReached(Opens(unrecorded, string.Empty)));
             }

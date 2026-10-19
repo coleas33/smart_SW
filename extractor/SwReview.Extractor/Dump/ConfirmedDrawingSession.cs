@@ -7,7 +7,7 @@ namespace SwReview.Extractor.Dump;
 /// <summary>
 /// Feature 011, decision 141A (2026-10-19): what <see cref="ConfirmedDrawingRead"/> keeps for one
 /// review session - its run folder, the opens it attempted that left no drawing record, and the
-/// path of each part or assembly with a candidate row in the package it last loaded.
+/// candidate drawing of each part or assembly in the package it last loaded.
 ///
 /// The host makes one for every review session it starts (the add-in's <c>SessionRecord</c>, which
 /// holds it for as long as it holds the record) and hands it to the read through its own records:
@@ -20,7 +20,7 @@ public sealed class ConfirmedDrawingSession
 {
     private readonly object _lock = new object();
     private int _unrecordedOpens;
-    private IReadOnlyDictionary<string, string> _candidateModels = new Dictionary<string, string>();
+    private IReadOnlyDictionary<string, string> _candidateDrawings = new Dictionary<string, string>();
 
     /// <param name="runFolder">The review's run folder, which holds its package.</param>
     public ConfirmedDrawingSession(string runFolder)
@@ -56,53 +56,59 @@ public sealed class ConfirmedDrawingSession
     }
 
     /// <summary>
-    /// Remembers, from <paramref name="package"/> as the read just loaded or merged it, the path of
-    /// every part or assembly that has a candidate row, by document id - in place of what the session
-    /// last remembered. Once the session's failed opens alone reach the limit, the read asks SOLIDWORKS
-    /// whether the drawing beside such a document is open without loading the package again: its
-    /// candidate rows only ever go, and its drawings only ever come. A package that holds ten drawings
-    /// leaves nothing to remember, since every request then meets the ten-records bound, which is the
-    /// read's to say once the package is loaded.
+    /// Remembers, from <paramref name="package"/> as the read just loaded or merged it, the candidate
+    /// drawing of every part or assembly, by document id: the path of the first candidate row the
+    /// document has, which is the row the read takes and the very path the seam would look up - in
+    /// place of what the session last remembered. Once the session's failed opens alone reach the
+    /// limit, the read asks SOLIDWORKS whether that drawing is open without loading the package
+    /// again: its candidate rows only ever go, and its drawings only ever come. A package that holds
+    /// ten drawings leaves nothing to remember, since every request then meets the ten-records bound,
+    /// which is the read's to say once the package is loaded.
     /// </summary>
     internal void Remember(EvidencePackage package)
     {
-        var models = new Dictionary<string, string>(StringComparer.Ordinal);
+        var drawings = new Dictionary<string, string>(StringComparer.Ordinal);
         if ((package.DrawingRecords?.Count ?? 0) < OpenDrawingDiscovery.MaxAttachedDrawings)
         {
-            var candidates = new HashSet<string>(StringComparer.Ordinal);
-            foreach (DrawingCandidate row in package.DrawingCandidates ?? new List<DrawingCandidate>())
-            {
-                candidates.Add(row.DocumentId);
-            }
-
+            // The first document and the first candidate row of an id, as the read takes them.
+            var kinds = new Dictionary<string, DocumentKind>(StringComparer.Ordinal);
             foreach (Document document in package.Documents)
             {
-                if ((document.Kind == DocumentKind.Part || document.Kind == DocumentKind.Assembly)
-                    && !string.IsNullOrEmpty(document.DocumentId)
-                    && !string.IsNullOrWhiteSpace(document.Path)
-                    && candidates.Contains(document.DocumentId)
-                    && !models.ContainsKey(document.DocumentId))
+                if (!string.IsNullOrEmpty(document.DocumentId) && !kinds.ContainsKey(document.DocumentId))
                 {
-                    models.Add(document.DocumentId, document.Path);
+                    kinds.Add(document.DocumentId, document.Kind);
+                }
+            }
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (DrawingCandidate row in package.DrawingCandidates ?? new List<DrawingCandidate>())
+            {
+                if (!string.IsNullOrEmpty(row.DocumentId)
+                    && seen.Add(row.DocumentId)
+                    && kinds.TryGetValue(row.DocumentId, out DocumentKind kind)
+                    && (kind == DocumentKind.Part || kind == DocumentKind.Assembly)
+                    && !string.IsNullOrWhiteSpace(row.Path))
+                {
+                    drawings.Add(row.DocumentId, row.Path);
                 }
             }
         }
 
         lock (_lock)
         {
-            _candidateModels = models;
+            _candidateDrawings = drawings;
         }
     }
 
     /// <summary>
-    /// The path of the part or assembly <paramref name="documentId"/> names when the package the
-    /// session last loaded holds it with a candidate row; otherwise null.
+    /// The candidate drawing's path of the part or assembly <paramref name="documentId"/> names, as
+    /// the package the session last loaded or merged holds it; otherwise null.
     /// </summary>
-    internal string? CandidateModelPath(string documentId)
+    internal string? CandidateDrawingPath(string documentId)
     {
         lock (_lock)
         {
-            return _candidateModels.TryGetValue(documentId, out string? path) ? path : null;
+            return _candidateDrawings.TryGetValue(documentId, out string? path) ? path : null;
         }
     }
 }

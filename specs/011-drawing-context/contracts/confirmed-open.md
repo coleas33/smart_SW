@@ -116,10 +116,10 @@ opening nothing, when any step fails:
    with the limit's sentence at its lookup (section 3), before anything is hidden or opened, and
    still reads a drawing that lookup finds open. **The early refusal stays**: once a session's
    failed opens alone reach ten, a candidate whose drawing is not open is refused before the
-   package is loaded, SOLIDWORKS asked only whether that drawing is open - the drawing beside the
-   document, by the document's path in the package as the session last loaded or merged it; a
-   document the session knows no candidate for meets every rule above, and a package already
-   holding ten drawings meets the ten-records sentence. **The refusal says how to go on**: both
+   package is loaded, SOLIDWORKS asked only whether that drawing is open - by the very path the
+   seam would look up, the document's first candidate row's, in the package as the session last
+   loaded or merged it; a document the session knows no candidate for meets every rule above, and a
+   package already holding ten drawings meets the ten-records sentence. **The refusal says how to go on**: both
    limit sentences end "; a drawing already open in SOLIDWORKS is still read, since reading it
    opens nothing, and a new review session (Retry or Recheck) starts its own count", and are said
    only while the package holds fewer than ten drawings, so both ways on are true when they are

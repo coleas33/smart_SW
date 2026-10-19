@@ -752,6 +752,31 @@ public class ConfirmedDrawingReadTests : IDisposable
     }
 
     /// <summary>
+    /// The early refusal asks SOLIDWORKS about the very path the seam would read: the candidate
+    /// row's own, which may spell the drawing beside the document otherwise than discovery's rule
+    /// writes it. A drawing open under that spelling is read, never refused before the package is
+    /// loaded.
+    /// </summary>
+    [Fact]
+    public void TheEarlyLookIsOfTheCandidateRowsOwnPath()
+    {
+        const string spelledOtherwise = @"C:\Fictional\bracket\sub\..\housing.SLDDRW";
+        EvidencePackage package = ConfirmedDrawingPackage.Build(drawings: 0);
+        package.DrawingCandidates![0].Path = spelledOtherwise;
+        PackageAppender.Save(_runFolder, package);
+        _existing.Add(spelledOtherwise);
+        SpendWithFailedOpens(10);
+        _host.AlreadyOpen(spelledOtherwise);
+
+        ConfirmedDrawingResult result = Read(RunId, HousingId);
+
+        Assert.False(result.Opened);
+        Assert.Equal(
+            new[] { "OpenDocument " + spelledOtherwise, "OpenDocument " + spelledOtherwise },
+            _host.Calls.Select(call => call.ToString()));
+    }
+
+    /// <summary>
     /// The engineer closes the drawing between the look that let the request past the early refusal
     /// and the seam's own lookup: the seam decides at its lookup, so the spent session's drawing is
     /// refused there and never opened.
