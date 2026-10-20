@@ -12,7 +12,10 @@ Sync Impact Report
   paragraph: opening a document read-only is a read, not a write, recorded with feature 011's
   read-only open of an engineer-confirmed drawing through DrawingOpenGuard, the console's attach
   (owner decision 137A), and the read-only answer SOLIDWORKS must give after either open (owner
-  decision 136A). The rule's other text and its two exceptions are unchanged.
+  decision 136A); and the re-modeler's exception gains one sentence (owner decision 148A):
+  activating or opening the run's copy is not a write under its clause (b), the copy's path,
+  checked before each call, being its scope. The rule's other text is unchanged, and it still
+  has exactly two exceptions.
 - Removed sections: none
 - Templates: no edits required (.specify/templates/ restates neither rule; plan-template.md takes
   its Constitution Check gates from this file)
@@ -197,6 +200,9 @@ saved per design without degrading review quality.
        (b) re-verifies the target document's path, its session tag, and its COM identity
        immediately before each write. No command in the bridge protocol, and no tool exposed to
        the language model, names a document.
+     - Activating the copy, or opening it, changes and saves nothing, so neither is a write under
+       (b): their scope is the copy's own path, checked in full before each call, as feature
+       004's bridge and the re-modeler's pane seat both check it (owner decision 148A).
      - Every applied change is recorded with its before state, its after state, and the inverse
        operation that undoes it. A change that raises the rebuild-error count above the run's
        baseline is undone and recorded as undone. The run is bounded by a change count and a

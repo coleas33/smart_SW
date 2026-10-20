@@ -861,7 +861,7 @@ recorded before their code):
   stack). A table lookup records no calculation, so its passes are a count (R2.21), and a document
   finding is a `DocumentResult` (`reviewer/src/swreview/checks/result.py:71-88`).
 - **Principle I and `M8`.** The constitution forbids inferring a favourable value
-  (`.specify/memory/constitution.md:59`). Reading `M8` as coarse is not an inference about this
+  (`.specify/memory/constitution.md:62`). Reading `M8` as coarse is not an inference about this
   part: it is the standard's designation rule, which the owner chose to apply (50A) over listing
   every such thread as unknown (50B), and the checked row states it.
 
