@@ -178,9 +178,9 @@ the rows are proven identical rather than assumed.
 
 | type | payload |
 |------|---------|
-| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}`. *Amended 2026-10-19 (feature 002, owner decision 145A, found on review):* `error` also when a settings restart failed once the old backend had stopped, with the failure, masked, as a failed first start is told: no backend answers the token of the page's last `init`. *Amended on the third review the same day:* the add-in marks its own word on the backend - `backend_starting`, `ready`, and `error` for a failed start or restart - `lifecycle: true`, and the page takes down a banner it put up for such an `error` once a later `init` names a backend; no other banner |
+| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}`. *Amended 2026-10-19 (feature 002, owner decision 145A, found on review):* `error` also when a settings restart failed once the old backend had stopped, with the failure, masked, as a failed first start is told: no backend answers the token of the page's last `init`. *Amended on the third review the same day:* the add-in marks its own word on the backend - `backend_starting`, `ready`, and `error` for a failed start or restart - `lifecycle: true`, and the page takes down a banner it put up for such an `error` once a later `init` names a backend; no other banner *Amended 2026-10-20 (feature 002, owner decision 150A):* from such an `error` the page's backend strip says "Backend not running" until an `init` names a backend - through an `init` that names none, and whatever banner is put up meanwhile - where it followed `init` alone and said "Backend ready" under that banner; any other `error` leaves the strip as it was *Amended on the 150A review, 2026-10-20 (feature 002, owner decision 150A):* the add-in's `error` - a first start that failed, or a settings restart that failed once the old backend had stopped - ends with the way on, "Save Settings on the Review tab to start it again.": the failure is followed by a full stop when it does not end in one, then that sentence |
 | `document.changed` | `{path, configuration, kind} \| null` when the active document changes |
-| `backend.stopped` | `{exit_code, log_path}` |
+| `backend.stopped` | `{exit_code, log_path}`. *Amended 2026-10-20 (feature 002, owner decision 150A):* the page says "The backend stopped. Save Settings on the Review tab to start it again.": the add-in starts the backend when it loads and a settings save, made on the Review tab, restarts it, so reopening the pane, which the sentence named before, starts nothing. No host posts it |
 | `backend.restarted` | `{sentences}` - *added 2026-10-19 (feature 002, owner decision 145A):* the add-in restarted the backend with saved settings, a save's restart made at once or one made after it waited (feature 002 `pane-host-messages.md`, `settings.save`). `sentences` is empty: the Review tab's sentences about a restart that waited are shown there alone |
 
 `kind` is what the page decides with - the Model check reads a part's feature tree, so the tab
@@ -203,7 +203,9 @@ third review the same day:* it is read again until it is read, or until a check 
 read still out when a check is pressed is neither shown nor remembered. A call waits for an `init`
 on its way whether that `init` is applied or refused. An Accept's re-read of its check is shown only
 while that check is the one on screen: a newer check shown first, its call let go with the Accept's
-since both waited for the same `init`, is not covered by the older check.
+since both waited for the same `init`, is not covered by the older check. *Amended 2026-10-20
+(feature 002, owner decision 150A):* a re-read not shown is said in the banner, as a re-read that
+failed is, with the exception the Accept wrote: "Accepted as {exception_id}, and the exception is saved; a newer check was pressed before this check was re-read. Press the check again to see where it stands."
 
 The two backend stages are here because this page calls the check routes itself. A tab opened
 while the backend was starting was given a null endpoint in `init`, so `status {stage: "ready"}`

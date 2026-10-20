@@ -48,7 +48,9 @@ namespace SwReview.AddIn.Tests;
 /// makes (section 9), and <b>a remodel run is treated as a turn</b> (section 10) - a save made
 /// during one waits for it and says so, and one started while a restart waits makes it first,
 /// waits for the one being made, or is refused saying what holds it back, so a restart and a run
-/// never overlap.
+/// never overlap. Owner decision 150A adds section 11: <b>a save whose restart fails says what is
+/// true</b> - the settings are saved, the backend did not restart, why, and that saving again
+/// retries it.
 ///
 /// Owner decision 149A adds one more (section 4b): <b>a new review reads its document again</b>
 /// once the backend is ready. A restart takes seconds, and the dump attaches to whatever is active
@@ -120,6 +122,20 @@ public sealed class DeferredRestartTests
         "the review backend did not answer whether a turn is running, so it has not been restarted with the "
         + "saved settings, and no remodel run starts before then. Save the settings again on the Review tab "
         + "to restart it, then try again.";
+
+    /// <summary>
+    /// How the answer to a save whose restart failed begins, the reason after it (owner decision
+    /// 150A): the settings are saved, the backend did not restart, and saving again retries it.
+    /// </summary>
+    private const string SavedNotRestarted =
+        "the settings are saved, but the review backend did not restart with them. " + RetryTheRestart
+        + " The restart failed: ";
+
+    /// <summary>
+    /// The way on after a restart for saved settings failed, whether it stopped the old backend or
+    /// not: in a save's answer, and after the failure a restart that waited posts (150A review).
+    /// </summary>
+    private const string RetryTheRestart = "Save the settings again to retry the restart.";
 
     /// <summary>Fictional keys, built from fragments and in no provider's format (AGENTS.md rule 2).</summary>
     private static readonly string OpenAiKey = string.Concat("FICT", "-saved-", "openai-", "143a-0001");
@@ -1029,9 +1045,11 @@ public sealed class DeferredRestartTests
         Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
         Assert.Equal(Failure, error.GetProperty("message").GetString());
         Assert.True(error.GetProperty("retryable").GetBoolean());
+        // The status the restart's failure posted carries the way on after it (150A review); the
+        // refusal carries the failure alone, its class's sentence naming the way on.
         JsonElement status = world.Last("status");
         Assert.Equal("error", status.GetProperty("stage").GetString());
-        Assert.Equal(Failure, status.GetProperty("message").GetString());
+        Assert.Equal(Failure + ". " + RetryTheRestart, status.GetProperty("message").GetString());
         Assert.Equal(0, world.Dump.Runs);
         Assert.Empty(world.Backend.Sessions);
     }
@@ -1408,9 +1426,10 @@ public sealed class DeferredRestartTests
         world.Backend.EndTurn("chat-1");
         Eventually(() => world.Posted("status").Length == 2, "the failure's status");
 
+        // As a failed start is reported, with the way on after it (150A review).
         JsonElement reported = world.Last("status");
         Assert.Equal("error", reported.GetProperty("stage").GetString());
-        Assert.Equal(failure, reported.GetProperty("message").GetString());
+        Assert.Equal(failure + " " + RetryTheRestart, reported.GetProperty("message").GetString());
         Assert.Empty(world.Posted("backend.restarted"));
 
         // Not retried: the next save is the engineer's retry, as after any failed start.
@@ -1784,10 +1803,12 @@ public sealed class DeferredRestartTests
             string reported = world.Last("status").GetProperty("message").GetString()!;
             Assert.Contains(Redaction.Mask, reported, StringComparison.Ordinal);
 
+            // The same failure, masked: the status with the way on after it (150A review), the
+            // refusal alone, its class's sentence naming the way on.
             JsonElement? answer = call.Result;
             Assert.NotNull(answer);
             Assert.Equal("BackendUnavailable", answer!.Value.GetProperty("error_class").GetString());
-            Assert.Equal(reported, answer.Value.GetProperty("message").GetString());
+            Assert.Equal(answer.Value.GetProperty("message").GetString() + ". " + RetryTheRestart, reported);
             Assert.Equal(0, world.Dump.Runs);
             Assert.Empty(world.Backend.Sessions);
             world.AssertNothingPostedContains(OpenAiKey);
@@ -1800,7 +1821,8 @@ public sealed class DeferredRestartTests
 
     /// <summary>
     /// ...and so is one that waited for a save's own restart, made when no turn ran, that failed
-    /// so: the save is told, as a failed start is, and the call that waited is told the same.
+    /// so: the save is told, in its answer (owner decision 150A), and the call that waited is told
+    /// the same failure.
     /// </summary>
     [Fact]
     public void ATurnCallThatWaitedForASavesRestartThatFailedIsToldThatFailure()
@@ -1830,7 +1852,7 @@ public sealed class DeferredRestartTests
             Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
             Assert.True(call.Finishes(TimeSpan.FromSeconds(10)), "the call never got an answer");
 
-            Assert.Equal(failure, world.Last("status").GetProperty("message").GetString());
+            Assert.Equal(SavedNotRestarted + failure, world.Reply("error", "second").GetProperty("message").GetString());
             BackendRequestException? refusal = call.Result;
             Assert.NotNull(refusal);
             Assert.Equal("BackendUnavailable", refusal!.ErrorClass);
@@ -2015,7 +2037,8 @@ public sealed class DeferredRestartTests
     /// never told to the other tabs as a restart: no backend was started for them to ask about. It is
     /// told to them as a failure, once, with its words, as a failed first start is told to every page
     /// (owner decision 145A, found on review; until then it told them nothing, and they went on
-    /// holding the token of a backend that was gone). The Review tab reports it as before.
+    /// holding the token of a backend that was gone). The Review tab is told it as before - a save's,
+    /// since owner decision 150A, in the save's own answer (section 11).
     /// </summary>
     [Theory]
     [InlineData("at once")]
@@ -2030,8 +2053,9 @@ public sealed class DeferredRestartTests
         if (when == "at once")
         {
             world.Receive("settings.save", "save", Save(effort: "low"));
-            world.Reply("settings.saved", "save");
-            Assert.Equal("FICT the backend would not start", world.Last("status").GetProperty("message").GetString());
+            Assert.Equal(
+                SavedNotRestarted + "FICT the backend would not start",
+                world.Reply("error", "save").GetProperty("message").GetString());
         }
         else
         {
@@ -2049,7 +2073,8 @@ public sealed class DeferredRestartTests
     /// <summary>
     /// A restart that fails before it stops anything - the launcher has gone, say - leaves the old
     /// backend up, and the token every other tab holds with it: they are told nothing. The Review
-    /// tab reports the failure as before.
+    /// tab is told the failure as before - a save's, since owner decision 150A, in the save's own
+    /// answer (section 11).
     /// </summary>
     [Theory]
     [InlineData("at once")]
@@ -2064,7 +2089,9 @@ public sealed class DeferredRestartTests
         if (when == "at once")
         {
             world.Receive("settings.save", "save", Save(effort: "low"));
-            world.Reply("settings.saved", "save");
+            Assert.Equal(
+                SavedNotRestarted + "FICT the launcher has gone",
+                world.Reply("error", "save").GetProperty("message").GetString());
         }
         else
         {
@@ -2072,9 +2099,9 @@ public sealed class DeferredRestartTests
             world.Backend.EndTurn("chat-1");
             Eventually(() => world.Posted("status").Length == 2, "the failure's status");
             Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+            Assert.Equal("FICT the launcher has gone. " + RetryTheRestart, world.Last("status").GetProperty("message").GetString());
         }
 
-        Assert.Equal("FICT the launcher has gone", world.Last("status").GetProperty("message").GetString());
         Assert.NotNull(world.Backend.Endpoint);
         Assert.Equal(0, world.OtherTabsTold);
         Assert.Empty(world.FailuresToldToTheOtherTabs);
@@ -2086,7 +2113,8 @@ public sealed class DeferredRestartTests
     /// <see cref="BackendStartException"/>. No backend is up then, and the other tabs are told, as
     /// for any failure (owner decision 145A, third review: only a <see cref="BackendStartException"/>
     /// told them). One that fails so before it stops anything leaves the old backend up, and tells
-    /// them nothing. How the save itself is answered is not changed here (research 145A).
+    /// them nothing. The save is answered as any save whose restart failed (owner decision 150A,
+    /// section 11).
     /// </summary>
     [Theory]
     [InlineData("old backend stopped")]
@@ -2120,9 +2148,9 @@ public sealed class DeferredRestartTests
             Assert.Empty(world.FailuresToldToTheOtherTabs);
         }
 
-        // As before 145A, and left for the owner (research 145A, Not changed): the save is answered
-        // with the failure although the settings were written.
-        Assert.Equal("HostError", world.Reply("error", "save").GetProperty("error_class").GetString());
+        // Owner decision 150A: no longer `HostError`, as if nothing had been saved - the settings
+        // were written, and the save says so.
+        Assert.Equal("BackendNotRestarted", world.Reply("error", "save").GetProperty("error_class").GetString());
     }
 
     /// <summary>
@@ -2137,7 +2165,7 @@ public sealed class DeferredRestartTests
         world.Open();
 
         world.Receive("settings.save", "save", Save(effort: "low"));
-        world.Reply("settings.saved", "save");
+        world.Reply("error", "save");
 
         string told = Assert.Single(world.FailuresToldToTheOtherTabs);
         Assert.StartsWith("FICT the child would not start with ", told, StringComparison.Ordinal);
@@ -2145,8 +2173,9 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// A tab that cannot be told of the failure turns nothing into an error: the save is still
-    /// answered `settings.saved`, and the Review page still told the failure.
+    /// A tab that cannot be told of the failure turns nothing into an error of its own: the save is
+    /// still answered with its restart's failure, and nothing else - since owner decision 150A,
+    /// `BackendNotRestarted`, never the tab's `HostError`.
     /// </summary>
     [Fact]
     public void ATabThatCannotBeToldOfAFailedRestartTurnsNothingIntoAnError()
@@ -2158,9 +2187,9 @@ public sealed class DeferredRestartTests
 
         world.Receive("settings.save", "save", Save(effort: "low"));
 
-        world.Reply("settings.saved", "save");
-        Assert.Empty(world.Posted("error"));
-        Assert.Equal("FICT the backend would not start", world.Last("status").GetProperty("message").GetString());
+        JsonElement answer = Assert.Single(world.Posted("error"));
+        Assert.Equal("BackendNotRestarted", answer.GetProperty("error_class").GetString());
+        Assert.Equal(SavedNotRestarted + "FICT the backend would not start", answer.GetProperty("message").GetString());
         Assert.Single(world.FailuresToldToTheOtherTabs);
     }
 
@@ -2612,6 +2641,129 @@ public sealed class DeferredRestartTests
         string options = OtherTabsBackendRestartTests.Between(
             source, "_remodelHost = new RemodelHost(new RemodelHostOptions(", "StartRemodelPump();");
         Assert.Contains("RestartAhead = () => _reviewHost?.RestartAhead == true,", options, StringComparison.Ordinal);
+    }
+
+    // ---- 11. a save whose restart fails says what is true (owner decision 150A) ---------------
+
+    /// <summary>
+    /// The settings are written, and in force in the host, before the save restarts the backend,
+    /// so a save whose restart fails is a save that was kept and a backend that was not restarted -
+    /// whatever the restart threw: a <see cref="BackendStartException"/>, or anything outside that
+    /// wrapper, such as the new backend's log not opened, and with the old backend stopped or still
+    /// up. It is answered `error {error_class: "BackendNotRestarted", retryable: true}`, whose
+    /// message says so, names the way on - saving again retries the restart - and gives the reason,
+    /// masked (owner decision 150A). Before it a start failure was answered `settings.saved`, the
+    /// reason alone in a `status`, and any other failure `HostError`, not retryable, as if nothing
+    /// had been saved (research 145A, Not changed).
+    /// </summary>
+    [Theory]
+    [InlineData("a start failure", "old backend stopped")]
+    [InlineData("a start failure", "old backend still up")]
+    [InlineData("any other failure", "old backend stopped")]
+    [InlineData("any other failure", "old backend still up")]
+    public void ASaveWhoseRestartFailsSaysTheSettingsAreSavedAndTheBackendDidNotRestart(string kind, string when)
+    {
+        string reason = "FICT the backend's log could not be opened with " + OpenAiKey;
+        Exception failure = kind == "a start failure" ? new BackendStartException(reason) : new IOException(reason);
+        using var world = new RestartWorld();
+        if (when == "old backend stopped")
+        {
+            world.Backend.RestartFailure = failure;
+        }
+        else
+        {
+            world.Backend.EarlyRestartFailure = failure;
+        }
+
+        world.Open();
+
+        world.Receive("settings.save", "save", Save(model: "gpt-5.6-mini", effort: "low"));
+
+        JsonElement answer = world.Reply("error", "save");
+        Assert.Equal("BackendNotRestarted", answer.GetProperty("error_class").GetString());
+        Assert.True(answer.GetProperty("retryable").GetBoolean());
+        string message = answer.GetProperty("message").GetString()!;
+        Assert.StartsWith(SavedNotRestarted + "FICT the backend's log could not be opened with ", message, StringComparison.Ordinal);
+        Assert.EndsWith(Redaction.Mask, message, StringComparison.Ordinal);
+
+        // Kept: written, and in force in the host. The answer says it all, so nothing beside it -
+        // no `settings.saved`, and no `status` carrying the reason a second time.
+        Assert.Equal("low", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.Effort);
+        Assert.Equal("gpt-5.6-mini", world.Host.Settings.Model);
+        Assert.Empty(world.Posted("settings.saved"));
+        Assert.Empty(world.Posted("status"));
+        Assert.Equal(1, world.Backend.Attempts);
+        Assert.Equal(when == "old backend stopped" ? 1 : 0, world.FailuresToldToTheOtherTabs.Length);
+        world.AssertNothingPostedContains(OpenAiKey);
+    }
+
+    /// <summary>
+    /// The way on is true: the next save retries the restart - nothing waits from the one that
+    /// failed - and, made, is answered `settings.saved` and told to the other tabs as any save's
+    /// restart is.
+    /// </summary>
+    [Fact]
+    public void SavingAgainAfterARestartThatFailedRetriesTheRestart()
+    {
+        using var world = new RestartWorld();
+        world.Backend.RestartFailure = new BackendStartException("FICT the backend would not start");
+        world.Open();
+        world.Receive("settings.save", "first", Save(effort: "low"));
+        world.Reply("error", "first");
+        Assert.False(world.Host.RestartAhead);
+
+        world.Backend.RestartFailure = null;
+        world.Receive("settings.save", "again", Save(effort: "low"));
+
+        world.Reply("settings.saved", "again");
+        Assert.Equal(2, world.Backend.Attempts);
+        Assert.Single(world.Backend.Restarts);
+        Assert.Equal(1, world.OtherTabsTold);
+    }
+
+    // ---- 12. a restart that waited and failed names the way on (150A review) ------------------
+
+    /// <summary>
+    /// A restart that waited for a turn and then failed is told to the Review page as before, as a
+    /// failed start is - `status {stage: "error"}` with the failure, masked - and now with the way on
+    /// after it, which is the same whether the restart stopped the old backend or failed before it
+    /// did: saving the settings again retries the restart (150A review, O2; until then the banner
+    /// carried the bare failure). The other tabs are handed the failure alone, and only once no
+    /// backend is up: the add-in adds their way on.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        "old backend stopped",
+        "FICT the backend did not answer /health within 30 seconds.",
+        "FICT the backend did not answer /health within 30 seconds. Save the settings again to retry the restart.")]
+    [InlineData(
+        "old backend still up",
+        "FICT the launcher could not be resolved (log: C:\\Fictional\\FICT-logs\\backend.log)",
+        "FICT the launcher could not be resolved (log: C:\\Fictional\\FICT-logs\\backend.log). Save the settings again to retry the restart.")]
+    public void ARestartThatWaitedAndFailedSaysSavingAgainRetriesIt(string when, string failure, string said)
+    {
+        using var world = new RestartWorld();
+        var thrown = new BackendStartException(failure);
+        if (when == "old backend stopped")
+        {
+            world.Backend.RestartFailure = thrown;
+        }
+        else
+        {
+            world.Backend.EarlyRestartFailure = thrown;
+        }
+
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+
+        world.Backend.EndTurn("chat-1");
+        Eventually(() => world.Posted("status").Length == 2, "the failure's status");
+
+        JsonElement status = world.Last("status");
+        Assert.Equal("error", status.GetProperty("stage").GetString());
+        Assert.Equal(said, status.GetProperty("message").GetString());
+        Assert.Equal(when == "old backend stopped" ? new[] { failure } : new string[0], world.FailuresToldToTheOtherTabs);
     }
 
     // ---- the restart itself, with no host ------------------------------------------------------

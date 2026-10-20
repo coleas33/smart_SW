@@ -268,7 +268,8 @@ internal sealed class DeferredRestart : IDisposable
     /// for a remodel run in progress, or for a turn the backend's own check found, which started
     /// after the save's (<see cref="Now(Action, out Hold)"/> says which).</returns>
     /// <exception cref="Exception">Whatever <paramref name="restart"/> throws other than
-    /// <see cref="TurnRunningException"/>, unchanged: the save answers it as it always has.</exception>
+    /// <see cref="TurnRunningException"/>, unchanged: the save answers it as a save kept whose
+    /// restart failed (owner decision 150A).</exception>
     public bool Now(Action restart) => Now(restart, out _);
 
     /// <summary>
