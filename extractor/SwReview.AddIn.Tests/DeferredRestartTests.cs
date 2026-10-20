@@ -1836,6 +1836,49 @@ public sealed class DeferredRestartTests
         Assert.NotNull(world.Backend.Endpoint);
     }
 
+    /// <summary>
+    /// Through the host: when whether a remodel run is in progress cannot be read -
+    /// <c>ReviewHostOptions.BackendBusy</c> throws - a save's restart waits as for a run and says
+    /// the run's sentence, and nothing is restarted; a remodel run asked to begin meanwhile is
+    /// refused `RemodelRunning`, the one way that refusal is ever given, since the Remodel host
+    /// refuses a second run itself. Once the run can be read again, and none is in progress, the
+    /// restart is made (owner decision 145A; found unpinned on review).
+    /// </summary>
+    [Fact]
+    public void WhenARemodelRunCannotBeReadASaveWaitsForItAndARunIsRefused()
+    {
+        int readable = 0;
+        using var world = new RestartWorld
+        {
+            BackendBusy = () => Volatile.Read(ref readable) == 1
+                ? false
+                : throw new InvalidOperationException("FICT the Remodel host cannot be asked"),
+        };
+        world.Open();
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        world.Reply("settings.saved", "save");
+        Assert.Equal(
+            "the settings are saved; the backend restarts when the remodel run ends.",
+            world.Last("status").GetProperty("message").GetString());
+
+        int began = 0;
+        BackendRequestException? refusal = world.Host.BeginRemodelRun(() => began++);
+        Assert.NotNull(refusal);
+        Assert.Equal("RemodelRunning", refusal!.ErrorClass);
+        Assert.Equal(
+            "the backend restarts with the saved settings when the remodel run ends, and nothing new starts "
+            + "before then. Wait for the run to end, then try again.",
+            refusal.Message);
+        Assert.True(refusal.Retryable);
+        Assert.Equal(0, began);
+        Assert.Equal(0, world.Backend.Attempts);
+
+        Volatile.Write(ref readable, 1);
+        Eventually(() => world.Backend.Restarts.Length == 1, "the restart once the run can be read");
+        Assert.Equal("low", world.Backend.Restarts[0].Settings.Effort);
+    }
+
     /// <summary>With nothing waiting, a remodel run begins at once: nothing is asked of the backend and nothing restarts.</summary>
     [Fact]
     public void ARemodelRunWithNoRestartWaitingBeginsAtOnceAndNothingIsAsked()
@@ -2595,6 +2638,36 @@ public sealed class DeferredRestartTests
         Assert.Equal(DeferredRestart.Outcome.RemodelRunning, restart.Apply(out Exception? failure));
         Assert.Null(failure);
         Assert.Equal(0, tried);
+        Assert.True(restart.Pending);
+    }
+
+    /// <summary>
+    /// Not knowing whether a remodel run is in progress is not knowing that none is: a reading of
+    /// the run that throws is read as one in progress. A save's restart waits for it and says so, a
+    /// restart that waits is not made under it, and a run's step does not begin while it waits
+    /// (owner decision 145A; the rule was written down, and found unpinned on review).
+    /// </summary>
+    [Fact]
+    public void ARunReadingThatThrowsIsReadAsARunInProgress()
+    {
+        int restarted = 0;
+        using var restart = NewRestart(
+            () => DeferredRestart.Hold.None,
+            () => restarted++,
+            busy: () => throw new InvalidOperationException("FICT the Remodel host cannot be asked"));
+
+        Assert.False(restart.Now(() => restarted++, out DeferredRestart.Hold heldBy));
+        Assert.Equal(DeferredRestart.Hold.RemodelRun, heldBy);
+        Assert.True(restart.Pending);
+
+        Assert.Equal(DeferredRestart.Outcome.RemodelRunning, restart.Apply(out Exception? failure));
+        Assert.Null(failure);
+
+        int began = 0;
+        Assert.Equal(DeferredRestart.Outcome.RemodelRunning, restart.Begin(() => began++, out failure));
+        Assert.Null(failure);
+        Assert.Equal(0, began);
+        Assert.Equal(0, restarted);
         Assert.True(restart.Pending);
     }
 

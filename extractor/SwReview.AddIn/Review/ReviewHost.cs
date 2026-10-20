@@ -1534,14 +1534,27 @@ public sealed class ReviewHost : IDisposable
                 return new BackendRequestException("UnknownChat", ChatEndedWithTheRestart, retryable: false);
 
             case DeferredRestart.Outcome.Failed:
-                return new BackendRequestException("BackendUnavailable", Redact(failure!.Message), retryable: true);
+                return RestartFailed(failure!);
 
             default:
-                // Stopped: the add-in is unloading, and its backend with it.
-                return new BackendRequestException(
-                    "BackendUnavailable", "the review backend is stopping with the add-in.", retryable: false);
+                return StoppingWithTheAddIn();
         }
     }
+
+    /// <summary>
+    /// The answer to a page call or a remodel run when the restart it made or waited for failed:
+    /// the failure, masked, as the backend's own `BackendUnavailable`, retryable. One copy for the
+    /// two answers that give it.
+    /// </summary>
+    private BackendRequestException RestartFailed(Exception failure) =>
+        new BackendRequestException("BackendUnavailable", Redact(failure.Message), retryable: true);
+
+    /// <summary>
+    /// The answer once the add-in is unloading, and its backend with it
+    /// (<see cref="DeferredRestart.Outcome.Stopped"/>). One copy for the two answers that give it.
+    /// </summary>
+    private static BackendRequestException StoppingWithTheAddIn() =>
+        new BackendRequestException("BackendUnavailable", "the review backend is stopping with the add-in.", retryable: false);
 
     /// <summary>
     /// Owner decision 145A: the gate a remodel run - a plan or a Start - begins through, from the
@@ -1580,12 +1593,10 @@ public sealed class ReviewHost : IDisposable
                 return new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheRemodelRun, retryable: true);
 
             case DeferredRestart.Outcome.Failed:
-                return new BackendRequestException("BackendUnavailable", Redact(failure!.Message), retryable: true);
+                return RestartFailed(failure!);
 
             default:
-                // Stopped: the add-in is unloading, and its backend with it.
-                return new BackendRequestException(
-                    "BackendUnavailable", "the review backend is stopping with the add-in.", retryable: false);
+                return StoppingWithTheAddIn();
         }
     }
 
