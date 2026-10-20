@@ -5019,6 +5019,119 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// The words a plan whose document changed while its gate waited is refused with: plain, and
+    /// naming no path, as this tab's words never do.
+    /// </summary>
+    private const string DocumentChangedWords =
+        "The active document changed after Remodel a copy was pressed, so nothing was copied and there "
+        + "is no plan. Your part was not changed. Make your part the active document and press Remodel a "
+        + "copy again.";
+
+    /// <summary>
+    /// Plan reads the active document before its gate, and the gate can wait through a settings
+    /// restart - seconds, up to the backend's handshake - in which the engineer can make another
+    /// document active. Plan reads it again once the host is busy, before any call, and refuses one
+    /// that changed - another part, another configuration of the same part, or none at all -
+    /// `DocumentChanged`, in plain words that name no path: nothing is probed, copied or closed, no
+    /// folder is made, and the host is free (owner decision 145A, found on review). Its probe would
+    /// read whatever was active by then, and the bridge would refuse the open as `scope_not_probed`,
+    /// both paths in its words.
+    /// </summary>
+    [Theory]
+    [InlineData("another part")]
+    [InlineData("another configuration")]
+    [InlineData("no document")]
+    public void APlanWhoseDocumentChangedWhileTheGateWaitedIsRefusedBeforeAnyCall(string change)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Options.BeginRun = begin =>
+            {
+                world.Document = change == "another part"
+                    ? new PageDocument(@"C:\parts\frame.SLDPRT", "Default")
+                    : change == "another configuration"
+                        ? new PageDocument(SourcePath, "Machined")
+                        : null;
+                begin();
+                return null;
+            };
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("DocumentChanged", error.GetProperty("error_class").GetString());
+            Assert.Equal(DocumentChangedWords, error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.DoesNotContain(@":\", DocumentChangedWords, StringComparison.Ordinal);
+            Assert.Empty(world.Pipeline.Calls);
+            Assert.Empty(Directory.GetDirectories(world.RunRoot));
+            Assert.Empty(world.Registered);
+            Assert.Null(world.Host.LatestRun);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
+    /// The refusal comes before the earlier plan waiting for Start is ended (004 T173): that plan
+    /// is not closed, not marked lost and not announced lost, and Start still starts it.
+    /// </summary>
+    [Fact]
+    public void APlanRefusedForADocumentChangedLeavesTheEarlierPlanAsItWas()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string runDir = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            int calls = world.Pipeline.Calls.Count;
+            Func<Action, BackendRequestException?> allowed = world.Options.BeginRun;
+            world.Options.BeginRun = begin =>
+            {
+                world.Document = new PageDocument(@"C:\parts\frame.SLDPRT", "Default");
+                begin();
+                return null;
+            };
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            Assert.Equal("DocumentChanged", world.ErrorClass("p2"));
+            Assert.Equal(calls, world.Pipeline.Calls.Count);
+            Assert.Equal(0, world.Pipeline.Count("close"));
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            Assert.False(world.Host.LatestRun!.ClosedByPlanAgain);
+
+            world.Options.BeginRun = allowed;
+            world.Receive("remodel.start", "s1", new { run_dir = runDir });
+            world.Reply("remodel.started", "s1");
+        }
+    }
+
+    /// <summary>
+    /// The document is the same one however its path is spelled: Windows names one file however it
+    /// is cased, and the rule is the pane's one rule for "the same document"
+    /// (<see cref="PageDocument.IsSameDocument(PageDocument)"/>). Such a plan goes ahead.
+    /// </summary>
+    [Fact]
+    public void APlanWhoseDocumentIsTheSameHoweverItsPathIsSpelledGoesAhead()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Options.BeginRun = begin =>
+            {
+                world.Document = new PageDocument(SourcePath.ToUpperInvariant(), "Default");
+                begin();
+                return null;
+            };
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Reply("remodel.planned", "p1");
+        }
+    }
+
     /// <summary>A Start refused on the spot - Start switched off in this build - asks no gate.</summary>
     [Fact]
     public void AStartRefusedOnTheSpotAsksNoRestartGate()

@@ -235,6 +235,17 @@ public sealed class RemodelHost : IDisposable
         + "the active document and press Remodel a copy again.";
 
     /// <summary>
+    /// What `remodel.plan` answers when the active document, read again once the settings-restart
+    /// gate has marked the host busy, is not the one the press was for (owner decision 145A, found on
+    /// review): the gate can wait through a restart, and the engineer can switch documents meanwhile.
+    /// No path: the tab says whose document it means without one.
+    /// </summary>
+    public const string DocumentChangedMessage =
+        "The active document changed after Remodel a copy was pressed, so nothing was copied and there "
+        + "is no plan. " + PartNotChanged + " Make your part the active document and press Remodel a "
+        + "copy again.";
+
+    /// <summary>
     /// The full no-change reassurance for refusals before any copy change. Loss and cleanup
     /// notices instead use <see cref="PartNotChanged"/>, because cleanup may be late or incomplete.
     /// </summary>
@@ -1067,6 +1078,18 @@ public sealed class RemodelHost : IDisposable
 
         try
         {
+            // The document was read before the gate, and the gate can wait through a settings
+            // restart - seconds, up to the backend's handshake - in which the engineer can make
+            // another document active. Read again now the host is busy, before any call: a plan of
+            // another document than the one the press was for is refused in plain words, rather
+            // than met at the bridge's open as `scope_not_probed`, both paths in its words (owner
+            // decision 145A, found on review).
+            if (!document.IsSameDocument(_options.CurrentDocument()))
+            {
+                _actions.SendError(id, "DocumentChanged", DocumentChangedMessage, retryable: true);
+                return;
+            }
+
             // Decision 22A: the attachment this plan's bridge session will live on. Read once
             // the host is busy - from here the tool service begins no re-attach of its own - and
             // before the probe, so it is the attachment the probe, the copy and the session go
