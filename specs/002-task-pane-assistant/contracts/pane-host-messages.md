@@ -211,6 +211,7 @@ The check run folder is `<run_root>/<yyyyMMdd-HHmmss>-<doc>-check`, named throug
 | `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
 | `document.changed` | `{path, configuration, kind} \| null` when the active document changes |
 | `backend.stopped` | `{exit_code, log_path}` |
+| `backend.restarted` | `{sentences}` - *added 2026-10-19 (owner decision 145A):* the host restarted the backend with saved settings, a save's restart made at once or one made after it waited (`settings.save`); `sentences` is empty, since the Review tab's sentences about a restart that waited are shown there alone. The page sends `ready` again - once more after an `init` already on its way - takes the new port and token, and keeps the check on screen without reading its latest check again |
 
 *Amended 2026-09-28 (U25; default taken 2026-09-28, the owner may revise):* the Review page decides with `kind` too, since it disables Review for a drawing rather than letting the engineer press a button the host will refuse, so its rows carry `kind` - from the same `CheckPaneHost.DocumentPayload`, so the pages cannot disagree - and it never reads a drawing from the path's extension. A drawing's payload also carries `drawing_guidance`: the sentence `ReviewHost.DrawingSentence` composes, naming the model the drawing's views show when they say which (the first, in sheet-then-view order, by file name; the rest counted), which the page prints as sent in its banner and on a Retry it will not send, and which the host's `DrawingActive` refusal carries too. The paragraph below is kept for the record.
 
@@ -266,6 +267,7 @@ value read out of the profile ever travels on any message to any page.
 | `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
 | `document.changed` | `{path, configuration, kind} \| null` when the active document changes |
 | `backend.stopped` | `{exit_code, log_path}` |
+| `backend.restarted` | `{sentences}` - *added 2026-10-19 (owner decision 145A):* as on the Model check page |
 
 The Model check page's table exactly, including the two backend stages and why they are
 here. What differs is what the page does with `kind`: all three kinds can be graded, so

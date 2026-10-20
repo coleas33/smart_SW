@@ -1545,6 +1545,130 @@ public sealed class DeferredRestartTests
         Assert.Equal(retryable, body.GetProperty("retryable").GetBoolean());
     }
 
+    // ---- 9. every other tab is told (owner decision 145A) ---------------------------------------
+
+    /// <summary>
+    /// A save's restart made at once tells every other tab, once, as soon as it is made. The
+    /// Review page is told as before, by the save's reply; the Model check, Standards and Remodel
+    /// pages hold the old port and token and nothing else tells them.
+    /// </summary>
+    [Fact]
+    public void ASavesRestartMadeAtOnceTellsTheOtherTabsOnce()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        Assert.Single(world.Backend.Restarts);
+        world.Reply("settings.saved", "save");
+        Assert.Equal(1, world.OtherTabsTold);
+        Assert.Empty(world.Posted("backend.restarted"));
+    }
+
+    /// <summary>A restart that waited tells them once it is made, and not while it waits.</summary>
+    [Fact]
+    public void ARestartThatWaitedTellsTheOtherTabsOnceItIsMadeAndNotBefore()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        Polls(world.Backend, 2);
+        Assert.Equal(0, world.OtherTabsTold);
+
+        world.Backend.EndTurn("chat-1");
+        Eventually(() => world.OtherTabsTold == 1, "the other tabs told of the restart");
+
+        Assert.Single(world.Posted("backend.restarted"));
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(1, world.OtherTabsTold);
+    }
+
+    /// <summary>...whoever makes it: a new review, or a page call that would start a turn, the moment the turn ends.</summary>
+    [Theory]
+    [InlineData("review")]
+    [InlineData("turn call")]
+    public void ARestartANewReviewOrATurnCallMakesTellsTheOtherTabs(string maker)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+
+        if (maker == "review")
+        {
+            world.Receive("review.start", "start", new { });
+            world.Reply("review.started", "start");
+        }
+        else
+        {
+            Assert.Equal("UnknownChat", world.Host.PageTurnRefusal()!.ErrorClass);
+        }
+
+        Assert.Single(world.Backend.Restarts);
+        Assert.Equal(1, world.OtherTabsTold);
+    }
+
+    /// <summary>
+    /// A restart that fails tells them nothing - made at once or after waiting: no backend was
+    /// started for them to ask about, and the failure is the Review tab's to report, as a failed
+    /// start is.
+    /// </summary>
+    [Theory]
+    [InlineData("at once")]
+    [InlineData("after waiting")]
+    public void ARestartThatFailsTellsTheOtherTabsNothing(string when)
+    {
+        using var world = new RestartWorld();
+        world.Backend.RestartFailure = new BackendStartException("FICT the backend would not start");
+        world.Open();
+        world.Track("chat-1");
+
+        if (when == "at once")
+        {
+            world.Receive("settings.save", "save", Save(effort: "low"));
+            world.Reply("settings.saved", "save");
+            Assert.Equal("FICT the backend would not start", world.Last("status").GetProperty("message").GetString());
+        }
+        else
+        {
+            SaveAsATurnStarts(world, "save", Save(effort: "low"));
+            world.Backend.EndTurn("chat-1");
+            Eventually(() => world.Posted("status").Length == 2, "the failure's status");
+            Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        }
+
+        Assert.Equal(1, world.Backend.Attempts);
+        Assert.Equal(0, world.OtherTabsTold);
+    }
+
+    /// <summary>
+    /// A tab that cannot be told turns no restart into a failure: the save is still answered
+    /// `settings.saved` with nothing refused, and a restart that waited is still told to the
+    /// Review page.
+    /// </summary>
+    [Fact]
+    public void ATabThatCannotBeToldTurnsNoRestartIntoAFailure()
+    {
+        using var world = new RestartWorld();
+        world.TellingTheOtherTabs = () => throw new InvalidOperationException("FICT the pane has closed");
+        world.Open();
+        world.Track("chat-1");
+
+        world.Receive("settings.save", "first", Save(effort: "low"));
+        world.Reply("settings.saved", "first");
+        Assert.Empty(world.Posted("error"));
+
+        SaveAsATurnStarts(world, "second", Save(effort: "medium"));
+        world.Backend.EndTurn("chat-1");
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted");
+        Eventually(() => world.OtherTabsTold == 2, "the other tabs asked to be told twice");
+        Assert.Equal(2, world.Backend.Restarts.Length);
+    }
+
     // ---- the restart itself, with no host ------------------------------------------------------
 
     [Fact]
@@ -2159,6 +2283,7 @@ public sealed class DeferredRestartTests
     {
         private readonly FakeChannel _channel = new FakeChannel();
         private ReviewHost? _host;
+        private int _otherTabsTold;
 
         public RestartWorld()
         {
@@ -2197,6 +2322,15 @@ public sealed class DeferredRestartTests
         /// <summary>Whether a remodel run is in progress on the backend, as the add-in answers it.</summary>
         public Func<bool> BackendBusy { get; set; } = () => false;
 
+        /// <summary>
+        /// How many times the host asked for every other tab to be told the backend restarted
+        /// (owner decision 145A), as the add-in tells the Model check, Standards and Remodel tabs.
+        /// </summary>
+        public int OtherTabsTold => Volatile.Read(ref _otherTabsTold);
+
+        /// <summary>What telling the other tabs does after it is counted; a test makes it throw.</summary>
+        public Action? TellingTheOtherTabs { get; set; }
+
         public ReviewHost Host => _host ?? throw new InvalidOperationException("call Open() first");
 
         public void Open()
@@ -2218,6 +2352,11 @@ public sealed class DeferredRestartTests
                 Now = () => Stamp,
                 RestartPoll = Poll,
                 BackendBusy = () => BackendBusy(),
+                BackendRestarted = () =>
+                {
+                    Interlocked.Increment(ref _otherTabsTold);
+                    TellingTheOtherTabs?.Invoke();
+                },
             });
         }
 

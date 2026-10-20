@@ -1993,9 +1993,10 @@ public sealed class RemodelPageContractTests
                 }
             }
 
-            // A parser that quietly matched nothing would make every test above vacuous.
+            // A parser that quietly matched nothing would make every test above vacuous. Seven
+            // unsolicited rows since owner decision 145A added `backend.restarted`.
             Assert.True(
-                pageToHost.Count == 11 && unsolicited.Count == 6 && hostToPage.Count >= 8,
+                pageToHost.Count == 11 && unsolicited.Count == 7 && hostToPage.Count >= 8,
                 $"contracts/pane-remodel-messages.md did not parse: {pageToHost.Count} "
                     + $"page-to-host rows ({Join(pageToHost)}), {unsolicited.Count} unsolicited "
                     + $"rows ({Join(unsolicited)}). Did the table or heading shape change?");

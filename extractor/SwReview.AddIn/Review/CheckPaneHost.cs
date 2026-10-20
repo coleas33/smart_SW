@@ -266,6 +266,15 @@ public sealed class CheckPaneHost : IDisposable
         Post("document.changed", DocumentPayload(_options.CurrentDocument()));
 
     /// <summary>
+    /// Tells the page the backend was restarted with saved settings, so it asks `ready` again for
+    /// the new port and token (owner decision 145A): both check pages call their check routes with
+    /// what `init` carried, and the restarted backend refuses the old token. The add-in calls it
+    /// after every restart the review host makes. No sentence travels with it: the Review tab's
+    /// sentences about a restart that waited are shown on the Review tab alone.
+    /// </summary>
+    public void BackendRestarted() => _actions.PostBackendRestarted(Array.Empty<string>());
+
+    /// <summary>
     /// The `init` reply: the backend, the token, the run root, the open document, whatever the
     /// owner adds, and the newest check this pane can answer for - the one this session ran, or
     /// failing that the newest folder on disk carrying this pane's own suffix, which is how a

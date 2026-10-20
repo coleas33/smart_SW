@@ -181,9 +181,17 @@ the rows are proven identical rather than assumed.
 | `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
 | `document.changed` | `{path, configuration, kind} \| null` when the active document changes |
 | `backend.stopped` | `{exit_code, log_path}` |
+| `backend.restarted` | `{sentences}` - *added 2026-10-19 (feature 002, owner decision 145A):* the add-in restarted the backend with saved settings, a save's restart made at once or one made after it waited (feature 002 `pane-host-messages.md`, `settings.save`). `sentences` is empty: the Review tab's sentences about a restart that waited are shown there alone |
 
 `kind` is what the page decides with - the Model check reads a part's feature tree, so the tab
 says whether a check can run at all instead of offering a button the host will refuse.
+
+`backend.restarted` is here for the reason the two backend stages are: the restarted backend
+listens on another port with another token, and refuses the token of the page's last `init`. The
+page sends `ready` again - once more after an `init` already on its way, which the host may have
+read before the new backend was up - and takes the new port and token from the `init`. It keeps
+the check on screen: it does not read its latest check again, since the restart changed the
+backend and not the check, and a call already made with the old token is not made again.
 
 The two backend stages are here because this page calls the check routes itself. A tab opened
 while the backend was starting was given a null endpoint in `init`, so `status {stage: "ready"}`

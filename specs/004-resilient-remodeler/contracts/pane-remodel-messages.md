@@ -379,6 +379,7 @@ only decision 24A's notice. Nothing new is added to the message tables.
 | `document.changed` | `{path, configuration, kind, remodel: {available: true \| false \| null, message: string \| null}} \| {path, configuration} \| null`. The additive `remodel` field refreshes capability after tool-service attach/detach. If the **copy** goes away mid-run, the run aborts with the change log intact |
 | `remodel.plan_lost` | `{run_dir, message}`: the plan in `run_dir` can no longer be started, because the tool service re-attached after it was made (decision 24A, above). Posted once per plan, as soon as the host sees it; `message` is `RemodelHost.PlanLostMessage`, printed verbatim. The page disables Start for that plan and offers Plan again; a `run_dir` it is not showing changes nothing |
 | `backend.stopped` | `{exit_code, log_path}`, unchanged from feature 002 |
+| `backend.restarted` | `{sentences}` - *added 2026-10-19 (feature 002, owner decision 145A):* the add-in restarted the backend with saved settings, a save's restart made at once or one made after it waited, so the port and token of the page's last `init` are the old backend's. `sentences` is empty: the Review tab's sentences about a restart that waited are shown there alone. The page sends `ready` again - once more after an `init` already on its way - takes the new port and token, and leaves the run on screen as it is: it does not read `latest_run` again, since the run's record is its run folder, which the restart does not touch, and this host reads it, not the backend |
 
 ## What the page shows
 

@@ -187,6 +187,9 @@ public sealed class StandardsHost : IDisposable
     /// <summary>Tells the page which document the pane is looking at now, or that there is none.</summary>
     public void DocumentChanged() => _pane.DocumentChanged();
 
+    /// <summary>Tells the page the backend was restarted with saved settings (owner decision 145A).</summary>
+    public void BackendRestarted() => _pane.BackendRestarted();
+
     public void Dispose() => _pane.Dispose();
 
     // ---- standards.start ------------------------------------------------------------------

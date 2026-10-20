@@ -137,6 +137,13 @@
       /** Whether a `ready` is in flight, so a second status does not ask again on top of it. */
       initPending: false,
 
+      /**
+       * A `backend.restarted` arrived while a `ready` was in flight: ask once more after it,
+       * since the host may have read that `init` before the new backend was up (owner decision
+       * 145A).
+       */
+      initAgain: false,
+
       /** Which buckets are showing, by bucket name. */
       buckets: Object.create(null),
 
@@ -209,6 +216,17 @@
           state.backend = null;
           state.token = null;
           renderBackendState('The backend stopped. Reopen the pane to start it again.', true);
+          return;
+        case 'backend.restarted':
+          // Owner decision 145A: the host restarted the backend with saved settings. The port and
+          // token of the last `init` are the old backend's, which the new one refuses, so the page
+          // asks again - once more after an `init` already on its way. The check on screen is the
+          // engineer's and stays: it is not read again (`requestInit(false)`).
+          if (state.initPending) {
+            state.initAgain = true;
+          } else {
+            requestInit(false);
+          }
           return;
         case 'error':
           showBanner(asError(message.payload).message);
@@ -1319,10 +1337,11 @@
     /**
      * Ask the host for `init` and apply it.
      *
-     * `loadLatest` is false when the page is re-asking because the backend has only just started:
-     * the first `init` already loaded whatever check this session left behind, and re-reading it
-     * would race whatever the page is rendering now. `initPending` keeps two statuses in quick
-     * succession from producing two in-flight asks.
+     * `loadLatest` is false when the page is re-asking because the backend has only just started,
+     * or has been restarted: the first `init` already loaded whatever check this session left
+     * behind, and re-reading it would race whatever the page is rendering now. `initPending` keeps
+     * two statuses in quick succession from producing two in-flight asks, and `initAgain` asks
+     * once more after one a restart arrived during.
      */
     function requestInit(loadLatest) {
       if (state.initPending) {
@@ -1339,6 +1358,10 @@
         })
         .then(function () {
           state.initPending = false;
+          if (state.initAgain) {
+            state.initAgain = false;
+            requestInit(false);
+          }
         });
     }
 

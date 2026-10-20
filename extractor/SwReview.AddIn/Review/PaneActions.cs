@@ -535,6 +535,20 @@ public sealed class PaneActions
             { "message", Redact(message) },
         });
 
+    /// <summary>
+    /// Tells the page the backend was restarted with saved settings, so the port and token of its
+    /// last `init` are the old backend's and it asks `ready` again (owner decisions 143A and 145A):
+    /// `backend.restarted {sentences}`. <paramref name="sentences"/> are the host's own sentences
+    /// about a restart that waited, which the page takes off its banner - the Review tab's - or
+    /// none, for a page that was shown none. One message in one shape for every page that holds
+    /// the backend's port and token, sent from one place.
+    /// </summary>
+    public void PostBackendRestarted(IReadOnlyList<string> sentences) =>
+        Send("backend.restarted", null, new Dictionary<string, object?>
+        {
+            { "sentences", sentences ?? throw new ArgumentNullException(nameof(sentences)) },
+        });
+
     /// <summary>Masks every configured secret in anything headed for the page or the log.</summary>
     public string Redact(string text)
     {

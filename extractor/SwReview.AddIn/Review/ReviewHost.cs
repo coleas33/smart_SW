@@ -277,6 +277,15 @@ public sealed class ReviewHostOptions
     /// </summary>
     public Func<bool> BackendBusy { get; set; } = () => false;
 
+    /// <summary>
+    /// Tells every other tab that holds the backend's port and token - Model check, Standards and
+    /// Remodel - that the backend was restarted with saved settings, so each asks for its `init`
+    /// again (owner decision 145A). Called after every restart this host makes, a save's made at
+    /// once or one made after it waited, and never after one that failed; the Review page is told
+    /// by the save's reply or by `backend.restarted`. Nothing when the caller has no other tab.
+    /// </summary>
+    public Action BackendRestarted { get; set; } = () => { };
+
     internal static string DefaultLogFolder() => System.IO.Path.Combine(
         System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
         "SwReview",
@@ -444,7 +453,11 @@ public sealed class ReviewHost : IDisposable
         _restart = new DeferredRestart(
             RestartHeldBack,
             RestartWithSettingsInForce,
-            () => Post("backend.restarted", new Dictionary<string, object?> { { "sentences", RestartSentences } }),
+            () =>
+            {
+                _actions.PostBackendRestarted(RestartSentences);
+                TellTheOtherTabs();
+            },
             failure => PostStatus("error", failure.Message),
             () => PostStatus("error", RestartNotAnswered),
             options.RestartPoll);
@@ -1172,6 +1185,11 @@ public sealed class ReviewHost : IDisposable
                 // waits for the turn to end rather than being dropped (owner decision 143A).
                 restartFailure = RestartPromise;
             }
+            else
+            {
+                // The Review page learns of it from the reply; the other tabs from this.
+                TellTheOtherTabs();
+            }
         }
         catch (BackendStartException failure)
         {
@@ -1334,6 +1352,24 @@ public sealed class ReviewHost : IDisposable
     {
         UserSettings settings = _settings;
         _options.Backend.Restart(settings, settings.ResolveApiKey(_options.Environment));
+    }
+
+    /// <summary>
+    /// Tells every other tab that holds the backend's port and token that this host has just
+    /// restarted the backend (owner decision 145A, <see cref="ReviewHostOptions.BackendRestarted"/>).
+    /// Never throws: a tab that cannot be told must not turn a restart that was made into a save
+    /// answered with an error, or into a restart reported as failed.
+    /// </summary>
+    private void TellTheOtherTabs()
+    {
+        try
+        {
+            _options.BackendRestarted();
+        }
+        catch (Exception)
+        {
+            // Each host's post swallows its own failures; this guards anything else the add-in does.
+        }
     }
 
     /// <summary>

@@ -467,6 +467,10 @@ public class SwReviewAddIn : ISwAddin
             // after these options, and one that has gone runs nothing.
             BackendBusy = () => _remodelHost?.RunInProgress == true,
 
+            // Owner decision 145A: every other tab that holds the backend's port and token is told
+            // after each restart the review host makes, and asks for its `init` again.
+            BackendRestarted = TellTheOtherTabsTheBackendRestarted,
+
             DrawingModels = DrawingModels,
             Dump = reviewDump,
             PrepareReview = reviewDump.Prepare,
@@ -1055,6 +1059,22 @@ public class SwReviewAddIn : ISwAddin
         {
             _remodelHost?.PostStatus(stage, message);
         }
+    }
+
+    /// <summary>
+    /// Owner decision 145A: the review host has restarted the backend with saved settings - a
+    /// save's restart made at once, or one made after it waited - so every other tab that holds
+    /// the backend's port and token is told, and asks for its `init` again. The Model check and
+    /// Standards pages call their check routes with that token, which the restarted backend
+    /// refuses, and the Remodel page keeps it so one `init` field means one thing on every tab.
+    /// The Terminal tab holds no backend. Each host is read through its field: all three are
+    /// built after the review host's options, and one that has gone tells nothing.
+    /// </summary>
+    private void TellTheOtherTabsTheBackendRestarted()
+    {
+        _modelCheckHost?.BackendRestarted();
+        _standardsHost?.BackendRestarted();
+        _remodelHost?.BackendRestarted();
     }
 
     /// <summary>

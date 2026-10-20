@@ -491,6 +491,16 @@ public sealed class RemodelHost : IDisposable
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
 
     /// <summary>
+    /// Tells the page the backend was restarted with saved settings, so it asks `ready` again for
+    /// the new port and token (owner decision 145A). This page makes no call of its own - its
+    /// backend work is this host's, which reads the endpoint per call - but it keeps them, so one
+    /// `init` field means one thing on every tab. The add-in calls it after every restart the
+    /// review host makes. No sentence travels with it: the Review tab's sentences about a restart
+    /// that waited are shown on the Review tab alone.
+    /// </summary>
+    public void BackendRestarted() => _actions.PostBackendRestarted(Array.Empty<string>());
+
+    /// <summary>
     /// The `status` stages this page has a branch for, closed by
     /// `contracts/pane-remodel-messages.md`.
     ///
