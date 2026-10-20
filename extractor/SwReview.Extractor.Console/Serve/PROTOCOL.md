@@ -329,7 +329,9 @@ error, not ignored.)
   nothing, the package's ten drawings still bounding it. Once a session's such opens reach ten on
   their own, a candidate whose drawing is not open is refused before the package is even loaded,
   SOLIDWORKS asked only whether that drawing is open. The limit's refusal ends saying how to go
-  on. The sentences are `specs/011-drawing-context/contracts/confirmed-open.md` section 2 item 5's.
+  on: *since decision 147A (2026-10-19)*, a new review first, which Review starts in a run folder
+  of its own and so with a count of its own, then that a drawing already open is still read. The
+  sentences are `specs/011-drawing-context/contracts/confirmed-open.md` section 2 item 5's.
 - The drawing is opened **read-only and hidden** only when it is not already open - through its
   own allowlisted seam (`ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6` with type 3 and options
   3, `ISldWorks.CloseDoc`; `specs/004-resilient-remodeler/contracts/guard-allowlist.md`). *Since

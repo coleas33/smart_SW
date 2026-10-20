@@ -1303,6 +1303,11 @@ word for word, as each candidate's reason.
    Review, the surest way on, which it does not; and whether a Recheck should ask a refused
    candidate question again, are the owner's call; neither changes here. (Retry is offered only
    on an error card, and a Recheck only as the Send of a restored waiting review.)
+   *Settled by decision 147A (2026-10-19)*: the sentence names a new review first, and no Retry
+   or Recheck - both limit sentences end "; a new review (press Review) starts its own count, and
+   a drawing already open in SOLIDWORKS is still read, since reading it opens nothing"
+   (`contracts/confirmed-open.md` section 2 item 5; 002 `research.md`, 147A). Whether a Recheck
+   should ask a refused candidate question again is not part of 147A and stays the owner's call.
 2. **Two sessions of one folder at once.** A request is counted for the latest session of its run
    folder, since the request names no session. An older session of the same folder that still asked
    - a context review's failed chat, whose chip is still shown - would count against the latest's.
