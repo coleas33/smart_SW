@@ -517,6 +517,81 @@ public class AllowlistGuardTests
         }
     }
 
+    /// <summary>
+    /// Decision 151A's review (T207; its finding N4): the shared rule holds its own invariant, that every key is
+    /// interface-qualified, and a guard built with a key that is not fails as it is built, before it is asked
+    /// anything. A bare name among the keys would pass before the read-only guard was asked - <c>SaveAs3</c>
+    /// through a gate whose read-only guard refuses it - and a key with no interface or no member would never
+    /// be a qualified key at all. Whichever policy the guard's bare names have.
+    /// </summary>
+    [Theory]
+    [InlineData("SaveAs3")]
+    [InlineData("OpenDoc7")]
+    [InlineData("GetTitle")]
+    [InlineData("ISldWorks.")]
+    [InlineData(".OpenDoc7")]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void AGuardBuiltWithAKeyThatIsNotQualifiedFailsAsItIsBuilt(string? key)
+    {
+        Assert.Throws<ArgumentException>(() => new ThrowawayGuard(new[] { "ISldWorks.OpenDoc7", key! }));
+        Assert.Throws<ArgumentException>(() => new ThrowawayGuard(new[] { "ISldWorks.OpenDoc7", key! }, new[] { "GetTitle" }));
+    }
+
+    /// <summary>
+    /// Decision 151A's review (T207; its finding N4): every read of a closed allowlist is a bare member name -
+    /// not blank, and with no separator at all - and a guard built with one that is not fails as it is built.
+    /// A qualified name among the reads would pass a closed allowlist as a read, though only its keys are
+    /// qualified, and a name with a separator but no interface or no member is no member name.
+    /// </summary>
+    [Theory]
+    [InlineData("IModelDoc2.GetTitle")]
+    [InlineData("ISldWorks.OpenDoc7")]
+    [InlineData(".GetTitle")]
+    [InlineData("GetTitle.")]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void AGuardBuiltWithAReadThatIsNotABareNameFailsAsItIsBuilt(string? read)
+    {
+        Assert.Throws<ArgumentException>(() => new ThrowawayGuard(new[] { "ISldWorks.OpenDoc7" }, new[] { "GetTitle", read! }));
+    }
+
+    /// <summary>
+    /// The control beside the two above: a guard built with qualified keys and bare reads is built, and answers
+    /// by the shared rule - as each of the product's three is, which every test that builds one shows.
+    /// </summary>
+    [Fact]
+    public void AGuardBuiltWithQualifiedKeysAndBareReadsIsBuilt()
+    {
+        var closed = new ThrowawayGuard(new[] { "ISldWorks.OpenDoc7" }, new[] { "GetTitle" });
+        closed.Assert("ISldWorks.OpenDoc7");
+        closed.Assert("GetTitle");
+        AssertRefusedNaming(closed, "OpenDoc7");
+        AssertRefusedNaming(closed, "IModelDoc2.GetTitle");
+
+        var open = new ThrowawayGuard(new[] { "ISldWorks.OpenDoc7" });
+        open.Assert("GetTitle");
+        AssertRefusedNaming(open, "SaveAs3");
+    }
+
+    /// <summary>A guard of the test's own, built on the shared rule with the lists a case hands it.</summary>
+    private sealed class ThrowawayGuard : AllowlistGuard
+    {
+        public ThrowawayGuard(IEnumerable<string> keys)
+            : base(keys)
+        {
+        }
+
+        public ThrowawayGuard(IEnumerable<string> keys, IEnumerable<string> reads)
+            : base(keys, reads)
+        {
+        }
+
+        protected override string Refusal(string key) => key + " is not on the throwaway guard's list.";
+    }
+
     private static void AssertRefusedNaming(ICallGuard guard, string name)
     {
         MutatingCallError refusal = Assert.Throws<MutatingCallError>(() => guard.Assert(name));

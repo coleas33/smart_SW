@@ -43,7 +43,9 @@ public enum BareNamePolicy
 ///
 /// Each guard keeps its own list, its own words for a refusal (<see cref="Refusal"/>) and its own construction
 /// site. This class adds no name to any list and widens no guard: its <see cref="Assert"/> cannot be
-/// overridden, and the one answer a guard may add, <see cref="RefuseByName"/>, can only refuse. The tests read
+/// overridden, the one answer a guard may add, <see cref="RefuseByName"/>, can only refuse, and since the
+/// decision's review a guard whose key is not interface-qualified, or whose read is not a bare member name,
+/// fails as it is built. The tests read
 /// each guard's keys and bare-name policy through it. <see cref="RemodelProbeGuard"/> and
 /// <see cref="SuppressTestGuard"/> are not built on it: they are exemptions over the read-only guard, not
 /// allowlists - a name on their lists passes, matched ignoring case, and every other, bare or qualified, is
@@ -70,6 +72,32 @@ public abstract class AllowlistGuard : ICallGuard
     {
         _keys = new HashSet<string>(keys, StringComparer.Ordinal);
         _reads = new HashSet<string>(reads, StringComparer.Ordinal);
+
+        // The rule's own invariant (decision 151A's review, finding N4), held as the guard is built rather than
+        // by each guard's pinned list alone: every key is interface-qualified, so no bare name passes before the
+        // read-only guard is asked, and every read is a bare member name - not blank, with no separator at all -
+        // so a closed allowlist passes no qualified name as a read. A guard built otherwise is a programming
+        // error, and fails as it is built, before it is asked anything.
+        foreach (string key in _keys)
+        {
+            if (!CallKey.IsQualified(key))
+            {
+                throw new ArgumentException(
+                    $"An allowlist guard's key is interface-qualified, such as \"IModelDoc2.Save3\"; got \"{key}\".",
+                    nameof(keys));
+            }
+        }
+
+        foreach (string read in _reads)
+        {
+            if (string.IsNullOrWhiteSpace(read) || read.IndexOf(CallKey.Separator) >= 0)
+            {
+                throw new ArgumentException(
+                    $"An allowlist guard's read is a bare member name, such as \"GetTitle\"; got \"{read}\".",
+                    nameof(reads));
+            }
+        }
+
         BareNames = bareNames;
         Keys = new ReadOnlyCollection<string>(_keys.ToList());
         Reads = new ReadOnlyCollection<string>(_reads.ToList());
