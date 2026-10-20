@@ -1721,6 +1721,51 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
+    /// A save's restart can fail with something other than a start failure: the old backend
+    /// stopped, and the new one's log could not be opened, outside the wrapper that makes a
+    /// <see cref="BackendStartException"/>. No backend is up then, and the other tabs are told, as
+    /// for any failure (owner decision 145A, third review: only a <see cref="BackendStartException"/>
+    /// told them). One that fails so before it stops anything leaves the old backend up, and tells
+    /// them nothing. How the save itself is answered is not changed here (research 145A).
+    /// </summary>
+    [Theory]
+    [InlineData("old backend stopped")]
+    [InlineData("old backend still up")]
+    public void ASavesRestartThatFailsOtherwiseIsToldToTheOtherTabsOnceNoBackendIsUp(string when)
+    {
+        using var world = new RestartWorld();
+        var failure = new IOException("FICT the backend's log could not be opened with " + OpenAiKey);
+        if (when == "old backend stopped")
+        {
+            world.Backend.RestartFailure = failure;
+        }
+        else
+        {
+            world.Backend.EarlyRestartFailure = failure;
+        }
+
+        world.Open();
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        Assert.Equal(0, world.OtherTabsTold);
+        if (when == "old backend stopped")
+        {
+            string told = Assert.Single(world.FailuresToldToTheOtherTabs);
+            Assert.StartsWith("FICT the backend's log could not be opened with ", told, StringComparison.Ordinal);
+            Assert.DoesNotContain(OpenAiKey, told, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Empty(world.FailuresToldToTheOtherTabs);
+        }
+
+        // As before 145A, and left for the owner (research 145A, Not changed): the save is answered
+        // with the failure although the settings were written.
+        Assert.Equal("HostError", world.Reply("error", "save").GetProperty("error_class").GetString());
+    }
+
+    /// <summary>
     /// The failure reaches the other tabs masked: whatever the start said - a key in a child's
     /// error, say - never leaves this host unmasked (FR-015).
     /// </summary>

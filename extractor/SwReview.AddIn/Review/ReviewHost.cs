@@ -1225,6 +1225,15 @@ public sealed class ReviewHost : IDisposable
             restartFailure = failure.Message;
             TellTheOtherTabsTheRestartFailed(failure);
         }
+        catch (Exception failure)
+        {
+            // Any other failure of the restart - the new backend's log not opened, outside the
+            // wrapper that makes a BackendStartException - can come after the old backend stopped:
+            // the other tabs are told as for any failure, which only a backend no longer up does
+            // (owner decision 145A, third review). The save is answered as it always was.
+            TellTheOtherTabsTheRestartFailed(failure);
+            throw;
+        }
 
         SendSettings("settings.saved", id);
 
