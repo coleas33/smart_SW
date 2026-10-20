@@ -475,7 +475,8 @@ public sealed class ReviewHost : IDisposable
             },
             failure =>
             {
-                PostStatus("error", failure.Message);
+                // As a failed start is reported, with the way on after it (150A review).
+                PostStatus("error", WithTheWayOn(failure.Message, RetryTheRestart));
                 TellTheOtherTabsTheRestartFailed(failure);
             },
             () => PostStatus("error", RestartNotAnswered),
@@ -1342,8 +1343,42 @@ public sealed class ReviewHost : IDisposable
     /// because a restart's failure need not end in a full stop.
     /// </summary>
     private const string SavedNotRestarted =
-        "the settings are saved, but the review backend did not restart with them. Save the settings again "
-        + "to retry the restart. The restart failed: ";
+        "the settings are saved, but the review backend did not restart with them. " + RetryTheRestart
+        + " The restart failed: ";
+
+    // ---- the way on once the backend did not start (owner decision 150A, found on review) ------
+
+    /// <summary>
+    /// What the Review tab is told to do once the add-in's first start of the backend failed: the
+    /// settings are saved on this tab, and a save starts the backend, none running included.
+    /// </summary>
+    internal const string StartItAgain = "Save Settings to start it again.";
+
+    /// <summary>...what every other tab is told once the backend did not start: it has no Save of its own.</summary>
+    internal const string StartItAgainOnTheReviewTab = "Save Settings on the Review tab to start it again.";
+
+    /// <summary>
+    /// ...what the Review tab is told once a restart that waited for a turn or a remodel run failed:
+    /// true whether the restart stopped the old backend or failed before it did, so not "start".
+    /// </summary>
+    private const string RetryTheRestart = "Save the settings again to retry the restart.";
+
+    /// <summary>
+    /// The add-in's word that the backend did not start, as a page's banner shows it: the failure,
+    /// then the way on (owner decision 150A, found on review). The way on is a sentence of its own,
+    /// so a failure that does not end in one - "... (log: &lt;path&gt;)" - is given a full stop.
+    /// </summary>
+    internal static string WithTheWayOn(string failure, string wayOn)
+    {
+        string said = (failure ?? string.Empty).TrimEnd();
+        if (said.Length == 0)
+        {
+            return wayOn;
+        }
+
+        char last = said[said.Length - 1];
+        return said + (last == '.' || last == '!' || last == '?' ? " " : ". ") + wayOn;
+    }
 
     /// <summary>
     /// The sentence for a save whose restart waits, naming what it waits for (owner decision 145A):
@@ -1532,9 +1567,10 @@ public sealed class ReviewHost : IDisposable
     /// backend, or waits for the one being made, so the review runs on the restarted backend
     /// with those settings and never on the old one. Answers false, having sent the refusal, when
     /// it cannot: something still holds the restart back, and the refusal says what; or the
-    /// restart failed - this call's, or the one it waited for - which has been reported as a
-    /// failed start is, and is this review's answer too. True when nothing waits, or once the
-    /// restart has been made.
+    /// restart failed - this call's, or the one it waited for - which whoever made it has
+    /// reported, a save in its own answer (owner decision 150A) and any other caller in a `status`
+    /// with the way on, and that failure is this review's answer too. True when nothing waits, or
+    /// once the restart has been made.
     /// </summary>
     private bool RestartedForNewReview(string? id)
     {

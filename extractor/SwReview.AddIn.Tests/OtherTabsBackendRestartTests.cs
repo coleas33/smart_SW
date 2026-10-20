@@ -22,6 +22,9 @@ namespace SwReview.AddIn.Tests;
 ///
 /// The add-in cannot be built without a live SOLIDWORKS, so its wiring is read from its source,
 /// as <see cref="DeferredRestartTests"/> and <see cref="RemodelWiringTests"/> read theirs.
+///
+/// The 150A review adds the way on to the add-in's word that the backend did not start, a failed
+/// first start's and a failed restart's, as each tab is told it.
 /// </summary>
 public sealed class OtherTabsBackendRestartTests
 {
@@ -82,7 +85,9 @@ public sealed class OtherTabsBackendRestartTests
     /// review host one call that posts `status {stage: "error"}`, with the failure, through each of
     /// the Model check, Standards and Remodel hosts - the add-in's own fan-out of a backend status,
     /// less the Review page, which the review host tells itself (owner decision 145A, found on
-    /// review). One case per tab.
+    /// review). One case per tab. Since the 150A review the failure ends with the way on, which is
+    /// on the Review tab, and the call, which a failed first start makes too, is named for what it
+    /// says: the backend did not start.
     /// </summary>
     [Theory]
     [InlineData("_modelCheckHost?.PostStatus(stage, message, lifecycle: true);")]
@@ -93,9 +98,10 @@ public sealed class OtherTabsBackendRestartTests
         string source = AddInSource();
         string options = Between(
             source, "var reviewOptions = new ReviewHostOptions(", "_reviewHost = new ReviewHost(reviewOptions);");
-        Assert.Contains("BackendRestartFailed = TellTheOtherTabsTheRestartFailed,", options, StringComparison.Ordinal);
+        Assert.Contains("BackendRestartFailed = TellTheOtherTabsTheBackendDidNotStart,", options, StringComparison.Ordinal);
         Assert.Contains(
-            "private void TellTheOtherTabsTheRestartFailed(string message) => PostStatusToTheOtherPages(\"error\", message);",
+            "private void TellTheOtherTabsTheBackendDidNotStart(string message) => PostStatusToTheOtherPages("
+                + "\"error\", ReviewHost.WithTheWayOn(message, ReviewHost.StartItAgainOnTheReviewTab));",
             source,
             StringComparison.Ordinal);
 
@@ -106,6 +112,52 @@ public sealed class OtherTabsBackendRestartTests
         // The first start's fan-out is the same one, with the Review page in front of it.
         string every = Between(source, "private void PostStatusToPages(string stage, string message) {", "}");
         Assert.Contains("_reviewHost?.PostStatus(stage, message); PostStatusToTheOtherPages(stage, message);", every, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A first start that failed is told to every page with the way on (150A review, O2: until then
+    /// each banner carried the bare failure): the Review page is sent to its own Save, and every
+    /// other tab, through the call a restart that failed is told to them with, to the Review tab's.
+    /// </summary>
+    [Fact]
+    public void AFailedFirstStartTellsEveryPageTheWayOn()
+    {
+        string source = AddInSource();
+        string start = Between(
+            source,
+            "private void StartBackend(UserSettings settings, ResolvedApiKey key) {",
+            "Report(\"The SwReview backend did not start.\", failure);");
+        int caught = start.IndexOf("catch (Exception failure)", StringComparison.Ordinal);
+        Assert.True(caught >= 0, "StartBackend no longer catches the start's failure where this test reads it.");
+        string failed = start.Substring(caught);
+
+        Assert.Contains(
+            "_reviewHost?.PostStatus(\"error\", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain));",
+            failed,
+            StringComparison.Ordinal);
+        Assert.Contains("TellTheOtherTabsTheBackendDidNotStart(failure.Message);", failed, StringComparison.Ordinal);
+        Assert.DoesNotContain("PostStatusToPages(\"error\"", failed, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The way on is a sentence of its own after the failure: a failure that does not end in a full
+    /// stop - "... (log: &lt;path&gt;)" - is given one, trailing blanks go, and with no failure there is
+    /// only the way on (150A review, O2).
+    /// </summary>
+    [Theory]
+    [InlineData(
+        "FICT the backend did not answer /health within 30 seconds. See the log at C:\\Fictional\\FICT-logs\\backend.log.",
+        "FICT the backend did not answer /health within 30 seconds. See the log at C:\\Fictional\\FICT-logs\\backend.log. "
+            + "Save Settings on the Review tab to start it again.")]
+    [InlineData(
+        "FICT the backend could not be started: the job refused it (log: C:\\Fictional\\FICT-logs\\backend.log)",
+        "FICT the backend could not be started: the job refused it (log: C:\\Fictional\\FICT-logs\\backend.log). "
+            + "Save Settings on the Review tab to start it again.")]
+    [InlineData("FICT the backend did not start?  ", "FICT the backend did not start? Save Settings on the Review tab to start it again.")]
+    [InlineData("", "Save Settings on the Review tab to start it again.")]
+    public void TheWayOnIsASentenceOfItsOwnAfterTheFailure(string failure, string said)
+    {
+        Assert.Equal(said, ReviewHost.WithTheWayOn(failure, ReviewHost.StartItAgainOnTheReviewTab));
     }
 
     /// <summary>
