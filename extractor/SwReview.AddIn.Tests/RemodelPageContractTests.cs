@@ -1482,6 +1482,114 @@ public sealed class RemodelPageContractTests
     }
 
     /// <summary>
+    /// Owner decision 155A, test first (004 T193; feature 011 research R12.9 item 9): a page that loads
+    /// again while its run runs starts from `init` alone, and `init.latest_run.running` says the run is in
+    /// flight. The page shows the run running, as the page that pressed Start did: Stop pressable, and
+    /// neither Remodel a copy, Start, Open copy nor Discard copy offered - the host refuses each while the
+    /// run holds it. Stop works: it is sent, and the host's answer, once the run has finalized, ends the
+    /// running state and offers them again. Before, the page offered all four and disabled Stop.
+    /// </summary>
+    [Fact]
+    public void APageLoadedAgainWhileItsRunRunsShowsItRunningAndCanStopIt()
+    {
+        HostStub? stub = null;
+        var states = new List<string>();
+        string? runStatus = null;
+        int startsAtTheEnd = -1;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                await Click(page, "start-run");
+
+                stub!.LatestRun = LatestRun("applying", running: true);
+                await Reload(page);
+                states.Add("reloaded " + await Pressable(page));
+                runStatus = await TextOf(page, "run-status");
+
+                await Click(page, "stop-run");
+                states.Add("stopped " + await Pressable(page));
+                startsAtTheEnd = stub.Starts;
+            });
+
+        Assert.Equal(
+            new[]
+            {
+                "reloaded stop-run",
+                "stopped plan-run start-run open-copy discard-copy",
+            },
+            states);
+        Assert.Equal("Running...", runStatus);
+        Assert.Contains("remodel.stop", stub!.Received);
+        Assert.Equal(1, startsAtTheEnd);
+    }
+
+    /// <summary>
+    /// Owner decision 155A (004 T193): the run shown running after a reload ends as a run this page started
+    /// does, at the host's terminal status, which offers the copy actions again.
+    /// </summary>
+    [Fact]
+    public void ARunShownRunningAfterAReloadEndsAtItsTerminalStatus()
+    {
+        HostStub? stub = null;
+        var states = new List<string>();
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+
+                stub!.LatestRun = LatestRun("verifying", running: true);
+                await Reload(page);
+                states.Add("reloaded " + await Pressable(page));
+
+                stub.Post("status", new { stage = "ready", message = "The run ended 'saved'." });
+                await Settled(page);
+                states.Add("ended " + await Pressable(page));
+            });
+
+        Assert.Equal(
+            new[]
+            {
+                "reloaded stop-run",
+                "ended plan-run start-run open-copy discard-copy",
+            },
+            states);
+    }
+
+    /// <summary>The run buttons the page offers now, by id, in the page's order, or "-" for none (owner decision 155A).</summary>
+    private static async Task<string> Pressable(CoreWebView2 page)
+    {
+        var pressable = new List<string>();
+        foreach (string id in new[] { "plan-run", "start-run", "stop-run", "open-copy", "discard-copy" })
+        {
+            if (!await Disabled(page, id))
+            {
+                pressable.Add(id);
+            }
+        }
+
+        return pressable.Count == 0 ? "-" : string.Join(" ", pressable);
+    }
+
+    /// <summary>`init.latest_run` for the first plan's folder in <paramref name="state"/>, as `RemodelHost.SendInit` writes it with a run in flight or not (owner decision 155A).</summary>
+    private static object LatestRun(string state, bool running) => new
+    {
+        run_dir = HostStub.RunDir,
+        at = "2026-09-16T14:22:01.0000000",
+        state,
+        plan_lost = (string?)null,
+        running,
+    };
+
+    /// <summary>
     /// The notice's line reaches the DOM as text, like every other string on this page: markup
     /// in it builds no element and runs nothing. The host's sentence carries none, and the page
     /// does not take that on trust.
@@ -1831,6 +1939,10 @@ public sealed class RemodelPageContractTests
                     return;
                 case "remodel.result":
                     Reply("remodel.result", id, Parse(RemodelResultSample.ResultJson()));
+                    return;
+                case "remodel.stop":
+                    // As `RemodelHost` answers it, once the executor has finalized the run.
+                    Reply("remodel.stopped", id, new { changes_applied = 2 });
                     return;
                 default:
                     Reply("ok", id, new { });

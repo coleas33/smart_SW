@@ -157,6 +157,65 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 155A, test first (004 T193; feature 011 research R12.9 item 9): a page that loads
+    /// again asks for `init`, and `init.latest_run` carried the plan's state and nothing of whether the run
+    /// was in flight, so a page that loaded again during a run offered what the host refuses and could not
+    /// stop the run. `init.latest_run.running` says so: true from `remodel.started` while the run is in
+    /// flight.
+    /// </summary>
+    [Fact]
+    public void AnInitAnsweredWhileTheRunIsInFlightSaysTheLatestRunIsRunning()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+            {
+                world.WritePlanState("applying");
+                world.Receive("ready", "r2", new { });
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement latest = world.Reply("init", "r2").GetProperty("latest_run");
+            Assert.Equal(world.ExpectedRunDirectory, latest.GetProperty("run_dir").GetString());
+            Assert.Equal("applying", latest.GetProperty("state").GetString());
+            Assert.True(latest.GetProperty("running").GetBoolean());
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 155A (004 T193): and false for a run that is not in flight - a plan waiting for Start,
+    /// one Start refused, a run that has ended, and a plan whose copy was discarded.
+    /// </summary>
+    [Theory]
+    [InlineData("planned")]
+    [InlineData("refused")]
+    [InlineData("ended")]
+    [InlineData("discarded")]
+    public void AnInitSaysTheLatestRunIsNotRunningWhenNoRunIsInFlight(string when)
+    {
+        using (var world = new RemodelWorld { StartValidated = when != "refused" })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            if (when == "refused" || when == "ended")
+            {
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            }
+            else if (when == "discarded")
+            {
+                world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+            }
+
+            world.Receive("ready", "r2", new { });
+
+            Assert.False(world.Reply("init", "r2").GetProperty("latest_run").GetProperty("running").GetBoolean());
+        }
+    }
+
+    /// <summary>
     /// The token is a bearer credential. It belongs in exactly one message - the `init` the
     /// page needs it in - and in nothing the host ever says about a failure (FR-015).
     /// </summary>

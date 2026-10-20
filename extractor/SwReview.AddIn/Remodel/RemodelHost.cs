@@ -1041,6 +1041,12 @@ public sealed class RemodelHost : IDisposable
                         // describes the run it names; the notice's once-per-plan claim is
                         // neither spent nor needed here.
                         { "plan_lost", IsLostPlan(latest) ? LostMessage(latest) : null },
+
+                        // Owner decision 155A (feature 011 research R12.9 item 9): whether this run
+                        // is in flight - started and not yet ended - which `state`, the plan's, does
+                        // not say. A page that loads again starts from `init` alone, and shows the
+                        // run running, Stop pressable, rather than offering what the host refuses.
+                        { "running", ReferenceEquals(_active, latest) },
                     }
             },
         });
