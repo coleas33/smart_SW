@@ -34,10 +34,11 @@ namespace SwReview.AddIn.Review;
 /// <b>Work the restart would end is treated as a turn (owner decision 145A).</b> A remodel run
 /// holds the backend as a turn does, and is known without asking it (<c>busy</c>). Every restart
 /// reads it under the restart's own lock - a save's before it asks the backend anything
-/// (<see cref="Now(Action, out Hold)"/>), any other after its look (<see cref="Apply"/>), which is
-/// made outside the lock - and waits while a run is in progress. A run begins through
-/// <see cref="Begin"/>, which makes a waiting restart first, or waits for the one being made, and
-/// marks the run under that same lock: a restart and a run never overlap.
+/// (<see cref="Now(Action, out Hold)"/>), any other after its look (<see cref="Apply"/>), which
+/// can answer without reading the run - and waits while a run is in progress. A run begins
+/// through <see cref="Begin"/>, which makes a waiting restart first, or waits for the one being
+/// made, and marks the run under that same lock, so a run begins only once no restart waits or is
+/// being made: a restart and a run never overlap.
 ///
 /// <b>A backend that does not answer is watched, but not for ever.</b> Not knowing whether a turn
 /// runs is not knowing that none does, so a look the backend leaves without a usable answer
@@ -99,8 +100,9 @@ internal sealed class DeferredRestart : IDisposable
         TurnRunning,
 
         /// <summary>
-        /// A remodel run holds the restart back - the look found one, or one began after the look
-        /// (owner decision 145A): nothing was changed, and it still waits.
+        /// A remodel run holds the restart back - the look found one, or the restart's own lock
+        /// found one the look did not read (owner decision 145A): nothing was changed, and it
+        /// still waits.
         /// </summary>
         RemodelRunning,
 
@@ -352,10 +354,12 @@ internal sealed class DeferredRestart : IDisposable
                 return settled.Value;
             }
 
-            // Owner decision 145A: a remodel run can have begun since the look above, which was
-            // made outside this lock. A run begins under this lock (Begin), so read here none can
-            // begin before the restart, and the restart never ends one. Nothing was changed, so
-            // the restart still waits.
+            // Owner decision 145A: the look above can answer that nothing holds the restart back
+            // without reading the remodel run - the review host's does so when there is no backend
+            // process at all, and a look that cannot be made counts as such an answer - so the run
+            // is read here, under the lock a run begins under (Begin), and the restart never ends
+            // one. Nothing was changed, so the restart still waits. (A run cannot begin after the
+            // look while a restart waits: Begin makes or waits for the restart first.)
             if (Busy())
             {
                 return Outcome.RemodelRunning;

@@ -4973,6 +4973,52 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// The gate can wait through a settings restart - seconds in which the host is not busy yet, so
+    /// the tool service is free to re-attach, or a teardown to end the plan's session. Start reads
+    /// the plan's session again once the host is busy, and refuses `SessionLost` before
+    /// `remodel.started` and before any call, as it does when the loss came before the press
+    /// (decision 22A): a run never starts on a session that went while the gate waited. Found by
+    /// an independent review of 145A.
+    /// </summary>
+    [Theory]
+    [InlineData("re-attach")]
+    [InlineData("session ended")]
+    public void APlansSessionLostWhileTheGateWaitsIsRefusedBeforeTheRunStarts(string loss)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string runDir = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            world.Options.BeginRun = begin =>
+            {
+                if (loss == "re-attach")
+                {
+                    world.Reattach(SecondAttachment);
+                }
+                else
+                {
+                    world.Host.SessionEnded(world.EndOutcome(copyClosed: true));
+                }
+
+                begin();
+                return null;
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = runDir });
+
+            JsonElement error = world.Reply("error", "s1");
+            Assert.Equal("SessionLost", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.SessionLostMessage, error.GetProperty("message").GetString());
+            Assert.False(error.GetProperty("retryable").GetBoolean());
+            Assert.Empty(world.AllPosted("remodel.started"));
+            Assert.Equal(0, world.Pipeline.Count("run"));
+            Assert.Equal(RemodelRunPhase.Planned, world.Host.LatestRun!.Phase);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
     /// <summary>A Start refused on the spot - Start switched off in this build - asks no gate.</summary>
     [Fact]
     public void AStartRefusedOnTheSpotAsksNoRestartGate()

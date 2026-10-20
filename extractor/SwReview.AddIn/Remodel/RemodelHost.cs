@@ -1550,15 +1550,10 @@ public sealed class RemodelHost : IDisposable
         // anything. Ahead of the seat check on purpose: mid-restart the seat reads as still
         // being checked, and asking the engineer to wait would only earn this answer next time.
         // 004 T173: a plan planning again closed is lost the same way, in its own words.
-        if (run.ClosedByPlanAgain)
+        string? lost = LostSessionWords(run);
+        if (lost != null)
         {
-            _actions.SendError(id, "SessionLost", PlanClosedMessage, retryable: false);
-            return;
-        }
-
-        if (run.SessionEnded || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()))
-        {
-            _actions.SendError(id, "SessionLost", SessionLostMessage, retryable: false);
+            _actions.SendError(id, "SessionLost", lost, retryable: false);
             return;
         }
 
@@ -1585,6 +1580,18 @@ public sealed class RemodelHost : IDisposable
         // needs no call and before `remodel.started`.
         if (!BeganRun(id))
         {
+            return;
+        }
+
+        // The gate may have waited through a settings restart - seconds in which the host was not
+        // busy, so the tool service was free to re-attach, or a teardown to end the plan's session.
+        // Read again now the host is busy, which a re-attach of the service's own asks before it
+        // moves: a run never starts on a session that went while the gate waited (decision 22A).
+        lost = LostSessionWords(run);
+        if (lost != null)
+        {
+            _busy = false;
+            _actions.SendError(id, "SessionLost", lost, retryable: false);
             return;
         }
 
@@ -1681,6 +1688,25 @@ public sealed class RemodelHost : IDisposable
                 { "changes_applied", outcome.ChangesApplied },
             });
         }
+    }
+
+    /// <summary>
+    /// The words Start refuses a plan whose bridge session is gone with (`SessionLost`), or null
+    /// while the plan holds it: <see cref="PlanClosedMessage"/> for one planning again closed (004
+    /// T173), and <see cref="SessionLostMessage"/> for one whose session a teardown ended or whose
+    /// attachment is not the one listening now (decision 22A). One reading for Start's check
+    /// before the restart gate and its check again once the host is busy (owner decision 145A).
+    /// </summary>
+    private string? LostSessionWords(RemodelRun run)
+    {
+        if (run.ClosedByPlanAgain)
+        {
+            return PlanClosedMessage;
+        }
+
+        return run.SessionEnded || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment())
+            ? SessionLostMessage
+            : null;
     }
 
     /// <summary>

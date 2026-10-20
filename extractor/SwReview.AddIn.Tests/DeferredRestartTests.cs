@@ -1808,6 +1808,34 @@ public sealed class DeferredRestartTests
             world.Last("backend.restarted").GetProperty("sentences").EnumerateArray().Select(sentence => sentence.GetString()));
     }
 
+    /// <summary>
+    /// With no backend process at all the look answers that nothing holds the restart back - the
+    /// restart is what brings a backend back - without reading the remodel run. The run is read
+    /// again under the restart's own lock, so one still in progress holds the restart back even
+    /// then, and the restart is made once the run ends. Found by an independent review of 145A:
+    /// this, not a run begun after the look, is what that reading under the lock guards.
+    /// </summary>
+    [Fact]
+    public void WithNoBackendAtAllARemodelRunInProgressStillHoldsTheRestartBack()
+    {
+        int remodelling = 1;
+        using var world = new RestartWorld { BackendBusy = () => Volatile.Read(ref remodelling) == 1 };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        world.Backend.Down = true;
+
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.Attempts);
+        Assert.Empty(world.Posted("backend.restarted"));
+
+        Volatile.Write(ref remodelling, 0);
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted after the run");
+        Assert.Equal("low", Assert.Single(world.Backend.Restarts).Settings.Effort);
+        Assert.NotNull(world.Backend.Endpoint);
+    }
+
     /// <summary>With nothing waiting, a remodel run begins at once: nothing is asked of the backend and nothing restarts.</summary>
     [Fact]
     public void ARemodelRunWithNoRestartWaitingBeginsAtOnceAndNothingIsAsked()
@@ -2541,19 +2569,22 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// A remodel run that began after the look - made outside the restart's lock, as a round trip
-    /// must be - and before the lock is never ended by the restart: the run is read again under the
-    /// lock, which a run takes to begin, and the restart still waits.
+    /// A look that answers that nothing holds the restart back while a remodel run is in progress -
+    /// the review host's answers so, without reading the run, when there is no backend process at
+    /// all, and a look that cannot be made counts as such an answer - never leads to a restart that
+    /// ends the run: the run is read again under the restart's own lock, and the restart still
+    /// waits. (Renamed on review: it was said to guard a run begun after the look, which the gate
+    /// rules out, since a run begins only once no restart waits.)
     /// </summary>
     [Fact]
-    public void ARestartNeverEndsARemodelRunThatBeganAfterItsLook()
+    public void ARestartNeverEndsARemodelRunItsLookDidNotRead()
     {
         int busy = 0;
         int tried = 0;
         using var restart = NewRestart(
             () =>
             {
-                // The run begins just after this look, which saw none.
+                // A run is in progress, and this look answers without reading it.
                 Volatile.Write(ref busy, 1);
                 return DeferredRestart.Hold.None;
             },
