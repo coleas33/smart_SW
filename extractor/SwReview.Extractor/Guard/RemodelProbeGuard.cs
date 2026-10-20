@@ -66,9 +66,9 @@ public sealed class RemodelProbeGuard : ICallGuard
 
     /// <summary>
     /// The rest of the exemption: the throwaway part's creation and PROBE-5's move into a folder, one
-    /// rebuild per recipe step, the part's save into the run folder, the run-scoped system settings
-    /// <see cref="RemodelSystemToggles"/> sets and restores in a <c>finally</c> around the whole probe
-    /// run, and PROBE-9's one suppression.
+    /// rebuild per recipe step, the part's save into the run folder and PROBE-12's reopen of it, the
+    /// run-scoped system settings <see cref="RemodelSystemToggles"/> sets and restores in a
+    /// <c>finally</c> around the whole probe run, and PROBE-9's one suppression.
     /// </summary>
     private static readonly HashSet<string> RunScopedMemberSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -81,6 +81,12 @@ public sealed class RemodelProbeGuard : ICallGuard
         // PROBE-5's move of a feature of the throwaway part into a folder: IFeatureManager.MoveToFolder.
         // The read-only guard refuses it since decision 144A, as it refuses NewDocument.
         "MoveToFolder",
+
+        // PROBE-12's reopen of the throwaway part it saved and closed: ISldWorks.OpenDoc7, by the
+        // qualified key its host gates - the key the stage-1 allowlist gives remodel.open's open of the
+        // copy. Owner decision 148A (feature 011, 2026-10-20) has the read-only guard refuse the bare
+        // name, which this probe gated until then, so the open is exempted here, for this one gate.
+        "ISldWorks.OpenDoc7",
 
         // Committing each step so the next one sees a rebuilt tree.
         "ForceRebuild3",

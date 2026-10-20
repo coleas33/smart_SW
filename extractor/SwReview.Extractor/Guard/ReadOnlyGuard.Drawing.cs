@@ -378,6 +378,7 @@ public static partial class ReadOnlyGuard
         "OpenDoc2",
         "OpenDoc3",
         "OpenDoc4",
+        "OpenDoc7",
         "OpenDocSilent",
         "OpenModelConfiguration",
         "PasteSheet",

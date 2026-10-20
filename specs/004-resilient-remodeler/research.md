@@ -922,7 +922,10 @@ do not appear in the MCP function list and they are not in the terminal profile'
 ### R8.1 The run folder
 
 Created by the existing `RunFolders` helper so the naming convention stays in one place:
-`<run_root>/<yyyyMMdd-HHmmss>-<doc>-remodel/`.
+`<run_root>/<yyyyMMdd-HHmmss>-<doc>-remodel/`. *Amended 2026-10-20 (feature 011, owner decision
+148A; its research R12.3):* in its full form, named under `Path.GetFullPath` of the run root, so a
+run root spelled with a `..` segment, which the backend's rule for a run folder and the one rule for
+the copy's path refuse, plans.
 
 ```
 copy/<doc>-RMS.SLDPRT     the working copy; the ONLY file SOLIDWORKS may write
@@ -1569,6 +1572,11 @@ the request's `gated=` line and counts toward the breaker, and `SwRemodelCopyDoc
   `ISldWorks.OpenDoc7` by those keys, refuses every other qualified key and hands every bare name
   to the read-only guard; the seat takes only the run's copy and writes its gate log to the run's
   `remodel.log` (`contracts/guard-allowlist.md`, "The re-modeler's pane seat").
+  *Amended 2026-10-20 (owner decision 148A; feature 011's research R12):* the seat's guard is a closed
+  allowlist - its two keys and its five reads, nothing else; `remodel.open` and `probe remodel`'s
+  reopen call `OpenDoc7` by its qualified key too, the stage-1 allowlist and the probe's guard allowing
+  it, and the read-only guard refuses the bare name; both seats take the run's copy by one rule,
+  `RemodelCopy.CopyOf`; and Open copy is refused while a remodel run is in progress.
 
 ## R15. Defaults taken 2026-09-27: the manifest's regeneration and the teardown's answers (T181, T179)
 
@@ -1679,7 +1687,10 @@ answer for).
   says SOLIDWORKS has no document open at the copy's path: a new seat member,
   `IRemodelSeat.IsDocumentOpen(copyPath)` (`ISldWorks.GetOpenDocumentByName` answered a document),
   asked only about a copy's path, by `RemodelCopy.RunDirectoryOf`'s rule, as the open and the close
-  are. The read is a clean-up read: the guard asked under the bare key `GetOpenDocumentByName` and
+  are. *Amended 2026-10-20 (feature 011, owner decision 148A's review; its research R12.8)*: by
+  `RemodelCopy.CopyOf`, the one rule both seats take the run's copy by, for the read, the open and the
+  close alike, where the copy folder's name alone took a `..` segment and a device path. The read is a
+  clean-up read: the guard asked under the bare key `GetOpenDocumentByName` and
   the observer told, not counted against the breaker, as the clean-up's writes are, so an open
   circuit cannot make every teardown report the copy open. A copy still open is false with a
   sentence that SOLIDWORKS still has it open; a read that throws is unknown, and unknown is not

@@ -7,25 +7,35 @@ namespace SwReview.Extractor.Guard;
 /// Owner decision 144A (feature 011, 2026-10-19; research R11, contracts/guard.md section 8). The
 /// guard the re-modeler's pane seat - the add-in's <c>SwRemodelSeat</c>: <c>remodel.open_copy</c>,
 /// and the activation of the run's copy before each dump (feature 004 T159) - builds its gate with:
-/// an <see cref="ICallGuard"/> allowlist of exactly two interface-qualified keys, in the shape of
-/// <see cref="DrawingOpenGuard"/>, recorded as one entry of its own in
+/// an <see cref="ICallGuard"/> allowlist, recorded as one entry of its own in
 /// <c>specs/004-resilient-remodeler/contracts/guard-allowlist.md</c>.
 ///
-/// Three answers, in this order:
-///   1. a key on <see cref="AllowedKeys"/>, matched <b>ordinally</b> so a mis-spelling fails
-///      closed rather than widening the surface, returns;
-///   2. any other interface-qualified key is refused, because the two keys are the whole of what
-///      the seat may do beyond reading; and
-///   3. a bare member name - every read - is <see cref="ReadOnlyGuard"/>'s answer, unchanged.
+/// <b>A closed allowlist</b> since owner decision 148A (2026-10-20; research R12.1): exactly the
+/// seat's own calls, and nothing else. Three answers, in this order:
+///   1. a key on <see cref="AllowedKeys"/> - the activation and the open, by their interface-qualified
+///      keys - matched <b>ordinally</b>, so a mis-spelling fails closed rather than widening the
+///      surface, returns;
+///   2. a read on <see cref="AllowedReads"/> - the five the seat makes, by the bare names it gates them
+///      under - matched ordinally too, returns; and
+///   3. any other name, bare or qualified, is refused, naming it.
+///
+/// Until decision 148A a bare name was <see cref="ReadOnlyGuard"/>'s answer, as it is in
+/// <see cref="DrawingOpenGuard"/>, so the bare <c>CloseDoc</c>, <c>OpenDoc6</c> and <c>OpenDoc7</c> the read-only
+/// guard left allowed passed this one too (research R11.7, finding 3). The tests hold each read on the list
+/// to a bare name the read-only guard allows, so the list can never name a writer it refuses, and hold the
+/// list to the members the seat's gate is asked about, way by way.
 ///
 /// It sees member names, never documents: that the seat opens or activates the run's copy and
 /// nothing else is the seat's own check, made before the first call and after each lookup or open
 /// (the copy's path must be a part inside a run folder's <c>copy/</c>, and the document SOLIDWORKS
-/// answers must be at that path), as <c>RemodelScope</c> is <see cref="RemodelGuard"/>'s second
-/// layer. It adds nothing to <see cref="ReadOnlyGuard"/>, <see cref="RemodelGuard"/> or
-/// <see cref="DrawingOpenGuard"/>, and it is built only by <c>SwRemodelSeat</c>. Of the two keys
-/// only <c>ActivateDoc3</c> overrides a read-only denial (the shared <c>ISldWorks</c> row of
-/// contracts/guard.md section 1); <c>OpenDoc7</c> is an exclusion of section 3.
+/// answers must be at that path), as <c>RemodelScope</c> is <see cref="RemodelGuard"/>'s second layer.
+/// It adds nothing to <see cref="ReadOnlyGuard"/>, <see cref="RemodelGuard"/> or
+/// <see cref="DrawingOpenGuard"/>, and it is built only by
+/// <c>SwRemodelSeat</c>. Both keys override a read-only denial (the shared <c>ISldWorks</c> row of
+/// contracts/guard.md section 1): <c>ActivateDoc3</c> since feature 011's T004, and <c>OpenDoc7</c>
+/// since owner decision 148A, which had the open's two other callers - <c>remodel.open</c>, under
+/// <see cref="RemodelGuard"/>, and <c>probe remodel</c>'s reopen, under <see cref="RemodelProbeGuard"/> -
+/// name it by this key too, and the read-only guard refuse the bare name.
 /// </summary>
 public sealed class RemodelSeatGuard : ICallGuard
 {
@@ -51,6 +61,23 @@ public sealed class RemodelSeatGuard : ICallGuard
     /// <summary>The allowlist, for reading: the tests assert it as an exact set.</summary>
     public static readonly IReadOnlyCollection<string> AllowedKeys = AllowedKeySet;
 
+    /// <summary>
+    /// Decision 148A: the reads the seat makes, by the bare names every read call site of the product
+    /// gives them - the lookup of the copy among the documents SOLIDWORKS has open, a document's path and
+    /// its title, the active document after an activation, and the open request <c>OpenDoc7</c> takes.
+    /// </summary>
+    private static readonly HashSet<string> AllowedReadSet = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "GetOpenDocumentByName",
+        "GetPathName",
+        "GetTitle",
+        "ActiveDoc",
+        "GetOpenDocSpec",
+    };
+
+    /// <summary>The reads the seat makes, for reading: the tests assert them as an exact set.</summary>
+    public static readonly IReadOnlyCollection<string> AllowedReads = AllowedReadSet;
+
     /// <inheritdoc />
     public void Assert(string interopMemberName)
     {
@@ -61,20 +88,16 @@ public sealed class RemodelSeatGuard : ICallGuard
 
         string key = interopMemberName.Trim();
 
-        if (AllowedKeySet.Contains(key))
+        if (AllowedKeySet.Contains(key) || AllowedReadSet.Contains(key))
         {
             return;
         }
 
-        if (CallKey.IsQualified(key))
-        {
-            throw new MutatingCallError(
-                key,
-                $"{key} is not on the re-modeler pane seat's allowlist ({ActivateDocKey}, {OpenDocKey}; "
-                + "specs/004-resilient-remodeler/contracts/guard-allowlist.md).");
-        }
-
-        // A bare member name is a read call site. The read-only rules apply to it unchanged.
-        ReadOnlyGuard.Assert(key);
+        throw new MutatingCallError(
+            key,
+            $"{key} is not on the re-modeler pane seat's allowlist, which holds the seat's own calls and "
+            + $"nothing else: {ActivateDocKey}, {OpenDocKey} and the reads "
+            + string.Join(", ", AllowedReadSet)
+            + " (specs/004-resilient-remodeler/contracts/guard-allowlist.md).");
     }
 }

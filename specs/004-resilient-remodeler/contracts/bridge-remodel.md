@@ -185,7 +185,13 @@ Sequence, in order, with the call that performs each step:
    read-only referenced documents" option was turned on since the probe is refused
    `scope_changed`, before the copy.
 4. `copy_path` passes `AssertSaveTarget` (`guard-allowlist.md`): inside this run's folder,
-   canonicalized, `.SLDPRT`, not the source, not another run's copy.
+   canonicalized, `.SLDPRT`, not the source, not another run's copy. *Amended 2026-10-20 (feature
+   011, owner decision 148A; its research R12.3):* first, the path is taken by the one rule both seats
+   take the run's copy by, `RemodelCopy.CopyOf` - a full path, a drive's or a share's, never a device
+   path, with no `..` segment, to a part in a run folder's `copy/`, the run folder not a root - which
+   answers its canonical form, used from here on; any other path is refused as a save target is,
+   `guard_refused` naming `Save3`, before anything is recorded. Until then a `..` was canonicalized
+   away and a device path taken. The run folder it names must be the one the host bound, as before.
 5. Record the source attestation: absolute path, length, `LastWriteTimeUtc`, SHA-256, and, when
    the path is inside an EPDM vault, the vault path and the revision as read from the vault. An
    EPDM part is **copied out, never refused for vault reasons**. *Amended 2026-09-26 (default
@@ -219,7 +225,10 @@ Sequence, in order, with the call that performs each step:
    - or, if even that fails, the sentence says where it was left.
 8. `OpenDoc7` with `Silent | LoadModel = 17` exactly, and **never** `ReadOnly(2)` or
    `ViewOnly(4)` (VERIFIED values; asserted as an integer in a unit test). Then assert
-   `GetPathName()` equals `copy_path` and does not equal `source_path`.
+   `GetPathName()` equals `copy_path` and does not equal `source_path`. *Amended 2026-10-20 (feature
+   011, owner decision 148A):* gated by its qualified key, `ISldWorks.OpenDoc7`, on the stage-1
+   allowlist (`guard-allowlist.md`), where it was gated by the bare name `ReadOnlyGuard` left allowed;
+   the read-only guard refuses the bare name now. Its marker is the key.
 9. Tag: `ICustomPropertyManager.Add3("SwReviewRemodelRun", 30, run_id, 2)` and read back with
    `Get4` (both VERIFIED; **UNVERIFIED that the round trip works on 2024, PROBE-12, blocking**,
    because it is one of `VerifyTarget`'s four checks). Failure is `tag_failed`.

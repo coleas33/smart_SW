@@ -134,12 +134,12 @@ public class StandardsGateLogTests : IDisposable
         AssertTheLogIsReadOnly();
 
         Assert.DoesNotContain(
-            _observer.Members,
+            GatedMemberHalves(),
             member => member.StartsWith("OpenDoc", StringComparison.OrdinalIgnoreCase)
                 || member.StartsWith("ActivateDoc", StringComparison.OrdinalIgnoreCase));
         foreach (string member in Program.StandardsProbeDocumentOpeningMembers)
         {
-            Assert.DoesNotContain(member, _observer.Members, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(member, GatedMemberHalves(), StringComparer.OrdinalIgnoreCase);
         }
     }
 
@@ -155,7 +155,7 @@ public class StandardsGateLogTests : IDisposable
 
         foreach (string member in Program.StandardsProbeSheetActivationMembers)
         {
-            Assert.DoesNotContain(member, _observer.Members, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(member, GatedMemberHalves(), StringComparer.OrdinalIgnoreCase);
         }
     }
 
@@ -179,9 +179,17 @@ public class StandardsGateLogTests : IDisposable
 
         foreach (string member in Program.StandardsProbeSheetActivationMembers)
         {
-            Assert.DoesNotContain(member, _observer.Members, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(member, GatedMemberHalves(), StringComparer.OrdinalIgnoreCase);
         }
     }
+
+    /// <summary>
+    /// Every member the gate was asked about, by its member half - the whole name of a bare one - as the
+    /// read-only guard judges a qualified key. Edited deliberately on owner decision 148A's review
+    /// (feature 011 T193, research R12.8): the sweeps above read the log's names as spelled, so a
+    /// qualified key - every open in the product is spelled so since that decision - slipped past them.
+    /// </summary>
+    private IEnumerable<string> GatedMemberHalves() => _observer.Members.Select(CallKey.BareName);
 
     /// <summary>
     /// The non-vacuity guard: every phase that runs here left its own gated member in the

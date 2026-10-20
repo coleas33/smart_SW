@@ -533,7 +533,9 @@ provider constructed in either call.
 ## 7. Run folder layout
 
 Created by the existing `RunFolders` helper (`extractor/SwReview.AddIn/Review/RunFolders.cs`), so
-the naming convention stays in one place: `<run_root>/<yyyyMMdd-HHmmss>-<doc>-remodel/`.
+the naming convention stays in one place: `<run_root>/<yyyyMMdd-HHmmss>-<doc>-remodel/`. *Amended
+2026-10-20 (feature 011, owner decision 148A):* made in its full form, under `Path.GetFullPath` of the
+run root (`contracts/run-artifacts.md`).
 
 | Path | Written by | Contains |
 |---|---|---|

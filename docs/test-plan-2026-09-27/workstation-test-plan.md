@@ -2179,8 +2179,19 @@ B. **A throwaway box, before any real part.** In the ordinary window:
    and the open, `seat=open_copy begin` and then
    `seat=open_copy status=ok outcome=opened gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7,GetPathName`
    - none with `refused=` or `error=`. A line with either is a fail, and so is a `begin` line with no
-   line after it: write each down whole (they name no path). Then use **Discard copy**, close the box
-   without saving, and go on to item 1 below with part J.
+   line after it: write each down whole (they name no path).
+
+   *Added 2026-10-20 (decision 148A, 011 T171):* the plan opened the copy through the bridge by the
+   open's qualified key, which the bare name no longer passes for. Then:
+
+   ```powershell
+   Select-String -LiteralPath (Join-Path $run.FullName 'remodel.log') -SimpleMatch 'command=remodel.open status=' | ForEach-Object { ($_.Line -split ' ' | Where-Object { $_ -like 'status=*' -or $_ -like 'gated=*' -or $_ -like 'refused=*' }) -join ' ' }
+   ```
+
+   Pass: one line, `status=ok`, whose `gated=` list names `ISldWorks.OpenDoc7` and not `OpenDoc7` on
+   its own, with no `refused=`. Otherwise it is a fail: write the line down as printed (it names
+   members, no path). Then use **Discard copy**, close the box without saving, and go on to item 1
+   below with part J.
 C. **If SOLIDWORKS closes, freezes or shows its own error report** at item B or at any item below:
    stop the step, and before you restart SOLIDWORKS:
    1. write down the time on the clock, and whether SOLIDWORKS froze first, vanished at once, or
@@ -2355,7 +2366,7 @@ entity. Record: both answers. The registration survives both builds; nothing to 
 Settings now shows a different provider, model or no key, close SOLIDWORKS and put the copy back:
 `Copy-Item "$env:APPDATA\SwReview\settings.json.before-5.5" "$env:APPDATA\SwReview\settings.json"`.
 
-### 5.6 The re-modeler probes, with no document open: last [004 T033 to T039]
+### 5.6 The re-modeler probes, with no document open: last [004 T033 to T039; 011 T171]
 
 Feature 004's Phase 2 probes (the owner's decision 18A). `swreview-extract probe remodel` builds a
 throwaway part of its own inside the folder it is given, changes it on purpose to see what this
@@ -2431,6 +2442,11 @@ SOLIDWORKS until someone answers it, and PROBE-1 asks for one on purpose.
      or `false`, `verdict: verified`, `refuted` or `unresolved`, and its `"reason":` sentence. An
      `"error":` line in place of the reason means the probe threw, and its verdict is
      `unresolved`.
+   - *Added 2026-10-20 (decision 148A, 011 T171):* after the first run, PROBE-12 reopens the part
+     it saved by the open's qualified key. Pass: the run's `interop members:` line names
+     `ISldWorks.OpenDoc7` and not `OpenDoc7` on its own, and PROBE-12's lines carry a `"reason":`,
+     not an `"error":`. An `"error":` line for PROBE-12 is a fail: write `error` and whether it
+     names `OpenDoc7`, never the error's text, which may hold a path.
 5. **What each probe asks.** Research R10 and quickstart Scenario 4 of
    `specs/004-resilient-remodeler` hold the whole question and what a bad answer costs.
 

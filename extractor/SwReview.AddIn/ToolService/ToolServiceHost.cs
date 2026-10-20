@@ -145,8 +145,10 @@ public sealed class SwGateRecorder : ISwGateObserver
 /// is whatever document the run is open on at that instant.
 ///
 /// <b>Unknown stays unknown.</b> A write made before <c>remodel.open</c> has built the scope -
-/// the three user-preference toggles and the modal-suppression flag, which name no document -
-/// records <see cref="NoTarget"/> rather than the copy path that does not exist yet.
+/// the three user-preference toggles and the modal-suppression flag, which name no document, and
+/// since owner decision 148A the open of the copy, <c>ISldWorks.OpenDoc7</c>, whose key is on the
+/// allowlist now - records <see cref="NoTarget"/> rather than the copy path that has no scope yet;
+/// the toggles are written first, so the open's line names no target it did not already.
 /// </summary>
 public sealed class RemodelGateRecorder : ISwGateObserver
 {

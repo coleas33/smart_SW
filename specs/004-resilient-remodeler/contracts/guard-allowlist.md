@@ -111,7 +111,7 @@ is the output of `extractor/tools/list-writer-members.ps1` over `SolidWorks.Inte
 with `-CSharp`. `DrawingFamilyDenylistTests` (in `GuardTests.cs`) parses the table below and
 `DrawingFamilyCompletenessTests` reflects the interop to prove it complete. The "Already denied"
 column names members an earlier feature (or a denied prefix) refuses; they are not added twice.
-757 names are new; 652 distinct names match the writer grammar on the 28 families.
+758 names are new; 652 distinct names match the writer grammar on the 28 families.
 
 | Members refused (feature 011) | Interface; already denied |
 |---|---|
@@ -137,7 +137,7 @@ column names members an earlier feature (or a denied prefix) refuses; they are n
 | `set_Flipped` | `IDowelSymbol`; already denied: - |
 | `set_FitDisplayStyle`, `set_FitTextHeight`, `set_FitTextScale`, `set_FitUseTextScale`, `set_ShaftFit`, `set_ShowParenthesis`, `set_TextHeight`, `set_TextScale`, `set_ToleranceMax`, `set_ToleranceMin`, `set_ToleranceType`, `set_UseTextScale` | `ICalloutVariable`; already denied: `set_FitType`, `set_HoleFit` |
 | `set_Precision`, `set_TolerancePrecision` | `ICalloutLengthVariable`; already denied: - |
-| `ActivateDoc`, `ActivateDoc2`, `ActivateDoc3`, `ActivateTaskPane`, `AddFileOpenItem`, `AddFileOpenItem2`, `AddFileOpenItem3`, `AddFileSaveAsItem`, `AddFileSaveAsItem2`, `CloseAllDocuments`, `CloseAndReopen`, `CloseAndReopen2`, `CloseUserNotification`, `CopyAppearance`, `CopyDocument`, `CreateNewWindow`, `DocumentVisible`, `ExitApp`, `IActivateDoc`, `IActivateDoc2`, `IActivateDoc3`, `ICopyDocument`, `IMoveDocument`, `INewAssembly`, `INewDocument`, `INewDocument2`, `INewDrawing`, `INewDrawing2`, `INewPart`, `IOpenDoc`, `IOpenDoc2`, `IOpenDoc3`, `IOpenDoc4`, `IOpenDoc5`, `IOpenDocSilent`, `LoadAddIn`, `LoadAdminSettingsFile`, `LoadFile`, `LoadFile2`, `LoadFile3`, `LoadFile4`, `MoveDocument`, `NewAssembly`, `NewDocument`, `NewDrawing`, `NewDrawing2`, `NewPart`, `OpenDoc`, `OpenDoc2`, `OpenDoc3`, `OpenDoc4`, `OpenDocSilent`, `OpenModelConfiguration`, `PresetNewDrawingParameters`, `QuitDoc`, `RemoveFileOpenItem`, `RemoveFileOpenItem2`, `RemoveFileSaveAsItem`, `RemoveFileSaveAsItem2`, `ReplaceReferencedDocument`, `RunAttachedMacro`, `RunBatchSaveProcess`, `RunCommand`, `RunJournalCmd`, `RunMacro`, `RunMacro2`, `SaveSettings`, `SetNewFilename`, `ShowBatchSaveTo3DExperienceDlg`, `UnloadAddIn` | `ISldWorks`; already denied: - |
+| `ActivateDoc`, `ActivateDoc2`, `ActivateDoc3`, `ActivateTaskPane`, `AddFileOpenItem`, `AddFileOpenItem2`, `AddFileOpenItem3`, `AddFileSaveAsItem`, `AddFileSaveAsItem2`, `CloseAllDocuments`, `CloseAndReopen`, `CloseAndReopen2`, `CloseUserNotification`, `CopyAppearance`, `CopyDocument`, `CreateNewWindow`, `DocumentVisible`, `ExitApp`, `IActivateDoc`, `IActivateDoc2`, `IActivateDoc3`, `ICopyDocument`, `IMoveDocument`, `INewAssembly`, `INewDocument`, `INewDocument2`, `INewDrawing`, `INewDrawing2`, `INewPart`, `IOpenDoc`, `IOpenDoc2`, `IOpenDoc3`, `IOpenDoc4`, `IOpenDoc5`, `IOpenDocSilent`, `LoadAddIn`, `LoadAdminSettingsFile`, `LoadFile`, `LoadFile2`, `LoadFile3`, `LoadFile4`, `MoveDocument`, `NewAssembly`, `NewDocument`, `NewDrawing`, `NewDrawing2`, `NewPart`, `OpenDoc`, `OpenDoc2`, `OpenDoc3`, `OpenDoc4`, `OpenDoc7`, `OpenDocSilent`, `OpenModelConfiguration`, `PresetNewDrawingParameters`, `QuitDoc`, `RemoveFileOpenItem`, `RemoveFileOpenItem2`, `RemoveFileSaveAsItem`, `RemoveFileSaveAsItem2`, `ReplaceReferencedDocument`, `RunAttachedMacro`, `RunBatchSaveProcess`, `RunCommand`, `RunJournalCmd`, `RunMacro`, `RunMacro2`, `SaveSettings`, `SetNewFilename`, `ShowBatchSaveTo3DExperienceDlg`, `UnloadAddIn` | `ISldWorks`; already denied: - |
 | `ActivateFeatureMgrView`, `ActivateSelectedFeature`, `Close`, `CloseFamilyTable`, `ClosePrintPreview`, `DeActivateFeatureMgrView`, `EditCopy`, `FileReload`, `ForceReleaseLocks`, `IRelease3rdPartyStorage`, `Lock`, `LockAllExternalReferences`, `LockFramePoint`, `LockLightToModel`, `Quit`, `Rebuild`, `ReloadOrReplace`, `Save`, `Save2`, `SaveAs`, `SaveAs2`, `SaveAs4`, `SaveAsSilent`, `SaveSilent`, `SetReadOnlyState`, `SetSaveAsFileName`, `UnLock`, `UnlockAllExternalReferences`, `UnlockFramePoint` | `IModelDoc2`; already denied: - |
 | `CloseMessageBar`, `CloseUserNotification`, `CopyDraftingStandard`, `EditRebuildAll`, `IRelease3rdPartyStorageStore`, `LoadDraftingStandard`, `MoveDecal`, `Rebuild`, `ReleaseStream`, `ReloadOrReplace`, `RenameDocument`, `RenameDraftingStandard`, `SaveAs`, `SaveAs2`, `SaveDeFeaturedFile`, `SaveDraftingStandard`, `SavePackAndGo`, `SaveTo3DExperience`, `SaveViewToSolidworks`, `SetUserPreferenceDouble`, `SetUserPreferenceInteger`, `SetUserPreferenceString`, `SetUserPreferenceTextFormat`, `set_ShowPartRebuildIndicators` | `IModelDocExtension`; already denied: - |
 | `SaveToFile`, `SaveToFile2`, `SaveToFile3` | `IPartDoc`; already denied: - |
@@ -149,12 +149,16 @@ Interfaces of the 28 with no writer on this interop: `IGeneralTableFeature`, `IT
 
 | Not denied (feature 011) | Why |
 |---|---|
-| `CloseDoc` | the bare name of feature 004's stage-1 allowlist key `ISldWorks.CloseDoc`; denying it would make that key override a read-only denial and move `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive` |
+| `CloseDoc` | the bare name of feature 004's stage-1 allowlist key `ISldWorks.CloseDoc`; denying it would make that key override a read-only denial and move `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes` |
 | `OpenDoc6` | the console attach's read-only open of a part or assembly (`SwSession.OpenReadOnly`), checked with `IsOpenedReadOnly` after it (decision 136A); the confirmed drawing's open calls the qualified key through its own allowlist guard (`contracts/confirmed-open.md`) |
-| `OpenDoc7` | feature 004's open of the re-modeler's own copy (`remodel.open`, a bare read call site under `RemodelGuard`) and `probe remodel`'s reopen of its throwaway part; found by the read audit (T003) |
 | `SaveBMP` | the capture's image of a view: `SwCaptureView` gates the bare name on the session's read-only gate and has it write a bitmap of the graphics window beside the capture's PNG, at the PNG's name with `.bmp`. `SaveBMP` writes to whatever path it is handed, a document's included, and a guard judges names, never paths: what keeps this path an image is the capture's own code, which names the PNG under the `captures` folder of the directory the host chose and checks its extension with `AssertSaveAs` first. `SaveAs3` stays refused (decision 140A; corrected on its review, which found this said `SaveBMP` cannot write a document) |
-| `Select2` | the bare name of feature 004's stage-1 allowlist key `IFeature.Select2`; denying it would make that key override a read-only denial and move `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive` |
-| `set_Name` | the bare name of feature 004's stage-1 allowlist key `IFeature.set_Name`; denying it would make that key override a read-only denial and move `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive` |
+| `Select2` | the bare name of feature 004's stage-1 allowlist key `IFeature.Select2`; denying it would make that key override a read-only denial and move `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes` |
+| `set_Name` | the bare name of feature 004's stage-1 allowlist key `IFeature.set_Name`; denying it would make that key override a read-only denial and move `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes` |
+
+*Amended 2026-10-20 (feature 011, owner decision 148A; its research R12.2)*: the table refuses
+`OpenDoc7` on the `ISldWorks` row - the first bare name of a stage-1 key it refuses, on purpose: the
+open of the copy joined the stage-1 list below as `ISldWorks.OpenDoc7`, both its callers name it by
+that key, and the overriding keys are six. The paragraph below is kept as it was written.
 
 **None of them widens this allowlist either.** No new name is the bare name of a stage-1 key or a
 member `RemodelGuard` refuses itself (the "Not denied" table says which names were left allowed and
@@ -397,7 +401,11 @@ PROBE-9's `SetSuppression2` - is unchanged and is not creation. *Amended 2026-10
 144A)*: `NewDocument`, which creates the throwaway part and PROBE-8's and PROBE-21's own, and
 `MoveToFolder`, PROBE-5's move into a folder, join it under the bare names the probe host gates: only
 `probe remodel` calls them, so feature 011's table above refuses both now, and no other gate lets
-either through (`011-drawing-context/research.md` R11.2).
+either through (`011-drawing-context/research.md` R11.2). *Amended 2026-10-20 (owner decision
+148A)*: `ISldWorks.OpenDoc7`, PROBE-12's reopen of the part it saved and closed, joins it under that
+qualified key, which its host gates now - the key the stage-1 list gives `remodel.open`'s open of the
+copy - since feature 011's table refuses the bare `OpenDoc7`; the guard matches it ignoring case, as it
+matches the toggles' keys (`011-drawing-context/research.md` R12.2).
 
 **What decision 21A does not close.** The grammar is the creation family of the four interfaces.
 Their other writers - edits, suppression and visibility writers, saves and rebuilds - are not in its
@@ -480,6 +488,7 @@ records (`interop-manifest.md`); VERIFIED never means the call behaves.
 | `ISldWorks.SetUserPreferenceToggle` | the three user-preference toggles (10, 77, 329), restored in a `finally` |
 | `ISldWorks.set_CommandInProgress` | the modal-suppression flag set for the run and restored in the same `finally` (PROBE-1). It is a property, not a `swUserPreferenceToggle_e` value, so it needs its own key. *Since 2026-09-28 (U27, T185):* set for `remodel.open`'s own calls and put back as its last step |
 | `ISldWorks.CloseDoc` | close the tagged copy |
+| `ISldWorks.OpenDoc7` | open the copy at its own path, `Silent \| LoadModel = 17`, never `ReadOnly (2)` or `ViewOnly (4)` (`remodel.open` step 8), behind step 4's path checks and with `AssertOpenedAtCopy` after it. *Added 2026-10-20 (feature 011, owner decision 148A; its research R12.2)*: the open was gated by the bare `OpenDoc7`, which `ReadOnlyGuard` left allowed, so every read-only gate let a writable open through; `ReadOnlyGuard` refuses the bare name now, and this key is the sixth that overrides a read-only denial (`Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes`, renamed from `...DeclaredFive`). It is made before a scope exists, so the observer records it with no target, as it records the toggles |
 
 **`remodel.probe_scope` adds nothing to this list.** The preflight probe that reads the scope
 signals off the engineer's open source (`bridge-remodel.md`) calls read members only, every one of
@@ -667,7 +676,10 @@ interop directly, through no gate and no gate log (feature 011's research R10.4 
 go through a gate of its own now, built per action, whose guard is `Guard/RemodelSeatGuard.cs`: an
 `ICallGuard` in the shape of the confirmed drawing's entry above - the two keys below, matched
 **ordinally**; any other interface-qualified key refused, naming it; a bare name - every read -
-answered by `ReadOnlyGuard`, unchanged. It is built only by the seat.
+answered by `ReadOnlyGuard`, unchanged. It is built only by the seat. *Amended 2026-10-20 (owner
+decision 148A; feature 011's research R12.1)*: a closed allowlist - the two keys and the five reads
+below, each ordinally, and every other name, bare or qualified, refused, naming it; until then the
+bare `CloseDoc`, `OpenDoc6` and `OpenDoc7` that `ReadOnlyGuard` left allowed passed it.
 
 | Key (feature 011, decision 144A, the pane seat) | Used for | Composition, asserted as integers |
 |---|---|---|
@@ -675,7 +687,8 @@ answered by `ReadOnlyGuard`, unchanged. It is built only by the seat.
 | `ISldWorks.OpenDoc7` | the run's copy opened again when SOLIDWORKS no longer has it, for `remodel.open_copy` only | the one open request `CopyOpenSpecification` builds, as `remodel.open`'s: a part, `Silent \| LoadModel = 17` (`RemodelCopy.OpenOptions`), never `ReadOnly (2)` or `ViewOnly (4)` - the copy opens writable, for the engineer's Save As |
 
 The reads go through the same gate by their bare names: `GetOpenDocumentByName`, `GetPathName`,
-`GetTitle`, `ActiveDoc` and `GetOpenDocSpec`. The open request's property sets are made inside the
+`GetTitle`, `ActiveDoc` and `GetOpenDocSpec` - since decision 148A the guard's whole list of reads
+(`RemodelSeatGuard.AllowedReads`), each a bare name `ReadOnlyGuard` allows. The open request's property sets are made inside the
 `GetOpenDocSpec` gate entry and its load bits read back inside the open's, as `remodel.open` makes them
 inside its own; they set a throwaway request, and the frozen manifest records each (`interop-manifest.md`).
 
@@ -690,6 +703,12 @@ answers is taken as the copy only once its own path is the copy's - otherwise it
 never activated, closed or named. The seat writes nothing to a document, so the session tag and COM
 identity checks of `VerifyTarget` are not its (feature 011's research R11.1; whether the
 constitution's 2(b) reaches an activation and a writable open is its R11.8 question for the owner).
+*Amended 2026-10-20 (owner decision 148A; feature 011's research R12.3 to R12.5)*: the path rule is
+`RemodelCopy.CopyOf`, the one rule both seats take the copy by - `remodel.open`'s step 4 too - and
+every run folder is made in its full form; the seat refuses Open copy while a remodel run is in
+progress (`pane-remodel-messages.md`); and the draft constitution amendment (pull request #4) answers
+2(b) for the seat: activating or opening the run's copy is not a write, the copy's path check being
+its scope.
 
 **Its gate log** is two lines per action in the run folder's `remodel.log` (`run-artifacts.md`): a
 begin line before the first call, then the status, how the action ended, the members its gate was
@@ -698,7 +717,11 @@ asked about and any refusal - never a `target=`.
 **It widens no guard.** Nothing is added to `ReadOnlyGuard`, `RemodelGuard` (whose stage-1
 allowlist and its pinned five overriding keys are unchanged) or `DrawingOpenGuard`. Of the two keys
 only `ActivateDoc3` overrides a read-only denial (feature 011's shared `ISldWorks` row); `OpenDoc7` is
-a bare name `ReadOnlyGuard` already allows (feature 011's exclusions). `RemodelSeatGuardTests` pins
+a bare name `ReadOnlyGuard` already allows (feature 011's exclusions). *Amended 2026-10-20 (owner
+decision 148A)*: both keys override one now - `ReadOnlyGuard` refuses the bare `OpenDoc7` - and
+`ISldWorks.OpenDoc7` is a key of the stage-1 list too, for `remodel.open`, and of
+`RemodelProbeGuard`'s run-scoped members, for `probe remodel`'s reopen: decision 148A's, not the
+seat's. `ActivateDoc3` is on no other list. `RemodelSeatGuardTests` pins
 the set, each refusal, the delegation, the one overriding key and the one construction site; the
 add-in's `SwRemodelSeatTests` pins the seat's every call under the gate entry it is made under, the
 integers, the scope and the log lines. Feature 011's `DocumentLifecycleFamilyTests` names

@@ -636,6 +636,122 @@ public sealed class RemodelPageContractTests
     }
 
     /// <summary>
+    /// Owner decision 148A (feature 011 T188, research R12.4): Open copy is offered as Discard copy is - not
+    /// while a run is running. Over the real transport, both are pressable once the plan is made, neither
+    /// from <c>remodel.started</c> until the run reaches a terminal status, and both again after it.
+    /// </summary>
+    [Fact]
+    public void OpenCopyAndDiscardCopyAreNotOfferedWhileARunRuns()
+    {
+        var states = new List<string>();
+        HostStub? stub = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                states.Add("planned " + await Offered(page));
+                await Click(page, "start-run");
+                states.Add("started " + await Offered(page));
+                stub!.Post("status", new { stage = "applying", message = "Applying change 3 of 12." });
+                await Settled(page);
+                states.Add("applying " + await Offered(page));
+                stub!.Post("status", new { stage = "ready", message = "The run ended 'saved'." });
+                await Settled(page);
+                states.Add("ended " + await Offered(page));
+            });
+
+        Assert.Equal(
+            new[]
+            {
+                "planned open-copy discard-copy",
+                "started -",
+                "applying -",
+                "ended open-copy discard-copy",
+            },
+            states);
+        Assert.Equal(1, stub!.Starts);
+    }
+
+    /// <summary>
+    /// Owner decision 148A's second review (feature 011 T197, research R12.8a): nor while a plan is being
+    /// made - the host's "a plan or a run". With an earlier run on screen, Open copy pressed mid-plan waited
+    /// behind the plan on the host's one remodel message thread and was served, once the plan ended, on the
+    /// earlier run's copy while the page showed the new plan; Discard copy likewise, its "deleted" words then
+    /// shown beside the new plan. Neither is offered from the press of Remodel until the plan is answered,
+    /// and a press in between sends nothing.
+    /// </summary>
+    [Fact]
+    public void OpenCopyAndDiscardCopyAreNotOfferedWhileAPlanIsBeingMade()
+    {
+        var states = new List<string>();
+        HostStub? stub = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                states.Add("planned " + await Offered(page));
+
+                stub!.WithholdsPlanAnswers = true;
+                await Click(page, "plan-run");
+                states.Add("planning " + await Offered(page));
+                await Click(page, "open-copy");
+                await Click(page, "discard-copy");
+
+                stub.AnswerTheWithheldPlan();
+                await Settled(page);
+                states.Add("planned again " + await Offered(page));
+            });
+
+        Assert.Equal(
+            new[]
+            {
+                "planned open-copy discard-copy",
+                "planning -",
+                "planned again open-copy discard-copy",
+            },
+            states);
+        Assert.Equal(2, stub!.Plans);
+        Assert.DoesNotContain("remodel.open_copy", stub.Received);
+        Assert.DoesNotContain("remodel.discard_copy", stub.Received);
+    }
+
+    /// <summary>Decision 148A: the host's refusal of Open copy during a run names the button by its label and no path.</summary>
+    [Fact]
+    public void TheOpenCopyRefusalNamesItsButtonByItsLabelAndNoPath()
+    {
+        string sentence = RemodelHost.OpenCopyWhileARunIsInProgressMessage;
+
+        Assert.Contains("Press " + ButtonLabel("open-copy") + " again", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("/", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain(@":\", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("run_dir", sentence, StringComparison.Ordinal);
+    }
+
+    /// <summary>The two copy buttons the page offers now, by id, or "-" for neither (decision 148A).</summary>
+    private static async Task<string> Offered(CoreWebView2 page)
+    {
+        var offered = new List<string>();
+        foreach (string id in new[] { "open-copy", "discard-copy" })
+        {
+            if (!await Disabled(page, id))
+            {
+                offered.Add(id);
+            }
+        }
+
+        return offered.Count == 0 ? "-" : string.Join(" ", offered);
+    }
+
+    /// <summary>
     /// Decision 22A over the real transport: a Start the host refuses because the tool service
     /// re-attached after the plan. The page prints the host's sentence verbatim - it has no
     /// words file and invents none - and, since no run began and no terminal `status` is
@@ -1580,6 +1696,18 @@ public sealed class RemodelPageContractTests
         /// <summary>How many `remodel.start` messages the page has posted.</summary>
         public int Starts { get; private set; }
 
+        /// <summary>The type of every message the page has posted, in order (decision 148A's second review).</summary>
+        public List<string> Received { get; } = new List<string>();
+
+        /// <summary>
+        /// Decision 148A's second review (feature 011 T197): when set, a `remodel.plan` is not answered until
+        /// <see cref="AnswerTheWithheldPlan"/> - the page waits, as it waits while `RemodelHost` makes a plan.
+        /// </summary>
+        public bool WithholdsPlanAnswers { get; set; }
+
+        /// <summary>The id of the `remodel.plan` not answered yet under <see cref="WithholdsPlanAnswers"/>.</summary>
+        private string? _withheldPlan;
+
         public int Plans { get; private set; }
 
         /// <summary>
@@ -1618,6 +1746,7 @@ public sealed class RemodelPageContractTests
                 ? value.GetString()
                 : null;
 
+            Received.Add(type);
             switch (type)
             {
                 case "ready":
@@ -1660,17 +1789,13 @@ public sealed class RemodelPageContractTests
                         return;
                     }
 
-                    if (ClosesTheHeldPlanOnPlanAgain && _planned > 0)
+                    if (WithholdsPlanAnswers)
                     {
-                        Post("remodel.plan_lost", new { run_dir = RunDirFor(_planned), message = RemodelHost.PlanClosedMessage });
+                        _withheldPlan = id;
+                        return;
                     }
 
-                    _planned++;
-                    Reply("remodel.planned", id, new
-                    {
-                        run_dir = RunDirFor(_planned),
-                        plan_summary = Parse(RemodelResultSample.PlanSummaryJson()),
-                    });
+                    AnswerPlan(id);
                     return;
                 case "remodel.start":
                     Starts++;
@@ -1694,6 +1819,30 @@ public sealed class RemodelPageContractTests
                     Reply("ok", id, new { });
                     return;
             }
+        }
+
+        /// <summary>Answers the plan withheld under <see cref="WithholdsPlanAnswers"/>, as `RemodelHost` answers one once it is made.</summary>
+        public void AnswerTheWithheldPlan()
+        {
+            string id = _withheldPlan ?? throw new InvalidOperationException("no remodel.plan is withheld");
+            _withheldPlan = null;
+            AnswerPlan(id);
+        }
+
+        /// <summary>A plan's answer: a folder of its own, after the held plan's notice when one is held.</summary>
+        private void AnswerPlan(string? id)
+        {
+            if (ClosesTheHeldPlanOnPlanAgain && _planned > 0)
+            {
+                Post("remodel.plan_lost", new { run_dir = RunDirFor(_planned), message = RemodelHost.PlanClosedMessage });
+            }
+
+            _planned++;
+            Reply("remodel.planned", id, new
+            {
+                run_dir = RunDirFor(_planned),
+                plan_summary = Parse(RemodelResultSample.PlanSummaryJson()),
+            });
         }
 
         private static JsonElement Parse(string json) =>

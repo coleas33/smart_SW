@@ -1965,7 +1965,8 @@ public sealed class ToolServiceWiringTests
             world.PlanOnTheSeat();
 
             Assert.NotNull(lastLine);
-            Assert.EndsWith("command=remodel.open stage=before OpenDoc7", lastLine!);
+            // Edited deliberately for decision 148A (feature 011 T184): the open's marker is its key.
+            Assert.EndsWith("command=remodel.open stage=before ISldWorks.OpenDoc7", lastLine!);
             string[] lines = LiveFile.ReadAllLines(remodelLog);
             Assert.Contains(lines, line => line.EndsWith("command=remodel.open stage=after ISldWorks.set_CommandInProgress", StringComparison.Ordinal));
             Assert.Contains(lines, line => line.Contains("command=remodel.open status=ok"));

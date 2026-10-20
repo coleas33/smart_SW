@@ -89,6 +89,16 @@
   </ItemGroup>
 
   <!--
+    Feature 011, owner decision 148A (2026-10-20): the forms a path to a run's copy can take, in one
+    list both seats are held to - the bridge's remodel.open in SwReview.Extractor.Tests and the pane
+    seat here - compiled from the one copy rather than a second that could drift. Fictional paths
+    only, in the SwReview.Extractor.Tests namespace.
+  -->
+  <ItemGroup>
+    <Compile Include="..\SwReview.Extractor.Tests\RemodelCopyPathForms.cs" Link="Shared\RemodelCopyPathForms.cs" />
+  </ItemGroup>
+
+  <!--
     The settings contract is the single source of truth
     (specs/002-task-pane-assistant/contracts/settings.schema.json). It is copied, not
     duplicated, so a schema change breaks UserSettingsTests immediately.

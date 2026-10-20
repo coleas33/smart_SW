@@ -305,6 +305,16 @@ public sealed class RemodelHost : IDisposable
         + PartNotChanged + " Wait a moment and press Remodel a copy again.";
 
     /// <summary>
+    /// Owner decision 148A (feature 011 research R12.4): `remodel.open_copy`'s refusal while a remodel run
+    /// is in progress, `RunInProgress`. Opening or activating the copy between the run's requests to the
+    /// bridge would change the document SOLIDWORKS has active under the run. In the engineer's words, with
+    /// no path, naming the button that works once the run has finished by its label.
+    /// </summary>
+    public const string OpenCopyWhileARunIsInProgressMessage =
+        "The copy is not opened while a remodel run is in progress: opening it would change the "
+        + "document SOLIDWORKS has active under the run. Press Open copy again once the run has finished.";
+
+    /// <summary>
     /// The reason both of 004 T159's refusals give: the copy could not be made the active document
     /// before a dump - SOLIDWORKS does not have it open, would not activate it, had another
     /// document active afterwards, or no copy was left to activate - so it was not read, since a
@@ -1974,6 +1984,17 @@ public sealed class RemodelHost : IDisposable
         if (run == null)
         {
             SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            return;
+        }
+
+        // Owner decision 148A (feature 011 research R12.4; R11.8 item 9): not while a plan or a run is in
+        // flight - any run's copy, not only its own - since the copy activated or opened between the run's
+        // requests to the bridge would change the document SOLIDWORKS has active under the run. The page
+        // offers Open copy no more than Discard copy while a run runs; this is the backstop, before
+        // anything is asked of SOLIDWORKS.
+        if (_busy)
+        {
+            _actions.SendError(id, "RunInProgress", OpenCopyWhileARunIsInProgressMessage, retryable: true);
             return;
         }
 

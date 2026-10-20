@@ -122,7 +122,8 @@ the only matches are `ActivateSheet` and `ActivateView`, already denied and name
 re-modeler's `Feature.Select2` write site, excluded). *Corrected 2026-09-23 by T003's read audit*:
 feature 004 gates `OpenDoc7` and `NewDocument` by bare name through constants, which the literal
 scan missed; both are excluded from the shared row with that reason (`contracts/guard.md`
-section 3). A hand list of 580 names would be a
+section 3). *(Both are refused now: `NewDocument` since decision 144A, R11.2, and `OpenDoc7` since
+decision 148A, whose two callers name it by its qualified key, R12.2.)* A hand list of 580 names would be a
 transcription that drifts; the tolerance lesson of feature 005's figures ("regenerated, never
 transcribed") applies. The guard stores bare names (`ReadOnlyGuard.cs:35`), so the families are
 denied by name; an interface-qualified guard is feature 004's pattern for writes and is not needed
@@ -1685,7 +1686,10 @@ line below; items 3 and 4 stay recorded as they are.
    pinning `ActivateOrOpen`'s calls and its open options; or record the convention as accepted.
    Nothing was changed.
    *Settled 2026-10-19 by decision 144A (R11.1)*: the first option, with the seat scoped to the
-   run's copy and its gate log in the run's `remodel.log`.
+   run's copy and its gate log in the run's `remodel.log`. *Amended 2026-10-20 by decision 148A
+   (R12.1, R12.2)*: the option taken handed every bare read to `ReadOnlyGuard`; the seat's guard is
+   a closed allowlist now, of its two keys and its five reads, and no gate lets the bare `OpenDoc7`
+   through.
 
 ### R10.5 The second review: what it found and what changed (T154 to T162)
 
@@ -1822,7 +1826,11 @@ they set and read a throwaway request, not a document, as the bridge makes them 
 and as the frozen manifest records them, and gated on their own they could not pass (the read-only
 guard refuses the bare `set_ReadOnly`, the drawing families' writer of that name, and the seat's guard
 any qualified key but its two). Of the two keys only `ActivateDoc3` overrides a read-only denial;
-`OpenDoc7` is an exclusion of `contracts/guard.md` section 3. The seat is the guard's one
+`OpenDoc7` is an exclusion of `contracts/guard.md` section 3. *Amended 2026-10-20 (owner decision
+148A, R12.1 and R12.2; noted on its review, R12.8)*: both keys override a read-only denial now - the
+read-only guard refuses the bare `OpenDoc7`, and `ISldWorks.OpenDoc7` is a key of `RemodelGuard` and
+`RemodelProbeGuard` as well - and the seat's guard hands no bare name to `ReadOnlyGuard`: it is a
+closed allowlist of its two keys and its five reads. The seat is the guard's one
 construction site. `contracts/guard.md` section 8 and 004's `contracts/guard-allowlist.md` ("The
 re-modeler's pane seat") record the entry.
 
@@ -1878,7 +1886,9 @@ writes a begin line before its first call and names its outcome on its closing l
 `OpenDoc7` and `CloseDoc` allowed (section 3's exclusions), so the seat's guard, as `DrawingOpenGuard`
 does, lets those bare spellings through: a guard judges the name a call site gives it. What keeps the
 seat to its two keys is that its call sites name them qualified, which `SwRemodelSeatTests` pins call
-by call. R11.8 records `OpenDoc7`'s standing, and a closed allowlist, for the owner.
+by call. R11.8 records `OpenDoc7`'s standing, and a closed allowlist, for the owner. *Settled
+2026-10-20 by decision 148A (R12.1, R12.2)*: the seat's guard is a closed allowlist, which refuses
+those bare spellings, and the read-only guard refuses the bare `OpenDoc7` too.
 
 **Tests.** `SwRemodelSeatTests` (add-in) places every interop call of both actions under the latest
 gate entry before it - a journal that notes, at each entry, how many calls each stand-in had
@@ -2203,6 +2213,9 @@ of its class.
 
 Nothing here was changed; each is the owner's call.
 
+*Amended 2026-10-20 (owner decision 148A, R12)*: items 1, 2, 3, 5 and 9 are settled, each with its
+line below; items 4, 6, 7, 8 and 10 stay recorded as they are.
+
 1. **`OpenDoc7` stands as `NewDocument` did** (the review's finding 12 too). The read-only guard
    leaves the bare name allowed (section 3), for `remodel.open`, which gates it bare under
    `RemodelGuard` - whose bare branch asks the read-only guard - and for `probe remodel`'s reopen of its
@@ -2211,6 +2224,11 @@ Nothing here was changed; each is the owner's call.
    qualify the bridge's call as `ISldWorks.OpenDoc7` on `RemodelGuard`'s stage-1 allowlist - the
    twenty keys 004's contract fixes, and the five that override a read-only denial would become six -
    and add the bare name to `RemodelProbeGuard`'s run-scoped members.
+   *Settled 2026-10-20 by decision 148A (R12.2)*: both callers name it by its qualified key -
+   `remodel.open` on `RemodelGuard`'s stage-1 allowlist, the sixth key that overrides a read-only
+   denial, and `probe remodel`'s reopen as one of `RemodelProbeGuard`'s run-scoped members, under the
+   qualified key rather than the bare name - and the read-only guard refuses the bare name, so every
+   gate the product builds does.
 2. **A closed allowlist for the seat** (the review's finding 3). The register reads "a gate whose
    guard allows only the seat's own calls"; the option it chose (R10.4 item 6) hands every bare name
    to the read-only guard, as `DrawingOpenGuard` does, so the seat's guard lets through bare
@@ -2219,12 +2237,18 @@ Nothing here was changed; each is the owner's call.
    would be strictly narrower at no cost. The guard keeps the chosen shape until the owner says.
    *The second review's view (R11.7a)*: "cheap, strictly narrower: two keys plus the five reads; I
    would take it" - put to the owner as the recommended option, and not built.
+   *Settled 2026-10-20 by decision 148A (R12.1)*: built - the two keys and the five reads, ordinally,
+   every other name refused, bare or qualified, and the list held to the members the seat asks its
+   gate about.
 3. **Does the constitution's 2(b) reach the seat?** (the review's finding 11). 2(b) has the target
    document's path, session tag and COM identity re-verified before each write. The seat activates a
    document and opens one writable, and writes nothing to either; it checks the path, and after the
    session ends the copy carries no tag (`RemodelCopy.Untag`), so 2(b) as written could not be met
    there. R11.1 treats an activation and a writable open as no writes; if they are writes, the seat
    falls short of 2(b).
+   *Settled by decision 148A (R12.5) once the owner merges the draft constitution amendment (pull
+   request #4)*, which says that activating or opening the run's copy is not a write, the copy's path
+   check being its scope; the owner adds that sentence to the draft himself.
 4. **An activation answered with a rebuild warning** (the review's finding 5). `remodel.open_copy`
    refuses an activation `ActivateDoc3` answers with any error bit, `swDocNeedsRebuildWarning` among
    them, though it activated the copy; the activation before a dump takes the same warning as success
@@ -2240,6 +2264,18 @@ Nothing here was changed; each is the owner's call.
    does not point at the setting. A `\\?\` path, likewise, the bridge's `IsFullyQualified` accepts
    and the seat refuses. Either `RunFolders.Create` returns `Path.GetFullPath` of the folder, or the
    seat checks only the canonical form.
+   *Settled 2026-10-20 by decision 148A (R12.3)*: one rule, `RemodelCopy.CopyOf`, which both seats
+   call, and every run folder made - and found - in its full form. On the `..`: the rule refuses a
+   `..` segment on sight, at the bridge as at the seat, rather than canonicalize it away, and the
+   folders the host makes carry none, so a run root spelled `C:\work\..\runs` plans; and a device
+   path is refused at both seats, since a run makes none the rule could take. The bridge's bind of
+   the host's own folder keeps its own test, which takes a device path (R12.3). *Its other half - tying
+   the copy's run folder to this run, which neither seat does - is left to the callers on purpose
+   (noted on the second review, R12.8a)*: a path alone cannot say which run it belongs to, and each
+   caller already knows - the bridge compares the copy's run folder with the one the host bound for
+   this run before anything is copied (step 4), and the pane seat is handed only the copy in `copy/`
+   of a run folder its own host made (`BackendRemodelPipeline.CopyIn`) - so `CopyOf` checks what a
+   path can show and answers the run folder for its caller to compare.
 6. **The allowlist guards, written three times** (the review's finding 7). `DrawingOpenGuard`,
    `RemodelSeatGuard` and, with a fourth answer, `RemodelGuard` write the same three answers, and the
    read audit's `Judged` and the creation tests' `AllowlistsByName` name the guards by type. A shared
@@ -2259,8 +2295,530 @@ Nothing here was changed; each is the owner's call.
    **Open copy** enabled during a run (`remodel.js`, which disables it only when there is no run).
    Once Start is on, Open copy pressed mid-run would activate the copy between the run's bridge
    requests. It cannot be reached in this build, whose Start is switched off.
+   *Settled 2026-10-20 by decision 148A (R12.4)*: the host refuses Open copy while a plan or a run is
+   in flight, any run's copy, `RunInProgress`, in plain words with no path; the page disables it while
+   a run runs, as it does Discard copy.
 10. **The grammar's verbs are read as prefixes** (the second review). A reader whose name starts
     with a verb's letters - one named like `ClosestDistance`, or its twin `IClosestDistance` - on
     one of the 28 families would be read as a writer and refused. None is today: the grammar's
     matches grew from 646 to 652 by the six names R11.4 meant. After an interop upgrade, the read
     audit would catch such a name the product reads.
+
+## R12. Decision 148A: the re-modeler's pane seat and its open path closed (owner, 2026-10-20)
+
+**Source.** Decision 144A and its two reviews left ten findings for the owner (R11.8). The owner's
+decision 148A of 2026-10-20 ("1A") closes five of them, test first, with an adversarial review: the
+seat's guard becomes a closed allowlist - its two keys and the reads the seat makes, nothing else
+(item 2, R12.1); `OpenDoc7` is called by its qualified key at its two callers, `remodel.open` and
+`probe remodel`'s reopen, and the bare name is denied (item 1, R12.2); one rule for the copy's path
+serves both seats, and run folders are made in their full form (item 5, R12.3); Open copy is refused
+while a remodel run is in progress (item 9, R12.4); and the draft constitution amendment (pull
+request #4) says that activating or opening the run's copy is not a write, the copy's path check
+being its scope (item 3, R12.5). **Items 4, 6, 7, 8 and 10 stay recorded as they are.** The tasks
+are T182 to T190 (Phase 10G) and, on the decision's adversarial review, T191 to T196 (R12.8) and, on
+its second, T197 to T199 (R12.8a), with T171 amended for the next sitting (R12.6). SOLIDWORKS was
+not started: the C# tests run over fakes and the interop stand-ins, the interop (`SolidWorks.Interop.sldworks` 32.5.0.48) was read as metadata
+only, and the frozen interop manifest was regenerated with
+`swreview-extract probe interop --emit-manifest`, which reads assemblies and never a session.
+Measured on the development machine: `SwReview.Extractor.Tests` 9,913 tests before and 10,006
+after, `SwReview.AddIn.Tests` 2,817 before and 2,895 after, and 10,007 and 2,956 after the review's
+fixes (R12.8) - 10,007 and 2,967 with main merged in (`1db5b88`), and 10,007 and 2,968 after the
+second review's (R12.8a) - all green, the build at zero warnings from scratch (`--no-incremental`); the
+Python suite 18,081 passed and 5 skipped before, on 3.12 and on 3.11, and unchanged after, at the
+records commit and again at the review's (the change is the extractor's and the records'; the merge
+brings decision 149A's own Python changes, so "unchanged" speaks of this branch's own commits).
+
+### R12.1 The seat's guard is a closed allowlist (T182, T183)
+
+**Decision**: `Guard/RemodelSeatGuard.cs` allows exactly the seat's own calls - its two keys,
+`ISldWorks.ActivateDoc3` and `ISldWorks.OpenDoc7`, and the five reads `SwRemodelSeat` makes, by the
+bare names it gates them under: `GetOpenDocumentByName`, `GetPathName`, `GetTitle`, `ActiveDoc` and
+`GetOpenDocSpec` (verified from the seat's own constants, and from the members its gate is asked about
+way by way, below) - each matched ordinally, and refuses any other name, bare or qualified, naming
+it. Until now a bare name was the read-only guard's answer, as it is in `DrawingOpenGuard`, so the
+bare `CloseDoc` and `OpenDoc6`, which the read-only guard leaves allowed, and `OpenDoc7`, which it left
+allowed until this decision (R12.2), passed the seat's gate (R11.7, finding 3). The five reads are not handed to the read-only guard at run time as well: the
+list is closed, and a test holds each read on it to a bare name the read-only guard allows, so the
+list cannot name a writer that guard refuses; a second check at run time would agree with the first
+today, so no test could show it. The seat's own code is unchanged.
+
+**Tests.** In `RemodelSeatGuardTests`: the list's reads are exactly the five
+(`TheReadsOnTheListAreExactlyTheFiveTheSeatMakes`); each is a bare name the read-only guard allows
+(`EveryReadOnTheListIsABareNameTheReadOnlyGuardAllows`); each passes, spaces around it included
+(`EachOfTheFiveReadsIsAllowed`); and seventeen bare names off the list are refused, naming them,
+whatever the read-only guard answers - the writers it leaves allowed (`CloseDoc`, `OpenDoc6`), the two
+keys' bare names, writers it refuses, `SetUserPreferenceToggle`, reads the seat never makes
+(`IsOpenedReadOnly`, `GetDocuments`, `GetTitle2`) and the list's reads in another case
+(`AnyOtherBareNameIsRefusedNamingItWhateverTheReadOnlyGuardAnswers`), the refusal the list's and not
+the read-only guard's (`ANameTheReadOnlyGuardAllowsIsRefusedWhenTheSeatDoesNotMakeIt`). In
+`SwRemodelSeatTests`: the seat's gate passes its seven names and refuses every other, the bare
+`CloseDoc`, `OpenDoc6` and `OpenDoc7` among them; and
+`TheSeatsGuardAllowsExactlyTheMembersTheSeatAsksItsGateAbout` takes every way the seat reaches the
+copy - `remodel.open_copy`'s activation and its open, and the activation before a dump - with nothing
+refused, and holds the members its gate was asked about to exactly the list's seven, so a call the
+list left out, or a name on it the seat no longer asks for, fails. Red before the change: 16 cases of
+4 tests.
+
+**Edited deliberately**: `RemodelSeatGuardTests.ABareReadIsAllowedExactlyAsTheReadOnlyGuardAllowsIt`,
+now `EachOfTheFiveReadsIsAllowed`: its sixth case, `IsOpenedReadOnly`, a read the seat never makes, is
+refused now; `ABareNameIsAnsweredExactlyAsTheReadOnlyGuardAnswersIt`, replaced by the refusal theory
+above, since it pinned the rule the decision closes; `SwRemodelSeatTests.TheSeatsGateAllowsItsTwoKeysAndHandsEveryBareNameToTheReadOnlyGuard`,
+now `...AllowsItsTwoKeysAndItsFiveReadsAndRefusesEveryOtherName`, which pinned the bare `CloseDoc`,
+`OpenDoc6` and `OpenDoc7` passing; and `DrawingOpenGuardTests.TheReadOnlyCheckIsABareReadEveryGuardAllows`,
+which swept the seat's guard as allowing `IsOpenedReadOnly`: every gate but the seat's allows it, and
+the seat's is asserted to refuse it (*renamed `...EveryGuardButThePaneSeatsAllows` on the review,
+R12.8*). Each asserts as much as it did or more - what passed and should
+not is refused. The comments that said a bare name is the read-only guard's answer at the seat's gate
+are corrected (`SwRemodelSeat.cs`, `ReadOnlyGuard.Assert`, both test classes).
+
+**Evidence**: commit `1ff15a8`; M41 to M44 (R12.7).
+
+### R12.2 `OpenDoc7` by its qualified key at its two callers; the bare name refused (T184, T185)
+
+**The search**, as R11.2 searched `NewDocument` and `MoveToFolder`: the product names `OpenDoc7` as
+a literal in `Bridge/BridgeDispatcher.cs` (`remodel.open`'s gate key, bare),
+`Rms/SwRemodelProbeHost.cs` (`probe remodel`'s reopen of its throwaway part, PROBE-12, bare),
+`Remodel/SwRemodelSeat.cs` and `Guard/RemodelSeatGuard.cs` (the pane seat's qualified key),
+`Rms/RemodelInteropSurface.cs` (the frozen manifest's row, interface and member apart) and the
+console's `Program.cs` (a member `probe standards` asserts is absent from its gate log); it calls
+`ISldWorks.OpenDoc7` in `Remodel/Seat/SwRemodelBridgeSeat.cs` (under the bridge's gate key),
+`SwRemodelSeat.cs` and `SwRemodelProbeHost.cs`; no `nameof` names it, and the rest are comments.
+
+**Decision**: `remodel.open` opens the copy by `ISldWorks.OpenDoc7`, which joins `RemodelGuard`'s
+stage-1 allowlist - twenty-one keys, the sixth that overrides a read-only denial. Its second layer
+stands as before: the open makes the document the scope is built on, so it is fenced by step 4 -
+the copy's path by the one rule (R12.3), this run's bound folder, `AssertSaveTarget` - before it and
+by `AssertOpenedAtCopy` after it, and `VerifyTarget` runs before every write from the tag on. The
+tool service's observer counts an allowlisted key as a write, with the copy as its target once a
+scope exists; the open is made before one, so it records no target, `(none)` - which the toggles
+written before it have already put on the open's request line, so that line is unchanged. The open's
+marker in `remodel.log` is its key, as the open's other gated writes' are (`stage=before
+ISldWorks.OpenDoc7`).
+
+`probe remodel`'s reopen is gated under the same qualified key, one of `RemodelProbeGuard`'s
+run-scoped members, rather than under the bare name as decision 144A exempted `NewDocument` and
+`MoveToFolder`. Why: the decision has `OpenDoc7` "called by its qualified key at its two callers";
+with both callers qualified no gate lets the bare name through - the read-only guard refuses it, and
+so does every gate the product builds, a simpler fact to hold than a bare exemption in one guard; and
+the probe's guard already exempts the qualified keys it shares with the stage-1 allowlist, the
+toggles'. It matches its set ignoring case, as it does for those, and its one host names the key as
+a constant. The PROBE-12 reading's members, and the run's `interop members:` line, name
+`ISldWorks.OpenDoc7` now.
+
+The generator withdraws both of `OpenDoc7`'s exclusions: the named one, `remodel.open` and the
+reopen by the bare name, and the structural one `New-GuardExclusions` gives the bare name of a
+stage-1 key - `ISldWorks.OpenDoc7` is the one stage-1 key whose bare name the generated table refuses
+on purpose. The structural reason now names the overriding-keys test by its new name,
+`Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes` (renamed from `...DeclaredFive`, so
+that a count is not its name). The "Feature 011" table of 004's `guard-allowlist.md` and
+`ReadOnlyGuard.Drawing.cs` regenerate from one run, byte for byte: 758 new names, `OpenDoc7` on the
+`ISldWorks` row and off the "Not denied" table, the 28 families' 652 matches unchanged; decision
+21A's table and `ReadOnlyGuard.Creation.cs` regenerate unchanged. The frozen manifest marks
+`ISldWorks.OpenDoc7` allowlisted, its row beside the stage-1 keys, and the fixture is regenerated: 103
+members, 62 enum constants and 4 absences.
+
+**The read audit**: the table refuses the bare `"OpenDoc7"` now, so the audit names its two remaining
+literals, each by its file: `Program.cs` (`probe standards`' absent list) and
+`RemodelInteropSurface.cs` (the manifest's row). `ISldWorks.OpenDoc7` is a `RemodelGuard` key, which the
+audit judges whole in every file (`Judged`); so `TheSeatsKeysAreLiteralsOfTheFilesWhoseGuardsLetThemThroughAlone`
+holds each seat key to exactly the files whose guards let it through - `ActivateDoc3` the seat's
+alone, `OpenDoc7` the seat's, the dispatcher's and the probe host's - and
+`TheOpensTwoOtherCallersNameItByItsQualifiedKeyAndNeverBare` holds the dispatcher and the probe host to
+the key and never the bare name.
+
+**Tests.** `TheBareOpenDoc7IsRefusedByEveryGateAndOnlyTheGuardsOfItsCallersLetItsKeyThrough` sweeps
+both spellings over every gate the product builds: the bare name refused by all, the key let through
+by `RemodelProbeGuard`, `RemodelGuard` and `RemodelSeatGuard` and no other.
+`Assert_TheOpenOfTheCopyPassesByItsQualifiedKeyAndIsRefusedBare` and
+`Open_OpensTheCopyUnderItsQualifiedKeyOnTheStage1Allowlist` (the open gated under the key, never the
+bare name, nothing refused). `DocumentLifecycleFamilyTests` moves `ISldWorks.OpenDoc7` from `Allowed`
+to three `Exceptions`, each with the file whose call needs it and its reason, so its family sweep and
+its staleness check read them. Red before the change: 19 cases of 19 tests.
+
+**Edited deliberately**: `DrawingFamilyDenylistTests.EveryExclusionHasOneOfTheContractsReasons` and
+`TheSanctionedCallsStayAllowed` (`OpenDoc7` out, narrowed); `NoMemberOfTheTableIsTheBareNameOfAStage1AllowlistKey`,
+which held the table to no stage-1 key's bare name and now names the one, `OpenDoc7`, any other
+failing as before (*renamed `OnlyTheNamedMembersOfTheTableAreBareNamesOfStage1AllowlistKeys` on the
+review, R12.8*); `DocumentLifecycleFamilyTests.Allowed` and `Exceptions` (and the `ActivateDoc3`
+exception's reason, which said the read-only guard leaves `OpenDoc7` allowed); the read audit's
+`NamedLiterals` and `TheSeatsOwnKeysAreLiteralsOfItsOwnFileAlone`, now
+`TheSeatsKeysAreLiteralsOfTheFilesWhoseGuardsLetThemThroughAlone`; `RemodelGuardTests.Stage1Allowlist`,
+its count, `Assert_AllowlistedKey_Passes` and `KeysThatOverrideAReadOnlyDenial`, whose test is renamed
+`...AreExactlyTheDeclaredOnes`; `RemodelSeatGuardTests.TheOnlyKeyWhoseBareNameTheReadOnlyGuardDeniesIsActivateDoc3`,
+now `BothKeysBareNamesAreDeniedByTheReadOnlyGuard`, and `TheGuardWidensNoOtherGuard`, where
+`ISldWorks.OpenDoc7` is `RemodelGuard`'s own key now, for `remodel.open`; and the open's marker in
+`RemodelOpenHandlerTests` (two tests) and `ToolServiceWiringTests`. **Kept consistent**: the frozen
+manifest and its tests, the family sweeps and `GuardSweep` (whose list of guards does not move), the
+read audit, 004's `guard-allowlist.md` and `interop-manifest.md`, and `contracts/guard.md` sections
+1, 2, 3, 5 and 8.
+
+**Evidence**: commit `b8b6b8c`; M45 to M50 (R12.7).
+
+### R12.3 One rule for the copy's path, for both seats; run folders in their full form (T186, T187)
+
+**Decision**: `Rms/RemodelCopy.CopyOf` is the one rule for the run's copy's path, in the extractor,
+and both seats call it: the bridge's `remodel.open` at step 4 for the `copy_path` it is sent, refusing
+as a save target is refused (`guard_refused`, naming `Save3`, as its refusal of a path outside a run
+folder's `copy/` always has) and using the canonical form from there on; and the pane seat through
+`Remodel/RemodelSeatCopyPath.cs`, which is now only its door to the rule, answering a refusal as the
+seat always has, an argument error. The rule is the one the pane seat had (R11.7): a full path, a
+drive's or a share's (`RemodelCopy.IsFullPath`, moved with it) and never a device path, with no `..`
+segment, to a part inside a run folder's `copy/` (`RunDirectoryOf`), the run folder not the root of a
+drive or a share; it answers the canonical form and the run folder. Until now the bridge
+canonicalized a `..` away - a path through `copy\..\copy` was taken as the copy - and took a device
+path, which it then compared with the folder the host bound.
+
+`Review/RunFolders.cs` names every folder it makes - a review's, a Model check's, a Standards
+check's, a re-modeler's run's and the terminal's - under the run root's full form, `Path.GetFullPath`
+of it, whatever spelling the setting holds, and its two searches (`NewestCheckFolder`,
+`FindNotSentReview`) enumerate the same full form. Under a run root spelled `C:\work\..\runs`, a
+folder named as it was spelled carried the segment to everything it was handed to: the backend's rule
+for a run folder refuses a `..` segment rather than resolve it (`resolve_run_dir`), and a backend that
+passed the folder on would have had the pane seat refuse the copy, every plan ending `CopyNotActive`
+(R11.8 item 5, which `RemodelPlanEndToEndTests` reproduces with its relay, which does not resolve).
+
+**Found on the way: two spellings of one folder.** The review host compares the folder of a review
+the engineer removed with the folder its search finds on disk (`ReviewHost._forgottenFolders`, owner
+decision 98A item 4), trailing separators and letter case aside. A folder made in its full form and
+the same folder found by enumerating the root as it was spelled would differ under a spelled root,
+and the removed review would be offered again; so the searches enumerate the full form too, and
+`AFolderMadeIsSpeltAsTheSameFolderFound` and `ARemovedReviewUnderARunRootSpeltWithAParentSegmentIsNotFoundAgain`
+pin it. `NewestCheckFolder` answers nothing, as before, for a root with a colon after the drive's,
+which `Path.GetFullPath` refuses with `NotSupportedException`.
+
+**Every producer of a path either seat is handed, traced.** The pane seat is handed a copy path by
+the pipeline alone: `BackendRemodelPipeline.CopyIn`, the one real part `Directory.GetFiles` lists in
+`copy/` of the run folder the host holds, for Open copy (`ActivateCopy`) and for the activation
+before each dump (`MakeTheCopyActive`); that folder is the one `RunFolders.CreateForRemodel` made. The
+bridge seat is handed two paths: the run folder the host binds before each open (the same folder,
+`BindRemodelRun`), and `remodel.open`'s `copy_path`, which the backend builds in
+`reviewer/src/swreview/chat/remodel.py` (`copy_path_for`) as the run folder it was sent - resolved by
+its path rule, `resolve_run_dir`, which first refuses a UNC or device path and a `..` segment, then
+`Path(text).resolve()` - then `copy` and `<the source's stem>-RMS.SLDPRT`. No other request carries a
+path to the copy: `remodel_client.py`'s `probe_scope` and `open` carry the source, and the runner's
+change commands carry none. So a real run hands either seat a full drive path in canonical form, its
+run folder in full form, its separators backslashes and no `..` in it, which the rule takes. A run
+root on a share never plans: the backend refuses a UNC run folder before any bridge call (R12.9).
+The rule takes, on both seats, the forms decision 144A's second review took (T178) - a share's path
+with either separator, a run folder directly under a share's root or a mapped drive's, spaces,
+another letter case - and refuses everything else, in one list of forms both seats' tests read
+(`RemodelCopyPathForms`, linked into the add-in's suite): not the run's copy, not a full path, a
+`..` segment, a device path in each spelling, a copy folder in no run folder, and a path that names
+nothing.
+
+**Device paths, decided: refused on both seats.** The question was whether the backend could send
+one: `Path.resolve()` (`ntpath.realpath`) answers with the `\\?\` prefix only when the plain path does
+not reach the same file - a final path, after a junction, a symbolic link, a `subst` drive or a mapped
+drive is followed, at or past `MAX_PATH` on a machine where long paths are not enabled, or a name only
+a `\\?\` path can hold (a trailing dot or space, a reserved name). Such a run folder is spelled by the
+backend otherwise than the host bound it, so the bridge refused its copy before this decision too, at
+step 4's comparison of run folders; and the host makes a device path only from a run root set as
+one, which the backend refuses as a run folder. Refusing a device path at the rule refuses no copy a
+run could use, and keeps the rule one: the pane seat refused it already. (This machine has long
+paths enabled; the pilot's setting is not known here, and does not matter to the answer.)
+
+**The bind, unchanged.** `BridgeDispatcher.BindRemodelRun` keeps its own test of a whole path, which
+takes a device path, and still canonicalizes the folder it is handed. It is handed the host's own
+folder, never a request's, and that folder is in its full form now, so it carries no `..`; a run
+folder bound as a device path - only a run root set as one makes it - holds no copy the rule takes,
+and before any bridge call the backend refuses it in its own words (`run_dir ... is a UNC or device
+path`), where a refusal at the bind would reach the page as "could not reach SOLIDWORKS"
+(`RunNotBoundMessage`). The decision names the copy's path; the bind is the run folder's.
+
+**Tests.** `RemodelCopyTests` holds `CopyOf` to the shared forms, both ways, and refuses no path at
+all as an argument error. `RemodelOpenHandlerTests`: every accepted form passes step 4 with its run
+folder bound as the host binds one - stopped at step 6, the first write to the engineer's settings,
+so nothing is copied at a fictional path, the open's ending naming the canonical copy and its run
+folder; every refused form a request can carry is `guard_refused` naming `Save3` before anything is
+recorded or set; a device path is refused even with the run folder bound as one, where the bridge
+copied and opened through it before; and the copy is made, opened and attested in the canonical form
+of a path spelt with forward slashes and spaces around it. `SwRemodelSeatTests` holds the pane seat to
+the same forms by every way it reaches the copy. `RunFoldersFullFormTests`: every kind of run folder
+made in its full form under four spellings of the root, a folder made spelled as the same folder
+found, the searches answering in the full form, and a root that names no folder answered nothing.
+`RemodelPlanEndToEndTests.APlanUnderARunRootSpeltWithAParentSegmentPlansAndItsCopyOpensAgain` plans
+under such a root through the production wiring and opens the copy again after it. Red before the
+change: 47 cases of 7 tests; the accepted forms on both seats, the canonical-form open, a folder made
+spelled as the one found and the removed review were green before and after, pinning what must not
+move. No existing test was edited.
+
+**Evidence**: commit `c1b83ca`; M51 to M59 (R12.7).
+
+### R12.4 Open copy refused while a remodel run is in progress (T188, T189)
+
+**Decision**: `RemodelHost.OpenCopy` refuses `remodel.open_copy` while a plan or a run is in flight -
+the host's `RunInProgress` - with `RunInProgress`, retryable, in plain words that name no path and
+name the Open copy button by its label (`RemodelHost.OpenCopyWhileARunIsInProgressMessage`), after
+the run is found and before anything is asked of SOLIDWORKS. Any run's copy, not only the one running:
+the copy of an earlier plan activated or opened mid-run changes the document SOLIDWORKS has active
+under the run as surely as the run's own. A plan holds the page's message queue while it runs, so the
+refusal is a run's in practice; the page's messages are handled while a run executes off their thread.
+`DiscardCopy` keeps its own rule - refused only while its run is in flight - since deleting another
+run's copy changes nothing the running one reads. The page mirrors what it does for Discard copy
+during a run: Open copy is disabled from `remodel.started` until the run reaches a terminal status
+(`remodel.js`, `renderControls`). *Amended on the second review (R12.8a)*: both are disabled while a
+plan is made too, from the press of Remodel until the plan is answered, the host's "a plan or a run".
+Start is switched off in this build (004 T172), so no run can be in
+progress at the pilot yet; the refusal waits for the switch.
+
+**Tests.** `RemodelHostTests`: Open copy during its own run and during another plan's run refused,
+nothing activated; answered again once the run has finished; and Discard copy's own refusal during its
+run, which no test pinned. `RemodelPageContractTests.OpenCopyAndDiscardCopyAreNotOfferedWhileARunRuns`
+drives the real page over the real transport: both offered after the plan, neither from
+`remodel.started` to the terminal status, both again after it; and the refusal's words name the button
+by its label and no path. Red before the change: 3 cases of 3 tests. 004's `pane-remodel-messages.md` says so.
+
+**Evidence**: commit `18b2dd9`; M60 to M62 (R12.7).
+
+### R12.5 Is activating or opening the run's copy a write? (constitution 2(b))
+
+R11.8 item 3 asked whether the constitution's 2(b) - the target's path, session tag and COM identity
+re-verified before each write - reaches the pane seat, which activates the run's copy and opens it
+writable and writes nothing to it, and whose copy carries no tag once the session has ended. The
+owner's answer is the draft constitution amendment's (pull request #4), which says that activating or
+opening the run's copy is not a write, the copy's path check being its scope - the rule of R12.3, at
+both seats. The owner adds that sentence to the draft himself; nothing here edits the constitution or
+the draft. R11.8 item 3 is settled by decision 148A once the owner merges the amendment.
+
+### R12.6 The next sitting (T171, amended)
+
+`remodel.open`, the pane seat and `probe remodel` run only on the pilot workstation, so T171, which
+already runs the pane seat's activation and Open copy at the test plan's step 5.3 item B, is amended
+to run each of the three paths this decision changes once more with this change and to read their
+gate lines: the plan's `remodel.open` request line in the run's `remodel.log` (`status=ok`, its
+`gated=` naming `ISldWorks.OpenDoc7` and no bare `OpenDoc7`, no `refused=`), the four `seat=` lines as
+before, and at step 5.6's first run, PROBE-12's reopen (its verdict with a reason and no `"error":`,
+and the run's `interop members:` line naming `ISldWorks.OpenDoc7`). The lines name members and no
+path. No minutes are added: each is a line the step already prints, read where it is printed. The
+test plan, its results sheet and the handover say so.
+
+### R12.7 The mutations
+
+Each fix taken out once, by an exact replacement in one file, in a detached worktree of `18b2dd9`:
+the suite built and the named tests run, then the file restored byte for byte and checked so; M50,
+a generator's line, by the byte-for-byte check of both generators instead. Every mutation is red.
+M51 and M52 turn the rule's own tests, the bridge's and the pane seat's red together, which shows
+both seats take the copy by the one rule; under M53 and M54 the bridge's tests stay green, since
+its run-folder comparison and `AssertSaveTarget` refuse those paths as well, a second layer the
+seat does not have, and the seat's turn red. M63 to M68 were added on the review (R12.8), the same
+way, in detached worktrees of `d8542bc` (M63, M64) and `8f62df1` (M65 to M68); M65 and M66 are the
+review's own, and M68 is M48 run again, to show the probe's own-calls test, widened on the review,
+red beside the four M48 turned red, where before it stayed green. M69 and M70 were added on the
+second review (R12.8a), the same way, in a detached worktree of `7047fc4`.
+
+| Id | Taken out | Red |
+|---|---|---|
+| M41 | the seat's guard hands a bare name off its list to the read-only guard again | 15 cases of 4 tests: `ANameTheReadOnlyGuardAllowsIsRefusedWhenTheSeatDoesNotMakeIt`, `AnyOtherBareNameIsRefusedNamingItWhateverTheReadOnlyGuardAnswers`, `TheReadOnlyCheckIsABareReadEveryGuardAllows` and 1 more |
+| M42 | a read the seat makes dropped from the seat's list (`GetTitle`) | 51 cases of 24 tests: `ACallThatThrowsReachesTheCallerUnchangedAndTheLogNamesItsType`, `ACopyWhosePathSolidworksAnswersInAnotherCaseIsTheCopy`, `ALogThatCannotBeWrittenFailsNothing` and 21 more |
+| M43 | a writer the read-only guard leaves allowed added to the seat's reads (`CloseDoc`) | 5 cases of 5 tests: `ANameTheReadOnlyGuardAllowsIsRefusedWhenTheSeatDoesNotMakeIt`, `AnyOtherBareNameIsRefusedNamingItWhateverTheReadOnlyGuardAnswers`, `TheReadsOnTheListAreExactlyTheFiveTheSeatMakes` and 2 more |
+| M44 | the seat's reads matched in any case | 4 cases of 2 tests: `AnyOtherBareNameIsRefusedNamingItWhateverTheReadOnlyGuardAnswers`, `TheSeatsGateAllowsItsTwoKeysAndItsFiveReadsAndRefusesEveryOtherName` |
+| M45 | `ISldWorks.OpenDoc7` dropped from `RemodelGuard`'s stage-1 allowlist | 222 cases of 181 tests: `ACleanOutcomeCarriesNoFailedCheckAndAnEmptyOutstandingList`, `ACloseThatReturnedButLeftTheCopyOpenIsNotAClose`, `ACloseThatThrewIsNotConfirmedByARead` and 178 more |
+| M46 | `remodel.open`'s open gated by the bare `OpenDoc7` again | 215 cases of 174 tests: `ACleanOutcomeCarriesNoFailedCheckAndAnEmptyOutstandingList`, `ACloseThatReturnedButLeftTheCopyOpenIsNotAClose`, `ACloseThatThrewIsNotConfirmedByARead` and 171 more |
+| M47 | `probe remodel`'s reopen gated by the bare `OpenDoc7` again | 6 cases of 6 tests: `EveryExceptionIsStillNamedByTheProduct`, `EveryProbeHostCallTheReadOnlyGuardRefusesPassesTheProbesGuard`, `NoLiteralOfTheProductSourceIsRefusedByTheTableExceptTheNamedOnes` and 3 more |
+| M48 | `ISldWorks.OpenDoc7` dropped from `RemodelProbeGuard`'s run-scoped members | 4 cases of 4 tests: `EveryGateTheProductBuildsLetsThroughOnlyTheNamedExceptions`, `EveryProbeHostCallTheReadOnlyGuardRefusesPassesTheProbesGuard`, `TheBareOpenDoc7IsRefusedByEveryGateAndOnlyTheGuardsOfItsCallersLetItsKeyThrough` and 1 more |
+| M49 | the generated denial of the bare `OpenDoc7` removed from `ReadOnlyGuard.Drawing.cs` | 13 cases of 13 tests: `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes`, `Assert_TheOpenOfTheCopyPassesByItsQualifiedKeyAndIsRefusedBare`, `BothKeysBareNamesAreDeniedByTheReadOnlyGuard` and 10 more |
+| M50 | the generator without its withdrawal of `OpenDoc7`'s structural exclusion (`list-writer-members.ps1`) | the byte-for-byte check: the "Feature 011" section and `ReadOnlyGuard.Drawing.cs` differ - 757 new names, and `OpenDoc7` back on the "Not denied" table as the bare name of a stage-1 key |
+| M51 | the one rule without its `..` refusal (the rule's, the bridge's and the pane seat's tests run) | 11 cases of 4 tests: `APathThatIsNotARunsCopyIsRefusedBeforeAnyCall`, `CopyOf_RefusesEveryOtherPathAsASaveTargetIsRefused`, `Open_EveryOtherPathIsRefusedAsASaveTargetBeforeAnythingIsSet` and 1 more |
+| M52 | the one rule's full-path test taking a device path (the same tests) | 11 cases of 4 tests: `APathThatIsNotARunsCopyIsRefusedBeforeAnyCall`, `CopyOf_RefusesEveryOtherPathAsASaveTargetIsRefused`, `Open_ADevicePathIsRefusedEvenWhenTheBoundRunFolderIsSpeltAsOne` and 1 more |
+| M53 | the one rule without its refusal of a run folder at a root (the same tests) | 8 cases of 3 tests: `APathThatIsNotARunsCopyIsRefusedBeforeAnyCall`, `CopyOf_RefusesEveryOtherPathAsASaveTargetIsRefused`, `TheSeatRefusesEveryPathTheOneRuleRefusesBeforeAnyCall` |
+| M54 | the one rule without its part-extension check (the same tests) | 8 cases of 3 tests: `APathThatIsNotARunsCopyIsRefusedBeforeAnyCall`, `CopyOf_RefusesEveryOtherPathAsASaveTargetIsRefused`, `TheSeatRefusesEveryPathTheOneRuleRefusesBeforeAnyCall` |
+| M55 | `remodel.open`'s step 4 back to its own canonicalization, not the one rule | 7 cases of 2 tests: `Open_ADevicePathIsRefusedEvenWhenTheBoundRunFolderIsSpeltAsOne`, `Open_EveryOtherPathIsRefusedAsASaveTargetBeforeAnythingIsSet` |
+| M56 | run folders named under the run root as it was spelled, not its full form | 20 cases of 4 tests: `AFolderMadeIsSpeltAsTheSameFolderFound`, `APlanUnderARunRootSpeltWithAParentSegmentPlansAndItsCopyOpensAgain`, `ARemovedReviewUnderARunRootSpeltWithAParentSegmentIsNotFoundAgain` and 1 more |
+| M57 | the check tabs' search enumerating the run root as it was spelled | 6 cases of 2 tests: `AFolderMadeIsSpeltAsTheSameFolderFound`, `TheSearchesAnswerInTheFullFormWhateverTheRootsSpelling` |
+| M58 | the waiting-review search enumerating the run root as it was spelled | 7 cases of 3 tests: `AFolderMadeIsSpeltAsTheSameFolderFound`, `ARemovedReviewUnderARunRootSpeltWithAParentSegmentIsNotFoundAgain`, `TheSearchesAnswerInTheFullFormWhateverTheRootsSpelling` |
+| M59 | the check tabs' search letting a root with a colon after the drive's throw | 1 case of 1 test: `ARootThatNamesNoFolderIsAnsweredNothingByTheSearches` |
+| M60 | Open copy without the busy check | 2 cases of 2 tests: `OpenCopyOfAnEarlierPlanWhileARunIsInProgressIsRefusedToo`, `OpenCopyWhileItsRunIsInProgressIsRefusedInPlainWordsAndNothingIsActivated` |
+| M61 | the page leaving Open copy offered during a run | 1 case of 1 test: `OpenCopyAndDiscardCopyAreNotOfferedWhileARunRuns` |
+| M62 | the busy check limited to the run whose copy it is, Discard's rule | 1 case of 1 test: `OpenCopyOfAnEarlierPlanWhileARunIsInProgressIsRefusedToo` |
+| M63 | the bridge seat's check back to the copy folder's name alone (`RunDirectoryOf`) | 20 cases of 1 test: `APathTheOneRuleRefusesIsNeitherOpenedNorClosedNorAskedAbout` |
+| M64 | the bridge seat's refusal of a null path as an argument taken out | 1 case of 1 test: `ABlankPathIsNeitherOpenedNorClosed` |
+| M65 | Open copy's busy check limited to a run that has begun (`_busy && _active != null`, the review's) | 1 case of 1 test: `OpenCopyOfAnEarlierPlanWhileAPlanIsInFlightIsRefusedToo` |
+| M66 | the same second's folder named under the run root as it was spelled (the review's) | 15 cases of 1 test: `AFolderMadeInTheSameSecondIsMadeInItsFullFormToo` - the five kinds of run under the three spellings that differ from the full form |
+| M67 | `probe standards`' claims reading a gated key whole again | 1 case of 1 test: `StandardsProbe_GateLogNamesWhatWasTouchedHoweverTheKeyIsSpelled` |
+| M68 | `ISldWorks.OpenDoc7` dropped from `RemodelProbeGuard`'s run-scoped members (M48 again) | 5 cases of 5 tests: M48's four and `TheProbesOwnCallsAreExactlyTheDeclaredWritersAndOnlyTheirCallersGuardsLetThemThrough` |
+| M69 | the page offering Open copy while a plan is made, a run's rule only | 1 case of 1 test: `OpenCopyAndDiscardCopyAreNotOfferedWhileAPlanIsBeingMade` |
+| M70 | the page offering Discard copy while a plan is made, a run's rule only | 1 case of 1 test: `OpenCopyAndDiscardCopyAreNotOfferedWhileAPlanIsBeingMade` |
+
+### R12.8 The adversarial review: what it found and what changed (T191 to T196)
+
+**Source.** An independent, adversarial review of the five commits at `d1b4246`, the same day, read
+only, in a detached worktree of the branch, attacking false refusals at the pilot, gates that let
+more through, tests that cannot fail and the records. It built the solution from scratch with zero
+warnings, ran both C# suites (10,006 and 2,895 tests, all green, as R12 says), reproduced both
+generators' tables and `ReadOnlyGuard.Drawing.cs` and `ReadOnlyGuard.Creation.cs` byte for byte,
+compared the manifest fixture with `35d6ff7` (only `ISldWorks.OpenDoc7`'s `allowlisted` flag and
+note differ) and ran the Python test that reads the edited test plan. Its run of the whole Python
+suite failed five tests, which it traced to its own long scratch `--basetemp` (a CLI message cut
+short, a golden file's session id rewritten inside the path); this branch changes no Python file,
+and the suite as the gates run it passed, unchanged (R12). It found **no must-fix**: no false refusal
+the pilot could hit, no gate that lets more through than before, every identifier the records name
+present in the code, and no edited test weaker than the decision requires. Checked and found sound:
+the seven names the pane seat's gate is asked about on every path, failures included; no caller of
+the bare `OpenDoc7` left; the tool service's open line still recording no target, `(none)`, since
+the toggles are written first; the one rule against what the backend sends, a full drive path with
+no `..`, 8.3 short names included, which `Path.GetFullPath` and Python's `resolve()` both expand where
+the folder exists, so they do not split the seats; every comparison of run folders; `_busy`, which
+cannot stick; and the test plan's PowerShell line against the log's own format. Its findings, and what
+each became:
+
+- **The decision register still says "In progress"** (finding 1, should-fix): the branch is based on
+  `35d6ff7`, older than the commit that registered 148A (`bc92632`, on main), and touches nothing in
+  `docs/decisions.md`. Left to the owner, by his instruction for this decision: he marks the row done.
+  Since the branch leaves the register alone, main's row merges as it stands.
+- **Open copy during a plan was untested** (finding 2, should-fix): the host refuses while a plan or a
+  run is in flight, as R12.4 and the contracts say, but the decision's tests pressed it during a run
+  only, so a check limited to a run that has begun (`_busy && _active != null`) passed them all.
+  `RemodelHostTests.OpenCopyOfAnEarlierPlanWhileAPlanIsInFlightIsRefusedToo` sends it from inside a
+  second plan (T193; M65). No pilot impact: the page cannot send it then (R12.4).
+- **The same second's run folder was not pinned to its full form** (finding 3): a `-2` folder, a
+  double-click's, named under the run root as it was spelled would have passed every test, and carried
+  a `..` to the backend. `RunFoldersFullFormTests.AFolderMadeInTheSameSecondIsMadeInItsFullFormToo`,
+  for every kind of run under every spelling of the root (T193; M66).
+- **Text left stale** (finding 4): the frozen manifest's heading for the stage-1 write surface counted
+  twenty keys, the generator listed `OpenDoc7` among the members left allowed with no "until decision
+  148A", and a pane seat test's summary named the bare `OpenDoc7` among them (T195); `contracts/guard.md`
+  section 3's first row named the overriding-keys test by its old name, R11.1 had no dated note for
+  `OpenDoc7`'s standing, R12.1 said in the present tense that the read-only guard leaves the bare
+  `OpenDoc7` allowed, and 003's `model-check.md` and 006's `standards-check.md` say their folders are
+  made by `RunFolders` with no word of the full form, which 002's amendment covers (T196). R12.8's place
+  in the numbering was this section's.
+- **Three test names the decision made untrue** (finding 5): `TheReadOnlyCheckIsABareReadEveryGuardAllows`
+  (the seat's guard refuses that read), the drawing family's `NoMemberOfTheTableIsTheBareNameOfAStage1AllowlistKey`
+  (one is, named) and `TheProbesOwnCallsAreExactlyItsTwoWritersAndOnlyItsGuardLetsThemThrough`, which
+  could not see the probe's third writer, its reopen by `ISldWorks.OpenDoc7`: the read audit's `Judged`
+  reads a key of `RemodelGuard` whole, and the table holds bare names. The first two are renamed
+  `TheReadOnlyCheckIsABareReadEveryGuardButThePaneSeatsAllows` and
+  `OnlyTheNamedMembersOfTheTableAreBareNamesOfStage1AllowlistKeys`; the third reads the probe host's
+  literals by their member half (`MemberHalf`, which `Judged` now uses for everything but the two
+  allowlist guards' keys), pins the key among the probe's own calls and pins it let through by exactly
+  its three callers' guards, renamed `TheProbesOwnCallsAreExactlyTheDeclaredWritersAndOnlyTheirCallersGuardsLetThemThrough`
+  (T193; M68). Each asserts as much as before or more.
+- **The page offers Open copy before the host is free** (finding 6, for the owner, and only once Start
+  is switched on): R12.9 item 4, and 004's T172.
+- **Two tests of a whole path and two rules for a segment** (finding 7, for the owner): R12.9 item 5.
+- **`probe standards`' claims read a key whole** (finding 8): its gate log's "document opening" line
+  matched the watched names against the gate log's names as spelled, and so did the sweeps of
+  `StandardsGateLogTests`, so `ISldWorks.OpenDoc7` would not be named there - and since the decision
+  every open in the product is spelled so. `Program.Claim` reads a gated member by its member half, as
+  the read-only guard judges it (T194; M67), red before for want of it
+  (`StandardsProbe_GateLogNamesWhatWasTouchedHoweverTheKeyIsSpelled`); the three sweeps read the log
+  the same way (T193, edited deliberately).
+- **Found beside the review, not by it**: the extractor-side seat the bridge calls,
+  `SwRemodelBridgeSeat`, checked a path before SOLIDWORKS by the copy folder's name alone
+  (`RunDirectoryOf`), which took a `..` segment that canonicalizes onto a copy, a device path, a path
+  relative to wherever the process is, a `copy` folder at the root of a drive or a share, and a
+  document that is not a part - the last line of the one rule, which no path a run makes reached, since
+  the bridge hands it the canonical copy step 4 took. Its open, its close and the read that confirms a
+  close check by `RemodelCopy.CopyOf` now, refusing as an argument, as before, and a null path the same
+  way; it still hands SOLIDWORKS the path as it was handed (T191, T192; M63, M64). Every form the rule
+  refuses is refused by all three, as the rule's refusal, before any call (20 cases red before); every
+  form it takes, as step 4 answers it and as a request spells it, is opened, asked about and closed
+  (green before and after). 004's research R15.3, which named the old rule for the read, says so. T171
+  exercises it at the next sitting as it stands: with Start switched off the plan lets the copy go
+  through the bridge's close, which this seat checks and confirms (004 T176), and Open copy must then
+  open the copy again, `outcome=opened`, which a close refused would leave open and only activate.
+
+**Evidence**: commits `d8542bc`, `278eda4` and `8f62df1`, with M63 to M68 of R12.7. The tests were
+written before the code they pin, and each change was then taken out once: every mutation is red.
+
+### R12.8a The second review: what it found and what changed (T197 to T199)
+
+**Source.** A second independent review of decision 148A, on the branch with main merged in
+(`1db5b88`: decision 149A, pull request #22, and the register's rows), found no must-fix: nothing it
+found would refuse a real path at the pilot, and no gate lets more through. Its own mutations showed
+the tests hold: a typo in `BridgeDispatcher.OpenDocKey` fails 66 tests, and a letter-case typo in the
+probe host's key fails 4 of the read audit's. The merged tree carries 149A's own Python changes, so
+R12 now says that its Python "unchanged" speaks of this branch's commits, which change no Python. Its
+findings, and what each became:
+
+- **The page offered Open copy while a plan was made, which the host refuses** (fixed): the page
+  disabled both copy actions only while a run runs, where the host's rule is "a plan or a run" (R12.4).
+  With an earlier run on screen, Open copy pressed mid-plan waited behind the plan on the host's one
+  remodel message thread and was served once the plan ended - on the earlier run's copy, while the
+  page showed the new plan; Discard copy, which the page offers by the same rule and the host refuses
+  only while its own run is in flight, likewise, its "deleted" words shown beside the new plan. The
+  page disables both while a plan is made or a run runs (T198; M69, M70), red before for want of it
+  (`RemodelPageContractTests.OpenCopyAndDiscardCopyAreNotOfferedWhileAPlanIsBeingMade`, T197, over the
+  real page and transport, a press in between sending nothing). Open report and Open folder, which
+  ask SOLIDWORKS nothing, stay as they are.
+- **R11.8 item 5's other half went unsaid** (recorded): the item noted too that neither seat ties the
+  copy's run folder to the host's run root, and its settlement spoke of the rule alone. The settled
+  note now says that half was left to the callers on purpose, and why (T199).
+- **The run report can never say that every write went to the copy** (for the owner; older than the
+  decision): R12.9 item 8.
+- **A page that loads again mid-run offers what the host refuses** (for the owner; only once Start
+  is switched on): R12.9 item 9.
+
+**Evidence**: commit `7047fc4` (T197, T198), with M69 and M70 of R12.7; the records, T199.
+
+### R12.9 Found on the way, and left for the owner
+
+Each is beyond what decision 148A names, so nothing here was changed.
+
+1. **A run root on a share cannot plan at all.** The backend's rule for a run folder refuses a UNC
+   or device path for every route (`resolve_run_dir`, `reviewer/src/swreview/chat/server.py`), before
+   the bridge is asked, for a review as for a plan; so a run root on a share - the default, the
+   Documents folder, when Documents is redirected to one - plans nothing, though both seats take a
+   share's path to a run's copy. Whether run roots on a share are to work is the owner's call.
+2. **A run root reached through a link is spelled two ways.** The backend resolves the run folder
+   it is sent (`Path.resolve()`), which follows a junction, a symbolic link, a `subst` drive or a
+   mapped network drive, and builds the copy path from that spelling; the host binds its own. So under
+   such a run root `remodel.open` refuses the copy at step 4's comparison of run folders, before and
+   after this decision alike. The pilot's run root is not one: the copy opened there on 2026-09-28
+   (U27). The options: the backend builds the copy path from the run folder as it was sent,
+   normalized and not resolved, its containment still checked on the resolved form; or the bridge
+   compares the two run folders by the file they name. Nothing was changed.
+3. **`RemodelProbeGuard` matches ignoring case.** Its run-scoped members, `ISldWorks.OpenDoc7` now
+   among them as the toggles' keys were, are matched ignoring case, where `RemodelGuard` and
+   `RemodelSeatGuard` match their keys ordinally so that a mis-spelling fails closed. Its one host
+   names each key as a constant, so no mis-spelling reaches it today; matching ordinally would be the
+   stricter rule, for the owner.
+4. **The page offers Open copy, and Discard copy, before the host is free** (the review's finding 6;
+   only once Start is switched on). On a failure ending, the run's terminal status reaches the page -
+   posted by the pipeline, or by `RemodelHost.Execute` as it catches the failure - before `Execute`'s
+   `finally` closes the session over the bridge and frees the host; the page offers both actions again
+   on that status (`endRun`), so a press in that window is refused `RunInProgress`, retryable, in words
+   that say to press again once the run has finished, while the page shows the run over. Refusing is
+   right while the close is in flight. Start is switched off (004 T172), so no run reaches it at the
+   pilot; 004's T172 now says that the commit switching it on settles it. The options: post the
+   terminal status once the host is free, or keep the retryable refusal as it is.
+5. **Two tests of a whole path, and two rules for a segment** (the review's finding 7).
+   `RemodelCopy.IsFullPath` refuses a device path, which the bind's `BridgeDispatcher.IsFullyQualified`
+   takes; and `CopyOf` takes a `.` segment, which `RemodelScope.HasRelativeSegment`, read by
+   `AssertSaveTarget`, refuses. Neither difference shows today: step 4 hands `AssertSaveTarget` the
+   canonical form, which carries neither, and the bind is kept as it is for R12.3's reasons. The
+   options: keep them (the reviewer's choice, given R12.3), or have the bind and `AssertSaveTarget` read
+   the rule's own checks.
+6. **`AssertSaveTarget`'s refusal says more than it does** (seen by the review; older than this
+   decision). Its words for a path that is not this run's copy say the comparison is exact, "so another
+   case or an 8.3 short name of the same file is refused"; but it canonicalizes both paths first with
+   `Path.GetFullPath`, which expands the short names of a path whose folder exists - the copy's does
+   when it is saved - so an 8.3 spelling of the copy reaches the comparison long and is taken. Nothing
+   was changed.
+7. **The review backlog's item on the open of the copy is settled.** `docs/review-backlog.md` keeps a
+   2026-09-13 finding on 004's `guard-allowlist.md`: `ISldWorks.OpenDoc7` was off the allowlist, so the
+   open took the read-only guard's path. It asked for the key on the allowlist, the copy's path checked
+   before the open as a save target is, and a rule for `CloseDoc`'s argument (its text is cut short
+   there). The key is on the allowlist since this decision; step 4 - the one rule, this run's bound
+   folder and `AssertSaveTarget` - checks the path before the open, with `AssertOpenedAtCopy` after it;
+   and the close is handed the scope's own copy, which the bridge seat checks by the one rule (R12.8).
+   The backlog, the record of those rounds, is left as it is.
+8. **The run report can never say that every write went to the copy** (the second review's; older
+   than this decision). `remodel/report.py`'s `read_log_targets` keeps every `target=` entry in
+   `remodel.log`, and the report's word on where the writes went counts every one that is not the
+   copy against the claim. The tool service records `(none)` (`RemodelGateRecorder.NoTarget`) for an
+   allowlisted key written before a scope exists, so every successful `remodel.open` writes its
+   request line with `target=(none)`: step 6's toggles always did, and since this decision
+   `ISldWorks.OpenDoc7` does too. So a run's report says it cannot claim that every write went to the
+   copy, naming `(none)` as another target - which the second review's probe confirmed. It stays
+   hidden until Start is switched on (004 T172), since only a run writes the report; and it bears on
+   the draft constitution amendment's sentence that opening the copy is not a write. The options: skip
+   `(none)` in `read_log_targets`, or report such lines as calls with no document behind them.
+9. **A page that loads again mid-run offers what the host refuses** (the second review's; only once
+   Start is switched on). A page that loads asks for `init` (`requestInit(true)`), and `applyInit` sets
+   no running state: `init.latest_run` carries the plan's state, not whether the host is busy. So a
+   page that loads again while a run runs offers Open copy, Discard copy and Start, each of which the
+   host refuses `RunInProgress`, and disables Stop, so the run cannot be stopped from that page. Start,
+   Discard copy and Stop behaved so before this decision, which adds Open copy; item 4 covers only the
+   window at a run's end. The fix would be a flag on `init.latest_run` that a run is in flight, which
+   `applyInit` reads. Unreachable until Start is switched on, as 004's T172 now says.

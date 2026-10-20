@@ -169,6 +169,14 @@ when one exists; otherwise it creates `<run_root>/<yyyyMMdd-HHmmss>-terminal` th
 Terminal tab is reachable with no review and no document open, so a run folder is always
 created rather than assumed.
 
+*Amended 2026-10-20 (feature 011, owner decision 148A; its research R12.3):* the helper,
+`RunFolders`, makes every run folder - a review's, a Model check's, a Standards check's, a
+re-modeler's run's and the terminal's - in its full form, named under `Path.GetFullPath` of
+`run_root`, whatever spelling the setting holds, and its two searches, the check tabs' newest folder
+and the waiting review, answer in the same form. A folder spelled with a `..` segment, which the
+backend's rule for a run folder refuses, is never handed on, and a folder made is spelled as the
+same folder found.
+
 ## Host → terminal page (unsolicited)
 
 | type | payload |

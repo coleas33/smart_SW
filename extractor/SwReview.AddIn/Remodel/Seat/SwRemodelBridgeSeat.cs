@@ -20,12 +20,15 @@ namespace SwReview.AddIn.Remodel.Seat;
 /// (<see cref="CopyOpenSpecification"/>) and nothing else.
 ///
 /// <b>It calls COM directly and gates nothing itself</b> (T153's amendment): the bridge gates every
-/// call on it - the open and the close under <c>OpenDoc7</c> and <c>ISldWorks.CloseDoc</c>, the
+/// call on it - the open and the close under <c>ISldWorks.OpenDoc7</c> (the bare <c>OpenDoc7</c> until
+/// decision 148A) and <c>ISldWorks.CloseDoc</c>, the
 /// toggles through <see cref="RemodelSystemToggles"/>. What it does check, before any call, is that
-/// a path it is asked to open or close is inside a run folder's <c>copy/</c> subfolder
-/// (<see cref="RemodelCopy.RunDirectoryOf"/>'s rule) - the bridge has already checked the path is
-/// this run's copy, so reaching the refusal is a bug in the caller - and that the options are
+/// a path it is asked to open, close or ask about is a run's copy by the one rule both seats take
+/// the copy by, <see cref="RemodelCopy.CopyOf"/> (owner decision 148A; until then the copy folder's
+/// name alone, <see cref="RemodelCopy.RunDirectoryOf"/>) - the bridge has already checked the path
+/// is this run's copy, so reaching the refusal is a bug in the caller - and that the options are
 /// exactly <see cref="RemodelCopy.OpenOptions"/> (defaults taken 2026-09-27, the owner may revise).
+/// It hands SOLIDWORKS the path as it was handed, which is the canonical form the bridge took.
 ///
 /// <see cref="GetVault"/> answers null, which means "not read by this build", until T139 adds a vault
 /// read (T155's amendment, research R13.5): no PDM API is referenced anywhere in the product.
@@ -115,15 +118,21 @@ public sealed class SwRemodelBridgeSeat : SwReview.Extractor.Rms.IRemodelSeat
     public void SetCommandInProgress(bool value) => _toggles.SetCommandInProgress(value);
 
     /// <summary>
-    /// The seat opens and closes nothing but a copy: a path whose folder is not a run folder's
-    /// <c>copy/</c> is refused before SOLIDWORKS is asked anything, by the rule
-    /// <see cref="RemodelCopy.RunDirectoryOf"/> states once.
+    /// The seat opens, closes and asks about nothing but a copy: a path that is not a run's copy by
+    /// the one rule <see cref="RemodelCopy.CopyOf"/> states - a full path with no <c>..</c> segment, never
+    /// a device path, to a part in a run folder's <c>copy/</c> - is refused before SOLIDWORKS is asked
+    /// anything (owner decision 148A, feature 011 research R12.8).
     /// </summary>
     private static void RequireCopyPath(string documentPath, string parameterName)
     {
+        if (documentPath == null)
+        {
+            throw new ArgumentException("A copy path is required.", parameterName);
+        }
+
         try
         {
-            RemodelCopy.RunDirectoryOf(documentPath);
+            RemodelCopy.CopyOf(documentPath);
         }
         catch (MutatingCallError refusal)
         {

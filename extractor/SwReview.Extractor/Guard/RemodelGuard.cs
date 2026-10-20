@@ -9,7 +9,8 @@ namespace SwReview.Extractor.Guard;
 ///
 /// <see cref="ReadOnlyGuard"/> is a denylist because the reviewer's read surface is unbounded
 /// and grows every phase. The re-modeler is the inverse: its write surface is the closed set
-/// of twenty keys in <see cref="AllowedKeys"/>, and it is exactly the workload that finds a
+/// of keys in <see cref="AllowedKeys"/> - twenty, and twenty-one since owner decision 148A
+/// (2026-10-20) put the open of the copy among them - and it is exactly the workload that finds a
 /// denylist's gaps - the read-only list blocked <c>InsertFeatureTreeFolder2</c> through its
 /// <c>InsertFeature</c> prefix while leaving <c>FeatureFillet3</c>, <c>FeatureRevolve2</c>,
 /// <c>InsertPart3</c> and <c>SetSuppression2</c>'s neighbours wide open. Decision 21A
@@ -91,6 +92,15 @@ public sealed class RemodelGuard : ICallGuard
 
         // Close the tagged copy.
         "ISldWorks.CloseDoc",
+
+        // Open the copy at its own path, Silent | LoadModel = 17, never ReadOnly or ViewOnly
+        // (remodel.open step 8), behind the copy's path check and with the opened document's path
+        // asserted after it. Owner decision 148A (2026-10-20; feature 011 research R12.2): it was
+        // gated by the bare name the read-only guard left allowed, so every read-only gate let a
+        // writable open through; the read-only guard refuses the bare name now, and this key is the
+        // sixth that overrides a read-only denial. The pane seat's guard and probe remodel's allow the
+        // same key for their own opens.
+        "ISldWorks.OpenDoc7",
     };
 
     /// <summary>

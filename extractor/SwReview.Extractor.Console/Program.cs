@@ -479,7 +479,13 @@ public static class Program
         };
     }
 
-    /// <summary>One gate-log claim: what of <paramref name="watched"/> the run actually touched.</summary>
+    /// <summary>
+    /// One gate-log claim: what of <paramref name="watched"/> the run actually touched. A member the gate
+    /// was asked about by its interface-qualified key is read by its member half, as the read-only guard
+    /// judges it (owner decision 148A's review, feature 011 research R12.8): every open in the product is
+    /// spelled <c>ISldWorks.OpenDoc7</c> since that decision, and a claim that read the key whole would
+    /// print "none" beside it.
+    /// </summary>
     private static string Claim(string name, IReadOnlyList<string> members, string[] watched)
     {
         var touched = new List<string>();
@@ -487,7 +493,7 @@ public static class Program
         {
             foreach (string seen in members)
             {
-                if (string.Equals(seen, member, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(CallKey.BareName(seen), member, StringComparison.OrdinalIgnoreCase))
                 {
                     touched.Add(member);
                     break;

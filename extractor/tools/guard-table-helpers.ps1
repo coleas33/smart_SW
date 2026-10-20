@@ -74,7 +74,7 @@ function New-GuardExclusions($sources) {
     $exclusions = [ordered]@{}
     foreach ($key in $sources.StageOneKeys) {
         $bare = $key.Substring($key.LastIndexOf('.') + 1)
-        $exclusions[$bare] = "the bare name of feature 004's stage-1 allowlist key ``$key``; denying it would make that key override a read-only denial and move ``Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive``"
+        $exclusions[$bare] = "the bare name of feature 004's stage-1 allowlist key ``$key``; denying it would make that key override a read-only denial and move ``Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes``"
     }
     foreach ($member in $sources.RemodelRefusals) {
         $exclusions[$member] = "refused by feature 004's ``RemodelGuard`` itself (``ExcludedMembers``), whose test asserts ``ReadOnlyGuard`` does not refuse it"

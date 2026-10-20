@@ -648,6 +648,24 @@ public class CommandLineOptionsTests
         Assert.Contains(lines, line => line.StartsWith("  display state: ShowNamedView2  (watched:"));
     }
 
+    /// <summary>
+    /// Owner decision 148A's review (feature 011 T193, research R12.8): since the decision every open in
+    /// the product is spelled with its interface - <c>ISldWorks.OpenDoc7</c> at each of its callers - so a
+    /// claim reads a gated member by its member half, as the read-only guard judges it: a gate log that
+    /// holds a qualified key names the member it watched for, and never prints "none" beside it.
+    /// </summary>
+    [Fact]
+    public void StandardsProbe_GateLogNamesWhatWasTouchedHoweverTheKeyIsSpelled()
+    {
+        IReadOnlyList<string> lines = Program.StandardsProbeGateLogLines(
+            new[] { "IDrawingDoc.ActivateSheet", "ISldWorks.OpenDoc7", "ISldWorks.ActivateDoc3", "IModelDoc2.ShowNamedView2" },
+            new MutatingCallError[0]);
+
+        Assert.Contains(lines, line => line.StartsWith("  sheet activation: ActivateSheet  (watched:"));
+        Assert.Contains(lines, line => line.StartsWith("  document opening: OpenDoc7, ActivateDoc3  (watched:"));
+        Assert.Contains(lines, line => line.StartsWith("  display state: ShowNamedView2  (watched:"));
+    }
+
     [Fact]
     public void StandardsProbe_GateLogNamesEveryRefusal()
     {

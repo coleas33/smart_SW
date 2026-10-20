@@ -11,10 +11,12 @@ namespace SwReview.Extractor.Tests;
 /// Owner decision 144A (feature 011 T163, research R11, contracts/guard.md section 8): the
 /// re-modeler's pane seat calls SOLIDWORKS through a gate whose guard is an allowlist of its own -
 /// exactly <c>ISldWorks.ActivateDoc3</c> and <c>ISldWorks.OpenDoc7</c>, matched ordinally - and every
-/// other qualified key is refused, while a bare name (every read) is <see cref="ReadOnlyGuard"/>'s
-/// answer, unchanged. The guard widens neither <see cref="ReadOnlyGuard"/>, <see cref="RemodelGuard"/>
-/// nor <see cref="DrawingOpenGuard"/>, and only the pane seat builds it. The seat's own calls, its
-/// open options and its gate log are <c>SwRemodelSeatTests</c>' (in the add-in's suite).
+/// other qualified key is refused. Since owner decision 148A (T182, research R12.1) the allowlist is
+/// closed: the seat's five reads are on it, by the bare names the seat gates them under, and every other
+/// name, bare or qualified, is refused, where a bare name was <see cref="ReadOnlyGuard"/>'s answer. The
+/// guard widens neither <see cref="ReadOnlyGuard"/>, <see cref="RemodelGuard"/> nor
+/// <see cref="DrawingOpenGuard"/>, and only the pane seat builds it. The seat's own calls, its open
+/// options and its gate log are <c>SwRemodelSeatTests</c>' (in the add-in's suite).
 /// </summary>
 public class RemodelSeatGuardTests
 {
@@ -22,6 +24,16 @@ public class RemodelSeatGuardTests
     {
         "ISldWorks.ActivateDoc3",
         "ISldWorks.OpenDoc7",
+    };
+
+    /// <summary>The reads <c>SwRemodelSeat</c> makes, by the bare names it gates them under (decision 148A).</summary>
+    private static readonly string[] TheFiveReads =
+    {
+        "GetOpenDocumentByName",
+        "GetPathName",
+        "GetTitle",
+        "ActiveDoc",
+        "GetOpenDocSpec",
     };
 
     private readonly RemodelSeatGuard _guard = new RemodelSeatGuard();
@@ -76,66 +88,145 @@ public class RemodelSeatGuardTests
         Assert.Contains(key, refusal.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Owner decision 148A (feature 011 T182): the reads on the list are exactly the five the seat
+    /// makes - its lookup, a document's path and title, the active document and the open request - as
+    /// <c>SwRemodelSeat</c> names them, bare. <c>SwRemodelSeatTests</c> holds the list to the members the
+    /// seat's gate is asked about, way by way.
+    /// </summary>
+    [Fact]
+    public void TheReadsOnTheListAreExactlyTheFiveTheSeatMakes()
+    {
+        Assert.Equal(
+            TheFiveReads.OrderBy(read => read, StringComparer.Ordinal),
+            RemodelSeatGuard.AllowedReads.OrderBy(read => read, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Decision 148A: each read on the list is a read - the read-only guard allows it - and a bare name,
+    /// so the list can never name a writer the read-only guard refuses, nor a qualified key.
+    /// </summary>
+    [Fact]
+    public void EveryReadOnTheListIsABareNameTheReadOnlyGuardAllows()
+    {
+        Assert.NotEmpty(RemodelSeatGuard.AllowedReads);
+        foreach (string read in RemodelSeatGuard.AllowedReads)
+        {
+            Assert.False(CallKey.IsQualified(read), read + " is qualified");
+            ReadOnlyGuard.Assert(read);
+        }
+    }
+
+    /// <summary>
+    /// Edited deliberately for decision 148A (feature 011 T182): it was
+    /// <c>ABareReadIsAllowedExactlyAsTheReadOnlyGuardAllowsIt</c>, whose cases were the seat's five reads
+    /// and <c>IsOpenedReadOnly</c>, a read the seat never makes; the closed allowlist refuses that one
+    /// (<see cref="AnyOtherBareNameIsRefusedNamingItWhateverTheReadOnlyGuardAnswers"/>), and each of the five
+    /// is allowed, the read-only guard allowing it too.
+    /// </summary>
     [Theory]
     [InlineData("GetOpenDocumentByName")]
     [InlineData("GetPathName")]
     [InlineData("GetTitle")]
     [InlineData("ActiveDoc")]
     [InlineData("GetOpenDocSpec")]
-    [InlineData("IsOpenedReadOnly")]
-    public void ABareReadIsAllowedExactlyAsTheReadOnlyGuardAllowsIt(string member)
+    [InlineData("  GetPathName  ")]
+    public void EachOfTheFiveReadsIsAllowed(string member)
     {
         ReadOnlyGuard.Assert(member);
         _guard.Assert(member);
     }
 
     /// <summary>
-    /// A bare name is the read-only guard's answer, whatever it is: refused for a writer, the two
-    /// keys' own bare names among them where the read-only guard refuses them.
+    /// Replaced deliberately for decision 148A (feature 011 T182): it was
+    /// <c>ABareNameIsAnsweredExactlyAsTheReadOnlyGuardAnswersIt</c> - a bare name was the read-only guard's
+    /// answer, so the bare <c>CloseDoc</c> the read-only guard leaves allowed passed this guard (research
+    /// R11.7, finding 3). The allowlist is closed now: a bare name off it is refused naming it, whatever the
+    /// read-only guard answers - the writers it leaves allowed (<c>CloseDoc</c>, <c>OpenDoc6</c>), the two keys'
+    /// own bare names, the writers it refuses, a read the seat never makes, and a read of the list in another
+    /// case.
     /// </summary>
     [Theory]
-    [InlineData("ActivateDoc3")]
-    [InlineData("OpenDoc7")]
     [InlineData("CloseDoc")]
+    [InlineData("OpenDoc6")]
+    [InlineData("OpenDoc7")]
+    [InlineData("ActivateDoc3")]
     [InlineData("Save3")]
     [InlineData("SaveAs")]
     [InlineData("CloseAllDocuments")]
     [InlineData("DocumentVisible")]
     [InlineData("ForceRebuild3")]
-    public void ABareNameIsAnsweredExactlyAsTheReadOnlyGuardAnswersIt(string member)
+    [InlineData("NewDocument")]
+    [InlineData("SetUserPreferenceToggle")]
+    [InlineData("IsOpenedReadOnly")]
+    [InlineData("GetDocuments")]
+    [InlineData("GetTitle2")]
+    [InlineData("getpathname")]
+    [InlineData("GETOPENDOCUMENTBYNAME")]
+    [InlineData("activedoc")]
+    public void AnyOtherBareNameIsRefusedNamingItWhateverTheReadOnlyGuardAnswers(string member)
     {
-        Assert.Equal(Refuses(() => ReadOnlyGuard.Assert(member)), Refuses(() => _guard.Assert(member)));
+        MutatingCallError refusal = Assert.Throws<MutatingCallError>(() => _guard.Assert(member));
+
+        Assert.Equal(member, refusal.MemberName);
+        Assert.Contains(member, refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// Of the two keys only <c>ActivateDoc3</c> overrides a read-only denial (contracts/guard.md section
-    /// 1's shared <c>ISldWorks</c> row): <c>OpenDoc7</c> is an exclusion of section 3, which the
-    /// read-only guard leaves allowed for <c>remodel.open</c> and <c>probe remodel</c>'s reopen.
+    /// Decision 148A: the cases above include the bare writers the read-only guard leaves allowed and the
+    /// reads it allows, so the refusal is the closed list's and not the read-only guard's.
+    /// </summary>
+    [Theory]
+    [InlineData("CloseDoc")]
+    [InlineData("OpenDoc6")]
+    [InlineData("IsOpenedReadOnly")]
+    [InlineData("GetDocuments")]
+    public void ANameTheReadOnlyGuardAllowsIsRefusedWhenTheSeatDoesNotMakeIt(string member)
+    {
+        ReadOnlyGuard.Assert(member);
+        Assert.True(Refuses(() => _guard.Assert(member)), member);
+    }
+
+    /// <summary>
+    /// Both keys override a read-only denial (contracts/guard.md section 1's shared <c>ISldWorks</c>
+    /// row): <c>ActivateDoc3</c> since feature 011's T004, and <c>OpenDoc7</c> since owner decision
+    /// 148A (2026-10-20, T184), which had its two other callers, <c>remodel.open</c> and
+    /// <c>probe remodel</c>'s reopen, name it by its qualified key and the read-only guard refuse the
+    /// bare name. Edited deliberately: it was <c>TheOnlyKeyWhoseBareNameTheReadOnlyGuardDeniesIsActivateDoc3</c>,
+    /// when <c>OpenDoc7</c> was an exclusion of section 3.
     /// </summary>
     [Fact]
-    public void TheOnlyKeyWhoseBareNameTheReadOnlyGuardDeniesIsActivateDoc3()
+    public void BothKeysBareNamesAreDeniedByTheReadOnlyGuard()
     {
         Assert.Equal(
-            new[] { "ISldWorks.ActivateDoc3" },
-            RemodelSeatGuard.AllowedKeys.Where(key => Refuses(() => ReadOnlyGuard.Assert(CallKey.BareName(key)))));
+            TheTwoKeys,
+            RemodelSeatGuard.AllowedKeys
+                .Where(key => Refuses(() => ReadOnlyGuard.Assert(CallKey.BareName(key))))
+                .OrderBy(key => key, StringComparer.Ordinal));
     }
 
     /// <summary>
-    /// It widens no other guard: the read-only guard refuses <c>ActivateDoc3</c> in both spellings, and
-    /// the two other allowlist guards refuse both keys, which are on neither of their lists.
+    /// It widens no other guard: the read-only guard refuses both keys in both spellings, the confirmed
+    /// drawing's guard refuses both, and the re-modeler's refuses <c>ActivateDoc3</c>. Edited deliberately
+    /// for owner decision 148A (2026-10-20, T184): <c>ISldWorks.OpenDoc7</c> is <see cref="RemodelGuard"/>'s
+    /// own key now, on the stage-1 allowlist for <c>remodel.open</c>'s open of the copy, which called it
+    /// by the bare name the read-only guard refuses now; the pane seat's guard adds nothing to it, and
+    /// <c>ActivateDoc3</c> stays on no other allowlist.
     /// </summary>
     [Fact]
     public void TheGuardWidensNoOtherGuard()
     {
-        Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert("ActivateDoc3"));
-        Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert("ISldWorks.ActivateDoc3"));
         foreach (string key in TheTwoKeys)
         {
-            Assert.DoesNotContain(key, RemodelGuard.AllowedKeys);
+            Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(CallKey.BareName(key)));
+            Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(key));
             Assert.DoesNotContain(key, DrawingOpenGuard.AllowedKeys);
-            Assert.Throws<MutatingCallError>(() => new RemodelGuard().Assert(key));
             Assert.Throws<MutatingCallError>(() => new DrawingOpenGuard().Assert(key));
         }
+
+        Assert.DoesNotContain(RemodelSeatGuard.ActivateDocKey, RemodelGuard.AllowedKeys);
+        Assert.Throws<MutatingCallError>(() => new RemodelGuard().Assert(RemodelSeatGuard.ActivateDocKey));
+        Assert.Contains(RemodelSeatGuard.OpenDocKey, RemodelGuard.AllowedKeys);
     }
 
     [Theory]
