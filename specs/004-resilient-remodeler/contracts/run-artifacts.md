@@ -7,7 +7,11 @@ example below into the pydantic model named beside it, so an example cannot drif
 the Phase 5 and Phase 6 artifact tests are written against it.
 
 One run, one folder, created by the existing `RunFolders` helper so the naming convention stays in
-one place:
+one place. *Amended 2026-10-20 (feature 011, owner decision 148A; its research R12.3):* the folder is
+made in its full form - named under `Path.GetFullPath` of the run root, whatever spelling the setting
+holds - so the folder handed to the backend and bound for the bridge, and the copy the pane seat is
+handed, carry no `..` segment, which the backend's rule for a run folder and the one rule for the
+copy's path both refuse:
 
 ```text
 <run_root>/<yyyyMMdd-HHmmss>-<doc>-remodel/
@@ -50,7 +54,8 @@ T185, research R16.1):*
 
 - `command=remodel.open stage=...` markers around each step of `remodel.open` that calls
   SOLIDWORKS or does file work - the source re-check's reads, `RecordSource`, the toggles,
-  `File.Copy`, `OpenDoc7`, the tag, the rollback, the rolled-back walk, the rebuild, the error
+  `File.Copy`, `OpenDoc7` (marked `ISldWorks.OpenDoc7`, its gate key, since decision 148A), the tag,
+  the rollback, the rolled-back walk, the rebuild, the error
   count, the copy's signals, its save flag and units, and `CommandInProgress` put back - and around
   the unwind's `unwind.CloseDoc`, `unwind.DeleteCopy` and `unwind.PutBackSettings`. They go to the
   run folder the host bound, before the run exists.
