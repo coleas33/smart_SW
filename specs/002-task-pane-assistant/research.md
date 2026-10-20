@@ -1115,7 +1115,9 @@ hid the tab and is not amended here.
   - `scope_not_probed`'s words name both full paths, and reach the page as `ScopeRefused`
     (`chat/remodel.py`), on a tab whose words name no path. Since T124 only a part switched in the
     moment between a plan's second reading of the document and its probe meets them. Older than
-    145A; put to the owner.
+    145A; put to the owner. *Settled by decision 149A (2026-10-20)*: both of the codes
+    `ScopeRefused` carries from the bridge reach the page in plain words, with no path (149A,
+    below).
   - The restart and re-`init` handling is still written in three page scripts - `app.js`,
     `check-page.js`, `remodel.js`. The one script all three load is `web/shared/dom.js`, whose
     charter keeps it to building nodes, with no page state, host bridge or network, so the
@@ -1140,6 +1142,8 @@ hid the tab and is not amended here.
     and its dump attaches to whatever is active after (`SwReviewDump.Run`). A restart takes
     seconds, in which the engineer can switch documents, so the run folder named for one document
     could hold another's evidence; nothing like `scope_not_probed` stands between the two.
+    *Settled by decision 149A (2026-10-20)*: a new review reads its document again once the backend
+    is ready, and refuses one that changed, in plain words, making nothing (149A, below).
 - **Mutations**: each fix is pinned by a case that turns red when it is taken out: 14 mutations
   for the tabs (T114), 38 red results in all; 21 for a remodel run (T116), 75 red results in
   all; and 4 for the review's findings (T119), 10 red results in all; and for the second review
@@ -1314,7 +1318,9 @@ hid the tab and is not amended here.
      and what is restored is read-only and true of the folder - or restore a folder holding
      `check.json` only when its session also opens a stream there? A review always writes
      `events.jsonl`, rotated with its session on a Retry, and a check never does; but that test
-     would also refuse a review whose stream was removed by hand.
+     would also refuse a review whose stream was removed by hand. *Kept recorded by decision 149A
+     (2026-10-20)*: unchanged - such a folder is still restored read-only as a review's - and the
+     question stands here as recorded (149A, below).
 - **Review**: each fix is pinned by taking it out once - 13 mutations of the reviewer's code, 74
   red results in all, and 1 of the pin, 3 red C# cases. The claim's refusals back to
   `InvalidRunDir` (15 red), the session's words back to "a review session" (4), each sentence in
@@ -1443,3 +1449,234 @@ live, with `SWREVIEW_REQUIRE_TOKENIZER=1`: before, on 3.11, 18,053 passed, 5 ski
 which passed alone, and in its whole module three times in a row; after, 18,054 passed and 5
 skipped on 3.12 and on 3.11 (`--isolated`), that case among the passed. `ruff check` clean, and
 no broken link.
+
+### 149A. Evidence from the wrong document: a new review reads its document again, and `ScopeRefused` speaks plainly (2026-10-20)
+
+- **Question**: 145A's reviews left two things to the owner (145A, Not changed). A new review read
+  the active document before the waiting settings restart it makes first (`BackendReady`), and its
+  dump attaches to whatever is active after it (`SwReviewDump.Run`): a restart takes seconds, in
+  which the engineer can make another document active, so the run folder named for one document
+  could hold another's evidence. And the bridge's `scope_not_probed` reached the Remodel tab as
+  `ScopeRefused` in the bridge's own words, which name both full paths, on a tab whose words name
+  no path. The same decision answers two questions recorded earlier: 146A's, a check run cut off
+  between its session and its record, which `GET /reviews` restores read-only as a review's; and
+  011 R9.5's, a Recheck that does not read a refused drawing again.
+- **Decision** (owner decision 149A, "2A", 2026-10-20): "Evidence from the wrong document, test
+  first: a new review reads the active document again once it has made a waiting restart, and
+  refuses in plain words if it changed, as Plan and Start do since 145A; and `ScopeRefused` reaches
+  the Remodel tab in plain words, with no path. A check run cut off between its session and its
+  record (146A's question) and a Recheck that does not read a refused drawing again (011
+  `research.md` R9.5) stay recorded."
+
+**1. A new review reads its document again once the backend is ready.**
+
+- **How**: `ReviewHost.StartReview` reads the active document again once `BackendReady` has
+  answered - after any settings restart the start made or waited for - and compares it with the one
+  it read first by `PageDocument.IsSameDocument`, the rule Plan uses since 145A (T124): the path
+  ignoring case, the configuration exactly. Another document, another configuration of it, none at
+  all, or a drawing is refused `DocumentChanged`, retryable, before the run folder is made: nothing
+  is extracted, no run folder is made, no session is created and no extraction is announced. The
+  restart the start made stands and nothing is left held: the next press, its document active,
+  runs on the restarted backend, which is not restarted again. The message names no path: "the
+  active document or its configuration changed after the review was asked for, so nothing was
+  extracted and no run folder was made. Make the part or assembly you want reviewed the active
+  document, then press Review again."
+- **Always, not only after a restart** (decided here; the decision's words name the restart):
+  - *read again always, once the backend is ready* - **chosen**. One rule, Plan's: Plan reads its
+    document again after its gate whatever the gate did. It is explicit: `BackendReady` stays a
+    yes or no, the review's question about its evidence is not tied to what `DeferredRestart`
+    answered, and a wait added to the gate later is covered without anyone remembering to report
+    it. It is true of any change between the two readings, whatever took the time. It costs one
+    more `CurrentDocument` - a few reads on the application thread, which the add-in makes several
+    times per document switch - before minutes of extraction. With nothing waiting the two readings
+    are a moment apart, so a refusal there is rare, and right: the dump would read the other
+    document;
+  - *read again only when a restart was made or waited for*: `BackendReady` would have to say
+    which (`Outcome.Restarted` or `RestartedMeanwhile`, against `NotPending`) and the review branch
+    on it - one more branch, with its own tests - and the moment before the gate would be left
+    uncovered.
+  - Both branches are pinned (T143): the restart the review makes (four kinds of change), the
+    restart it waits for (the watcher's), and no restart waiting at all.
+- **The class and its label**: the Review page shows a class's label first and the message in a
+  fold (`render.plainError`; 009 `contracts/plain-words.md` section 5), and every class the host
+  sends has a label (`ErrorLabelsCoverTheHostTests`). Three were weighed:
+  - `PreparationExpired` ("The preparation is out of date. Press Review again."): the add-in always
+    prepares a review, and the class's message is the nearest case - the document changed between
+    the preparation and the start - but the label speaks of a preparation, which a host without one
+    (`ReviewHostOptions.PrepareReview` null) never made, and which was still current when the start
+    read the document;
+  - `ReviewNotActive` ("This review is of another document. Open that document in SOLIDWORKS, then
+    try again."): a Recheck's and a context Retry's, about a review that exists; a refused new
+    review is no review yet, and its way on is either document;
+  - `DocumentChanged` - **chosen**: the Remodel tab's class for the same event since 145A, so one
+    word means one thing on every tab, with a label of its own, true of every refusal that carries
+    it on the Review page: "The active document or its configuration changed while the review was
+    starting, so nothing was extracted. Make the part or assembly you want reviewed the active
+    document, then press Review again." The Remodel page reads no words file, so the label is the
+    Review page's alone.
+  - The pane fixtures that carry the words file's labels are regenerated with their generators
+    (`generate_pane_fixture.py --write`: `review-big-assembly.json`; `generate_waiting_fixtures.py
+    --write`: `review-waiting.json`, `review-waiting-big-assembly.json` and
+    `review-waiting-restored.json`, `review-not-sent-session.json` coming back byte for byte), each
+    differing in the one added line, and `review-send-failure-events.json`'s pin of
+    `review-waiting.json` moves to its sha256 as written on Windows. `review-waiting-apply.json`
+    carries no labels, and `review-waiting-apply-failure.json` keeps the labels it was captured
+    with, as 146A and 147A left it.
+- **The other starts**, checked: the rule applies where a waiting restart can come between a
+  reading of the document and a dump.
+  - A Retry of a review started without saved context is `review.start` with `retry_of`: a new run
+    folder and a new dump, through the same code, so it is read again (pinned by its own case).
+  - A context review's Retry (108A) and a Recheck (015) read the document, check it is the
+    review's, and make the restart first - and extract nothing: each starts its session on the
+    evidence saved in its own run folder (`RetryContextReview`, `CreateReviewSession`'s Recheck
+    branch). A document made active during the restart cannot put one document's evidence in a
+    folder named for another, so neither is read again. Their check that the review's document is
+    active is the page's binding (015 `contracts/recheck.md` section 1, check 3; 108A), and a switch
+    after it - during the restart, or at any moment of the review - reaches the page as
+    `document.changed`, as for any review. A guard case pins both, so that a dump added to either,
+    or a reading after the gate, is a deliberate change.
+  - A context review (016): `context.prepare` reads the document only after `ContextReady`, which
+    makes the restart first, and again after its dump; `context.selection` and `context.review`
+    compare the prepared document with the active one after `ContextReady`. Read after the gate
+    already; unchanged.
+  - The Extract tab: no backend and no restart. It runs on the SOLIDWORKS thread, where the engineer
+    cannot switch documents while it runs; it reads the document only at its dump's attach
+    (`SwReviewAddIn.OnDumpRequested`); and it writes to the folder the engineer chose, named for no
+    document. Unchanged.
+  - The Model check and Standards tabs, and the Terminal tab's Extract evidence: no restart gate - a
+    check is not a turn to the restart (145A) - so no waiting restart comes between their reading
+    and their dump. Unchanged.
+  - The Remodel tab: Plan reads its document again after its gate since 145A (T124); Start reads its
+    plan's session again (T119) and no document.
+- **What is left**: the moment between the second reading and the dump's attach, one call on the
+  application thread apart with nothing slow between them, as Plan has between its second reading
+  and its probe. Closing it would take the dump to check the document it attaches to, within the
+  same application-thread call; `SwReviewDump.Run` attaches to whatever is active by design (011
+  `contracts/attach.md`), and `IReviewDump` is every tab's. Not done: owner question 1, below.
+
+**2. `ScopeRefused` in plain words.**
+
+- **Where `ScopeRefused` comes from**: two places, and only one names a path.
+  - The bridge's refusals of `remodel.open`, which `chat/remodel.py` maps by `error_code`
+    (`BRIDGE_REFUSALS`). `scope_not_probed`, at the open's first step, before anything is copied:
+    the open names a file no probe of this bridge session was minted for - "'{probe_id}' is not a
+    probe this bridge session performed. ..." or "probe '{probe_id}' was minted for '{path}' and
+    this request names '{path}'. ..." (`RemodelScopeProbe.Require`). The probe reads the document
+    active when it runs (`BackendRemodelPipeline.ProbeScope`) and the open names the one the host
+    read (`OpenCopy`), so since T124 this is a part made active in the moment between the plan's
+    second reading and its probe. `scope_changed` in the open's re-reading of the source, before
+    the copy - the source open read-only, and "Don't prompt to save read-only referenced documents"
+    turned on since the probe: "'{source}' is open read-only and SOLIDWORKS now discards changes
+    ..." (`BridgeDispatcher.RecheckSource`) - or at its twelfth step, after the copy, which is then
+    deleted: "the copy's scope signals differ from the probe's in {signals}. ..."
+    (`BridgeDispatcher.OpenIn`). Two of the four sentences name a full path, one of them both, and
+    two name the probe.
+  - The add-in's own, once the probe has answered: `RemodelHost.ScopeAllowsARun` sends the scope
+    gate's refusals (`ScopeGate.evaluate`, through `POST /remodel/probe`) and its own unread
+    signals, "the re-modeler will not run on this part: ...". These name signals and their values -
+    folder and feature-type names - and no path: the signals the gate refuses on hold none.
+    Unchanged.
+- **How**: `_refusal`, the one mapping from a bridge refusal to the page's class, gives the two
+  codes plain words (`SCOPE_REFUSAL_WORDS`), one sentence per code true of every refusal under it,
+  and logs the bridge's sentence on the module's logger at `WARNING`, which reaches the backend's
+  log - the one record left of which files disagreed. Every other code keeps the bridge's sentence.
+  - `scope_not_probed`: "The part to be copied is not one this remodel checked, so nothing was
+    copied and no new plan was made. Your part was not changed. Make your part the active document
+    and press Remodel a copy again."
+  - `scope_changed`: "The part no longer reads as it did when this remodel checked it, so no copy
+    was kept and no new plan was made. Your part was not changed. Press Remodel a copy again to
+    check it afresh."
+  - The words follow the tab's own refusals of a plan (`RemodelHost.DocumentChangedMessage`): what
+    was not done, that the engineer's part was not changed (`PartNotChanged`), and the button by its
+    label - a case reads both from the add-in's sources. Pressing again probes afresh, and a reason
+    that still stands is then named by the gate in its own words, the read-only option among them
+    (U26).
+- **Why in the backend**: the page prints the message it is given, which comes from the backend
+  through the add-in unchanged (`RemodelBackendClient`, `RemodelHost.SendRefusal`); the add-in also
+  posts it as the run line's `status {stage: "error"}` (`RemodelHost.Plan`). One mapping, where the
+  bridge's codes already become the page's classes, reaches both, on every route that maps a bridge
+  refusal. The bridge's sentences are unchanged: they are the bridge's contract (004
+  `contracts/bridge-remodel.md`).
+- **The other refusals the Remodel tab prints with a path**, checked; recorded, not changed - the
+  decision names `ScopeRefused`, and each of these is a wording of 004's to decide:
+  - On every plan, the bridge's refusals of `remodel.probe_scope`, its sentence passed on:
+    `source_dirty` (`DocumentDirty`, "'{path}' has unsaved changes. ...") and `external_refs`
+    (`ExternalReferences`, "'{path}' has {n} external file reference(s). ..."), which every part
+    with unsaved changes or with references meets; `not_a_part` (`NotAPart`), for a part the bridge
+    cannot find on disk or that is open as another type; and `source_not_open`, which has no row
+    and so reaches the page as `RunFolderFailed`. The add-in's own plain sentences for the first two
+    (`RemodelHost.ScopeAllowsARun`: "the part has unsaved changes. ..." and "the part carries {n}
+    external file references, ...") are never reached with the bridge as it is: its probe refuses
+    before it would answer `save_flag_dirty: true` or a count other than zero
+    (`RemodelScopeProbe.Probe`).
+  - From `remodel.open`: the same refusals on the source's re-reading (`RecheckSource`), and the
+    copy's own (`copy_exists`, `copy_failed`, `open_failed`, the save target's), which name the
+    copy.
+  - The backend's own: the run folder's path in `PackageMissing` ("package-before.json is not in
+    {run_dir}; ..."), in `POST /remodel/plan`'s `RunFolderFailed` ("open.json is not in {run_dir}",
+    the carry-forward's "could not be carried into {run_dir}") and in `copy_path_for`'s.
+  - The add-in's own `RunFolderFailed` ("the run folder could not be created under '{run_root}':
+    ..."), and the run line's `status {stage: "error"}` with the message of a pipeline call that
+    failed.
+  - `POST /remodel/runs` and the routes after it (`RunInProgress`, `RunNotPlanned`,
+    `ResumeRefused`) name the run folder too, and are not reached while Start is switched off in
+    this build (`StartNotValidated`).
+
+**3. Kept recorded.** Both questions stand as recorded, behaviour unchanged, each with a dated
+note where it is recorded: 146A's owner question 1, above, and 011 `research.md` R9.5 item 1's
+second question.
+
+- **Contracts**: 002 [`contracts/pane-host-messages.md`](contracts/pane-host-messages.md)
+  (`review.start`); 004 `contracts/pane-remodel-messages.md` (`ScopeRefused`, and the restart
+  section's sentence on `scope_not_probed`) and `contracts/backend-remodel.md` (`ScopeRefused`),
+  each with a dated 149A note.
+- **Not changed**:
+  - The scope gate's own refusals, which name signals by their tokens ("solid_body_count is 2:
+    ...") and no path; they are 004's report lines too (`ScopeGateResult.coverage`). Owner question
+    4, below.
+  - A scope refusal stays not retryable: the Remodel page reads no flag, and the gate's refusal of
+    a part, a weldment say, is not one a press can change.
+  - The bridge's sentences, and every refusal in the list above.
+- **Owner questions** (recorded 2026-10-20, behaviour unchanged):
+  1. The moment between a new review's second reading and its dump's attach (What is left, above):
+     close it by having the dump check, within its own application-thread call, that the document
+     it attaches to is the one the review read - a change to `IReviewDump`, which every tab shares -
+     or leave it, since nothing slow runs in it?
+  2. A Recheck and a context review's Retry check that the review's document is active before their
+     gate and not after it. Neither can put evidence in the wrong folder, but each can run while
+     another document is active. Check their binding again after the gate too, with their own
+     `ReviewNotActive` - two small changes, no new class - or leave them as pinned?
+  3. On the Remodel tab, `DocumentDirty` and `ExternalReferences` carry the bridge's sentence and the
+     part's full path, and every part with unsaved changes or with references meets them, while the
+     add-in's own plain sentences for the two classes are never reached. Give them plain words in the
+     backend's mapping, as the scope codes now have, and the rest of the list above with them?
+  4. The scope gate's own refusals, which name signals by their tokens: reword them for the tab,
+     which would change the reports' coverage lines too, or leave them?
+- **Mutations**: each fix is taken out once, by one exact replacement, the named tests run, and the
+  file restored byte for byte (checked by its sha256): 13 mutations, 65 red results.
+
+  | Id | Taken out | Red |
+  |---|---|---|
+  | M1 | The second reading: the first compared with itself | 7: the four changes, the restart waited for, no restart waiting, and the Retry |
+  | M2 | The configuration: the path compared alone | 1: another configuration |
+  | M3 | The pane's rule: the path compared with its case | 1: the same document spelled otherwise |
+  | M4 | The refusal's flag: not retryable | 7: as M1 |
+  | M5 | The class: `PreparationExpired`, the nearest existing one | 8: as M1, and the label scan's list |
+  | M6 | The words: the document's path added to them | 7: as M1 |
+  | M7 | The label: `DocumentChanged`'s line taken out of the words file | 8: `ErrorLabelsCoverTheHostTests`' words-file case; the label's pin; and the six pane fixture tests, the committed fixtures no longer a fresh generation |
+  | M8 | The pin's move: `review-send-failure-events.json` left on the old `review-waiting.json` | 3: `ReviewPageSendGateTests`' cases that read it |
+  | P1 | The plain words: every scope refusal carries the bridge's sentence | 6: the four sentences and the two mapping cases |
+  | P2 | The log of the bridge's sentence | 4: the four sentences |
+  | P3 | `scope_changed`'s words | 3: its two sentences and its mapping case |
+  | P4 | `scope_not_probed`'s words | 3: as P3, for its code |
+  | P5 | The plain words kept to the two codes: every code given them | 7: the other seven codes' mapping cases |
+
+- **Tests**: T143 and T145 in [tasks.md](tasks.md), each written first.
+
+**Evidence** (2026-10-20; before at `35d6ff7`, after on the branch): the C# build,
+`--no-incremental`, at zero warnings both times; `SwReview.Extractor.Tests` 9,913 passed before and
+after, and `SwReview.AddIn.Tests` 2,817 before and 2,827 after - the ten new cases of section 4b -
+with the restart classes and the stub-children collection, 540 cases, green five times in a row.
+Python, not live, with `SWREVIEW_REQUIRE_TOKENIZER=1`: 18,081 passed and 5 skipped before, and
+18,087 passed and 5 skipped after - the label's pin and the five new route cases - on 3.12 (3.12.3)
+and on 3.11 (3.11.16, `--isolated`) alike. `ruff check` clean, and no broken link.

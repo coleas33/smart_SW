@@ -1314,6 +1314,9 @@ word for word, as each candidate's reason.
    a drawing already open in SOLIDWORKS is still read, since reading it opens nothing"
    (`contracts/confirmed-open.md` section 2 item 5; 002 `research.md`, 147A). Whether a Recheck
    should ask a refused candidate question again is not part of 147A and stays the owner's call.
+   *Kept recorded by decision 149A (2026-10-20)*: unchanged - a Recheck still carries an earlier
+   confirmed answer onto the same candidate question with no new read - and the question stands
+   here as recorded ([002 `research.md`, 149A](../002-task-pane-assistant/research.md#149a-evidence-from-the-wrong-document-a-new-review-reads-its-document-again-and-scoperefused-speaks-plainly-2026-10-20)).
 2. **Two sessions of one folder at once.** A request is counted for the latest session of its run
    folder, since the request names no session. An older session of the same folder that still asked
    - a context review's failed chat, whose chip is still shown - would count against the latest's.
