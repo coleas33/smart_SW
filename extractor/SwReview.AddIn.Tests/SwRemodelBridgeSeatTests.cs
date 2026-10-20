@@ -5,6 +5,7 @@ using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SwReview.AddIn.Remodel.Seat;
 using SwReview.Extractor.Bridge;
+using SwReview.Extractor.Guard;
 using SwReview.Extractor.Rms;
 using SwReview.Extractor.Tests;
 using Xunit;
@@ -133,6 +134,61 @@ public class SwRemodelBridgeSeatTests
         Assert.Throws<ArgumentException>(() => Seat().OpenDocument(path!, RemodelCopy.OpenOptions));
         Assert.Throws<ArgumentException>(() => Seat().CloseDocument(path!));
         Assert.Empty(_application.Calls);
+    }
+
+    /// <summary>
+    /// Owner decision 148A (feature 011 T191, research R12.8): the seat's own check before SOLIDWORKS is
+    /// the one rule both seats take the run's copy by, <c>RemodelCopy.CopyOf</c>, where it was the copy
+    /// folder's name alone (<c>RunDirectoryOf</c>), which took a <c>..</c> segment that canonicalizes onto a
+    /// copy, a device path, a path relative to wherever the process is, a <c>copy</c> folder at the root of
+    /// a drive or a share and a document that is not a part. Every form the rule refuses
+    /// (<see cref="RemodelCopyPathForms.Refused"/>) is refused by the open, the close and the read that
+    /// confirms a close alike - an argument the rule refused, before SOLIDWORKS is asked anything.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RemodelCopyPathForms.Refused), MemberType = typeof(RemodelCopyPathForms))]
+    public void APathTheOneRuleRefusesIsNeitherOpenedNorClosedNorAskedAbout(string path)
+    {
+        ArgumentException open = Assert.Throws<ArgumentException>(() => Seat().OpenDocument(path, RemodelCopy.OpenOptions));
+        ArgumentException close = Assert.Throws<ArgumentException>(() => Seat().CloseDocument(path));
+        ArgumentException asked = Assert.Throws<ArgumentException>(() => Seat().IsDocumentOpen(path));
+
+        foreach (ArgumentException refusal in new[] { open, close, asked })
+        {
+            Assert.Equal("documentPath", refusal.ParamName);
+            Assert.Equal("Save3", Assert.IsType<MutatingCallError>(refusal.InnerException).MemberName);
+        }
+
+        Assert.Empty(_application.Calls);
+    }
+
+    /// <summary>
+    /// ... and nothing the rule takes is refused (T191): for every form it takes
+    /// (<see cref="RemodelCopyPathForms.Accepted"/>), the canonical path the bridge's step 4 answers - the
+    /// one <c>remodel.open</c> and the close hand the seat - and the path as a request spelled it are each
+    /// opened, asked about and closed, SOLIDWORKS handed the path exactly as the seat was: the seat checks
+    /// a path, it does not respell it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RemodelCopyPathForms.Accepted), MemberType = typeof(RemodelCopyPathForms))]
+    public void APathTheOneRuleTakesIsOpenedAskedAboutAndClosedAsHanded(string path, string canonical, string runDirectory)
+    {
+        Assert.Equal((canonical, runDirectory), RemodelCopy.CopyOf(path));
+        SwRemodelBridgeSeat seat = Seat();
+
+        foreach (string handed in new[] { canonical, path })
+        {
+            Assert.NotNull(seat.OpenDocument(handed, RemodelCopy.OpenOptions));
+            Assert.False(seat.IsDocumentOpen(handed));
+            seat.CloseDocument(handed);
+        }
+
+        Assert.Equal(
+            new[] { "GetOpenDocSpec", "OpenDoc7", "GetOpenDocumentByName", "CloseDoc", "GetOpenDocSpec", "OpenDoc7", "GetOpenDocumentByName", "CloseDoc" },
+            _application.Members);
+        Assert.Equal(
+            new object?[] { canonical, canonical, canonical, path, path, path },
+            _application.Calls.Where(call => call.Member != "OpenDoc7").Select(call => Assert.Single(call.Arguments)));
     }
 
     /// <summary>A failed open says why, in the load errors' own names, and is the bridge's open_failed.</summary>
