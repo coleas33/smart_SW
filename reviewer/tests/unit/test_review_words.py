@@ -684,6 +684,25 @@ def test_each_thing_that_holds_a_restart_back_has_a_true_sentence() -> None:
     assert {key: errors.get(key) for key in RESTART_HOLDS} == RESTART_HOLDS
 
 
+SAVE_NOT_RESTARTED = {
+    "BackendNotRestarted": (
+        "The settings are saved, but the review backend did not restart with them. "
+        "Save Settings again to retry the restart."
+    ),
+}
+"""The class the add-in answers a settings save with when the save's restart fails, whatever it
+threw (owner decision 150A): the settings are written and in force in the host before the backend
+is restarted, so the sentence says they are saved, that the backend did not restart, and that saving
+again retries the restart; the message in the fold gives the reason. `HostError`'s sentence, which
+such a save used to meet, says nothing of either. The add-in's own class; the backend never sends
+it."""
+
+
+def test_a_save_whose_restart_failed_says_the_settings_are_saved() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in SAVE_NOT_RESTARTED} == SAVE_NOT_RESTARTED
+
+
 RUN_DIR_REFUSALS = {
     "InvalidRunDir": (
         "The backend refused the run folder's path: it writes only into a local folder inside "

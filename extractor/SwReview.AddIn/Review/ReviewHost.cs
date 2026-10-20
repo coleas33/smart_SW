@@ -1202,7 +1202,7 @@ public sealed class ReviewHost : IDisposable
         }
 
         ResolvedApiKey key = next.ResolveApiKey(_options.Environment);
-        string? restartFailure = null;
+        string? promise = null;
         try
         {
             if (!_restart.Now(() => _options.Backend.Restart(next, key), out DeferredRestart.Hold waitsFor))
@@ -1212,7 +1212,7 @@ public sealed class ReviewHost : IDisposable
                 // answer is "saved, not yet in force" - and the restart waits for what holds it
                 // back rather than being dropped, and the sentence names it (owner decisions 143A
                 // and 145A).
-                restartFailure = Promise(waitsFor);
+                promise = Promise(waitsFor);
             }
             else
             {
@@ -1220,26 +1220,24 @@ public sealed class ReviewHost : IDisposable
                 TellTheOtherTabs();
             }
         }
-        catch (BackendStartException failure)
-        {
-            restartFailure = failure.Message;
-            TellTheOtherTabsTheRestartFailed(failure);
-        }
         catch (Exception failure)
         {
-            // Any other failure of the restart - the new backend's log not opened, outside the
-            // wrapper that makes a BackendStartException - can come after the old backend stopped:
-            // the other tabs are told as for any failure, which only a backend no longer up does
-            // (owner decision 145A, third review). The save is answered as it always was.
+            // Whatever the restart threw - a BackendStartException, or anything outside that
+            // wrapper, such as the new backend's log not opened - the settings are written and in
+            // force here, and only the restart failed: the save says so, with the reason, masked,
+            // and retryable, since saving again retries the restart (owner decision 150A). The
+            // other tabs are told as for any failure, which only a backend no longer up does
+            // (owner decision 145A).
             TellTheOtherTabsTheRestartFailed(failure);
-            throw;
+            SendError(id, "BackendNotRestarted", SavedNotRestarted + failure.Message, retryable: true);
+            return;
         }
 
         SendSettings("settings.saved", id);
 
-        if (restartFailure != null)
+        if (promise != null)
         {
-            PostStatus("error", restartFailure);
+            PostStatus("error", promise);
         }
     }
 
@@ -1336,6 +1334,16 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     private static readonly string[] RestartSentences =
         { RestartPromise, RemodelRunPromise, TurnAndRemodelRunPromise, RestartNotAnswered };
+
+    /// <summary>
+    /// How the answer to a save whose restart failed begins, the reason after it (owner decision
+    /// 150A): the settings are written and in force here before the backend is restarted, so the
+    /// save was kept and only the restart failed, and saving again retries it. The reason goes last
+    /// because a restart's failure need not end in a full stop.
+    /// </summary>
+    private const string SavedNotRestarted =
+        "the settings are saved, but the review backend did not restart with them. Save the settings again "
+        + "to retry the restart. The restart failed: ";
 
     /// <summary>
     /// The sentence for a save whose restart waits, naming what it waits for (owner decision 145A):
