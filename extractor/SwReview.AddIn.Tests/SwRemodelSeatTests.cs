@@ -30,8 +30,8 @@ namespace SwReview.AddIn.Tests;
 /// opened is the copy; all on the application thread, each action between a begin line and an outcome
 /// line in the run's <c>remodel.log</c>. What it must never do is reach SOLIDWORKS except through its
 /// gate, whose guard (<see cref="RemodelSeatGuard"/>) allows <c>ISldWorks.ActivateDoc3</c> and
-/// <c>ISldWorks.OpenDoc7</c> by their qualified keys and hands every bare name to the read-only guard;
-/// open anything for a dump; or touch a document that is not the run's copy.
+/// <c>ISldWorks.OpenDoc7</c> by their qualified keys and, since decision 148A, the seat's five reads, and
+/// refuses every other name; open anything for a dump; or touch a document that is not the run's copy.
 ///
 /// The seat runs only on the pilot workstation, so these list exactly the calls it makes: the gate's
 /// journal places every interop call under the latest gate entry before it, so each call must follow
@@ -826,15 +826,18 @@ public sealed class SwRemodelSeatTests
     // ---- the seat's gate and its log -------------------------------------------------------------
 
     /// <summary>
-    /// The gate each action builds is the seat's own: its two keys pass, any other qualified key is
-    /// refused and told to the observer, and a bare name is the read-only guard's answer - the reads pass,
-    /// and so do the bare names the read-only guard leaves allowed (<c>CloseDoc</c>, <c>OpenDoc6</c>,
-    /// <c>OpenDoc7</c>), which is why the seat names its two calls by their qualified keys. Renamed on
-    /// decision 144A's review (T176): it was <c>TheSeatsGateAllowsItsTwoKeysAndTheReadsAndRefusesAnyOtherCall</c>,
-    /// which said more than the guard does.
+    /// The gate each action builds is the seat's own: its two keys and its five reads pass, and every
+    /// other name is refused, bare or qualified, and told to the observer - the bare names the read-only
+    /// guard leaves allowed (<c>CloseDoc</c>, <c>OpenDoc6</c>, <c>OpenDoc7</c>) and a read the seat never
+    /// makes among them. Renamed on decision 144A's review (T176): it was
+    /// <c>TheSeatsGateAllowsItsTwoKeysAndTheReadsAndRefusesAnyOtherCall</c>, which said more than the guard
+    /// did. Edited deliberately for decision 148A (feature 011 T182), which closed the allowlist: it was
+    /// <c>TheSeatsGateAllowsItsTwoKeysAndHandsEveryBareNameToTheReadOnlyGuard</c>, which pinned the bare
+    /// <c>CloseDoc</c>, <c>OpenDoc6</c> and <c>OpenDoc7</c> passing; they are refused now, with
+    /// <c>IsOpenedReadOnly</c>, <c>GetDocuments</c> and a read of the list in another case beside them.
     /// </summary>
     [Fact]
-    public void TheSeatsGateAllowsItsTwoKeysAndHandsEveryBareNameToTheReadOnlyGuard()
+    public void TheSeatsGateAllowsItsTwoKeysAndItsFiveReadsAndRefusesEveryOtherName()
     {
         var observer = new RecordingGateObserver();
         SwGate gate = SwRemodelSeat.Gate(observer);
@@ -842,7 +845,7 @@ public sealed class SwRemodelSeatTests
         foreach (string allowed in new[]
                  {
                      "ISldWorks.ActivateDoc3", "ISldWorks.OpenDoc7", "GetOpenDocumentByName", "GetPathName", "GetTitle",
-                     "ActiveDoc", "GetOpenDocSpec", "CloseDoc", "OpenDoc6", "OpenDoc7",
+                     "ActiveDoc", "GetOpenDocSpec",
                  })
         {
             Assert.True(gate.Call(allowed, () => true), allowed);
@@ -853,7 +856,8 @@ public sealed class SwRemodelSeatTests
             "ISldWorks.CloseDoc", "ISldWorks.OpenDoc6", "ISldWorks.CloseAllDocuments", "ISldWorks.IActivateDoc3",
             "ISldWorks.ActivateDoc2", "IModelDoc2.Save3", "IModelDoc2.ForceRebuild3", "IModelDoc2.GetPathName",
             "isldworks.activatedoc3", "ActivateDoc3", "Save3", "SaveAs", "ForceRebuild3", "CloseAllDocuments",
-            "NewDocument", "MoveToFolder", "Isolate",
+            "NewDocument", "MoveToFolder", "Isolate", "CloseDoc", "OpenDoc6", "OpenDoc7", "IsOpenedReadOnly",
+            "GetDocuments", "getpathname",
         };
         foreach (string key in refused)
         {
@@ -863,6 +867,29 @@ public sealed class SwRemodelSeatTests
         }
 
         Assert.Equal(refused, observer.Refusals.Select(refusal => refusal.MemberName));
+    }
+
+    /// <summary>
+    /// Owner decision 148A (feature 011 T182): the seat's guard allows exactly what the seat asks its gate
+    /// about. Every way the seat reaches the copy - <c>remodel.open_copy</c>'s activation and its open, and
+    /// the activation before a dump - is taken with nothing refused, and the members its gate was asked
+    /// about, together, are the guard's two keys and five reads and no other: a call the seat makes that the
+    /// list left out would be refused and fail here, and so would a name on the list the seat no longer
+    /// asks for.
+    /// </summary>
+    [Fact]
+    public void TheSeatsGuardAllowsExactlyTheMembersTheSeatAsksItsGateAbout()
+    {
+        foreach (string way in new[] { ActivateTheOpenCopy, ActivateBeforeADump, OpenTheClosedCopy })
+        {
+            _application.Answer("GetOpenDocumentByName", _copy.Instance);
+            Reach(way, CopyPath, CopyPath);
+        }
+
+        Assert.Empty(_journal.Refusals);
+        Assert.Equal(
+            RemodelSeatGuard.AllowedKeys.Concat(RemodelSeatGuard.AllowedReads).OrderBy(name => name, StringComparer.Ordinal),
+            _journal.Asked.Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -1018,6 +1045,9 @@ public sealed class SwRemodelSeatTests
         }
 
         public List<MutatingCallError> Refusals { get; } = new List<MutatingCallError>();
+
+        /// <summary>Every member the gate was asked about, in order (decision 148A).</summary>
+        public IEnumerable<string> Asked => _entries.Select(entry => entry.Member);
 
         public void Gated(string interopMember) =>
             _entries.Add((interopMember, _standIns.Select(standIn => standIn.Members().Count).ToArray()));

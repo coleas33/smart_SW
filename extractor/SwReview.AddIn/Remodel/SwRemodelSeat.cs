@@ -33,8 +33,8 @@ namespace SwReview.AddIn.Remodel;
 ///
 /// <b>Every call goes through a gate</b> (owner decision 144A, feature 011 research R11): each action
 /// builds one, <see cref="Gate"/>, whose guard is <see cref="RemodelSeatGuard"/> - an allowlist of
-/// <c>ISldWorks.ActivateDoc3</c> and <c>ISldWorks.OpenDoc7</c> by their qualified keys, every other
-/// qualified key refused, every bare name handed to the read-only guard - and writes what the gate was
+/// <c>ISldWorks.ActivateDoc3</c> and <c>ISldWorks.OpenDoc7</c> by their qualified keys and, closed since
+/// decision 148A, of the five reads below by their bare names, every other name refused - and writes what the gate was
 /// asked to the run folder's <c>remodel.log</c> (<see cref="RemodelSeatGateLog"/>): a begin line before
 /// its first call, and its outcome after its last. The open request's property sets are made inside
 /// the gate entry that asks for the request, and read back inside the open's, as the bridge makes them

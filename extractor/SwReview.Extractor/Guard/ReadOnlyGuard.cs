@@ -297,7 +297,8 @@ public static partial class ReadOnlyGuard
     /// (feature 011 review, 2026-09-23: a qualified key had passed whatever it named). The
     /// allowlist guards - <see cref="RemodelGuard"/>, <see cref="DrawingOpenGuard"/> and, since
     /// decision 144A, <see cref="RemodelSeatGuard"/> - accept their own qualified keys before this
-    /// guard is asked, and are unchanged by this. The error names the key as the caller wrote it.
+    /// guard is asked, and are unchanged by this; the pane seat's, a closed allowlist since decision
+    /// 148A, never asks it. The error names the key as the caller wrote it.
     /// </summary>
     public static void Assert(string interopMemberName)
     {
