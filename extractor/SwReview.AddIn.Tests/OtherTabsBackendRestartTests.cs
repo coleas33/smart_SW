@@ -77,6 +77,38 @@ public sealed class OtherTabsBackendRestartTests
     }
 
     /// <summary>
+    /// A restart that failed once the old backend had stopped reaches every other tab that holds the
+    /// backend's port and token as a failed first start reaches every page: the add-in hands the
+    /// review host one call that posts `status {stage: "error"}`, with the failure, through each of
+    /// the Model check, Standards and Remodel hosts - the add-in's own fan-out of a backend status,
+    /// less the Review page, which the review host tells itself (owner decision 145A, found on
+    /// review). One case per tab.
+    /// </summary>
+    [Theory]
+    [InlineData("_modelCheckHost?.PostStatus(stage, message);")]
+    [InlineData("_standardsHost?.PostStatus(stage, message);")]
+    [InlineData("_remodelHost?.PostStatus(stage, message);")]
+    public void TheAddInTellsEachOtherTabARestartFailedAsAFailedStartIsTold(string post)
+    {
+        string source = AddInSource();
+        string options = Between(
+            source, "var reviewOptions = new ReviewHostOptions(", "_reviewHost = new ReviewHost(reviewOptions);");
+        Assert.Contains("BackendRestartFailed = TellTheOtherTabsTheRestartFailed,", options, StringComparison.Ordinal);
+        Assert.Contains(
+            "private void TellTheOtherTabsTheRestartFailed(string message) => PostStatusToTheOtherPages(\"error\", message);",
+            source,
+            StringComparison.Ordinal);
+
+        string others = Between(source, "private void PostStatusToTheOtherPages(string stage, string message) {", "/// <summary>");
+        Assert.Contains(post, others, StringComparison.Ordinal);
+        Assert.DoesNotContain("_reviewHost", others, StringComparison.Ordinal);
+
+        // The first start's fan-out is the same one, with the Review page in front of it.
+        string every = Between(source, "private void PostStatusToPages(string stage, string message) {", "}");
+        Assert.Contains("_reviewHost?.PostStatus(stage, message); PostStatusToTheOtherPages(stage, message);", every, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The host of <paramref name="tab"/> over a channel that collects what it posts, and its
     /// <c>BackendRestarted</c>: the call the add-in makes on it after a restart.
     /// </summary>

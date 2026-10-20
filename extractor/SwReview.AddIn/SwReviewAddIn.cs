@@ -468,8 +468,10 @@ public class SwReviewAddIn : ISwAddin
             BackendBusy = () => _remodelHost?.RunInProgress == true,
 
             // Owner decision 145A: every other tab that holds the backend's port and token is told
-            // after each restart the review host makes, and asks for its `init` again.
+            // after each restart the review host makes, and asks for its `init` again; and told of
+            // one that failed once the old backend had stopped, as a failed first start is told.
             BackendRestarted = TellTheOtherTabsTheBackendRestarted,
+            BackendRestartFailed = TellTheOtherTabsTheRestartFailed,
 
             DrawingModels = DrawingModels,
             Dump = reviewDump,
@@ -1067,6 +1069,16 @@ public class SwReviewAddIn : ISwAddin
     private void PostStatusToPages(string stage, string message)
     {
         _reviewHost?.PostStatus(stage, message);
+        PostStatusToTheOtherPages(stage, message);
+    }
+
+    /// <summary>
+    /// <see cref="PostStatusToPages"/> less the Review page: the share of every page but the
+    /// Review tab's, whose host tells it of a failed settings restart itself (owner decision 145A,
+    /// <see cref="TellTheOtherTabsTheRestartFailed"/>).
+    /// </summary>
+    private void PostStatusToTheOtherPages(string stage, string message)
+    {
         _modelCheckHost?.PostStatus(stage, message);
 
         // The Standards page tracks the backend for the reason the Model check page does: it
@@ -1085,6 +1097,15 @@ public class SwReviewAddIn : ISwAddin
             _remodelHost?.PostStatus(stage, message);
         }
     }
+
+    /// <summary>
+    /// Owner decision 145A, found on review: a settings restart the review host made failed once
+    /// the old backend had stopped, so no backend answers the port and token the Model check,
+    /// Standards and Remodel tabs hold. They are told as a failed first start is told to every page
+    /// (<see cref="StartBackend"/>): `status {stage: "error"}` with the failure, which each host
+    /// masks again. The Review page is told by its own host.
+    /// </summary>
+    private void TellTheOtherTabsTheRestartFailed(string message) => PostStatusToTheOtherPages("error", message);
 
     /// <summary>
     /// Owner decision 145A: the review host has restarted the backend with saved settings - a

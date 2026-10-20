@@ -288,6 +288,16 @@ public sealed class ReviewHostOptions
     /// </summary>
     public Action BackendRestarted { get; set; } = () => { };
 
+    /// <summary>
+    /// Tells every other tab that holds the backend's port and token that a restart this host made
+    /// failed once the old backend had stopped, with the failure, masked (owner decision 145A, found
+    /// on review): no backend answers the token those tabs hold, and they are told as a failed first
+    /// start is told to every page, `status {stage: "error"}`. A restart that failed before it
+    /// stopped anything left the old backend up, and is not told to them; the Review page is told of
+    /// every failure by this host itself. Nothing when the caller has no other tab.
+    /// </summary>
+    public Action<string> BackendRestartFailed { get; set; } = _ => { };
+
     internal static string DefaultLogFolder() => System.IO.Path.Combine(
         System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
         "SwReview",
@@ -463,7 +473,11 @@ public sealed class ReviewHost : IDisposable
                 _actions.PostBackendRestarted(RestartSentences);
                 TellTheOtherTabs();
             },
-            failure => PostStatus("error", failure.Message),
+            failure =>
+            {
+                PostStatus("error", failure.Message);
+                TellTheOtherTabsTheRestartFailed(failure);
+            },
             () => PostStatus("error", RestartNotAnswered),
             options.RestartPoll);
     }
@@ -1201,6 +1215,7 @@ public sealed class ReviewHost : IDisposable
         catch (BackendStartException failure)
         {
             restartFailure = failure.Message;
+            TellTheOtherTabsTheRestartFailed(failure);
         }
 
         SendSettings("settings.saved", id);
@@ -1432,6 +1447,29 @@ public sealed class ReviewHost : IDisposable
         try
         {
             _options.BackendRestarted();
+        }
+        catch (Exception)
+        {
+            // Each host's post swallows its own failures; this guards anything else the add-in does.
+        }
+    }
+
+    /// <summary>
+    /// A restart this host made failed (owner decision 145A, found on review). When the old backend
+    /// stopped with it - no backend is up, so the port and token every other tab holds answer
+    /// nothing - those tabs are told, with the failure masked, as a failed first start is told to
+    /// every page (<see cref="ReviewHostOptions.BackendRestartFailed"/>). One that failed before it
+    /// stopped anything left the old backend up, and their tokens with it: they are told nothing.
+    /// Never throws, for the reason <see cref="TellTheOtherTabs"/> gives.
+    /// </summary>
+    private void TellTheOtherTabsTheRestartFailed(Exception failure)
+    {
+        try
+        {
+            if (_options.Backend.Endpoint == null)
+            {
+                _options.BackendRestartFailed(Redact(failure.Message));
+            }
         }
         catch (Exception)
         {

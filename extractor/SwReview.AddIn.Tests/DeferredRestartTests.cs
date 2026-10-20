@@ -1651,14 +1651,16 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// A restart that fails tells them nothing - made at once or after waiting: no backend was
-    /// started for them to ask about, and the failure is the Review tab's to report, as a failed
-    /// start is.
+    /// A restart that fails once the old backend has stopped - made at once or after waiting - is
+    /// never told to the other tabs as a restart: no backend was started for them to ask about. It is
+    /// told to them as a failure, once, with its words, as a failed first start is told to every page
+    /// (owner decision 145A, found on review; until then it told them nothing, and they went on
+    /// holding the token of a backend that was gone). The Review tab reports it as before.
     /// </summary>
     [Theory]
     [InlineData("at once")]
     [InlineData("after waiting")]
-    public void ARestartThatFailsTellsTheOtherTabsNothing(string when)
+    public void ARestartThatFailsOnceTheOldBackendStoppedIsToldToTheOtherTabsAsAFailure(string when)
     {
         using var world = new RestartWorld();
         world.Backend.RestartFailure = new BackendStartException("FICT the backend would not start");
@@ -1681,6 +1683,80 @@ public sealed class DeferredRestartTests
 
         Assert.Equal(1, world.Backend.Attempts);
         Assert.Equal(0, world.OtherTabsTold);
+        Assert.Equal(new[] { "FICT the backend would not start" }, world.FailuresToldToTheOtherTabs);
+    }
+
+    /// <summary>
+    /// A restart that fails before it stops anything - the launcher has gone, say - leaves the old
+    /// backend up, and the token every other tab holds with it: they are told nothing. The Review
+    /// tab reports the failure as before.
+    /// </summary>
+    [Theory]
+    [InlineData("at once")]
+    [InlineData("after waiting")]
+    public void ARestartThatFailsBeforeTheOldBackendStoppedTellsTheOtherTabsNothing(string when)
+    {
+        using var world = new RestartWorld();
+        world.Backend.EarlyRestartFailure = new BackendStartException("FICT the launcher has gone");
+        world.Open();
+        world.Track("chat-1");
+
+        if (when == "at once")
+        {
+            world.Receive("settings.save", "save", Save(effort: "low"));
+            world.Reply("settings.saved", "save");
+        }
+        else
+        {
+            SaveAsATurnStarts(world, "save", Save(effort: "low"));
+            world.Backend.EndTurn("chat-1");
+            Eventually(() => world.Posted("status").Length == 2, "the failure's status");
+            Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        }
+
+        Assert.Equal("FICT the launcher has gone", world.Last("status").GetProperty("message").GetString());
+        Assert.NotNull(world.Backend.Endpoint);
+        Assert.Equal(0, world.OtherTabsTold);
+        Assert.Empty(world.FailuresToldToTheOtherTabs);
+    }
+
+    /// <summary>
+    /// The failure reaches the other tabs masked: whatever the start said - a key in a child's
+    /// error, say - never leaves this host unmasked (FR-015).
+    /// </summary>
+    [Fact]
+    public void AFailedRestartToldToTheOtherTabsIsMasked()
+    {
+        using var world = new RestartWorld();
+        world.Backend.RestartFailure = new BackendStartException("FICT the child would not start with " + OpenAiKey);
+        world.Open();
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        world.Reply("settings.saved", "save");
+
+        string told = Assert.Single(world.FailuresToldToTheOtherTabs);
+        Assert.StartsWith("FICT the child would not start with ", told, StringComparison.Ordinal);
+        Assert.DoesNotContain(OpenAiKey, told, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A tab that cannot be told of the failure turns nothing into an error: the save is still
+    /// answered `settings.saved`, and the Review page still told the failure.
+    /// </summary>
+    [Fact]
+    public void ATabThatCannotBeToldOfAFailedRestartTurnsNothingIntoAnError()
+    {
+        using var world = new RestartWorld();
+        world.Backend.RestartFailure = new BackendStartException("FICT the backend would not start");
+        world.TellingTheOtherTabsOfAFailure = () => throw new InvalidOperationException("FICT the pane has closed");
+        world.Open();
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        world.Reply("settings.saved", "save");
+        Assert.Empty(world.Posted("error"));
+        Assert.Equal("FICT the backend would not start", world.Last("status").GetProperty("message").GetString());
+        Assert.Single(world.FailuresToldToTheOtherTabs);
     }
 
     /// <summary>
@@ -3024,6 +3100,7 @@ public sealed class DeferredRestartTests
     private sealed class RestartWorld : IDisposable
     {
         private readonly FakeChannel _channel = new FakeChannel();
+        private readonly List<string> _failuresTold = new List<string>();
         private ReviewHost? _host;
         private int _otherTabsTold;
 
@@ -3073,6 +3150,25 @@ public sealed class DeferredRestartTests
         /// <summary>What telling the other tabs does after it is counted; a test makes it throw.</summary>
         public Action? TellingTheOtherTabs { get; set; }
 
+        /// <summary>
+        /// Every failed restart the host asked for every other tab to be told of, by its words - one
+        /// that failed once the old backend had stopped (owner decision 145A, found on review) - as
+        /// the add-in tells the Model check, Standards and Remodel tabs.
+        /// </summary>
+        public string[] FailuresToldToTheOtherTabs
+        {
+            get
+            {
+                lock (_failuresTold)
+                {
+                    return _failuresTold.ToArray();
+                }
+            }
+        }
+
+        /// <summary>What telling the other tabs of a failure does after it is recorded; a test makes it throw.</summary>
+        public Action? TellingTheOtherTabsOfAFailure { get; set; }
+
         public ReviewHost Host => _host ?? throw new InvalidOperationException("call Open() first");
 
         public void Open()
@@ -3098,6 +3194,15 @@ public sealed class DeferredRestartTests
                 {
                     Interlocked.Increment(ref _otherTabsTold);
                     TellingTheOtherTabs?.Invoke();
+                },
+                BackendRestartFailed = message =>
+                {
+                    lock (_failuresTold)
+                    {
+                        _failuresTold.Add(message);
+                    }
+
+                    TellingTheOtherTabsOfAFailure?.Invoke();
                 },
             });
         }
