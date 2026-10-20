@@ -58,6 +58,14 @@ record whose `model_status.state` is `not_sent` or `send_failed` is read-only wi
 `restored` Send block; every other record is answered as above
 ([015 recheck.md](../../015-review-send-gate/contracts/recheck.md) section 8).
 
+*Amended 2026-10-19 (owner decision 146A;
+[002 research.md](../../002-task-pane-assistant/research.md), 146A):* a folder holding a
+`check.json` is refused while that record names the `session.json` beside it - the check's own
+folder, which `GET /checks/{check_id}` reads - or cannot be read, or names no session. One whose
+record names another session holds a review that claimed the folder and moved the check's session
+aside (feature 003 User Story 6 scenario 11), and that review is restored, from its
+`session.json` and never from the check's session.
+
 ## 5. The chips and choosing one
 
 `<nav id="review-chips">` under the header: one chip per `sessions` item in the host's order, reading
