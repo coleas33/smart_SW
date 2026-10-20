@@ -260,6 +260,10 @@ Each check creates `<run_root>/<yyyyMMdd-HHmmss>-<doc>-standards` **[D]** throug
 `RunFolders`, the same helper the review, the terminal and the model check use, with the same
 collision suffix. Two runs in the same second on the same document get different ids from that
 suffix, so two records never share an id and the page always reads back the run it asked for.
+*Amended 2026-10-20 (feature 011, owner decision 148A; its research R12.3 and R12.8):* the folder,
+the collision suffix's too, is made in its full form - named under `Path.GetFullPath` of the run
+root, whatever spelling the setting holds - and `RunFolders.NewestCheckFolder` answers in the same
+form, so a folder made is spelled as the same folder found.
 
 ```
 package.json      the Standards-profile dump; extractor.profile == "standards"

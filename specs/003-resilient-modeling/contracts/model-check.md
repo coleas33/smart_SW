@@ -216,6 +216,10 @@ it in the middle of a check.
 Each check creates `<run_root>/<yyyyMMdd-HHmmss>-<doc>-check` through `RunFolders`, the same
 helper the review and the terminal use, with the same collision suffix. The `-check` suffix
 means the folders sort beside the review they belong to and are obviously disposable.
+*Amended 2026-10-20 (feature 011, owner decision 148A; its research R12.3 and R12.8):* the folder,
+the collision suffix's too, is made in its full form - named under `Path.GetFullPath` of the run
+root, whatever spelling the setting holds - and `RunFolders.NewestCheckFolder` answers in the same
+form, so a folder made is spelled as the same folder found.
 
 ```
 package.json      the ModelCheck-profile dump; extractor.profile == "model_check"

@@ -1687,7 +1687,10 @@ answer for).
   says SOLIDWORKS has no document open at the copy's path: a new seat member,
   `IRemodelSeat.IsDocumentOpen(copyPath)` (`ISldWorks.GetOpenDocumentByName` answered a document),
   asked only about a copy's path, by `RemodelCopy.RunDirectoryOf`'s rule, as the open and the close
-  are. The read is a clean-up read: the guard asked under the bare key `GetOpenDocumentByName` and
+  are. *Amended 2026-10-20 (feature 011, owner decision 148A's review; its research R12.8)*: by
+  `RemodelCopy.CopyOf`, the one rule both seats take the run's copy by, for the read, the open and the
+  close alike, where the copy folder's name alone took a `..` segment and a device path. The read is a
+  clean-up read: the guard asked under the bare key `GetOpenDocumentByName` and
   the observer told, not counted against the breaker, as the clean-up's writes are, so an open
   circuit cannot make every teardown report the copy open. A copy still open is false with a
   sentence that SOLIDWORKS still has it open; a read that throws is unknown, and unknown is not
