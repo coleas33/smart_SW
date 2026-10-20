@@ -60,10 +60,12 @@ from swreview.agent.settings import (
 from swreview.chat.server import SESSION_FILES, _sse, build_provider, create_app
 from swreview.chat.sessions import ChatSession, ChatState
 from swreview.checks.rms.run import is_check_folder
+from swreview.checks.rules.run import session_replaced
 from swreview.checks.standards.run import run_standards_check
 from swreview.ir.loader import save_package
+from swreview.ir.models import EvidencePackage
 from swreview.prerun import DIGEST_HEADER, RMS_PRERUN_TOOLS
-from swreview.remodel.artifacts import grade_remodel_run
+from swreview.remodel.artifacts import GradedRun, grade_remodel_run, write_package
 from swreview.report.attention import rank
 from swreview.report.attention_record import (
     ATTENTION_FILE_NAME,
@@ -796,13 +798,17 @@ def test_a_second_chat_on_a_run_dir_a_live_chat_holds_is_refused(
 def test_a_run_dir_that_already_holds_a_session_is_refused_without_a_retry(
     client: TestClient, run_dir: Path
 ) -> None:
-    """A second session in the folder would restart `seq` mid-file and lose the first."""
+    """A second session in the folder would restart `seq` mid-file and lose the first.
+
+    `RunDirTaken`, not `InvalidRunDir` (owner decision 146A): the folder is inside the run root,
+    and the path rule's sentence sent the engineer to Settings for a folder that only holds
+    another run's files."""
     settle(client, start_session(client, run_dir)["chat_id"])
 
     response = client.post("/sessions", json=session_body(run_dir))
 
     assert response.status_code == 400
-    assert response.json()["error_class"] == "InvalidRunDir"
+    assert response.json() == held_session_refusal(run_dir)
 
 
 def test_a_retry_into_the_same_run_dir_starts_a_clean_stream_and_keeps_the_old_one(
@@ -925,19 +931,32 @@ def standards_check_folder(run_root: Path) -> Path:
     return target
 
 
-def grade_check_folder(run_root: Path) -> Path:
-    """The re-modeler's grade of the copy at open: `rms-before/` under its remodel run."""
+REMODEL_RUN = "20261019-101500-bracket-remodel"
+"""A remodel run's folder in the run root, as `RunFolders.CreateForRemodel` names one."""
+
+
+def remodel_copy_package() -> EvidencePackage:
+    """The `ModelCheck` dump of a remodel run's copy: one core feature and one detail."""
     tree = [
         folder("3-Core", feature("Boss-Extrude1", "Extrusion", description="")),
         folder("4-Detail", feature("Hole1", "HoleWzd")),
     ]
-    package = remodel_package(tree, document_id="doc:copy", name="bracket-RMS")
-    remodel_run = run_root / "20261019-101500-bracket-remodel"
+    return remodel_package(tree, document_id="doc:copy", name="bracket-RMS")
+
+
+def graded_remodel_run(run_root: Path) -> GradedRun:
+    """A remodel run that graded its copy before and after: `rms-before/` and `rms-after/`."""
+    remodel_run = run_root / REMODEL_RUN
     remodel_run.mkdir()
-    graded = grade_remodel_run(
+    package = remodel_copy_package()
+    return grade_remodel_run(
         remodel_run, before=package, after=package, source_design_id="dsn:FICT-source"
     )
-    return graded.before.check_file.parent
+
+
+def grade_check_folder(run_root: Path) -> Path:
+    """The re-modeler's grade of the copy at open: `rms-before/` under its remodel run."""
+    return graded_remodel_run(run_root).before.check_file.parent
 
 
 CHECK_FOLDERS: dict[str, tuple[str, Callable[[Path], Path]]] = {
@@ -995,13 +1014,45 @@ def test_the_record_is_not_in_session_files(run_dir: Path) -> None:
 
 
 def check_folder_refusal(check_dir: Path, family: str) -> dict[str, Any]:
-    """The one body a check's folder is refused with, by a Retry and by a start alike."""
+    """The one body a check's folder is refused with, by a Retry and by a start alike.
+
+    `RunDirTaken` since owner decision 146A, where 142A answered `InvalidRunDir`: the page shows
+    a class's sentence first, and `InvalidRunDir`'s is the path rule's."""
     return {
-        "error_class": "InvalidRunDir",
+        "error_class": "RunDirTaken",
         "message": (
             f"{check_dir.resolve()} holds the {family} check that ran in it and no review "
             "session: a Retry replaces only a review's session, and only a Model check's "
             "folder is handed to a new review; review into a new run folder"
+        ),
+        "retryable": False,
+    }
+
+
+def grade_refusal(grade_dir: Path, side: str) -> dict[str, Any]:
+    """The body a start or a Retry meets on a re-modeler grade's folder (owner decision 146A)."""
+    folder = grade_dir.resolve()
+    return {
+        "error_class": "RunDirTaken",
+        "message": (
+            f"{folder} is the folder of the {side} grade of the remodel run in {folder.parent}: "
+            "a review never claims a grade's folder, which only the remodel run writes; review "
+            "into a new run folder"
+        ),
+        "retryable": False,
+    }
+
+
+def held_session_refusal(run_dir: Path) -> dict[str, Any]:
+    """A start into a folder that already holds a session and is no check's to hand over.
+
+    "a session", not "a review session" (owner decision 146A): the folder's session is a
+    review's as a rule, but it may be a remodel run's, or a check's whose record cannot be read."""
+    return {
+        "error_class": "RunDirTaken",
+        "message": (
+            f"{run_dir.resolve()} already holds a session that a start does not write over: "
+            "review into a new run folder, or retry the chat that wrote it with 'retry_of'"
         ),
         "retryable": False,
     }
@@ -1055,6 +1106,65 @@ def test_a_standards_folder_whose_session_its_record_does_not_name_is_no_check_f
     assert not is_check_folder(check_dir)
 
 
+@pytest.mark.parametrize("kind", list(CHECK_FOLDERS))
+def test_session_replaced_tells_a_check_s_own_session_from_one_in_its_place(
+    run_root: Path, kind: str
+) -> None:
+    """What `GET /reviews` asks of a folder holding `check.json` (owner decision 146A): the
+    check's own session is not replaced, and another session in its place - a review's, which
+    moved the check's aside - is, whatever the family. It answers `is_check_folder`'s question
+    the other way round only where both records can be read."""
+    _, build = CHECK_FOLDERS[kind]
+    check_dir = build(run_root)
+    assert (session_replaced(check_dir), is_check_folder(check_dir)) == (False, True)
+
+    session = load_session(check_dir / "session.json")
+    save_session(session.model_copy(update={"session_id": uuid4()}), check_dir / "session.json")
+
+    assert (session_replaced(check_dir), is_check_folder(check_dir)) == (True, False)
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        "no record",
+        "an unreadable record",
+        "a record that is no object",
+        "a record naming no session",
+        "no session",
+        "an unreadable session",
+    ],
+)
+def test_session_replaced_guesses_nothing_where_a_record_cannot_be_read(
+    check_run_dir: Path, broken: str
+) -> None:
+    """A session in the check's place, then each way the folder can fail to show whose it is:
+    every one answers no, so `GET /reviews` restores nothing it cannot show is a review's. A
+    record that names no session read as one naming another before 146A ("the record describes
+    session None"); it is a record that cannot be read now, to every caller alike."""
+    session = load_session(check_run_dir / "session.json")
+    save_session(session.model_copy(update={"session_id": uuid4()}), check_run_dir / "session.json")
+    assert session_replaced(check_run_dir)
+    record = check_run_dir / "check.json"
+    if broken == "no record":
+        record.unlink()
+    elif broken == "an unreadable record":
+        record.write_text("{ not json", encoding="utf-8")
+    elif broken == "a record that is no object":
+        record.write_text("[]", encoding="utf-8")
+    elif broken == "a record naming no session":
+        body = json.loads(record.read_text(encoding="utf-8"))
+        del body["session_id"]
+        record.write_text(json.dumps(body), encoding="utf-8")
+    elif broken == "no session":
+        (check_run_dir / "session.json").unlink()
+    else:
+        (check_run_dir / "session.json").write_text("{ not json", encoding="utf-8")
+
+    assert not session_replaced(check_run_dir)
+    assert not is_check_folder(check_run_dir)
+
+
 @pytest.mark.parametrize("named", ["a chat this backend holds", "an id it never issued"])
 @pytest.mark.parametrize("kind", list(CHECK_FOLDERS))
 def test_a_retry_is_refused_on_every_family_s_check_folder_and_moves_nothing(
@@ -1069,7 +1179,10 @@ def test_a_retry_is_refused_on_every_family_s_check_folder_and_moves_nothing(
     """A check's folder holds no review session for a Retry to replace. Before 142A a Retry
     skipped the folder check, so any `retry_of` rotated the check's session aside and wrote
     a review into its folder. The folder is refused before the chat is looked up, so a chat
-    this backend holds and an id it never issued meet the same 400."""
+    this backend holds and an id it never issued meet the same 400.
+
+    A grade's folder is refused with the grade's words since owner decision 146A, which a
+    start meets too, where 142A refused it as any check's."""
     family, build = CHECK_FOLDERS[kind]
     reviewed = start_session(client, run_dir)
     settle(client, reviewed["chat_id"])
@@ -1081,7 +1194,11 @@ def test_a_retry_is_refused_on_every_family_s_check_folder_and_moves_nothing(
     response = client.post("/sessions", json=session_body(check_dir, retry_of=retry_of))
 
     assert response.status_code == 400
-    assert response.json() == check_folder_refusal(check_dir, family)
+    assert response.json() == (
+        grade_refusal(check_dir, "before")
+        if kind == "re-modeler grade"
+        else check_folder_refusal(check_dir, family)
+    )
     assert folder_hashes(check_dir) == before
     assert list(app.state.server.chats) == [UUID(reviewed["chat_id"])]
     assert len(provider_control.built) == built
@@ -1106,22 +1223,102 @@ def test_a_start_on_a_standards_folder_is_refused_with_the_body_a_retry_gets(
     assert provider_control.built == []
 
 
-@pytest.mark.parametrize("kind", ["model check", "re-modeler grade"])
-def test_a_start_still_claims_an_rms_check_s_folder(
-    client: TestClient, run_root: Path, kind: str
-) -> None:
-    """Unchanged by 142A. Feature 003's User Story 6 scenario 11 hands a Model check's folder
-    to a review, which rotates the check's session aside (feature 007 FR-021). The
-    re-modeler's grade is the same rms record, so a start claims it as well; only a Retry is
-    refused on either."""
-    _, build = CHECK_FOLDERS[kind]
-    check_dir = build(run_root)
+def test_a_start_still_claims_a_model_check_s_folder(client: TestClient, run_root: Path) -> None:
+    """Unchanged by 142A and 146A. Feature 003's User Story 6 scenario 11 hands a Model check's
+    folder to a review, which rotates the check's session aside (feature 007 FR-021). Its case
+    for the re-modeler's grade, which a start claimed as the same rms record, is gone: owner
+    decision 146A refuses a grade's folder to every start (below)."""
+    check_dir = model_check_folder(run_root)
     check_session = load_session(check_dir / "session.json").session_id
 
     settle(client, start_session(client, check_dir)["chat_id"])
 
     assert load_session(check_dir / "session.1.json").session_id == check_session
     assert load_session(check_dir / "session.json").session_id != check_session
+
+
+# --- a review never claims a re-modeler grade's folder (owner decision 146A) ---------------
+
+
+@pytest.mark.parametrize("side", ["before", "after"])
+def test_a_start_on_a_re_modeler_grade_s_folder_is_refused_and_moves_nothing(
+    app: Any, client: TestClient, run_root: Path, provider_control: ProviderControl, side: str
+) -> None:
+    """A grade's `check.json` is `run_rms_check`'s own rms record, so 142A's rule took the folder
+    for a Model check's and a start claimed it: the grade's session went aside, the review
+    wrote over the grade's `report.md`, and the run's `rms-<side>.json` then named the review's
+    files. A grade is its remodel run's, and nothing in the run's folder moves."""
+    graded = graded_remodel_run(run_root)
+    grade_dir = getattr(graded, side).check_file.parent
+    before = folder_hashes(graded.run_dir)
+
+    response = client.post("/sessions", json=session_body(grade_dir))
+
+    assert response.status_code == 400
+    assert response.json() == grade_refusal(grade_dir, side)
+    assert folder_hashes(graded.run_dir) == before
+    named = json.loads((graded.run_dir / f"rms-{side}.json").read_text(encoding="utf-8"))
+    assert load_session(graded.run_dir / named["session"]).session_id == (
+        getattr(graded, side).session.session_id
+    )
+    assert app.state.server.chats == {}
+    assert provider_control.built == []
+
+
+def test_a_grade_s_folder_is_refused_before_its_grade_is_written(
+    app: Any, client: TestClient, run_root: Path, provider_control: ProviderControl
+) -> None:
+    """`grade_remodel_run` files a side's dump in the grade's folder, and beside it, before it
+    grades anything. Until the grade's session was written the folder held none, so a start
+    claimed it - and the grade would then have written its own session and report over the
+    review's. A grade's folder is refused whatever it holds."""
+    remodel_run = run_root / REMODEL_RUN
+    remodel_run.mkdir()
+    write_package(remodel_run, remodel_copy_package(), side="before")
+    grade_dir = remodel_run / "rms-before"
+    before = folder_hashes(remodel_run)
+
+    response = client.post("/sessions", json=session_body(grade_dir))
+
+    assert response.status_code == 400
+    assert response.json() == grade_refusal(grade_dir, "before")
+    assert folder_hashes(remodel_run) == before
+    assert app.state.server.chats == {}
+    assert provider_control.built == []
+
+
+def test_a_model_check_s_folder_named_like_a_grade_s_is_still_claimed(
+    client: TestClient, run_root: Path
+) -> None:
+    """A grade's folder is told by its remodel run's layout - its side's dump filed beside it -
+    and neither by its record, which is a Model check's too, nor by its name alone: a Model
+    check's folder called `rms-before` in the run root is handed to a review as any is."""
+    check_dir = run_root / "rms-before"
+    shutil.copytree(ATTENTION_CHECK_FOLDER, check_dir)
+    check_session = load_session(check_dir / "session.json").session_id
+
+    settle(client, start_session(client, check_dir)["chat_id"])
+
+    assert load_session(check_dir / "session.1.json").session_id == check_session
+
+
+def test_a_re_run_naming_a_grade_s_folder_is_refused_as_no_waiting_review(
+    client: TestClient, run_root: Path
+) -> None:
+    """A re-run (`recheck`, feature 015) re-runs a waiting review in its own folder, so the
+    grade's refusal is not asked of it: the grade's session waits for nothing, and the re-run
+    is refused `NotWaiting` with nothing moved, as before 146A."""
+    graded = graded_remodel_run(run_root)
+    grade_dir = graded.before.check_file.parent
+    before = folder_hashes(graded.run_dir)
+
+    response = client.post(
+        "/sessions", json=session_body(grade_dir, send_when_checked=False, recheck=True)
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error_class"] == "NotWaiting"
+    assert folder_hashes(graded.run_dir) == before
 
 
 def test_a_retry_naming_no_chat_this_backend_holds_is_refused_and_moves_nothing(
@@ -1374,20 +1571,40 @@ def test_a_retry_of_that_is_no_uuid_is_refused_before_the_folder_is_looked_at(
 def test_an_empty_retry_of_is_no_retry_and_meets_a_start_s_refusal(
     client: TestClient, run_dir: Path
 ) -> None:
+    """The start's refusal is `RunDirTaken` with words true of any session (owner decision
+    146A), where 142A pinned `InvalidRunDir` and "already holds a review session"."""
     first = start_session(client, run_dir)
     settle(client, first["chat_id"])
 
     response = client.post("/sessions", json=session_body(run_dir, retry_of=""))
 
     assert response.status_code == 400
-    assert response.json() == {
-        "error_class": "InvalidRunDir",
-        "message": (
-            f"{run_dir.resolve()} already holds a review session; retry it with 'retry_of' "
-            "or review into a new run folder"
-        ),
-        "retryable": False,
-    }
+    assert response.json() == held_session_refusal(run_dir)
+
+
+@pytest.mark.parametrize("record", ["not json", "names no session"])
+def test_a_start_on_a_check_s_folder_whose_record_cannot_be_read_is_told_it_holds_a_session(
+    client: TestClient, check_run_dir: Path, provider_control: ProviderControl, record: str
+) -> None:
+    """A check's folder whose `check.json` cannot show whose its session is, is no check's folder
+    (`is_check_folder`), so a start meets the refusal for any folder that holds a session. The
+    session there is the check's, not a review's, so the words name a session and no review
+    (owner decision 146A); and nothing is guessed through, so nothing moves."""
+    check_file = check_run_dir / "check.json"
+    if record == "not json":
+        check_file.write_text("{ not json", encoding="utf-8")
+    else:
+        body = json.loads(check_file.read_text(encoding="utf-8"))
+        del body["session_id"]
+        check_file.write_text(json.dumps(body), encoding="utf-8")
+    before = folder_hashes(check_run_dir)
+
+    response = client.post("/sessions", json=session_body(check_run_dir))
+
+    assert response.status_code == 400
+    assert response.json() == held_session_refusal(check_run_dir)
+    assert folder_hashes(check_run_dir) == before
+    assert provider_control.built == []
 
 
 def test_two_retries_of_one_chat_rotate_its_folder_once(

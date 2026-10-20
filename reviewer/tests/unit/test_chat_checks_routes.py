@@ -1152,7 +1152,11 @@ class TestAReviewOfACheckFolder:
         self, review_app: Any, check_dir: Path
     ) -> None:
         """The rule the last test relaxes is not removed: a folder holding a review's own
-        session is still a 400, because that pair really cannot be shared."""
+        session is still a 400, because that pair really cannot be shared.
+
+        `RunDirTaken`, where it was `InvalidRunDir` (owner decision 146A): the folder passes the
+        path rule, and the path rule's class carries the sentence that sends the engineer to
+        the run root in Settings."""
         (check_dir / SESSION_FILE).write_text("{}", encoding="utf-8")
 
         with TestClient(
@@ -1172,7 +1176,7 @@ class TestAReviewOfACheckFolder:
             )
 
         assert response.status_code == 400
-        assert error_of(response)["error_class"] == "InvalidRunDir"
+        assert error_of(response)["error_class"] == "RunDirTaken"
 
 
 def test_the_error_body_is_the_contract_s(client: TestClient, tmp_path: Path) -> None:

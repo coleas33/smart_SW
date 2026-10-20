@@ -766,6 +766,177 @@ hid the tab and is not amended here.
 - **Tests**: T079, T081, T083, T085, T087, T089, T092 and T095 in [tasks.md](tasks.md), each
   written first.
 
+### 146A. Three run-folder fixes left by 142A (2026-10-19)
+
+- **Question**: 142A recorded three things it noticed and did not change (above, "Noticed, not
+  changed"). It refused a folder for what the folder holds with the path rule's class,
+  `InvalidRunDir`, whose sentence in the words file reads "The run folder is not inside the run
+  root. Check the run root in Settings."; the Review page shows a class's sentence first and its
+  message only in a fold (`render.js`, `plainError`), so an engineer refused for a folder holding
+  a check, or another review, was sent to a run root that was right. A start still claimed the re-modeler's
+  grade folders as Model check folders: the grade's session went aside, the review wrote over its
+  `report.md`, and the run's `rms-before.json` or `rms-after.json` then named the review's files.
+  And `GET /reviews/{run_id}` refused any folder holding `check.json`, so a review that claimed a
+  Model check's folder - as feature 003 User Story 6 scenario 11 and feature 007 FR-021 intend -
+  could not be restored read-only after a restart.
+- **Decision** (owner decision 146A): fix the three, test first. A context review's Retry after a
+  backend restart (108A) and the command line's `--out` stay as they are (Not changed, below).
+
+**1. A class of its own for a folder another run holds.**
+
+- Two designs were weighed:
+  - *one class, with a sentence true of every refusal and the reason in the message* - say, "The
+    review cannot use this run folder. Press Review to review into a new run folder; if it is
+    refused again, check the run root in Settings." Nothing changes on the wire and one sentence
+    changes; but the sentence is vaguer than either case, an engineer whose run root is wrong is
+    refused a second time before being told to look at it, and what is true of the folder stays
+    in the fold, in the words FR-026 (feature 009) keeps out of the engineer's way;
+  - *a class for each way on, each with its own sentence* - **chosen**. The cases differ in what
+    is true and in the way on: a path the rule refuses is fixed in Settings, a folder another run
+    holds by reviewing into a new one. The sentence is the first thing the page shows, so it must
+    be true of every refusal that carries its class. This is 143A's precedent: `TurnRunning`'s
+    sentence was untrue of a remodel run, so a remodel run got a class of its own,
+    `RemodelRunning`, rather than a vaguer sentence for both.
+- `InvalidRunDir` is the path rule's alone (`resolve_run_dir`, on every route that takes a
+  `run_dir`), and its sentence states the rule rather than that the folder is outside the run
+  root, which is untrue of a network path under a network run root and of a path spelled with
+  `..` that lands inside: "The backend refused the run folder's path: it writes only into a local
+  folder inside the run root. Check the run root in Settings."
+- Every refusal `_claim_run_dir` makes for what a folder holds is the new `400 RunDirTaken`, not
+  retryable: "This run folder already holds another run's files, which a new review must not
+  write over. Press Review to start the review in a new run folder." One class, not one per kind
+  of folder: what the folder holds changes the message and not the way on, and the one sentence
+  is true of each. The messages:
+
+  | Refused | Message |
+  |---|---|
+  | A start or a Retry on a re-modeler grade's folder (item 2) | "`<run_dir>` is the folder of the `<side>` grade of the remodel run in `<parent>`: a review never claims a grade's folder, which only the remodel run writes; review into a new run folder" |
+  | A Retry on a Model check's or a Standards check's folder, a start on a Standards check's | "`<run_dir>` holds the `<family>` check that ran in it and no review session: a Retry replaces only a review's session, and only a Model check's folder is handed to a new review; review into a new run folder" (142A's, unchanged) |
+  | A start on any other folder that holds a session | "`<run_dir>` already holds a session that a start does not write over: review into a new run folder, or retry the chat that wrote it with 'retry_of'" |
+
+  The last said "already holds a review session; retry it with 'retry_of' ...": untrue of a
+  remodel run's own folder, whose session is the re-modeler's, and of a check's folder whose
+  record cannot be read, which `is_check_folder` cannot tell from a review's; and since 142A
+  only the chat that wrote a session may replace it.
+- Unchanged: `RunDirInUse` (409: a chat on the folder is live or being set up),
+  `_require_retried`'s `UnknownChat` and `RunDirInUse` (142A), every status, and the add-in,
+  which makes neither class: it passes the backend's refusal on (`CreateReviewSession`) and the
+  page prints the class's sentence. `test_review_words.py` asserts every `ChatError` subclass has a sentence,
+  `RunDirTaken` included, and pins both; `ErrorLabelsCoverTheHostTests` scans the classes the
+  add-in and the page make, which this does not add to, and passes unchanged.
+- The pane fixtures that carry the words file's labels are regenerated with their generators in
+  the commit that changes the words (015 R2.25): `review-big-assembly.json`
+  (`generate_pane_fixture.py`), and `review-waiting.json`, `review-waiting-big-assembly.json` and
+  `review-waiting-restored.json` (`generate_waiting_fixtures.py`, whose
+  `review-not-sent-session.json` came back byte for byte). Each diff is the one sentence changed
+  and the one added. `review-send-failure-events.json`'s pin of `review-waiting.json`
+  (`source_fixture_sha256`, over the bytes `ReviewPageSendGateTests` reads) moved with it, as
+  143A moved it.
+- The two captured fixtures have no generator. `review-waiting-apply.json` carries no labels.
+  `review-waiting-apply-failure.json` carries the `labels` block it was captured with, before
+  015's T100: 58 error classes against the words file's 67 - none of 016's seven, nor
+  `RemodelRunning`, nor `RunDirTaken` - and the old `InvalidRunDir` sentence. Nothing reads that
+  block: its cases read its `before_save` and `after_save` captures, and the page under test takes
+  its labels from `review-waiting.json` (`WaitingReviewFixture`). It is left as captured, as 015's
+  review and 143A left it: a hand edit would break the capture and the hashes 015 recorded for it
+  (R2.25), and regenerating it needs a generator, which is code. If the owner wants its labels
+  current, that is a small generator task.
+
+**2. A grade's folder, told by the remodel run's layout and not by its record.**
+
+- A grade's folder and a Model check's both hold a `check.json` naming the `session.json` beside
+  it, written by `run_rms_check`, family `rms`. The records differ only in prose - a grade's
+  carry-forward `reason` is `SUPPLIED_STORE`'s sentence, because the re-modeler hands its store
+  in - which a refusal should not rest on. What tells them apart is where a grade is:
+  `grade_remodel_run` grades each side in a folder of its own, `rms-before/` or `rms-after/`,
+  inside the remodel run's folder, and files that side's dump beside it as `package-before.json`
+  or `package-after.json` (`write_package`) before it grades anything. `remodel/artifacts.py`,
+  which writes that layout, answers the question (`grade_side_of`): the folder is one of the two,
+  and its side's dump is beside it.
+- Not by the name alone: a Model check's folder called `rms-before` in the run root has no dump
+  beside it, and is claimed as a Model check's. Not by `rms-before.json` or `rms-after.json`,
+  which name the grade's files but are written only after both grades: a run cut off between a
+  grade and its artifact would leave a grade's folder nothing names, which a start would claim.
+- The grade is asked about before the folder's files, so a grade's folder is refused whatever it
+  holds - before its grade is written too, when it holds only its `package.json`: a start claimed
+  that as a folder holding no session, and the grade would then have written its session and
+  report over the review's. A Retry meets the same refusal; 142A refused it as a check's, with
+  the check's words. A re-run (`recheck: true`) is not refused here: it re-runs a waiting review
+  in its own folder, and `_waiting_record` refuses a grade's, which waits for nothing
+  (`409 NotWaiting`, nothing moved).
+- Records: of every spec and contract, only 002 `contracts/chat-api.md` said a start claims a
+  grade's folder (142A's paragraph), and it is amended. 004 described a grade's artifacts and not
+  its folders; `contracts/run-artifacts.md` gains the two folders, the layout that tells them
+  apart and the rule, and `data-model.md` section 7 a row pointing there. 003 describes its own
+  `-check` folder and no grade's (`contracts/model-check.md` section 4); its User Story 6 scenario
+  11, and 007's FR-021, are about a Model check's folder, which a start still claims, so neither
+  conflicts and neither is amended.
+
+**3. A review beside a check, restored.**
+
+- `GET /reviews/{run_id}` restores a folder that holds `check.json` when the record can be read,
+  names a session, and that session is not the one `session.json` holds: a review claimed the
+  folder and moved the check's session aside. `checks/rules/run.py` says so in one place:
+  `recorded_session` raises `SessionReplacedError`, a `NotACheckError`, for exactly that case,
+  and `session_replaced` asks it. The snapshot is `session.json`'s, the review's; the check's
+  session at `session.N.json` is never read. A check's own folder - its record names
+  `session.json`'s session - stays `404 UnknownReview`, and `GET /checks/{check_id}` is its route;
+  the claimed folder stays `404 UnknownCheck` there. The rule is every family's.
+- It is the rule the claim reads (`is_check_folder`: a folder is its check's while its record
+  names the session beside it) and the one 132A gave a report (015 `contracts/records.md`
+  section 4), so the three cannot disagree about whose a session is.
+- A record that cannot be read, or that names no session, cannot show whose `session.json` is,
+  and nothing is guessed through: `404`, as before 146A. A record naming no session read, until
+  now, as one naming another ("the record describes session None"); `recorded_session` now
+  refuses it as a record it cannot read, the same `NotACheckError` to every caller, so
+  `GET /checks`, the claim and the command line's check readers answer as before.
+- **Edge cases**, each decided and tested (`test_chat_review_routes.py`, `test_chat_server.py`):
+  - the review's own chat retried it there: `session.1.json` is the check's, `session.2.json` the
+    attempt replaced, and `session.json`, the latest, is restored;
+  - a `session.json` that cannot be read: no review to restore, `404`;
+  - a `check.json` that cannot be read, is no JSON object, or names no session: `404`;
+  - the review's `session.json` gone, the check's still at `session.1.json`: `404`, and the
+    check's session is not restored in its place;
+  - a folder holding both records as the check wrote them: `GET /checks` answers it and
+    `GET /reviews` does not; a claimed one the other way round;
+  - every family: any family's own session is not replaced, and another session in its place is.
+- **What it leaves**: a check run cut off after it saved its session and before it wrote its
+  record (`run_rms_check` writes `session.json`, then `report.md` and `attention.json`, then
+  `check.json`, and an Accept re-runs the check that way) leaves a check's session its record does
+  not name. `GET /checks` already reads that folder as no longer the check; `GET /reviews` now
+  restores that session read-only as a review's. Owner question 1, below.
+
+- **Not changed**:
+  - a context review's Retry after a backend restart (108A) stays `404 UnknownChat`, with nothing
+    moved: 142A's cost, above. Keeping it needs the folder to record which chat wrote it, or
+    `retry_of` to accept the review session id the folder records, both left to the owner as 142A
+    left them;
+  - `swreview review --out` keeps writing into any folder it is given - a check's, a grade's or a
+    review's - with no claim rule (142A, "The command line is not changed");
+  - the path rule and every route's use of it: `InvalidRunDir` keeps its status, and only its
+    sentence changes;
+  - `report/rerender.py` asks whether a session is its check's in its own words (`check_run`,
+    the record's `session_id` against the session's, 132A), a second statement of the rule
+    `recorded_session` holds. The two agree on every record this backend writes, and on one
+    naming no session, so it is noticed and not touched.
+- **Owner questions** (recorded 2026-10-19, behaviour unchanged):
+  1. A check run cut off between its session and its record is restored by `GET /reviews` as a
+     review (What it leaves, above). Leave it - it takes a kill inside one synchronous request,
+     and what is restored is read-only and true of the folder - or restore a folder holding
+     `check.json` only when its session also opens a stream there? A review always writes
+     `events.jsonl`, rotated with its session on a Retry, and a check never does; but that test
+     would also refuse a review whose stream was removed by hand.
+- **Review**: each fix is pinned by taking it out once - 13 mutations of the reviewer's code, 74
+  red results in all, and 1 of the pin, 3 red C# cases. The claim's refusals back to
+  `InvalidRunDir` (15 red), the session's words back to "a review session" (4), each sentence in
+  the words file (7 and 8), the grade's refusal (5), the grade without its dump beside it (3) or
+  without its name (4), the grade asked only of a folder holding a session (1), `GET /reviews`
+  refusing any `check.json` (2), `recorded_session` raising no `SessionReplacedError` (11), a
+  record naming no session taken for another (2), a folder that cannot be read guessed through
+  (8), a check's own folder restored (4), and `review-send-failure-events.json`'s pin left on
+  the old `review-waiting.json` (3, in `ReviewPageSendGateTests`).
+- **Tests**: T106, T108 and T110 in [tasks.md](tasks.md), each written first.
+
 ### 147A. Four sentences say what is true (2026-10-19)
 
 **Decision** (owner decision 147A): four wording fixes, test first where a test pins the words.

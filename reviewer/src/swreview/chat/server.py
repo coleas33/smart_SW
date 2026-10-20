@@ -124,7 +124,12 @@ from swreview.checks.rms.run import (
     run_rms_check,
 )
 from swreview.checks.rules.family import waiver_invalidity
-from swreview.checks.rules.run import CHECK_FILE_NAME, check_record, is_check_folder
+from swreview.checks.rules.run import (
+    CHECK_FILE_NAME,
+    check_record,
+    is_check_folder,
+    session_replaced,
+)
 from swreview.checks.standards.profile import SETTING_NAME, ProfileError, ProfileUnreadable
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
 from swreview.checks.standards.registry import STANDARDS_FAMILY
@@ -138,6 +143,7 @@ from swreview.engineering_context.models import ContextArtifact
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
+from swreview.remodel.artifacts import grade_side_of
 from swreview.report.attention import rank
 from swreview.report.attention_record import ATTENTION_FILE_NAME
 from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
@@ -226,10 +232,30 @@ class ChatError(Exception):
 
 
 class InvalidRunDir(ChatError):
-    """`run_dir` broke the path rule (`chat-api.md`, Path rule for `run_dir`), or holds a
-    session this start may not write over: a review's, or a check's (`_claim_run_dir`)."""
+    """`run_dir` broke the path rule (`chat-api.md`, Path rule for `run_dir`; `resolve_run_dir`).
+
+    The path rule's alone (owner decision 146A). A folder that passes it and already holds
+    another run's files is `RunDirTaken`: this class's sentence in the words file sends the
+    engineer to the run root in Settings, which is the way on from the path rule and from
+    nothing else.
+    """
 
     error_class = "InvalidRunDir"
+
+
+class RunDirTaken(ChatError):
+    """`run_dir` already holds another run's files, which this start may not write over.
+
+    Every refusal `_claim_run_dir` makes for what a folder holds (owner decisions 142A and
+    146A): a re-modeler grade's folder, whatever it holds, to any start; a check's folder to a
+    Retry, and a Standards check's to a start as well; any other folder that holds a session to
+    a start. A class of its own because the page shows its class's sentence first, and the way
+    on from all of these is a new run folder, where the path rule's, `InvalidRunDir`'s, is the
+    run root in Settings. A chat that is live on the folder, or being set up in it, is
+    `RunDirInUse`.
+    """
+
+    error_class = "RunDirTaken"
 
 
 class InvalidPackage(ChatError):
@@ -380,9 +406,9 @@ class UnknownReview(ChatError):
 
     `GET /reviews/{run_id}` (feature 009, contracts/sessions.md section 4) takes a folder
     name, so every way it can fail - a name the path rule refuses, no such folder, no
-    `session.json`, a check folder, a file that cannot be read - is this one 404 naming only
-    the id, as `UnknownCheck` is: a route that said *why* would be a way to probe the
-    workstation.
+    `session.json`, a check's own folder or one whose check record cannot show whose its
+    session is, a file that cannot be read - is this one 404 naming only the id, as
+    `UnknownCheck` is: a route that said *why* would be a way to probe the workstation.
     """
 
     status = 404
@@ -1781,14 +1807,22 @@ class ChatServer:
     def _read_review(self, review_dir: Path) -> dict[str, Any]:
         """The snapshot of the review `review_dir` holds, read-only; blocking.
 
-        A folder holding `check.json` is a Model check or Standards run, whose own route is
-        `GET /checks/{check_id}`; a folder with no `session.json` has no review; a file that
-        cannot be read or does not validate is a review that can no longer be restored. All
-        three are `UnknownReview`.
+        A folder with no `session.json` has no review, and a file that cannot be read or does
+        not validate is a review that can no longer be restored. A folder holding `check.json`
+        is its check's while that record names the `session.json` beside it, and its route is
+        `GET /checks/{check_id}`. A review that claimed it - a Model check's folder handed to a
+        review (feature 003 User Story 6 scenario 11) - moved the check's session aside and put
+        its own in `session.json`, so the record names another session and the folder's
+        session is the review's, which is restored (owner decision 146A); the check's, at
+        `session.N.json`, is never read here. A record that cannot be read, or names no
+        session, cannot show whose the session is, and nothing is guessed through
+        (`session_replaced`). Every refusal is `UnknownReview`.
         """
         unknown = UnknownReview(f"no review {review_dir.name!r} under the run root")
         session_file = review_dir / SESSION_FILE_NAME
-        if (review_dir / CHECK_FILE_NAME).exists() or not session_file.is_file():
+        if not session_file.is_file():
+            raise unknown
+        if (review_dir / CHECK_FILE_NAME).exists() and not session_replaced(review_dir):
             raise unknown
         try:
             session = load_session(session_file)
@@ -2154,10 +2188,10 @@ class ChatServer:
         already been shown, and `session.json` holds only the later of the two sessions.
 
         So: a folder a live chat is reviewing is a 409, and a folder that already holds a
-        session is a 400 - unless this request is the Retry that replaces it, which
-        `_rotate_previous` moves the old pair aside for rather than writing over. It has to be
-        that Retry (owner decision 142A): `_require_retried` holds a Retry to the chat that
-        wrote the session, so one naming any other chat moves nothing.
+        session is a 400, `RunDirTaken` - unless this request is the Retry that replaces it,
+        which `_rotate_previous` moves the old pair aside for rather than writing over. It has
+        to be that Retry (owner decision 142A): `_require_retried` holds a Retry to the chat
+        that wrote the session, so one naming any other chat moves nothing.
 
         A Model check's folder is the one other exception, and for the same reason read
         the other way: a check writes `session.json` and **no** `events.jsonl`, so there
@@ -2173,8 +2207,14 @@ class ChatServer:
         for it to replace, and a start on a Standards check's folder, which feature 007 left
         unclaimable (its FR-021 names the rms check's folder only): one 400 with one wording
         from both routes. `is_check_folder` knows every family's folder, and the family is
-        the record's own, as `GET /checks/{check_id}` reads it; the re-modeler's grade is an
-        rms record, so a start claims it as it claims a Model check's folder.
+        the record's own, as `GET /checks/{check_id}` reads it.
+
+        The re-modeler's grade is an rms record too, and no request claims its folder (owner
+        decision 146A): the grade is its remodel run's, whose `rms-<side>.json` names its
+        session and report. It is told from a Model check's folder by the run's layout
+        (`grade_side_of`), the record being the same, and refused before the folder's files are
+        looked at, so whatever it holds: a start into it before the grade is written found no
+        session, and the grade would then have written over the review.
 
         A re-run (feature 015, `recheck`; `contracts/recheck.md` section 2) re-runs a waiting
         review's checks in its own folder, so the session it holds is its point, not a
@@ -2200,21 +2240,31 @@ class ChatServer:
             )
         if recheck:
             return None
+        side = grade_side_of(run_dir)
+        if side is not None:
+            raise RunDirTaken(
+                f"{run_dir} is the folder of the {side} grade of the remodel run in "
+                f"{run_dir.parent}: a review never claims a grade's folder, which only the "
+                "remodel run writes; review into a new run folder"
+            )
         if not _session_files(run_dir):
             return None
         if is_check_folder(run_dir):
             family = self._family_of(run_dir)
             if retry_of is None and family == RMS_FAMILY.check_file_family:
                 return None
-            raise InvalidRunDir(
+            raise RunDirTaken(
                 f"{run_dir} holds the {family} check that ran in it and no review session: "
                 "a Retry replaces only a review's session, and only a Model check's folder "
                 "is handed to a new review; review into a new run folder"
             )
         if retry_of is None:
-            raise InvalidRunDir(
-                f"{run_dir} already holds a review session; retry it with 'retry_of' or "
-                f"review into a new run folder"
+            # "a session", not "a review session": it is a review's as a rule, but a remodel
+            # run's own folder holds the re-modeler's, and a check's folder whose record cannot
+            # be read holds the check's, which `is_check_folder` cannot tell from a review's.
+            raise RunDirTaken(
+                f"{run_dir} already holds a session that a start does not write over: review "
+                "into a new run folder, or retry the chat that wrote it with 'retry_of'"
             )
         self._require_retried(run_dir, retry_of)
         return None
