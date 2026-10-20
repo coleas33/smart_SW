@@ -726,21 +726,74 @@ public class ThrowawayPartExemptionTests
 
     /// <summary>
     /// The exemption's scope is the one gate built with it: <c>Program.RemodelProbeGate</c>, which
-    /// refuses to run while any document is open and addresses only the part it creates. A second
-    /// construction site would carry the exemption to a gate the scope never reviewed.
+    /// <c>probe remodel</c>'s run (<c>ExecuteProbeRemodel</c>) calls once, and which refuses to run while
+    /// any document is open and addresses only the part it creates. A second construction site, or a
+    /// second caller of the gate, would carry the exemption - the bare <c>ForceRebuild3</c>,
+    /// <c>SaveAs3</c>, <c>NewDocument</c> and <c>MoveToFolder</c> among it - to a gate the scope never
+    /// reviewed. So no product file but <c>Program.cs</c> names the guard, however it is built -
+    /// <c>new()</c> included - it is named there once, in the gate factory, and the factory is named twice:
+    /// where it is declared and where <c>ExecuteProbeRemodel</c> calls it. Replaced on decision 144A's
+    /// second review (T179): it was <c>TheProbesGuardIsBuiltInExactlyOnePlaceTheProbeGate</c>, which read
+    /// <c>new RemodelProbeGuard(</c> alone, as the pane seat's test did before T173.
     /// </summary>
     [Fact]
-    public void TheProbesGuardIsBuiltInExactlyOnePlaceTheProbeGate()
+    public void OnlyTheProbeRunBuildsTheProbesGuardOrCallsItsGate()
     {
-        var construction = new Regex(@"new\s+(?:[\w.]+\.)?RemodelProbeGuard\s*\(", RegexOptions.CultureInvariant);
-        var sites = DrawingFamilyReadAuditTests.ProductSourceFiles()
-            .SelectMany(file => construction.Matches(File.ReadAllText(file)).Cast<Match>().Select(match => Path.GetFileName(file)))
+        const string ProgramFile = "SwReview.Extractor.Console/Program.cs";
+        var guard = new Regex(@"\bRemodelProbeGuard\b", RegexOptions.CultureInvariant);
+        var factory = new Regex(@"\bRemodelProbeGate\b", RegexOptions.CultureInvariant);
+        string root = DrawingFamilyReadAuditTests.ExtractorRoot();
+        var namings = DrawingFamilyReadAuditTests.ProductSourceFiles()
+            .SelectMany(file =>
+            {
+                string where = file.Substring(root.Length).TrimStart('\\', '/').Replace('\\', '/');
+                string[] lines = File.ReadAllLines(file);
+                return Enumerable.Range(0, lines.Length)
+                    .Where(index => !DrawingFamilyReadAuditTests.IsWholeLineComment(lines[index])
+                        && (guard.IsMatch(lines[index]) || factory.IsMatch(lines[index])))
+                    .Select(index => (Where: where, Line: lines[index], In: EnclosingMember(lines, index)));
+            })
             .ToList();
 
-        Assert.Equal(new[] { "Program.cs" }, sites);
+        Assert.Equal(new[] { ProgramFile }, namings.Select(site => site.Where).Distinct());
+        Assert.Equal(new[] { "RemodelProbeGate" }, namings.Where(site => guard.IsMatch(site.Line)).Select(site => site.In));
+        Assert.Equal(
+            new[] { "RemodelProbeGate", "ExecuteProbeRemodel" },
+            namings.Where(site => factory.IsMatch(site.Line)).Select(site => site.In));
+        Assert.Contains(
+            "new SwGate(new CircuitBreaker(), new RemodelProbeGuard())",
+            namings.Single(site => guard.IsMatch(site.Line)).Line,
+            StringComparison.Ordinal);
 
         SwGate gate = SwReview.Extractor.Console.Program.RemodelProbeGate(new RecordingGateObserver());
         Assert.True(gate.Call("FeatureFillet3", () => true));
+    }
+
+    /// <summary>
+    /// A method's declaration at a class member's indentation - four spaces under a file-scoped
+    /// namespace - its modifiers, its return type and its name, then its parameters or type parameters.
+    /// </summary>
+    private static readonly Regex MemberDeclaration = new Regex(
+        @"^ {4}(?:(?:public|internal|private|protected|static|async|unsafe|override|sealed|virtual|new)\s+)+[\w<>\[\],.?]+\s+(?<name>\w+)\s*[(<]",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The member of its class a line of a product file sits in: the nearest method declaration at or
+    /// above it (<see cref="MemberDeclaration"/>), so a call in a lambda or a local function is placed in
+    /// the method around it.
+    /// </summary>
+    private static string EnclosingMember(string[] lines, int index)
+    {
+        for (int line = index; line >= 0; line--)
+        {
+            Match match = MemberDeclaration.Match(lines[line]);
+            if (match.Success)
+            {
+                return match.Groups["name"].Value;
+            }
+        }
+
+        return "(no member)";
     }
 }
 
