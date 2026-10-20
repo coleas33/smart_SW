@@ -187,7 +187,8 @@ class ScopeRefused(ChatError):
     """The scope gate refused, or the bridge says the scope was not probed or has changed.
 
     The message names **every** failing signal and never only the first: a message that
-    named one of two reasons would send the engineer back twice (`research.md` R4.1).
+    named one of two reasons would send the engineer back twice (`research.md` R4.1). The
+    bridge's two codes carry plain words instead, which name no path (`SCOPE_REFUSAL_WORDS`).
     """
 
     error_class = "ScopeRefused"
@@ -289,13 +290,50 @@ is short on purpose: the codes it does not list are the ones a run meets *after*
 is open, and those are the executor's to record against the change it was making rather
 than an HTTP refusal for a route to answer."""
 
+SCOPE_REFUSAL_WORDS: Mapping[str, str] = {
+    "scope_not_probed": (
+        "The part to be copied is not one this remodel checked, so nothing was copied and no new "
+        "plan was made. Your part was not changed. Make your part the active document and press "
+        "Remodel a copy again."
+    ),
+    "scope_changed": (
+        "The part, or the copy made of it, no longer reads as it did when this remodel checked it, "
+        "so the remodel stopped and no new plan was made. Your part was not changed. Press "
+        "Remodel a copy again to check it afresh; if the same happens again, the copy reads "
+        "differently from your part once SOLIDWORKS opens it, and this part cannot be remodeled "
+        "as it stands."
+    ),
+}
+"""What the Remodel tab reads for the two codes `ScopeRefused` carries (owner decision 149A).
+
+The bridge's own sentences can name the probe it was handed and the source's full path - both
+paths, for a probe minted for another file - and the page prints a refusal's message as it is, on
+a tab whose words name no path. `scope_not_probed` is raised at the open's first step, before
+anything is copied: the open names a file no probe of the bridge's session was minted for, which
+since 145A is a part made active between the plan's second reading of the document and its probe.
+`scope_changed` is raised before the copy, when the source can no longer be read as it was
+probed, or after it, when the copy does not read as the probe did; the bridge's unwind then
+deletes the copy when it can. Each sentence is true of every refusal under its code and vouches,
+as the tab's own refusals of a plan do (`RemodelHost`), for the engineer's part alone, never for
+the copy. Pressing again probes afresh: a reason the gate reads is then named by it, the read-only
+option among them, while a copy that reads differently from the part does so on every press,
+which `scope_changed`'s sentence says. The bridge's sentence goes to the log (`_refusal`)."""
+
 PREEXISTING_REBUILD_ERRORS = "preexisting_rebuild_errors"
 """The one refusal that is not an error body; see `RemodelServer._open`."""
 
 
 def _refusal(exc: RemodelError) -> ChatError:
-    """The host's `error_code` as the class the page switches on, with its own sentence."""
-    return BRIDGE_REFUSALS.get(exc.error_code, RunFolderFailed)(str(exc))
+    """The host's `error_code` as the class the page switches on, with its own sentence - or, for
+    the two codes `ScopeRefused` carries, the plain words the page prints instead, the host's
+    sentence logged for whoever reads the backend's log (owner decision 149A). The process-wide
+    log redactor masks every secret in that line, as in every other (`chat/__main__.py`)."""
+    refusal = BRIDGE_REFUSALS.get(exc.error_code, RunFolderFailed)
+    plain = SCOPE_REFUSAL_WORDS.get(exc.error_code)
+    if plain is None:
+        return refusal(str(exc))
+    logger.warning("the bridge refused with %s: %s", exc.error_code, exc)
+    return refusal(plain)
 
 
 def _unavailable(what: str, detail: str | None = None) -> BridgeUnavailable:

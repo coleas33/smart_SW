@@ -56,7 +56,7 @@ issued, and the host resolves it against its own run record.
 | `NotAPart` | The active document is an assembly or a drawing. v1 is parts only |
 | `DocumentDirty` | The source has unsaved changes. The source is never saved by this feature, so the engineer saves it or closes it |
 | `ExternalReferences` | `ListExternalFileReferencesCount2() != 0` |
-| `ScopeRefused` | The scope gate refused. `message` names **every** failing signal, not the first one. *Since 2026-09-28 (U26):* including an unresolved `save_flag_dirty` on a read-only source, worded with the option to turn off |
+| `ScopeRefused` | The scope gate refused. `message` names **every** failing signal, not the first one. *Since 2026-09-28 (U26):* including an unresolved `save_flag_dirty` on a read-only source, worded with the option to turn off. *Amended 2026-10-20 (feature 002, owner decision 149A):* the backend's `ScopeRefused` for the bridge's `scope_not_probed` and `scope_changed` on `remodel.open` carries plain words that name no path ([`backend-remodel.md`](backend-remodel.md), Error classes), where it carried the bridge's sentence, which can name the part's full path; this host's own, after the probe, names the gate's signals and no path |
 | `PreexistingRebuildErrors` | The part is already broken; nothing the run did could be attributed. The only refusal raised after the copy exists, and the only one whose handler deletes a copy. *Amended 2026-09-27 (T159):* `CopyNotActive` is raised after the copy exists too, and deletes nothing, so this stays the only one that deletes a copy |
 | `RunInProgress` | One remodel run per host |
 | `RunNotFound` | `run_dir` is not a run this host created |
@@ -401,6 +401,9 @@ treated as a turn** (feature 002 `pane-host-messages.md`, `settings.save`).
   path or configuration - changed is refused `DocumentChanged`, in words that name no path. Without
   it the probe would read the document active by then and the bridge would refuse the open as
   `scope_not_probed`, which reaches the page as `ScopeRefused` with both paths in its message.
+  *Amended 2026-10-20 (owner decision 149A):* a part made active in the moment between the second
+  reading and the probe still meets that refusal, and it now reaches the page in plain words, with
+  no path.
 - The page is told when a press meets a restart first. Before the gate, when a restart waits or is
   being made, the host posts `status {stage: "backend_starting"}` - "Waiting for the review backend to
   restart with the saved settings, then reading the part..." for a plan, "...then starting the
