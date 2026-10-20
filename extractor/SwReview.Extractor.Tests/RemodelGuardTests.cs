@@ -13,7 +13,8 @@ namespace SwReview.Extractor.Tests;
 ///
 /// <see cref="ReadOnlyGuard"/> is a denylist because the reviewer's read surface is unbounded;
 /// <see cref="RemodelGuard"/> is an allowlist because the re-modeler's write surface is a
-/// closed set of twenty interface-qualified keys. The two layers answer different questions -
+/// closed set of interface-qualified keys - twenty, and since owner decision 148A (2026-10-20)
+/// twenty-one with the open of the copy. The two layers answer different questions -
 /// which member may be called at all, and (in <see cref="RemodelScope"/>) which document it
 /// may be called on - because a call guard never sees the document: it is captured inside the
 /// lambda at <c>SwGate.Call("GetChildren", () =&gt; component.GetChildren())</c>.
@@ -23,7 +24,10 @@ public class RemodelGuardTests
     /// <summary>
     /// The stage-1 allowlist, exactly as contracts/guard-allowlist.md tabulates it. This
     /// array is the specification; a key added to <see cref="RemodelGuard"/> without a row
-    /// here fails <see cref="AllowedKeys_AreExactlyTheStage1Allowlist"/>.
+    /// here fails <see cref="AllowedKeys_AreExactlyTheStage1Allowlist"/>. Edited deliberately for
+    /// owner decision 148A (2026-10-20, feature 011 T184): <c>ISldWorks.OpenDoc7</c>, the open of the
+    /// copy <c>remodel.open</c> makes, which it called by the bare name the read-only guard left
+    /// allowed and calls by this key now, the bare name refused.
     /// </summary>
     public static readonly string[] Stage1Allowlist =
     {
@@ -47,6 +51,7 @@ public class RemodelGuardTests
         "ISldWorks.SetUserPreferenceToggle",
         "ISldWorks.set_CommandInProgress",
         "ISldWorks.CloseDoc",
+        "ISldWorks.OpenDoc7",
     };
 
     /// <summary>
@@ -62,11 +67,14 @@ public class RemodelGuardTests
     /// generated from the interop into the "Feature 011" table of the same file, and read from
     /// there rather than typed a second time (<see cref="DrawingFamilyDenylistTests"/>). Every one
     /// of them is a narrowing: none is on the stage-1 allowlist, so
-    /// <see cref="Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive"/> and
+    /// <see cref="Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes"/> and
     /// <see cref="RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse"/>
     /// answer exactly as they did before it. Decision 140A's names (2026-10-19) are a narrowing too,
     /// and the five keys did not move; but one of them, <c>SetReadOnlyState</c>, was a member the
     /// remodel guard refused itself, so it left that list (<see cref="ExpectedRemodelExclusions"/>).
+    /// Decision 148A (2026-10-20) is the one that is not a narrowing alone: the "Feature 011" table
+    /// refuses the bare <c>OpenDoc7</c> now, and <c>ISldWorks.OpenDoc7</c> joined the allowlist with it,
+    /// so the keys that override a read-only denial are six (<see cref="KeysThatOverrideAReadOnlyDenial"/>).
     /// </summary>
     private static readonly string[] ExpectedDeniedMembers = new[]
     {
@@ -201,10 +209,12 @@ public class RemodelGuardTests
     };
 
     /// <summary>
-    /// The five allowlist keys that needed the allowlist to pass: every other key is a member
-    /// the read-only denylist never covered. This is the whole of the remodel feature's
-    /// widening, one row per key, and it is asserted as a set so a denial added upstream
-    /// cannot enlarge it unnoticed.
+    /// The allowlist keys that needed the allowlist to pass: every other key is a member the
+    /// read-only denylist never covered. This is the whole of the remodel feature's widening, one
+    /// row per key, and it is asserted as a set so a denial added upstream cannot enlarge it
+    /// unnoticed. Five until owner decision 148A (2026-10-20, feature 011 T184), which refused the
+    /// bare <c>OpenDoc7</c> and put the open of the copy on the allowlist by its qualified key:
+    /// six, edited deliberately.
     /// </summary>
     private static readonly string[] KeysThatOverrideAReadOnlyDenial =
     {
@@ -213,6 +223,7 @@ public class RemodelGuardTests
         "IModelDoc2.ForceRebuild3",
         "IModelDoc2.Save3",
         "ICustomPropertyManager.Delete2",
+        "ISldWorks.OpenDoc7",
     };
 
     /// <summary>
@@ -249,7 +260,7 @@ public class RemodelGuardTests
             + string.Join(", ", expected.Except(actual)) + "; missing from this test: "
             + string.Join(", ", actual.Except(expected)) + ".");
         Assert.Equal(Stage1Allowlist.Length, RemodelGuard.AllowedKeys.Count);
-        Assert.Equal(20, RemodelGuard.AllowedKeys.Count);
+        Assert.Equal(21, RemodelGuard.AllowedKeys.Count);
     }
 
     [Theory]
@@ -273,9 +284,24 @@ public class RemodelGuardTests
     [InlineData("ISldWorks.SetUserPreferenceToggle")]
     [InlineData("ISldWorks.set_CommandInProgress")]
     [InlineData("ISldWorks.CloseDoc")]
+    [InlineData("ISldWorks.OpenDoc7")]
     public void Assert_AllowlistedKey_Passes(string key)
     {
         Guard().Assert(key);
+    }
+
+    /// <summary>
+    /// Owner decision 148A (2026-10-20, feature 011 T184): <c>remodel.open</c> opens the copy by the
+    /// qualified key <c>ISldWorks.OpenDoc7</c>, which this guard allows, ordinally; the bare name, the
+    /// read-only guard's answer, is refused, as is the key spelled in another case.
+    /// </summary>
+    [Fact]
+    public void Assert_TheOpenOfTheCopyPassesByItsQualifiedKeyAndIsRefusedBare()
+    {
+        Guard().Assert("ISldWorks.OpenDoc7");
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("OpenDoc7"));
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("isldworks.opendoc7"));
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("ISldWorks.OpenDoc6"));
     }
 
     /// <summary>
@@ -502,11 +528,13 @@ public class RemodelGuardTests
     /// <summary>
     /// The set assertion contracts/guard-allowlist.md asks for: the allowlist keys that the
     /// read-only denied surface refuses - every key that needed the allowlist to pass - are
-    /// exactly five, so a denial added upstream cannot silently widen the remodel surface,
-    /// and an allowlist key added here cannot silently override one.
+    /// exactly the declared ones, so a denial added upstream cannot silently widen the remodel
+    /// surface, and an allowlist key added here cannot silently override one. Renamed deliberately
+    /// for owner decision 148A (2026-10-20, feature 011 T184), which made them six: it was
+    /// <c>Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive</c>.
     /// </summary>
     [Fact]
-    public void Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive()
+    public void Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes()
     {
         var overriding = new HashSet<string>(
             RemodelGuard.AllowedKeys.Where(key => ReadOnlyGuardRefuses(CallKey.BareName(key))),

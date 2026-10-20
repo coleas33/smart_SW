@@ -31,9 +31,11 @@ namespace SwReview.Extractor.Guard;
 /// answers must be at that path), as <c>RemodelScope</c> is <see cref="RemodelGuard"/>'s second layer.
 /// It adds nothing to <see cref="ReadOnlyGuard"/>, <see cref="RemodelGuard"/> or
 /// <see cref="DrawingOpenGuard"/>, and it is built only by
-/// <c>SwRemodelSeat</c>. Of the two keys only <c>ActivateDoc3</c> overrides a read-only denial (the
-/// shared <c>ISldWorks</c> row of contracts/guard.md section 1); <c>OpenDoc7</c> is an exclusion of
-/// section 3.
+/// <c>SwRemodelSeat</c>. Both keys override a read-only denial (the shared <c>ISldWorks</c> row of
+/// contracts/guard.md section 1): <c>ActivateDoc3</c> since feature 011's T004, and <c>OpenDoc7</c>
+/// since owner decision 148A, which had the open's two other callers - <c>remodel.open</c>, under
+/// <see cref="RemodelGuard"/>, and <c>probe remodel</c>'s reopen, under <see cref="RemodelProbeGuard"/> -
+/// name it by this key too, and the read-only guard refuse the bare name.
 /// </summary>
 public sealed class RemodelSeatGuard : ICallGuard
 {

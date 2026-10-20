@@ -834,10 +834,13 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     // =================================================================================
 
     /// <summary>
-    /// <c>OpenDoc7</c>, as the gate is told about it. A read as far as
-    /// <see cref="ReadOnlyGuard"/> is concerned, and recorded so the log shows what was opened.
+    /// <c>ISldWorks.OpenDoc7</c>, the open of the copy, by its key on <see cref="RemodelGuard"/>'s
+    /// stage-1 allowlist (owner decision 148A, 2026-10-20; feature 011 research R12.2). It was the bare
+    /// <c>OpenDoc7</c>, which the read-only guard left allowed, so every read-only gate let a writable
+    /// open through; the read-only guard refuses the bare name now. Recorded so the log shows what was
+    /// opened, and the step's marker in <c>remodel.log</c>.
     /// </summary>
-    private const string OpenDocMember = "OpenDoc7";
+    private const string OpenDocKey = "ISldWorks.OpenDoc7";
 
     /// <summary><c>ICustomPropertyManager.Add3</c>: the session tag, written before any scope exists.</summary>
     private const string TagMember = "ICustomPropertyManager.Add3";
@@ -1097,8 +1100,8 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             // 8. Silent | LoadModel = 17 exactly, then the two-sided assertion.
             document = RemodelStageMarkers.Around(
                 stage,
-                OpenDocMember,
-                () => _remodelGate.Call(OpenDocMember, () => seat.OpenDocument(copy, RemodelCopy.OpenOptions)));
+                OpenDocKey,
+                () => _remodelGate.Call(OpenDocKey, () => seat.OpenDocument(copy, RemodelCopy.OpenOptions)));
             if (document == null)
             {
                 throw new RemodelCopyError(

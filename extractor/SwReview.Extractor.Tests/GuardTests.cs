@@ -910,7 +910,10 @@ public class DrawingFamilyDenylistTests
     /// <summary>
     /// Feature 004's allowlist is asserted against the read-only denied surface; a feature 011
     /// denial that shared a stage-1 key's bare name would change the keys that override a denial
-    /// (<c>Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive</c>).
+    /// (<c>Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes</c>). Edited deliberately
+    /// for owner decision 148A (2026-10-20, T184), which made one such denial on purpose: the bare
+    /// <c>OpenDoc7</c>, whose key <c>ISldWorks.OpenDoc7</c> joined the allowlist as the sixth key that
+    /// overrides a read-only denial. It is the one, named; any other fails as before.
     /// </summary>
     [Fact]
     public void NoMemberOfTheTableIsTheBareNameOfAStage1AllowlistKey()
@@ -918,7 +921,9 @@ public class DrawingFamilyDenylistTests
         var bareKeys = new HashSet<string>(
             RemodelGuard.AllowedKeys.Select(CallKey.BareName), StringComparer.OrdinalIgnoreCase);
 
-        Assert.DoesNotContain(ExpectedMembers, bareKeys.Contains);
+        Assert.Equal(
+            new[] { "OpenDoc7" },
+            ExpectedMembers.Where(bareKeys.Contains).ToArray());
     }
 
     /// <summary>
@@ -954,6 +959,9 @@ public class DrawingFamilyDenylistTests
     /// again for decision 144A the same day: <c>NewDocument</c> and <c>MoveToFolder</c>, which only
     /// <c>probe remodel</c> calls, are no exclusions now - the read-only guard refuses them and only the
     /// probe's own guard lets them through (<see cref="TheProbesTwoWritersAreRefusedByEveryGateButTheProbesOwnBare"/>).
+    /// Narrowed again for decision 148A (2026-10-20, feature 011 T184): <c>OpenDoc7</c> is no exclusion
+    /// now - its two callers name it by its qualified key, and the read-only guard refuses the bare name
+    /// (<see cref="TheBareOpenDoc7IsRefusedByEveryGateAndOnlyTheGuardsOfItsCallersLetItsKeyThrough"/>).
     /// </summary>
     [Fact]
     public void EveryExclusionHasOneOfTheContractsReasons()
@@ -961,7 +969,6 @@ public class DrawingFamilyDenylistTests
         var sanctionedCalls = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "OpenDoc6",
-            "OpenDoc7",
             "SaveBMP",
         };
         var bareKeys = new HashSet<string>(
@@ -984,11 +991,12 @@ public class DrawingFamilyDenylistTests
     /// names feature 004's allowlist keys carry, and (decision 140A) the capture's image. Edited
     /// deliberately for decision 144A (2026-10-19): <c>NewDocument</c> and <c>MoveToFolder</c> left
     /// this list for <see cref="TheProbesTwoWritersAreRefusedByEveryGateButTheProbesOwnBare"/>, which
-    /// asserts they are refused, and let through only where the decision says.
+    /// asserts they are refused, and let through only where the decision says. And for decision 148A
+    /// (2026-10-20, T184): <c>OpenDoc7</c> left it for
+    /// <see cref="TheBareOpenDoc7IsRefusedByEveryGateAndOnlyTheGuardsOfItsCallersLetItsKeyThrough"/>.
     /// </summary>
     [Theory]
     [InlineData("OpenDoc6")]
-    [InlineData("OpenDoc7")]
     [InlineData("SaveBMP")]
     [InlineData("CloseDoc")]
     [InlineData("SetUserPreferenceToggle")]
@@ -1028,6 +1036,30 @@ public class DrawingFamilyDenylistTests
                 Assert.Throws<MutatingCallError>(() => gate.Assert(member));
             }
         }
+    }
+
+    /// <summary>
+    /// Owner decision 148A (2026-10-20, feature 011 T184; research R11.8 item 1): <c>ISldWorks.OpenDoc7</c>,
+    /// a writable open, is called by its qualified key at both its callers - the bridge's
+    /// <c>remodel.open</c>, on <see cref="RemodelGuard"/>'s stage-1 allowlist, and <c>probe remodel</c>'s
+    /// reopen of its throwaway part, one of <see cref="RemodelProbeGuard"/>'s run-scoped members - as the
+    /// pane seat calls it under its own guard's. So the read-only guard refuses the bare name, and so does
+    /// every gate the product builds; and the key passes exactly the guards of those three callers.
+    /// </summary>
+    [Fact]
+    public void TheBareOpenDoc7IsRefusedByEveryGateAndOnlyTheGuardsOfItsCallersLetItsKeyThrough()
+    {
+        Assert.Contains("OpenDoc7", ExpectedMembers, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("OpenDoc7", ExcludedMembers, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(
+            new[]
+            {
+                "RemodelProbeGuard ISldWorks.OpenDoc7",
+                "RemodelGuard ISldWorks.OpenDoc7",
+                "RemodelSeatGuard ISldWorks.OpenDoc7",
+            },
+            GuardSweep.LetThrough(GuardSweep.ProductGates(), new[] { "OpenDoc7", "ISldWorks.OpenDoc7" }));
     }
 
     /// <summary>
@@ -1382,6 +1414,13 @@ public class DrawingFamilyReadAuditTests
                 + "own, by the qualified key its own guard, RemodelSeatGuard, allowlists",
             [("LoadFile4", "SwReview.Extractor.Console/Program.cs")] =
                 "a member probe standards asserts is absent from its gate log",
+            [("OpenDoc7", "SwReview.Extractor.Console/Program.cs")] =
+                "a member probe standards asserts is absent from its gate log; refused bare since decision 148A, whose "
+                + "callers name it by its qualified key",
+            [("OpenDoc7", "SwReview.Extractor/Rms/RemodelInteropSurface.cs")] =
+                "the frozen interop manifest's row for ISldWorks.OpenDoc7 (feature 004 T156, T181), named by interface "
+                + "and member apart; a row records a member and permits none. Refused bare since decision 148A, whose "
+                + "callers - remodel.open, probe remodel's reopen and the pane seat - name it by its qualified key",
             [("dimensions", "SwReview.Extractor/Ir/DrawingSheet.cs")] =
                 "a JSON property name, matching IDrawingDoc.Dimensions only by case",
             [("dissolve", "SwReview.Extractor/Bridge/BridgeProtocol.cs")] =
@@ -1596,10 +1635,15 @@ public class DrawingFamilyReadAuditTests
     /// <summary>
     /// Decision 144A's review (T173): the pane seat's two keys are literals of its own file and of no
     /// other product file, so its guard's exemption is exercised and stays its own; a key carried to
-    /// another file fails here and in the audit.
+    /// another file fails here and in the audit. Edited deliberately for decision 148A (2026-10-20,
+    /// T184), which had <c>ISldWorks.OpenDoc7</c> called by that key at its two other callers too - the
+    /// bridge's <c>remodel.open</c>, whose <see cref="RemodelGuard"/> allowlists it, and <c>probe remodel</c>'s
+    /// reopen, whose <see cref="RemodelProbeGuard"/> does: it was <c>TheSeatsOwnKeysAreLiteralsOfItsOwnFileAlone</c>.
+    /// Each key is a literal of exactly the files whose guards let it through, and of no other, since the
+    /// audit judges a <see cref="RemodelGuard"/> key whole in every file (<see cref="Judged"/>).
     /// </summary>
     [Fact]
-    public void TheSeatsOwnKeysAreLiteralsOfItsOwnFileAlone()
+    public void TheSeatsKeysAreLiteralsOfTheFilesWhoseGuardsLetThemThroughAlone()
     {
         var named = Literals()
             .Where(literal => RemodelSeatGuard.AllowedKeys.Contains(literal.Literal))
@@ -1609,8 +1653,37 @@ public class DrawingFamilyReadAuditTests
             .ToList();
 
         Assert.Equal(
-            new[] { "ISldWorks.ActivateDoc3 in " + PaneSeatFile, "ISldWorks.OpenDoc7 in " + PaneSeatFile },
+            new[]
+            {
+                "ISldWorks.ActivateDoc3 in " + PaneSeatFile,
+                "ISldWorks.OpenDoc7 in " + PaneSeatFile,
+                "ISldWorks.OpenDoc7 in " + CreationFamilyReadAuditTests.ProbeHostFile,
+                "ISldWorks.OpenDoc7 in " + BridgeDispatcherFile,
+            }.OrderBy(entry => entry, StringComparer.Ordinal),
             named);
+    }
+
+    /// <summary>The bridge's dispatcher, by its path under the extractor folder (decision 148A).</summary>
+    internal const string BridgeDispatcherFile = "SwReview.Extractor/Bridge/BridgeDispatcher.cs";
+
+    /// <summary>
+    /// Decision 148A (2026-10-20, T184): the two callers that called the open by its bare name name it by
+    /// its qualified key now - <c>remodel.open</c> in the dispatcher and <c>probe remodel</c>'s reopen in the
+    /// probe host - and neither file names the bare <c>OpenDoc7</c>, which the read-only guard refuses; each
+    /// key is let through by its file's guard.
+    /// </summary>
+    [Fact]
+    public void TheOpensTwoOtherCallersNameItByItsQualifiedKeyAndNeverBare()
+    {
+        IReadOnlyList<(string Literal, string Where)> literals = Literals();
+        foreach (string file in new[] { BridgeDispatcherFile, CreationFamilyReadAuditTests.ProbeHostFile })
+        {
+            Assert.Contains(("ISldWorks.OpenDoc7", file), literals);
+            Assert.DoesNotContain(("OpenDoc7", file), literals);
+        }
+
+        new RemodelGuard().Assert("ISldWorks.OpenDoc7");
+        new RemodelProbeGuard().Assert("ISldWorks.OpenDoc7");
     }
 
     /// <summary>
@@ -1954,8 +2027,6 @@ public class DocumentLifecycleFamilyTests
         ["ISldWorks.OpenDoc6"] = "the console attach's read-only open of a part or assembly (SwSession.OpenReadOnly, "
             + "under the bare key), checked with IsOpenedReadOnly since decision 136A; the confirmed drawing's open "
             + "calls the qualified key through DrawingOpenGuard's allowlist",
-        ["ISldWorks.OpenDoc7"] = "feature 004's open of the re-modeler's own copy (remodel.open, under RemodelGuard) and "
-            + "probe remodel's reopen of its throwaway part",
         ["ISldWorks.CloseDoc"] = "the bare name of feature 004's stage-1 allowlist key ISldWorks.CloseDoc: denying it "
             + "would make that key override a read-only denial; the confirmed drawing's close and the console "
             + "attach's close of a document it opened that is not read-only both go through the identity check",
@@ -1967,6 +2038,10 @@ public class DocumentLifecycleFamilyTests
         // Decision 144A (the same day) removed ISldWorks.NewDocument: probe remodel's throwaway part is
         // created with it under the probe's own guard, so the read-only guard refuses it now and only
         // RemodelProbeGuard lets it through, one of the Exceptions below.
+        //
+        // Decision 148A (2026-10-20, T184) removed ISldWorks.OpenDoc7: its two callers, remodel.open and
+        // probe remodel's reopen, name it by its qualified key, so the read-only guard refuses the bare
+        // name and only the guards of its three callers let the key through, Exceptions below.
     };
 
     /// <summary>
@@ -1983,8 +2058,19 @@ public class DocumentLifecycleFamilyTests
             ["RemodelSeatGuard ISldWorks.ActivateDoc3"] = ("SwReview.AddIn/Remodel/SwRemodelSeat.cs",
                 "the re-modeler's pane seat makes the run's copy the active document, by its title and without a "
                 + "rebuild, for remodel.open_copy and before each dump (feature 004 T159); its own guard allowlists "
-                + "the qualified key and nothing else of the families but ISldWorks.OpenDoc7, which the read-only "
-                + "guard leaves allowed (decision 144A)"),
+                + "the qualified key and nothing else of the families but ISldWorks.OpenDoc7 (decision 144A)"),
+            ["RemodelSeatGuard ISldWorks.OpenDoc7"] = ("SwReview.AddIn/Remodel/SwRemodelSeat.cs",
+                "the re-modeler's pane seat opens the run's copy again, writable, for remodel.open_copy when SOLIDWORKS "
+                + "no longer has it open (feature 004 T159), under its own guard's qualified key (decision 144A); the "
+                + "read-only guard refuses the bare name since decision 148A"),
+            ["RemodelGuard ISldWorks.OpenDoc7"] = ("SwReview.Extractor/Bridge/BridgeDispatcher.cs",
+                "remodel.open opens the run's copy at its own path, Silent | LoadModel = 17 (feature 004 T061, step 8), "
+                + "by the qualified key on the stage-1 allowlist since decision 148A, behind the copy's path check and "
+                + "with the opened document's path asserted after it"),
+            ["RemodelProbeGuard ISldWorks.OpenDoc7"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
+                "probe remodel's PROBE-12 reopens its saved throwaway part (feature 004 T037): one of RemodelProbeGuard's "
+                + "run-scoped members since decision 148A, under the qualified key its host gates, in the one gate built "
+                + "with that guard, which refuses to run while any document is open"),
             ["RemodelProbeGuard NewDocument"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
                 "probe remodel creates its throwaway part, and PROBE-8's and PROBE-21's, with it (feature 004 T032): one "
                 + "of RemodelProbeGuard's run-scoped members since decision 144A, under the bare name its host gates, "

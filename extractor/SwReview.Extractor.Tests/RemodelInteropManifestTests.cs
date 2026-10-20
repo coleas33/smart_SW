@@ -416,7 +416,9 @@ public class RemodelInteropManifestTests
     /// stays on the read-only guard's denylist. *Since decision 144A (2026-10-19, feature 011 research
     /// R11)* the seat calls each of them through a gate of its own, whose guard, <c>RemodelSeatGuard</c>,
     /// allows <c>ISldWorks.ActivateDoc3</c> and <c>ISldWorks.OpenDoc7</c> by those keys; the column this
-    /// pins is the stage-1 allowlist's, which neither key is on.
+    /// pins is the stage-1 allowlist's, which <c>ActivateDoc3</c> is never on. <c>ISldWorks.OpenDoc7</c>,
+    /// which the seat shares with the bridge and which is not among these additions, joined it with
+    /// owner decision 148A (2026-10-20) for <c>remodel.open</c>.
     /// </summary>
     private static readonly string[] PaneSeatAdditions =
     {

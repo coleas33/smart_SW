@@ -20,7 +20,8 @@ namespace SwReview.AddIn.Remodel.Seat;
 /// (<see cref="CopyOpenSpecification"/>) and nothing else.
 ///
 /// <b>It calls COM directly and gates nothing itself</b> (T153's amendment): the bridge gates every
-/// call on it - the open and the close under <c>OpenDoc7</c> and <c>ISldWorks.CloseDoc</c>, the
+/// call on it - the open and the close under <c>ISldWorks.OpenDoc7</c> (the bare <c>OpenDoc7</c> until
+/// decision 148A) and <c>ISldWorks.CloseDoc</c>, the
 /// toggles through <see cref="RemodelSystemToggles"/>. What it does check, before any call, is that
 /// a path it is asked to open or close is inside a run folder's <c>copy/</c> subfolder
 /// (<see cref="RemodelCopy.RunDirectoryOf"/>'s rule) - the bridge has already checked the path is

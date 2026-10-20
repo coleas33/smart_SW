@@ -1236,7 +1236,9 @@ public class RemodelOpenHandlerTests : IDisposable
     /// U27: every native step of <c>remodel.open</c> - and the file work between them - has a
     /// <c>before</c> marker written ahead of it and an <c>after</c> marker once it returns, in the
     /// exact order the open makes them. The marker for <c>OpenDoc7</c> is asserted from inside
-    /// the seat's open, the only moment that proves it was written first.
+    /// the seat's open, the only moment that proves it was written first. Edited deliberately for
+    /// owner decision 148A (2026-10-20, feature 011 T184): the open is gated under its qualified key,
+    /// <c>ISldWorks.OpenDoc7</c>, and marked under it, as every other gated write of the open is.
     /// </summary>
     [Fact]
     public void Open_WritesABeforeMarkerAheadOfEveryStepAndAnAfterMarkerOnceItReturns()
@@ -1249,7 +1251,7 @@ public class RemodelOpenHandlerTests : IDisposable
             Assert.Equal(RemodelCommands.Open, command);
             markers.Add(marker);
         };
-        seat.DuringCall = _ => Assert.Equal("before OpenDoc7", markers.Last());
+        seat.DuringCall = _ => Assert.Equal("before ISldWorks.OpenDoc7", markers.Last());
         var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
         string probeId = Probe(dispatcher);
         Assert.Empty(markers);
@@ -1266,7 +1268,7 @@ public class RemodelOpenHandlerTests : IDisposable
                 "RecordSource",
                 "RemodelSystemToggles.Apply",
                 "File.Copy",
-                "OpenDoc7",
+                "ISldWorks.OpenDoc7",
                 "AssertOpenedAtCopy",
                 "ICustomPropertyManager.Add3",
                 "IFeatureManager.EditRollback",
@@ -1283,7 +1285,10 @@ public class RemodelOpenHandlerTests : IDisposable
             markers);
     }
 
-    /// <summary>A step that throws leaves <c>failed</c> in place of its <c>after</c>, and the open's unwind follows.</summary>
+    /// <summary>
+    /// A step that throws leaves <c>failed</c> in place of its <c>after</c>, and the open's unwind follows.
+    /// Edited deliberately for decision 148A (T184): the open's marker is its qualified key.
+    /// </summary>
     [Fact]
     public void Open_AStepThatThrowsLeavesAFailedMarkerInPlaceOfItsAfterMarker()
     {
@@ -1296,10 +1301,10 @@ public class RemodelOpenHandlerTests : IDisposable
 
         Assert.Equal(BridgeStatus.Error, dispatcher.Dispatch(OpenRequest(Probe(dispatcher))).Status);
 
-        int failed = markers.IndexOf("failed OpenDoc7");
-        Assert.True(failed > 0, "no failed marker for OpenDoc7.");
-        Assert.Equal("before OpenDoc7", markers[failed - 1]);
-        Assert.DoesNotContain("after OpenDoc7", markers);
+        int failed = markers.IndexOf("failed ISldWorks.OpenDoc7");
+        Assert.True(failed > 0, "no failed marker for ISldWorks.OpenDoc7.");
+        Assert.Equal("before ISldWorks.OpenDoc7", markers[failed - 1]);
+        Assert.DoesNotContain("after ISldWorks.OpenDoc7", markers);
 
         // The unwind's own steps are marked too, after the failure, so a crash inside the
         // clean-up is attributable as well.
@@ -1491,6 +1496,26 @@ public class RemodelOpenHandlerTests : IDisposable
             RemodelErrorCodes.BadRequest,
             Refusal(dispatcher.Dispatch(Request("2", RemodelCommands.Open, "{}"))));
         Assert.Null(services.RemodelRunRoot);
+    }
+
+    /// <summary>
+    /// Owner decision 148A (2026-10-20, feature 011 T184; research R11.8 item 1): <c>remodel.open</c> opens
+    /// the copy under its qualified key, <c>ISldWorks.OpenDoc7</c>, on the stage-1 allowlist - never the
+    /// bare name, which the read-only guard refuses - once, with nothing refused.
+    /// </summary>
+    [Fact]
+    public void Open_OpensTheCopyUnderItsQualifiedKeyOnTheStage1Allowlist()
+    {
+        FakeRemodelSeat seat = Seat();
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Single(_observer.Members, member => member == "ISldWorks.OpenDoc7");
+        Assert.DoesNotContain("OpenDoc7", _observer.Members);
+        Assert.Empty(_observer.Refusals);
+        Assert.Contains("ISldWorks.OpenDoc7", RemodelGuard.AllowedKeys);
+        Assert.Equal(new[] { _copyPath }, seat.Opened);
     }
 
     [Fact]
