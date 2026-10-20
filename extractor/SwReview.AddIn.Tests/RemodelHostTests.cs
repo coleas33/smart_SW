@@ -5170,8 +5170,8 @@ public sealed class RemodelHostTests
             Assert.Equal("backend_starting", statuses[before].GetProperty("stage").GetString());
             Assert.Equal(
                 press == "plan"
-                    ? "Restarting the review backend with the saved settings first, then reading the part..."
-                    : "Restarting the review backend with the saved settings first, then starting the run...",
+                    ? "Waiting for the review backend to restart with the saved settings, then reading the part..."
+                    : "Waiting for the review backend to restart with the saved settings, then starting the run...",
                 statuses[before].GetProperty("message").GetString());
             Assert.Single(statuses, status => status.GetProperty("stage").GetString() == "backend_starting");
         }
@@ -5222,9 +5222,9 @@ public sealed class RemodelHostTests
     /// naming no path, as this tab's words never do.
     /// </summary>
     private const string DocumentChangedWords =
-        "The active document changed after Remodel a copy was pressed, so nothing was copied and there "
-        + "is no plan. Your part was not changed. Make your part the active document and press Remodel a "
-        + "copy again.";
+        "The active document or its configuration changed after Remodel a copy was pressed, so nothing was "
+        + "copied and no new plan was made. Your part was not changed. Make your part the active document "
+        + "and press Remodel a copy again.";
 
     /// <summary>
     /// Plan reads the active document before its gate, and the gate can wait through a settings

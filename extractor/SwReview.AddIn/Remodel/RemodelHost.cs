@@ -245,25 +245,34 @@ public sealed class RemodelHost : IDisposable
     /// <summary>
     /// What `remodel.plan` answers when the active document, read again once the settings-restart
     /// gate has marked the host busy, is not the one the press was for (owner decision 145A, found on
-    /// review): the gate can wait through a restart, and the engineer can switch documents meanwhile.
-    /// No path: the tab says whose document it means without one.
+    /// review): the gate can wait through a restart, and the engineer can switch documents - or
+    /// configurations - meanwhile. True of a configuration switched alone, and of an earlier plan
+    /// waiting for Start, which is kept (third review). No path: the tab says whose document it
+    /// means without one.
     /// </summary>
     public const string DocumentChangedMessage =
-        "The active document changed after Remodel a copy was pressed, so nothing was copied and there "
-        + "is no plan. " + PartNotChanged + " Make your part the active document and press Remodel a "
-        + "copy again.";
+        "The active document or its configuration changed after Remodel a copy was pressed, so nothing "
+        + "was copied and no new plan was made. " + PartNotChanged + " Make your part the active document "
+        + "and press Remodel a copy again.";
 
     /// <summary>
-    /// What the page's run status line is told before a plan whose gate makes a settings restart
-    /// first, or waits for one being made (owner decision 145A, found on review): the seconds before
-    /// the plan go to the restart. Posted as `status {stage: "backend_starting"}`.
+    /// How the run status line's word on a settings restart before a press begins: true whether the
+    /// gate makes the restart, waits for one being made, or finds a turn or a backend that does not
+    /// answer holding it back and refuses the press - a look that can take a round trip's timeout
+    /// per chat (owner decision 145A, third review: the words said the backend was restarting).
     /// </summary>
-    public const string PlanAfterRestartMessage =
-        "Restarting the review backend with the saved settings first, then reading the part...";
+    private const string WaitingForTheRestart =
+        "Waiting for the review backend to restart with the saved settings, then ";
+
+    /// <summary>
+    /// What the page's run status line is told before a plan whose gate meets a settings restart
+    /// that waits or is being made (owner decision 145A, found on review). Posted as
+    /// `status {stage: "backend_starting"}`.
+    /// </summary>
+    public const string PlanAfterRestartMessage = WaitingForTheRestart + "reading the part...";
 
     /// <summary>...before a Start's run.</summary>
-    public const string StartAfterRestartMessage =
-        "Restarting the review backend with the saved settings first, then starting the run...";
+    public const string StartAfterRestartMessage = WaitingForTheRestart + "starting the run...";
 
     /// <summary>
     /// The full no-change reassurance for refusals before any copy change. Loss and cleanup
@@ -1269,12 +1278,10 @@ public sealed class RemodelHost : IDisposable
         }
         finally
         {
-            _busy = false;
-
             // Decision 24A: a re-attach that landed while this plan held the host was not told
             // then. It is asked about now, of whichever plan is on screen - the one just
             // recorded, or the earlier one if this plan was refused.
-            AnnounceLostPlan();
+            FreeTheHost();
         }
     }
 
@@ -1679,11 +1686,9 @@ public sealed class RemodelHost : IDisposable
                 // left in flight for Stop.
                 run.Phase = phaseBefore;
                 _active = null;
-                _busy = false;
-
                 // Decision 24A: a re-attach or a teardown that took the plan's session while Start
                 // held the host was not announced then; it is now, as the end of a plan announces it.
-                AnnounceLostPlan();
+                FreeTheHost();
             }
         }
     }
@@ -2473,6 +2478,17 @@ public sealed class RemodelHost : IDisposable
 
         _actions.SendError(id, held.ErrorClass, held.Message, held.Retryable);
         return false;
+    }
+
+    /// <summary>
+    /// Frees the host once a plan, or a Start that did not hand its run on, is over, and tells the
+    /// page of a plan lost while the host was busy, which nothing told it then (decision 24A). One
+    /// copy for Plan's `finally` and Start's (owner decision 145A, third review).
+    /// </summary>
+    private void FreeTheHost()
+    {
+        _busy = false;
+        AnnounceLostPlan();
     }
 
     /// <summary>

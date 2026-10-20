@@ -401,12 +401,15 @@ treated as a turn** (feature 002 `pane-host-messages.md`, `settings.save`).
   path or configuration - changed is refused `DocumentChanged`, in words that name no path. Without
   it the probe would read the document active by then and the bridge would refuse the open as
   `scope_not_probed`, which reaches the page as `ScopeRefused` with both paths in its message.
-- The page is told when a press makes a restart first. Before the gate, when a restart waits or is
-  being made, the host posts `status {stage: "backend_starting"}` - "Restarting the review backend
-  with the saved settings first, then reading the part..." for a plan, "...then starting the run..."
-  for a Start - which the page writes into its run status line, a backend-lifecycle stage and never a
-  run phase. Only words hang on it: the gate decides, and a reading that cannot be made says nothing.
-  A refusal replaces it, and a refused Start, like a refused plan, leaves the run status line empty.
+- The page is told when a press meets a restart first. Before the gate, when a restart waits or is
+  being made, the host posts `status {stage: "backend_starting"}` - "Waiting for the review backend to
+  restart with the saved settings, then reading the part..." for a plan, "...then starting the
+  run..." for a Start - which the page writes into its run status line, a backend-lifecycle stage and
+  never a run phase. The words are true whether the gate makes the restart, waits for it, or finds a
+  turn or a backend that does not answer holding it back and refuses the press (amended on the third
+  review the same day: they said the backend was restarting). Only words hang on it: the gate decides,
+  and a reading that cannot be made says nothing. A refusal replaces it, and a refused Start, like a
+  refused plan, leaves the run status line empty.
 - The page is told of every restart with `backend.restarted` (below) and asks `ready` again for the new
   port and token, leaving the run on screen as it is: the run's record is its run folder, which the
   restart does not touch, and this host reads `remodel.result` out of it, not the backend.

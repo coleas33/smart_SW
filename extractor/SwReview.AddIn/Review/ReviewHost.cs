@@ -1542,7 +1542,8 @@ public sealed class ReviewHost : IDisposable
 
         if (outcome == DeferredRestart.Outcome.Failed)
         {
-            SendError(id, "BackendUnavailable", failure!.Message, retryable: true);
+            BackendRequestException failed = RestartFailed(failure!);
+            SendError(id, failed.ErrorClass, failed.Message, failed.Retryable);
             return false;
         }
 
@@ -1597,9 +1598,9 @@ public sealed class ReviewHost : IDisposable
     }
 
     /// <summary>
-    /// The answer to a page call or a remodel run when the restart it made or waited for failed:
-    /// the failure, masked, as the backend's own `BackendUnavailable`, retryable. One copy for the
-    /// two answers that give it.
+    /// The answer to a new review, a page call or a remodel run when the restart it made or waited
+    /// for failed: the failure, masked, as the backend's own `BackendUnavailable`, retryable. One
+    /// copy for the three answers that give it.
     /// </summary>
     private BackendRequestException RestartFailed(Exception failure) =>
         new BackendRequestException("BackendUnavailable", Redact(failure.Message), retryable: true);
