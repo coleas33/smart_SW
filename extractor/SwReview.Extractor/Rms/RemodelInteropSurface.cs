@@ -221,7 +221,8 @@ public static class RemodelInteropSurface
 
     private static readonly RemodelInteropCall[] CallArray =
     {
-        // ---- the stage-1 write surface (contracts/guard-allowlist.md), twenty keys ----------
+        // ---- the stage-1 write surface (contracts/guard-allowlist.md), twenty-one keys ------
+        // (twenty until owner decision 148A put ISldWorks.OpenDoc7, below, on the allowlist)
 
         // The only move operation; MoveLocation is Before = 2 or After = 3.
         Call("IModelDocExtension", "ReorderFeature", Method, "System.Boolean", true,

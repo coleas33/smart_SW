@@ -873,8 +873,8 @@ public sealed class SwRemodelSeatTests
     /// <summary>
     /// The gate each action builds is the seat's own: its two keys and its five reads pass, and every
     /// other name is refused, bare or qualified, and told to the observer - the bare names the read-only
-    /// guard leaves allowed (<c>CloseDoc</c>, <c>OpenDoc6</c>, <c>OpenDoc7</c>) and a read the seat never
-    /// makes among them. Renamed on decision 144A's review (T176): it was
+    /// guard leaves allowed (<c>CloseDoc</c>, <c>OpenDoc6</c>), the bare <c>OpenDoc7</c>, which it left
+    /// allowed until decision 148A, and a read the seat never makes among them. Renamed on decision 144A's review (T176): it was
     /// <c>TheSeatsGateAllowsItsTwoKeysAndTheReadsAndRefusesAnyOtherCall</c>, which said more than the guard
     /// did. Edited deliberately for decision 148A (feature 011 T182), which closed the allowlist: it was
     /// <c>TheSeatsGateAllowsItsTwoKeysAndHandsEveryBareNameToTheReadOnlyGuard</c>, which pinned the bare

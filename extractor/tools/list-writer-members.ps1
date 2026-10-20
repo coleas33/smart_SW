@@ -64,8 +64,8 @@ $familyCount = $drawingFamilies.Count
 # interop declares - the COM twins (IOpenDoc*, IActivateDoc*, INew*) and bare LoadFile, LoadAddIn and
 # LoadAdminSettingsFile above all - is named below, and DocumentLifecycleFamilyTests (GuardTests.cs)
 # reflects the interop with the family grammar to prove the rows complete. The members left allowed
-# (OpenDoc6, OpenDoc7, CloseDoc, and NewDocument until decision 144A) are named as well, so the "Not
-# denied" table says why.
+# (OpenDoc6 and CloseDoc; NewDocument until decision 144A and OpenDoc7 until decision 148A) are named
+# as well, so the "Not denied" table says why.
 #
 # Decision 140A (2026-10-19) refuses IModelDoc2's Close, which 136A had to leave allowed, and Save
 # and Rebuild, IModelDocExtension's Rebuild with them: the bridge judges its commands against its own
