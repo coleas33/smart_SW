@@ -944,13 +944,15 @@ public class DrawingFamilyDenylistTests
     /// Every exclusion has one of contracts/guard.md section 3's reasons: the bare name of a
     /// stage-1 allowlist key, a member <see cref="RemodelGuard"/> refuses itself, or a member a
     /// sanctioned path already calls by its bare name - the extractor's read-only model open and
-    /// feature 004's two opens of documents it created (found by the read audit, T003), and, since
-    /// decision 140A refused the save and move families, the capture's image, <c>SaveBMP</c>, and
-    /// <c>probe remodel</c>'s move into a folder, <c>MoveToFolder</c>. Edited
+    /// feature 004's opens of the copy and of the throwaway part (found by the read audit, T003),
+    /// and, since decision 140A refused the save family, the capture's image, <c>SaveBMP</c>. Edited
     /// deliberately for decision 136A (2026-10-19), which accepted one exclusion more, <c>Close</c>,
     /// the member half of the bridge command <c>remodel.close</c> while the dispatcher handed command
     /// names to the read-only guard; and narrowed back for decision 140A the same day, when the
-    /// dispatcher stopped doing so: a bridge command's member half is no reason at all now.
+    /// dispatcher stopped doing so: a bridge command's member half is no reason at all now. Narrowed
+    /// again for decision 144A the same day: <c>NewDocument</c> and <c>MoveToFolder</c>, which only
+    /// <c>probe remodel</c> calls, are no exclusions now - the read-only guard refuses them and only the
+    /// probe's own guard lets them through (<see cref="TheProbesTwoWritersAreRefusedByEveryGateButTheProbesOwnBare"/>).
     /// </summary>
     [Fact]
     public void EveryExclusionHasOneOfTheContractsReasons()
@@ -959,9 +961,7 @@ public class DrawingFamilyDenylistTests
         {
             "OpenDoc6",
             "OpenDoc7",
-            "NewDocument",
             "SaveBMP",
-            "MoveToFolder",
         };
         var bareKeys = new HashSet<string>(
             RemodelGuard.AllowedKeys.Select(CallKey.BareName), StringComparer.OrdinalIgnoreCase);
@@ -979,16 +979,16 @@ public class DrawingFamilyDenylistTests
 
     /// <summary>
     /// The sanctioned calls stay allowed whether or not a grammar reached them: the extractor's
-    /// read-only model open, feature 004's copy open and throwaway part, the two shared names
-    /// feature 004's allowlist keys carry, and (decision 140A) the capture's image and
-    /// <c>probe remodel</c>'s move into a folder.
+    /// read-only model open, feature 004's opens of the copy and of the throwaway part, the shared
+    /// names feature 004's allowlist keys carry, and (decision 140A) the capture's image. Edited
+    /// deliberately for decision 144A (2026-10-19): <c>NewDocument</c> and <c>MoveToFolder</c> left
+    /// this list for <see cref="TheProbesTwoWritersAreRefusedByEveryGateButTheProbesOwnBare"/>, which
+    /// asserts they are refused, and let through only where the decision says.
     /// </summary>
     [Theory]
     [InlineData("OpenDoc6")]
     [InlineData("OpenDoc7")]
-    [InlineData("NewDocument")]
     [InlineData("SaveBMP")]
-    [InlineData("MoveToFolder")]
     [InlineData("CloseDoc")]
     [InlineData("SetUserPreferenceToggle")]
     [InlineData("set_Name")]
@@ -996,6 +996,37 @@ public class DrawingFamilyDenylistTests
     public void TheSanctionedCallsStayAllowed(string member)
     {
         ReadOnlyGuard.Assert(member);
+    }
+
+    /// <summary>
+    /// Decision 144A (2026-10-19; research R10.4 item 5): <c>probe remodel</c>'s two writers that the
+    /// read-only guard left allowed - <c>ISldWorks.NewDocument</c>, which creates the throwaway part,
+    /// and <c>IFeatureManager.MoveToFolder</c>, PROBE-5's move into a folder - are refused by it in both
+    /// spellings, and so by every gate the product builds, but for <see cref="RemodelProbeGuard"/>, which
+    /// lets the bare name its host gates through and nothing else: its run-scoped members, as
+    /// <c>ForceRebuild3</c> and <c>SaveAs3</c> are.
+    /// </summary>
+    [Theory]
+    [InlineData("ISldWorks.NewDocument")]
+    [InlineData("IFeatureManager.MoveToFolder")]
+    public void TheProbesTwoWritersAreRefusedByEveryGateButTheProbesOwnBare(string key)
+    {
+        string member = CallKey.BareName(key);
+        Assert.Contains(member, ExpectedMembers, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(member, ExcludedMembers, StringComparer.OrdinalIgnoreCase);
+
+        foreach (ICallGuard gate in GuardSweep.ProductGates())
+        {
+            Assert.Throws<MutatingCallError>(() => gate.Assert(key));
+            if (gate is RemodelProbeGuard)
+            {
+                gate.Assert(member);
+            }
+            else
+            {
+                Assert.Throws<MutatingCallError>(() => gate.Assert(member));
+            }
+        }
     }
 
     /// <summary>
@@ -1470,12 +1501,20 @@ public class DrawingFamilyReadAuditTests
             ? CallKey.BareName(literal)
             : literal;
 
+    /// <summary>
+    /// Edited deliberately for decision 144A (2026-10-19): a literal of <c>probe remodel</c>'s host that
+    /// the probe's own guard lets through is not a read but the probe's own call
+    /// (<see cref="IsTheProbesOwnCall"/>), as decision 21A's audit judges the probe's creation calls;
+    /// <see cref="TheProbesOwnCallsAreExactlyItsTwoWritersAndOnlyItsGuardLetsThemThrough"/> pins which.
+    /// </summary>
     [Fact]
     public void NoLiteralOfTheProductSourceIsRefusedByTheTableExceptTheNamedOnes()
     {
         var table = new HashSet<string>(DrawingFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
         var refused = Literals()
-            .Where(literal => table.Contains(Judged(literal.Literal)) && !NamedLiterals.ContainsKey(literal))
+            .Where(literal => table.Contains(Judged(literal.Literal))
+                && !NamedLiterals.ContainsKey(literal)
+                && !IsTheProbesOwnCall(literal))
             .Select(literal => $"\"{literal.Literal}\" in {literal.Where}")
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -1484,6 +1523,37 @@ public class DrawingFamilyReadAuditTests
             refused.Count == 0,
             "The feature 011 denials refuse a name the product source uses; a read that needs a refused "
                 + "member is a read that writes and is redesigned, never exempted: " + string.Join(", ", refused));
+    }
+
+    /// <summary>
+    /// Decision 144A (2026-10-19): a literal of <c>probe remodel</c>'s host
+    /// (<see cref="CreationFamilyReadAuditTests.ProbeHostFile"/>) that <see cref="RemodelProbeGuard"/>
+    /// lets through is one of the probe's own calls on its throwaway part, made through the one gate
+    /// built with that guard - never a read the table would refuse.
+    /// </summary>
+    private static bool IsTheProbesOwnCall((string Literal, string Where) literal) =>
+        literal.Where == CreationFamilyReadAuditTests.ProbeHostFile
+        && !GuardSweep.Refuses(new RemodelProbeGuard().Assert, literal.Literal);
+
+    /// <summary>
+    /// Decision 144A: the probe's own calls the table refuses are exactly its two writers the read-only
+    /// guard left allowed until then - <c>NewDocument</c> and <c>MoveToFolder</c> - and its guard lets
+    /// each through, so the exception is exercised and no wider: a later literal of the probe host the
+    /// table refuses fails here until someone decides what it is.
+    /// </summary>
+    [Fact]
+    public void TheProbesOwnCallsAreExactlyItsTwoWritersAndOnlyItsGuardLetsThemThrough()
+    {
+        var table = new HashSet<string>(DrawingFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
+        var named = Literals()
+            .Where(literal => literal.Where == CreationFamilyReadAuditTests.ProbeHostFile && table.Contains(Judged(literal.Literal)))
+            .Select(literal => literal.Literal)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(literal => literal, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(new[] { "MoveToFolder", "NewDocument" }, named);
+        Assert.All(named, member => new RemodelProbeGuard().Assert(member));
     }
 
     /// <summary>
@@ -1720,11 +1790,14 @@ public class DocumentLifecycleFamilyTests
         ["ISldWorks.CloseDoc"] = "the bare name of feature 004's stage-1 allowlist key ISldWorks.CloseDoc: denying it "
             + "would make that key override a read-only denial; the confirmed drawing's close and the console "
             + "attach's close of a document it opened that is not read-only both go through the identity check",
-        ["ISldWorks.NewDocument"] = "probe remodel's throwaway part (feature 004 T032, under RemodelProbeGuard)",
 
         // Decision 140A (2026-10-19) removed IModelDoc2.Close from this list: it was left allowed only
         // because the bridge handed the command name remodel.close to the read-only guard, which
         // judged it by its member half. The dispatcher no longer does, and nothing calls the member.
+        //
+        // Decision 144A (the same day) removed ISldWorks.NewDocument: probe remodel's throwaway part is
+        // created with it under the probe's own guard, so the read-only guard refuses it now and only
+        // RemodelProbeGuard lets it through, one of the Exceptions below.
     };
 
     /// <summary>
@@ -1743,6 +1816,10 @@ public class DocumentLifecycleFamilyTests
                 + "rebuild, for remodel.open_copy and before each dump (feature 004 T159); its own guard allowlists "
                 + "the qualified key and nothing else of the families but ISldWorks.OpenDoc7, which the read-only "
                 + "guard leaves allowed (decision 144A)"),
+            ["RemodelProbeGuard NewDocument"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
+                "probe remodel creates its throwaway part, and PROBE-8's and PROBE-21's, with it (feature 004 T032): one "
+                + "of RemodelProbeGuard's run-scoped members since decision 144A, under the bare name its host gates, "
+                + "in the one gate built with that guard, which refuses to run while any document is open"),
         };
 
     internal static bool BelongsToAFamily(string name) => Family.IsMatch(name);
@@ -2008,18 +2085,17 @@ public class DocumentWriteFamilyTests
                 + "paths: what keeps this path an image is the capture's own code, which names the PNG under the "
                 + "captures folder of the directory the host chose and checks its extension with AssertSaveAs first. "
                 + "SaveAs3 stays refused"),
-            ["IFeatureManager.MoveToFolder"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
-                "probe remodel's PROBE-5 moves a feature of its throwaway part into a folder: SwRemodelProbeHost gates "
-                + "the bare name under RemodelProbeGuard, which hands it to the read-only guard, as it does NewDocument "
-                + "(feature 004 T032); never the engineer's document, which probe remodel refuses to run beside. "
-                + "RemodelGuardTests keeps it as its example of a bare writer the denylist misses, the reason the "
-                + "re-modeler's writes are interface-qualified"),
+
+            // Decision 144A (2026-10-19) moved IFeatureManager.MoveToFolder from here to the Exceptions
+            // below: probe remodel's PROBE-5 needs it, so the read-only guard refuses it now and only
+            // RemodelProbeGuard lets it through, as it does ForceRebuild3 and SaveAs3.
         };
 
     /// <summary>
     /// What a guard written for an exception lets through of these families, as the guard's type and
     /// the key, each with the product file whose call needs it and the exception it is - exactly these.
-    /// The read-only guard and the confirmed drawing's guard let none through.
+    /// The read-only guard, the confirmed drawing's guard and the re-modeler's pane seat's guard let none
+    /// through.
     /// </summary>
     internal static readonly IReadOnlyDictionary<string, (string Where, string Reason)> Exceptions =
         new Dictionary<string, (string Where, string Reason)>(StringComparer.Ordinal)
@@ -2030,6 +2106,10 @@ public class DocumentWriteFamilyTests
                 "probe remodel rebuilds its throwaway part after each step (feature 004 T032)"),
             ["RemodelProbeGuard SaveAs3"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
                 "probe remodel saves its throwaway part into the run folder, behind RemodelProbe.AssertPartSavePath"),
+            ["RemodelProbeGuard MoveToFolder"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
+                "probe remodel's PROBE-5 moves a feature of its throwaway part into a folder (feature 004 T038): one of "
+                + "RemodelProbeGuard's run-scoped members since decision 144A, under the bare name its host gates; never "
+                + "the engineer's document, which probe remodel refuses to run beside"),
             ["RemodelGuard IModelDoc2.ForceRebuild3"] = ("SwReview.Extractor/Bridge/BridgeDispatcher.cs",
                 "the re-modeler's one rebuild of its own copy (feature 004's stage-1 allowlist)"),
             ["RemodelGuard IModelDoc2.Save3"] = ("SwReview.Extractor/Bridge/BridgeDispatcher.cs",

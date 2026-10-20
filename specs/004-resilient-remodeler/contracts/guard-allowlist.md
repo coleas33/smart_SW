@@ -20,7 +20,10 @@ wide open. *Amended 2026-09-25*: the owner's decision 21A (below) closes the cre
 them; the argument stands, because a denylist still cannot enumerate a write surface, and
 `IModelDoc2.Save` is still open. *Amended 2026-10-19 (owner decision 140A)*: `IModelDoc2.Save` is
 refused now (feature 011's table, below); the argument still stands - `IFeatureManager.MoveToFolder`
-passes as a bare name - and none of this file's keys moves.
+passes as a bare name - and none of this file's keys moves. *Amended 2026-10-19 (owner decision
+144A)*: `MoveToFolder` is refused now too, and only `probe remodel`'s guard lets it through (below);
+the argument still stands - `IModelDoc2.DeleteConfiguration2` passes as a bare name (feature 011's
+research R10.4 item 3) - and none of this file's keys moves.
 
 **Stage 1 adds nothing to `ReadOnlyGuard`.** The four narrowing denials
 (`IFeature.SetSuppression2` exempted under `SuppressTestGuard`,
@@ -108,7 +111,7 @@ is the output of `extractor/tools/list-writer-members.ps1` over `SolidWorks.Inte
 with `-CSharp`. `DrawingFamilyDenylistTests` (in `GuardTests.cs`) parses the table below and
 `DrawingFamilyCompletenessTests` reflects the interop to prove it complete. The "Already denied"
 column names members an earlier feature (or a denied prefix) refuses; they are not added twice.
-733 names are new; 646 distinct names match the writer grammar on the 28 families.
+735 names are new; 646 distinct names match the writer grammar on the 28 families.
 
 | Members refused (feature 011) | Interface; already denied |
 |---|---|
@@ -134,12 +137,12 @@ column names members an earlier feature (or a denied prefix) refuses; they are n
 | `set_Flipped` | `IDowelSymbol`; already denied: - |
 | `set_FitDisplayStyle`, `set_FitTextHeight`, `set_FitTextScale`, `set_FitUseTextScale`, `set_ShaftFit`, `set_ShowParenthesis`, `set_TextHeight`, `set_TextScale`, `set_ToleranceMax`, `set_ToleranceMin`, `set_ToleranceType`, `set_UseTextScale` | `ICalloutVariable`; already denied: `set_FitType`, `set_HoleFit` |
 | `set_Precision`, `set_TolerancePrecision` | `ICalloutLengthVariable`; already denied: - |
-| `ActivateDoc`, `ActivateDoc2`, `ActivateDoc3`, `ActivateTaskPane`, `AddFileOpenItem`, `AddFileOpenItem2`, `AddFileOpenItem3`, `AddFileSaveAsItem`, `AddFileSaveAsItem2`, `CloseAllDocuments`, `CloseAndReopen`, `CloseAndReopen2`, `CloseUserNotification`, `CopyAppearance`, `CopyDocument`, `CreateNewWindow`, `DocumentVisible`, `ExitApp`, `IActivateDoc`, `IActivateDoc2`, `IActivateDoc3`, `ICopyDocument`, `IMoveDocument`, `INewAssembly`, `INewDocument`, `INewDocument2`, `INewDrawing`, `INewDrawing2`, `INewPart`, `IOpenDoc`, `IOpenDoc2`, `IOpenDoc3`, `IOpenDoc4`, `IOpenDoc5`, `IOpenDocSilent`, `LoadAddIn`, `LoadAdminSettingsFile`, `LoadFile`, `LoadFile2`, `LoadFile3`, `LoadFile4`, `MoveDocument`, `NewAssembly`, `NewDrawing`, `NewDrawing2`, `NewPart`, `OpenDoc`, `OpenDoc2`, `OpenDoc3`, `OpenDoc4`, `OpenDocSilent`, `OpenModelConfiguration`, `PresetNewDrawingParameters`, `QuitDoc`, `RemoveFileOpenItem`, `RemoveFileOpenItem2`, `RemoveFileSaveAsItem`, `RemoveFileSaveAsItem2`, `ReplaceReferencedDocument`, `RunAttachedMacro`, `RunBatchSaveProcess`, `RunCommand`, `RunJournalCmd`, `RunMacro`, `RunMacro2`, `SaveSettings`, `SetNewFilename`, `ShowBatchSaveTo3DExperienceDlg`, `UnloadAddIn` | `ISldWorks`; already denied: - |
+| `ActivateDoc`, `ActivateDoc2`, `ActivateDoc3`, `ActivateTaskPane`, `AddFileOpenItem`, `AddFileOpenItem2`, `AddFileOpenItem3`, `AddFileSaveAsItem`, `AddFileSaveAsItem2`, `CloseAllDocuments`, `CloseAndReopen`, `CloseAndReopen2`, `CloseUserNotification`, `CopyAppearance`, `CopyDocument`, `CreateNewWindow`, `DocumentVisible`, `ExitApp`, `IActivateDoc`, `IActivateDoc2`, `IActivateDoc3`, `ICopyDocument`, `IMoveDocument`, `INewAssembly`, `INewDocument`, `INewDocument2`, `INewDrawing`, `INewDrawing2`, `INewPart`, `IOpenDoc`, `IOpenDoc2`, `IOpenDoc3`, `IOpenDoc4`, `IOpenDoc5`, `IOpenDocSilent`, `LoadAddIn`, `LoadAdminSettingsFile`, `LoadFile`, `LoadFile2`, `LoadFile3`, `LoadFile4`, `MoveDocument`, `NewAssembly`, `NewDocument`, `NewDrawing`, `NewDrawing2`, `NewPart`, `OpenDoc`, `OpenDoc2`, `OpenDoc3`, `OpenDoc4`, `OpenDocSilent`, `OpenModelConfiguration`, `PresetNewDrawingParameters`, `QuitDoc`, `RemoveFileOpenItem`, `RemoveFileOpenItem2`, `RemoveFileSaveAsItem`, `RemoveFileSaveAsItem2`, `ReplaceReferencedDocument`, `RunAttachedMacro`, `RunBatchSaveProcess`, `RunCommand`, `RunJournalCmd`, `RunMacro`, `RunMacro2`, `SaveSettings`, `SetNewFilename`, `ShowBatchSaveTo3DExperienceDlg`, `UnloadAddIn` | `ISldWorks`; already denied: - |
 | `ActivateFeatureMgrView`, `ActivateSelectedFeature`, `Close`, `CloseFamilyTable`, `ClosePrintPreview`, `DeActivateFeatureMgrView`, `EditCopy`, `FileReload`, `ForceReleaseLocks`, `IRelease3rdPartyStorage`, `Lock`, `LockAllExternalReferences`, `LockFramePoint`, `LockLightToModel`, `Quit`, `Rebuild`, `ReloadOrReplace`, `Save`, `Save2`, `SaveAs`, `SaveAs2`, `SaveAs4`, `SaveAsSilent`, `SaveSilent`, `SetReadOnlyState`, `SetSaveAsFileName`, `UnLock`, `UnlockAllExternalReferences`, `UnlockFramePoint` | `IModelDoc2`; already denied: - |
 | `CloseMessageBar`, `CloseUserNotification`, `CopyDraftingStandard`, `EditRebuildAll`, `IRelease3rdPartyStorageStore`, `LoadDraftingStandard`, `MoveDecal`, `Rebuild`, `ReleaseStream`, `ReloadOrReplace`, `RenameDocument`, `RenameDraftingStandard`, `SaveAs`, `SaveAs2`, `SaveDeFeaturedFile`, `SaveDraftingStandard`, `SavePackAndGo`, `SaveTo3DExperience`, `SaveViewToSolidworks`, `SetUserPreferenceDouble`, `SetUserPreferenceInteger`, `SetUserPreferenceString`, `SetUserPreferenceTextFormat`, `set_ShowPartRebuildIndicators` | `IModelDocExtension`; already denied: - |
 | `SaveToFile`, `SaveToFile2`, `SaveToFile3` | `IPartDoc`; already denied: - |
 | `CopyWithMates`, `CopyWithMates2`, `ForceRebuild2`, `ReplaceComponents`, `ReplaceComponents2`, `ReplacePLMComponents`, `SaveIsolate`, `set_EnableAssemblyRebuild` | `IAssemblyDoc`; already denied: - |
-| `MoveRotateLiveSectionPlane`, `set_MoveSizeFeatures` | `IFeatureManager`; already denied: - |
+| `MoveRotateLiveSectionPlane`, `MoveToFolder`, `set_MoveSizeFeatures` | `IFeatureManager`; already denied: - |
 
 Interfaces of the 28 whose every writer was already denied: `IGtolFrame` (`AddIndicator`, `DeleteIndicator`, `SetFrameToleranceType`, `SetIndicator`, `SetSymbolXml`).
 Interfaces of the 28 with no writer on this interop: `IGeneralTableFeature`, `ITitleBlockTableFeature`, `IMultiJogLeader`, `ICalloutAngleVariable`, `ICalloutStringVariable`.
@@ -147,8 +150,6 @@ Interfaces of the 28 with no writer on this interop: `IGeneralTableFeature`, `IT
 | Not denied (feature 011) | Why |
 |---|---|
 | `CloseDoc` | the bare name of feature 004's stage-1 allowlist key `ISldWorks.CloseDoc`; denying it would make that key override a read-only denial and move `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive` |
-| `MoveToFolder` | `probe remodel`'s PROBE-5, which moves a feature of its throwaway part into a folder (`SwRemodelProbeHost` gates the bare name under `RemodelProbeGuard`, which hands it to `ReadOnlyGuard`, as it does `NewDocument`); never the engineer's document, which `probe remodel` refuses to run beside. `RemodelGuardTests` keeps it as its example of a bare writer the denylist misses, the reason the re-modeler's writes are interface-qualified (decision 140A's review) |
-| `NewDocument` | `probe remodel`'s throwaway part (feature 004 T032, under `RemodelProbeGuard`, which exempts only the members `ReadOnlyGuard` refused when it was written); found by the read audit (T003) |
 | `OpenDoc6` | the console attach's read-only open of a part or assembly (`SwSession.OpenReadOnly`), checked with `IsOpenedReadOnly` after it (decision 136A); the confirmed drawing's open calls the qualified key through its own allowlist guard (`contracts/confirmed-open.md`) |
 | `OpenDoc7` | feature 004's open of the re-modeler's own copy (`remodel.open`, a bare read call site under `RemodelGuard`) and `probe remodel`'s reopen of its throwaway part; found by the read audit (T003) |
 | `SaveBMP` | the capture's image of a view: `SwCaptureView` gates the bare name on the session's read-only gate and has it write a bitmap of the graphics window beside the capture's PNG, at the PNG's name with `.bmp`. `SaveBMP` writes to whatever path it is handed, a document's included, and a guard judges names, never paths: what keeps this path an image is the capture's own code, which names the PNG under the `captures` folder of the directory the host chose and checks its extension with `AssertSaveAs` first. `SaveAs3` stays refused (decision 140A; corrected on its review, which found this said `SaveBMP` cannot write a document) |
@@ -388,7 +389,11 @@ exemptions. This table is the set; `ThrowawayPartExemptionTests` parses it and a
 | `CreateCircleByRadius` | PROBE-8's cylinder profile (`ISketchManager.CreateCircleByRadius`); decision 21A's table, through the bare name `IModelDoc2.CreateCircleByRadius` shares |
 
 The rest of `RemodelProbeGuard`'s exemption - `ForceRebuild3`, `SaveAs3`, the two toggles and
-PROBE-9's `SetSuppression2` - is unchanged and is not creation.
+PROBE-9's `SetSuppression2` - is unchanged and is not creation. *Amended 2026-10-19 (owner decision
+144A)*: `NewDocument`, which creates the throwaway part and PROBE-8's and PROBE-21's own, and
+`MoveToFolder`, PROBE-5's move into a folder, join it under the bare names the probe host gates: only
+`probe remodel` calls them, so feature 011's table above refuses both now, and no other gate lets
+either through (`011-drawing-context/research.md` R11.2).
 
 **What decision 21A does not close.** The grammar is the creation family of the four interfaces.
 Their other writers - edits, suppression and visibility writers, saves and rebuilds - are not in its
@@ -404,7 +409,8 @@ the save, rename, move and copy, replace, release and lock, read-only and rebuil
 `ISldWorks`, `IModelDoc2`, `IModelDocExtension`, `IPartDoc`, `IAssemblyDoc` and `IFeatureManager`
 (`011-drawing-context/research.md` R10); only `SaveBMP`, the capture's image, and `MoveToFolder`,
 `probe remodel`'s PROBE-5, stay allowed. The other writers and the creation on other interfaces
-stay as this paragraph leaves them.
+stay as this paragraph leaves them. *Amended 2026-10-19 (owner decision 144A)*: `MoveToFolder` is
+refused too, and only `RemodelProbeGuard` lets it through, so `SaveBMP` alone stays allowed.
 
 **None of them widens this allowlist either.** No member of the generated tables is the bare name
 of a stage-1 key or of `RemodelGuard.ExcludedMembers` (the generator excludes both, and the "Not

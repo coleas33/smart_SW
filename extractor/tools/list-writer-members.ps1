@@ -64,7 +64,8 @@ $familyCount = $drawingFamilies.Count
 # interop declares - the COM twins (IOpenDoc*, IActivateDoc*, INew*) and bare LoadFile, LoadAddIn and
 # LoadAdminSettingsFile above all - is named below, and DocumentLifecycleFamilyTests (GuardTests.cs)
 # reflects the interop with the family grammar to prove the rows complete. The members left allowed
-# (OpenDoc6, OpenDoc7, CloseDoc, NewDocument) are named as well, so the "Not denied" table says why.
+# (OpenDoc6, OpenDoc7, CloseDoc, and NewDocument until decision 144A) are named as well, so the "Not
+# denied" table says why.
 #
 # Decision 140A (2026-10-19) refuses IModelDoc2's Close, which 136A had to leave allowed, and Save
 # and Rebuild, IModelDocExtension's Rebuild with them: the bridge judges its commands against its own
@@ -74,9 +75,9 @@ $familyCount = $drawingFamilies.Count
 # The same decision names every member of the save, rename, move and copy, replace, release and lock,
 # read-only and rebuild families of these three interfaces and of IPartDoc, IAssemblyDoc and, on the
 # decision's review, IFeatureManager (three rows more; the drawing families' are writers of their
-# family rows already) that the guard did not refuse yet, and SaveBMP and MoveToFolder, which stay
-# allowed for the reasons below. DocumentWriteFamilyTests (GuardTests.cs) reflects the interop with
-# that family grammar to prove the rows complete. Three kinds of member are refused
+# family rows already) that the guard did not refuse yet, and SaveBMP, which stays allowed for the
+# reason below (as MoveToFolder did until decision 144A). DocumentWriteFamilyTests (GuardTests.cs)
+# reflects the interop with that family grammar to prove the rows complete. Three kinds of member are refused
 # already and are not named here: those Guard/ReadOnlyGuard.cs denies (Save3, SaveAs3, SetSaveFlag,
 # EditRebuild3, ForceRebuild3, ForceRebuildAll, and InsertFeatureReplaceFace by its InsertFeature
 # prefix); those this table's drawing rows deny by a bare name the document types share (EditRebuild,
@@ -153,9 +154,12 @@ $guard = Read-GuardSources $extractor
 $exclusions = New-GuardExclusions $guard
 $exclusions['OpenDoc6'] = "the console attach's read-only open of a part or assembly (``SwSession.OpenReadOnly``), checked with ``IsOpenedReadOnly`` after it (decision 136A); the confirmed drawing's open calls the qualified key through its own allowlist guard (``contracts/confirmed-open.md``)"
 $exclusions['OpenDoc7'] = "feature 004's open of the re-modeler's own copy (``remodel.open``, a bare read call site under ``RemodelGuard``) and ``probe remodel``'s reopen of its throwaway part; found by the read audit (T003)"
-$exclusions['NewDocument'] = "``probe remodel``'s throwaway part (feature 004 T032, under ``RemodelProbeGuard``, which exempts only the members ``ReadOnlyGuard`` refused when it was written); found by the read audit (T003)"
 $exclusions['SaveBMP'] = "the capture's image of a view: ``SwCaptureView`` gates the bare name on the session's read-only gate and has it write a bitmap of the graphics window beside the capture's PNG, at the PNG's name with ``.bmp``. ``SaveBMP`` writes to whatever path it is handed, a document's included, and a guard judges names, never paths: what keeps this path an image is the capture's own code, which names the PNG under the ``captures`` folder of the directory the host chose and checks its extension with ``AssertSaveAs`` first. ``SaveAs3`` stays refused (decision 140A; corrected on its review, which found this said ``SaveBMP`` cannot write a document)"
-$exclusions['MoveToFolder'] = "``probe remodel``'s PROBE-5, which moves a feature of its throwaway part into a folder (``SwRemodelProbeHost`` gates the bare name under ``RemodelProbeGuard``, which hands it to ``ReadOnlyGuard``, as it does ``NewDocument``); never the engineer's document, which ``probe remodel`` refuses to run beside. ``RemodelGuardTests`` keeps it as its example of a bare writer the denylist misses, the reason the re-modeler's writes are interface-qualified (decision 140A's review)"
+
+# Decision 144A (2026-10-19) withdrew two exclusions: NewDocument, which creates probe remodel's
+# throwaway part, and MoveToFolder, PROBE-5's move into a folder. Only probe remodel calls them, so
+# the shared rows refuse them now and RemodelProbeGuard's run-scoped members exempt them for its one
+# gate, as they exempt ForceRebuild3 and SaveAs3.
 
 function Test-AlreadyDenied([string] $name) {
     return (Test-DeniedBy $name $guard.BaseDenied $guard.BasePrefixes)
