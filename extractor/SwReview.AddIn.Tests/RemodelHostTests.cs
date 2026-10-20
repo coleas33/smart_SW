@@ -5020,6 +5020,111 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// A plan's session can go after the gate has marked the host busy - the tool service
+    /// re-attached, or a teardown ended it - and the notice that the plan is lost waits while the
+    /// host is busy (decision 24A). Start refuses the plan `SessionLost` and frees the host, and the
+    /// notice is given then, as the end of a plan gives it: Start does not stay on for a plan that
+    /// can no longer be started (owner decision 145A, found on review).
+    /// </summary>
+    [Theory]
+    [InlineData("re-attach")]
+    [InlineData("session ended")]
+    public void APlanLostAfterTheGateMarkedTheHostIsAnnouncedOnceStartFreesIt(string loss)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string runDir = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            world.Options.BeginRun = begin =>
+            {
+                begin();
+                if (loss == "re-attach")
+                {
+                    world.Reattach(SecondAttachment);
+                }
+                else
+                {
+                    world.Host.SessionEnded(world.EndOutcome(copyClosed: true));
+                }
+
+                return null;
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = runDir });
+
+            Assert.Equal("SessionLost", world.ErrorClass("s1"));
+            JsonElement lost = Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(runDir, lost.GetProperty("run_dir").GetString());
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
+    /// Anything that throws once the gate has marked the host busy, and before the run is handed to
+    /// its scheduler, leaves the host free: busy for the rest of the SOLIDWORKS session, it would hold
+    /// back every settings restart, and every new review with it (owner decision 145A, found on
+    /// review). The plan stays planned and startable, nothing is left in flight for Stop, and a page
+    /// already told `remodel.started` is told the run is over, by the status that ends a run.
+    /// </summary>
+    [Theory]
+    [InlineData("the attachment read")]
+    [InlineData("the scheduler")]
+    public void AStartThatFailsAfterTheGateLeavesTheHostFree(string failing)
+    {
+        const string Failure = "FICT the run could not be handed on";
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string runDir = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            Func<Action, BackendRequestException?> allowed = world.Options.BeginRun;
+            Func<string?> attachment = world.Options.ToolServiceAttachment;
+            Action<Action> schedule = world.Options.Schedule;
+            if (failing == "the attachment read")
+            {
+                world.Options.BeginRun = begin =>
+                {
+                    begin();
+                    world.Options.ToolServiceAttachment = () => throw new InvalidOperationException(Failure);
+                    return null;
+                };
+            }
+            else
+            {
+                world.Options.Schedule = work => throw new InvalidOperationException(Failure);
+            }
+
+            world.Receive("remodel.start", "s1", new { run_dir = runDir });
+
+            Assert.False(world.Host.RunInProgress);
+            Assert.Equal(RemodelRunPhase.Planned, world.Host.LatestRun!.Phase);
+            Assert.Equal(0, world.Pipeline.Count("run"));
+            if (failing == "the scheduler")
+            {
+                world.Reply("remodel.started", "s1");
+                Assert.Contains(world.AllPosted("status"), status =>
+                    status.GetProperty("stage").GetString() == "error"
+                    && (status.GetProperty("message").GetString() ?? string.Empty).Contains(Failure));
+            }
+            else
+            {
+                Assert.Empty(world.AllPosted("remodel.started"));
+                Assert.Equal("HostError", world.ErrorClass("s1"));
+            }
+
+            world.Options.BeginRun = allowed;
+            world.Options.ToolServiceAttachment = attachment;
+            world.Options.Schedule = schedule;
+            world.Receive("remodel.stop", "x1", new { });
+            Assert.Equal("RunNotFound", world.ErrorClass("x1"));
+            world.Receive("remodel.start", "s2", new { run_dir = runDir });
+            world.Reply("remodel.started", "s2");
+            Assert.Equal(1, world.Pipeline.Count("run"));
+        }
+    }
+
+    /// <summary>
     /// The words a plan whose document changed while its gate waited is refused with: plain, and
     /// naming no path, as this tab's words never do.
     /// </summary>

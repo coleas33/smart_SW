@@ -1606,29 +1606,63 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        // The gate may have waited through a settings restart - seconds in which the host was not
-        // busy, so the tool service was free to re-attach, or a teardown to end the plan's session.
-        // Read again now the host is busy, which a re-attach of the service's own asks before it
-        // moves: a run never starts on a session that went while the gate waited (decision 22A).
-        lost = LostSessionWords(run);
-        if (lost != null)
+        // From here the run holds the host. Whatever ends Start before the run is handed to its
+        // scheduler - the refusal below, or anything that throws - frees it again: a host left busy
+        // would hold back every settings restart, and every new review with it, until SOLIDWORKS
+        // restarts (owner decision 145A, found on review).
+        RemodelRunPhase phaseBefore = run.Phase;
+        bool started = false;
+        bool handedOver = false;
+        try
         {
-            _busy = false;
-            _actions.SendError(id, "SessionLost", lost, retryable: false);
-            return;
+            // The gate may have waited through a settings restart - seconds in which the host was
+            // not busy, so the tool service was free to re-attach, or a teardown to end the plan's
+            // session. Read again now the host is busy, which a re-attach of the service's own asks
+            // before it moves: a run never starts on a session that went while the gate waited
+            // (decision 22A).
+            lost = LostSessionWords(run);
+            if (lost != null)
+            {
+                _actions.SendError(id, "SessionLost", lost, retryable: false);
+                return;
+            }
+
+            run.Phase = RemodelRunPhase.Running;
+            _active = run;
+
+            // The reply goes first, so the page has the chat id before the first `status` or
+            // `remodel.change` arrives on it.
+            _actions.Send("remodel.started", id, new Dictionary<string, object?>
+            {
+                { "chat_id", run.RunId },
+            });
+            started = true;
+
+            _options.Schedule(() => Execute(pipeline, run));
+            handedOver = true;
         }
-
-        run.Phase = RemodelRunPhase.Running;
-        _active = run;
-
-        // The reply goes first, so the page has the chat id before the first `status` or
-        // `remodel.change` arrives on it.
-        _actions.Send("remodel.started", id, new Dictionary<string, object?>
+        catch (Exception failure) when (started)
         {
-            { "chat_id", run.RunId },
-        });
+            // The page was told the run began, and none is coming: it is told the run is over by
+            // the status a run's end posts, and the failure is answered as any failure is.
+            PostStatus("error", failure.Message);
+            throw;
+        }
+        finally
+        {
+            if (!handedOver)
+            {
+                // Nothing runs: what Start set is undone, the plan stays startable, and nothing is
+                // left in flight for Stop.
+                run.Phase = phaseBefore;
+                _active = null;
+                _busy = false;
 
-        _options.Schedule(() => Execute(pipeline, run));
+                // Decision 24A: a re-attach or a teardown that took the plan's session while Start
+                // held the host was not announced then; it is now, as the end of a plan announces it.
+                AnnounceLostPlan();
+            }
+        }
     }
 
     /// <summary>
@@ -2380,9 +2414,11 @@ public sealed class RemodelHost : IDisposable
     /// (owner decision 145A), so a settings restart that waits is made first, or the one being
     /// made is waited for, and none can begin under the plan or the run. Answers whether the host
     /// is now busy; when it is not, the press has been answered with the gate's refusal - its class,
-    /// words and flag - and the host is left free. A gate that throws leaves the host free too, so
-    /// one failure cannot hold every later plan, and the restart waiting on the run, back for good;
-    /// the throw is the press's answer, as `Receive` gives any failure.
+    /// words and flag - and the host is still free, since a gate that refuses runs no step
+    /// (<see cref="ReviewHost.BeginRemodelRun"/>). A gate that throws leaves the host free
+    /// too, whether or not it ran the step, so one failure cannot hold every later plan, and the
+    /// restart waiting on the run, back for good; the throw is the press's answer, as `Receive`
+    /// gives any failure.
     /// </summary>
     private bool BeganRun(string? id)
     {
@@ -2402,7 +2438,6 @@ public sealed class RemodelHost : IDisposable
             return true;
         }
 
-        _busy = false;
         _actions.SendError(id, held.ErrorClass, held.Message, held.Retryable);
         return false;
     }
