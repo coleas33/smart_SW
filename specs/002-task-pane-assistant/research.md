@@ -828,7 +828,15 @@ hid the tab and is not amended here.
     stale-result rule is applied to the document the `init` names, which is the one open. These
     pages hold no stream, and retry no call: a check's `POST`, an Accept or a re-read already
     made with the old token is refused by the new backend, or fails with the old one, and is
-    answered as any failed call is; the engineer presses again, on the new backend.
+    answered as any failed call is; the engineer presses again, on the new backend. *Second
+    review (T121, T122):* a call the page makes while that `init` is on its way waits for it,
+    and for the one more ask after it, and carries the token they leave: the host answers
+    `ready` on the tab's own pump, behind an extraction already running there, so a check
+    pressed as the backend restarted got its extraction's reply first and called its route
+    with the old token. And a latest check the page could not read - a tab opened during a
+    restart reads it with the token of an `init` the host gave before - is read again by the
+    next `init` while the tab shows no result and no check is in flight; one the page did read
+    is still not read again.
   - The Remodel page: `applyInit(payload, false)` - the backend, the token, the run root, the
     document, the limits and the seat capability - and it does not read `latest_run` again.
     Decision: its `init` used to re-read its latest run (`renderRun`, the `plan_lost` notice,
@@ -888,8 +896,8 @@ hid the tab and is not amended here.
     for good.
   - Threading and the lock order: the gate runs on the Remodel page's own pump, while the
     restart is made from the watcher's thread, the review page's pump or a proxied request's
-    thread. `DeferredRestart` keeps the order it documents - its restart lock, then its state lock
-    - and `Begin` takes the restart lock and reads the state under it, as `Apply` does; the step it
+    thread. `DeferredRestart` keeps the order it documents, its restart lock and then its state
+    lock, and `Begin` takes the restart lock and reads the state under it, as `Apply` does; the step it
     runs there writes a volatile flag and nothing more: no lock, no call back into the restart,
     nothing that blocks. A restart the gate makes posts `backend.restarted` and tells the other
     tabs from the Remodel pump, under the lock, as 143A's restarts post from the other callers'
@@ -934,12 +942,17 @@ hid the tab and is not amended here.
 - **Edge cases**, each decided and tested (T113, T115, T118):
   - A save's restart made at once tells every other tab once; a restart that waited tells them
     once it is made and not before; one a new review, a turn call or a remodel run makes tells
-    them too; a failed restart, at once or after waiting, tells them nothing; a tab that cannot
-    be told leaves the save answered `settings.saved` and the Review page told.
+    them too; a failed restart, at once or after waiting, never tells them it restarted - one
+    that failed once the old backend had stopped tells them the failure, masked, as a failed
+    first start is told (T129), and one that failed before it stopped anything tells them
+    nothing; a tab that cannot be told, of either, leaves the save answered `settings.saved`
+    and the Review page told.
   - A page told while an `init` is on its way asks once more after it, and only once, however
     many messages arrive meanwhile; its next call carries the new token, and none the old.
-  - A save during a remodel run is kept and says the run's sentence; nothing is asked of the
-    backend while the run lasts; the backend restarts once, with the saved settings, when it ends.
+  - A save during a remodel run is kept and says the run's sentence; the watcher asks nothing of
+    the backend while the run lasts, since it reads the run first - the save itself asks about
+    the turns before it writes, as every save does, and once more for its sentence; the backend
+    restarts once, with the saved settings, when the run ends.
     A save a turn also started during says the sentence for both and waits for both, whichever
     ends first.
   - A run started with nothing waiting begins at once and asks nothing; the moment the turn ends
@@ -959,7 +972,15 @@ hid the tab and is not amended here.
     free.
   - A Start whose plan's session went while its gate waited - the tool service re-attached, or a
     teardown ended the session - is refused `SessionLost` in decision 22A's words, before
-    `remodel.started` and before any call, and the host is left free.
+    `remodel.started` and before any call, and the host is left free; a loss that came after
+    the gate marked the host busy is announced `remodel.plan_lost` as Start frees it (T125).
+  - A plan whose document - another part, another configuration, or none - changed while its
+    gate waited is refused `DocumentChanged` before any call, in words that name no path, the
+    earlier plan left as it was; the same part spelled otherwise still plans (T123).
+  - Anything that throws after Start's gate and before its run is handed on frees the host,
+    puts the plan back and leaves nothing for Stop; a page told `remodel.started` is told the
+    run is over (T125). A press that makes a restart first, or waits for one being made, says
+    so first, and a refused Start leaves the run status line empty (T131).
 - **Evidence** (at `ef6d1ce`):
   - A save restarted the backend under a remodel run: `ReviewHost.Save` checks only the turns
     before it writes (`ReviewHost.cs:1049`) and restarts through `DeferredRestart.Now` (`:1168`),
@@ -996,12 +1017,52 @@ hid the tab and is not amended here.
     answers without reading the run; the comment, `Outcome.RemodelRunning`, the class summary and
     the unit case's name now say so, and a case through the host pins it: no backend process, a
     run in progress, and the restart made only when the run ends.
+- **Second review**: an independent adversarial review of the branch at `020fec8` found no
+  must-fix - no lock inversion, `Begin`'s loop sound, 36 of its 40 mutations caught - and the
+  items below, settled test first by T121 to T132:
+  - A check pressed as the backend restarted called its route with the old token (S1), and a
+    check tab opened during a restart could come up blank (N5): `check-page.js`'s calls wait
+    for the `init` on its way, and a latest check that could not be read is read again (above).
+  - Plan read the active document before its gate and its probe read whatever was active after
+    (S2). The bridge's `scope_not_probed` caught the switch, but its words name both full paths
+    and reach the page as `ScopeRefused`, and an assembly made active got a refusal about a
+    document the engineer never pressed for. Plan reads the document again once the gate has
+    marked the host busy, by `PageDocument.IsSameDocument`, and refuses `DocumentChanged`.
+  - "A throw is read as busy" was written down and tested nowhere (S3): two cases pin it, one
+    per layer (T127), and the review's mutations D8, R9 and R13 now go red.
+  - A failed restart told the other tabs nothing (N4). Decision: they are told as a failed first
+    start is told to every page, `status {stage: "error"}` with the failure, masked - only when
+    no backend is up after it, since one that failed before it stopped anything left their
+    tokens working. Not `backend.stopped`: its payload names a process's exit code, and every
+    page's sentence for it sends the engineer to reopen the pane, which starts no backend.
+  - While a press waited in the gate the Remodel page said only "Reading the part..." or
+    "Running..." (N6). Telling it is cheap - the existing `status` message, the
+    `backend_starting` stage the page already writes into its run line, and one reading
+    (`ReviewHost.RestartAhead`: a restart that waits, which stays pending until it ends, or a
+    save's being made at once) - so it is told, before the gate. A refused Start now empties the
+    run line, as a refused plan already did, since the restart's sentence would otherwise stay
+    under the refusal.
+  - Repetition (N7): `ReviewHost`'s refusals for an unloading add-in and for a failed restart
+    are written once each (T128). The pages' restart handling is not consolidated (below).
+  - Start had no `try`/`finally` after the gate (N8), and its refusal after the gate did not
+    announce the lost plan (N9): both settled in one `finally` (T126). Two throwing seams test
+    it - the attachment read after the gate, and the scheduler.
+  - This entry said nothing was asked of the backend while a run lasts, true of the watcher and
+    not of the save (N10); the edge cases above now say which.
+  - `BeganRun`'s busy reset on a refusal never mattered (N11, the review's equivalent mutant
+    H7): 145A added it (`e732436`), and it is removed (T126).
 - **Not changed**:
   - Discard copy's close is one backend round trip that holds nothing back: a restart that lands
     during it fails the close, and Discard deletes `copy/` anyway, as it does when the bridge does
     not answer. A check (Model check, Standards) is not a turn to the restart either: its call in
     flight when the backend restarts fails as any call to a backend that stopped does.
-  - No host posts `backend.stopped`, which every page's contract names and every page handles.
+  - No host posts `backend.stopped`, which every page's contract names and every page handles: a
+    failed restart is told as a failed first start is (above). Its sentence on every page, "The
+    backend stopped. Reopen the pane to start it again.", names a way that starts no backend -
+    the add-in starts it when it loads - and is left for the owner with the message.
+  - After a failed restart a check page's backend strip still says "Backend ready", the
+    banner carrying the failure, as after a failed first start it says "Backend starting": the
+    strip follows `init`, not `status`. Left for the owner.
   - The supervisor's own check (`BackendSupervisor`'s delegate) still asks only about turns: every
     restart reaches it through the review host's lock, which now reads the run first.
   - The Review page's script: it takes whichever of the host's sentences is on its banner off it,
@@ -1013,10 +1074,23 @@ hid the tab and is not amended here.
     service down, in which a Start that has read its session just after its mark can still lose
     it: Start's reading and its mark had that moment before 145A, and the gate's wait no longer
     widens it.
-  - A plan reads the active document before its gate, and its probe reads it afresh after; the
-    bridge refuses an open whose probe was not of that exact source (`scope_not_probed`), so a
-    part switched while the gate waited fails the plan before anything is copied, and the wrong
-    part is never planned.
+  - `scope_not_probed`'s words name both full paths, and reach the page as `ScopeRefused`
+    (`chat/remodel.py`), on a tab whose words name no path. Since T124 only a part switched in the
+    moment between a plan's second reading of the document and its probe meets them. Older than
+    145A; put to the owner.
+  - The restart and re-`init` handling is still written in three page scripts - `app.js`,
+    `check-page.js`, `remodel.js`. The one script all three load is `web/shared/dom.js`, whose
+    charter keeps it to building nodes, with no page state, host bridge or network, so the
+    injection tests can call it inside the real page; a fourth shared script would be a new
+    include on three pages. What the three share is about a dozen lines - the
+    `initPending`/`initAgain` pair and the `backend.restarted` case - around halves that differ:
+    the Review page's `replacedToken` and stream close, a check page's waiting calls and its
+    latest check, the Remodel page's `latest_run`. Left for the owner.
+  - The review host's catch in `RemodelRunInProgress` is redundant with `DeferredRestart`'s own,
+    which reads a look that throws as no hold and then reads the run again under the lock. It is
+    kept, since the look is documented never to throw; the mutant that removes it is equivalent.
+  - The Remodel page's restart sentence is read before the gate: a restart that begins to wait
+    between that reading and the gate is made without it, and only the words are missed.
   - Seen while reviewing, in 143A's area and left for the owner: a new review reads the active
     document before it makes a waiting restart first (`ReviewHost.StartReview`, `BackendReady`),
     and its dump attaches to whatever is active after (`SwReviewDump.Run`). A restart takes
@@ -1024,9 +1098,14 @@ hid the tab and is not amended here.
     could hold another's evidence; nothing like `scope_not_probed` stands between the two.
 - **Mutations**: each fix is pinned by a case that turns red when it is taken out: 14 mutations
   for the tabs (T114), 38 red results in all; 21 for a remodel run (T116), 75 red results in
-  all; and 4 for the review's findings (T119), 10 red results in all - each taking one fix out,
-  the tree rebuilt and restored after each.
-- **Tests**: T113, T115 and T118 in [tasks.md](tasks.md), each written first.
+  all; and 4 for the review's findings (T119), 10 red results in all; and for the second review
+  45 - 7 for the check pages (T122), 26 red results; 6 for a plan's document (T124), 13; 6 for
+  Start after its gate (T126), 16; 7 for a throwing run reading and the refusals written once
+  (T127, T128), 9, the one that removes the review host's own catch surviving as an equivalent
+  mutant; 8 for a failed restart (T130), 15; and 11 for the restart-first sentence (T132), 14 -
+  93 red results in all - each taking one fix out, the tree rebuilt and restored after each.
+- **Tests**: T113, T115, T118, T121, T123, T125, T127, T129 and T131 in [tasks.md](tasks.md),
+  each written first except T127, which pins what T116 built.
 
 ### 146A. Three run-folder fixes left by 142A (2026-10-19)
 
