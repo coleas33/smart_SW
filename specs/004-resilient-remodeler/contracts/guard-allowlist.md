@@ -453,6 +453,14 @@ real on 2024 SP5:
 delegates to `ReadOnlyGuard.Assert(BareName(qualifiedKey))`, so the read-only rules still apply
 unchanged to everything off the list. Only the remodel call sites use qualified keys; the
 reviewer's existing `SwGate.Call("GetChildren", ...)` sites keep bare names and are untouched.
+*Corrected 2026-10-20 (feature 011, owner decision 151A; its research R13.5)*: the guard does not
+hand a qualified key off the list to `ReadOnlyGuard`, and has not since it landed (`ceada16`,
+2026-09-16): it refuses it outright, naming it, the list being the whole of the write surface, and
+refuses a member on its own exclusions (below) however it is spelled; only a bare name is
+`ReadOnlyGuard`'s answer.
+Since decision 151A that rule is the one the product's three allowlist guards share
+(`Guard/AllowlistGuard.cs`; 011 `contracts/guard.md` section 9), `RemodelGuard` keeping its list, its
+exclusions and its words.
 
 Within the remodel family the rule is **qualified keys at write call sites, bare names at read call
 sites**. The probe and the remodel handlers' own reads (`GetObjectByPersistReference3`,
@@ -636,7 +644,10 @@ drawing the engineer confirms, read-only, "through the guarded seam, with its ow
 entry. `Guard/DrawingOpenGuard.cs` is an `ICallGuard` in the shape of `RemodelGuard`, built only by
 `Sw/DrawingOpenScope.cs`: the three keys below, matched **ordinally**; any other
 interface-qualified key refused naming it; a bare name - every read - answered by `ReadOnlyGuard`,
-unchanged.
+unchanged. *Amended 2026-10-20 (feature 011, owner decision 151A)*: those answers are the rule the
+product's three allowlist guards share (`Guard/AllowlistGuard.cs`; 011 `contracts/guard.md` section
+9); the entry keeps its three keys, its words and its one construction site, and answers every name as
+it did.
 
 | Key (feature 011, confirmed open) | Used for | Composition, asserted as integers |
 |---|---|---|
@@ -679,7 +690,11 @@ go through a gate of its own now, built per action, whose guard is `Guard/Remode
 answered by `ReadOnlyGuard`, unchanged. It is built only by the seat. *Amended 2026-10-20 (owner
 decision 148A; feature 011's research R12.1)*: a closed allowlist - the two keys and the five reads
 below, each ordinally, and every other name, bare or qualified, refused, naming it; until then the
-bare `CloseDoc`, `OpenDoc6` and `OpenDoc7` that `ReadOnlyGuard` left allowed passed it.
+bare `CloseDoc`, `OpenDoc6` and `OpenDoc7` that `ReadOnlyGuard` left allowed passed it. *Amended
+2026-10-20 (owner decision 151A)*: those answers are the rule the product's three allowlist guards
+share (`Guard/AllowlistGuard.cs`; feature 011's `contracts/guard.md` section 9), with the seat's bare
+names its five reads alone; the entry keeps its keys, its reads, its words and its one construction
+site, and answers every name as it did.
 
 | Key (feature 011, decision 144A, the pane seat) | Used for | Composition, asserted as integers |
 |---|---|---|
