@@ -500,13 +500,13 @@ hid the tab and is not amended here.
     so while a restart waits the pane's proxy asks the review host
     (`TaskPaneOptions.PageTurnRefusal`, `ReviewHost.PageTurnRefusal`) and never sends it: while
     something holds the restart back it is refused with what, as a new review is; otherwise the
-    restart is made, or waited for, and the call is answered `UnknownChat` - or
-    `BackendUnavailable` when that restart failed and there is no backend. A refusal goes out
-    with the status and the `retryable` flag the backend gives its class - `TurnRunning` 409, not
-    retryable, and `UnknownChat` 404, as `chat/server.py` answers them - and the host's own
-    words, which say why. Stop, dispositions and the timing are never held: Stop must reach the
-    backend while a turn holds the restart back, and a disposition sent before the restart is
-    recorded, where one held until after it would only be refused.
+    restart is made, or waited for, and the call is answered `UnknownChat` once one has been
+    made - or `BackendUnavailable`, with the failure, when the restart it made or waited for
+    failed. A refusal goes out with the status and the `retryable` flag the backend gives its
+    class - `TurnRunning` 409, not retryable, and `UnknownChat` 404, as `chat/server.py` answers
+    them - and the host's own words, which say why. Stop, dispositions and the timing are never
+    held: Stop must reach the backend while a turn holds the restart back, and a disposition
+    sent before the restart is recorded, where one held until after it would only be refused.
   - The page is told with `backend.restarted {sentences}`, takes whichever of the host's
     sentences about the wait - the promise, or that the backend is not answering - is on its
     banner off it, and nothing else there, and asks `ready` again for the new port and token, as
@@ -517,7 +517,10 @@ hid the tab and is not amended here.
     backend's token (feature 015 FR-042); and it closes the old chat's stream and any reconnect
     its close left waiting, since the new backend does not hold that chat. A failed restart is
     reported as a failed start is - `status {stage: "error"}` with its message - and not
-    retried: the next save is the retry, as after any failed start.
+    retried: the next save is the retry, as after any failed start. A review or turn call that
+    waited for a restart someone else was making - the watcher, another call, a save - is told
+    what became of it: made, or failed with that same failure (`DeferredRestart`, a count of the
+    restarts that ended and the last one's failure, read against the count seen before waiting).
   - A page that asks `ready` again while it reads a stream on the same backend asks for that
     stream again, from the last event it showed. The host's `ready` closes the reader it holds
     for the page, as a reload needs; and the save a turn started during re-inits the page while
@@ -594,7 +597,7 @@ hid the tab and is not amended here.
   - The sentence needs no change: it is now what happens, unless a remodel run outlasts the
     turn (owner question 1, below). The up-front refusal's old sentence made the kind of promise
     143A removes, in a smaller place, so it is corrected with the behaviour.
-- **Edge cases**, each pinned by a test (T079, T081, T083, T085, T087, T089, T092):
+- **Edge cases**, each pinned by a test (T079, T081, T083, T085, T087, T089, T092, T095):
   - However the turn ends - normally or stopped (`ended`), in an error (`failed`), asking the
     engineer (`waiting_engineer`), or a Send that failed back to waiting (`awaiting_send`) - the
     chat leaves `running`, and the restart is made. The contract names none of them as a reason
@@ -636,7 +639,13 @@ hid the tab and is not amended here.
     backend's status and flag for that class; with nothing waiting, every call goes on as
     before and nothing is asked.
   - A restart that fails is reported, whatever it threw, with the key masked, and is not tried
-    again; the backend is then down, as after any failed start, until the next save.
+    again, and every review or turn call that waited for it is told the same failure - never
+    that the backend restarted, and never let through to the backend there is. One that fails
+    before it stops anything - the configured launcher has gone, so its start options cannot be
+    built - leaves the old backend up, with the environment it was started with and its chats;
+    one that fails after stopping it leaves no backend. Either way the next save is the retry,
+    as after any failed start, and a save's own failed restart is told to those that waited for
+    it the same way.
   - Disposing the host - the add-in unloading - while a restart waits stops the watcher without
     waiting a poll out, and nothing asks or restarts afterwards. A restart already under way
     when the host is disposed - past the lock's check that one still waits - is not stopped or
@@ -743,8 +752,16 @@ hid the tab and is not amended here.
   (corrected); a stop test failed once under a loaded run (read from the code as two test
   classes changing the runner's one console at once - the add-in makes every stop under one
   gate - so the classes that start stub children now run one at a time; not seen again); and the
-  label for a backend that does not answer says "not running" (Not changed, above). Each fix
-  is pinned: 26 mutations for the first pass and 9 for the second, each taking one fix
-  out, turn 66 and 21 cases red (T089, T092).
-- **Tests**: T079, T081, T083, T085, T087, T089 and T092 in [tasks.md](tasks.md), each written
-  first.
+  label for a backend that does not answer says "not running" (Not changed, above). A third
+  pass, on `50db9fa`, found two more, which T095 and T096 settle test first: nothing pinned
+  the watcher's stop taking itself off the books, without which a save refused later starts
+  no new watcher and is never restarted (pinned: a save refused after the watcher stopped is
+  restarted by a new one); and a caller that waited for a restart which failed before it
+  stopped anything was told the backend had restarted, or let through to the old backend
+  with the new settings, while the caller that made the attempt was refused (a waiter is now
+  told what became of the restart it waited for - made, or that failure - for a turn call, a
+  review and a save's restart alike). Each fix is pinned: 26 mutations for the first pass, 9
+  for the second and 5 for the third, each taking one fix out, turn 66, 21 and 21 cases red
+  (T089, T092, T095).
+- **Tests**: T079, T081, T083, T085, T087, T089, T092 and T095 in [tasks.md](tasks.md), each
+  written first.
