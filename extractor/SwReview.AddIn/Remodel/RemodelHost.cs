@@ -315,6 +315,50 @@ public sealed class RemodelHost : IDisposable
         + "document SOLIDWORKS has active under the run. Press Open copy again once the run has finished.";
 
     /// <summary>
+    /// Owner decision 155A (004 research R18): what the tab says for `DocumentDirty`, whoever refused - this
+    /// host's own reading of the probe's signals, or the bridge's probe or its reading of the part again
+    /// inside `remodel.open`, before the copy. The bridge's sentences name the part's full path, and the
+    /// backend passes them on, so the page is given these words instead (<see cref="PageWords"/>); the
+    /// bridge's sentence stays in the tool-service log's line for the request it refused. No path, the way
+    /// on by the button's label, and the engineer's part vouched for alone, as the tab's other refusals of a
+    /// plan do (<see cref="DocumentChangedMessage"/>).
+    /// </summary>
+    public const string DocumentDirtyMessage =
+        "Your part has unsaved changes, and the re-modeler copies the part as it is saved on disk, so "
+        + "nothing was copied and no new plan was made. " + PartNotChanged + " Save it, or close it "
+        + "without saving and open it again, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 155A: what the tab says for `ExternalReferences`, whoever refused, by
+    /// <see cref="DocumentDirtyMessage"/>'s rules. It names no button: pressing again changes nothing, and
+    /// breaking the part's references is a change to the engineer's own part, which this tab does not ask
+    /// for.
+    /// </summary>
+    public const string ExternalReferencesMessage =
+        "This part references other files, which this remodel cannot copy with it, so nothing was "
+        + "copied and no new plan was made. " + PartNotChanged + " This version remodels only parts "
+        + "that reference no other files.";
+
+    /// <summary>
+    /// Owner decision 155A: what every row that looks a run up answers for a run folder this host has no
+    /// record of (`RunNotFound`) - Start, the result, Open copy, Discard copy, Show and the shared rows'
+    /// lookup - where it named the folder the page sent. A host keeps its runs for as long as it lives, so
+    /// a page naming one it does not have is showing a run from before it.
+    /// </summary>
+    public const string RunNotFoundMessage =
+        "This tab no longer has that run, so nothing was done with it. Press Remodel a copy to plan again.";
+
+    /// <summary>
+    /// Owner decision 155A: what the page is told when the copy goes away while a run is in progress (RK-14)
+    /// and the run is stopped, where it named the copy's full path. Told as the engineer's own Stop is told,
+    /// a stage the page shows in its run line while the run goes on to its end (<see cref="DocumentChanged"/>).
+    /// </summary>
+    public const string CopyGoneMessage =
+        "The copy is gone, so the run is stopping: the change in flight is finished first, and the "
+        + "change log stays in the run folder. " + PartNotChanged + " Once the run has ended, press "
+        + "Remodel a copy to plan again.";
+
+    /// <summary>
     /// The reason both of 004 T159's refusals give: the copy could not be made the active document
     /// before a dump - SOLIDWORKS does not have it open, would not activate it, had another
     /// document active afterwards, or no copy was left to activate - so it was not read, since a
@@ -436,8 +480,7 @@ public sealed class RemodelHost : IDisposable
             new PaneRunLookup(
                 "run_dir",
                 "RunNotFound",
-                runDir => $"this pane did not start a remodel run in '{runDir}', so it does not "
-                    + "know which folder to open.",
+                _ => RunNotFoundMessage,
                 runDir => FindRun(runDir)?.RunDirectory))
         {
             LogFolder = options.LogFolder,
@@ -628,10 +671,9 @@ public sealed class RemodelHost : IDisposable
         }
 
         run.RequestStop();
-        PostStatus(
-            "error",
-            $"the copy '{run.CopyPath}' is no longer there, so the run is stopping. The change "
-            + "log in the run folder is intact.");
+
+        // Owner decision 155A: in plain words, naming no path; the run folder holds the copy's.
+        PostStatus("error", CopyGoneMessage);
     }
 
     /// <summary>
@@ -1154,7 +1196,7 @@ public sealed class RemodelHost : IDisposable
             }
             catch (Exception failure)
             {
-                PostStatus("error", failure.Message);
+                PostStatus("error", PageWords(failure));
                 throw;
             }
 
@@ -1197,7 +1239,7 @@ public sealed class RemodelHost : IDisposable
             {
                 // The run folder is left behind on purpose: whatever it holds is the evidence
                 // for why the run stopped (constitution Principle I).
-                PostStatus("error", failure.Message);
+                PostStatus("error", PageWords(failure));
                 EndTheSessionOfAFailedPlan(pipeline, runDirectory);
                 throw;
             }
@@ -1268,7 +1310,7 @@ public sealed class RemodelHost : IDisposable
             }
             catch (Exception failure)
             {
-                PostStatus("error", failure.Message);
+                PostStatus("error", PageWords(failure));
                 EndTheSessionOfAFailedPlan(pipeline, runDirectory);
                 throw;
             }
@@ -1489,26 +1531,18 @@ public sealed class RemodelHost : IDisposable
     {
         ScopeSignals signals = scope.Signals;
 
+        // Owner decision 155A: one sentence per class, the tab's own, whoever refused (PageWords). The
+        // bridge as built never reaches these two: its probe refuses `source_dirty` and `external_refs`
+        // before it answers a dirty save flag or a count of references.
         if (signals.SaveFlagDirty == true)
         {
-            _actions.SendError(
-                id,
-                "DocumentDirty",
-                "the part has unsaved changes. This feature never saves your file, so save it "
-                + "or close it yourself, then press Remodel again.",
-                retryable: true);
+            _actions.SendError(id, "DocumentDirty", DocumentDirtyMessage, retryable: true);
             return false;
         }
 
         if (signals.ExternalReferenceCount > 0)
         {
-            _actions.SendError(
-                id,
-                "ExternalReferences",
-                $"the part carries {signals.ExternalReferenceCount} external file "
-                + (signals.ExternalReferenceCount == 1 ? "reference" : "references")
-                + ", which a copy cannot carry with it.",
-                retryable: false);
+            _actions.SendError(id, "ExternalReferences", ExternalReferencesMessage, retryable: false);
             return false;
         }
 
@@ -1560,7 +1594,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -1944,7 +1978,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -1983,7 +2017,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -2050,7 +2084,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -2186,7 +2220,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -2537,7 +2571,31 @@ public sealed class RemodelHost : IDisposable
     /// is three chances to drop it.
     /// </summary>
     private void SendRefusal(string? id, RemodelRefusal refusal) =>
-        _actions.SendError(id, refusal.ErrorClass, refusal.Message, refusal.Retryable);
+        _actions.SendError(id, refusal.ErrorClass, PageWords(refusal), refusal.Retryable);
+
+    /// <summary>
+    /// Owner decision 155A (004 research R18): the classes whose words on this tab are the host's own,
+    /// whoever refused. The bridge refuses both with a sentence naming the part's full path, which the
+    /// backend passes on unchanged (`BRIDGE_REFUSALS`) and the tool-service log keeps on the refused
+    /// request's line; one sentence per class, the one the host already had for its own reading of the
+    /// probe, is what the page prints.
+    /// </summary>
+    private static readonly Dictionary<string, string> TabWords =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            { "DocumentDirty", DocumentDirtyMessage },
+            { "ExternalReferences", ExternalReferencesMessage },
+        };
+
+    /// <summary>
+    /// The words a failure reaches the page in, in a refusal and in the run line's `status {stage:
+    /// "error"}` alike: <see cref="TabWords"/>' sentence for a refusal of one of its classes, and the
+    /// failure's own message otherwise (owner decision 155A).
+    /// </summary>
+    private static string PageWords(Exception failure) =>
+        failure is RemodelRefusal refusal && TabWords.TryGetValue(refusal.ErrorClass, out string? words)
+            ? words
+            : failure.Message;
 
     private void SendRunInProgress(string? id) =>
         _actions.SendError(
@@ -2547,12 +2605,13 @@ public sealed class RemodelHost : IDisposable
             + "share one SOLIDWORKS session and neither could be attributed.",
             retryable: true);
 
-    private void SendRunNotFound(string? id, string? runDir) =>
-        _actions.SendError(
-            id,
-            "RunNotFound",
-            $"this pane did not start a remodel run in '{runDir}', so it will not act on it.",
-            retryable: false);
+    /// <summary>
+    /// `RunNotFound` for a run folder the page named that this host has no record of, in
+    /// <see cref="RunNotFoundMessage"/>'s plain words: the folder the page sent is not repeated (owner
+    /// decision 155A).
+    /// </summary>
+    private void SendRunNotFound(string? id) =>
+        _actions.SendError(id, "RunNotFound", RunNotFoundMessage, retryable: false);
 
     private void SendUnavailable(string? id, RemodelAvailability availability) =>
         _actions.SendError(

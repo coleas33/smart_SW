@@ -999,6 +999,23 @@ public sealed class RemodelPageContractTests
     }
 
     /// <summary>
+    /// Owner decision 155A (004 T189): the refusals that named a path - an unsaved part, a run this tab no
+    /// longer has, and the stop when the copy is gone - name the way on by the label of the button the
+    /// page gives it, read from the page itself. The refusal of a part that references other files names
+    /// no button: pressing again changes nothing.
+    /// </summary>
+    [Fact]
+    public void TheRefusalsThatNamedAPathNameTheirButtonByItsLabel()
+    {
+        string plan = ButtonLabel("plan-run");
+
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.DocumentDirtyMessage, StringComparison.Ordinal);
+        Assert.EndsWith("Press " + plan + " to plan again.", RemodelHost.RunNotFoundMessage, StringComparison.Ordinal);
+        Assert.EndsWith("press " + plan + " to plan again.", RemodelHost.CopyGoneMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(plan, RemodelHost.ExternalReferencesMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 004 T173 over the real transport: Plan pressed again while a plan is held. The host tells
     /// the page the held plan is lost - the notice for that folder, in the host's words - and
     /// then answers the new plan, which is on screen, not lost, and startable.

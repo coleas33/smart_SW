@@ -455,6 +455,234 @@ public sealed class RemodelHostTests
         }
     }
 
+    // ---- owner decision 155A: the refusals that named a path, in the tab's own words ---------
+
+    /// <summary>
+    /// The part the bridge's sentences name, fictional, spelled as <c>RemodelScopeProbe.Probe</c> and
+    /// <c>BridgeDispatcher.RecheckSource</c> spell a part's full path.
+    /// </summary>
+    private const string BridgePart = @"C:\Fictional\FICT-bracket.SLDPRT";
+
+    /// <summary>
+    /// The three ways a plan meets <c>DocumentDirty</c> and <c>ExternalReferences</c>: this host's own
+    /// reading of the probe's signals, which the bridge as built never reaches; the bridge's probe, which
+    /// refuses before it answers a signal; and the bridge's reading of the part again inside
+    /// <c>remodel.open</c>, before the copy. The last two carry the bridge's sentence, which names the
+    /// part's full path, through the backend unchanged.
+    /// </summary>
+    public static IEnumerable<object[]> PartRefusalRoutes => new[]
+    {
+        new object[] { "DocumentDirty", "signal" },
+        new object[] { "DocumentDirty", "probe" },
+        new object[] { "DocumentDirty", "open" },
+        new object[] { "ExternalReferences", "signal" },
+        new object[] { "ExternalReferences", "probe" },
+        new object[] { "ExternalReferences", "open" },
+    };
+
+    /// <summary>
+    /// Owner decision 155A, test first (004 T189): an unsaved part and a part that references other files
+    /// are refused in the tab's own plain words whoever refused them, and no path reaches the page - not in
+    /// the refusal, and not in the run line's `status {stage: "error"}` a failed call posts beside it.
+    /// The host's sentences for the two classes are the ones it already had for its own reading of the
+    /// probe, which the bridge never reached: its probe refuses `source_dirty` and `external_refs` before
+    /// it answers a dirty save flag or a count of references.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(PartRefusalRoutes))]
+    public void APartRefusalReachesThePageInTheTabsOwnWordsWhoeverRefusedItAndNamesNoPath(
+        string errorClass, string route)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            bool dirty = errorClass == "DocumentDirty";
+            string bridgeSentence = dirty
+                ? (route == "probe"
+                    ? $"'{BridgePart}' has unsaved changes. The copy would be taken from the file on disk "
+                        + "and would not be the part the engineer is looking at."
+                    : $"'{BridgePart}' has been edited since the probe and has unsaved changes.")
+                : (route == "probe"
+                    ? $"'{BridgePart}' has 2 external file reference(s). Reorganizing a part whose "
+                        + "geometry is driven from another document is out of scope in v1."
+                    : $"'{BridgePart}' has 1 external file reference(s) now.");
+            var refusal = new RemodelRefusal(errorClass, bridgeSentence, retryable: false);
+            switch (route)
+            {
+                case "signal":
+                    if (dirty)
+                    {
+                        world.Pipeline.Signals.SaveFlagDirty = true;
+                    }
+                    else
+                    {
+                        world.Pipeline.Signals.ExternalReferenceCount = 2;
+                    }
+
+                    break;
+                case "probe":
+                    world.Pipeline.ProbeFailure = refusal;
+                    break;
+                default:
+                    world.Pipeline.CopyFailure = refusal;
+                    break;
+            }
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            string words = dirty ? RemodelHost.DocumentDirtyMessage : RemodelHost.ExternalReferencesMessage;
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal(errorClass, error.GetProperty("error_class").GetString());
+            Assert.Equal(words, error.GetProperty("message").GetString());
+            Assert.All(
+                world.AllPosted("status").Where(status => status.GetProperty("stage").GetString() == "error"),
+                status => Assert.Equal(words, status.GetProperty("message").GetString()));
+            AssertNoPathWasPosted(world);
+            Assert.Equal(0, world.Pipeline.Count("plan"));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 155A (004 T189): `RunNotFound` - a run folder the page names that this host has no
+    /// record of - is answered in one plain sentence, naming no path, on every row that looks a run up:
+    /// the host's own, and the shared rows' lookup (`report.open`, `folder.open`, `entity.show`).
+    /// </summary>
+    [Theory]
+    [InlineData("remodel.start")]
+    [InlineData("remodel.result")]
+    [InlineData("remodel.open_copy")]
+    [InlineData("remodel.discard_copy")]
+    [InlineData("remodel.show_change")]
+    [InlineData("report.open")]
+    [InlineData("folder.open")]
+    [InlineData("entity.show")]
+    public void ARunThisHostDoesNotHaveIsRefusedInPlainWordsThatNameNoPath(string type)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            int before = world.Posted.Count;
+            const string unknown = @"C:\Fictional\runs\20260101-000000-FICT-remodel";
+
+            world.Receive(type, "x1", new { run_dir = unknown, change_seq = 1, persist_ref = "FICT-ref" });
+
+            JsonElement error = world.Reply("error", "x1");
+            Assert.Equal("RunNotFound", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.RunNotFoundMessage, error.GetProperty("message").GetString());
+            AssertNoPathWasPosted(world, before);
+            Assert.Equal(0, world.Pipeline.Count("run"));
+            Assert.Equal(0, world.Pipeline.Count("activate"));
+            Assert.Empty(world.Opener.Opened);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 155A (004 T189): the stop when the run's copy goes away mid-run - RK-14, a Start's run
+    /// only - is told in plain words that name no path, where it named the copy's full path.
+    /// </summary>
+    [Fact]
+    public void TheStopWhenTheCopyIsGoneIsToldInPlainWordsThatNameNoPath()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            int before = -1;
+            world.Pipeline.DuringRun = reporter =>
+            {
+                before = world.Posted.Count;
+                File.Delete(world.ExpectedCopyPath);
+                world.Document = null;
+                world.Host.DocumentChanged();
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Single(
+                world.Posted.Skip(before)
+                    .Select(json => JsonDocument.Parse(json).RootElement)
+                    .Where(root => root.GetProperty("type").GetString() == "status")
+                    .Select(root => root.GetProperty("payload").Clone()),
+                status => status.GetProperty("message").GetString() == RemodelHost.CopyGoneMessage);
+            AssertNoPathWasPosted(world, before);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 155A (004 T189): the four sentences, word for word. Each says what was not done and
+    /// how to go on, by the button's label where there is one, and names no path, no command and none of
+    /// the build's plumbing; the two refusals of a plan and the copy-gone stop vouch for the engineer's
+    /// part alone, as the tab's other refusals do.
+    /// </summary>
+    [Fact]
+    public void TheRefusalsThatNamedAPathAreThePlainWordsOfTheTab()
+    {
+        Assert.Equal(
+            "Your part has unsaved changes, and the re-modeler copies the part as it is saved on disk, so "
+            + "nothing was copied and no new plan was made. Your part was not changed. Save it, or close it "
+            + "without saving and open it again, then press Remodel a copy again.",
+            RemodelHost.DocumentDirtyMessage);
+        Assert.Equal(
+            "This part references other files, which this remodel cannot copy with it, so nothing was "
+            + "copied and no new plan was made. Your part was not changed. This version remodels only "
+            + "parts that reference no other files.",
+            RemodelHost.ExternalReferencesMessage);
+        Assert.Equal(
+            "This tab no longer has that run, so nothing was done with it. Press Remodel a copy to plan "
+            + "again.",
+            RemodelHost.RunNotFoundMessage);
+        Assert.Equal(
+            "The copy is gone, so the run is stopping: the change in flight is finished first, and the "
+            + "change log stays in the run folder. Your part was not changed. Once the run has ended, "
+            + "press Remodel a copy to plan again.",
+            RemodelHost.CopyGoneMessage);
+
+        foreach (string message in new[]
+                 {
+                     RemodelHost.DocumentDirtyMessage,
+                     RemodelHost.ExternalReferencesMessage,
+                     RemodelHost.RunNotFoundMessage,
+                     RemodelHost.CopyGoneMessage,
+                 })
+        {
+            AssertPlainWords(message);
+            Assert.DoesNotContain("/", message, StringComparison.Ordinal);
+            Assert.DoesNotContain("run_dir", message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>A posted message with its JSON escapes undone, so a path reads as it would on the page.</summary>
+    private static string Unescaped(string json) => Regex.Unescape(json);
+
+    /// <summary>
+    /// Owner decision 155A: no message posted from <paramref name="from"/> on names a path - a drive's
+    /// root, a share, the run root, or the fictional folders these cases put in the bridge's sentences and
+    /// the page's `run_dir`. `remodel.planned`, `init` and `document.changed` name the run folder or the
+    /// active document by design - the page echoes the one back and shows both in its header - and are not
+    /// refusals, so they are left out.
+    /// </summary>
+    private static void AssertNoPathWasPosted(RemodelWorld world, int from = 0)
+    {
+        foreach (string json in world.Posted.Skip(from))
+        {
+            JsonElement root = JsonDocument.Parse(json).RootElement;
+            string type = root.GetProperty("type").GetString()!;
+            if (type == "remodel.planned" || type == "init" || type == "document.changed")
+            {
+                continue;
+            }
+
+            string text = Unescaped(json);
+            foreach (string mark in new[] { @":\", @"\\", "Fictional", world.RunRoot })
+            {
+                Assert.True(
+                    text.IndexOf(mark, StringComparison.OrdinalIgnoreCase) < 0,
+                    $"a '{type}' message names a path ({mark}): {text}");
+            }
+        }
+    }
+
     /// <summary>
     /// "`message` names <b>every</b> failing signal, not the first one": a refusal that named
     /// one of two reasons would send the engineer back to fix one thing and press Remodel
@@ -685,7 +913,11 @@ public sealed class RemodelHostTests
     /// <summary>
     /// The refusal the wiring brief names explicitly: a `POST /remodel/open` that came back
     /// `{error_class, message}`. The run folder is kept - it is the evidence for why the run
-    /// stopped - and the class the bridge chose is the class the page is told.
+    /// stopped - and the class the bridge chose is the class the page is told. *Changed
+    /// deliberately 2026-10-20 (owner decision 155A, 004 research R18):* the class is
+    /// `RunFolderFailed`, a refusal that keeps its own words, where it was `DocumentDirty`, whose
+    /// words on this tab are now the host's own whoever refused
+    /// (<see cref="APartRefusalReachesThePageInTheTabsOwnWordsWhoeverRefusedItAndNamesNoPath"/>).
     /// </summary>
     [Fact]
     public void ARefusalRaisedWhileCopyingIsAnsweredWithItsOwnClass()
@@ -694,16 +926,16 @@ public sealed class RemodelHostTests
         {
             world.Open();
             world.Pipeline.CopyFailure = new RemodelRefusal(
-                "DocumentDirty",
-                "the part has unsaved changes. This feature never saves your file.",
+                "RunFolderFailed",
+                "the copy could not be made: the disk is full.",
                 retryable: true);
 
             world.Receive("remodel.plan", "p1", new { });
 
             JsonElement error = world.Reply("error", "p1");
-            Assert.Equal("DocumentDirty", error.GetProperty("error_class").GetString());
+            Assert.Equal("RunFolderFailed", error.GetProperty("error_class").GetString());
             Assert.Equal(
-                "the part has unsaved changes. This feature never saves your file.",
+                "the copy could not be made: the disk is full.",
                 error.GetProperty("message").GetString());
             Assert.True(
                 Directory.Exists(world.ExpectedRunDirectory),
