@@ -79,7 +79,7 @@ as a guess. Only `chat serve` takes it, so a command-line run never records `set
 | POST | `/engineering-context/{run_id}/requirement` | typed target/text/source/assumptions plus `expected_head` | 200 publication; 400 malformed or unavailable target; 409 stale/busy context. |
 | POST | `/engineering-context/{run_id}/force` | typed target/force/unit/direction/frame/point/source/assumptions plus `expected_head` | 200 publication; unknown stays unknown; 400 malformed or unavailable target; 409 stale/busy context. |
 | POST | `/engineering-context/{run_id}/confirm` | `{expected_head, record_id, actor, expected_record_digest, expected_dependency_digest}` | 200 publication of exact explicit saved-input receipt; 400 unconfirmable inputs; 409 stale/busy context. |
-| POST | `/sessions` | `{run_dir, provider, model, effort, bridge: {pipe, secret} \| null, engineer, retry_of: chat_id \| null, standards_profile: str \| null, send_when_checked?: boolean}` | `201 {chat_id, review_session_id, not_examined}`; starts the review turn immediately when `send_when_checked` is true or absent. False runs the code checks, builds the Send cache, finalizes and renders the record, then registers the chat in `awaiting_send`, without a provider request. A non-boolean value is `400 InvalidRequest` naming `send_when_checked`. `standards_profile` is the configured profile path, passed to the reasoning side to attach `check_standards`; blank or null means no profile. An unreadable or invalid configured profile leaves the review possible and makes the standards family not evaluated, rather than refusing the review. `not_examined` is the shared `{sentence, headline, instances}` block from `report/unexamined.py`, or null when every instance was read; Review displays its `headline` (names, no ids; feature 009 T013) above the grouped findings (`<section id="findings-by-type">`, feature 013 T054; above Start here until then) as soon as the session starts, with the instances' ids in a fold, and falls back to `sentence` from a backend that sends no `headline`. `sentence` keeps the ids and is what `report.md` and both check bodies print. 400 if `run_dir` fails the path rule below or `run_dir/package.json` is missing or invalid. A folder that already holds a session is claimed only as "A folder that already holds a session" below says, a Retry's included (*amended 2026-10-19, owner decision 142A*). |
+| POST | `/sessions` | `{run_dir, provider, model, effort, bridge: {pipe, secret} \| null, engineer, retry_of: chat_id \| null, standards_profile: str \| null, send_when_checked?: boolean}` | `201 {chat_id, review_session_id, not_examined}`; starts the review turn immediately when `send_when_checked` is true or absent. False runs the code checks, builds the Send cache, finalizes and renders the record, then registers the chat in `awaiting_send`, without a provider request. A non-boolean value is `400 InvalidRequest` naming `send_when_checked`. `standards_profile` is the configured profile path, passed to the reasoning side to attach `check_standards`; blank or null means no profile. An unreadable or invalid configured profile leaves the review possible and makes the standards family not evaluated, rather than refusing the review. `not_examined` is the shared `{sentence, headline, instances}` block from `report/unexamined.py`, or null when every instance was read; Review displays its `headline` (names, no ids; feature 009 T013) above the grouped findings (`<section id="findings-by-type">`, feature 013 T054; above Start here until then) as soon as the session starts, with the instances' ids in a fold, and falls back to `sentence` from a backend that sends no `headline`. `sentence` keeps the ids and is what `report.md` and both check bodies print. 400 if `run_dir` fails the path rule below or `run_dir/package.json` is missing or invalid. A folder that already holds a session is claimed only as "A folder that already holds a session" below says, a Retry's included (*amended 2026-10-19, owner decision 142A*), and a re-modeler grade's folder never, each refusal `400 RunDirTaken` (*amended 2026-10-19, owner decision 146A*). |
 | GET | `/sessions/{chat_id}` | | `ChatSession` state without `token` and without `bridge` (neither the HTTP token nor the bridge secret is ever echoed) |
 | GET | `/sessions/{chat_id}/events` | `Last-Event-ID` header optional | `text/event-stream`; replays from `events.jsonl` after the given id, then live. Event `id` = `seq`, `event` = `type`, `data` = JSON body. |
 | POST | `/sessions/{chat_id}/messages` | `{text}` | 202; appends a user turn and runs, including on a session whose previous turn already ended (`ended → running`, see data-model section 3). 409 if a turn is running; `409 NotSent` while the run waits for Send, without changing the review. |
@@ -91,7 +91,7 @@ as a guess. Only `chat serve` takes it, so a command-line run never records `set
 | GET | `/sessions/{chat_id}/report` | | `text/markdown` of `report.md` |
 | GET | `/sessions/{chat_id}/attention` | | `200` with the `Ranking` of `specs/007-attention-policy-gate/contracts/attention.md` section 4 **minus `session_id`** - the same block the two check results carry in their `attention` key. Computed from the **live** session the run is holding on every call, so a disposition recorded a moment ago is in it; it **writes nothing**, not `report.md` and not `attention.json`, because a page refresh must not refresh the record of the order the engineer was shown. A review that produced no findings answers `200` with `rows: []` and `empty_reason` set rather than an empty list alone, so the Review tab's pinned panel can say there is nothing to start with and why (feature 007 FR-023, FR-024). Since feature 009 (T015) the body is a `ReviewRanking`: that `Ranking` unchanged plus one `summary` key, the Review tab's summary computed from the same live session and the run's package (`specs/009-engineer-workspace/contracts/review-summary.md`); neither check body nor `attention.json` carries it. `404 UnknownChat`. |
 | GET | `/sessions/{chat_id}/snapshot` | | `200` with `report/snapshot.review_snapshot` of the run this backend holds (feature 009, `specs/009-engineer-workspace/contracts/sessions.md` section 3, data-model section 8): `{run_id, read_only: false, read_only_reason: null, chat_state, last_seq, document, findings, evidence_requests, coverage, ranking, not_examined}` - the live session's findings and requests in session order as their stream bodies, the coverage flattened bucket by bucket as `coverage` event bodies, the `ReviewRanking` with its summary (resume cost from the run's ledger), the chat's state and the sink's last `seq`. Computes and **writes nothing**. `404 UnknownChat`. |
-| GET | `/reviews/{run_id}` | | `200` with the same snapshot read-only from the run folder `run_id` names under the run root (sessions.md section 4): `session.json` and `package.json` loaded, the ranking and summary recomputed in memory with no ledger (`resume_input_tokens: null`), `read_only: true` with the words file's `read_only` sentence (a record that waits for Send: its dated line and `restored` Send block, feature 015 T100), `chat_state` and `last_seq` null. `run_id` goes through the `run_dir` path rule as `check_id` does. `404 UnknownReview`, naming only the id, for a name the rule refuses, a missing folder, a folder with no `session.json`, a check folder (`check.json`), or a file that cannot be read or does not validate. **Writes nothing**: every file under the folder keeps its bytes and modification time. |
+| GET | `/reviews/{run_id}` | | `200` with the same snapshot read-only from the run folder `run_id` names under the run root (sessions.md section 4): `session.json` and `package.json` loaded, the ranking and summary recomputed in memory with no ledger (`resume_input_tokens: null`), `read_only: true` with the words file's `read_only` sentence (a record that waits for Send: its dated line and `restored` Send block, feature 015 T100), `chat_state` and `last_seq` null. `run_id` goes through the `run_dir` path rule as `check_id` does. `404 UnknownReview`, naming only the id, for a name the rule refuses, a missing folder, a folder with no `session.json`, a check's own folder (its `check.json` names the `session.json` beside it), or a file that cannot be read or does not validate. A folder whose `check.json` can be read and names another session - a review claimed the folder and moved the check's session aside - is restored as that review, from its `session.json` and never from the check's session; a `check.json` that cannot be read, or names no session, is the `404` (*amended 2026-10-19, owner decision 146A*). **Writes nothing**: every file under the folder keeps its bytes and modification time. |
 | POST | `/checks/rms` | `{run_dir, scope: "part" \| "equations" \| "all", document_id: str \| null, standards_profile?: str \| null}` | `201 CheckResult` (feature 003 `contracts/model-check.md`; with a `standards_profile`, since feature 013 T148, the body also carries `bought_parts`). Runs synchronously: no provider, no network call, no turn, and no chat is registered for the folder. 400 when `run_dir` fails the path rule, when `run_dir/package.json` is missing or invalid (`InvalidPackage`), when the package carries no feature rows (`EmptyFeatureTree`), when the carry-forward candidate cannot be parsed (`UnreadableExceptions`), or when `scope` is `"assembly"` (`ScopeNotAvailable`) |
 | POST | `/checks/standards` | `{run_dir, profile_path: str}` | `201 StandardsResult` (feature 006 `contracts/standards-check.md`, the normative source for this row and the two below). Runs synchronously for the same reasons as `/checks/rms`: no provider, no key, no network call, no turn, and no chat is registered for the folder. **There is no `scope`**: every standards check runs on every run, the document kinds decide which apply, and a body carrying one is refused rather than quietly answered. 400 when `run_dir` fails the path rule, when `run_dir/package.json` is missing or invalid (`InvalidPackage`), when the package does not record the phases the standards checks read (`MissingStandardsPhases`), when the root document has no recorded kind or no path (`UngradableRoot`), when `profile_path` is absent, unreadable or not configured (`ProfileUnreadable`), when the profile parses and fails its schema (`ProfileInvalid`), or when the carry-forward candidate cannot be parsed (`UnreadableExceptions`) |
 | GET | `/checks/{check_id}` | | `200` re-read from that check run folder - the recorded `session.json` and `check.json`, with nothing evaluated and nothing written, so a refresh cannot overwrite a recorded disposition; `404 UnknownCheck` when the run root holds no such folder, no check ran in it, or its session is no longer the one its record names. The answer is **the record's own family shape**: a `CheckResult` for a folder whose `check.json` carries `family: "rms"` or no `family` at all, a `StandardsResult` for `family: "standards"`. Neither family ever answers for the other: the route answers in the record's own family shape, and a page reads back only the ids its own evaluation route produced - handed the other family's shape it renders nothing it cannot read |
@@ -117,26 +117,41 @@ write nothing for a finalized waiting review; its state remains `awaiting_send`.
 
 **A folder that already holds a session** - `events.jsonl` or `session.json` - is written into
 only by the request that replaces that session (*amended 2026-10-19, owner decision 142A*; 002
-[research.md](../research.md), 142A):
+[research.md](../research.md), 142A). Each refusal of a folder for what it holds is
+`400 RunDirTaken`, whose sentence in the words file says the folder holds another run's files
+and to review into a new run folder; it was `400 InvalidRunDir`, which is the path rule's below
+and whose sentence sends the engineer to the run root in Settings (*amended 2026-10-19, owner
+decision 146A*; research, 146A):
 
-- **A check's folder**, whose `check.json` names the `session.json` beside it - a Model check's,
-  a Standards check's or the re-modeler's grade - holds no review session. A start claims an rms
-  check's folder, a Model check's or a grade's, and rotates the check's session aside (feature
-  003 User Story 6 scenario 11; feature 007 FR-021). A start on a Standards check's folder, and
-  a Retry on any check's folder, is `400 InvalidRunDir` with one body from both: "`<run_dir>`
-  holds the `<family>` check that ran in it and no review session: a Retry replaces only a
-  review's session, and only a Model check's folder is handed to a new review; review into a
-  new run folder".
-- **Any other folder that holds a session** is `400 InvalidRunDir` to a start. A Retry claims
-  it only for the chat that wrote it: `retry_of` must name a chat this backend holds, else
-  `404 UnknownChat`; that chat must have reviewed this folder, and every session file there
-  must belong to its review session - `session.json`'s record, the session `events.jsonl`
-  opens with, whichever the folder holds - else `409 RunDirInUse`, naming each file that is
-  another session's or cannot be read. A failed start registers no chat, so no Retry claims
-  the stream it may leave; and a backend holds its chats in memory only, so after a restart (a
-  settings save is one) a Retry that reuses its failed chat's folder is `404 UnknownChat`.
-- **A folder that holds no session file** is claimed by any start, and `retry_of` is recorded
-  on the new session only when this backend holds that chat.
+- **A re-modeler grade's folder** - `rms-before/` or `rms-after/` in a remodel run's folder, with
+  that side's dump filed beside it (004
+  [run-artifacts.md](../../004-resilient-remodeler/contracts/run-artifacts.md)) - is claimed by no
+  start or Retry, whether it holds its grade or nothing graded yet: "`<run_dir>` is the folder of
+  the `<side>` grade of the remodel run in `<parent>`: a review never claims a grade's folder,
+  which only the remodel run writes; review into a new run folder" (*amended 2026-10-19, owner
+  decision 146A*: a start claimed it before, as a Model check's, the grade's record being the
+  same).
+- **A check's folder**, whose `check.json` names the `session.json` beside it - a Model check's
+  or a Standards check's - holds no review session. A start claims a Model check's folder and
+  rotates the check's session aside (feature 003 User Story 6 scenario 11; feature 007 FR-021).
+  A start on a Standards check's folder, and a Retry on any check's folder, is refused with one
+  body from both: "`<run_dir>` holds the `<family>` check that ran in it and no review session:
+  a Retry replaces only a review's session, and only a Model check's folder is handed to a new
+  review; review into a new run folder".
+- **Any other folder that holds a session** is refused to a start: "`<run_dir>` already holds a
+  session that a start does not write over: review into a new run folder, or retry the chat that
+  wrote it with 'retry_of'" (*amended 2026-10-19, owner decision 146A*: it said "a review
+  session", untrue of a remodel run's own folder and of a check's whose record cannot be read).
+  A Retry claims it only for the chat that wrote it: `retry_of` must name a chat this backend
+  holds, else `404 UnknownChat`; that chat must have reviewed this folder, and every session
+  file there must belong to its review session - `session.json`'s record, the session
+  `events.jsonl` opens with, whichever the folder holds - else `409 RunDirInUse`, naming each
+  file that is another session's or cannot be read. A failed start registers no chat, so no
+  Retry claims the stream it may leave; and a backend holds its chats in memory only, so after
+  a restart (a settings save is one) a Retry that reuses its failed chat's folder is
+  `404 UnknownChat`.
+- **A folder that holds no session file**, and is no grade's, is claimed by any start, and
+  `retry_of` is recorded on the new session only when this backend holds that chat.
 
 `retry_of` is read as a uuid, so its case and spelling do not matter; a value that is no uuid is
 `400 InvalidRequest`, and an empty string is no Retry. None of these refusals moves anything.
@@ -168,7 +183,9 @@ defines the entry bodies, projections, privacy limits and saved-snapshot scope.
 and Win32 device paths, and requires the result to be a descendant of the configured
 `--run-root` (the pane passes the settings `run_root`). Anything else is 400 with
 `error_class: "InvalidRunDir"`. The same rule applies to every host-side path action in
-`pane-host-messages.md`.
+`pane-host-messages.md`. *Amended 2026-10-19 (owner decision 146A):* `InvalidRunDir` is this
+rule's alone, and its sentence in the words file states the rule; a folder that passes it and
+already holds another run's files is `400 RunDirTaken` to `POST /sessions` (above).
 
 `check_id` is the check run folder's *name*, so a check is addressable after a restart
 without any server-side registry. It is caller-supplied too and goes through the same

@@ -40,7 +40,7 @@ from swreview.ir.loader import load_package
 from swreview.report.attention import load_policy, rank
 from swreview.report.finding_groups import findings_by_type
 from swreview.report.session import SendFailure, load_session, save_session
-from swreview.report.snapshot import review_snapshot
+from swreview.report.snapshot import restored_snapshot, review_snapshot
 from swreview.report.summary import load_words
 from tests.support.attention import CHECK_FOLDER
 from tests.support.restart import restarted_app
@@ -379,3 +379,120 @@ def test_a_waiting_record_restores_read_only_with_its_dated_line_and_send(
 def test_both_routes_are_in_the_door_tests_census() -> None:
     assert ("GET", "/sessions/{chat}/snapshot") in ROUTES
     assert any(method == "GET" and path.startswith("/reviews/") for method, path in ROUTES)
+
+
+# --- 6. a review beside a check (owner decision 146A) ------------------------------------------
+
+
+@pytest.fixture
+def claimed_check(client: TestClient, run_root: Path) -> tuple[Path, dict[str, Any]]:
+    """A Model check's folder handed to a review (feature 003 User Story 6 scenario 11): the
+    check's `check.json`, its session moved aside to `session.1.json`, and the review's
+    `session.json` beside them."""
+    folder = chat.model_check_folder(run_root)
+    review = start_session(client, folder)
+    settle(client, review["chat_id"])
+    return folder, review
+
+
+def restored_from(folder: Path, name: str) -> dict[str, Any]:
+    """The snapshot `GET /reviews/{run_id}` would answer for the session in `folder / name`."""
+    return to_jsonable_python(
+        restored_snapshot(
+            load_session(folder / name), load_package(folder).package, run_id=folder.name
+        )
+    )
+
+
+def test_a_review_that_claimed_a_check_s_folder_is_restored_and_never_as_the_check(
+    run_root: Path,
+    provider_control: ProviderControl,
+    models: Any,
+    claimed_check: tuple[Path, dict[str, Any]],
+) -> None:
+    """Before 146A any folder holding `check.json` was `UnknownReview`, so the chip of a review
+    handed a Model check's folder could not be restored after a restart. The check's record
+    names the session it moved aside, so the folder's session is the review's, and that is what
+    is restored - `session.json`, never `session.1.json` - while the folder answers the check's
+    route no more. Nothing is written."""
+    folder, review = claimed_check
+    assert str(load_session(folder / "session.json").session_id) == review["review_session_id"]
+    before = tree_state(folder)
+
+    with restarted_app(run_root, restart_settings(provider_control, models)) as fresh:
+        restored = fresh.get(f"/reviews/{folder.name}")
+        check = fresh.get(f"/checks/{folder.name}")
+
+    assert restored.status_code == 200, restored.text
+    assert restored.json() == restored_from(folder, "session.json")
+    assert restored.json() != restored_from(folder, "session.1.json")
+    assert (check.status_code, check.json()["error_class"]) == (404, "UnknownCheck")
+    assert tree_state(folder) == before
+
+
+def test_a_review_retried_beside_a_check_restores_its_latest_attempt(
+    client: TestClient,
+    run_root: Path,
+    provider_control: ProviderControl,
+    models: Any,
+    claimed_check: tuple[Path, dict[str, Any]],
+) -> None:
+    """The review's own chat retried it there (142A): `session.1.json` is the check's,
+    `session.2.json` the attempt the Retry replaced, and `session.json`, the latest, is the one
+    restored."""
+    folder, review = claimed_check
+    retry = start_session(client, folder, retry_of=review["chat_id"])
+    settle(client, retry["chat_id"])
+
+    with restarted_app(run_root, restart_settings(provider_control, models)) as fresh:
+        restored = fresh.get(f"/reviews/{folder.name}")
+
+    assert restored.status_code == 200, restored.text
+    assert str(load_session(folder / "session.json").session_id) == retry["review_session_id"]
+    assert str(load_session(folder / "session.2.json").session_id) == review["review_session_id"]
+    assert restored.json() == restored_from(folder, "session.json")
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        "an unreadable session",
+        "an unreadable record",
+        "a record naming no session",
+        "no review session",
+    ],
+)
+def test_a_folder_beside_a_check_that_cannot_show_whose_its_session_is_is_unknown(
+    client: TestClient, run_root: Path, claimed_check: tuple[Path, dict[str, Any]], broken: str
+) -> None:
+    """Restored only when both records can be read and the check's names another session. An
+    unreadable `session.json` is no review to restore; a `check.json` that cannot be read, or
+    names no session, cannot show that the session is not the check's, and nothing is guessed
+    through; and with the review's `session.json` gone, the check's at `session.1.json` is not
+    restored in its place."""
+    folder, _ = claimed_check
+    if broken == "an unreadable session":
+        (folder / "session.json").write_text("{ not json", encoding="utf-8")
+    elif broken == "an unreadable record":
+        (folder / "check.json").write_text("{ not json", encoding="utf-8")
+    elif broken == "a record naming no session":
+        record = json.loads((folder / "check.json").read_text(encoding="utf-8"))
+        del record["session_id"]
+        (folder / "check.json").write_text(json.dumps(record), encoding="utf-8")
+    else:
+        (folder / "session.json").unlink()
+    before = tree_state(folder)
+
+    assert_unknown_review(client.get(f"/reviews/{folder.name}"), run_root)
+    assert tree_state(folder) == before
+
+
+def test_a_check_s_own_folder_answers_only_the_check_s_route(
+    client: TestClient, run_root: Path
+) -> None:
+    """The other half of the rule: while `check.json` names the session beside it, the folder
+    is the check's, read by `GET /checks/{check_id}` and refused by `GET /reviews/{run_id}`."""
+    folder = chat.model_check_folder(run_root)
+
+    assert client.get(f"/checks/{folder.name}").status_code == 200
+    assert_unknown_review(client.get(f"/reviews/{folder.name}"), run_root)

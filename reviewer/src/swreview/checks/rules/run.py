@@ -80,6 +80,7 @@ __all__ = [
     "CheckRunError",
     "EmptyFeatureTreeError",
     "NotACheckError",
+    "SessionReplacedError",
     "UnreadableExceptionsError",
     "carry_forward",
     "check_record",
@@ -89,6 +90,7 @@ __all__ = [
     "package_design_id",
     "recorded_call",
     "recorded_session",
+    "session_replaced",
     "store_to_grade_against",
     "write_check_record",
     "write_report",
@@ -171,6 +173,17 @@ class NotACheckError(CheckRunError):
     """The folder holds no check of its own to read back."""
 
     error_class = "UnknownCheck"
+
+
+class SessionReplacedError(NotACheckError):
+    """The folder's records can both be read, and its `session.json` is not the session its
+    `check.json` names: a review claimed the folder and moved the check's session aside, or a
+    later run replaced it.
+
+    The one `NotACheckError` that says whose the folder's session is not, named apart so a
+    reader can tell it from a folder whose files cannot be read (`session_replaced`; owner
+    decision 146A). Every caller that catches `NotACheckError` catches it as before.
+    """
 
 
 def coverage_rows(session: ReviewSession) -> list[dict[str, Any]]:
@@ -427,7 +440,19 @@ def check_record(directory: Path) -> Mapping[str, Any]:
 
 
 def recorded_session(directory: Path, record: Mapping[str, Any]) -> ReviewSession:
-    """The session `record` describes, or `NotACheckError` naming what the folder holds."""
+    """The session `record` describes, or `NotACheckError` naming what the folder holds.
+
+    `SessionReplacedError`, the one subclass, when both can be read and the folder's
+    `session.json` is another session than the one the record names. A record names its
+    session by the `session_id` it was written with, compared as written; one without names
+    none, and is a record that cannot be read, not one naming another session (owner decision
+    146A: `session_replaced` must not take it for one).
+    """
+    recorded = record.get("session_id")
+    if not isinstance(recorded, str):
+        raise NotACheckError(
+            UNREADABLE_RECORD.format(path=directory / CHECK_FILE_NAME, error="it names no session")
+        )
     file = directory / SESSION_FILE_NAME
     try:
         session = load_session(file)
@@ -437,17 +462,38 @@ def recorded_session(directory: Path, record: Mapping[str, Any]) -> ReviewSessio
         ) from exc
     except ValueError as exc:  # a ValidationError is one
         raise NotACheckError(UNREADABLE_RECORD.format(path=file, error=exc)) from exc
-    if str(session.session_id) != str(record.get("session_id")):
-        raise NotACheckError(
+    if str(session.session_id) != recorded:
+        raise SessionReplacedError(
             SESSION_IS_NOT_THE_RECORDED_ONE.format(
                 directory=directory,
                 session=SESSION_FILE_NAME,
                 file=CHECK_FILE_NAME,
-                recorded=record.get("session_id"),
+                recorded=recorded,
                 found=session.session_id,
             )
         )
     return session
+
+
+def session_replaced(directory: Path | str) -> bool:
+    """Whether `directory`'s check record names a session other than the one beside it.
+
+    The folder's `session.json` is then not its check's: a review claimed the folder and moved
+    the check's session aside, or a later run replaced it (`SessionReplacedError`). What
+    `GET /reviews/{run_id}` asks of a folder holding `check.json` before it restores the
+    session there as a review's (`chat/server.py`, `_read_review`; owner decision 146A).
+    False for a check's own folder, and for one whose record or session cannot be read, or
+    whose record names no session: whose that session is cannot be shown there, and nothing is
+    guessed through.
+    """
+    folder = Path(directory)
+    try:
+        recorded_session(folder, check_record(folder))
+    except SessionReplacedError:
+        return True
+    except NotACheckError:
+        return False
+    return False
 
 
 def is_check_folder(directory: Path | str) -> bool:

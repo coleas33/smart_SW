@@ -134,6 +134,16 @@ opening nothing, when any step fails:
    full rules would give the ten-records one - a refusal either way, and the backend stops asking
    at ten drawings. The backend still asks once per candidate file (section 1): a later candidate
    the engineer has open is read, which a backend that stopped at the first refusal would lose.
+   *(Amended 2026-10-19, owner decision 147A)*: **the refusal names a new review first.** Both
+   limit sentences now end "; a new review (press Review) starts its own count, and a drawing
+   already open in SOLIDWORKS is still read, since reading it opens nothing". Review starts a
+   review in a run folder of its own, so a session whose count is its own, which reads natively
+   the open drawings that show its design and asks the candidate question afresh. The sentence no
+   longer names a Retry or a Recheck: each starts its own count, but a Recheck carries an earlier
+   confirmed answer forward with no new read (015 `contracts/recheck.md` section 4), and a Retry
+   is offered only on an error card, which this refusal does not raise. The way on 141A named
+   first, a drawing already open, is now the second, with the same two limits; the ten-records
+   sentence is unchanged.
 
 Item 1's records are `ReviewHost.ReviewRunDirectory(run_id)` in the add-in (T074, pane lane,
 2026-09-23): the run folder of the review whose `SessionRecord.RunId` equals `run_id` ignoring
