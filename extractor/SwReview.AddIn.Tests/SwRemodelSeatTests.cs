@@ -49,6 +49,15 @@ public sealed class SwRemodelSeatTests
 
     private const string DumpBegin = "seat=activate_before_dump begin";
 
+    // The ways the seat reaches the copy (decision 144A's second review, T178).
+    private const string OpenTheClosedCopy = "remodel.open_copy, the copy closed";
+
+    private const string ActivateTheOpenCopy = "remodel.open_copy, the copy open";
+
+    private const string ActivateBeforeADump = "the activation before a dump";
+
+    private static readonly string[] EveryWay = { OpenTheClosedCopy, ActivateTheOpenCopy, ActivateBeforeADump };
+
     private static readonly string CopyPath = RemodelCopy.CopyPathFor(RunDirectory, SourcePath);
 
     private readonly InteropRecorder<ISldWorks> _application = new InteropRecorder<ISldWorks>();
@@ -683,6 +692,80 @@ public sealed class SwRemodelSeatTests
     }
 
     /// <summary>
+    /// Decision 144A's second review (T178): the run-root forms a pilot most likely has are the run's
+    /// copy. The default run root is the Documents folder, which is a share when Documents is
+    /// redirected, so: a share's path, with either separator; a run folder directly under a share's
+    /// root, and under a mapped drive's; a path with spaces; and the copy folder and the part's
+    /// extension in another case. Each is taken by every way the seat reaches the copy -
+    /// <c>remodel.open_copy</c>'s open and its activation, and the activation before a dump - handed to
+    /// SOLIDWORKS in its canonical form, the lookup's and the open request's, with its lines written
+    /// beside its run folder. An edit that refused a share, or a run folder at the top of one, fails
+    /// here; the refusals are <see cref="APathThatIsNotARunsCopyIsRefusedBeforeAnyCall"/>'s.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(PathsThatAreARunsCopy))]
+    public void APathInARunRootAPilotHasIsTheRunsCopy(string path, string canonical, string runDirectory, string way)
+    {
+        _copy.Document.Answer("GetPathName", canonical);
+
+        string outcome = Reach(way, path, canonical);
+
+        Assert.Equal("GetOpenDocumentByName", _application.Calls[0].Member);
+        Assert.Equal(new object?[] { canonical }, _application.Calls[0].Arguments);
+        if (way == OpenTheClosedCopy)
+        {
+            Assert.Equal("GetOpenDocSpec", _application.Calls[1].Member);
+            Assert.Equal(new object?[] { canonical }, _application.Calls[1].Arguments);
+        }
+
+        Assert.Empty(_journal.Refusals);
+        Assert.Equal(2, _log.Count);
+        Assert.All(_log, entry => Assert.Equal(runDirectory, entry.RunDirectory));
+        Assert.StartsWith(outcome, _log[1].Line, StringComparison.Ordinal);
+    }
+
+    public static IEnumerable<object[]> PathsThatAreARunsCopy()
+    {
+        const string Stamp = "20260927-100000-bracket-remodel";
+        const string Share = "\\\\server\\share\\runs\\" + Stamp;
+        const string ShareRoot = "\\\\server\\share\\" + Stamp;
+        const string MappedDrive = "Z:\\" + Stamp;
+        const string Spaces = "C:\\Users\\Fictional Engineer\\Documents\\Remodel runs\\20260927-100000-my bracket-remodel";
+        (string Path, string Canonical, string RunDirectory)[] paths =
+        {
+            (Share + "\\copy\\bracket-RMS.SLDPRT", Share + "\\copy\\bracket-RMS.SLDPRT", Share),
+            ("//server/share/runs/" + Stamp + "/copy/bracket-RMS.SLDPRT", Share + "\\copy\\bracket-RMS.SLDPRT", Share),
+            (ShareRoot + "\\copy\\bracket-RMS.SLDPRT", ShareRoot + "\\copy\\bracket-RMS.SLDPRT", ShareRoot),
+            (MappedDrive + "\\copy\\bracket-RMS.SLDPRT", MappedDrive + "\\copy\\bracket-RMS.SLDPRT", MappedDrive),
+            (Spaces + "\\copy\\my bracket-RMS.SLDPRT", Spaces + "\\copy\\my bracket-RMS.SLDPRT", Spaces),
+            (RunDirectory + "\\COPY\\bracket-RMS.sldprt", RunDirectory + "\\COPY\\bracket-RMS.sldprt", RunDirectory),
+        };
+
+        return paths.SelectMany(path => EveryWay.Select(way => new object[] { path.Path, path.Canonical, path.RunDirectory, way }));
+    }
+
+    /// <summary>
+    /// Decision 144A's second review (T178): SOLIDWORKS may answer the copy's path in another letter
+    /// case than the seat holds - a Windows path is the same path in any case - and the document is
+    /// still the copy, by every way the seat reaches it.
+    /// </summary>
+    [Theory]
+    [InlineData(OpenTheClosedCopy)]
+    [InlineData(ActivateTheOpenCopy)]
+    [InlineData(ActivateBeforeADump)]
+    public void ACopyWhosePathSolidworksAnswersInAnotherCaseIsTheCopy(string way)
+    {
+        string answered = CopyPath.ToUpperInvariant();
+        Assert.NotEqual(CopyPath, answered);
+        _copy.Document.Answer("GetPathName", answered);
+
+        string outcome = Reach(way, CopyPath, answered);
+
+        Assert.Empty(_journal.Refusals);
+        Assert.StartsWith(outcome, Lines().Last(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Decision 144A's review (T174): a call SOLIDWORKS fails reaches the caller as it was thrown, the
     /// same exception, and the log names its type and the members gated up to it.
     /// </summary>
@@ -859,6 +942,30 @@ public sealed class SwRemodelSeatTests
     }
 
     private IReadOnlyList<string> Lines() => _log.Select(entry => entry.Line).ToList();
+
+    /// <summary>
+    /// Reaches the copy at <paramref name="path"/> by <paramref name="way"/> - the copy closed for the
+    /// open - and answers how the closing line must start. The activation before a dump answers the
+    /// active document's path, which must be <paramref name="answered"/>, the path the copy gives.
+    /// </summary>
+    private string Reach(string way, string path, string answered)
+    {
+        switch (way)
+        {
+            case OpenTheClosedCopy:
+                _application.Answer("GetOpenDocumentByName", null);
+                Seat().ActivateOrOpen(path);
+                return "seat=open_copy status=ok outcome=opened gated=";
+            case ActivateTheOpenCopy:
+                Seat().ActivateOrOpen(path);
+                return "seat=open_copy status=ok outcome=activated gated=";
+            case ActivateBeforeADump:
+                Assert.Equal(answered, Seat().ActivateOpenCopy(path));
+                return "seat=activate_before_dump status=ok outcome=activated gated=";
+            default:
+                throw new ArgumentOutOfRangeException(nameof(way), way, "not a way the seat reaches the copy");
+        }
+    }
 
     private SwRemodelSeat Seat() =>
         new SwRemodelSeat(
