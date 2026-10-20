@@ -654,6 +654,53 @@ seat that the open neither changes, saves nor locks the drawing and leaves the e
 where it was (feature 011 T077); while it is false a closed drawing is refused and an already-open
 one is still read.
 
+## The re-modeler's pane seat (feature 011, owner decision 144A): an allowlist entry of its own
+
+*Added 2026-10-19.* The pane's own seat, `SwReview.AddIn/Remodel/SwRemodelSeat.cs` -
+`remodel.open_copy`, and T159's activation of the run's copy before each dump - is outside the
+bridge by design (`IRemodelSeat`'s remarks; research R14.6), and until this decision it called the
+interop directly, through no gate and no gate log (feature 011's research R10.4 item 6). Its calls
+go through a gate of its own now, built per action, whose guard is `Guard/RemodelSeatGuard.cs`: an
+`ICallGuard` in the shape of the confirmed drawing's entry above - the two keys below, matched
+**ordinally**; any other interface-qualified key refused, naming it; a bare name - every read -
+answered by `ReadOnlyGuard`, unchanged. It is built only by the seat.
+
+| Key (feature 011, decision 144A, the pane seat) | Used for | Composition, asserted as integers |
+|---|---|---|
+| `ISldWorks.ActivateDoc3` | the run's copy made the active document, for `remodel.open_copy` and before each dump | by the copy's title, `UseUserPreferences` false, `Option` `swDontRebuildActiveDoc = 1` |
+| `ISldWorks.OpenDoc7` | the run's copy opened again when SOLIDWORKS no longer has it, for `remodel.open_copy` only | the one open request `CopyOpenSpecification` builds, as `remodel.open`'s: a part, `Silent \| LoadModel = 17` (`RemodelCopy.OpenOptions`), never `ReadOnly (2)` or `ViewOnly (4)` - the copy opens writable, for the engineer's Save As |
+
+The reads go through the same gate by their bare names: `GetOpenDocumentByName`, `GetPathName`,
+`GetTitle`, `ActiveDoc` and `GetOpenDocSpec`. The open request's property sets are made inside the
+`GetOpenDocSpec` gate entry and its load bits read back inside the open's, as `remodel.open` makes them
+inside its own; they set a throwaway request, and the frozen manifest records each (`interop-manifest.md`).
+
+**Only the run's copy.** The guard sees names, never documents, so the seat's own second layer
+scopes the two keys to the run's copy, as `RemodelScope` scopes the stage-1 list: before any call, a
+path is refused unless it is a full path, a drive's or a share's, with no `..`, to a part (`.SLDPRT`)
+inside a run folder's `copy/` (`RemodelCopy.RunDirectoryOf`'s rule) whose run folder is not the root
+of a drive or a share, and from then on the seat uses the canonical form it checked; a document the
+lookup answers is asked its title and activated only once its own path is the copy's, and for
+`remodel.open_copy` the document the activation answers must be the copy too; and a document the open
+answers is taken as the copy only once its own path is the copy's - otherwise it is left as it is,
+never activated, closed or named. The seat writes nothing to a document, so the session tag and COM
+identity checks of `VerifyTarget` are not its (feature 011's research R11.1; whether the
+constitution's 2(b) reaches an activation and a writable open is its R11.8 question for the owner).
+
+**Its gate log** is two lines per action in the run folder's `remodel.log` (`run-artifacts.md`): a
+begin line before the first call, then the status, how the action ended, the members its gate was
+asked about and any refusal - never a `target=`.
+
+**It widens no guard.** Nothing is added to `ReadOnlyGuard`, `RemodelGuard` (whose stage-1
+allowlist and its pinned five overriding keys are unchanged) or `DrawingOpenGuard`. Of the two keys
+only `ActivateDoc3` overrides a read-only denial (feature 011's shared `ISldWorks` row); `OpenDoc7` is
+a bare name `ReadOnlyGuard` already allows (feature 011's exclusions). `RemodelSeatGuardTests` pins
+the set, each refusal, the delegation, the one overriding key and the one construction site; the
+add-in's `SwRemodelSeatTests` pins the seat's every call under the gate entry it is made under, the
+integers, the scope and the log lines. Feature 011's `DocumentLifecycleFamilyTests` names
+`RemodelSeatGuard ISldWorks.ActivateDoc3` as the one exception a gate the product builds makes to
+the lifecycle families on the seat's account.
+
 ## T187: override calibration fixtures (2026-10-13)
 
 `remodel.geometry` adds only `GetOverrideOptions`, `get_OverrideMass`,

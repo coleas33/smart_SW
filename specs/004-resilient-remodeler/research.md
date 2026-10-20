@@ -1563,6 +1563,12 @@ the request's `gated=` line and counts toward the breaker, and `SwRemodelCopyDoc
 - **The pane seat's direct COM calls are not a defect** (the review said so itself): the pane's UI
   actions are the add-in's and have no bridge command by design; what is owed is their record in the
   manifest and the audit, T181.
+  *Amended 2026-10-19 (owner decision 144A; feature 011's research R10.4 item 6 and R11.1):* the
+  seat stays outside the bridge, but its calls no longer bypass every gate: each action calls
+  SOLIDWORKS through a gate of its own, whose guard allows `ISldWorks.ActivateDoc3` and
+  `ISldWorks.OpenDoc7` by those keys, refuses every other qualified key and hands every bare name
+  to the read-only guard; the seat takes only the run's copy and writes its gate log to the run's
+  `remodel.log` (`contracts/guard-allowlist.md`, "The re-modeler's pane seat").
 
 ## R15. Defaults taken 2026-09-27: the manifest's regeneration and the teardown's answers (T181, T179)
 
@@ -1630,6 +1636,9 @@ the interop assemblies and nothing else).
   dump. `OpenDoc7` gains `remodel.open_copy`, and its note, cut short at a `|` when it was first
   typed, is completed; `GetOpenDocumentByName` and `GetPathName` gain `remodel.open_copy`,
   `remodel.plan` and `remodel.start`.
+  *Amended 2026-10-19 (owner decision 144A):* the seat calls these through a gate of its own now
+  (R14.6's amendment); "none allowlisted" stays true of the stage-1 allowlist the manifest's
+  column records, and the rows are unchanged.
 - **Constants.** `swCustomInfoDeleteResult_e`, all three (`OK = 0`, `NotPresent = 1`,
   `LinkedProp = 2`), because the teardown names each answer (R15.3); and
   `swRebuildOnActivation_e.swDontRebuildActiveDoc = 1`, the constant the pane seat composes, since

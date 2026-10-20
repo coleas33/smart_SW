@@ -66,6 +66,18 @@ T185, research R16.1):*
 Each marker and line is one `File.AppendAllText`, in the operating system's hands before the call
 it names starts; none carries a value, a path or a request field.
 
+*Added 2026-10-19 (owner decision 144A; feature 011's research R11.1):* the pane seat's gate log.
+`remodel.open_copy` and the activation of the copy before each dump call SOLIDWORKS through the
+pane seat's own gate (`guard-allowlist.md`, "The re-modeler's pane seat"), and each writes two
+timestamped lines to this run's `remodel.log`, on the application thread: `seat=open_copy begin` or
+`seat=activate_before_dump begin` before its first call, as every request's begin line is written
+before it runs; and once its calls are made, `status=ok` with `outcome=` how it ended (`activated`,
+`opened`, or for the activation before a dump `not_open`, `not_the_copy` or `not_activated`) or
+`status=error`, then `gated=` the members its gate was asked about, once each in the order first
+seen, and `refused=` and `error=<exception type>` when they apply. A seat line carries no `target=`,
+so the report's count of writes (`read_log_targets`) is unchanged, and no path; a line that cannot
+be written fails nothing.
+
 The backend also writes `remodel-open.jsonl`, a diagnostic JSON-lines file with `at` (UTC)
 and `phase`. Its fixed phases cover copy open, attestation written, baseline geometry,
 open record written, and cleanup after a failed open. Each line is flushed to disk;
