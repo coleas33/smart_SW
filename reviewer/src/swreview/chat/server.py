@@ -124,7 +124,12 @@ from swreview.checks.rms.run import (
     run_rms_check,
 )
 from swreview.checks.rules.family import waiver_invalidity
-from swreview.checks.rules.run import CHECK_FILE_NAME, check_record, is_check_folder
+from swreview.checks.rules.run import (
+    CHECK_FILE_NAME,
+    check_record,
+    is_check_folder,
+    session_replaced,
+)
 from swreview.checks.standards.profile import SETTING_NAME, ProfileError, ProfileUnreadable
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
 from swreview.checks.standards.registry import STANDARDS_FAMILY
@@ -401,9 +406,9 @@ class UnknownReview(ChatError):
 
     `GET /reviews/{run_id}` (feature 009, contracts/sessions.md section 4) takes a folder
     name, so every way it can fail - a name the path rule refuses, no such folder, no
-    `session.json`, a check folder, a file that cannot be read - is this one 404 naming only
-    the id, as `UnknownCheck` is: a route that said *why* would be a way to probe the
-    workstation.
+    `session.json`, a check's own folder or one whose check record cannot show whose its
+    session is, a file that cannot be read - is this one 404 naming only the id, as
+    `UnknownCheck` is: a route that said *why* would be a way to probe the workstation.
     """
 
     status = 404
@@ -1802,14 +1807,22 @@ class ChatServer:
     def _read_review(self, review_dir: Path) -> dict[str, Any]:
         """The snapshot of the review `review_dir` holds, read-only; blocking.
 
-        A folder holding `check.json` is a Model check or Standards run, whose own route is
-        `GET /checks/{check_id}`; a folder with no `session.json` has no review; a file that
-        cannot be read or does not validate is a review that can no longer be restored. All
-        three are `UnknownReview`.
+        A folder with no `session.json` has no review, and a file that cannot be read or does
+        not validate is a review that can no longer be restored. A folder holding `check.json`
+        is its check's while that record names the `session.json` beside it, and its route is
+        `GET /checks/{check_id}`. A review that claimed it - a Model check's folder handed to a
+        review (feature 003 User Story 6 scenario 11) - moved the check's session aside and put
+        its own in `session.json`, so the record names another session and the folder's
+        session is the review's, which is restored (owner decision 146A); the check's, at
+        `session.N.json`, is never read here. A record that cannot be read, or names no
+        session, cannot show whose the session is, and nothing is guessed through
+        (`session_replaced`). Every refusal is `UnknownReview`.
         """
         unknown = UnknownReview(f"no review {review_dir.name!r} under the run root")
         session_file = review_dir / SESSION_FILE_NAME
-        if (review_dir / CHECK_FILE_NAME).exists() or not session_file.is_file():
+        if not session_file.is_file():
+            raise unknown
+        if (review_dir / CHECK_FILE_NAME).exists() and not session_replaced(review_dir):
             raise unknown
         try:
             session = load_session(session_file)

@@ -60,6 +60,7 @@ from swreview.agent.settings import (
 from swreview.chat.server import SESSION_FILES, _sse, build_provider, create_app
 from swreview.chat.sessions import ChatSession, ChatState
 from swreview.checks.rms.run import is_check_folder
+from swreview.checks.rules.run import session_replaced
 from swreview.checks.standards.run import run_standards_check
 from swreview.ir.loader import save_package
 from swreview.ir.models import EvidencePackage
@@ -1103,6 +1104,65 @@ def test_a_standards_folder_whose_session_its_record_does_not_name_is_no_check_f
     save_session(session.model_copy(update={"session_id": uuid4()}), check_dir / "session.json")
 
     assert not is_check_folder(check_dir)
+
+
+@pytest.mark.parametrize("kind", list(CHECK_FOLDERS))
+def test_session_replaced_tells_a_check_s_own_session_from_one_in_its_place(
+    run_root: Path, kind: str
+) -> None:
+    """What `GET /reviews` asks of a folder holding `check.json` (owner decision 146A): the
+    check's own session is not replaced, and another session in its place - a review's, which
+    moved the check's aside - is, whatever the family. It answers `is_check_folder`'s question
+    the other way round only where both records can be read."""
+    _, build = CHECK_FOLDERS[kind]
+    check_dir = build(run_root)
+    assert (session_replaced(check_dir), is_check_folder(check_dir)) == (False, True)
+
+    session = load_session(check_dir / "session.json")
+    save_session(session.model_copy(update={"session_id": uuid4()}), check_dir / "session.json")
+
+    assert (session_replaced(check_dir), is_check_folder(check_dir)) == (True, False)
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        "no record",
+        "an unreadable record",
+        "a record that is no object",
+        "a record naming no session",
+        "no session",
+        "an unreadable session",
+    ],
+)
+def test_session_replaced_guesses_nothing_where_a_record_cannot_be_read(
+    check_run_dir: Path, broken: str
+) -> None:
+    """A session in the check's place, then each way the folder can fail to show whose it is:
+    every one answers no, so `GET /reviews` restores nothing it cannot show is a review's. A
+    record that names no session read as one naming another before 146A ("the record describes
+    session None"); it is a record that cannot be read now, to every caller alike."""
+    session = load_session(check_run_dir / "session.json")
+    save_session(session.model_copy(update={"session_id": uuid4()}), check_run_dir / "session.json")
+    assert session_replaced(check_run_dir)
+    record = check_run_dir / "check.json"
+    if broken == "no record":
+        record.unlink()
+    elif broken == "an unreadable record":
+        record.write_text("{ not json", encoding="utf-8")
+    elif broken == "a record that is no object":
+        record.write_text("[]", encoding="utf-8")
+    elif broken == "a record naming no session":
+        body = json.loads(record.read_text(encoding="utf-8"))
+        del body["session_id"]
+        record.write_text(json.dumps(body), encoding="utf-8")
+    elif broken == "no session":
+        (check_run_dir / "session.json").unlink()
+    else:
+        (check_run_dir / "session.json").write_text("{ not json", encoding="utf-8")
+
+    assert not session_replaced(check_run_dir)
+    assert not is_check_folder(check_run_dir)
 
 
 @pytest.mark.parametrize("named", ["a chat this backend holds", "an id it never issued"])
