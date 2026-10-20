@@ -1453,9 +1453,9 @@ no broken link.
   `settings.saved`, the failure alone in a `status`, which said neither that the backend did not
   restart nor how to go on. Every page's sentence for `backend.stopped`, "The backend stopped.
   Reopen the pane to start it again.", named a way that starts no backend. A check page's backend
-  strip followed `init` alone, so after a failed start or restart it said "Backend ready" under
-  the banner that said the backend did not start. And an Accept whose re-read was dropped for a
-  newer check said nothing of the exception it wrote.
+  strip followed `init` alone, so under the banner that said the backend did not start it said
+  "Backend ready" after a failed restart, and "Backend starting" after a failed first start. And
+  an Accept whose re-read was dropped for a newer check said nothing of the exception it wrote.
 - **Decision** (owner decision 150A, "3A", test first): "a save whose restart fails says the
   settings were saved and the backend did not restart, with the reason, retryable;
   `backend.stopped`'s sentence names saving the settings as the way to start the backend again; a
@@ -1499,13 +1499,15 @@ no broken link.
   it has no labels, as `TurnRunning`'s is, rather than "class: message"; and it asks `ready` again,
   as after a save that restarted the backend, so the key typed leaves the box, the key source says
   it is stored, and the page holds the backend there is now - the old one, or none.
-- Decision: the Review page's strip too. Item 3 names a check page's strip, but on the Review page
-  the `init` that followed a failed save restart named no backend and the strip said "Backend
-  starting" under a Save line saying the backend did not restart - the same untruth, on the page
-  item 1 changes. It now says "Backend not running" while an `init` names none, and "Backend
-  ready" once one names one; an `init` naming none after that says "Backend starting" again, as
-  during a restart. Its mark (`notRunning`) is its own and set by this class alone: the Review
-  page has no lifecycle-banner mark to reuse, and 145A left its `status` handling as it is.
+- The Review page's strip: an extension of the decision's words, by the implementer's choice, not
+  the owner's decision - item 3 names a check page's strip - made for the same defect, and put to
+  the owner. On the Review page the `init` that followed a failed save restart named no backend
+  and the strip said "Backend starting" under a Save line saying the backend did not restart - the
+  same untruth, on the page item 1 changes. It now says "Backend not running" while an `init`
+  names none, and "Backend ready" once one names one; an `init` naming none after that says
+  "Backend starting" again, as during a restart. Its mark (`notRunning`) is its own and set by this
+  class alone: the Review page has no lifecycle-banner mark to reuse, and 145A left its `status`
+  handling as it is.
 
 **2. `backend.stopped`'s sentence.**
 
@@ -1519,13 +1521,15 @@ no broken link.
 
 **3. A page's backend strip follows a failed start or restart.**
 
-- `check-page.js`, which the Model check and Standards pages share, and `remodel.js` - the Remodel
-  page had the same defect, its strip following `init` alone - now say "Backend not running" from
-  `status {stage: "error", lifecycle: true}`, the add-in's own word that the backend did not start
-  (145A), until an `init` names a backend: through an `init` that names none, "Backend ready" at
-  the one that names one, which is where 145A takes the banner down, and "Backend starting" for an
-  `init` naming none after that. An `error` that is not the add-in's word leaves the strip as it
+- `check-page.js`, which the Model check and Standards pages share, now says "Backend not running"
+  from `status {stage: "error", lifecycle: true}`, the add-in's own word that the backend did not
+  start (145A), until an `init` names a backend: through an `init` that names none, "Backend ready"
+  at the one that names one, which is where 145A takes the banner down, and "Backend starting" for
+  an `init` naming none after that. An `error` that is not the add-in's word leaves the strip as it
   was.
+- `remodel.js` does the same: an extension of the decision's words, by the implementer's choice,
+  not the owner's decision - the Remodel page is not a check page - made because its strip had the
+  same defect, following `init` alone; put to the owner.
 - Decision: a mark of its own (`notRunning`), set and cleared where 145A sets and clears the
   banner's, rather than the banner's mark itself, which the instruction suggested reusing. The
   banner's mark is cleared by any banner put up since - 145A's rule, which
@@ -1563,13 +1567,72 @@ words for the strip.
     `app.js:3067`, whose `init` after a failed save restart came after the failure's `status`.
   - The Accept: `check-page.js:427` to `:433` shows its re-read only while wanted, and says nothing
     otherwise.
+- **Review**: an independent adversarial review of the branch at `8b75949` found no must-fix, and
+  these, settled test first by T150 to T154:
+  - After a save whose restart failed once the old backend had stopped, the Review page stopped
+    noticing that the backend was later replaced (S1). The `init` that followed named no backend,
+    so the next one, naming the restarted backend, had no token to compare with, and the page asked
+    the new backend for the old chat's stream - a 404 and a reconnect loop, which 143A's
+    `AReInitOnARestartedBackendAsksNothingOfTheOldChatsStream` exists to prevent - and left a live
+    waiting review live, its Send going to a backend that does not hold its chat (FR-042). Older
+    than 150A for a start that failed and was answered `settings.saved`; 150A routed every failed
+    save restart through it. On `BackendNotRestarted` the page now marks its backend replaced, as
+    `backend.restarted` marks it: a fix in the page's restart detection, not the consolidation the
+    decision rules out. The reviewer's two probes are T150's cases.
+  - Nothing pinned that the dropped re-read's notice stays off an Accept whose re-read is shown
+    (S2): a mutation that put it up then too survived every check page case. The Model check
+    page's Accept case now asserts the banner stays hidden, and the Standards page has the Accept
+    case it lacked, its twin.
+  - The two strips the decision does not name were recorded under "Decision:", which reads as the
+    owner's (O1, the owner's point): they are recorded above as the implementer's extension.
+  - The way on was where no message goes (O2, the owner's point). `backend.stopped` names it, but no
+    host posts it; a stopped backend reaches the pages as the add-in's `status {stage: "error"}`,
+    whose banner carried the bare failure. That failure is now followed by the way on - on the Model
+    check, Standards and Remodel tabs, after a first start that failed or a restart that failed once
+    the old backend had stopped, "Save Settings on the Review tab to start it again."; on the Review
+    tab, after a first start that failed, "Save Settings to start it again.", and after a restart
+    that waited and failed, whether or not it stopped the old backend, "Save the settings again to
+    retry the restart.". The three sentences are written once (`ReviewHost.StartItAgain`,
+    `StartItAgainOnTheReviewTab` and `RetryTheRestart`, which the save's own answer shares), and
+    `ReviewHost.WithTheWayOn` puts a full stop after a failure that has none (`"... (log: <path>)"`).
+    The add-in's call for the other tabs is renamed `TellTheOtherTabsTheBackendDidNotStart`, since
+    a failed first start makes it now too.
+  - Recorded, not changed (O3, the owner's point): a restart that fails before the old backend
+    stops leaves reviews running on it with mixed settings (Not changed, below).
+  - Nits: a save made while the add-in unloads (N1: recorded below, since answering it otherwise is
+    not small); three comments that said less than the code (N2: `RestartedForNewReview`,
+    `PaneActions.PostStatus`'s `lifecycle`, the add-in's fan-out); this entry's account of the
+    first start's strip (N3: corrected above); and the Review page's strip word, now the constant
+    `NOT_RUNNING` the other pages name it by (N4).
+  - Existing cases changed deliberately: the Model check page's Accept case asserts the banner
+    stays hidden (tightened); `TheAddInTellsEachOtherTabARestartFailedAsAFailedStartIsTold` reads
+    the renamed call and its way on; and the four cases that pinned a waited restart's `status`
+    word for word - `ANewReviewWhoseRestartFailsIsRefusedWithThatFailure`,
+    `ARestartThatFailsIsReportedAsAFailedStartIsAndNotTriedAgain`,
+    `ACallThatWaitedForARestartThatFailedBeforeStoppingAnythingIsToldThatFailure` and the "after
+    waiting" half of `ARestartThatFailsBeforeTheOldBackendStoppedTellsTheOtherTabsNothing` - expect
+    the way on after the failure; nothing else they assert moves.
 - **Not changed**:
-  - A restart that waited for a turn or a remodel run and then failed is told as before, as a
-    failed start is: `status {stage: "error"}` with the failure alone (143A). The save that waited
-    said the settings were saved when it was kept; the failure's words do not say that saving again
-    retries the restart. The decision names a save's own answer, so this is left for the owner.
   - A review, a turn call or a remodel run refused because a restart failed keeps
-    `BackendUnavailable` with the failure (143A, 145A).
+    `BackendUnavailable` with the failure (143A, 145A). The Review page shows the class's sentence,
+    which names the way on; the Remodel page prints the message as it is (145A), so there the
+    refusal names none.
+  - A restart that fails before it stops the old backend - the launcher cannot be resolved, say -
+    ends what waited (`End(caught)` in `DeferredRestart.Now` and `Apply`, `DeferredRestart.cs:313`
+    to `:319` at `8b75949`; a save's, `ReviewHost.cs:1223` to `:1234`), so nothing waits any more.
+    The next review or remodel run goes to the old backend, which keeps its environment - the key,
+    `OPENAI_BASE_URL`, Gemini Enterprise - while the session takes the new provider, model and
+    effort from the settings in force (`ReviewHost.cs:2311` to `:2313`), and the strip says
+    "Backend ready". 143A's and 145A's rule is that nothing runs on the old backend with settings
+    replaced since; this breaks it. Older than 150A (143A's edge case: one that fails before it
+    stops anything leaves the old backend up); closing it is a design choice left to the owner.
+  - A save made while the add-in unloads - its restart refused because the backend client is
+    unloading (`BackendClient.cs:212` to `:218`), or its start told to stop - is answered
+    `BackendNotRestarted`, whose sentence says to save again. Answering it as the add-in stopping,
+    in 143A's words, would not change what the page shows: the Review page shows a class's
+    sentence, not its message, and those words go out as `BackendUnavailable`, whose sentence says
+    to save too. It needs a class of its own, so it is not small; and the pane goes with the add-in,
+    so the answer is seldom seen.
   - No host posts `backend.stopped`, and its handlers keep no mark for the strip: a page told it
     and then given an `init` naming no backend says "Backend starting".
   - A page that loads, or loads again, while no backend is up after a failed start or restart says
@@ -1583,7 +1646,8 @@ words for the strip.
     lands last stays, as the failed re-read's notice and a check's failure did before 150A.
 - **Mutations**: each fix taken out once with one exact replacement, the tree rebuilt, the named
   cases run and the file restored byte for byte (checked by sha256) - 28 mutations, 96 red
-  results in all, and every mutation turned at least one case red:
+  results in all, and every mutation turned at least one case red; and for the review, 10
+  mutations, 33 red results, every one red but S1b, an equivalent mutant (below):
 
   | id | where | taken out | red |
   |---|---|---|---|
@@ -1615,5 +1679,22 @@ words for the strip.
   | M4 | `remodel.js` | the banner's mark in the strip's own place | 2 |
   | M5 | `remodel.js` | any `error` marks it | 1 |
   | M6 | `remodel.js` | `backend.stopped`'s old sentence | 1 |
+  | S1a | `app.js` | a failed save restart does not mark the backend replaced | 2 |
+  | S1b | `app.js` | the mark overwrites one `backend.restarted` made | 0, equivalent |
+  | S2 | `check-page.js` | the dropped re-read's notice on a re-read that was shown too | 2 |
+  | O2a | `ReviewHost.WithTheWayOn` | the way on dropped | 10 |
+  | O2b | `ReviewHost.WithTheWayOn` | no full stop before the way on | 6 |
+  | O2c | `ReviewHost` | a waited restart's failure told the Review page bare | 7 |
+  | O2d | `SwReviewAddIn` | the other tabs told the failure bare | 3 |
+  | O2e | `SwReviewAddIn.StartBackend` | a failed first start told the Review page bare | 1 |
+  | O2f | `SwReviewAddIn.StartBackend` | the other tabs told past the call that adds their way on | 1 |
+  | O2g | `SwReviewAddIn.StartBackend` | the Review page sent to the Review tab | 1 |
 
-- **Tests**: T143, T145 and T147 in [tasks.md](tasks.md), each written first.
+  S1b keeps the mark but drops its guard, so a failed save restart overwrites the token an earlier
+  mark kept. The two differ only once an `init` naming no backend has emptied the page's token, and
+  every `init` after that can only name a new backend's token, which either one believes: no case
+  can tell them apart. The guard is kept, as it says what the mark is - the token of the first
+  backend said to be replaced.
+
+- **Tests**: T143, T145 and T147 in [tasks.md](tasks.md), each written first; and the review's,
+  T150, T152 and T153.
