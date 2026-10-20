@@ -22,6 +22,11 @@ namespace SwReview.AddIn.Tests;
 /// may have read before the new backend was up. On that `init` a page takes the new port and token
 /// and leaves what the engineer is looking at as it is: a check page does not read its latest
 /// check again, and the Remodel page does not read its latest run again (research 145A).
+///
+/// Owner decision 150A adds what a failed or stopped backend leaves on these tabs: the strip says
+/// the backend is not running from the add-in's word that it did not start until an `init` names
+/// one, `backend.stopped` sends the engineer to save the settings on the Review tab, and an Accept
+/// whose re-read is dropped for a newer check says its exception is saved.
 /// </summary>
 public sealed class TabPagesBackendRestartTests
 {
@@ -454,26 +459,82 @@ public sealed class TabPagesBackendRestartTests
     {
         TabPageDriver.Run(tab, driver => driver.WithLatestResult = true, async driver =>
         {
-            await driver.UntilTheLatestResultIsRead();
-            await driver.Settle();
-            await driver.WhatIsShown();
-            int readies = driver.Readies;
-            driver.HoldReady = true;
-            driver.Token = RestartedToken;
-
-            await driver.Post("backend.restarted", Restarted);
-            await driver.Until(() => driver.Readies == readies + 1, "asked for init again");
-            await driver.AcceptTheFirstRule();
-            await driver.Click("run-check");
-            await driver.HoldGets();
-
-            await driver.ReleaseReady();
-            await driver.UntilText("check-state", text => text.StartsWith("Checked", StringComparison.Ordinal), "showed the newer check");
-            await driver.ReleaseGets();
+            await AcceptAndANewerCheckAreLetGoTogether(driver);
 
             Assert.StartsWith("Checked", await driver.TextOf("check-state"), StringComparison.Ordinal);
             Assert.Equal(0, await driver.JustAccepted());
         });
+    }
+
+    /// <summary>
+    /// ...but the exception that Accept wrote is saved, and the page says so, in its banner, as it
+    /// says so of an Accept whose re-read failed - naming the exception, why its check was not
+    /// shown again, and the way on - so the engineer is not left to accept the rule a second time
+    /// (owner decision 150A; until then the dropped re-read said nothing).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void AnAcceptWhoseReReadIsDroppedSaysItsExceptionIsSaved(string tab)
+    {
+        TabPageDriver.Run(tab, driver => driver.WithLatestResult = true, async driver =>
+        {
+            await AcceptAndANewerCheckAreLetGoTogether(driver);
+
+            Assert.Equal(
+                "Accepted as " + TabPageDriver.ExceptionId + ", and the exception is saved; a newer check was "
+                    + "pressed before this check was re-read. Press the check again to see where it stands.",
+                await driver.Banner());
+        });
+    }
+
+    /// <summary>
+    /// An Accept whose re-read failed says so in the same place and the same way - the exception it
+    /// wrote, why its check is not shown again, the way on - since before 150A; the one helper that
+    /// now says both is pinned by both.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void AnAcceptWhoseReReadFailsSaysItsExceptionWasWrittenAndWhy(string tab)
+    {
+        TabPageDriver.Run(tab, driver => driver.WithLatestResult = true, async driver =>
+        {
+            await driver.UntilTheLatestResultIsRead();
+            await driver.Settle();
+            await driver.WhatIsShown();
+            await driver.RefuseGets();
+
+            await driver.AcceptTheFirstRule();
+            await driver.UntilBanner("said the Accept's re-read failed");
+
+            Assert.Equal(
+                "Accepted as " + TabPageDriver.ExceptionId + ", but the check could not be re-read: "
+                    + TabPageDriver.RefusedGet + " Press the check again to see where it stands.",
+                await driver.Banner());
+        });
+    }
+
+    /// <summary>
+    /// An Accept and a check, both waiting for the `init` a restart asked for, let go together: the
+    /// newer check is shown before the Accept's re-read of the older one lands.
+    /// </summary>
+    private static async Task AcceptAndANewerCheckAreLetGoTogether(TabPageDriver driver)
+    {
+        await driver.UntilTheLatestResultIsRead();
+        await driver.Settle();
+        await driver.WhatIsShown();
+        int readies = driver.Readies;
+        driver.HoldReady = true;
+        driver.Token = RestartedToken;
+
+        await driver.Post("backend.restarted", Restarted);
+        await driver.Until(() => driver.Readies == readies + 1, "asked for init again");
+        await driver.AcceptTheFirstRule();
+        await driver.Click("run-check");
+        await driver.HoldGets();
+
+        await driver.ReleaseReady();
+        await driver.UntilText("check-state", text => text.StartsWith("Checked", StringComparison.Ordinal), "showed the newer check");
+        await driver.ReleaseGets();
     }
 
     /// <summary>The add-in's word that the backend did not start, as a failed start or restart tells every tab.</summary>
@@ -551,6 +612,112 @@ public sealed class TabPagesBackendRestartTests
             new object[] { kind, "not the backend's" },
             new object[] { kind, "in the backend's place" },
         });
+
+    /// <summary>What the strip says from the add-in's word that the backend did not start (owner decision 150A).</summary>
+    private const string NotRunning = "Backend not running";
+
+    /// <summary>
+    /// The strip follows the add-in's word that the backend did not start - a failed start or
+    /// restart, `status {stage: "error", lifecycle: true}` - and says the backend is not running
+    /// until an `init` names a backend again: through an `init` that names none, and back to
+    /// "Backend ready" at the one that names one, where the banner comes down too. The word is then
+    /// done with: an `init` naming none after it is a backend starting, as during a restart (owner
+    /// decision 150A; until then the strip followed `init` alone, and said "Backend ready" under the
+    /// banner that said the backend did not start).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void TheStripSaysTheBackendIsNotRunningFromALifecycleErrorUntilAnInitNamesABackend(string tab)
+    {
+        TabPageDriver.Run(tab, null, async driver =>
+        {
+            int readies = driver.Readies;
+            Assert.Equal(("Backend ready", false), await driver.Strip());
+
+            await driver.Post("status", new { stage = "error", message = BackendFailure, lifecycle = true });
+            Assert.Equal((NotRunning, true), await driver.Strip());
+
+            driver.NoBackend = true;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for init again");
+            await driver.Settle();
+            Assert.Equal((NotRunning, true), await driver.Strip());
+
+            driver.NoBackend = false;
+            driver.Token = RestartedToken;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 2, "asked for init again");
+            await driver.Settle();
+            Assert.Equal(("Backend ready", false), await driver.Strip());
+
+            driver.NoBackend = true;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 3, "asked for init once more");
+            await driver.Settle();
+            Assert.Equal(("Backend starting", true), await driver.Strip());
+        });
+    }
+
+    /// <summary>
+    /// A banner put up since the add-in's word - a check's failure, say, which takes its place - is
+    /// not the backend starting: the strip still says it is not running through an `init` that
+    /// names none. (The banner's own mark is cleared by any banner put up since, which is why the
+    /// strip keeps one of its own.)
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void ABannerPutUpSinceTheLifecycleErrorLeavesTheStripSayingTheBackendIsNotRunning(string tab)
+    {
+        TabPageDriver.Run(tab, null, async driver =>
+        {
+            int readies = driver.Readies;
+            await driver.Post("status", new { stage = "error", message = BackendFailure, lifecycle = true });
+            await driver.Post("error", new { error_class = "BackendUnavailable", message = "FICT the check could not reach the backend.", retryable = true });
+
+            driver.NoBackend = true;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for init again");
+            await driver.Settle();
+
+            Assert.Equal((NotRunning, true), await driver.Strip());
+        });
+    }
+
+    /// <summary>
+    /// Only the add-in's word: an error that is not the backend's - a check or a run that stopped -
+    /// leaves the strip as it was.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void AnErrorThatIsNotTheBackendsWordLeavesTheStripAsItWas(string tab)
+    {
+        TabPageDriver.Run(tab, null, async driver =>
+        {
+            await driver.Post("status", new { stage = "error", message = "FICT the check stopped part way through." });
+
+            Assert.Equal(("Backend ready", false), await driver.Strip());
+        });
+    }
+
+    /// <summary>
+    /// `backend.stopped` names the way that starts the backend again (owner decision 150A): the
+    /// add-in starts it when it loads and a settings save restarts it, and the settings are saved on
+    /// the Review tab - so the sentence sends the engineer there, not to reopen the pane, which
+    /// starts nothing.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void ABackendStoppedNamesSavingTheSettingsOnTheReviewTabAsTheWayToStartItAgain(string tab)
+    {
+        TabPageDriver.Run(tab, null, async driver =>
+        {
+            await driver.Post("backend.stopped", new { exit_code = 1, log_path = @"C:\Fictional\FICT-logs\backend.log" });
+
+            Assert.Equal(
+                ("The backend stopped. Save Settings on the Review tab to start it again.", true),
+                await driver.Strip());
+        });
+    }
 
     /// <summary>
     /// The page keeps what the engineer is looking at. A check page's result - read back from its
@@ -632,6 +799,12 @@ public sealed class TabPagesBackendRestartTests
 
         /// <summary>The token the backend started with, before any restart.</summary>
         public const string FirstToken = "FICT-token-before-the-restart";
+
+        /// <summary>The exception the stubbed backend writes for an Accept, as its route answers it.</summary>
+        public const string ExceptionId = "EXC-FICT-0001";
+
+        /// <summary>Why the stubbed backend refuses a `GET` once <see cref="RefuseGets"/> is called.</summary>
+        public const string RefusedGet = "FICT the check folder is gone.";
 
         private const string RemodelRunDir = @"C:\SwReviewRuns\20260916-142201-bracket-remodel";
 
@@ -751,6 +924,16 @@ public sealed class TabPagesBackendRestartTests
             return banner.ValueKind == JsonValueKind.Null ? null : banner.GetString();
         }
 
+        /// <summary>The backend strip: its text, and whether it wears the warning colour.</summary>
+        public async Task<(string Text, bool Warn)> Strip()
+        {
+            string raw = await Page.ExecuteScriptAsync(
+                "(function () { var strip = document.getElementById('backend-state'); "
+                + "return JSON.stringify({ text: strip.textContent, warn: strip.classList.contains('warn') }); }())");
+            JsonElement strip = JsonDocument.Parse(JsonDocument.Parse(raw).RootElement.GetString() ?? "{}").RootElement;
+            return (strip.GetProperty("text").GetString() ?? string.Empty, strip.GetProperty("warn").GetBoolean());
+        }
+
         /// <summary>The text of one element of the page.</summary>
         public async Task<string> TextOf(string elementId) =>
             JsonDocument.Parse(await Page.ExecuteScriptAsync(
@@ -799,6 +982,24 @@ public sealed class TabPagesBackendRestartTests
 
         /// <summary>From now on the stubbed backend holds every `GET`, until <see cref="ReleaseGets"/>.</summary>
         public Task HoldGets() => Page.ExecuteScriptAsync("window.__holdGets = true;0");
+
+        /// <summary>From now on the stubbed backend refuses every `GET`, 404 `UnknownCheck`, saying <see cref="RefusedGet"/>.</summary>
+        public Task RefuseGets() => Page.ExecuteScriptAsync("window.__refuseGets = true;0");
+
+        /// <summary>Waits, bounded, until the banner shows.</summary>
+        public async Task UntilBanner(string what)
+        {
+            var bound = System.Diagnostics.Stopwatch.StartNew();
+            while (await Banner() == null)
+            {
+                if (bound.Elapsed > TimeSpan.FromSeconds(30))
+                {
+                    throw new TimeoutException("the page never " + what + ".");
+                }
+
+                await Task.Delay(5);
+            }
+        }
 
         /// <summary>Answers every `GET` held, and holds no more.</summary>
         public async Task ReleaseGets()
@@ -1142,9 +1343,11 @@ public sealed class TabPagesBackendRestartTests
         /// its path with the origin stripped, and its `Authorization` header. A call that does not
         /// carry <paramref name="accepted"/>, when there is one, is refused as the backend refuses a
         /// token that is not its own (chat/server.py). A check - the `POST` to the family's route -
-        /// is answered as a newer check than the sample, under a check id of its own; every `GET` is
-        /// held while `window.__holdGets` is set - from the boot when <paramref name="holdGets"/> -
-        /// and answered by `window.__releaseGets()`.
+        /// is answered as a newer check than the sample, under a check id of its own, and an Accept -
+        /// the `POST` to a finding's exceptions route - with the exception it wrote,
+        /// <see cref="ExceptionId"/>; every `GET` is held while `window.__holdGets` is set - from
+        /// the boot when <paramref name="holdGets"/> - and answered by `window.__releaseGets()`, and
+        /// refused while `window.__refuseGets` is set.
         /// </summary>
         private static string FetchStub(string sample, string? accepted, bool holdGets) => @"
 (function () {
@@ -1162,6 +1365,19 @@ public sealed class TabPagesBackendRestartTests
     for (var index = 0; index < held.length; index++) { held[index](); }
   };
   function answer(method, path, headers) {
+    if (method === 'GET' && window.__refuseGets) {
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        text: function () {
+          return Promise.resolve(JSON.stringify({
+            error_class: 'UnknownCheck',
+            message: '" + RefusedGet + @"',
+            retryable: false
+          }));
+        }
+      });
+    }
     if (accepted !== null && headers.Authorization !== 'Bearer ' + accepted) {
       return Promise.resolve({
         ok: false,
@@ -1179,6 +1395,8 @@ public sealed class TabPagesBackendRestartTests
     if (method === 'POST' && checkRoutes.indexOf(path) >= 0) {
       body = JSON.parse(JSON.stringify(sample));
       body.check_id = String(sample.check_id) + '-newer';
+    } else if (method === 'POST' && path.indexOf('/exceptions/') >= 0) {
+      body = { exception_id: '" + ExceptionId + @"' };
     }
     return Promise.resolve({
       ok: true,

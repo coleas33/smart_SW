@@ -68,6 +68,12 @@
    */
   var NO_SEAT_MESSAGE = 'Remodel is not in this build yet. This tab will not change the open part.';
 
+  /**
+   * What the strip says from the add-in's word that the backend did not start until an `init`
+   * names a backend (owner decision 150A).
+   */
+  var NOT_RUNNING = 'Backend not running';
+
   var pending = Object.create(null);
   var nextId = 0;
 
@@ -108,7 +114,15 @@
      * names a backend takes it down; no other banner, a run's or a teardown's included (owner
      * decision 145A, third review).
      */
-    lifecycleBanner: false
+    lifecycleBanner: false,
+
+    /**
+     * Whether the add-in's last word on the backend is that it did not start, and no `init` has
+     * named a backend since: the strip says it is not running until one does (owner decision
+     * 150A). Not the banner's mark above, which any banner put up since clears while the backend
+     * is still not running.
+     */
+    notRunning: false
   };
 
   var ui = {};
@@ -187,7 +201,7 @@
       case 'backend.stopped':
         state.backend = null;
         state.token = null;
-        renderBackendState('The backend stopped. Reopen the pane to start it again.', true);
+        renderBackendState('The backend stopped. Save Settings on the Review tab to start it again.', true);
         return;
       case 'backend.restarted':
         // Owner decision 145A: the host restarted the backend with saved settings, so the port
@@ -989,6 +1003,12 @@
     if (stage === 'error') {
       showBanner(payload.message || 'the run stopped');
       state.lifecycleBanner = payload.lifecycle === true;
+      if (state.lifecycleBanner) {
+        // The add-in's word that the backend did not start: the strip says so until an `init`
+        // names a backend (owner decision 150A).
+        state.notRunning = true;
+        renderBackendState(NOT_RUNNING, true);
+      }
       return;
     }
 
@@ -1168,7 +1188,12 @@
 
     renderDocument();
     renderLimits();
-    renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', !state.backend);
+    if (state.backend) {
+      state.notRunning = false;
+    }
+    renderBackendState(
+      state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),
+      !state.backend);
     if (state.backend && state.lifecycleBanner) {
       // The add-in's word that the backend did not start is no longer true: one is up.
       hideBanner();

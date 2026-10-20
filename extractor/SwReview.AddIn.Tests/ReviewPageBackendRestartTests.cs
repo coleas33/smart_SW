@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Text.Json;
 using Xunit;
@@ -15,6 +16,11 @@ namespace SwReview.AddIn.Tests;
 /// does after a save that restarted the backend at once, and takes whichever of the host's
 /// sentences about the wait is on the banner off it, since neither is true once the restart is
 /// made; anything else there stays.
+///
+/// Owner decision 150A adds what a failed or stopped backend leaves on this page: a save whose
+/// restart failed says the settings are saved and the backend did not restart, asks for its
+/// `init` again and says the backend is not running while none is named; and `backend.stopped`
+/// names saving the settings as the way to start it again.
 /// </summary>
 public sealed class ReviewPageBackendRestartTests
 {
@@ -318,6 +324,216 @@ public sealed class ReviewPageBackendRestartTests
             await driver.RunHeldTimers();
 
             Assert.Single(driver.Posted("events.open"));
+        });
+    }
+
+    // ---- owner decision 150A: a save whose restart failed, and a backend that stopped -------------
+
+    /// <summary>The host's answer to a save whose restart failed (ReviewHost, `settings.save`).</summary>
+    private const string NotRestartedMessage =
+        "the settings are saved, but the review backend did not restart with them. Save the settings again "
+        + "to retry the restart. The restart failed: FICT the backend did not answer /health within 30 seconds.";
+
+    private static readonly object NotRestarted = new
+    {
+        error_class = "BackendNotRestarted",
+        message = NotRestartedMessage,
+        retryable = true,
+    };
+
+    private const string SaveLine = @"
+var node = document.getElementById('save-state');
+var fold = node.querySelector('details');
+return JSON.stringify({
+  visible: h.visibleText(node),
+  fold: fold ? fold.textContent : '',
+  text: node.textContent,
+  key: document.getElementById('api-key').value
+});";
+
+    private const string Strip =
+        "var strip = document.getElementById('backend-state');"
+        + "return JSON.stringify({ text: strip.textContent, className: strip.className });";
+
+    /// <summary>
+    /// A save whose restart failed is a save that was kept (owner decision 150A): the save's line
+    /// says so in the class's sentence - the settings are saved, the backend did not restart, save
+    /// again to retry - with the class and the reason in the fold; and, as after a save that
+    /// restarted the backend, the page asks for its `init` again, so it shows the settings saved -
+    /// the key typed is in the store and leaves the box - and holds the backend there is now.
+    /// </summary>
+    [Fact]
+    public void ASaveWhoseRestartFailedSaysTheSettingsAreSavedAndAsksForItsInitAgain()
+    {
+        ReviewPageDriver.Run(
+            driver => driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json())),
+            async driver =>
+            {
+                await driver.Read("document.getElementById('api-key').value = 'FICT-typed-key'; return JSON.stringify({ok: true});");
+                int readies = driver.Posted("ready").Length;
+                driver.SettingsSaveError = NotRestarted;
+
+                await driver.Click("save-settings");
+                await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init after the save");
+                await driver.Settle();
+
+                JsonElement line = await driver.Read(SaveLine);
+                string visible = line.GetProperty("visible").GetString()!.Trim();
+                Assert.StartsWith(LabelsSample.BackendNotRestarted, visible, StringComparison.Ordinal);
+                Assert.DoesNotContain("BackendNotRestarted", visible, StringComparison.Ordinal);
+                Assert.Contains("BackendNotRestarted", line.GetProperty("fold").GetString()!, StringComparison.Ordinal);
+                Assert.Contains(NotRestartedMessage, line.GetProperty("fold").GetString()!, StringComparison.Ordinal);
+                Assert.Equal(string.Empty, line.GetProperty("key").GetString());
+            });
+    }
+
+    /// <summary>
+    /// With no labels - a backend that never answered this page, say - the save's line prints the
+    /// host's message as it is, which says all of it, rather than "class: message".
+    /// </summary>
+    [Fact]
+    public void ASaveWhoseRestartFailedPrintsItsMessageWhenThereAreNoLabels()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            driver.SettingsSaveError = NotRestarted;
+
+            await driver.Click("save-settings");
+            await driver.Settle();
+
+            Assert.Equal(NotRestartedMessage, (await driver.Read(SaveLine)).GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// After a save whose restart failed, the strip says the backend is not running while an
+    /// `init` names none - the old backend stopped, and nothing is starting - rather than "Backend
+    /// starting"; it says "Backend ready" once one names a backend, and an `init` that names none
+    /// after that is back to "Backend starting", as it says while a restart is being made.
+    /// </summary>
+    [Fact]
+    public void AfterASaveWhoseRestartFailedTheStripSaysTheBackendIsNotRunningUntilAnInitNamesOne()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            int readies = driver.Posted("ready").Length;
+            driver.SettingsSaveError = NotRestarted;
+            driver.HoldReady = true;
+
+            await driver.Click("save-settings");
+            await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for init after the save");
+            await driver.ReleaseReady(backendUp: false);
+            JsonElement strip = await driver.Read(Strip);
+            Assert.Equal("Backend not running", strip.GetProperty("text").GetString());
+            Assert.Contains("bad", strip.GetProperty("className").GetString()!, StringComparison.Ordinal);
+
+            driver.BackendToken = RestartedToken;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Posted("ready").Length == readies + 2, "asked for init again");
+            await driver.Settle();
+            Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+
+            driver.HoldReady = true;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Posted("ready").Length == readies + 3, "asked for init once more");
+            await driver.ReleaseReady(backendUp: false);
+            Assert.Equal("Backend starting", (await driver.Read(Strip)).GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// A save whose restart failed once the old backend had stopped, then a save that restarted it.
+    /// The `init` between the two named no backend, so the next one has no token to compare its own
+    /// with; the page still knows the backend was replaced, and asks the new one nothing of the old
+    /// chat's stream - which it does not hold - as after any restart (143A). Until the 150A review
+    /// it asked, and a 404 and a reconnect after it began (S1).
+    /// </summary>
+    [Fact]
+    public void AfterASaveWhoseRestartFailedTheNextRestartAsksNothingOfTheOldChatsStream()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await driver.HoldTimers();
+            await driver.StartReview();
+            string chatId = Assert.Single(driver.Posted("events.open")).GetProperty("chat_id").GetString()!;
+            await driver.Push(chatId, 7, "text.delta", "{\"text\":\"FICT\"}");
+            await driver.Settle();
+
+            await SaveWhoseRestartFailsOnceTheOldBackendStopped(driver);
+            int opens = driver.Posted("events.open").Length;
+
+            await SaveThatRestartsTheBackend(driver);
+            await driver.RunHeldTimers();
+            await driver.RunHeldTimers();
+
+            Assert.Equal(opens, driver.Posted("events.open").Length);
+        });
+    }
+
+    /// <summary>
+    /// ...and a live waiting review on screen is restored from its folder, read-only with Send
+    /// offered, by the restart that worked (feature 015 FR-042), as by any other: until the 150A
+    /// review it stayed live, and its Send went to a backend that did not hold its chat (S1).
+    /// </summary>
+    [Fact]
+    public void AfterASaveWhoseRestartFailedTheNextRestartRestoresALiveWaitingReview()
+    {
+        RestoredReviewFixture fixture = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(driver => fixture.Configure(driver, refuseSend: true), async driver =>
+        {
+            await ReviewPageRecheckTests.PressSend(driver);
+            Assert.False((await driver.Read(ReviewPageRecheckTests.ReadState)).GetProperty("readOnly").GetBoolean());
+            await driver.Route("GET", "/sessions/" + fixture.RecheckedChat + "/snapshot", 404, ReviewPageRecheckTests.UnknownChat);
+            int reviews = (await driver.Calls()).Count(call => call.GetProperty("path").GetString() == fixture.ReviewPath);
+
+            await SaveWhoseRestartFailsOnceTheOldBackendStopped(driver);
+            await SaveThatRestartsTheBackend(driver);
+
+            JsonElement state = await driver.Read(ReviewPageRecheckTests.ReadState);
+            Assert.True(state.GetProperty("readOnly").GetBoolean(), state.GetRawText());
+            Assert.Equal(
+                reviews + 1,
+                (await driver.Calls()).Count(call => call.GetProperty("path").GetString() == fixture.ReviewPath));
+        });
+    }
+
+    /// <summary>A save answered `BackendNotRestarted`, and the `init` after it naming no backend: the old one stopped.</summary>
+    private static async System.Threading.Tasks.Task SaveWhoseRestartFailsOnceTheOldBackendStopped(ReviewPageDriver driver)
+    {
+        int readies = driver.Posted("ready").Length;
+        driver.SettingsSaveError = NotRestarted;
+        driver.HoldReady = true;
+        await driver.Click("save-settings");
+        await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for init after the failed save");
+        await driver.ReleaseReady(backendUp: false);
+    }
+
+    /// <summary>A save answered `settings.saved`: its restart made, a new backend with a new token.</summary>
+    private static async System.Threading.Tasks.Task SaveThatRestartsTheBackend(ReviewPageDriver driver)
+    {
+        int readies = driver.Posted("ready").Length;
+        driver.SettingsSaveError = null;
+        driver.BackendToken = RestartedToken;
+        await driver.Click("save-settings");
+        await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for init after the save");
+        await driver.Settle();
+    }
+
+    /// <summary>
+    /// `backend.stopped` names the way that starts the backend again: the add-in starts it when it
+    /// loads, and a settings save restarts it, so on this tab, where the settings are saved, the
+    /// sentence sends the engineer to Save Settings - not to reopen the pane, which starts nothing.
+    /// </summary>
+    [Fact]
+    public void ABackendStoppedNamesSavingTheSettingsAsTheWayToStartItAgain()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await driver.Post("backend.stopped", new { exit_code = 1, log_path = @"C:\Fictional\FICT-logs\backend.log" });
+
+            JsonElement strip = await driver.Read(Strip);
+            Assert.Equal("The backend stopped. Save Settings to start it again.", strip.GetProperty("text").GetString());
+            Assert.Contains("bad", strip.GetProperty("className").GetString()!, StringComparison.Ordinal);
         });
     }
 }

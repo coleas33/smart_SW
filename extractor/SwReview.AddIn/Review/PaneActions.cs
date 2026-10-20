@@ -535,8 +535,9 @@ public sealed class PaneActions
     /// <param name="message">The message, masked here.</param>
     /// <param name="lifecycle">Whether this is the add-in's own word on the backend - its start, or
     /// a restart that failed: a banner the page put up for such an `error` comes down once a later
-    /// `init` names a backend, and no other banner does (owner decision 145A, third review).
-    /// Nothing else is so marked.</param>
+    /// `init` names a backend, and no other banner does (owner decision 145A, third review), and the
+    /// page's backend strip says the backend is not running from such an `error` until then (owner
+    /// decision 150A). Nothing else is so marked.</param>
     public void PostStatus(string stage, string message, bool lifecycle)
     {
         var payload = new Dictionary<string, object?>

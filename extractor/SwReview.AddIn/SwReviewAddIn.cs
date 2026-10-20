@@ -471,7 +471,7 @@ public class SwReviewAddIn : ISwAddin
             // after each restart the review host makes, and asks for its `init` again; and told of
             // one that failed once the old backend had stopped, as a failed first start is told.
             BackendRestarted = TellTheOtherTabsTheBackendRestarted,
-            BackendRestartFailed = TellTheOtherTabsTheRestartFailed,
+            BackendRestartFailed = TellTheOtherTabsTheBackendDidNotStart,
 
             DrawingModels = DrawingModels,
             Dump = reviewDump,
@@ -1050,8 +1050,10 @@ public class SwReviewAddIn : ISwAddin
             // redacted - a job-object failure, a key-resolution failure, or anything thrown
             // before that wrapper - and the page must never be the first place a key appears.
             // Reported to the page and to the log, never thrown from a thread pool thread,
-            // where it would end the process.
-            PostStatusToPages("error", failure.Message);
+            // where it would end the process. Each page is told the way on with it (150A review):
+            // the Review tab saves the settings itself, and every other tab is sent there.
+            _reviewHost?.PostStatus("error", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain));
+            TellTheOtherTabsTheBackendDidNotStart(failure.Message);
             Report("The SwReview backend did not start.", failure);
         }
     }
@@ -1077,13 +1079,15 @@ public class SwReviewAddIn : ISwAddin
     /// <summary>
     /// <see cref="PostStatusToPages"/> less the Review page: the share of every page but the
     /// Review tab's, whose host tells it of a failed settings restart itself (owner decision 145A,
-    /// <see cref="TellTheOtherTabsTheRestartFailed"/>).
+    /// <see cref="TellTheOtherTabsTheBackendDidNotStart"/>).
     /// </summary>
     private void PostStatusToTheOtherPages(string stage, string message)
     {
         // Each marked as the add-in's own word on the backend (`lifecycle: true`), so a page takes
         // down a banner it put up for a failed start or restart once a later `init` names a backend
-        // (owner decision 145A, third review). The Review page's own Save clears its banner.
+        // (owner decision 145A, third review), and its backend strip says the backend is not
+        // running from such an `error` until then (owner decision 150A). The Review page's own
+        // Save clears its banner.
         _modelCheckHost?.PostStatus(stage, message, lifecycle: true);
 
         // The Standards page tracks the backend for the reason the Model check page does: it
@@ -1104,13 +1108,16 @@ public class SwReviewAddIn : ISwAddin
     }
 
     /// <summary>
-    /// Owner decision 145A, found on review: a settings restart the review host made failed once
-    /// the old backend had stopped, so no backend answers the port and token the Model check,
-    /// Standards and Remodel tabs hold. They are told as a failed first start is told to every page
-    /// (<see cref="StartBackend"/>): `status {stage: "error"}` with the failure, which each host
-    /// masks again. The Review page is told by its own host.
+    /// The add-in's word to the Model check, Standards and Remodel tabs that the backend did not
+    /// start: the first start failed (<see cref="StartBackend"/>), or a settings restart the review
+    /// host made failed once the old backend had stopped (owner decision 145A, found on review). No
+    /// backend answers the port and token they hold, and they are told `status {stage: "error"}`
+    /// with the failure, which each host masks again, and the way on after it, which is on the
+    /// Review tab, since they have no Save of their own (150A review). The Review page is told by
+    /// its own host, or by <see cref="StartBackend"/>.
     /// </summary>
-    private void TellTheOtherTabsTheRestartFailed(string message) => PostStatusToTheOtherPages("error", message);
+    private void TellTheOtherTabsTheBackendDidNotStart(string message) =>
+        PostStatusToTheOtherPages("error", ReviewHost.WithTheWayOn(message, ReviewHost.StartItAgainOnTheReviewTab));
 
     /// <summary>
     /// Owner decision 145A: the review host has restarted the backend with saved settings - a
