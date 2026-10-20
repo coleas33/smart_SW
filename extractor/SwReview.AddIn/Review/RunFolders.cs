@@ -21,6 +21,16 @@ namespace SwReview.AddIn.Review;
 /// The folder is created, not just named: every caller writes into it immediately, and a
 /// name handed back without the directory behind it would fail later, inside the extractor or
 /// inside a CLI's working-directory switch, where the message no longer points here.
+///
+/// <b>In its full form</b> (owner decision 148A, 2026-10-20; feature 011 research R12.3): every folder
+/// made, and every folder found, is named under the run root's full form
+/// (<see cref="FullFormOf"/>), whatever spelling of it the setting holds. The folder is handed on as
+/// it is named: to the backend, whose rule for a run folder refuses a <c>..</c> segment rather than
+/// resolve it, to the bridge's bind, and, as the folder of a re-modeler's copy, to the pane seat,
+/// whose rule for the copy's path refuses one too - so under a run root spelled
+/// <c>C:\work\..\runs</c> a folder named as it was spelled ended every plan before it began
+/// (research R11.8 item 5). A folder made and the same folder found are spelled one way, which the
+/// review host's comparison of a removed review's folder with the one its search finds relies on.
 /// </summary>
 public static class RunFolders
 {
@@ -82,7 +92,7 @@ public static class RunFolders
             string label = "-" + DocumentName(document.Path);
             string? newest = null;
             DateTime newestStamp = DateTime.MinValue;
-            foreach (string directory in Directory.EnumerateDirectories(runRoot))
+            foreach (string directory in Directory.EnumerateDirectories(FullFormOf(runRoot!)))
             {
                 string name = Path.GetFileName(directory);
                 DateTime? stamp = TimestampOf(name);
@@ -251,13 +261,15 @@ public static class RunFolders
         string[] directories;
         try
         {
-            directories = Directory.Exists(runRoot)
-                ? Directory.GetDirectories(runRoot)
+            string root = FullFormOf(runRoot!);
+            directories = Directory.Exists(root)
+                ? Directory.GetDirectories(root)
                 : new string[0];
         }
         catch (Exception failure)
             when (failure is IOException || failure is UnauthorizedAccessException
-                || failure is ArgumentException)
+                || failure is ArgumentException || failure is NotSupportedException
+                || failure is System.Security.SecurityException)
         {
             return null;
         }
@@ -471,15 +483,27 @@ public static class RunFolders
 
         string stem = timestamp.ToString(TimestampFormat, CultureInfo.InvariantCulture) + "-" + label;
 
+        // Owner decision 148A: the folder is named under the run root's full form, so it is handed on
+        // in its full form, as every kind of run's folder is.
+        string root = FullFormOf(runRoot);
+
         // Two reviews of the same document inside one second is a double-click, not an error,
         // and the second one must not be written into the first one's folder.
-        string candidate = Path.Combine(runRoot, stem);
+        string candidate = Path.Combine(root, stem);
         for (int suffix = 2; Directory.Exists(candidate); suffix++)
         {
-            candidate = Path.Combine(runRoot, stem + "-" + suffix.ToString(CultureInfo.InvariantCulture));
+            candidate = Path.Combine(root, stem + "-" + suffix.ToString(CultureInfo.InvariantCulture));
         }
 
         Directory.CreateDirectory(candidate);
         return candidate;
     }
+
+    /// <summary>
+    /// The run root in its full form - <c>Path.GetFullPath</c>: canonical, rooted, with no <c>.</c> or
+    /// <c>..</c> segment and a backslash between segments - the one form every folder this class makes or
+    /// finds is named under (owner decision 148A). A root that names no folder throws here as it would
+    /// below; the searches answer it with nothing.
+    /// </summary>
+    private static string FullFormOf(string runRoot) => Path.GetFullPath(runRoot);
 }

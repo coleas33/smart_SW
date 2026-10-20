@@ -208,6 +208,39 @@ public sealed class RemodelPlanEndToEndTests
     }
 
     /// <summary>
+    /// Owner decision 148A (feature 011 T186, research R12.3; R11.8 item 5): a run root the setting spells
+    /// with a parent segment - <c>...\work\..\runs</c> - plans, and its copy opens again after the plan.
+    /// The run folder is made in its full form, so the folder the bridge binds, the copy path it is sent,
+    /// and the copy the pane seat is handed for the activation before the dump and for Open copy are the
+    /// run's copy by the one rule both seats take it by. Made as the root was spelled, the folder carried
+    /// the segment, the seat refused the copy's path, and every plan ended <c>CopyNotActive</c>.
+    /// </summary>
+    [Fact]
+    public void APlanUnderARunRootSpeltWithAParentSegmentPlansAndItsCopyOpensAgain()
+    {
+        using (var world = new PlanWorld(root => Path.Combine(root, "work", "..", "runs")))
+        {
+            world.Receive("remodel.plan", "p1");
+
+            string runDirectory = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            Assert.Equal(Path.GetFullPath(Path.Combine(world.RunRoot, Path.GetFileName(runDirectory))), runDirectory);
+            Assert.DoesNotContain("..", runDirectory.Split('\\'));
+            List<string> seat = PlanWorld.SeatLines(runDirectory);
+            Assert.EndsWith(
+                " seat=activate_before_dump status=ok outcome=activated gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3,ActiveDoc",
+                seat[1],
+                StringComparison.Ordinal);
+
+            world.Receive("remodel.open_copy", "o1", new { run_dir = runDirectory });
+
+            world.Reply("ok", "o1");
+            Assert.True(world.Solidworks.CopyOpen);
+            Assert.Equal(Path.GetFullPath(RemodelCopy.CopyPathFor(runDirectory, world.SourcePath)), world.Solidworks.CopyPath);
+            Assert.DoesNotContain(PlanWorld.SeatLines(runDirectory), line => line.Contains(" refused=") || line.Contains(" error="));
+        }
+    }
+
+    /// <summary>
     /// T167's words through 004 T176's close: the plan's session ends as the plan is made, and here
     /// the three toggles cannot be put back, so the page is told, in one status error before it hears
     /// the plan was made, which settings were left, by their Tools &gt; Options labels. The plan is
@@ -302,9 +335,20 @@ public sealed class RemodelPlanEndToEndTests
         private readonly RemodelHost _host;
 
         public PlanWorld()
+            : this(null)
+        {
+        }
+
+        /// <param name="spellRunRoot">
+        /// Decision 148A (T186): how the setting spells the run root the host is given, from the folder
+        /// that holds it; null spells it as <see cref="RunRoot"/> is. <see cref="RunRoot"/> stays the
+        /// canonical form, the folder every spelling names.
+        /// </param>
+        public PlanWorld(Func<string, string>? spellRunRoot)
         {
             _root = Path.Combine(Path.GetTempPath(), "swreview-plan-e2e", Guid.NewGuid().ToString("N"));
             RunRoot = Path.Combine(_root, "runs");
+            string runRootAsSet = spellRunRoot == null ? RunRoot : spellRunRoot(_root);
             SourcePath = Path.Combine(_root, "work", "bracket.SLDPRT");
             Directory.CreateDirectory(RunRoot);
             Directory.CreateDirectory(Path.GetDirectoryName(SourcePath)!);
@@ -336,7 +380,7 @@ public sealed class RemodelPlanEndToEndTests
             var endpoint = new BackendEndpoint(51234, "0FAKEtoken");
             PageDocument Document() => new PageDocument(SourcePath, "Default");
 
-            _host = new RemodelHost(new RemodelHostOptions(new ListChannel(_posted), () => RunRoot)
+            _host = new RemodelHost(new RemodelHostOptions(new ListChannel(_posted), () => runRootAsSet)
             {
                 Backend = () => endpoint,
                 CurrentDocument = Document,

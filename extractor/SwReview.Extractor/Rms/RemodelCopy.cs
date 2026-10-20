@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -284,6 +285,91 @@ public static class RemodelCopy
 
         return run!;
     }
+
+    /// <summary>
+    /// Owner decision 148A (feature 011 research R12.3): the run's copy's path and its run folder - the
+    /// one rule both seats take the copy by: the bridge's <c>remodel.open</c>, step 4, for the
+    /// <c>copy_path</c> it is sent, and the add-in's pane seat, for <c>remodel.open_copy</c> and the
+    /// activation before each dump. Until this decision each seat had its own: the pane seat refused a
+    /// <c>..</c> segment and a device path, and the bridge canonicalized the one away and took the other.
+    ///
+    /// A path is the run's copy when it is a full path (<see cref="IsFullPath"/>: a drive's or a share's,
+    /// never a device path, nor one relative to a drive's own folder or to the current drive's root) with
+    /// no <c>..</c> segment, to a part (<see cref="PartExtension"/>) inside a run folder's
+    /// <c>copy/</c> (<see cref="RunDirectoryOf"/>), the run folder a folder and not the root of a drive or
+    /// a share. It answers the path's canonical form - what the seats hand SOLIDWORKS and compare with -
+    /// and its run folder. A <c>..</c> segment is refused on sight rather than canonicalized away, as the
+    /// backend's rule for a run folder refuses one, and so is a device path, though one may name the copy:
+    /// no path a run makes carries either (research R12.3). Anything else is refused as a save target is,
+    /// with the same <see cref="MutatingCallError"/> naming <c>Save3</c>, because it is the same decision:
+    /// this is not a document the re-modeler may open or write. Which run's copy it is, the caller knows:
+    /// the bridge compares the run folder with the one the host bound, and the pane seat is handed the
+    /// copy of a run its host made.
+    /// </summary>
+    public static (string Path, string RunDirectory) CopyOf(string copyPath)
+    {
+        if (copyPath == null)
+        {
+            throw new ArgumentNullException(nameof(copyPath));
+        }
+
+        string trimmed = copyPath.Trim();
+        if (!IsFullPath(trimmed))
+        {
+            throw NotTheCopy(copyPath, "is not a full path - a drive's or a share's - so it names no document");
+        }
+
+        if (trimmed.Split('\\', '/').Any(segment => segment == ".."))
+        {
+            throw NotTheCopy(copyPath, "climbs out of a folder ('..'), and the run's copy is taken by its own path only");
+        }
+
+        string canonical;
+        try
+        {
+            canonical = Path.GetFullPath(trimmed);
+        }
+        catch (Exception error) when (RemodelScope.IsPathError(error))
+        {
+            throw NotTheCopy(copyPath, "is not a path a document can have (" + error.Message + ")");
+        }
+
+        string runDirectory = RunDirectoryOf(canonical);
+        if (string.Equals(Path.GetPathRoot(runDirectory), runDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            throw NotTheCopy(
+                copyPath, $"is in a '{CopyFolderName}' folder at the root of a drive or a share, which is in no run folder");
+        }
+
+        if (!string.Equals(Path.GetExtension(canonical), PartExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            throw NotTheCopy(copyPath, $"is not a part ({PartExtension}), and the run's copy is one");
+        }
+
+        return (canonical, runDirectory);
+    }
+
+    /// <summary>
+    /// A full path, which names one place wherever the process is: a drive letter, a colon and a
+    /// separator, or a share - two separators and a server's name. Never a path relative to a drive's own
+    /// folder (<c>C:copy\...</c>) or to the current drive's root (<c>\runs\...</c>), which
+    /// <see cref="Path.IsPathRooted"/> takes and which resolve against wherever the process is, nor a
+    /// device path (<c>\\?\</c>, <c>\\.\</c>). Moved here from the pane seat's own rule with decision 148A.
+    /// </summary>
+    public static bool IsFullPath(string path) =>
+        path != null
+        && ((path.Length >= 3 && char.IsLetter(path[0]) && path[1] == ':' && IsSeparator(path[2]))
+            || (path.Length >= 3 && IsSeparator(path[0]) && IsSeparator(path[1])
+                && path[2] != '?' && path[2] != '.' && !IsSeparator(path[2])));
+
+    private static bool IsSeparator(char character) => character == '\\' || character == '/';
+
+    /// <summary>The refusal of a path that is not the run's copy, as a save target is refused (decision 148A).</summary>
+    private static MutatingCallError NotTheCopy(string copyPath, string why) =>
+        new MutatingCallError(
+            "Save3",
+            $"'{copyPath}' {why}. The run's copy is a part in its run folder's '{CopyFolderName}' folder, "
+            + "taken by its full path, and nothing else is opened, activated or written as it.");
 
     /// <summary>
     /// The bytewise copy, refusing to overwrite, with RK-9's fallback for a source SOLIDWORKS

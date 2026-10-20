@@ -749,6 +749,51 @@ public sealed class SwRemodelSeatTests
     }
 
     /// <summary>
+    /// Owner decision 148A (feature 011 T186, research R12.3): the seat takes the run's copy by the one rule
+    /// the bridge's <c>remodel.open</c> takes it by, and one list of forms, <see cref="RemodelCopyPathForms"/>,
+    /// holds both seats to it: every form the rule takes is the copy by every way the seat reaches it, handed
+    /// to SOLIDWORKS in the canonical form the rule answers, with its lines beside the run folder the rule
+    /// answers.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RemodelCopyPathForms.Accepted), MemberType = typeof(RemodelCopyPathForms))]
+    public void TheSeatTakesEveryFormTheOneRuleTakesByEveryWay(string path, string canonical, string runDirectory)
+    {
+        _copy.Document.Answer("GetPathName", canonical);
+        foreach (string way in EveryWay)
+        {
+            _application.Calls.Clear();
+            _log.Clear();
+            _application.Answer("GetOpenDocumentByName", _copy.Instance);
+
+            string outcome = Reach(way, path, canonical);
+
+            Assert.Equal(new object?[] { canonical }, _application.Calls[0].Arguments);
+            Assert.Equal(2, _log.Count);
+            Assert.All(_log, entry => Assert.Equal(runDirectory, entry.RunDirectory));
+            Assert.StartsWith(outcome, _log[1].Line, StringComparison.Ordinal);
+        }
+
+        Assert.Empty(_journal.Refusals);
+    }
+
+    /// <summary>
+    /// Decision 148A: and every path the one rule refuses, the seat refuses as an argument error, by both
+    /// actions, before any call, any hop onto the application thread or any line.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RemodelCopyPathForms.Refused), MemberType = typeof(RemodelCopyPathForms))]
+    public void TheSeatRefusesEveryPathTheOneRuleRefusesBeforeAnyCall(string path)
+    {
+        Assert.ThrowsAny<ArgumentException>(() => Seat().ActivateOrOpen(path));
+        Assert.ThrowsAny<ArgumentException>(() => Seat().ActivateOpenCopy(path));
+
+        Assert.Empty(_application.Calls);
+        Assert.Equal(0, _thread.Invocations);
+        Assert.Empty(_log);
+    }
+
+    /// <summary>
     /// Decision 144A's second review (T178): SOLIDWORKS may answer the copy's path in another letter
     /// case than the seat holds - a Windows path is the same path in any case - and the document is
     /// still the copy, by every way the seat reaches it.

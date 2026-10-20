@@ -839,6 +839,101 @@ public class RemodelOpenHandlerTests : IDisposable
         Assert.False(File.Exists(outside));
     }
 
+    // ---- the one rule for the copy's path, shared with the pane seat (decision 148A) ----------------
+
+    /// <summary>
+    /// Owner decision 148A (feature 011 T186, research R12.3): <c>remodel.open</c> takes the copy's path
+    /// by the one rule the pane seat takes it by (<c>RemodelCopy.CopyOf</c>), so every form of a run's copy
+    /// the rule takes passes step 4 - the rule, this run's folder and <c>AssertSaveTarget</c> - with the
+    /// run folder bound as the host binds its own. Each is stopped at step 6, the first write to the
+    /// engineer's settings, so nothing is copied or opened at a fictional path; the answer is the
+    /// settings' failure, never a refusal of the path.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RemodelCopyPathForms.Accepted), MemberType = typeof(RemodelCopyPathForms))]
+    public void Open_EveryFormOfARunsCopyTheOneRuleTakesPassesStepFour(string path, string canonical, string runDirectory)
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.FailingWrites.Add("10=False");
+        var told = new List<RemodelSessionEnd>();
+        BridgeServices services = Services(seat, runDirectory);
+        services.RemodelSessionEnded = told.Add;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher), path));
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Null(response.Result);
+        Assert.Equal("10=False", seat.ToggleWrites.First());
+        Assert.Empty(seat.Opened);
+
+        // The open's ending names the copy in the canonical form the rule answered, in the run folder bound.
+        RemodelSessionEnd outcome = Assert.Single(told);
+        Assert.Equal(canonical, outcome.CopyPath);
+        Assert.Equal(runDirectory, outcome.RunDirectory);
+    }
+
+    /// <summary>
+    /// Decision 148A: every other path a request can carry is refused at step 4 as a save target is -
+    /// <c>guard_refused</c>, naming <c>Save3</c> - before anything is recorded, set, copied or opened, with
+    /// this run's folder bound: a <c>..</c> segment that canonicalizes onto the run's copy, which the
+    /// bridge took until this decision, a device path, a path that names nothing, and the rest the rule
+    /// refuses. A blank path is the request reader's to refuse, before any rule.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RemodelCopyPathForms.RefusedThatARequestCanCarry), MemberType = typeof(RemodelCopyPathForms))]
+    public void Open_EveryOtherPathIsRefusedAsASaveTargetBeforeAnythingIsSet(string path)
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.FailingWrites.Add("10=False");
+        SwBridgeDispatcher dispatcher = Dispatcher(seat, RemodelCopyPathForms.RunDirectory);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher), path));
+
+        Assert.Equal(RemodelErrorCodes.GuardRefused, Refusal(response));
+        Assert.Equal("Save3", Assert.IsType<RemodelErrorResult>(response.Result).Detail!["member"]);
+        Assert.Empty(seat.ToggleWrites);
+        Assert.Empty(seat.Opened);
+    }
+
+    /// <summary>
+    /// Decision 148A: a device path is refused even when the run folder bound is spelt as one, so the
+    /// two agree - the case the bridge took until this decision, copying and opening the copy through
+    /// the device path.
+    /// </summary>
+    [Fact]
+    public void Open_ADevicePathIsRefusedEvenWhenTheBoundRunFolderIsSpeltAsOne()
+    {
+        FakeRemodelSeat seat = Seat();
+        SwBridgeDispatcher dispatcher = Dispatcher(seat, @"\\?\" + _runDirectory);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher), @"\\?\" + _copyPath));
+
+        Assert.Equal(RemodelErrorCodes.GuardRefused, Refusal(response));
+        Assert.Empty(seat.Opened);
+        Assert.Empty(seat.ToggleWrites);
+        Assert.False(File.Exists(_copyPath));
+    }
+
+    /// <summary>
+    /// Decision 148A: what the rule checked is what the bridge uses - the copy is made, opened and attested
+    /// at the canonical form of a path spelt with forward slashes and spaces around it.
+    /// </summary>
+    [Fact]
+    public void Open_TheCopyIsMadeOpenedAndAttestedInTheCanonicalFormItWasCheckedIn()
+    {
+        FakeRemodelSeat seat = Seat();
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+        string spelt = "  " + _copyPath.Replace('\\', '/') + " ";
+
+        var result = Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher), spelt)));
+
+        Assert.Equal(_copyPath, result.DocumentPath);
+        Assert.Equal(new[] { _copyPath }, seat.Opened);
+        Assert.Equal(_copyPath, result.SourceAttestation!.CopyPath);
+        Assert.True(File.Exists(_copyPath));
+    }
+
     /// <summary>
     /// And a bridge with a seat but no run folder refuses rather than deriving one from the
     /// request, which is the same refusal read from the other side.

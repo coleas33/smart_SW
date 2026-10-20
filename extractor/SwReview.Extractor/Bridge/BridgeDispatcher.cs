@@ -1037,10 +1037,12 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
         // 4. The save target, before a byte is written. The run folder is the HOST's - see
         // BridgeServices.RemodelRunRoot - and never one derived from the request, or both of
-        // this step's clauses would be satisfied by whatever path the client sent.
+        // this step's clauses would be satisfied by whatever path the client sent. Owner decision
+        // 148A (feature 011 research R12.3): the copy's path is taken by the one rule the pane seat
+        // takes it by, which refuses a '..' segment and a device path rather than canonicalize the
+        // one away and take the other, and answers the canonical form used from here on.
         string runDirectory = RunRoot(boundRunRoot);
-        string copy = System.IO.Path.GetFullPath(parameters.CopyPath.Trim());
-        string declaredRun = RemodelCopy.RunDirectoryOf(copy);
+        (string copy, string declaredRun) = RemodelCopy.CopyOf(parameters.CopyPath);
 
         if (!string.Equals(declaredRun, runDirectory, StringComparison.OrdinalIgnoreCase))
         {

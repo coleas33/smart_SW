@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using SwReview.Extractor.Bridge;
+using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ids;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.Rms;
@@ -712,5 +713,48 @@ public class RemodelCopyTests : IDisposable
             RemodelCopy.AssertOpenedAtCopy(target, copy, source));
 
         Assert.Equal("open_failed", error.ErrorCode);
+    }
+
+    // ------------------------------------------- the one rule for the copy's path (decision 148A)
+
+    /// <summary>
+    /// Owner decision 148A (feature 011 T186, research R12.3): one rule for the run's copy's path, which
+    /// both seats take it by - the bridge's <c>remodel.open</c> and the add-in's pane seat. Every form of a
+    /// run's copy is taken, in its canonical form, with the run folder it is in: the form a real run hands
+    /// either seat, and the spellings of it a pilot's run root can give (<see cref="RemodelCopyPathForms"/>).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RemodelCopyPathForms.Accepted), MemberType = typeof(RemodelCopyPathForms))]
+    public void CopyOf_TakesEveryFormOfARunsCopyInItsCanonicalFormWithItsRunFolder(
+        string path, string canonical, string runDirectory)
+    {
+        (string copy, string run) = RemodelCopy.CopyOf(path);
+
+        Assert.Equal(canonical, copy);
+        Assert.Equal(runDirectory, run);
+    }
+
+    /// <summary>
+    /// Decision 148A: everything else is refused as a save target is (<c>Save3</c>, the member the
+    /// bridge's refusal of a path outside a run folder's <c>copy/</c> has always named): not the run's
+    /// copy, not a full path, a <c>..</c> segment - refused on sight, never canonicalized away, as the
+    /// backend refuses one in a run folder - a device path, a copy folder in no run folder, and a path
+    /// that names nothing.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RemodelCopyPathForms.Refused), MemberType = typeof(RemodelCopyPathForms))]
+    public void CopyOf_RefusesEveryOtherPathAsASaveTargetIsRefused(string path)
+    {
+        MutatingCallError refusal = Assert.Throws<MutatingCallError>(() => RemodelCopy.CopyOf(path));
+
+        Assert.Equal("Save3", refusal.MemberName);
+        Assert.False(string.IsNullOrWhiteSpace(refusal.Message));
+    }
+
+    /// <summary>No path at all is the caller's mistake, not a path to judge.</summary>
+    [Fact]
+    public void CopyOf_RefusesNoPathAsAnArgumentError()
+    {
+        Assert.Throws<ArgumentNullException>(() => RemodelCopy.CopyOf(null!));
     }
 }

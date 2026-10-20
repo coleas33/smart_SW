@@ -726,6 +726,35 @@ public sealed class ReviewHostTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 148A (feature 011 T186, research R12.3): a review this session made is tracked in the
+    /// full form <c>RunFolders</c> makes its folder in, and once removed it is not found again under a run
+    /// root the setting spells with a parent segment - the search answers the same folder in the same full
+    /// form, so the host's comparison of the two holds. A folder made in full form and found as the root
+    /// was spelt would be offered again.
+    /// </summary>
+    [Fact]
+    public void ARemovedReviewUnderARunRootSpeltWithAParentSegmentIsNotFoundAgain()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Settings.RunRoot = Path.Combine(world.Settings.RunRoot, "..", Path.GetFileName(world.Settings.RunRoot));
+            var reviewed = new PageDocument(@"C:\Fictional\FICT-reopened.SLDASM", "Default");
+            world.Document = reviewed;
+            string made = world.SavedReview(reviewed, "FICT-saved-session", "not_sent", "2026-10-12T23:41:26+09:30");
+            world.Open();
+            world.Host.TrackSession("FICT-saved-session", made, reviewed, null, "not_sent");
+
+            world.Receive("session.forget", "removed", new { chat_id = "FICT-saved-session" });
+            Assert.Empty(world.Reply("sessions", "removed").GetProperty("items").EnumerateArray());
+
+            world.Receive("sessions.list", "again", new { });
+
+            Assert.Empty(world.Reply("sessions", "again").GetProperty("items").EnumerateArray());
+            Assert.Empty(world.Host.Reviews());
+        }
+    }
+
     [Fact]
     public void AReviewFoundBySessionsListCanRecheckItsSavedFolderWithoutADump()
     {
