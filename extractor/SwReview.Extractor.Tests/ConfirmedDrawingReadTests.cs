@@ -25,10 +25,13 @@ public class ConfirmedDrawingReadTests : IDisposable
 {
     private const string RunId = "20260923-101500-chat0001";
 
-    /// <summary>How the limit's refusal ends (decision 141A): the two ways on that are true of the host.</summary>
+    /// <summary>
+    /// How the limit's refusal ends (decision 141A): the two ways on that are true of the host - since
+    /// decision 147A a new review first, and no longer a Retry or Recheck.
+    /// </summary>
     private const string HowToGoOn =
-        "a drawing already open in SOLIDWORKS is still read, since reading it opens nothing, and a new review "
-        + "session (Retry or Recheck) starts its own count";
+        "a new review (press Review) starts its own count, and a drawing already open in SOLIDWORKS is still "
+        + "read, since reading it opens nothing";
 
     private readonly string _runFolder;
 
@@ -806,10 +809,11 @@ public class ConfirmedDrawingReadTests : IDisposable
     // ---- decision 141A (2026-10-19): the refusal says how to go on --------------------------------
 
     /// <summary>
-    /// The limit's refusal ends with the two ways on that are true of the host: a drawing already
-    /// open is still read, since reading it opens nothing, and a new review session starts its own
-    /// count. Both forms say so - failed opens alone, refused before the package is loaded, and
-    /// failed opens with the package's records.
+    /// The limit's refusal ends with the two ways on that are true of the host: a new review, which
+    /// Review starts in a run folder of its own, starts its own count - named first since decision
+    /// 147A - and a drawing already open is still read, since reading it opens nothing. Both forms
+    /// say so - failed opens alone, refused before the package is loaded, and failed opens with the
+    /// package's records.
     /// </summary>
     [Theory]
     [InlineData(0, 10, "10 opens that were refused or failed")]
