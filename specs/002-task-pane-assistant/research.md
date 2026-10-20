@@ -853,9 +853,13 @@ hid the tab and is not amended here.
     reads it under the restart's own lock. `Now`, a save's restart, reads it before it asks the
     backend anything: a run in progress defers the restart (`Hold.RemodelRun`), exactly as a turn
     the backend's own check finds does (`Hold.Turn`), and the watcher makes it once nothing holds
-    it back. `Apply` - the watcher's, a review's, a turn call's - reads it again after its look,
-    which is made outside the lock because it is a round trip, so a run that began between the
-    two is not ended (`Outcome.RemodelRunning`; the restart still waits).
+    it back. `Apply` - the watcher's, a review's, a turn call's - reads it again under the lock,
+    after its look, because the look can answer that nothing holds the restart back without
+    reading the run: the review host's does so when no backend process is up at all, since the
+    restart is what brings one back, and a look that cannot be made is read as that answer. A run
+    in progress then still holds the restart back (`Outcome.RemodelRunning`; the restart still
+    waits). No run begins between the look and the lock while a restart waits: a run begins
+    through `Begin`, below.
   - A run begins through `DeferredRestart.Begin(begin)`. A restart that waits is made first, as
     a new review makes it (`Apply`), or the one being made is waited for, on the restart's lock -
     a save's made at once included, which `Apply` never waited for, since it is never waiting. A
@@ -917,16 +921,17 @@ hid the tab and is not amended here.
     asks the model with the backend's environment - the provider and key the engineer replaced,
     the session of another provider 138A records for the Remodel route - and a restart that waited
     for the run would wait the length of it with the settings saved but not in force.
-  - The mark is set under the restart's lock because nothing else closes the two gaps: the
-    restart's look is made outside the lock, so a run could begin between a look that saw none and
-    the restart; and a save's restart made at once is never waiting, so a run that began during it
-    was never held, and ran on a backend about to go. The one lock every restart already holds is
-    where the two become exclusive, and a step that only writes a flag cannot slow it.
+  - The mark is set under the restart's lock because nothing else closes the two gaps: a save's
+    restart made at once is never waiting, so a run that began during it was never held, and ran
+    on a backend about to go; and a save whose restart began to wait between a run's look at the
+    restart and its mark would leave the run on the old backend, with the restart waiting on it.
+    Every restart, and every save's deferral, already holds that lock, so the two become exclusive
+    there, and a step that only writes a flag cannot slow it.
   - The other tabs are told by the host rather than left to meet a 401: the page cannot tell a
     refused token from a refused call, and only the host knows the restart happened. A message
     the pages already understand - `backend.restarted`, the Review page's since 143A - keeps one
     meaning for one word on every tab.
-- **Edge cases**, each decided and tested (T113, T115):
+- **Edge cases**, each decided and tested (T113, T115, T118):
   - A save's restart made at once tells every other tab once; a restart that waited tells them
     once it is made and not before; one a new review, a turn call or a remodel run makes tells
     them too; a failed restart, at once or after waiting, tells them nothing; a tab that cannot
@@ -945,11 +950,16 @@ hid the tab and is not amended here.
     restart fails - its own, or a save's that failed before it stopped anything, which left the old
     backend up - it is refused with the failure, masked, and never begins; once the host is
     disposed it never begins.
-  - A restart whose look saw no run never ends a run that began after the look; a save's restart
-    asked for while a run's step runs waits for it, and then waits for the run.
+  - A restart whose look did not read the run - no backend process at all, or a look that cannot
+    be made - never ends a run in progress: it waits, and is made once, with the saved settings,
+    when the run ends; a save's restart asked for while a run's step runs waits for it, and then
+    waits for the run.
   - A plan or a Start refused on the spot asks no gate; one the gate refuses calls nothing, makes
     no folder and records no run, leaving the plan startable; a gate that throws leaves the host
     free.
+  - A Start whose plan's session went while its gate waited - the tool service re-attached, or a
+    teardown ended the session - is refused `SessionLost` in decision 22A's words, before
+    `remodel.started` and before any call, and the host is left free.
 - **Evidence** (at `ef6d1ce`):
   - A save restarted the backend under a remodel run: `ReviewHost.Save` checks only the turns
     before it writes (`ReviewHost.cs:1049`) and restarts through `DeferredRestart.Now` (`:1168`),
@@ -972,6 +982,20 @@ hid the tab and is not amended here.
     likewise (`:961`); the review host posted `backend.restarted` to the Review page alone
     (`ReviewHost.cs:447`), and the add-in posts to every page only the first start's status
     (`SwReviewAddIn.cs:1038`).
+- **Review**: an independent review of T113 to T117 found two things, settled test first by T118
+  and T119:
+  - Start read its plan's session before the gate only, and the gate can wait through a restart:
+    seconds in which the host is not yet busy, so the tool service is free to re-attach - its
+    re-attach asks whether the host is busy before it moves (`ToolServiceGate.FollowCore`) - and
+    a teardown to end the session. A Start could then begin on a session that went while it
+    waited, which decision 22A refuses. Start now reads the session again once the gate has
+    marked the host busy (`RemodelHost.LostSessionWords`, one reading for both checks), and
+    refuses `SessionLost` in the same words, clearing the mark.
+  - `Apply`'s reading of the run under the lock was said to guard a run begun between the look
+    and the lock, which the gate rules out while a restart waits. What it guards is a look that
+    answers without reading the run; the comment, `Outcome.RemodelRunning`, the class summary and
+    the unit case's name now say so, and a case through the host pins it: no backend process, a
+    run in progress, and the restart made only when the run ends.
 - **Not changed**:
   - Discard copy's close is one backend round trip that holds nothing back: a restart that lands
     during it fails the close, and Discard deletes `copy/` anyway, as it does when the bridge does
@@ -985,7 +1009,21 @@ hid the tab and is not amended here.
   - The labels: the refusals keep their classes - `TurnRunning`, `RemodelRunning`,
     `BackendUnavailable` - and the Remodel page prints a refusal's message, not a label, so
     `review_words_v1.yaml` and the pane fixtures are untouched.
+  - The moment between a re-attach's question whether the host is busy and its taking the
+    service down, in which a Start that has read its session just after its mark can still lose
+    it: Start's reading and its mark had that moment before 145A, and the gate's wait no longer
+    widens it.
+  - A plan reads the active document before its gate, and its probe reads it afresh after; the
+    bridge refuses an open whose probe was not of that exact source (`scope_not_probed`), so a
+    part switched while the gate waited fails the plan before anything is copied, and the wrong
+    part is never planned.
+  - Seen while reviewing, in 143A's area and left for the owner: a new review reads the active
+    document before it makes a waiting restart first (`ReviewHost.StartReview`, `BackendReady`),
+    and its dump attaches to whatever is active after (`SwReviewDump.Run`). A restart takes
+    seconds, in which the engineer can switch documents, so the run folder named for one document
+    could hold another's evidence; nothing like `scope_not_probed` stands between the two.
 - **Mutations**: each fix is pinned by a case that turns red when it is taken out: 14 mutations
-  for the tabs (T114), 38 red results in all, and 21 for a remodel run (T116), 75 red
-  results in all - each taking one fix out, the tree rebuilt and restored after each.
-- **Tests**: T113 and T115 in [tasks.md](tasks.md), each written first.
+  for the tabs (T114), 38 red results in all; 21 for a remodel run (T116), 75 red results in
+  all; and 4 for the review's findings (T119), 10 red results in all - each taking one fix out,
+  the tree rebuilt and restored after each.
+- **Tests**: T113, T115 and T118 in [tasks.md](tasks.md), each written first.
