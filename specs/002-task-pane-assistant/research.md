@@ -470,14 +470,18 @@ hid the tab and is not amended here.
     order the add-in can know it: no backend process at all holds nothing - the restart brings
     one back; then a remodel run in progress (`ReviewHostOptions.BackendBusy`), which the
     restart would end, known without asking the backend; then the turns, asked of the backend
-    as the save's check asks them (`LookAtTheTurns`), but read strictly: a backend that gives no
-    answer at all - the connection refused, reset or timed out
-    (`BackendRequestException.Unanswered`) - leaves the turn unknown and holds the restart back,
-    and any answer that names no running state, whatever its status, says the chat has none.
-    After three looks in a row the backend leaves unanswered (`DeferredRestart.UnansweredLooks`)
-    the watcher stops waiting and posts `status {stage: "error"}`: "the review backend stopped
-    answering, so it was not restarted with the settings saved during the turn. Save the
-    settings again to restart it." A save refused again meanwhile starts the count again. The
+    as the save's check asks them (`LookAtTheTurns`), but read strictly: only a readable state, a
+    404 `UnknownChat` or a 400 `InvalidRequest` rules a turn out (`ReviewHost.RulesOutATurn`, on
+    the status `BackendRequestException.Status` keeps); anything else - no HTTP answer at all, a
+    5xx, a body that is not the backend's, any other refusal - leaves the turn unknown and holds
+    the restart back. After three such looks in a row (`DeferredRestart.UnansweredLooks`) the
+    watcher stops looking and posts `status {stage: "error"}`: "the review backend is not
+    answering, so it has not been restarted with the settings saved during the turn yet. It will
+    be before the next review or follow-up, once it answers; to restart it now, save the settings
+    again." It posts that under the restart's own lock, so a later save's promise always comes
+    after it. The restart still waits: each review and each turn call then looks once more, and
+    makes it if the backend has answered that nothing holds it back. A save refused again starts
+    a new watcher; one refused while the watcher is deciding to stop starts the count again. The
     restart reads the settings and resolves the key only when it is made. One lock is held for
     the whole of any restart the host makes, and whoever takes it asks again whether a restart
     is still waiting, so however many ask the backend restarts once. `settings.save`'s own
@@ -503,16 +507,17 @@ hid the tab and is not amended here.
     words, which say why. Stop, dispositions and the timing are never held: Stop must reach the
     backend while a turn holds the restart back, and a disposition sent before the restart is
     recorded, where one held until after it would only be refused.
-  - The page is told with `backend.restarted {promise}`, takes the host's sentence - the
-    `promise` - off its banner, and nothing else there, and asks `ready` again for the new port
-    and token, as it does after a save that restarted at once - once more after an `init` already
-    on its way, which the host may have read while there was no backend, or before the restart
-    began. It believes the restart until an `init` names a token other than the one it held
-    when the message arrived, so a live waiting review on screen is restored from its folder
-    with the new backend's token (feature 015 FR-042); and it closes the old chat's stream and
-    any reconnect its close left waiting, since the new backend does not hold that chat. A
-    failed restart is reported as a failed start is - `status {stage: "error"}` with its message
-    - and not retried: the next save is the retry, as after any failed start.
+  - The page is told with `backend.restarted {sentences}`, takes whichever of the host's
+    sentences about the wait - the promise, or that the backend is not answering - is on its
+    banner off it, and nothing else there, and asks `ready` again for the new port and token, as
+    it does after a save that restarted at once - once more after an `init` already on its way,
+    which the host may have read while there was no backend, or before the restart began. It
+    believes the restart until an `init` names a token other than the one it held when the
+    message arrived, so a live waiting review on screen is restored from its folder with the new
+    backend's token (feature 015 FR-042); and it closes the old chat's stream and any reconnect
+    its close left waiting, since the new backend does not hold that chat. A failed restart is
+    reported as a failed start is - `status {stage: "error"}` with its message - and not
+    retried: the next save is the retry, as after any failed start.
   - A page that asks `ready` again while it reads a stream on the same backend asks for that
     stream again, from the last event it showed. The host's `ready` closes the reader it holds
     for the page, as a reload needs; and the save a turn started during re-inits the page while
@@ -538,22 +543,22 @@ hid the tab and is not amended here.
     what the restart's own check reads. Asking is the one source that covers every chat however
     the turn ended, and it costs one `GET /sessions/{chat_id}` per review per second, and only
     while a restart waits.
-  - Only a missing answer leaves a turn unknown. A backend that answered - even 400 for an id
-    it cannot read, or 500 - is running and has said nothing of a turn, and to hold the restart
-    on such an answer would hold it for ever; a backend that gives no answer may be mid-turn,
-    and the backend's own check reads a missing answer as no turn, so it must not be the one to
-    decide. Waiting for such a backend is bounded because a wedged one keeps its process, and so
-    its endpoint, and would hold the restart, and every new review, for good. The bound is the
-    simplest truthful one: one count of looks, one status that says what did not happen and
-    what to do, and no restart made under a turn the add-in could not rule out. Saving the
-    settings again is the way on because the save's own check, and the backend's, read a
+  - Only an answer that rules a turn out releases the restart. A readable state says whether a
+    turn runs; 404 `UnknownChat` says the backend does not hold the chat, and 400
+    `InvalidRequest` that it could not. A 5xx, or a body that is not the backend's, says nothing
+    of the turn - a backend answering 500 to `GET /sessions/{chat_id}` may be mid-turn - and the
+    backend's own check, as lenient as the save's, reads such an answer as no turn, so it must
+    not be the one to decide; nor may no answer at all. Watching such a backend is bounded
+    because a wedged one keeps its process, and so its endpoint, and its watcher would ask for
+    good. The bound stops only the watcher: the restart still waits, so no review and no turn
+    call runs on the old backend - each looks once more, and makes the restart once the backend
+    answers - and no caller is told the backend restarted when it has not. Saving the settings
+    again is the way on meanwhile because the save's own check, and the backend's, read a
     missing answer as no turn (`AnyTurnRunning`, `TryListModels` swallowing its failure, and
     `BackendSupervisor`'s delegate being the same `AnyTurnRunning`): the save restarts the
     backend once each of those round trips has timed out - up to 30 seconds a tracked chat for
     each of the two checks, and 30 for the model list, on a backend that accepts connections and
-    never answers. Once the watcher stops, nothing waits: a review then runs on the backend there
-    is, as it did before 143A, and the status has told the engineer the saved settings are not
-    in it.
+    never answers.
   - A refusal says what holds the restart back because the page shows the label of its class
     first: `TurnRunning`'s says to wait or press Stop, which is untrue of a remodel run - and Stop
     is disabled then - and of a backend that does not answer. A turn keeps `TurnRunning`; a
@@ -589,7 +594,7 @@ hid the tab and is not amended here.
   - The sentence needs no change: it is now what happens, unless a remodel run outlasts the
     turn (owner question 1, below). The up-front refusal's old sentence made the kind of promise
     143A removes, in a smaller place, so it is corrected with the behaviour.
-- **Edge cases**, each pinned by a test (T079, T081, T083, T085, T087, T089):
+- **Edge cases**, each pinned by a test (T079, T081, T083, T085, T087, T089, T092):
   - However the turn ends - normally or stopped (`ended`), in an error (`failed`), asking the
     engineer (`waiting_engineer`), or a Send that failed back to waiting (`awaiting_send`) - the
     chat leaves `running`, and the restart is made. The contract names none of them as a reason
@@ -603,13 +608,19 @@ hid the tab and is not amended here.
     the one that waited; if the watcher gets there first, during that save, the backend is
     restarted twice and the second time with the newer settings. The settings in force are
     always the last saved.
-  - A backend that gives no answer holds the restart back for at most three looks of the
-    watcher's in a row - fewer, and an answer, release it as usual; three, and the watcher stops
-    waiting, restarts nothing, says so and how to go on, and asks nothing more, and a save then
-    restarts the backend at once. An answer between them starts the count again, and so does a
-    save refused again meanwhile. Any answer that names no running state - `UnknownChat` for a
-    chat the backend does not hold, 400 for an id it cannot read, any other refusal - does not
-    hold the restart back; with no backend process the restart is made, to bring one back.
+  - A backend that gives no usable answer holds the restart back; after three looks of the
+    watcher's in a row without one - fewer, and an answer that rules a turn out releases it as
+    usual - the watcher stops looking, restarts nothing, and says so and how to go on, before any
+    later save's promise. The restart still waits: the next review or follow-up looks once more,
+    is refused while the backend still gives no usable answer, and once it answers makes the
+    restart first - the review runs on the restarted backend, and a follow-up is answered
+    `UnknownChat` only after a restart has really been made. A save meanwhile restarts the
+    backend once its round trips have timed out. An answer between the looks starts the count
+    again, and so does a save refused again, even while the watcher is deciding to stop. A 404
+    `UnknownChat` or a 400 `InvalidRequest` does not hold the restart back; a 5xx, an unreadable
+    body or any other refusal holds it as no answer does, and a backend answering 500 during a
+    turn is never asked to restart under it. With no backend process the restart is made, to
+    bring one back.
   - A remodel run in progress holds the restart back as a turn does, and so holds a new review
     back with it; it is named before a backend that does not answer, and the watcher does not
     stop waiting for want of an answer while the run lasts.
@@ -674,6 +685,11 @@ hid the tab and is not amended here.
     its transcript although the backend no longer holds its chat: a follow-up, an answer or a
     disposition is answered `UnknownChat`. Only a review waiting for Send is restored from its
     folder (FR-042).
+  - A review refused because the backend does not answer is refused `BackendUnavailable`, whose
+    label reads "The review backend is not running. Save Settings to start it again, then
+    retry." The way on is right; "not running" is not quite - the backend is running and not
+    answering. The label is unchanged, since every pane fixture that carries it would be
+    regenerated; it goes to the owner's wording round.
 - **Owner questions** (recorded 2026-10-19, behaviour unchanged):
   1. The sentence says the backend restarts "when the running turn ends". A remodel run in
      progress holds the restart back too, so when one outlasts the turn the restart comes when
@@ -702,8 +718,8 @@ hid the tab and is not amended here.
   the backend did not answer could release the restart under a turn; that the restart could end
   a remodel run; and that a call could be told the backend restarted when the restart had
   failed. T087 and T088 fix each, test first. A second independent review, of T079 to T088 on
-  `4c4f0ce`, found no deadlock, no new wait on the SOLIDWORKS thread and no exception that can
-  escape a background thread, and these, which T089 and T090 settle test first: the two
+  `4c4f0ce`, found no deadlock and no exception that can escape a background thread, and these,
+  which T089 and T090 settle test first: the two
   restart calls before a review hid each other from the tests, and the engineering context
   requests' was pinned by none (now pinned; `CreateReviewSession`'s, which no caller could
   reach, removed); the strict look could hold the restart back for ever, and its refusals named
@@ -714,6 +730,21 @@ hid the tab and is not amended here.
   refusal was `retryable` where the backend's is not, while the docs said the two could not be
   told apart (now the backend's flag, pinned against `chat/server.py`, and the docs say what is
   true); and a sub-millisecond poll would spin the watcher (refused). The other tabs' stale
-  token is owner question 3. Each fix is pinned: 26 mutations, each taking one of them out,
-  turn 66 cases red in all (T089).
-- **Tests**: T079, T081, T083, T085, T087 and T089 in [tasks.md](tasks.md), each written first.
+  token is owner question 3. A second pass of that review, on `18a0823`, found seven more, which
+  T092 and T093 settle test first: after the bound the restart stopped waiting, so once the
+  backend answered again a review ran on the old backend with the new settings, and a turn call
+  racing the last look could be told the backend had restarted when it had not (the bound now
+  stops only the watcher); a 5xx was read as no turn, so a backend answering 500 during a turn
+  could be restarted under it by its own lenient check (only a readable state, 404
+  `UnknownChat` or 400 `InvalidRequest` rule a turn out); the watcher's guard against stopping
+  on a newer save's account was pinned by nothing (pinned); its word that it stopped could land
+  after a newer save's promise, and the restart did not take it off the banner (posted under
+  the restart's lock, and carried back with the promise); these records said more than the code
+  (corrected); a stop test failed once under a loaded run (read from the code as two test
+  classes changing the runner's one console at once - the add-in makes every stop under one
+  gate - so the classes that start stub children now run one at a time; not seen again); and the
+  label for a backend that does not answer says "not running" (Not changed, above). Each fix
+  is pinned: 26 mutations for the first pass and 9 for the second, each taking one fix
+  out, turn 66 and 21 cases red (T089, T092).
+- **Tests**: T079, T081, T083, T085, T087, T089 and T092 in [tasks.md](tasks.md), each written
+  first.
