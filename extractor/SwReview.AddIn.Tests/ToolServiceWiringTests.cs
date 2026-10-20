@@ -1658,8 +1658,8 @@ public sealed class ToolServiceWiringTests
             BridgeResponse spent = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
             Assert.Equal(
                 "the limit of ten drawings for this review is reached: 10 opens that were refused or failed, so this "
-                    + "one was not opened; a drawing already open in SOLIDWORKS is still read, since reading it opens "
-                    + "nothing, and a new review session (Retry or Recheck) starts its own count",
+                    + "one was not opened; a new review (press Review) starts its own count, and a drawing already open "
+                    + "in SOLIDWORKS is still read, since reading it opens nothing",
                 spent.Error);
             Assert.Equal(10, world.Seat.Calls.Count(call => call == "OpenDoc6"));
 

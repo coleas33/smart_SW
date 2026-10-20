@@ -270,7 +270,7 @@ labels:
   errors:
     AlreadyAccepted: "That condition already has an active exception, so nothing new was recorded."
     AlreadyAnswered: "That question was already answered, perhaps in another window. Reload the review to see its answer."
-    BackendUnavailable: "The review backend is not running. Save Settings to start it again, then retry."
+    BackendUnavailable: "The review backend is not running or not answering. Save Settings to start it again, then retry."
     BridgeUnavailable: "SOLIDWORKS could not be reached. Check that the add-in is loaded, then try again."
     ContextExpired: "The document or saved evidence changed. Extract context evidence again."
     ContextPreparationFailed: "Evidence could not be extracted. Check that the part or assembly is saved and loaded, then extract context evidence again."

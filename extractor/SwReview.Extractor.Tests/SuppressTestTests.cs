@@ -147,6 +147,14 @@ public class SuppressTestTests : IDisposable
         Assert.Contains(@"C:\vault\housing.SLDPRT", message, StringComparison.Ordinal);
         Assert.Contains("write access", message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("read-only", message, StringComparison.OrdinalIgnoreCase);
+
+        // Decision 147A: word for word. The extractor has more than one file-opening call (decision
+        // 137A), so the sentence names no single open path; it says what holds of every one.
+        Assert.Equal(
+            @"'C:\vault\housing.SLDPRT' is not open in SOLIDWORKS. Open it with write access first: "
+                + "suppress-test never opens a document, because the extractor opens your documents only "
+                + "read-only, and a read-only document cannot be suppressed.",
+            message);
     }
 
     [Fact]

@@ -936,3 +936,121 @@ hid the tab and is not amended here.
   (8), a check's own folder restored (4), and `review-send-failure-events.json`'s pin left on
   the old `review-waiting.json` (3, in `ReviewPageSendGateTests`).
 - **Tests**: T106, T108 and T110 in [tasks.md](tasks.md), each written first.
+
+### 147A. Four sentences say what is true (2026-10-19)
+
+**Decision** (owner decision 147A): four wording fixes, test first where a test pins the words.
+Feature 011's refusal once the limit of ten is spent names a new Review as the way on;
+`suppress-test`'s refusal no longer calls the extractor's read-only open its only open path;
+FR-001 names the tabs the pane shows; and `BackendUnavailable`'s label covers a backend that
+does not answer as well as one that is not running.
+
+1. **Feature 011's refusal once the limit of ten is spent** (`ConfirmedDrawingRead.LimitReached`,
+   the one helper both limit sentences share; 011 `contracts/confirmed-open.md` section 2 item 5,
+   amended, and the `drawing.read` bullet of `extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`).
+   - Old end: "; a drawing already open in SOLIDWORKS is still read, since reading it opens
+     nothing, and a new review session (Retry or Recheck) starts its own count".
+   - New end: "; a new review (press Review) starts its own count, and a drawing already open in
+     SOLIDWORKS is still read, since reading it opens nothing".
+   - Why: 011 research R9.5's first question. A Recheck starts its own count, but carries an
+     earlier confirmed answer onto the same candidate question with no new read (015
+     `contracts/recheck.md` section 4), so after a read refused for every candidate it reads
+     nothing again; and Retry is offered only on an error card, which this refusal does not
+     raise - the backend records it as the candidate's coverage reason. Review starts a review in
+     a run folder of its own (`ReviewHost.StartReview`, `RunFolders.CreateForDocument`), so a
+     session whose count starts at nothing, which reads natively the open drawings that show its
+     design and asks the candidate question afresh: the surest way on, now named first. The
+     second way on is kept word for word, with the two limits R9.5 item 4 records, and the
+     sentence is still said only while the package holds fewer than ten drawings, so both ways
+     are true whenever they are named. A Recheck, or a context review's Retry, still starts its
+     own count (011 research R9.1); the sentence no longer names either. The ten-records sentence
+     is unchanged. 011 research R9.5 item 1 carries a dated note.
+   - Left open: whether a Recheck should ask a refused candidate question again, R9.5's other
+     question, is not part of 147A and is still the owner's.
+2. **`suppress-test`'s refusal** (`SuppressTest.DocumentNotOpenMessage`).
+   - Old: "'{path}' is not open in SOLIDWORKS. Open it with write access first: suppress-test
+     never opens a document, because the extractor's only open path is read-only and a read-only
+     document cannot be suppressed."
+   - New: "'{path}' is not open in SOLIDWORKS. Open it with write access first: suppress-test
+     never opens a document, because the extractor opens your documents only read-only, and a
+     read-only document cannot be suppressed."
+   - Why: the extractor has more than one file-opening call (decision 137A; 011 research R8.4),
+     so "its only open path" was untrue - and "every open is read-only" would be untrue too.
+     Every call that opens a document of the engineer's opens it read-only: the console attach's
+     `SwSession.OpenReadOnly` and feature 011's `DrawingOpenScope` (probe D14's as well), each
+     `ISldWorks.OpenDoc6` with ReadOnly and Silent. The only calls that open a file for writing
+     are feature 004's `OpenDoc7` opens, with Silent and LoadModel and never ReadOnly, of the
+     re-modeler's own copy, which its run made in the run folder, and of `probe remodel`'s own
+     throwaway part: files the extractor made, never the engineer's (the constitution's second
+     exception: "The engineer's file is never opened for writing"). So the sentence says what
+     holds of every open the extractor makes, that it opens the engineer's documents only
+     read-only; the comment above it says why.
+   - Where the old words were recorded: 011 research R8.5 item 6 left them to the owner. Feature
+     003's records do not quote the message: the `suppress-test` row of its `contracts/cli.md`
+     lists the refusals made before anything is touched, and this one is not among them. Nothing
+     in 003 changes.
+3. **FR-001** ([spec.md](spec.md)).
+   - Old: "a Task Pane with a Review tab, an Ask tab (the CLI terminal) and an Extract tab", and
+     "the three steps (open a document, extract evidence, review or ask)".
+   - New: "a Task Pane with a Review tab, an Extract tab, a Model check tab, a Remodel tab and a
+     Standards tab", and "the three steps (open a document, extract evidence, review)", with a
+     dated note.
+   - Why: the pane's tab list (`TaskPaneControl`'s constructor) is Review, then Ask only while
+     `AskTabShown`, false since 2026-09-19, then Extract, Model check (feature 003), Remodel
+     (feature 004) and Standards (feature 006), each built with its purpose sentence as banner and
+     tooltip; and the step strip names the tabs step 3 is done on as the pane shows them, so it
+     reads `3 Review` (139A). 139A left FR-001 as it was. User Story 3 and FR-020 still describe
+     the Terminal tab, which is built and hidden; they are not changed.
+4. **`BackendUnavailable`'s label** (`reviewer/src/swreview/report/review_words_v1.yaml`).
+   - Old: "The review backend is not running. Save Settings to start it again, then retry."
+   - New: "The review backend is not running or not answering. Save Settings to start it again,
+     then retry."
+   - Why: 143A gives the class to a backend that does not answer as well as to one with no
+     process, and left the label to the owner's wording round (143A, Not changed). The way on is
+     kept: a save starts the backend in both cases - when it does not answer, once the save's
+     round trips have timed out.
+   - The fixtures: every pane fixture that carries the label was regenerated with its generator,
+     never by hand - `generate_pane_fixture.py --write` (`review-big-assembly.json`) and
+     `generate_waiting_fixtures.py --write` (`review-waiting.json`, `review-waiting-restored.json`
+     and `review-waiting-big-assembly.json`; `review-not-sent-session.json`, which carries no
+     labels, came out byte for byte the same) - each differing in the label's line alone; and
+     `review-send-failure-events.json`'s pin of `review-waiting.json`'s sha256 moved, as 143A
+     moved it. The two captured fixtures have no generator and are left as captured (015
+     `contracts/pane.md`, "A captured fixture"): `review-waiting-apply.json` carries no labels,
+     and `review-waiting-apply-failure.json`'s captured labels block keeps the old words, beside
+     the eight labels added since its capture that it already lacks, `RemodelRunning` among
+     them. No test reads that block: its cases read only `before_save` and `after_save`, and the
+     label the page shows in them comes from `review-waiting.json`.
+
+**Tests**, T098, T100 and T102 in [tasks.md](tasks.md), each changed to the new words first and
+run red against the old ones:
+
+- The limit (T098): `ConfirmedDrawingReadTests.HowToGoOn`, which `TheLimitsRefusalSaysHowToGoOn`
+  (three cases) and `AReviewWhoseFailedOpensAloneReachTheLimitIsRefusedBeforeItsPackageIsLoaded`
+  assert exactly, and the full sentence in
+  `ToolServiceWiringTests.ANewReviewSessionInTheSameRunFolderStartsItsOwnCountThroughTheReviewHostsRecords`:
+  those five cases red, the other 53 and 97 cases of the two classes green; then all green.
+  Changed because the words they pin change; nothing else they assert moved.
+  `test_confirmed_drawing_read.py` passes unedited: the backend records the sentence as each
+  candidate's reason and recognises none of it.
+- `suppress-test` (T100): `SuppressTestTests.DocumentNotOpenMessage_NamesThePartAndWhyTheCommandWillNotOpenIt`
+  keeps its three checks - the path, "write access", "read-only" - which the old words passed
+  too, and now asserts the sentence exactly: red, then green. Tightened, so that untrue words
+  cannot pass again.
+- The label (T102): `RESTART_HOLDS` in `test_review_words.py`, which
+  `test_each_thing_that_holds_a_restart_back_has_a_true_sentence` asserts exactly: red, then
+  green. With the words file changed and the fixtures not yet regenerated, six fixture tests of
+  `test_pane_fixture.py` and `test_pane_waiting_fixtures.py` were red, and once
+  `review-waiting.json` was regenerated three `ReviewPageSendGateTests` cases were red on the
+  pin until it moved; all green after. `ErrorLabelsCoverTheHostTests` reads the keys, not the
+  words, and passed before and after.
+- FR-001 is docs only: no test reads it.
+
+**Evidence** (2026-10-19; before at `ef6d1ce`, after on the branch): the C# build,
+`--no-incremental`, at zero warnings both times, and `SwReview.Extractor.Tests` 9,732 and
+`SwReview.AddIn.Tests` 2,608 passed before and after - tests changed, none added. Python, not
+live, with `SWREVIEW_REQUIRE_TOKENIZER=1`: before, on 3.11, 18,053 passed, 5 skipped and 1 failed,
+`test_prices.py::test_run_spend_includes_failed_attempts[failed]`, which 147A does not touch and
+which passed alone, and in its whole module three times in a row; after, 18,054 passed and 5
+skipped on 3.12 and on 3.11 (`--isolated`), that case among the passed. `ruff check` clean, and
+no broken link.
