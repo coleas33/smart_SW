@@ -149,11 +149,18 @@
 
       /**
        * A read of the latest check an `init` named failed - the backend refused the call or did
-       * not answer, as the one a restart replaced does. The next `init`, a restart's included,
-       * reads it again while the tab shows no result and no check is in flight, so a tab opened
+       * not answer, as the one a restart replaced does - and the latest check is still what the
+       * tab would show: the next `init`, a restart's included, reads it again, so a tab opened
        * while the backend restarted does not stay blank (owner decision 145A, found on review).
+       * Done with once it is read, and once a check is pressed (third review).
        */
       latestUnread: false,
+
+      /**
+       * How many checks have been pressed. A read made before a press is done with once it is
+       * pressed: its answer is neither shown nor remembered (owner decision 145A, third review).
+       */
+      checksPressed: 0,
 
       /** Which buckets are showing, by bucket name. */
       buckets: Object.create(null),
@@ -335,12 +342,28 @@
         return;
       }
 
+      // A check pressed while this read is out is newer than anything it can answer: its answer
+      // is then neither shown nor remembered (owner decision 145A, third review).
+      var pressed = state.checksPressed;
+      function stillWanted() {
+        return state.checksPressed === pressed;
+      }
+
       setRunDirectory(latest.run_dir);
-      refreshResult(checkId)
-        .then(function () {
+      refreshResult(checkId, stillWanted)
+        .then(function (shown) {
+          if (!shown) {
+            return;
+          }
+
+          state.latestUnread = false;
           setCheckState('The check from this session, as it stands now.');
         })
         .catch(function () {
+          if (!stillWanted()) {
+            return;
+          }
+
           // A check folder that has been tidied away is not an error the engineer has to read;
           // the tab simply has nothing to show until the next press. Nor is a backend that
           // refused the token, as the one a restart replaced does: the next `init` reads it again.
@@ -391,9 +414,16 @@
           // ("Never hidden, per Principle VI").
           state.buckets.checked = true;
 
-          return refreshResult(checkId)
-            .then(function () {
-              markAccepted(findingId, exceptionId);
+          // Re-read only while this check is the one on screen: a newer check shown meanwhile - its
+          // call let go with this one, both having waited for the same `init` - is not to be
+          // covered by the older one's re-read (owner decision 145A, third review).
+          return refreshResult(checkId, function () {
+            return !!state.result && state.result.check_id === checkId;
+          })
+            .then(function (shown) {
+              if (shown) {
+                markAccepted(findingId, exceptionId);
+              }
             })
             .catch(function (error) {
               // The exception is written; only the re-read failed. Both are said, because a page
@@ -416,9 +446,19 @@
      * entry point, FR-024), so a page that moved the counts itself would be a second opinion
      * about the score, and the headline number and the list would drift apart. Accepting re-ran
      * the rules and re-rendered `report.md` before it answered, so this reads what that run wrote.
+     *
+     * Shown only if `stillWanted()` says so when the answer lands - the caller's word on whether
+     * something newer has taken the screen meanwhile - and answers whether it was shown.
      */
-    function refreshResult(checkId) {
-      return call('/checks/' + encodeURIComponent(checkId), 'GET', null).then(renderResult);
+    function refreshResult(checkId, stillWanted) {
+      return call('/checks/' + encodeURIComponent(checkId), 'GET', null).then(function (result) {
+        if (!stillWanted()) {
+          return false;
+        }
+
+        renderResult(result);
+        return true;
+      });
     }
 
     /** Points at the row that was just accepted, and names the exception that covers it. */
@@ -1278,6 +1318,13 @@
     }
 
     function setChecking(running) {
+      if (running) {
+        // A check pressed is newer than the latest check: a read of it still out is done with,
+        // and so is one that failed (owner decision 145A, third review).
+        state.checksPressed += 1;
+        state.latestUnread = false;
+      }
+
       state.checking = running;
       renderDocument();
     }
@@ -1377,10 +1424,10 @@
      * `loadLatest` is false when the page is re-asking because the backend has only just started,
      * or has been restarted: the first `init` already loaded whatever check this session left
      * behind, and re-reading it would race whatever the page is rendering now - unless that read
-     * failed and the tab still shows nothing (`latestUnread`). `initPending` keeps two statuses in
-     * quick succession from producing two in-flight asks, and `initAgain` asks once more after one
-     * a restart arrived during. The calls waiting for the `init` (`call`) go on once the last of
-     * them is applied.
+     * failed and nothing has been read or pressed since (`latestUnread`). `initPending` keeps two
+     * statuses in quick succession from producing two in-flight asks, and `initAgain` asks once
+     * more after one a restart arrived during. The calls waiting for the `init` (`call`) go on once
+     * the last of them is answered, applied or refused.
      */
     function requestInit(loadLatest) {
       if (state.initPending) {
@@ -1425,7 +1472,7 @@
       if (page.onInit) {
         page.onInit(payload, api);
       }
-      if (loadLatest || (state.latestUnread && !state.result && !state.checking)) {
+      if (loadLatest || state.latestUnread) {
         loadLatestCheck();
       }
     }

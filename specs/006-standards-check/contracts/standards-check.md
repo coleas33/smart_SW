@@ -243,8 +243,10 @@ here: a tab opened while the backend was starting was given a null endpoint in `
 the token of its last `init`: it re-sends `ready` - once more after an `init` already on its way -
 takes the new port and token, and keeps the check on screen without reading its latest check
 again. *Amended 2026-10-19 (feature 002, owner decision 145A, found on review):* as on the Model
-check page, a call made while such an `init` is on its way waits for it, and a latest check the
-old token could not read is read again by the next `init` while no result has been shown since.
+check page, a call made while such an `init` is on its way waits for it, answered or refused, a
+latest check the old token could not read is read again by the next `init` until it is read or a
+check is pressed, and an Accept's re-read is shown only while its check is the one on screen
+(third review the same day).
 
 `kind` is what the page decides with. **[D]** The Model check page uses it to say whether a
 check can run at all, because only a part can be model-checked; here **all three kinds can be

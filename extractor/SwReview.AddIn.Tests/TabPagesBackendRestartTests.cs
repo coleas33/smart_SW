@@ -275,6 +275,208 @@ public sealed class TabPagesBackendRestartTests
     }
 
     /// <summary>
+    /// A latest check read again once it could be is done with: a check pressed afterwards that
+    /// fails before anything is graded - the Standards page clears its verdict then, on purpose -
+    /// and a later restart do not bring the old check back (owner decision 145A, found on the
+    /// third review: the flag that asked for the re-read was never cleared, and the Standards page
+    /// showed the old verdict again under the failure).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void ALatestCheckReadOnceItCouldBeIsNotReadAgainAfterACheckThatFailed(string tab)
+    {
+        TabPageDriver.Run(
+            tab,
+            driver =>
+            {
+                driver.WithLatestResult = true;
+                driver.AcceptedToken = RestartedToken;
+            },
+            async driver =>
+            {
+                await driver.UntilTheLatestResultIsRead();
+                await driver.Settle();
+                int readies = driver.Readies;
+                driver.Token = RestartedToken;
+
+                await driver.Post("backend.restarted", Restarted);
+                await driver.UntilReads(2, "read its latest check again");
+                await driver.Settle();
+                await driver.WhatIsShown();
+
+                driver.StartRefusal = ("ExtractionFailed", "FICT the extraction failed before anything was graded.");
+                await driver.Click("run-check");
+                await driver.Settle();
+                int rowsAfterTheFailure = await driver.RowsShown();
+
+                await driver.Post("backend.restarted", Restarted);
+                await driver.Until(() => driver.Readies == readies + 2, "asked for init again");
+                await driver.Settle();
+
+                Assert.Equal(2, await driver.LatestResultReads());
+                Assert.Equal(rowsAfterTheFailure, await driver.RowsShown());
+            });
+    }
+
+    /// <summary>
+    /// A latest check read again once it could be is not read again by the restart after that:
+    /// the read that failed has been answered (third review).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void ALatestCheckReadOnceItCouldBeIsNotReadAgainByALaterRestart(string tab)
+    {
+        TabPageDriver.Run(
+            tab,
+            driver =>
+            {
+                driver.WithLatestResult = true;
+                driver.AcceptedToken = RestartedToken;
+            },
+            async driver =>
+            {
+                await driver.UntilTheLatestResultIsRead();
+                await driver.Settle();
+                int readies = driver.Readies;
+                driver.Token = RestartedToken;
+
+                await driver.Post("backend.restarted", Restarted);
+                await driver.UntilReads(2, "read its latest check again");
+                await driver.Settle();
+                await driver.Post("backend.restarted", Restarted);
+                await driver.Until(() => driver.Readies == readies + 2, "asked for init again");
+                await driver.Settle();
+
+                Assert.Equal(2, await driver.LatestResultReads());
+                await driver.WhatIsShown();
+            });
+    }
+
+    /// <summary>
+    /// A latest-check read made before a check was pressed is done with once the check is pressed:
+    /// answered after it, it is not shown - here over a check that failed, whose cleared screen
+    /// is the engineer's - and refused after it, it is not read again by a later `init` (third
+    /// review).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void ALatestCheckReadMadeBeforeACheckWasPressedIsNotShownAfterIt(string tab)
+    {
+        TabPageDriver.Run(
+            tab,
+            driver =>
+            {
+                driver.WithLatestResult = true;
+                driver.HoldGetsAtBoot = true;
+            },
+            async driver =>
+            {
+                await driver.UntilTheLatestResultIsRead();
+                driver.StartRefusal = ("ExtractionFailed", "FICT the extraction failed before anything was graded.");
+                await driver.Click("run-check");
+                await driver.Settle();
+
+                await driver.ReleaseGets();
+
+                Assert.Equal(0, await driver.RowsShown());
+            });
+    }
+
+    /// <summary>The same read, refused after the press: it is not remembered as one to read again.</summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void ALatestCheckReadRefusedAfterACheckWasPressedIsNotReadAgain(string tab)
+    {
+        TabPageDriver.Run(
+            tab,
+            driver =>
+            {
+                driver.WithLatestResult = true;
+                driver.HoldGetsAtBoot = true;
+                driver.AcceptedToken = RestartedToken;
+            },
+            async driver =>
+            {
+                await driver.UntilTheLatestResultIsRead();
+                driver.StartRefusal = ("ExtractionFailed", "FICT the extraction failed before anything was graded.");
+                await driver.Click("run-check");
+                await driver.Settle();
+                await driver.ReleaseGets();
+                int readies = driver.Readies;
+                driver.Token = RestartedToken;
+
+                await driver.Post("backend.restarted", Restarted);
+                await driver.Until(() => driver.Readies > readies, "asked for init again");
+                await driver.Settle();
+
+                Assert.Equal(1, await driver.LatestResultReads());
+            });
+    }
+
+    /// <summary>
+    /// An `init` the host refuses still lets the calls waiting for it go: they wait for an `init`
+    /// on its way, not for one that succeeds, and a check pressed meanwhile still calls its route
+    /// - with the token the page holds, which the backend answers as it answers it (third review:
+    /// nothing pinned it, and with the calls let go only after an `init` that was applied, every
+    /// later call waited for ever).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void ARefusedInitStillLetsTheCallsWaitingForItGo(string tab)
+    {
+        TabPageDriver.Run(tab, null, async driver =>
+        {
+            int readies = driver.Readies;
+            await driver.ClearCalls();
+            driver.HoldReady = true;
+
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for init again");
+            await driver.Click("run-check");
+            await driver.Settle();
+            Assert.DoesNotContain(await driver.Calls(), call => call.GetProperty("method").GetString() == "POST");
+
+            await driver.RefuseOneReady();
+
+            await driver.UntilCall("POST", "the check's call once its init was refused");
+        });
+    }
+
+    /// <summary>
+    /// An Accept and a check, both waiting for the `init` a restart asked for, are let go together:
+    /// the newer check can be shown before the Accept's re-read of the older one lands. That
+    /// re-read is stale and is not shown - the newer check stays on screen, and no row of it is
+    /// marked as the one just accepted (third review: 145A's waiting calls made the order possible).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void AnAcceptsReReadMadeStaleByANewerCheckIsNotShown(string tab)
+    {
+        TabPageDriver.Run(tab, driver => driver.WithLatestResult = true, async driver =>
+        {
+            await driver.UntilTheLatestResultIsRead();
+            await driver.Settle();
+            await driver.WhatIsShown();
+            int readies = driver.Readies;
+            driver.HoldReady = true;
+            driver.Token = RestartedToken;
+
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for init again");
+            await driver.AcceptTheFirstRule();
+            await driver.Click("run-check");
+            await driver.HoldGets();
+
+            await driver.ReleaseReady();
+            await driver.UntilText("check-state", text => text.StartsWith("Checked", StringComparison.Ordinal), "showed the newer check");
+            await driver.ReleaseGets();
+
+            Assert.StartsWith("Checked", await driver.TextOf("check-state"), StringComparison.Ordinal);
+            Assert.Equal(0, await driver.JustAccepted());
+        });
+    }
+
+    /// <summary>
     /// The page keeps what the engineer is looking at. A check page's result - read back from its
     /// latest check when the page loaded - stays on screen as it was, and is not read again: the
     /// restart changed the backend, not the check, and a re-read would race whatever the page
@@ -392,6 +594,24 @@ public sealed class TabPagesBackendRestartTests
         /// </summary>
         public string? AcceptedToken { get; set; }
 
+        /// <summary>
+        /// Whether the stubbed backend holds every `GET` from the boot on, until
+        /// <see cref="ReleaseGets"/>: a read in flight. Set before the page loads.
+        /// </summary>
+        public bool HoldGetsAtBoot { get; set; }
+
+        /// <summary>
+        /// When set, the host refuses the check's start - `check.start` or `standards.start` - with this
+        /// class and message, as it refuses one that fails before anything is graded.
+        /// </summary>
+        public (string ErrorClass, string Message)? StartRefusal { get; set; }
+
+        /// <summary>
+        /// Whether `init` names no backend, as the host's does while none is up - after a start or a
+        /// restart that failed, say.
+        /// </summary>
+        public bool NoBackend { get; set; }
+
         public int Readies => Count("ready");
 
         public int HeldReady
@@ -444,6 +664,72 @@ public sealed class TabPagesBackendRestartTests
         public async Task<int> RowsShown() =>
             JsonDocument.Parse(await Page.ExecuteScriptAsync(
                 "document.querySelectorAll('.rule, #change-list li').length")).RootElement.GetInt32();
+
+        /// <summary>The banner's text, or null while it is hidden.</summary>
+        public async Task<string?> Banner()
+        {
+            string raw = await Page.ExecuteScriptAsync(
+                "(function () { var banner = document.getElementById('banner'); "
+                + "return banner.hidden ? null : banner.textContent; }())");
+            JsonElement banner = JsonDocument.Parse(raw).RootElement;
+            return banner.ValueKind == JsonValueKind.Null ? null : banner.GetString();
+        }
+
+        /// <summary>The text of one element of the page.</summary>
+        public async Task<string> TextOf(string elementId) =>
+            JsonDocument.Parse(await Page.ExecuteScriptAsync(
+                "document.getElementById(" + JsonSerializer.Serialize(elementId) + ").textContent"))
+                .RootElement.GetString() ?? string.Empty;
+
+        /// <summary>Waits, bounded, until one element's text satisfies <paramref name="condition"/>.</summary>
+        public async Task UntilText(string elementId, Func<string, bool> condition, string what)
+        {
+            var bound = System.Diagnostics.Stopwatch.StartNew();
+            while (!condition(await TextOf(elementId)))
+            {
+                if (bound.Elapsed > TimeSpan.FromSeconds(30))
+                {
+                    throw new TimeoutException("the page never " + what + ".");
+                }
+
+                await Task.Delay(5);
+            }
+        }
+
+        /// <summary>How many rule rows say they were just accepted.</summary>
+        public async Task<int> JustAccepted() =>
+            JsonDocument.Parse(await Page.ExecuteScriptAsync(
+                "document.querySelectorAll('.rule.just-accepted').length")).RootElement.GetInt32();
+
+        /// <summary>
+        /// Accepts the first rule on screen that can be accepted, with a note, as the engineer does;
+        /// answers its finding id.
+        /// </summary>
+        public async Task<string> AcceptTheFirstRule()
+        {
+            string raw = await Page.ExecuteScriptAsync(@"(function () {
+  var button = document.querySelector('#rules .rule [data-action=""accept""]');
+  if (!button) { return null; }
+  var row = button.closest('.rule');
+  row.querySelector('.note').value = 'FICT acceptable on this part for the test';
+  button.click();
+  return row.getAttribute('data-finding-id');
+}())");
+            JsonElement finding = JsonDocument.Parse(raw).RootElement;
+            Assert.True(finding.ValueKind == JsonValueKind.String, "no rule on screen could be accepted.");
+            await Settle();
+            return finding.GetString()!;
+        }
+
+        /// <summary>From now on the stubbed backend holds every `GET`, until <see cref="ReleaseGets"/>.</summary>
+        public Task HoldGets() => Page.ExecuteScriptAsync("window.__holdGets = true;0");
+
+        /// <summary>Answers every `GET` held, and holds no more.</summary>
+        public async Task ReleaseGets()
+        {
+            await Page.ExecuteScriptAsync("window.__releaseGets();0");
+            await Settle();
+        }
 
         public static void Run(string kind, Action<TabPageDriver>? configure, Func<TabPageDriver, Task> script)
         {
@@ -530,6 +816,26 @@ public sealed class TabPagesBackendRestartTests
             await Settle();
         }
 
+        /// <summary>
+        /// Answers the oldest `ready` held with an error, as a host that cannot give its `init`
+        /// answers it, and goes on holding the rest.
+        /// </summary>
+        public async Task RefuseOneReady()
+        {
+            lock (_gate)
+            {
+                Assert.NotEmpty(_heldReady);
+                Reply("error", _heldReady.Dequeue(), new
+                {
+                    error_class = "HostError",
+                    message = "FICT the host could not give its init",
+                    retryable = false,
+                });
+            }
+
+            await Settle();
+        }
+
         public async Task Click(string elementId)
         {
             await Page.ExecuteScriptAsync("document.getElementById(" + JsonSerializer.Serialize(elementId) + ").click();0");
@@ -606,7 +912,7 @@ public sealed class TabPagesBackendRestartTests
             Assert.True(_bootReady != null, "the " + _kind + " page never sent `ready`.");
             if (_kind != Remodel)
             {
-                await Page.ExecuteScriptAsync(FetchStub(SampleJson(), AcceptedToken));
+                await Page.ExecuteScriptAsync(FetchStub(SampleJson(), AcceptedToken, HoldGetsAtBoot));
             }
 
             lock (_gate)
@@ -629,6 +935,17 @@ public sealed class TabPagesBackendRestartTests
             lock (_gate)
             {
                 _posted.Add((type, id));
+                if ((type == "check.start" || type == "standards.start") && StartRefusal.HasValue)
+                {
+                    Reply("error", id, new
+                    {
+                        error_class = StartRefusal.Value.ErrorClass,
+                        message = StartRefusal.Value.Message,
+                        retryable = true,
+                    });
+                    return;
+                }
+
                 switch (type)
                 {
                     case "ready":
@@ -693,17 +1010,18 @@ public sealed class TabPagesBackendRestartTests
             }
         }
 
-        /// <summary>The `init` each host sends, for the backend that holds <see cref="Token"/>.</summary>
+        /// <summary>The `init` each host sends, for the backend that holds <see cref="Token"/>, or for none.</summary>
         private object Init()
         {
-            object backend = new { port = 51234, origin = Origin };
+            object? backend = NoBackend ? null : new { port = 51234, origin = Origin };
+            string? token = NoBackend ? null : Token;
             switch (_kind)
             {
                 case ModelCheck:
                     return new
                     {
                         backend,
-                        token = Token,
+                        token,
                         run_root = @"C:\SwReviewRuns",
                         standards_profile = (string?)null,
                         document = new { path = @"C:\vault\bracket.sldprt", configuration = "Default", kind = "part" },
@@ -716,7 +1034,7 @@ public sealed class TabPagesBackendRestartTests
                     return new
                     {
                         backend,
-                        token = Token,
+                        token,
                         run_root = @"C:\SwReviewRuns",
                         profile_path = @"C:\Fictional\FICT-standards.yaml",
                         document = new { path = @"C:\vault\top-plate.sldasm", configuration = "AsBuilt", kind = "assembly" },
@@ -729,7 +1047,7 @@ public sealed class TabPagesBackendRestartTests
                     return new
                     {
                         backend,
-                        token = Token,
+                        token,
                         run_root = @"C:\SwReviewRuns",
                         document = new { path = @"C:\vault\bracket.sldprt", configuration = "Default", kind = "part" },
                         limits = new { max_changes = 250, max_minutes = 20, max_rebuild_seconds = 120 },
@@ -747,23 +1065,27 @@ public sealed class TabPagesBackendRestartTests
         /// Every check route answered with this page's sample, each call recorded with its method,
         /// its path with the origin stripped, and its `Authorization` header. A call that does not
         /// carry <paramref name="accepted"/>, when there is one, is refused as the backend refuses a
-        /// token that is not its own (chat/server.py).
+        /// token that is not its own (chat/server.py). A check - the `POST` to the family's route -
+        /// is answered as a newer check than the sample, under a check id of its own; every `GET` is
+        /// held while `window.__holdGets` is set - from the boot when <paramref name="holdGets"/> -
+        /// and answered by `window.__releaseGets()`.
         /// </summary>
-        private static string FetchStub(string sample, string? accepted) => @"
+        private static string FetchStub(string sample, string? accepted, bool holdGets) => @"
 (function () {
   var origin = '" + Origin + @"';
   var sample = " + sample + @";
   var accepted = " + JsonSerializer.Serialize(accepted) + @";
+  var checkRoutes = ['/checks/rms', '/checks/standards'];
   window.__calls = [];
-  window.fetch = function (url, request) {
-    var path = String(url);
-    if (path.indexOf(origin) === 0) { path = path.substring(origin.length); }
-    var headers = (request && request.headers) || {};
-    window.__calls.push({
-      method: (request && request.method) || 'GET',
-      path: path,
-      authorization: headers.Authorization || ''
-    });
+  window.__holdGets = " + (holdGets ? "true" : "false") + @";
+  window.__heldGets = [];
+  window.__releaseGets = function () {
+    var held = window.__heldGets;
+    window.__heldGets = [];
+    window.__holdGets = false;
+    for (var index = 0; index < held.length; index++) { held[index](); }
+  };
+  function answer(method, path, headers) {
     if (accepted !== null && headers.Authorization !== 'Bearer ' + accepted) {
       return Promise.resolve({
         ok: false,
@@ -777,11 +1099,33 @@ public sealed class TabPagesBackendRestartTests
         }
       });
     }
+    var body = sample;
+    if (method === 'POST' && checkRoutes.indexOf(path) >= 0) {
+      body = JSON.parse(JSON.stringify(sample));
+      body.check_id = String(sample.check_id) + '-newer';
+    }
     return Promise.resolve({
       ok: true,
       status: 200,
-      text: function () { return Promise.resolve(JSON.stringify(sample)); }
+      text: function () { return Promise.resolve(JSON.stringify(body)); }
     });
+  }
+  window.fetch = function (url, request) {
+    var path = String(url);
+    if (path.indexOf(origin) === 0) { path = path.substring(origin.length); }
+    var headers = (request && request.headers) || {};
+    var method = (request && request.method) || 'GET';
+    window.__calls.push({
+      method: method,
+      path: path,
+      authorization: headers.Authorization || ''
+    });
+    if (method === 'GET' && window.__holdGets) {
+      return new Promise(function (resolve) {
+        window.__heldGets.push(function () { resolve(answer(method, path, headers)); });
+      });
+    }
+    return answer(method, path, headers);
   };
 }());0";
 

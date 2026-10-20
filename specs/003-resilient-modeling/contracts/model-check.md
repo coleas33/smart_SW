@@ -196,10 +196,14 @@ backend and not the check, and a call already made with the old token is not mad
 while such an `init` is on its way waits for it - and for the one more ask after it - and carries
 the token it leaves: the host answers that `ready` on this tab's pump, behind an extraction already
 running there, so a check pressed as the backend restarted reaches its route only once the page
-holds the new token, and its extraction is not wasted. And a latest check the page could not read
-- the backend refused the token, as the one a restart replaced does - is read again by the next
-`init`, a restart's included, while no result has been shown since, so a tab opened during a
-restart does not stay blank.
+holds the new token, and its extraction is not wasted. And a latest check the page could not read,
+the backend having refused the token as the one a restart replaced does, is read again by the next
+`init`, a restart's included, so a tab opened during a restart does not stay blank. *Amended on the
+third review the same day:* it is read again until it is read, or until a check is pressed, and a
+read still out when a check is pressed is neither shown nor remembered. A call waits for an `init`
+on its way whether that `init` is applied or refused. An Accept's re-read of its check is shown only
+while that check is the one on screen: a newer check shown first, its call let go with the Accept's
+since both waited for the same `init`, is not covered by the older check.
 
 The two backend stages are here because this page calls the check routes itself. A tab opened
 while the backend was starting was given a null endpoint in `init`, so `status {stage: "ready"}`
