@@ -1910,7 +1910,7 @@ words for the strip.
   - The Accept: `check-page.js:427` to `:433` shows its re-read only while wanted, and says nothing
     otherwise.
 - **Review**: an independent adversarial review of the branch at `8b75949` found no must-fix, and
-  these, settled test first by T150 to T154:
+  these, settled test first by T160 to T164:
   - After a save whose restart failed once the old backend had stopped, the Review page stopped
     noticing that the backend was later replaced (S1). The `init` that followed named no backend,
     so the next one, naming the restarted backend, had no token to compare with, and the page asked
@@ -1920,7 +1920,7 @@ words for the strip.
     than 150A for a start that failed and was answered `settings.saved`; 150A routed every failed
     save restart through it. On `BackendNotRestarted` the page now marks its backend replaced, as
     `backend.restarted` marks it: a fix in the page's restart detection, not the consolidation the
-    decision rules out. The reviewer's two probes are T150's cases.
+    decision rules out. The reviewer's two probes are T160's cases.
   - Nothing pinned that the dropped re-read's notice stays off an Accept whose re-read is shown
     (S2): a mutation that put it up then too survived every check page case. The Model check
     page's Accept case now asserts the banner stays hidden, and the Standards page has the Accept
@@ -2038,5 +2038,7 @@ words for the strip.
   can tell them apart. The guard is kept, as it says what the mark is - the token of the first
   backend said to be replaced.
 
-- **Tests**: T143, T145 and T147 in [tasks.md](tasks.md), each written first; and the review's,
-  T150, T152 and T153.
+- **Tests**: T153, T155 and T157 in [tasks.md](tasks.md), each written first; and the review's,
+  T160, T162 and T163. 150A's tasks landed as T143 to T155, the numbers the commits that made
+  them name, and were renumbered T153 to T165 when 150A was merged after 149A, whose Phase 14
+  holds T143 to T152.
