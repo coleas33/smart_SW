@@ -89,7 +89,10 @@ $familyCount = $drawingFamilies.Count
 # row names every member of the open, activate, new, load, close and quit families there - component
 # documents opened, reloaded or created, a reference loaded, the ground plane activated, the isolate
 # and temporary-fix-group modes left - and DocumentLifecycleFamilyTests reads IAssemblyDoc to prove
-# the row complete.
+# the row complete. The row also names Isolate, the mode ExitIsolate leaves, which the reader prefix
+# Is had taken for a reader by its letters and which no grammar of these interfaces reads; the same
+# decision reads the prefixes as whole words, and DrawingFamilyCompletenessTests holds every name
+# they took only by their letters, on the 34 interfaces, to a refusal.
 $sharedRows = [ordered]@{
     'ISldWorks' = @(
         'ActivateDoc', 'ActivateDoc2', 'ActivateDoc3', 'DocumentVisible', 'CloseAllDocuments',
@@ -136,7 +139,7 @@ $sharedRows = [ordered]@{
         'OpenCompFile', 'SelectiveOpen', 'ComponentReload', 'ComponentReload2', 'IComponentReload2',
         'IComponentReload3', 'InsertNewPart', 'InsertNewPart2', 'InsertNewAssembly', 'InsertNewVirtualPart',
         'InsertNewVirtualAssembly', 'InsertLoadReference', 'ActivateGroundPlane', 'ExitIsolate',
-        'TemporaryFixGroupExit'
+        'TemporaryFixGroupExit', 'Isolate'
     )
     'IFeatureManager' = @(
         'MoveRotateLiveSectionPlane', 'set_MoveSizeFeatures', 'MoveToFolder'
@@ -145,14 +148,19 @@ $sharedRows = [ordered]@{
 
 # ---- section 2: the writer grammar --------------------------------------------------------
 
-$writerPattern = '^(set_|Set|ISet|Add|IAdd|Insert|IInsert|Delete|Remove|Edit|Modify|Change|Reset|' +
-    'Activate|Attach|Detach|Update|Replace|Break|Hide|Show|Move|Align|Suppress|Unsuppress|Rebuild|' +
-    'Convert|Create|ICreate|Make|Lock|Unlock|Sort|Split|Merge|Rotate|Scale|Flip|Link|Unlink|Import|' +
+# Decision 144A (2026-10-19): the COM twin's I may come before every verb, where it came before four
+# (ISet, IAdd, IInsert, ICreate) and the twins of other verbs passed (IDrawingDoc.IEditSelectedGtol,
+# IMakeCustomSymbol2, INewGtol, IReorderSheets, IView.ISelectEntity); and Isolate, the display writer
+# beside Hide and Show, is a verb (IDrawingDoc.IsolateChangedDimensions), which the reader prefix Is
+# had hidden until the prefixes were read as whole words.
+$writerPattern = '^(set_|I?(Set|Add|Insert|Delete|Remove|Edit|Modify|Change|Reset|' +
+    'Activate|Attach|Detach|Update|Replace|Break|Hide|Show|Isolate|Move|Align|Suppress|Unsuppress|Rebuild|' +
+    'Convert|Create|Make|Lock|Unlock|Sort|Split|Merge|Rotate|Scale|Flip|Link|Unlink|Import|' +
     'Explode|Clear|Apply|Restore|Save|Dissolve|Expand|Collapse|Reload|Rename|New|Paste|Copy|Cut|Drag|' +
     'Close|Quit|Open|Load|Unload|Regenerate|Reorder|Auto|Dimension|Reverse|Swap|Toggle|Enable|' +
-    'Disable|Select|Purge|Relink|Resolve|Crop|Unbreak|Force|Hatch|Offset|Position|Freeze|Unfreeze)'
+    'Disable|Select|Purge|Relink|Resolve|Crop|Unbreak|Force|Hatch|Offset|Position|Freeze|Unfreeze))'
 
-# The reader prefixes ($ReaderPrefixes, Test-Reader) are guard-table-helpers.ps1's.
+# The reader rule ($ReaderPattern, Test-Reader) is guard-table-helpers.ps1's.
 function Test-Writer([string] $name) {
     if (Test-Reader $name) { return $false }
     return [regex]::IsMatch($name, $writerPattern)

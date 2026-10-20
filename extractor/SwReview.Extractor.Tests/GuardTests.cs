@@ -1122,18 +1122,37 @@ public class DrawingFamilyCompletenessTests
     internal static readonly string[] SharedFamilies =
         { "ISldWorks", "IModelDoc2", "IModelDocExtension", "IPartDoc", "IAssemblyDoc", "IFeatureManager" };
 
-    /// <summary>contracts/guard.md section 2: a name starting with one of these is a reader.</summary>
-    private static readonly string[] ReaderPrefixes = { "get_", "Get", "IGet", "Is" };
+    /// <summary>
+    /// contracts/guard.md section 2: a name starting with one of the reader prefixes - <c>get_</c>,
+    /// <c>Get</c>, <c>IGet</c>, <c>Is</c> - as a whole word is a reader: the prefix followed by the end
+    /// of the name or by anything but a lowercase letter (<c>get_</c> ends a word itself). Edited
+    /// deliberately for decision 144A (2026-10-19; research R10.4 item 2): the prefixes were read by
+    /// their letters, so <c>Is</c> took in two writers, <c>IDrawingDoc.IsolateChangedDimensions</c> and
+    /// <c>IAssemblyDoc.Isolate</c> (<see cref="ReaderLetters"/>, which
+    /// <see cref="EveryNameTheReaderPrefixesTookOnlyByTheirLettersIsRefusedByEveryGate"/> reads).
+    /// </summary>
+    private static readonly Regex ReaderRule = new Regex("^(get_|(Get|IGet|Is)(?![a-z]))", RegexOptions.CultureInvariant);
 
-    /// <summary>contracts/guard.md section 2: the writer grammar.</summary>
+    /// <summary>The reader prefixes read by their letters alone, as section 2 read them until decision 144A.</summary>
+    private static readonly Regex ReaderLetters = new Regex("^(get_|Get|IGet|Is)", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// contracts/guard.md section 2: the writer grammar. Edited deliberately for decision 144A
+    /// (2026-10-19; research R10.4 item 2): the COM twin's <c>I</c> may come before every verb, where it
+    /// came before four (<c>ISet</c>, <c>IAdd</c>, <c>IInsert</c>, <c>ICreate</c>) and the twins of
+    /// other verbs passed - <c>IDrawingDoc.IEditSelectedGtol</c>, <c>IMakeCustomSymbol2</c>,
+    /// <c>INewGtol</c> and <c>IReorderSheets</c>, and <c>IView.ISelectEntity</c>; and <c>Isolate</c>,
+    /// the display writer beside <c>Hide</c> and <c>Show</c>, is a verb, which the reader prefix
+    /// <c>Is</c> had hidden.
+    /// </summary>
     private static readonly Regex WriterGrammar = new Regex(
-        "^(set_|Set|ISet|Add|IAdd|Insert|IInsert|Delete|Remove|Edit|Modify|Change|Reset|Activate|"
-            + "Attach|Detach|Update|Replace|Break|Hide|Show|Move|Align|Suppress|Unsuppress|Rebuild|"
-            + "Convert|Create|ICreate|Make|Lock|Unlock|Sort|Split|Merge|Rotate|Scale|Flip|Link|Unlink|"
+        "^(set_|I?(Set|Add|Insert|Delete|Remove|Edit|Modify|Change|Reset|Activate|"
+            + "Attach|Detach|Update|Replace|Break|Hide|Show|Isolate|Move|Align|Suppress|Unsuppress|Rebuild|"
+            + "Convert|Create|Make|Lock|Unlock|Sort|Split|Merge|Rotate|Scale|Flip|Link|Unlink|"
             + "Import|Explode|Clear|Apply|Restore|Save|Dissolve|Expand|Collapse|Reload|Rename|New|Paste|"
             + "Copy|Cut|Drag|Close|Quit|Open|Load|Unload|Regenerate|Reorder|Auto|Dimension|Reverse|Swap|"
             + "Toggle|Enable|Disable|Select|Purge|Relink|Resolve|Crop|Unbreak|Force|Hatch|Offset|"
-            + "Position|Freeze|Unfreeze)",
+            + "Position|Freeze|Unfreeze))",
         RegexOptions.CultureInvariant);
 
     /// <summary>
@@ -1158,10 +1177,71 @@ public class DrawingFamilyCompletenessTests
 
     /// <summary>contracts/guard.md section 2's reader rule, which decision 21A's creation grammar
     /// applies first as well (<see cref="CreationFamilyCompletenessTests.IsCreation"/>).</summary>
-    internal static bool IsReader(string name) =>
-        ReaderPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal));
+    internal static bool IsReader(string name) => ReaderRule.IsMatch(name);
 
     internal static bool IsWriter(string name) => !IsReader(name) && WriterGrammar.IsMatch(name);
+
+    /// <summary>
+    /// Section 2's grammar, case by case: every verb's COM twin is a writer, and so is
+    /// <c>Isolate</c>; a reader prefix is a whole word, so <c>Is</c> starts a reader only where a word
+    /// begins after it. The rows marked "(144A)" were wrong before decision 144A: the twins and
+    /// <c>Isolate</c> were no writers, and every name a reader prefix starts by its letters only was a
+    /// reader.
+    /// </summary>
+    [Theory]
+    [InlineData("IEditSelectedGtol", false, true)] // (144A)
+    [InlineData("IMakeCustomSymbol2", false, true)] // (144A)
+    [InlineData("INewGtol", false, true)] // (144A)
+    [InlineData("IReorderSheets", false, true)] // (144A)
+    [InlineData("ISelectEntity", false, true)] // (144A)
+    [InlineData("IsolateChangedDimensions", false, true)] // (144A)
+    [InlineData("Isolate", false, true)] // (144A)
+    [InlineData("ISetXform", false, true)]
+    [InlineData("IAddDisplayText", false, true)]
+    [InlineData("IInsertBomTable", false, true)]
+    [InlineData("ICreateText2", false, true)]
+    [InlineData("InsertNewNote2", false, true)]
+    [InlineData("ImportDiagnosis", false, true)]
+    [InlineData("set_Text", false, true)]
+    [InlineData("IsDetailingMode", true, false)]
+    [InlineData("IsOpenedReadOnly", true, false)]
+    [InlineData("Is3DView", true, false)]
+    [InlineData("Is", true, false)]
+    [InlineData("GetViews", true, false)]
+    [InlineData("get_ReadOnly", true, false)]
+    [InlineData("IGetDisplayDimensions", true, false)]
+    [InlineData("Issue", false, false)] // (144A)
+    [InlineData("Getaway", false, false)] // (144A)
+    [InlineData("Title", false, false)]
+    public void TheGrammarReadsEveryVerbsTwinAndTheReaderPrefixesAsWholeWords(string name, bool reader, bool writer)
+    {
+        Assert.Equal(reader, IsReader(name));
+        Assert.Equal(writer, IsWriter(name));
+    }
+
+    /// <summary>
+    /// Decision 144A (2026-10-19; research R10.4 item 2): every member of the 34 interfaces the generated
+    /// tables are written against whose name a reader prefix starts by its letters but not as a word -
+    /// on 32.5.0.48, <c>IDrawingDoc.IsolateChangedDimensions</c>, which the writer grammar now reaches, and
+    /// <c>IAssemblyDoc.Isolate</c>, which no grammar of these interfaces reads and the <c>IAssemblyDoc</c>
+    /// row names - is refused bare and qualified by every gate the product builds. A later interop's member
+    /// of the kind fails here until someone decides what it is.
+    /// </summary>
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void EveryNameTheReaderPrefixesTookOnlyByTheirLettersIsRefusedByEveryGate()
+    {
+        var taken = DocumentWriteFamilyTests.Interfaces
+            .SelectMany(face => MethodNames(face)
+                .Where(name => ReaderLetters.IsMatch(name) && !IsReader(name))
+                .Select(name => face + "." + name))
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(new[] { "IAssemblyDoc.Isolate", "IDrawingDoc.IsolateChangedDimensions" }, taken);
+
+        IReadOnlyList<string> letThrough = GuardSweep.LetThrough(GuardSweep.ProductGates(), GuardSweep.Spellings(taken));
+        Assert.True(letThrough.Count == 0, "Spellings a gate the product builds lets through: " + string.Join(", ", letThrough));
+    }
 
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
     public void EveryFamilyOfTheContractIsOnTheInterop()

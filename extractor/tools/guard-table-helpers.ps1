@@ -17,15 +17,15 @@
 
 Set-StrictMode -Version Latest
 
-# 011 contracts/guard.md section 2: a name starting with one of these is a reader, whatever else it
-# matches. Both grammars check it first.
-$ReaderPrefixes = @('get_', 'Get', 'IGet', 'Is')
+# 011 contracts/guard.md section 2: a name starting with one of the reader prefixes - get_, Get, IGet,
+# Is - as a whole word is a reader, whatever else it matches; both grammars check it first. A prefix is
+# a whole word when the name ends there or goes on with anything but a lowercase letter (get_ ends a
+# word itself). Decision 144A (2026-10-19) made it so: read by their letters, the prefixes took in two
+# writers, IDrawingDoc.IsolateChangedDimensions and IAssemblyDoc.Isolate.
+$ReaderPattern = '^(get_|(Get|IGet|Is)(?![a-z]))'
 
 function Test-Reader([string] $name) {
-    foreach ($prefix in $ReaderPrefixes) {
-        if ($name.StartsWith($prefix, [StringComparison]::Ordinal)) { return $true }
-    }
-    return $false
+    return [regex]::IsMatch($name, $ReaderPattern)
 }
 
 # ---- the guard's own source ---------------------------------------------------------------
