@@ -965,7 +965,9 @@
     ui.planLost.hidden = !lost;
     ui.planAgain.disabled = ui.planRun.disabled;
     ui.stopRun.disabled = !state.running;
-    ui.openCopy.disabled = !hasRun;
+    // Owner decision 148A: neither copy action while a run runs - opening the copy would change the
+    // document SOLIDWORKS has active under the run, and the host refuses it as it refuses a discard.
+    ui.openCopy.disabled = !hasRun || state.running;
     ui.discardCopy.disabled = !hasRun || state.running;
     ui.openReport.disabled = !hasRun;
     ui.openFolder.disabled = !hasRun;

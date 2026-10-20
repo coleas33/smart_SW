@@ -2337,6 +2337,99 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 148A (feature 011 T188, research R12.4; R11.8 item 9): Open copy pressed while a run
+    /// is in progress is refused - <c>RunInProgress</c>, retryable, in plain words naming no path - before
+    /// anything is asked of SOLIDWORKS: the copy activated or opened between the run's requests to the
+    /// bridge would change the document SOLIDWORKS has active under the run. The page offers it no more
+    /// than Discard copy while a run runs; this is the host's backstop.
+    /// </summary>
+    [Fact]
+    public void OpenCopyWhileItsRunIsInProgressIsRefusedInPlainWordsAndNothingIsActivated()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+                world.Receive("remodel.open_copy", "o1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("remodel.started", "s1");
+            JsonElement error = world.Reply("error", "o1");
+            Assert.Equal("RunInProgress", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.OpenCopyWhileARunIsInProgressMessage, error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal(0, world.Pipeline.Count("activate"));
+        }
+    }
+
+    /// <summary>
+    /// Decision 148A: any run in progress, not only the copy's own - the copy of an earlier plan, still in
+    /// its folder, is not opened under a run either, since the active document would change under it the
+    /// same way.
+    /// </summary>
+    [Fact]
+    public void OpenCopyOfAnEarlierPlanWhileARunIsInProgressIsRefusedToo()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string earlier = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            world.Receive("remodel.plan", "p2", new { });
+            string later = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            Assert.NotEqual(earlier, later);
+            world.Pipeline.DuringRun = reporter => world.Receive("remodel.open_copy", "o1", new { run_dir = earlier });
+
+            world.Receive("remodel.start", "s1", new { run_dir = later });
+
+            world.Reply("remodel.started", "s1");
+            Assert.Equal("RunInProgress", world.ErrorClass("o1"));
+            Assert.Equal(0, world.Pipeline.Count("activate"));
+        }
+    }
+
+    /// <summary>Decision 148A: once the run has finished, Open copy is answered again, as before it began.</summary>
+    [Fact]
+    public void OpenCopyAfterTheRunHasFinishedActivatesTheCopyAgain()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.False(world.Host.RunInProgress);
+
+            world.Receive("remodel.open_copy", "o1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("ok", "o1");
+            Assert.Equal(1, world.Pipeline.Count("activate"));
+        }
+    }
+
+    /// <summary>
+    /// The refusal decision 148A mirrors, pinned beside it: Discard copy pressed while its run is in
+    /// progress is refused <c>RunInProgress</c>, and the copy stays.
+    /// </summary>
+    [Fact]
+    public void DiscardCopyWhileItsRunIsInProgressIsRefusedAndTheCopyStays()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+                world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal("RunInProgress", world.ErrorClass("d1"));
+            Assert.True(File.Exists(world.ExpectedCopyPath));
+        }
+    }
+
     [Fact]
     public void OpenCopyAfterADiscardIsRefusedAsCopyDiscarded()
     {
