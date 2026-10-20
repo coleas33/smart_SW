@@ -141,6 +141,16 @@ public sealed class TaskPaneOptions
     /// </summary>
     public Func<ProxiedRequest, ProxiedResponse> ProxySend { get; set; } = BackendProxyHandler.Send;
 
+    /// <summary>
+    /// Asked before the pane sends on a page call that would start a turn - a follow-up, an
+    /// answer, a Send: a refusal is answered instead, and null sends the call on. While the
+    /// backend waits to be restarted with settings saved during a turn, such a call is for a chat
+    /// of the backend being replaced, and the review host answers it (owner decision 143A,
+    /// <see cref="ReviewHost.PageTurnRefusal"/>). A callback for the reason
+    /// <see cref="Backend"/> is one: the pane is built before the review host.
+    /// </summary>
+    public Func<BackendRequestException?> PageTurnRefusal { get; set; } = () => null;
+
     private static string DefaultWebFolder() =>
         Path.Combine(Path.GetDirectoryName(typeof(TaskPaneOptions).Assembly.Location) ?? ".", "web");
 }
@@ -363,7 +373,7 @@ public sealed class TaskPaneControl : UserControl
         // Through the options rather than from captured values: the backend is started after
         // the pane is built, and a `settings.save` replaces it with a child on another port.
         _proxy = new BackendProxyHandler(
-            () => _options.Backend(), request => _options.ProxySend(request));
+            () => _options.Backend(), request => _options.ProxySend(request), () => _options.PageTurnRefusal());
         _files = new PageFileServer(_options.WebFolder);
 
         _reviewTab = NewTab("Review", ReviewPurpose, Note("Starting the review page..."));

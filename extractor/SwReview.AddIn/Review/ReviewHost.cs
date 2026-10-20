@@ -260,6 +260,23 @@ public sealed class ReviewHostOptions
     public Func<string, string?> Environment { get; set; } =
         System.Environment.GetEnvironmentVariable;
 
+    /// <summary>
+    /// How often the host asks whether the turn a settings restart waits for has ended (owner
+    /// decision 143A). A second: it bounds only how long the backend keeps the old settings with
+    /// nothing running, since a new review makes the restart itself and a page call that would
+    /// start a turn is not sent to the old backend; and it costs one `GET /sessions/{chat_id}` per
+    /// review per poll, and only while a restart waits.
+    /// </summary>
+    public TimeSpan RestartPoll { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Whether the backend is busy with work other than a review turn that a restart would end -
+    /// a remodel run (feature 004) - asked before the turns are asked of the backend, whenever a
+    /// restart for settings saved during a turn looks at what holds it back (owner decision 143A).
+    /// False when the caller has none.
+    /// </summary>
+    public Func<bool> BackendBusy { get; set; } = () => false;
+
     internal static string DefaultLogFolder() => System.IO.Path.Combine(
         System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
         "SwReview",
@@ -288,7 +305,11 @@ public sealed class ReviewHostOptions
 ///
 /// <b>`settings.save` is refused, whole, while a turn is running.</b> Not partially applied
 /// and not queued: a running turn owns process state that is not on disk, so the file is not
-/// written and the backend is not restarted (chat-api.md).
+/// written and the backend is not restarted (chat-api.md). The one exception is a turn that
+/// starts after that check and before the restart, which the backend refuses with the file
+/// already written: the restart then waits until nothing holds it back, and a new review waits
+/// for the restart rather than running on the old backend (owner decision 143A,
+/// <see cref="DeferredRestart"/>).
 ///
 /// <b>A model the provider does not offer is refused, and the fresh list is pushed with the
 /// refusal</b>, so the engineer re-picks from what exists instead of meeting it later as an
@@ -356,6 +377,13 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     private readonly EventStreamPump _events;
 
+    /// <summary>
+    /// The backend restart a save could not make because a turn had started, made once no turn
+    /// runs (owner decision 143A). Every restart this host makes goes through it, so two never
+    /// overlap and the one made last reads the settings saved last.
+    /// </summary>
+    private readonly DeferredRestart _restart;
+
     private UserSettings _settings;
     private string? _settingsError;
     private PreparedContext? _preparedContext;
@@ -412,6 +440,14 @@ public sealed class ReviewHost : IDisposable
                 { "chat_id", chatId },
                 { "reason", Redact(reason) },
             }));
+
+        _restart = new DeferredRestart(
+            RestartHeldBack,
+            RestartWithSettingsInForce,
+            () => Post("backend.restarted", new Dictionary<string, object?> { { "sentences", RestartSentences } }),
+            failure => PostStatus("error", failure.Message),
+            () => PostStatus("error", RestartNotAnswered),
+            options.RestartPoll);
     }
 
     /// <summary>The settings in force. Replaced by a successful `settings.save`.</summary>
@@ -654,8 +690,34 @@ public sealed class ReviewHost : IDisposable
             ?.ConfirmedDrawings;
     }
 
-    /// <summary>Whether any chat this host started has a turn in flight.</summary>
-    public bool AnyTurnRunning()
+    /// <summary>What the backend says of the turns of the chats this host started.</summary>
+    private enum TurnsSeen
+    {
+        /// <summary>No chat has a turn running, by every answer the backend gave.</summary>
+        None,
+
+        /// <summary>A chat has a turn running.</summary>
+        Running,
+
+        /// <summary>
+        /// No chat was seen running, and of one at least the backend gave no answer that rules a
+        /// turn out (<see cref="RulesOutATurn"/>).
+        /// </summary>
+        NoAnswer,
+    }
+
+    /// <summary>
+    /// Whether any chat this host started has a turn in flight. A chat the backend gives no usable
+    /// answer about counts as none here: refusing every save because the backend is down would
+    /// leave the engineer unable to fix the settings that are keeping it down.
+    /// </summary>
+    public bool AnyTurnRunning() => LookAtTheTurns(stopAtNoAnswer: false) == TurnsSeen.Running;
+
+    /// <param name="stopAtNoAnswer">Stop at the first chat the backend gives no usable answer
+    /// about, as the restart for saved settings does (owner decision 143A): such a chat holds it
+    /// back whatever the other chats say, and its look must cost one round trip's timeout, not one
+    /// per chat.</param>
+    private TurnsSeen LookAtTheTurns(bool stopAtNoAnswer)
     {
         // A snapshot, because this is asked from the tool-service gate's thread while the page
         // pump may be tracking a `review.start` or a Model check: enumerating the live list
@@ -668,6 +730,7 @@ public sealed class ReviewHost : IDisposable
             sessions = _sessions.ToArray();
         }
 
+        bool unanswered = false;
         foreach (SessionRecord session in sessions)
         {
             // A check has no chat, so there is no chat id to ask the backend about. Skipped
@@ -682,19 +745,39 @@ public sealed class ReviewHost : IDisposable
             {
                 if (_options.Backend.IsTurnRunning(session.ChatId))
                 {
-                    return true;
+                    return TurnsSeen.Running;
                 }
+            }
+            catch (BackendRequestException refusal) when (RulesOutATurn(refusal))
+            {
+                // No turn of this chat runs here: the backend does not hold it, or could not.
             }
             catch (Exception)
             {
-                // A backend that cannot be asked has no turn worth protecting: refusing every
-                // save because the backend is down would leave the engineer unable to fix the
-                // settings that are keeping it down.
+                // No usable answer: none at all - the connection was refused, reset or timed out,
+                // or the reply broke off - or one that rules nothing out.
+                if (stopAtNoAnswer)
+                {
+                    return TurnsSeen.NoAnswer;
+                }
+
+                unanswered = true;
             }
         }
 
-        return false;
+        return unanswered ? TurnsSeen.NoAnswer : TurnsSeen.None;
     }
+
+    /// <summary>
+    /// The refusals of `GET /sessions/{chat_id}` that rule a turn out, besides a readable state:
+    /// 404 `UnknownChat`, a chat this backend does not hold - one found on disk, or one an earlier
+    /// backend held - and 400 `InvalidRequest`, an id it could not hold. Every other answer - a
+    /// 5xx, a body that is not the backend's own, any other refusal - says nothing of the turn,
+    /// and neither does no answer at all (owner decision 143A).
+    /// </summary>
+    private static bool RulesOutATurn(BackendRequestException refusal) =>
+        (refusal.Status == 404 && refusal.ErrorClass == "UnknownChat")
+        || (refusal.Status == 400 && refusal.ErrorClass == "InvalidRequest");
 
     /// <summary>Handles one message from the page. Never throws.</summary>
     public void Receive(string json)
@@ -752,6 +835,8 @@ public sealed class ReviewHost : IDisposable
 
     public void Dispose()
     {
+        // First, so nothing asks the backend about a turn or restarts it once the host is going.
+        _restart.Dispose();
         _events.Dispose();
         lock (_sessionsLock)
         {
@@ -1080,13 +1165,13 @@ public sealed class ReviewHost : IDisposable
         string? restartFailure = null;
         try
         {
-            _options.Backend.Restart(next, key);
-        }
-        catch (TurnRunningException)
-        {
-            // A turn started between the gate above and here. The settings are already written,
-            // so the honest answer is "saved, not yet in force".
-            restartFailure = "the settings are saved; the backend restarts when the running turn ends.";
+            if (!_restart.Now(() => _options.Backend.Restart(next, key)))
+            {
+                // A turn started between the gate above and here. The settings are already
+                // written, so the honest answer is "saved, not yet in force" - and the restart
+                // waits for the turn to end rather than being dropped (owner decision 143A).
+                restartFailure = RestartPromise;
+            }
         }
         catch (BackendStartException failure)
         {
@@ -1152,6 +1237,207 @@ public sealed class ReviewHost : IDisposable
         }
 
         PostStatus("error", string.Join(" ", problems.ToArray()));
+    }
+
+    // ---- a restart for settings saved during a turn (owner decision 143A) ---------------
+
+    /// <summary>
+    /// The Review tab's sentence for a save a turn started during: the settings are written and in
+    /// force in the host, and the backend is restarted with them once nothing holds it back.
+    /// </summary>
+    private const string RestartPromise =
+        "the settings are saved; the backend restarts when the running turn ends.";
+
+    /// <summary>
+    /// What the page is told when the watcher stops looking at a backend that does not answer
+    /// (<see cref="DeferredRestart.UnansweredLooks"/>): the restart has not been made, it still
+    /// waits for the next review or follow-up, and a save made now - which asks whether a turn
+    /// runs leniently - restarts the backend.
+    /// </summary>
+    private const string RestartNotAnswered =
+        "the review backend is not answering, so it has not been restarted with the settings saved during "
+        + "the turn yet. It will be before the next review or follow-up, once it answers; to restart it "
+        + "now, save the settings again.";
+
+    /// <summary>
+    /// The host's sentences about a restart that waits, as `backend.restarted` carries them once it
+    /// is made: the page takes whichever of them is on its banner off it, and nothing else there.
+    /// </summary>
+    private static readonly string[] RestartSentences = { RestartPromise, RestartNotAnswered };
+
+    /// <summary>A new review, or a page call that would start a turn, while a turn holds the restart back.</summary>
+    private const string TurnHoldsTheRestart =
+        "the backend restarts with the saved settings when the running turn ends, and nothing new starts "
+        + "before then. Wait for the turn to end, or press Stop, then try again.";
+
+    /// <summary>...while a remodel run holds it back.</summary>
+    private const string RemodelRunHoldsTheRestart =
+        "the backend restarts with the saved settings when the remodel run ends, and nothing new starts "
+        + "before then. Wait for the run to end, then try again.";
+
+    /// <summary>...while the backend does not answer whether a turn runs.</summary>
+    private const string NoAnswerHoldsTheRestart =
+        "the review backend did not answer whether a turn is running, so it has not been restarted with "
+        + "the saved settings, and nothing new starts before then. Save the settings again to restart "
+        + "it, then try again.";
+
+    /// <summary>
+    /// What holds the restart back. Read in the order the add-in can know it: no backend process
+    /// at all holds nothing - the restart is what brings one back; then a remodel run in progress,
+    /// which the restart would end with its copy half changed, and which the add-in knows without
+    /// asking the backend; then the turns, asked of the backend: a turn running, or a backend that
+    /// gave no answer, since not knowing whether a turn runs is not knowing that none does.
+    /// </summary>
+    private DeferredRestart.Hold RestartHeldBack()
+    {
+        if (_options.Backend.Endpoint == null)
+        {
+            return DeferredRestart.Hold.None;
+        }
+
+        bool remodelling;
+        try
+        {
+            remodelling = _options.BackendBusy();
+        }
+        catch (Exception)
+        {
+            // Not knowing whether a run is in progress is not knowing that none is.
+            remodelling = true;
+        }
+
+        if (remodelling)
+        {
+            return DeferredRestart.Hold.RemodelRun;
+        }
+
+        switch (LookAtTheTurns(stopAtNoAnswer: true))
+        {
+            case TurnsSeen.Running:
+                return DeferredRestart.Hold.Turn;
+
+            case TurnsSeen.NoAnswer:
+                return DeferredRestart.Hold.NoAnswer;
+
+            default:
+                return DeferredRestart.Hold.None;
+        }
+    }
+
+    /// <summary>
+    /// The restart <see cref="_restart"/> makes once nothing holds it back: the settings in force
+    /// now - the last ones saved, however many saves the turn saw - with the key resolved from them
+    /// now, so the backend is started with that provider's key and names it as the saved key's
+    /// provider (owner decision 138A).
+    /// </summary>
+    private void RestartWithSettingsInForce()
+    {
+        UserSettings settings = _settings;
+        _options.Backend.Restart(settings, settings.ResolveApiKey(_options.Environment));
+    }
+
+    /// <summary>
+    /// The refusal for what holds the restart back, or null when nothing does: the error class
+    /// whose next step is true of it, the words for it, and the flag the backend gives a call it
+    /// refuses for such a reason - its `TurnRunning` is not retryable (chat/server.py), a remodel
+    /// run is answered as a turn is, and a backend that does not answer as the proxy answers one
+    /// that is not there.
+    /// </summary>
+    private static BackendRequestException? HeldBackBy(DeferredRestart.Outcome outcome)
+    {
+        switch (outcome)
+        {
+            case DeferredRestart.Outcome.TurnRunning:
+                return new BackendRequestException("TurnRunning", TurnHoldsTheRestart, retryable: false);
+
+            case DeferredRestart.Outcome.RemodelRunning:
+                return new BackendRequestException("RemodelRunning", RemodelRunHoldsTheRestart, retryable: false);
+
+            case DeferredRestart.Outcome.NotAnswered:
+                return new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheRestart, retryable: true);
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Makes the restart that settings saved during a turn wait for before a new review uses the
+    /// backend, or waits for the one being made, so the review runs on the restarted backend
+    /// with those settings and never on the old one. Answers false, having sent the refusal, when
+    /// it cannot: something still holds the restart back, and the refusal says what; or the
+    /// restart failed - this call's, or the one it waited for - which has been reported as a
+    /// failed start is, and is this review's answer too. True when nothing waits, or once the
+    /// restart has been made.
+    /// </summary>
+    private bool RestartedForNewReview(string? id)
+    {
+        DeferredRestart.Outcome outcome = _restart.Apply(out Exception? failure);
+        BackendRequestException? held = HeldBackBy(outcome);
+        if (held != null)
+        {
+            // Retryable, as this host's other refusals of a review are: it can be pressed again
+            // once what holds it back has ended.
+            SendError(id, held.ErrorClass, held.Message, retryable: true);
+            return false;
+        }
+
+        if (outcome == DeferredRestart.Outcome.Failed)
+        {
+            SendError(id, "BackendUnavailable", failure!.Message, retryable: true);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// What a page call that would start a turn is answered with once the restart has ended the
+    /// chat it was for.
+    /// </summary>
+    private const string ChatEndedWithTheRestart =
+        "the backend restarted with the saved settings, and this review's chat ended with the backend "
+        + "it ran on. Press Review to review again with the new settings.";
+
+    /// <summary>
+    /// The pane proxy's question (owner decision 143A): what a page call that would start a turn
+    /// - a follow-up, an answer, a Send - is answered with while the backend waits to be
+    /// restarted with settings saved during a turn, or null to send it on as always. Such a call
+    /// is for a chat of the backend being replaced, so it is never sent: while something holds
+    /// the restart back it is refused, saying what; otherwise the restart is made first, or
+    /// waited for. Once one has been made the call is answered `UnknownChat` - the class, status
+    /// and flag the restarted backend would answer it with, since that backend does not hold the
+    /// chat - in words that say why; when the restart failed, made by this call or by the one it
+    /// waited for, the call is answered with that failure, the old backend perhaps still up and
+    /// holding its chat. Never throws, and asks nothing when nothing waits.
+    /// </summary>
+    public BackendRequestException? PageTurnRefusal()
+    {
+        DeferredRestart.Outcome outcome = _restart.Apply(out Exception? failure);
+        BackendRequestException? held = HeldBackBy(outcome);
+        if (held != null)
+        {
+            return held;
+        }
+
+        switch (outcome)
+        {
+            case DeferredRestart.Outcome.NotPending:
+                return null;
+
+            case DeferredRestart.Outcome.Restarted:
+            case DeferredRestart.Outcome.RestartedMeanwhile:
+                // The backend the call was for has gone, and the chat with it.
+                return new BackendRequestException("UnknownChat", ChatEndedWithTheRestart, retryable: false);
+
+            case DeferredRestart.Outcome.Failed:
+                return new BackendRequestException("BackendUnavailable", Redact(failure!.Message), retryable: true);
+
+            default:
+                // Stopped: the add-in is unloading, and its backend with it.
+                return new BackendRequestException(
+                    "BackendUnavailable", "the review backend is stopping with the add-in.", retryable: false);
+        }
     }
 
     // ---- models -------------------------------------------------------------------------
@@ -1403,6 +1689,10 @@ public sealed class ReviewHost : IDisposable
         if (AnyTurnRunning())
         {
             SendError(id, "TurnRunning", "Stop the running review before changing engineering context.", true);
+            return false;
+        }
+        if (!RestartedForNewReview(id))
+        {
             return false;
         }
         if (_options.Backend.Endpoint == null)
@@ -1748,6 +2038,7 @@ public sealed class ReviewHost : IDisposable
 
     private bool BackendReady(string? id)
     {
+        if (!RestartedForNewReview(id)) return false;
         if (_options.Backend.Endpoint != null) return true;
         SendError(id, "BackendUnavailable",
             "the review backend is not running yet, so there is nowhere to send the review. "

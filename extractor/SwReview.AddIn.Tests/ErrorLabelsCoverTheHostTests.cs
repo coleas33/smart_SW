@@ -13,8 +13,10 @@ namespace SwReview.AddIn.Tests;
 ///
 /// The Python side asserts every `ChatError` subclass has a label (the py lane's T007). The
 /// classes this side makes are the other half: every `SendError(id, "&lt;class&gt;"` literal in
-/// the Review host and in the shared `PaneActions`, every `PaneRunLookup`'s unknown-run class, and
-/// the three the Review page makes itself (`BackendUnavailable`, `HttpError`, `HostError`). A class
+/// the Review host and in the shared `PaneActions`, every refusal the Review host builds as a
+/// `BackendRequestException` (owner decision 143A: the proxy answers the page's own calls with
+/// them), every `PaneRunLookup`'s unknown-run class, and the three the Review page makes itself
+/// (`BackendUnavailable`, `HttpError`, `HostError`). A class
 /// with no sentence prints its message - correct, and exactly the developer vocabulary FR-026
 /// removes - so the list is read from the source rather than kept by hand.
 ///
@@ -38,6 +40,7 @@ public sealed class ErrorLabelsCoverTheHostTests
                      "PreparationFailed", "RunFolderFailed", "ExtractionFailed", "InvalidSettings", "UnknownModel",
                      "FakeProviderNotAllowed", "InvalidRequest", "UnknownMessage", "HostError", "PathRefused",
                      "NotFound", "OpenFailed", "UnknownChat", "UnknownCheck", "HttpError", "SettingNotSaved", "ReviewNotActive",
+                     "RemodelRunning",
                  })
         {
             Assert.Contains(expected, classes);
@@ -66,6 +69,13 @@ public sealed class ErrorLabelsCoverTheHostTests
 
     private static readonly Regex SendErrorLiteral = new Regex(@"SendError\(\s*id\s*,\s*""([A-Za-z]+)""", RegexOptions.Compiled);
 
+    /// <summary>
+    /// A refusal the Review host builds as an exception: sent on by `Receive`, or answered to the
+    /// page's own backend call by the pane's proxy (owner decision 143A, `PageTurnRefusal`).
+    /// </summary>
+    private static readonly Regex HostRefusalLiteral = new Regex(
+        @"new\s+BackendRequestException\(\s*""([A-Za-z]+)""", RegexOptions.Compiled);
+
     private static readonly Regex UnknownRunClass = new Regex(
         @"new\s+PaneRunLookup\(\s*""[a-z_]+""\s*,\s*""([A-Za-z]+)""", RegexOptions.Compiled);
 
@@ -82,6 +92,11 @@ public sealed class ErrorLabelsCoverTheHostTests
             {
                 classes.Add(match.Groups[1].Value);
             }
+        }
+
+        foreach (Match match in HostRefusalLiteral.Matches(File.ReadAllText(Path.Combine(addIn, "Review", "ReviewHost.cs"))))
+        {
+            classes.Add(match.Groups[1].Value);
         }
 
         foreach (string source in Directory.GetFiles(addIn, "*.cs", SearchOption.AllDirectories))

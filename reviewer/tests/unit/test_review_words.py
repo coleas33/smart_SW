@@ -662,3 +662,22 @@ def test_the_replaced_read_only_file_key_is_refused() -> None:
 def test_the_five_send_errors_are_exact_contract_sentences() -> None:
     errors = load_words().labels.errors
     assert {key: errors.get(key) for key in SEND_ERRORS} == SEND_ERRORS
+
+
+RESTART_HOLDS = {
+    "TurnRunning": "A review turn is still running. Wait for it to finish, or press Stop.",
+    "RemodelRunning": "A remodel run is in progress. Wait for it to finish, then try again.",
+    "BackendUnavailable": (
+        "The review backend is not running. Save Settings to start it again, then retry."
+    ),
+}
+"""The classes the add-in refuses a new review or a turn call with while the backend waits to be
+restarted with settings saved during a turn (owner decision 143A): one for each thing that can
+hold that restart back - a turn, a remodel run, a backend that does not answer - so the sentence
+the page shows is true of what holds it. `RemodelRunning` is the add-in's own class; the backend
+never sends it."""
+
+
+def test_each_thing_that_holds_a_restart_back_has_a_true_sentence() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in RESTART_HOLDS} == RESTART_HOLDS

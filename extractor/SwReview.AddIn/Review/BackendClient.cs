@@ -5,6 +5,7 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using SwReview.AddIn.Native;
 using SwReview.AddIn.Settings;
 
@@ -51,6 +52,15 @@ public sealed class BackendClient : IBackendClient, IDisposable
     /// </summary>
     private readonly object _gate = new object();
 
+    /// <summary>
+    /// Cancelled by <see cref="Dispose"/> before it takes <see cref="_gate"/>, and handed to every
+    /// start (<see cref="BackendStartOptions.Cancellation"/>): a start in flight when SOLIDWORKS
+    /// unloads - a restart for settings saved during a turn, made on the host's own thread - stops
+    /// waiting for the new backend and stops it, rather than holding the unload for the handshake
+    /// and health timeouts; and a restart asked for after that starts nothing.
+    /// </summary>
+    private readonly CancellationTokenSource _unloading = new CancellationTokenSource();
+
     public BackendClient(BackendSupervisor supervisor, string logFolder, JobObject? job)
         : this(supervisor, logFolder, job, () => DateTime.Now)
     {
@@ -78,6 +88,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
     {
         lock (_gate)
         {
+            ThrowIfUnloading();
             return _supervisor.Start(StartOptions(settings, key));
         }
     }
@@ -86,6 +97,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
     {
         lock (_gate)
         {
+            ThrowIfUnloading();
             _supervisor.Restart(StartOptions(settings, key));
         }
     }
@@ -182,12 +194,26 @@ public sealed class BackendClient : IBackendClient, IDisposable
             chatId!, Text(body, "review_session_id") ?? string.Empty, notExamined);
     }
 
-    /// <summary>Stops the child and releases the supervisor. Called on add-in disconnect.</summary>
+    /// <summary>
+    /// Stops the child and releases the supervisor. Called on add-in disconnect, on the
+    /// SOLIDWORKS thread: a start in flight is told to stop first, before the gate it holds is
+    /// waited for, so the unload waits for that start to stop its child, not for it to finish.
+    /// </summary>
     public void Dispose()
     {
+        _unloading.Cancel();
         lock (_gate)
         {
             _supervisor.Dispose();
+        }
+    }
+
+    /// <summary>A start or restart asked for once the add-in has begun to unload starts nothing.</summary>
+    private void ThrowIfUnloading()
+    {
+        if (_unloading.IsCancellationRequested)
+        {
+            throw new BackendStartException("the add-in is unloading, so the backend was not started.");
         }
     }
 
@@ -211,6 +237,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
             RunRoot = settings.RunRoot,
             AllowOrigin = TaskPaneControl.PageOrigin,
             Job = _job,
+            Cancellation = _unloading.Token,
         };
 
         if (key != null && !string.IsNullOrEmpty(key.Key))
@@ -359,6 +386,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
         var response = failure.Response as HttpWebResponse;
         if (response == null)
         {
+            // No HTTP answer at all, so no status.
             return new BackendRequestException(
                 "BackendUnavailable",
                 "the review backend did not answer: " + failure.Message,
@@ -368,6 +396,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
 
         using (response)
         {
+            int status = (int)response.StatusCode;
             string text = Read(response);
             JsonElement body;
             try
@@ -378,16 +407,18 @@ public sealed class BackendClient : IBackendClient, IDisposable
             {
                 return new BackendRequestException(
                     "HttpError",
-                    $"the backend answered {(int)response.StatusCode}.",
-                    retryable: (int)response.StatusCode >= 500,
-                    failure);
+                    $"the backend answered {status}.",
+                    retryable: status >= 500,
+                    failure,
+                    status);
             }
 
             return new BackendRequestException(
                 Text(body, "error_class") ?? "HttpError",
-                Text(body, "message") ?? $"the backend answered {(int)response.StatusCode}.",
+                Text(body, "message") ?? $"the backend answered {status}.",
                 Flag(body, "retryable"),
-                failure);
+                failure,
+                status);
         }
     }
 

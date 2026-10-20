@@ -199,6 +199,222 @@ public sealed class BackendProxyHandlerTests
         Assert.Null(seen!.Body);
     }
 
+    // ---- a call that would start a turn, while a restart waits (owner decision 143A) ----------
+
+    /// <summary>
+    /// The page's calls that start a turn, or resume one (chat-api.md): a follow-up, Send, the
+    /// answers, and the single answer the backend still serves. A trailing slash and an escaped
+    /// letter name the same route to the backend, so they are the same call here.
+    /// </summary>
+    public static TheoryData<string> CallsThatStartATurn => new TheoryData<string>
+    {
+        "/sessions/chat-1/messages",
+        "/sessions/chat-1/send",
+        "/sessions/chat-1/evidence",
+        "/sessions/chat-1/evidence/request-1",
+        "/sessions/chat-1/messages/",
+        "/sessions/chat-1/%6Dessages",
+    };
+
+    /// <summary>
+    /// While the backend waits to be restarted with settings saved during a turn, such a call is
+    /// for a chat of the backend being replaced: the host is asked first, and what it answers is
+    /// what the page gets - the call is never sent.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallsThatStartATurn))]
+    public void ACallThatWouldStartATurnIsAnsweredWithTheHostsRefusalAndNeverSent(string path)
+    {
+        int asked = 0;
+        var handler = new BackendProxyHandler(() => Endpoint, MustNotSend, () =>
+        {
+            asked++;
+            return new BackendRequestException("TurnRunning", "FICT a turn still runs", retryable: true);
+        });
+
+        ProxiedResponse? response = handler.TryServe(Prefix + path, "POST", null, null);
+
+        Assert.Equal(1, asked);
+        Assert.Equal(409, response!.Status);
+        Assert.Equal(
+            "{\"error_class\":\"TurnRunning\",\"message\":\"FICT a turn still runs\",\"retryable\":true}",
+            Encoding.UTF8.GetString(response.Content));
+    }
+
+    /// <summary>
+    /// Each refusal goes out with the status its class is answered with - the backend's own for
+    /// its classes, a remodel run's as a turn's, and this proxy's own for a backend that is not
+    /// there; the page reads only `ok` and the body. That the status and the flag are the
+    /// backend's own is pinned against chat/server.py itself, through the host
+    /// (DeferredRestartTests.TheProxyAnswersARefusedTurnCallWithTheBackendsOwnStatusAndFlag).
+    /// </summary>
+    [Theory]
+    [InlineData("TurnRunning", 409)]
+    [InlineData("RemodelRunning", 409)]
+    [InlineData("UnknownChat", 404)]
+    [InlineData("BackendUnavailable", 503)]
+    public void ARefusalIsAnsweredWithTheStatusTheBackendGivesIt(string errorClass, int status)
+    {
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            MustNotSend,
+            () => new BackendRequestException(errorClass, "FICT refused", retryable: false));
+
+        ProxiedResponse? response = handler.TryServe(Prefix + "/sessions/chat-1/messages", "POST", null, null);
+
+        Assert.Equal(status, response!.Status);
+        Assert.Contains("\"error_class\":\"" + errorClass + "\"", Encoding.UTF8.GetString(response.Content), StringComparison.Ordinal);
+    }
+
+    /// <summary>When nothing waits the host answers null, and the call goes on exactly as before.</summary>
+    [Fact]
+    public void ACallTheHostLetsThroughIsSentOnUnchanged()
+    {
+        int asked = 0;
+        ProxiedRequest? seen = null;
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            request =>
+            {
+                seen = request;
+                return Json(202, "Accepted", "{\"state\":\"running\"}");
+            },
+            () =>
+            {
+                asked++;
+                return null;
+            });
+
+        ProxiedResponse? response = handler.TryServe(
+            Prefix + "/sessions/chat-1/messages",
+            "POST",
+            new[] { new KeyValuePair<string, string>("Authorization", "Bearer 0FAKEtoken") },
+            new MemoryStream(Encoding.UTF8.GetBytes("{\"text\":\"why?\"}")));
+
+        Assert.Equal(1, asked);
+        Assert.Equal(202, response!.Status);
+        Assert.Equal("http://127.0.0.1:51234/sessions/chat-1/messages", seen!.Url.ToString());
+        Assert.Equal("{\"text\":\"why?\"}", Encoding.UTF8.GetString(seen.Body!));
+    }
+
+    /// <summary>
+    /// Nothing else is asked about. Stop must reach the backend while a turn holds a restart back
+    /// - the restart waits for that turn - and a disposition or the timing is the engineer's
+    /// write to the review the turn produced: sent now, before the restart, it is recorded, and
+    /// held until after it, it would only be refused. `POST /sessions` starts a turn too, but
+    /// the host is its only caller and makes it wait itself.
+    /// </summary>
+    [Theory]
+    [InlineData("GET", "/sessions/chat-1/snapshot")]
+    [InlineData("GET", "/sessions/chat-1/evidence")]
+    [InlineData("POST", "/sessions/chat-1/stop")]
+    [InlineData("POST", "/sessions/chat-1/findings/finding-1/disposition")]
+    [InlineData("POST", "/sessions/chat-1/timing")]
+    [InlineData("POST", "/sessions")]
+    [InlineData("POST", "/sessions/chat-1/messages/extra")]
+    [InlineData("POST", "/checks/rms")]
+    [InlineData("POST", "/engineering-context/run-1/init")]
+    [InlineData("POST", "/remodel/plan")]
+    public void NoOtherCallIsAskedAbout(string method, string path)
+    {
+        int asked = 0;
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            _ => Json(200, "OK", "{}"),
+            () =>
+            {
+                asked++;
+                return new BackendRequestException("TurnRunning", "FICT must not be asked", retryable: true);
+            });
+
+        ProxiedResponse? response = handler.TryServe(Prefix + path, method, null, null);
+
+        Assert.Equal(0, asked);
+        Assert.Equal(200, response!.Status);
+        Assert.Null(handler.TryServe("https://swreview.invalid/Review/ReviewPage/app.js", "POST", null, null));
+        Assert.Equal(0, asked);
+    }
+
+    /// <summary>
+    /// The host is asked before the backend is looked for: during the restart there is no
+    /// backend, and a call that would start a turn is held to the host's answer rather than
+    /// told the backend is not running.
+    /// </summary>
+    [Fact]
+    public void ACallThatWouldStartATurnIsAskedAboutEvenWhileThereIsNoBackend()
+    {
+        var refusing = new BackendProxyHandler(
+            () => null,
+            MustNotSend,
+            () => new BackendRequestException("UnknownChat", "FICT the chat ended with the restart", retryable: false));
+        Assert.Equal(404, refusing.TryServe(Prefix + "/sessions/chat-1/send", "POST", null, null)!.Status);
+
+        var letting = new BackendProxyHandler(() => null, MustNotSend, () => null);
+        ProxiedResponse? response = letting.TryServe(Prefix + "/sessions/chat-1/send", "POST", null, null);
+        Assert.Equal(503, response!.Status);
+        Assert.Contains("BackendUnavailable", Encoding.UTF8.GetString(response.Content), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A host that throws instead of answering still leaves the page with an answer - the
+    /// proxy's own `ProxyFailed` - and the call unsent: an unanswered request is the one outcome
+    /// the page cannot tell from the web filter this proxy routes around.
+    /// </summary>
+    [Fact]
+    public void AHostThatThrowsLeavesTheCallAnsweredAndUnsent()
+    {
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            MustNotSend,
+            () => throw new InvalidOperationException("FICT the host broke"));
+
+        ProxiedResponse? response = handler.TryServe(Prefix + "/sessions/chat-1/messages", "POST", null, null);
+
+        Assert.Equal(500, response!.Status);
+        string body = Encoding.UTF8.GetString(response.Content);
+        Assert.Contains("ProxyFailed", body, StringComparison.Ordinal);
+        Assert.Contains("FICT the host broke", body, StringComparison.Ordinal);
+        Assert.Contains("\"retryable\":false", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The calls the host is asked about are exactly the backend's routes that start a turn, or
+    /// resume one - every route chat/server.py serves whose handler moves a chat to `RUNNING`,
+    /// read from that source - save `POST /sessions`, which only the host makes and which waits
+    /// for the restart itself. A turn route the backend gains is asked about, or this fails.
+    /// </summary>
+    [Fact]
+    public void TheCallsAskedAboutAreTheBackendsOwnTurnRoutes()
+    {
+        IReadOnlyList<(string Method, string Path, bool StartsATurn)> routes = ChatServerSource.Routes();
+        Assert.Contains(routes, route => route.StartsATurn && route.Path == "/sessions/{chat_id}/messages");
+
+        var wrong = new List<string>();
+        foreach ((string method, string path, bool startsATurn) in routes)
+        {
+            int asked = 0;
+            var handler = new BackendProxyHandler(
+                () => Endpoint,
+                _ => Json(200, "OK", "{}"),
+                () =>
+                {
+                    asked++;
+                    return null;
+                });
+            string concrete = System.Text.RegularExpressions.Regex.Replace(path, @"\{(\w+)\}", "FICT-$1");
+
+            handler.TryServe(Prefix + concrete, method, null, null);
+
+            bool expected = startsATurn && path != "/sessions";
+            if ((asked == 1) != expected)
+            {
+                wrong.Add($"{method} {path}: asked {asked}, starts a turn {startsATurn}");
+            }
+        }
+
+        Assert.True(wrong.Count == 0, "The proxy's question does not match the backend's turn routes: " + string.Join("; ", wrong));
+    }
+
     private static ProxiedResponse MustNotSend(ProxiedRequest request) =>
         throw new InvalidOperationException("the handler must not have sent this request");
 

@@ -564,12 +564,45 @@ var h = {
         Answer(type, id, payload);
     }
 
+    /// <summary>
+    /// Holds every `ready` after the boot until <see cref="ReleaseReady"/>: an `init` on its way,
+    /// as one is while the host's pump answers it.
+    /// </summary>
+    public bool HoldReady { get; set; }
+
+    private readonly Queue<string> _heldReady = new Queue<string>();
+
+    /// <summary>How many `ready` messages are held, unanswered.</summary>
+    public int HeldReady => _heldReady.Count;
+
+    /// <summary>
+    /// Answers every held `ready`, in order, with the `init` the host would give now - or, with
+    /// <paramref name="backendUp"/> false, the one it gives while a restart is being made, when
+    /// there is no backend to name: no endpoint and no token - or, with <paramref name="token"/>,
+    /// one the host read before a restart, naming the backend that held that token.
+    /// </summary>
+    public async Task ReleaseReady(bool backendUp = true, string? token = null)
+    {
+        Assert.NotEmpty(_heldReady);
+        HoldReady = false;
+        while (_heldReady.Count > 0)
+        {
+            Reply("init", _heldReady.Dequeue(), Init(backendUp, token));
+        }
+
+        await OffscreenReviewPage.Settled(Page);
+    }
+
     private void Answer(string type, string id, JsonElement payload)
     {
         switch (type)
         {
             case "ready":
-                if (_booted)
+                if (_booted && HoldReady)
+                {
+                    _heldReady.Enqueue(id);
+                }
+                else if (_booted)
                 {
                     Reply("init", id, Init());
                 }
@@ -715,10 +748,15 @@ var h = {
     private void Reply(string type, string id, object payload) =>
         Page.PostWebMessageAsJson(JsonSerializer.Serialize(new { type, id, payload }));
 
-    private object Init() => new
+    /// <summary>
+    /// The `init` the host answers `ready` with; with <paramref name="backendUp"/> false, the one
+    /// it answers while a restart is being made, with no backend and no token to name; with
+    /// <paramref name="token"/>, one naming the backend that held it rather than the current one.
+    /// </summary>
+    private object Init(bool backendUp = true, string? token = null) => new
     {
-        backend = new { port = 51999, origin = Origin },
-        token = BackendToken,
+        backend = backendUp ? new { port = 51999, origin = Origin } : null,
+        token = backendUp ? token ?? BackendToken : null,
         settings = Settings(),
         key_source = KeySource,
         engineering_context = ContextPrepared != null,
