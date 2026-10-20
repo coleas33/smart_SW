@@ -835,8 +835,9 @@ hid the tab and is not amended here.
     pressed as the backend restarted got its extraction's reply first and called its route
     with the old token. And a latest check the page could not read - a tab opened during a
     restart reads it with the token of an `init` the host gave before - is read again by the
-    next `init` while the tab shows no result and no check is in flight; one the page did read
-    is still not read again.
+    next `init` until it is read, or until a check is pressed; a read still out when a check
+    is pressed is neither shown nor remembered, and one the page did read is not read again
+    (third review, T134, T135).
   - The Remodel page: `applyInit(payload, false)` - the backend, the token, the run root, the
     document, the limits and the seat capability - and it does not read `latest_run` again.
     Decision: its `init` used to re-read its latest run (`renderRun`, the `plan_lost` notice,
@@ -1051,6 +1052,43 @@ hid the tab and is not amended here.
     not of the save (N10); the edge cases above now say which.
   - `BeganRun`'s busy reset on a refusal never mattered (N11, the review's equivalent mutant
     H7): 145A added it (`e732436`), and it is removed (T126).
+- **Third review**: a third independent review of the fixes at `c9d34aa` found no must-fix -
+  `DeferredRestart` sound, the removal of `Apply`'s own mark right, about 34,000 restarts in a
+  stress probe with no violation - and proved the items below with probes; settled test first
+  by T134 to T141:
+  - `latestUnread` was never cleared (F1): on the Standards tab a latest verdict read again on a
+    restart's `init`, then cleared on purpose by a check that failed before anything was graded,
+    came back on the next restart under the failure. The flag is now cleared when the latest
+    check is read and when a check is pressed, and the `init` reads again on the flag alone. A
+    count of checks pressed, taken when a read is made, keeps a read still out when a check is
+    pressed from being shown or remembered.
+  - A save's restart that failed other than with `BackendStartException` told the other tabs
+    nothing (F2): the old backend can stop and the new one's log fail to open, outside the
+    wrapper. Save now tells them of any failure, still only when no backend is up, and throws it
+    on: how the save is answered is not changed (below).
+  - Nothing pinned that a refused `init` lets the calls waiting for it go (F3); a case does, the
+    driver refusing a held `ready`.
+  - A failed start's or restart's banner outlived the restart that worked (F4). A page cannot
+    tell that `error` from a check's or a run's by its stage, and taking those down would hide
+    what the engineer must read - a teardown's word on what it left, say - so the add-in marks
+    its own word: `status {stage, message, lifecycle: true}` through
+    `PostStatusToTheOtherPages`, from `PaneActions.PostStatus`'s marked form, beside the
+    two-argument form tests bind to. `check-page.js` and `remodel.js` remember whether the last
+    banner they put up was that word and take it down when an `init` names a backend; any other
+    banner since clears the mark. The Review page is not changed: its own Save clears its banner
+    before it saves, and every restart after a failed one starts from that Save.
+  - The restart-first sentence said the backend was restarting even while a turn or a backend
+    that does not answer held the restart back (F5): "Waiting for the review backend to restart
+    with the saved settings, then ...", true either way, its beginning written once.
+  - `DocumentChangedMessage` (F6) says "The active document or its configuration changed ... so
+    nothing was copied and no new plan was made": true of a configuration switched alone, and
+    not read as if the earlier plan waiting for Start were gone.
+  - Repetition (F7): `RestartedForNewReview` uses `RestartFailed`, so the failed-restart refusal
+    is written once; Plan's and Start's `finally` share `FreeTheHost`.
+  - An Accept and a check let go together could show the Accept's re-read of the older check
+    over the newer one (F8). `refreshResult` shows a re-read only while its caller still wants
+    it - the Accept's while its check is the one on screen - and answers whether it did; the
+    accepted row is marked only then. Nothing the engineer can click changed.
 - **Not changed**:
   - Discard copy's close is one backend round trip that holds nothing back: a restart that lands
     during it fails the close, and Discard deletes `copy/` anyway, as it does when the bridge does
@@ -1091,6 +1129,12 @@ hid the tab and is not amended here.
     kept, since the look is documented never to throw; the mutant that removes it is equivalent.
   - The Remodel page's restart sentence is read before the gate: a restart that begins to wait
     between that reading and the gate is made without it, and only the words are missed.
+  - A save whose restart failed other than with `BackendStartException` is answered with the
+    failure, `HostError`, although the settings were written: older than 145A, kept by T139 and
+    pinned by its case so a change to it is deliberate; put to the owner.
+  - An Accept whose re-read is dropped for a newer check says nothing of the exception it wrote:
+    the newer check on screen is the answer, and it shows the rule as accepted when the backend
+    wrote the exception before it graded. Left for the owner.
   - Seen while reviewing, in 143A's area and left for the owner: a new review reads the active
     document before it makes a waiting restart first (`ReviewHost.StartReview`, `BackendReady`),
     and its dump attaches to whatever is active after (`SwReviewDump.Run`). A restart takes
@@ -1103,9 +1147,13 @@ hid the tab and is not amended here.
   Start after its gate (T126), 16; 7 for a throwing run reading and the refusals written once
   (T127, T128), 9, the one that removes the review host's own catch surviving as an equivalent
   mutant; 8 for a failed restart (T130), 15; and 11 for the restart-first sentence (T132), 14 -
-  93 red results in all - each taking one fix out, the tree rebuilt and restored after each.
-- **Tests**: T113, T115, T118, T121, T123, T125, T127, T129 and T131 in [tasks.md](tasks.md),
-  each written first except T127, which pins what T116 built.
+  93 red results in all; and for the third review 25 - 9 for the check page's latest check, a
+  refused `init` and a stale re-read (T135), 26 red results; 9 for the backend's own error
+  banner (T137), 18; 2 for a save's other failure (T139), 3; and 5 for the words and the two
+  things written once (T141), 145 - 192 red results in all - each taking one fix out, the tree
+  rebuilt and restored after each.
+- **Tests**: T113, T115, T118, T121, T123, T125, T127, T129, T131, T134, T136, T138 and T140 in
+  [tasks.md](tasks.md), each written first except T127, which pins what T116 built.
 
 ### 146A. Three run-folder fixes left by 142A (2026-10-19)
 
