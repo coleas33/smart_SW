@@ -528,11 +528,42 @@ public sealed class PaneActions
     /// carry a key - a launcher failure, a key-resolution failure, anything thrown before the
     /// redacting wrapper - arrive verbatim, and the caller has no way to mask them (FR-015).
     /// </summary>
-    public void PostStatus(string stage, string message) =>
-        Send("status", null, new Dictionary<string, object?>
+    public void PostStatus(string stage, string message) => PostStatus(stage, message, lifecycle: false);
+
+    /// <summary><see cref="PostStatus(string, string)"/>, marked `lifecycle: true` when <paramref name="lifecycle"/>.</summary>
+    /// <param name="stage">The stage.</param>
+    /// <param name="message">The message, masked here.</param>
+    /// <param name="lifecycle">Whether this is the add-in's own word on the backend - its start, or
+    /// a restart that failed: a banner the page put up for such an `error` comes down once a later
+    /// `init` names a backend, and no other banner does (owner decision 145A, third review).
+    /// Nothing else is so marked.</param>
+    public void PostStatus(string stage, string message, bool lifecycle)
+    {
+        var payload = new Dictionary<string, object?>
         {
             { "stage", stage },
             { "message", Redact(message) },
+        };
+        if (lifecycle)
+        {
+            payload["lifecycle"] = true;
+        }
+
+        Send("status", null, payload);
+    }
+
+    /// <summary>
+    /// Tells the page the backend was restarted with saved settings, so the port and token of its
+    /// last `init` are the old backend's and it asks `ready` again (owner decisions 143A and 145A):
+    /// `backend.restarted {sentences}`. <paramref name="sentences"/> are the host's own sentences
+    /// about a restart that waited, which the page takes off its banner - the Review tab's - or
+    /// none, for a page that was shown none. One message in one shape for every page that holds
+    /// the backend's port and token, sent from one place.
+    /// </summary>
+    public void PostBackendRestarted(IReadOnlyList<string> sentences) =>
+        Send("backend.restarted", null, new Dictionary<string, object?>
+        {
+            { "sentences", sentences ?? throw new ArgumentNullException(nameof(sentences)) },
         });
 
     /// <summary>Masks every configured secret in anything headed for the page or the log.</summary>

@@ -178,12 +178,32 @@ the rows are proven identical rather than assumed.
 
 | type | payload |
 |------|---------|
-| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
+| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}`. *Amended 2026-10-19 (feature 002, owner decision 145A, found on review):* `error` also when a settings restart failed once the old backend had stopped, with the failure, masked, as a failed first start is told: no backend answers the token of the page's last `init`. *Amended on the third review the same day:* the add-in marks its own word on the backend - `backend_starting`, `ready`, and `error` for a failed start or restart - `lifecycle: true`, and the page takes down a banner it put up for such an `error` once a later `init` names a backend; no other banner |
 | `document.changed` | `{path, configuration, kind} \| null` when the active document changes |
 | `backend.stopped` | `{exit_code, log_path}` |
+| `backend.restarted` | `{sentences}` - *added 2026-10-19 (feature 002, owner decision 145A):* the add-in restarted the backend with saved settings, a save's restart made at once or one made after it waited (feature 002 `pane-host-messages.md`, `settings.save`). `sentences` is empty: the Review tab's sentences about a restart that waited are shown there alone |
 
 `kind` is what the page decides with - the Model check reads a part's feature tree, so the tab
 says whether a check can run at all instead of offering a button the host will refuse.
+
+`backend.restarted` is here for the reason the two backend stages are: the restarted backend
+listens on another port with another token, and refuses the token of the page's last `init`. The
+page sends `ready` again - once more after an `init` already on its way, which the host may have
+read before the new backend was up - and takes the new port and token from the `init`. It keeps
+the check on screen: it does not read its latest check again, since the restart changed the
+backend and not the check, and a call already made with the old token is not made again.
+*Amended 2026-10-19 (feature 002, owner decision 145A, found on review):* a call the page makes
+while such an `init` is on its way waits for it - and for the one more ask after it - and carries
+the token it leaves: the host answers that `ready` on this tab's pump, behind an extraction already
+running there, so a check pressed as the backend restarted reaches its route only once the page
+holds the new token, and its extraction is not wasted. And a latest check the page could not read,
+the backend having refused the token as the one a restart replaced does, is read again by the next
+`init`, a restart's included, so a tab opened during a restart does not stay blank. *Amended on the
+third review the same day:* it is read again until it is read, or until a check is pressed, and a
+read still out when a check is pressed is neither shown nor remembered. A call waits for an `init`
+on its way whether that `init` is applied or refused. An Accept's re-read of its check is shown only
+while that check is the one on screen: a newer check shown first, its call let go with the Accept's
+since both waited for the same `init`, is not covered by the older check.
 
 The two backend stages are here because this page calls the check routes itself. A tab opened
 while the backend was starting was given a null endpoint in `init`, so `status {stage: "ready"}`

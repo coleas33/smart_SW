@@ -467,6 +467,12 @@ public class SwReviewAddIn : ISwAddin
             // after these options, and one that has gone runs nothing.
             BackendBusy = () => _remodelHost?.RunInProgress == true,
 
+            // Owner decision 145A: every other tab that holds the backend's port and token is told
+            // after each restart the review host makes, and asks for its `init` again; and told of
+            // one that failed once the old backend had stopped, as a failed first start is told.
+            BackendRestarted = TellTheOtherTabsTheBackendRestarted,
+            BackendRestartFailed = TellTheOtherTabsTheRestartFailed,
+
             DrawingModels = DrawingModels,
             Dump = reviewDump,
             PrepareReview = reviewDump.Prepare,
@@ -808,6 +814,13 @@ public class SwReviewAddIn : ISwAddin
             // the capability above. A plan records it and Start refuses a run whose attachment
             // has changed, because the plan's bridge session did not survive the re-attach.
             ToolServiceAttachment = () => _toolService?.Attachment,
+
+            // Owner decision 145A: a plan or a run begins as a turn does - once no settings
+            // restart waits, the review host making a waiting one first - and is marked in
+            // progress under that restart's lock, so a restart never ends one. The page is told
+            // first when a restart stands before the press, read through the field per call.
+            BeginRun = BeginRemodelRun,
+            RestartAhead = () => _reviewHost?.RestartAhead == true,
             Pipeline = new BackendRemodelPipeline(
                 endpoint,
                 () => _toolService?.RemodelBridge,
@@ -846,6 +859,26 @@ public class SwReviewAddIn : ISwAddin
 
         StartRemodelPump();
         _pane.RemodelPageMessageReceived += OnRemodelPageMessage;
+    }
+
+    /// <summary>
+    /// Owner decision 145A: the gate a plan or a run begins through, which reaches the review
+    /// host's settings restart from the Remodel page's own pump. <see cref="ReviewHost.BeginRemodelRun"/>
+    /// makes a restart that waits first, or waits for the one being made, then marks the run in
+    /// progress under the restart's lock - or refuses the run, saying what holds the restart back.
+    /// The review host is read through its field per call; with none, there is no settings restart
+    /// to wait for, and the run is marked and begins.
+    /// </summary>
+    private BackendRequestException? BeginRemodelRun(Action begin)
+    {
+        ReviewHost? host = _reviewHost;
+        if (host != null)
+        {
+            return host.BeginRemodelRun(begin);
+        }
+
+        begin();
+        return null;
     }
 
     /// <summary>
@@ -1038,13 +1071,26 @@ public class SwReviewAddIn : ISwAddin
     private void PostStatusToPages(string stage, string message)
     {
         _reviewHost?.PostStatus(stage, message);
-        _modelCheckHost?.PostStatus(stage, message);
+        PostStatusToTheOtherPages(stage, message);
+    }
+
+    /// <summary>
+    /// <see cref="PostStatusToPages"/> less the Review page: the share of every page but the
+    /// Review tab's, whose host tells it of a failed settings restart itself (owner decision 145A,
+    /// <see cref="TellTheOtherTabsTheRestartFailed"/>).
+    /// </summary>
+    private void PostStatusToTheOtherPages(string stage, string message)
+    {
+        // Each marked as the add-in's own word on the backend (`lifecycle: true`), so a page takes
+        // down a banner it put up for a failed start or restart once a later `init` names a backend
+        // (owner decision 145A, third review). The Review page's own Save clears its banner.
+        _modelCheckHost?.PostStatus(stage, message, lifecycle: true);
 
         // The Standards page tracks the backend for the reason the Model check page does: it
         // calls `POST /checks/standards` itself with the endpoint its `init` carried, so a tab
         // opened while the backend was still starting holds a null endpoint, and `ready` is
         // what tells it to ask again.
-        _standardsHost?.PostStatus(stage, message);
+        _standardsHost?.PostStatus(stage, message, lifecycle: true);
 
         // The Remodel page's `status` stages are a closed list that names the three
         // backend-lifecycle stages posted here, so today every one of them goes through; the
@@ -1053,8 +1099,33 @@ public class SwReviewAddIn : ISwAddin
         // boot to ask for its `init` again.
         if (RemodelHost.IsStatusStage(stage))
         {
-            _remodelHost?.PostStatus(stage, message);
+            _remodelHost?.PostStatus(stage, message, lifecycle: true);
         }
+    }
+
+    /// <summary>
+    /// Owner decision 145A, found on review: a settings restart the review host made failed once
+    /// the old backend had stopped, so no backend answers the port and token the Model check,
+    /// Standards and Remodel tabs hold. They are told as a failed first start is told to every page
+    /// (<see cref="StartBackend"/>): `status {stage: "error"}` with the failure, which each host
+    /// masks again. The Review page is told by its own host.
+    /// </summary>
+    private void TellTheOtherTabsTheRestartFailed(string message) => PostStatusToTheOtherPages("error", message);
+
+    /// <summary>
+    /// Owner decision 145A: the review host has restarted the backend with saved settings - a
+    /// save's restart made at once, or one made after it waited - so every other tab that holds
+    /// the backend's port and token is told, and asks for its `init` again. The Model check and
+    /// Standards pages call their check routes with that token, which the restarted backend
+    /// refuses, and the Remodel page keeps it so one `init` field means one thing on every tab.
+    /// The Terminal tab holds no backend. Each host is read through its field: all three are
+    /// built after the review host's options, and one that has gone tells nothing.
+    /// </summary>
+    private void TellTheOtherTabsTheBackendRestarted()
+    {
+        _modelCheckHost?.BackendRestarted();
+        _standardsHost?.BackendRestarted();
+        _remodelHost?.BackendRestarted();
     }
 
     /// <summary>

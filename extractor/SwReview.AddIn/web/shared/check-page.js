@@ -114,6 +114,9 @@
     var nextId = 0;
     var nextSubject = 0;
 
+    /** The backend calls waiting for the `init` on its way to settle (`initSettled`). */
+    var initWaiters = [];
+
     var state = {
       backend: null,
       token: null,
@@ -136,6 +139,35 @@
 
       /** Whether a `ready` is in flight, so a second status does not ask again on top of it. */
       initPending: false,
+
+      /**
+       * A `backend.restarted` arrived while a `ready` was in flight: ask once more after it,
+       * since the host may have read that `init` before the new backend was up (owner decision
+       * 145A).
+       */
+      initAgain: false,
+
+      /**
+       * A read of the latest check an `init` named failed - the backend refused the call or did
+       * not answer, as the one a restart replaced does - and the latest check is still what the
+       * tab would show: the next `init`, a restart's included, reads it again, so a tab opened
+       * while the backend restarted does not stay blank (owner decision 145A, found on review).
+       * Done with once it is read, and once a check is pressed (third review).
+       */
+      latestUnread: false,
+
+      /**
+       * How many checks have been pressed. A read made before a press is done with once it is
+       * pressed: its answer is neither shown nor remembered (owner decision 145A, third review).
+       */
+      checksPressed: 0,
+
+      /**
+       * Whether the last banner put up is the add-in's word that the backend did not start - a
+       * failed start or restart, `status {stage: "error", lifecycle: true}`. The next `init` that
+       * names a backend takes it down; no other banner (owner decision 145A, third review).
+       */
+      lifecycleBanner: false,
 
       /** Which buckets are showing, by bucket name. */
       buckets: Object.create(null),
@@ -210,6 +242,17 @@
           state.token = null;
           renderBackendState('The backend stopped. Reopen the pane to start it again.', true);
           return;
+        case 'backend.restarted':
+          // Owner decision 145A: the host restarted the backend with saved settings. The port and
+          // token of the last `init` are the old backend's, which the new one refuses, so the page
+          // asks again - once more after an `init` already on its way. The check on screen is the
+          // engineer's and stays: it is not read again (`requestInit(false)`).
+          if (state.initPending) {
+            state.initAgain = true;
+          } else {
+            requestInit(false);
+          }
+          return;
         case 'error':
           showBanner(asError(message.payload).message);
           return;
@@ -224,8 +267,32 @@
      * One authenticated call to the loopback backend, rejecting with the backend's own
      * `{error_class, message, retryable}` so "this scope is not offered yet" can be said
      * differently from "the backend is gone".
+     *
+     * Made once no `init` is on its way (owner decision 145A, found on review). The page asks
+     * again on `backend.restarted`, and the host answers that `ready` on the tab's own pump, behind
+     * an extraction already running there - whose reply reaches the page first. A call made then
+     * would carry the token of the backend the restart replaced, which the new one refuses, and
+     * waste the extraction; so it waits for that `init`, and for the one more ask after it a
+     * restart announced meanwhile makes, and carries the token they leave.
      */
     function call(path, method, body) {
+      return initSettled().then(function () {
+        return callNow(path, method, body);
+      });
+    }
+
+    /** Resolves once no `init` is on its way: at once when none is. */
+    function initSettled() {
+      if (!state.initPending) {
+        return Promise.resolve();
+      }
+
+      return new Promise(function (resolve) {
+        initWaiters.push(resolve);
+      });
+    }
+
+    function callNow(path, method, body) {
       if (!state.backend || !state.token) {
         return Promise.reject(backendError(
           'BackendUnavailable', 'the reviewer backend is not running.', true));
@@ -282,14 +349,32 @@
         return;
       }
 
+      // A check pressed while this read is out is newer than anything it can answer: its answer
+      // is then neither shown nor remembered (owner decision 145A, third review).
+      var pressed = state.checksPressed;
+      function stillWanted() {
+        return state.checksPressed === pressed;
+      }
+
       setRunDirectory(latest.run_dir);
-      refreshResult(checkId)
-        .then(function () {
+      refreshResult(checkId, stillWanted)
+        .then(function (shown) {
+          if (!shown) {
+            return;
+          }
+
+          state.latestUnread = false;
           setCheckState('The check from this session, as it stands now.');
         })
         .catch(function () {
+          if (!stillWanted()) {
+            return;
+          }
+
           // A check folder that has been tidied away is not an error the engineer has to read;
-          // the tab simply has nothing to show until the next press.
+          // the tab simply has nothing to show until the next press. Nor is a backend that
+          // refused the token, as the one a restart replaced does: the next `init` reads it again.
+          state.latestUnread = true;
           setCheckState('');
         });
     }
@@ -336,9 +421,16 @@
           // ("Never hidden, per Principle VI").
           state.buckets.checked = true;
 
-          return refreshResult(checkId)
-            .then(function () {
-              markAccepted(findingId, exceptionId);
+          // Re-read only while this check is the one on screen: a newer check shown meanwhile - its
+          // call let go with this one, both having waited for the same `init` - is not to be
+          // covered by the older one's re-read (owner decision 145A, third review).
+          return refreshResult(checkId, function () {
+            return !!state.result && state.result.check_id === checkId;
+          })
+            .then(function (shown) {
+              if (shown) {
+                markAccepted(findingId, exceptionId);
+              }
             })
             .catch(function (error) {
               // The exception is written; only the re-read failed. Both are said, because a page
@@ -361,9 +453,19 @@
      * entry point, FR-024), so a page that moved the counts itself would be a second opinion
      * about the score, and the headline number and the list would drift apart. Accepting re-ran
      * the rules and re-rendered `report.md` before it answered, so this reads what that run wrote.
+     *
+     * Shown only if `stillWanted()` says so when the answer lands - the caller's word on whether
+     * something newer has taken the screen meanwhile - and answers whether it was shown.
      */
-    function refreshResult(checkId) {
-      return call('/checks/' + encodeURIComponent(checkId), 'GET', null).then(renderResult);
+    function refreshResult(checkId, stillWanted) {
+      return call('/checks/' + encodeURIComponent(checkId), 'GET', null).then(function (result) {
+        if (!stillWanted()) {
+          return false;
+        }
+
+        renderResult(result);
+        return true;
+      });
     }
 
     /** Points at the row that was just accepted, and names the exception that covers it. */
@@ -1188,6 +1290,7 @@
     function showStatus(payload) {
       if (payload && payload.stage === 'error') {
         showBanner(payload.message || 'the check stopped');
+        state.lifecycleBanner = payload.lifecycle === true;
         return;
       }
 
@@ -1223,11 +1326,19 @@
     }
 
     function setChecking(running) {
+      if (running) {
+        // A check pressed is newer than the latest check: a read of it still out is done with,
+        // and so is one that failed (owner decision 145A, third review).
+        state.checksPressed += 1;
+        state.latestUnread = false;
+      }
+
       state.checking = running;
       renderDocument();
     }
 
     function showBanner(message) {
+      state.lifecycleBanner = false;
       dom.clear(ui.banner);
       dom.write(ui.banner, message || '');
       ui.banner.hidden = !message;
@@ -1319,10 +1430,13 @@
     /**
      * Ask the host for `init` and apply it.
      *
-     * `loadLatest` is false when the page is re-asking because the backend has only just started:
-     * the first `init` already loaded whatever check this session left behind, and re-reading it
-     * would race whatever the page is rendering now. `initPending` keeps two statuses in quick
-     * succession from producing two in-flight asks.
+     * `loadLatest` is false when the page is re-asking because the backend has only just started,
+     * or has been restarted: the first `init` already loaded whatever check this session left
+     * behind, and re-reading it would race whatever the page is rendering now - unless that read
+     * failed and nothing has been read or pressed since (`latestUnread`). `initPending` keeps two
+     * statuses in quick succession from producing two in-flight asks, and `initAgain` asks once
+     * more after one a restart arrived during. The calls waiting for the `init` (`call`) go on once
+     * the last of them is answered, applied or refused.
      */
     function requestInit(loadLatest) {
       if (state.initPending) {
@@ -1339,6 +1453,17 @@
         })
         .then(function () {
           state.initPending = false;
+          if (state.initAgain) {
+            state.initAgain = false;
+            requestInit(false);
+            return;
+          }
+
+          var waiting = initWaiters;
+          initWaiters = [];
+          for (var index = 0; index < waiting.length; index++) {
+            waiting[index]();
+          }
         });
     }
 
@@ -1353,10 +1478,14 @@
       renderDocument();
       renderBinding();
       renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', !state.backend);
+      if (state.backend && state.lifecycleBanner) {
+        // The add-in's word that the backend did not start is no longer true: one is up.
+        hideBanner();
+      }
       if (page.onInit) {
         page.onInit(payload, api);
       }
-      if (loadLatest) {
+      if (loadLatest || state.latestUnread) {
         loadLatestCheck();
       }
     }

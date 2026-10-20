@@ -261,9 +261,21 @@ public sealed class CheckPaneHost : IDisposable
     /// <summary>Posts one `status`, with every secret masked out of it (FR-015).</summary>
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
 
+    /// <summary><see cref="PostStatus(string, string)"/>, marked as the add-in's own word on the backend when <paramref name="lifecycle"/> (owner decision 145A).</summary>
+    public void PostStatus(string stage, string message, bool lifecycle) => _actions.PostStatus(stage, message, lifecycle);
+
     /// <summary>Tells the page which document the pane is looking at now, or that there is none.</summary>
     public void DocumentChanged() =>
         Post("document.changed", DocumentPayload(_options.CurrentDocument()));
+
+    /// <summary>
+    /// Tells the page the backend was restarted with saved settings, so it asks `ready` again for
+    /// the new port and token (owner decision 145A): both check pages call their check routes with
+    /// what `init` carried, and the restarted backend refuses the old token. The add-in calls it
+    /// after every restart the review host makes. No sentence travels with it: the Review tab's
+    /// sentences about a restart that waited are shown on the Review tab alone.
+    /// </summary>
+    public void BackendRestarted() => _actions.PostBackendRestarted(Array.Empty<string>());
 
     /// <summary>
     /// The `init` reply: the backend, the token, the run root, the open document, whatever the

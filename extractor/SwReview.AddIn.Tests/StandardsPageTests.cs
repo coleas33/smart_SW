@@ -1480,9 +1480,10 @@ public sealed class StandardsPageTests
                 }
             }
 
-            // A parser that quietly matched nothing would make every test above vacuous.
+            // A parser that quietly matched nothing would make every test above vacuous. Four
+            // unsolicited rows since owner decision 145A added `backend.restarted`.
             Assert.True(
-                pageToHost.Count == 6 && unsolicited.Count == 3 && hostToPage.Count >= 6,
+                pageToHost.Count == 6 && unsolicited.Count == 4 && hostToPage.Count >= 6,
                 $"contracts/standards-check.md did not parse: {pageToHost.Count} page-to-host "
                     + $"rows ({Join(pageToHost)}), {unsolicited.Count} unsolicited rows "
                     + $"({Join(unsolicited)}). Did the table or heading shape change?");

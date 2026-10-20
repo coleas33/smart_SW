@@ -271,7 +271,11 @@ A running turn owns process state that is not on disk, so:
   answer is watched for three looks in a row, after which the engineer is told, and the restart
   is made before the next review or follow-up once the backend answers, or by saving the
   settings again (amended 2026-10-19, owner decision 143A; `pane-host-messages.md`,
-  `settings.save`).
+  `settings.save`). A remodel run is treated as a turn: a save made while one is in progress is
+  kept the same way, and the host restarts the backend once the run ends, never under it; and a
+  remodel run begins only once no restart waits - the host makes a waiting restart first, or
+  waits for the one being made, or refuses the run saying what holds the restart back (amended
+  2026-10-19, owner decision 145A).
 - On any shutdown signal the server finalizes every live chat before exiting: it writes
   `turn.ended {reason: "error"}` when a turn was mid-flight, then `session.ended` with an
   `ended_at`, and saves `session.json`. A session is never left without an ended time

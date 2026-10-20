@@ -44,6 +44,12 @@ namespace SwReview.AddIn.Tests;
 /// 7. <b>The 138A marker follows the new settings</b>: the restarted backend names the new
 ///    provider's saved key, or none.
 ///
+/// Owner decision 145A adds two more: <b>every other tab is told</b> of each restart the host
+/// makes (section 9), and <b>a remodel run is treated as a turn</b> (section 10) - a save made
+/// during one waits for it and says so, and one started while a restart waits makes it first,
+/// waits for the one being made, or is refused saying what holds it back, so a restart and a run
+/// never overlap.
+///
 /// The fakes run with no SOLIDWORKS, no Python and no provider; the one test that reads the
 /// backend's real answer to "is a turn running" uses the real <see cref="BackendClient"/>
 /// against a loopback listener, as <see cref="BackendClientSessionBodyTests"/> does.
@@ -72,12 +78,44 @@ public sealed class DeferredRestartTests
 
     /// <summary>
     /// The status the host posts when its watcher stops looking at a backend that does not answer:
-    /// the restart still waits, for the next review or follow-up.
+    /// the restart still waits, for the next review, follow-up or remodel run. Since owner decision
+    /// 145A it says "the saved settings", since a save during a remodel run is not one made during
+    /// the turn, and names the remodel run among what makes the restart first.
     /// </summary>
     private const string NotAnsweringYet =
-        "the review backend is not answering, so it has not been restarted with the settings saved during "
-        + "the turn yet. It will be before the next review or follow-up, once it answers; to restart it "
+        "the review backend is not answering, so it has not been restarted with the saved settings yet. "
+        + "It will be before the next review, follow-up or remodel run, once it answers; to restart it "
         + "now, save the settings again.";
+
+    /// <summary>The Review tab's sentence for a save made while a remodel run is in progress (owner decision 145A).</summary>
+    private const string RemodelRunPromise =
+        "the settings are saved; the backend restarts when the remodel run ends.";
+
+    /// <summary>...and for one a turn also started during.</summary>
+    private const string TurnAndRemodelRunPromise =
+        "the settings are saved; the backend restarts when the running turn and the remodel run end.";
+
+    /// <summary>
+    /// Every sentence the Review tab may have been shown about a restart that waits, as
+    /// `backend.restarted` carries them: the three promises and the watcher's word that the
+    /// backend is not answering.
+    /// </summary>
+    private static readonly string[] RestartSentences =
+        { Promise, RemodelRunPromise, TurnAndRemodelRunPromise, NotAnsweringYet };
+
+    /// <summary>
+    /// A remodel run - a plan or a Start - refused while a turn holds the restart back (owner
+    /// decision 145A). On the Remodel tab, whose own Stop stops the run: the turn's is on the Review tab.
+    /// </summary>
+    private const string TurnHoldsTheRemodelRun =
+        "the backend restarts with the saved settings when the running review turn ends, and no remodel run "
+        + "starts before then. Wait for the turn to end, or press Stop on the Review tab, then try again.";
+
+    /// <summary>...while the backend does not answer whether a turn runs.</summary>
+    private const string NoAnswerHoldsTheRemodelRun =
+        "the review backend did not answer whether a turn is running, so it has not been restarted with the "
+        + "saved settings, and no remodel run starts before then. Save the settings again on the Review tab "
+        + "to restart it, then try again.";
 
     /// <summary>Fictional keys, built from fragments and in no provider's format (AGENTS.md rule 2).</summary>
     private static readonly string OpenAiKey = string.Concat("FICT", "-saved-", "openai-", "143a-0001");
@@ -147,12 +185,12 @@ public sealed class DeferredRestartTests
         Assert.Equal("settings", key.Source);
 
         // One message after the restart, and nothing else: the promise is the only status, and the
-        // message carries the host's sentences about the wait back - the promise, and the one for
-        // a backend that does not answer - so the page takes whichever it shows, and nothing else,
-        // off its banner.
+        // message carries the host's sentences about the wait back - the three promises (owner
+        // decision 145A) and the one for a backend that does not answer - so the page takes
+        // whichever it shows, and nothing else, off its banner.
         Assert.Equal("backend.restarted", world.Types().Last());
         Assert.Equal(
-            new[] { Promise, NotAnsweringYet },
+            RestartSentences,
             world.Last("backend.restarted").GetProperty("sentences").EnumerateArray().Select(sentence => sentence.GetString()));
         Assert.Single(world.Posted("status"));
         world.AssertNothingPostedContains(OpenAiKey);
@@ -310,8 +348,8 @@ public sealed class DeferredRestartTests
     /// After the watcher has stopped looking, the backend answers again, the turn over: the next
     /// review - or follow-up - restarts it first, and the review runs on the restarted backend,
     /// never on the old one with the new settings. A follow-up is told its chat ended only once a
-    /// restart has really been made, and the page is told of it, with both of the host's sentences
-    /// about the wait.
+    /// restart has really been made, and the page is told of it, with every one of the host's
+    /// sentences about the wait.
     /// </summary>
     [Theory]
     [InlineData("review")]
@@ -351,7 +389,7 @@ public sealed class DeferredRestartTests
 
         Assert.Single(world.Backend.Restarts);
         Assert.Equal(
-            new[] { Promise, NotAnsweringYet },
+            RestartSentences,
             Assert.Single(world.Posted("backend.restarted")).GetProperty("sentences").EnumerateArray()
                 .Select(sentence => sentence.GetString()));
     }
@@ -1545,6 +1583,677 @@ public sealed class DeferredRestartTests
         Assert.Equal(retryable, body.GetProperty("retryable").GetBoolean());
     }
 
+    // ---- 9. every other tab is told (owner decision 145A) ---------------------------------------
+
+    /// <summary>
+    /// A save's restart made at once tells every other tab, once, as soon as it is made. The
+    /// Review page is told as before, by the save's reply; the Model check, Standards and Remodel
+    /// pages hold the old port and token and nothing else tells them.
+    /// </summary>
+    [Fact]
+    public void ASavesRestartMadeAtOnceTellsTheOtherTabsOnce()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        Assert.Single(world.Backend.Restarts);
+        world.Reply("settings.saved", "save");
+        Assert.Equal(1, world.OtherTabsTold);
+        Assert.Empty(world.Posted("backend.restarted"));
+    }
+
+    /// <summary>A restart that waited tells them once it is made, and not while it waits.</summary>
+    [Fact]
+    public void ARestartThatWaitedTellsTheOtherTabsOnceItIsMadeAndNotBefore()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        Polls(world.Backend, 2);
+        Assert.Equal(0, world.OtherTabsTold);
+
+        world.Backend.EndTurn("chat-1");
+        Eventually(() => world.OtherTabsTold == 1, "the other tabs told of the restart");
+
+        Assert.Single(world.Posted("backend.restarted"));
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(1, world.OtherTabsTold);
+    }
+
+    /// <summary>...whoever makes it: a new review, or a page call that would start a turn, the moment the turn ends.</summary>
+    [Theory]
+    [InlineData("review")]
+    [InlineData("turn call")]
+    public void ARestartANewReviewOrATurnCallMakesTellsTheOtherTabs(string maker)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+
+        if (maker == "review")
+        {
+            world.Receive("review.start", "start", new { });
+            world.Reply("review.started", "start");
+        }
+        else
+        {
+            Assert.Equal("UnknownChat", world.Host.PageTurnRefusal()!.ErrorClass);
+        }
+
+        Assert.Single(world.Backend.Restarts);
+        Assert.Equal(1, world.OtherTabsTold);
+    }
+
+    /// <summary>
+    /// A restart that fails once the old backend has stopped - made at once or after waiting - is
+    /// never told to the other tabs as a restart: no backend was started for them to ask about. It is
+    /// told to them as a failure, once, with its words, as a failed first start is told to every page
+    /// (owner decision 145A, found on review; until then it told them nothing, and they went on
+    /// holding the token of a backend that was gone). The Review tab reports it as before.
+    /// </summary>
+    [Theory]
+    [InlineData("at once")]
+    [InlineData("after waiting")]
+    public void ARestartThatFailsOnceTheOldBackendStoppedIsToldToTheOtherTabsAsAFailure(string when)
+    {
+        using var world = new RestartWorld();
+        world.Backend.RestartFailure = new BackendStartException("FICT the backend would not start");
+        world.Open();
+        world.Track("chat-1");
+
+        if (when == "at once")
+        {
+            world.Receive("settings.save", "save", Save(effort: "low"));
+            world.Reply("settings.saved", "save");
+            Assert.Equal("FICT the backend would not start", world.Last("status").GetProperty("message").GetString());
+        }
+        else
+        {
+            SaveAsATurnStarts(world, "save", Save(effort: "low"));
+            world.Backend.EndTurn("chat-1");
+            Eventually(() => world.Posted("status").Length == 2, "the failure's status");
+            Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        }
+
+        Assert.Equal(1, world.Backend.Attempts);
+        Assert.Equal(0, world.OtherTabsTold);
+        Assert.Equal(new[] { "FICT the backend would not start" }, world.FailuresToldToTheOtherTabs);
+    }
+
+    /// <summary>
+    /// A restart that fails before it stops anything - the launcher has gone, say - leaves the old
+    /// backend up, and the token every other tab holds with it: they are told nothing. The Review
+    /// tab reports the failure as before.
+    /// </summary>
+    [Theory]
+    [InlineData("at once")]
+    [InlineData("after waiting")]
+    public void ARestartThatFailsBeforeTheOldBackendStoppedTellsTheOtherTabsNothing(string when)
+    {
+        using var world = new RestartWorld();
+        world.Backend.EarlyRestartFailure = new BackendStartException("FICT the launcher has gone");
+        world.Open();
+        world.Track("chat-1");
+
+        if (when == "at once")
+        {
+            world.Receive("settings.save", "save", Save(effort: "low"));
+            world.Reply("settings.saved", "save");
+        }
+        else
+        {
+            SaveAsATurnStarts(world, "save", Save(effort: "low"));
+            world.Backend.EndTurn("chat-1");
+            Eventually(() => world.Posted("status").Length == 2, "the failure's status");
+            Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        }
+
+        Assert.Equal("FICT the launcher has gone", world.Last("status").GetProperty("message").GetString());
+        Assert.NotNull(world.Backend.Endpoint);
+        Assert.Equal(0, world.OtherTabsTold);
+        Assert.Empty(world.FailuresToldToTheOtherTabs);
+    }
+
+    /// <summary>
+    /// A save's restart can fail with something other than a start failure: the old backend
+    /// stopped, and the new one's log could not be opened, outside the wrapper that makes a
+    /// <see cref="BackendStartException"/>. No backend is up then, and the other tabs are told, as
+    /// for any failure (owner decision 145A, third review: only a <see cref="BackendStartException"/>
+    /// told them). One that fails so before it stops anything leaves the old backend up, and tells
+    /// them nothing. How the save itself is answered is not changed here (research 145A).
+    /// </summary>
+    [Theory]
+    [InlineData("old backend stopped")]
+    [InlineData("old backend still up")]
+    public void ASavesRestartThatFailsOtherwiseIsToldToTheOtherTabsOnceNoBackendIsUp(string when)
+    {
+        using var world = new RestartWorld();
+        var failure = new IOException("FICT the backend's log could not be opened with " + OpenAiKey);
+        if (when == "old backend stopped")
+        {
+            world.Backend.RestartFailure = failure;
+        }
+        else
+        {
+            world.Backend.EarlyRestartFailure = failure;
+        }
+
+        world.Open();
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        Assert.Equal(0, world.OtherTabsTold);
+        if (when == "old backend stopped")
+        {
+            string told = Assert.Single(world.FailuresToldToTheOtherTabs);
+            Assert.StartsWith("FICT the backend's log could not be opened with ", told, StringComparison.Ordinal);
+            Assert.DoesNotContain(OpenAiKey, told, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Empty(world.FailuresToldToTheOtherTabs);
+        }
+
+        // As before 145A, and left for the owner (research 145A, Not changed): the save is answered
+        // with the failure although the settings were written.
+        Assert.Equal("HostError", world.Reply("error", "save").GetProperty("error_class").GetString());
+    }
+
+    /// <summary>
+    /// The failure reaches the other tabs masked: whatever the start said - a key in a child's
+    /// error, say - never leaves this host unmasked (FR-015).
+    /// </summary>
+    [Fact]
+    public void AFailedRestartToldToTheOtherTabsIsMasked()
+    {
+        using var world = new RestartWorld();
+        world.Backend.RestartFailure = new BackendStartException("FICT the child would not start with " + OpenAiKey);
+        world.Open();
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        world.Reply("settings.saved", "save");
+
+        string told = Assert.Single(world.FailuresToldToTheOtherTabs);
+        Assert.StartsWith("FICT the child would not start with ", told, StringComparison.Ordinal);
+        Assert.DoesNotContain(OpenAiKey, told, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A tab that cannot be told of the failure turns nothing into an error: the save is still
+    /// answered `settings.saved`, and the Review page still told the failure.
+    /// </summary>
+    [Fact]
+    public void ATabThatCannotBeToldOfAFailedRestartTurnsNothingIntoAnError()
+    {
+        using var world = new RestartWorld();
+        world.Backend.RestartFailure = new BackendStartException("FICT the backend would not start");
+        world.TellingTheOtherTabsOfAFailure = () => throw new InvalidOperationException("FICT the pane has closed");
+        world.Open();
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        world.Reply("settings.saved", "save");
+        Assert.Empty(world.Posted("error"));
+        Assert.Equal("FICT the backend would not start", world.Last("status").GetProperty("message").GetString());
+        Assert.Single(world.FailuresToldToTheOtherTabs);
+    }
+
+    /// <summary>
+    /// A tab that cannot be told turns no restart into a failure: the save is still answered
+    /// `settings.saved` with nothing refused, and a restart that waited is still told to the
+    /// Review page.
+    /// </summary>
+    [Fact]
+    public void ATabThatCannotBeToldTurnsNoRestartIntoAFailure()
+    {
+        using var world = new RestartWorld();
+        world.TellingTheOtherTabs = () => throw new InvalidOperationException("FICT the pane has closed");
+        world.Open();
+        world.Track("chat-1");
+
+        world.Receive("settings.save", "first", Save(effort: "low"));
+        world.Reply("settings.saved", "first");
+        Assert.Empty(world.Posted("error"));
+
+        SaveAsATurnStarts(world, "second", Save(effort: "medium"));
+        world.Backend.EndTurn("chat-1");
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted");
+        Eventually(() => world.OtherTabsTold == 2, "the other tabs asked to be told twice");
+        Assert.Equal(2, world.Backend.Restarts.Length);
+    }
+
+    // ---- 10. a remodel run is treated as a turn (owner decision 145A) --------------------------
+
+    /// <summary>
+    /// A save made while a remodel run is in progress - a plan or a Start's run - is kept: written,
+    /// in force in the host and answered `settings.saved`. Its restart waits for the run, as one a
+    /// turn started during waits for the turn, and the pane says so: before 145A it restarted the
+    /// backend at once and ended the run with its copy half changed. Nothing is asked of the backend
+    /// meanwhile - the run is known without it - and once the run ends the backend restarts once,
+    /// with the saved settings, and every tab is told.
+    /// </summary>
+    [Fact]
+    public void ASaveDuringARemodelRunIsKeptAndItsRestartWaitsForTheRun()
+    {
+        int remodelling = 1;
+        using var world = new RestartWorld { BackendBusy = () => Volatile.Read(ref remodelling) == 1 };
+        world.Open();
+        world.Track("chat-1");
+
+        world.Receive("settings.save", "save", Save(model: "gpt-5.6-mini", effort: "low"));
+
+        Assert.Equal("low", world.Reply("settings.saved", "save").GetProperty("settings").GetProperty("effort").GetString());
+        Assert.Equal("low", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.Effort);
+        Assert.Equal("low", world.Host.Settings.Effort);
+        JsonElement status = world.Last("status");
+        Assert.Equal("error", status.GetProperty("stage").GetString());
+        Assert.Equal(RemodelRunPromise, status.GetProperty("message").GetString());
+
+        // The run goes on with the backend it began on: no restart is asked for, not even of the
+        // backend's own check, while it lasts.
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+        Assert.Equal(0, world.OtherTabsTold);
+
+        Volatile.Write(ref remodelling, 0);
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted after the run");
+        (UserSettings settings, _) = Assert.Single(world.Backend.Restarts);
+        Assert.Equal("gpt-5.6-mini", settings.Model);
+        Assert.Equal("low", settings.Effort);
+        Eventually(() => world.OtherTabsTold == 1, "the other tabs told");
+    }
+
+    /// <summary>
+    /// A save made during a remodel run that a turn also started during - after the save's own
+    /// check, inside its model-list round trip - says the restart waits for both, and it waits for
+    /// both: whichever ends first leaves it waiting for the other.
+    /// </summary>
+    [Theory]
+    [InlineData("the turn")]
+    [InlineData("the run")]
+    public void ASaveDuringARemodelRunThatATurnStartedDuringWaitsForBothAndSaysSo(string first)
+    {
+        int remodelling = 1;
+        using var world = new RestartWorld { BackendBusy = () => Volatile.Read(ref remodelling) == 1 };
+        world.Open();
+        world.Track("chat-1");
+
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        Assert.Equal(TurnAndRemodelRunPromise, world.Last("status").GetProperty("message").GetString());
+
+        if (first == "the turn")
+        {
+            world.Backend.EndTurn("chat-1");
+        }
+        else
+        {
+            Volatile.Write(ref remodelling, 0);
+        }
+
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.Attempts);
+        Assert.Empty(world.Posted("backend.restarted"));
+
+        world.Backend.EndTurn("chat-1");
+        Volatile.Write(ref remodelling, 0);
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted after both");
+        Assert.Single(world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// `backend.restarted` carries every sentence the Review tab may have shown about a restart
+    /// that waits - for a turn, for a remodel run, for both, and the watcher's word that the
+    /// backend is not answering - so the page takes whichever is on its banner off it, and nothing
+    /// else there.
+    /// </summary>
+    [Fact]
+    public void TheRestartCarriesEverySentenceTheReviewTabMayHaveShown()
+    {
+        int remodelling = 1;
+        using var world = new RestartWorld { BackendBusy = () => Volatile.Read(ref remodelling) == 1 };
+        world.Open();
+        world.Track("chat-1");
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        Volatile.Write(ref remodelling, 0);
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted");
+
+        Assert.Equal(
+            RestartSentences,
+            world.Last("backend.restarted").GetProperty("sentences").EnumerateArray().Select(sentence => sentence.GetString()));
+    }
+
+    /// <summary>
+    /// With no backend process at all the look answers that nothing holds the restart back - the
+    /// restart is what brings a backend back - without reading the remodel run. The run is read
+    /// again under the restart's own lock, so one still in progress holds the restart back even
+    /// then, and the restart is made once the run ends. Found by an independent review of 145A:
+    /// this, not a run begun after the look, is what that reading under the lock guards.
+    /// </summary>
+    [Fact]
+    public void WithNoBackendAtAllARemodelRunInProgressStillHoldsTheRestartBack()
+    {
+        int remodelling = 1;
+        using var world = new RestartWorld { BackendBusy = () => Volatile.Read(ref remodelling) == 1 };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        world.Backend.Down = true;
+
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.Attempts);
+        Assert.Empty(world.Posted("backend.restarted"));
+
+        Volatile.Write(ref remodelling, 0);
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted after the run");
+        Assert.Equal("low", Assert.Single(world.Backend.Restarts).Settings.Effort);
+        Assert.NotNull(world.Backend.Endpoint);
+    }
+
+    /// <summary>
+    /// Through the host: when whether a remodel run is in progress cannot be read -
+    /// <c>ReviewHostOptions.BackendBusy</c> throws - a save's restart waits as for a run and says
+    /// the run's sentence, and nothing is restarted; a remodel run asked to begin meanwhile is
+    /// refused `RemodelRunning`, the one way that refusal is ever given, since the Remodel host
+    /// refuses a second run itself. Once the run can be read again, and none is in progress, the
+    /// restart is made (owner decision 145A; found unpinned on review).
+    /// </summary>
+    [Fact]
+    public void WhenARemodelRunCannotBeReadASaveWaitsForItAndARunIsRefused()
+    {
+        int readable = 0;
+        using var world = new RestartWorld
+        {
+            BackendBusy = () => Volatile.Read(ref readable) == 1
+                ? false
+                : throw new InvalidOperationException("FICT the Remodel host cannot be asked"),
+        };
+        world.Open();
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        world.Reply("settings.saved", "save");
+        Assert.Equal(
+            "the settings are saved; the backend restarts when the remodel run ends.",
+            world.Last("status").GetProperty("message").GetString());
+
+        int began = 0;
+        BackendRequestException? refusal = world.Host.BeginRemodelRun(() => began++);
+        Assert.NotNull(refusal);
+        Assert.Equal("RemodelRunning", refusal!.ErrorClass);
+        Assert.Equal(
+            "the backend restarts with the saved settings when the remodel run ends, and nothing new starts "
+            + "before then. Wait for the run to end, then try again.",
+            refusal.Message);
+        Assert.True(refusal.Retryable);
+        Assert.Equal(0, began);
+        Assert.Equal(0, world.Backend.Attempts);
+
+        Volatile.Write(ref readable, 1);
+        Eventually(() => world.Backend.Restarts.Length == 1, "the restart once the run can be read");
+        Assert.Equal("low", world.Backend.Restarts[0].Settings.Effort);
+    }
+
+    /// <summary>With nothing waiting, a remodel run begins at once: nothing is asked of the backend and nothing restarts.</summary>
+    [Fact]
+    public void ARemodelRunWithNoRestartWaitingBeginsAtOnceAndNothingIsAsked()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        int begun = 0;
+
+        Assert.Null(world.Host.BeginRemodelRun(() => begun++));
+
+        Assert.Equal(1, begun);
+        Assert.Equal(0, world.Backend.Questions);
+        Assert.Equal(0, world.Backend.RestartsAsked);
+    }
+
+    /// <summary>
+    /// A remodel run started the moment the turn ends makes the waiting restart first, as a new
+    /// review does, and begins on the restarted backend with the saved settings - never on the old
+    /// one, with the provider and key the engineer replaced. Every page is told of the restart
+    /// before the run begins.
+    /// </summary>
+    [Fact]
+    public void ARemodelRunTheMomentTheTurnEndsRestartsTheBackendFirstAndBeginsOnIt()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(model: "gpt-5.6-mini", effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        int restartsAtTheBeginning = -1;
+        int toldAtTheBeginning = -1;
+
+        BackendRequestException? refusal = world.Host.BeginRemodelRun(() =>
+        {
+            restartsAtTheBeginning = world.Backend.Restarts.Length;
+            toldAtTheBeginning = world.Posted("backend.restarted").Length + world.OtherTabsTold;
+        });
+
+        Assert.Null(refusal);
+        Assert.Equal(1, restartsAtTheBeginning);
+        Assert.Equal(2, toldAtTheBeginning);
+        Assert.Equal("gpt-5.6-mini", Assert.Single(world.Backend.Restarts).Settings.Model);
+    }
+
+    /// <summary>
+    /// While something holds the restart back the run is refused, saying what, and its step never
+    /// runs: a turn (`TurnRunning`), in words for the Remodel tab, whose own Stop stops the run -
+    /// the turn's is on the Review tab; or a backend that does not answer (`BackendUnavailable`).
+    /// The restart still waits, and the next press makes it once nothing holds it back.
+    /// </summary>
+    [Theory]
+    [InlineData("turn", "TurnRunning")]
+    [InlineData("no answer", "BackendUnavailable")]
+    public void ARemodelRunWhileSomethingHoldsTheRestartIsRefusedSayingWhat(string cause, string expectedClass)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        if (cause == "no answer")
+        {
+            world.Backend.EndTurn("chat-1");
+            world.Backend.StopsAnswering(questions: 1);
+        }
+
+        int begun = 0;
+        BackendRequestException? refusal = world.Host.BeginRemodelRun(() => begun++);
+
+        Assert.NotNull(refusal);
+        Assert.Equal(expectedClass, refusal!.ErrorClass);
+        Assert.Equal(cause == "turn" ? TurnHoldsTheRemodelRun : NoAnswerHoldsTheRemodelRun, refusal.Message);
+        Assert.True(refusal.Retryable);
+        Assert.Equal(0, begun);
+        Assert.Equal(0, world.Backend.Attempts);
+
+        world.Backend.EndTurn("chat-1");
+        Assert.Null(world.Host.BeginRemodelRun(() => begun++));
+        Assert.Equal(1, begun);
+        Assert.Single(world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// A remodel run started while a restart is being made waits for it, and begins on the
+    /// restarted backend - the watcher's restart, and a save's own, made at once, which no caller
+    /// waited for before 145A: a run began at once, on a backend about to go.
+    /// </summary>
+    [Theory]
+    [InlineData("the watcher")]
+    [InlineData("a save")]
+    public void ARemodelRunWhileARestartIsBeingMadeWaitsForItThenBegins(string maker)
+    {
+        using var world = new RestartWorld { Poll = maker == "a save" ? TimeSpan.FromMinutes(10) : TimeSpan.FromMilliseconds(10) };
+        using var hold = new ManualResetEventSlim(false);
+        Caller<bool>? save = null;
+        try
+        {
+            world.Open();
+            world.Track("chat-1");
+            if (maker == "the watcher")
+            {
+                SaveAsATurnStarts(world, "save", Save(effort: "low"));
+                world.Backend.Hold = hold;
+                world.Backend.EndTurn("chat-1");
+            }
+            else
+            {
+                world.Backend.Hold = hold;
+                save = new Caller<bool>(() =>
+                {
+                    world.Receive("settings.save", "save", Save(effort: "low"));
+                    return true;
+                });
+            }
+
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the restart was never begun");
+            int restartsAtTheBeginning = -1;
+            var run = new Caller<BackendRequestException?>(() =>
+                world.Host.BeginRemodelRun(() => restartsAtTheBeginning = world.Backend.Restarts.Length));
+            Assert.False(run.Finishes(TimeSpan.FromMilliseconds(300)), "the run did not wait for the restart being made");
+
+            hold.Set();
+            Assert.True(run.Finishes(TimeSpan.FromSeconds(10)), "the run never began");
+            Assert.Null(run.Result);
+            Assert.Equal(1, restartsAtTheBeginning);
+            Assert.True(save == null || save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
+            Assert.Single(world.Backend.Restarts);
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    /// <summary>
+    /// A run whose restart fails is refused with that failure, masked, and never begins - its own
+    /// restart, or a save's it waited for, which failed before it stopped anything and so left the
+    /// old backend up with the old settings: as every waiter is told (143A), the run is never let
+    /// through to it.
+    /// </summary>
+    [Theory]
+    [InlineData("its own")]
+    [InlineData("a save's")]
+    public void ARemodelRunWhoseRestartFailsIsRefusedWithThatFailureAndNeverBegins(string whose)
+    {
+        string failure = "the child would not start with " + OpenAiKey;
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        using var hold = new ManualResetEventSlim(false);
+        try
+        {
+            world.Open();
+            world.Track("chat-1");
+            int begun = 0;
+            BackendRequestException? refusal;
+            if (whose == "its own")
+            {
+                SaveAsATurnStarts(world, "save", Save(effort: "low"));
+                world.Backend.EndTurn("chat-1");
+                world.Backend.RestartFailure = new InvalidOperationException(failure);
+                refusal = world.Host.BeginRemodelRun(() => begun++);
+            }
+            else
+            {
+                world.Backend.Hold = hold;
+                world.Backend.EarlyRestartFailure = new BackendStartException(failure);
+                var save = new Caller<bool>(() =>
+                {
+                    world.Receive("settings.save", "save", Save(effort: "low"));
+                    return true;
+                });
+                Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the save never began its restart");
+                var run = new Caller<BackendRequestException?>(() => world.Host.BeginRemodelRun(() => begun++));
+                Assert.False(run.Finishes(TimeSpan.FromMilliseconds(300)), "the run did not wait for the save's restart");
+                hold.Set();
+                Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
+                Assert.True(run.Finishes(TimeSpan.FromSeconds(10)), "the run never got an answer");
+                refusal = run.Result;
+                Assert.NotNull(world.Backend.Endpoint);
+                Assert.Equal(0, world.Backend.Generation);
+            }
+
+            Assert.NotNull(refusal);
+            Assert.Equal("BackendUnavailable", refusal!.ErrorClass);
+            Assert.StartsWith("the child would not start with ", refusal.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain(OpenAiKey, refusal.Message, StringComparison.Ordinal);
+            Assert.True(refusal.Retryable);
+            Assert.Equal(0, begun);
+            world.AssertNothingPostedContains(OpenAiKey);
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    /// <summary>A run asked for once the host is disposed - the add-in unloading, its backend with it - never begins.</summary>
+    [Fact]
+    public void ARemodelRunOnceTheHostIsDisposedIsRefusedAndNeverBegins()
+    {
+        var world = new RestartWorld();
+        try
+        {
+            world.Open();
+            world.Host.Dispose();
+            int begun = 0;
+
+            BackendRequestException? refusal = world.Host.BeginRemodelRun(() => begun++);
+
+            Assert.NotNull(refusal);
+            Assert.Equal("BackendUnavailable", refusal!.ErrorClass);
+            Assert.Equal("the review backend is stopping with the add-in.", refusal.Message);
+            Assert.False(refusal.Retryable);
+            Assert.Equal(0, begun);
+        }
+        finally
+        {
+            world.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The add-in hands the Remodel host the review host's gate, read through the field per call:
+    /// the review host is the one that keeps the restart, on another pump. With no review host
+    /// there is no settings restart to wait for, and the run begins.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsTheRemodelHostTheReviewHostsRestartGate()
+    {
+        string source = OtherTabsBackendRestartTests.AddInSource();
+        string options = OtherTabsBackendRestartTests.Between(
+            source, "_remodelHost = new RemodelHost(new RemodelHostOptions(", "StartRemodelPump();");
+        Assert.Contains("BeginRun = BeginRemodelRun,", options, StringComparison.Ordinal);
+
+        string gate = OtherTabsBackendRestartTests.Between(
+            source, "private BackendRequestException? BeginRemodelRun(Action begin) {", "private ");
+        Assert.Contains("ReviewHost? host = _reviewHost;", gate, StringComparison.Ordinal);
+        Assert.Contains("return host.BeginRemodelRun(begin);", gate, StringComparison.Ordinal);
+        Assert.Contains("begin(); return null;", gate, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The add-in hands the Remodel host the review host's word on whether a settings restart
+    /// stands before a plan or a run, read through the field per call - and none with no review
+    /// host (owner decision 145A, found on review).
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsTheRemodelHostTheReviewHostsWordOnARestartAhead()
+    {
+        string source = OtherTabsBackendRestartTests.AddInSource();
+        string options = OtherTabsBackendRestartTests.Between(
+            source, "_remodelHost = new RemodelHost(new RemodelHostOptions(", "StartRemodelPump();");
+        Assert.Contains("RestartAhead = () => _reviewHost?.RestartAhead == true,", options, StringComparison.Ordinal);
+    }
+
     // ---- the restart itself, with no host ------------------------------------------------------
 
     [Fact]
@@ -2010,16 +2719,383 @@ public sealed class DeferredRestartTests
         restart.Dispose();
     }
 
-    /// <summary>A restart with the callbacks a test does not care about doing nothing, and a ten-minute poll unless given one.</summary>
+    /// <summary>
+    /// Owner decision 145A: a save's restart never ends a remodel run. The run is read under the
+    /// restart's own lock before anything is asked; the restart then waits, and says it is the run
+    /// that holds it back - a turn the backend's own check finds is said as before.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "RemodelRun")]
+    [InlineData(false, "Turn")]
+    public void ASavesRestartWaitsForARemodelRunOrATurnAndSaysWhich(bool remodelling, string expected)
+    {
+        int tried = 0;
+        using var restart = NewRestart(() => DeferredRestart.Hold.None, () => { }, busy: () => remodelling);
+
+        bool restarted = restart.Now(
+            () =>
+            {
+                tried++;
+                throw new TurnRunningException();
+            },
+            out DeferredRestart.Hold heldBy);
+
+        Assert.False(restarted);
+        Assert.Equal((DeferredRestart.Hold)Enum.Parse(typeof(DeferredRestart.Hold), expected), heldBy);
+        Assert.Equal(remodelling ? 0 : 1, tried);
+        Assert.True(restart.Pending);
+    }
+
+    /// <summary>
+    /// A look that answers that nothing holds the restart back while a remodel run is in progress -
+    /// the review host's answers so, without reading the run, when there is no backend process at
+    /// all, and a look that cannot be made counts as such an answer - never leads to a restart that
+    /// ends the run: the run is read again under the restart's own lock, and the restart still
+    /// waits. (Renamed on review: it was said to guard a run begun after the look, which the gate
+    /// rules out, since a run begins only once no restart waits.)
+    /// </summary>
+    [Fact]
+    public void ARestartNeverEndsARemodelRunItsLookDidNotRead()
+    {
+        int busy = 0;
+        int tried = 0;
+        using var restart = NewRestart(
+            () =>
+            {
+                // A run is in progress, and this look answers without reading it.
+                Volatile.Write(ref busy, 1);
+                return DeferredRestart.Hold.None;
+            },
+            () => tried++,
+            busy: () => Volatile.Read(ref busy) == 1);
+        Assert.False(restart.Now(() => throw new TurnRunningException()));
+
+        Assert.Equal(DeferredRestart.Outcome.RemodelRunning, restart.Apply(out Exception? failure));
+        Assert.Null(failure);
+        Assert.Equal(0, tried);
+        Assert.True(restart.Pending);
+    }
+
+    /// <summary>
+    /// A restart stands before new work while one waits, until it is made, and while a save's is
+    /// being made at once - which never waits - and not once it is made, nor once the owner is
+    /// disposed (owner decision 145A, found on review): what the Remodel tab reads to say a press
+    /// makes the restart first. The gate itself decides; this is only what the page is told.
+    /// </summary>
+    [Fact]
+    public void ARestartIsAheadWhileOneWaitsOrIsBeingMade()
+    {
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        Action blocking = () =>
+        {
+            entered.Set();
+            release.Wait(TimeSpan.FromSeconds(10));
+        };
+        using var restart = NewRestart(() => DeferredRestart.Hold.None, blocking);
+        Assert.False(restart.Ahead);
+
+        // A save's restart, being made at once.
+        var save = new Caller<bool>(() => restart.Now(blocking));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the save's restart never began");
+        Assert.True(restart.Ahead);
+        release.Set();
+        Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save's restart never ended");
+        Assert.True(save.Result);
+        Assert.False(restart.Ahead);
+
+        // One that waits, and then is made.
+        entered.Reset();
+        release.Reset();
+        Assert.False(restart.Now(() => throw new TurnRunningException()));
+        Assert.True(restart.Ahead);
+        var made = new Caller<DeferredRestart.Outcome>(() => restart.Apply(out _));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the waiting restart was never made");
+        Assert.True(restart.Ahead);
+        release.Set();
+        Assert.True(made.Finishes(TimeSpan.FromSeconds(10)), "the waiting restart never ended");
+        Assert.Equal(DeferredRestart.Outcome.Restarted, made.Result);
+        Assert.False(restart.Ahead);
+
+        // Once the owner is disposed none stands before anything - the gate answers that the add-in
+        // is unloading - not even a save's restart still under way.
+        entered.Reset();
+        release.Reset();
+        var underWay = new Caller<bool>(() => restart.Now(blocking));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the last save's restart never began");
+        Assert.True(restart.Ahead);
+        restart.Dispose();
+        Assert.False(restart.Ahead);
+        release.Set();
+        Assert.True(underWay.Finishes(TimeSpan.FromSeconds(10)), "the last save's restart never ended");
+    }
+
+    /// <summary>
+    /// Through the host: a settings restart stands before new work while it waits for a turn, and
+    /// not once it is made (owner decision 145A, found on review). The add-in hands this to the
+    /// Remodel host, which says so before a plan or a Start.
+    /// </summary>
+    [Fact]
+    public void TheReviewHostSaysARestartIsAheadWhileOneWaits()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        Assert.False(world.Host.RestartAhead);
+
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        Assert.True(world.Host.RestartAhead);
+
+        world.Backend.EndTurn("chat-1");
+        Eventually(() => world.Backend.Restarts.Length == 1, "the restart once the turn ends");
+        Eventually(() => !world.Host.RestartAhead, "no restart ahead once it is made");
+    }
+
+    /// <summary>
+    /// Not knowing whether a remodel run is in progress is not knowing that none is: a reading of
+    /// the run that throws is read as one in progress. A save's restart waits for it and says so, a
+    /// restart that waits is not made under it, and a run's step does not begin while it waits
+    /// (owner decision 145A; the rule was written down, and found unpinned on review).
+    /// </summary>
+    [Fact]
+    public void ARunReadingThatThrowsIsReadAsARunInProgress()
+    {
+        int restarted = 0;
+        using var restart = NewRestart(
+            () => DeferredRestart.Hold.None,
+            () => restarted++,
+            busy: () => throw new InvalidOperationException("FICT the Remodel host cannot be asked"));
+
+        Assert.False(restart.Now(() => restarted++, out DeferredRestart.Hold heldBy));
+        Assert.Equal(DeferredRestart.Hold.RemodelRun, heldBy);
+        Assert.True(restart.Pending);
+
+        Assert.Equal(DeferredRestart.Outcome.RemodelRunning, restart.Apply(out Exception? failure));
+        Assert.Null(failure);
+
+        int began = 0;
+        Assert.Equal(DeferredRestart.Outcome.RemodelRunning, restart.Begin(() => began++, out failure));
+        Assert.Null(failure);
+        Assert.Equal(0, began);
+        Assert.Equal(0, restarted);
+        Assert.True(restart.Pending);
+    }
+
+    /// <summary>
+    /// Begin runs a run's step under the restart's own lock: a save asking for its restart while the
+    /// step runs waits for it, and then finds the run in progress and waits for it in turn - so a
+    /// run and a restart never overlap.
+    /// </summary>
+    [Fact]
+    public void BeginRunsItsStepUnderTheRestartsLockSoNoRestartOverlapsTheRun()
+    {
+        int busy = 0;
+        int tried = 0;
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        using var restart = NewRestart(() => DeferredRestart.Hold.None, () => { }, busy: () => Volatile.Read(ref busy) == 1);
+        try
+        {
+            var run = new Caller<DeferredRestart.Outcome>(() => restart.Begin(
+                () =>
+                {
+                    entered.Set();
+                    release.Wait(TimeSpan.FromSeconds(10));
+                    Volatile.Write(ref busy, 1);
+                },
+                out _));
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the run's step never ran");
+
+            var save = new Caller<(bool, DeferredRestart.Hold)>(() =>
+                (restart.Now(() => Interlocked.Increment(ref tried), out DeferredRestart.Hold heldBy), heldBy));
+            Assert.False(save.Finishes(TimeSpan.FromMilliseconds(300)), "the save's restart did not wait for the run's step");
+
+            release.Set();
+            Assert.True(run.Finishes(TimeSpan.FromSeconds(10)), "the run never began");
+            Assert.Equal(DeferredRestart.Outcome.NotPending, run.Result);
+            Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
+            Assert.False(save.Result.Item1);
+            Assert.Equal(DeferredRestart.Hold.RemodelRun, save.Result.Item2);
+            Assert.Equal(0, Volatile.Read(ref tried));
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    /// <summary>
+    /// Begin makes a waiting restart first when nothing holds it back, as a new review does, and
+    /// runs its step after it; while something holds it back it answers what, runs nothing and
+    /// leaves the restart waiting.
+    /// </summary>
+    [Theory]
+    [InlineData("None", "Restarted")]
+    [InlineData("Turn", "TurnRunning")]
+    [InlineData("RemodelRun", "RemodelRunning")]
+    [InlineData("NoAnswer", "NotAnswered")]
+    public void BeginMakesAWaitingRestartFirstOrAnswersWhatHoldsItBack(string hold, string expected)
+    {
+        var order = new List<string>();
+        var held = (DeferredRestart.Hold)Enum.Parse(typeof(DeferredRestart.Hold), hold);
+        using var restart = NewRestart(() => held, () => order.Add("restart"));
+        Assert.False(restart.Now(() => throw new TurnRunningException()));
+
+        DeferredRestart.Outcome outcome = restart.Begin(() => order.Add("begin"), out Exception? failure);
+
+        Assert.Equal((DeferredRestart.Outcome)Enum.Parse(typeof(DeferredRestart.Outcome), expected), outcome);
+        Assert.Null(failure);
+        Assert.Equal(hold == "None" ? new[] { "restart", "begin" } : new string[0], order);
+        Assert.Equal(hold != "None", restart.Pending);
+    }
+
+    /// <summary>
+    /// Begin waits for a restart being made - one that waited, made by another caller's look, and a
+    /// save's made at once, which is never waiting and which nothing waited for before 145A - and
+    /// is told what became of it: made, and the step runs after it; or failed, and the step never
+    /// runs. It makes no attempt of its own.
+    /// </summary>
+    [Theory]
+    [InlineData("apply", false)]
+    [InlineData("apply", true)]
+    [InlineData("save", false)]
+    [InlineData("save", true)]
+    public void BeginWaitsForARestartBeingMadeAndIsToldWhatBecameOfIt(string maker, bool fails)
+    {
+        var failure = new BackendStartException("FICT the launcher has gone");
+        int attempts = 0;
+        int begun = 0;
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        Action attempt = () =>
+        {
+            Interlocked.Increment(ref attempts);
+            entered.Set();
+            release.Wait(TimeSpan.FromSeconds(10));
+            if (fails)
+            {
+                throw failure;
+            }
+        };
+        using var restart = NewRestart(() => DeferredRestart.Hold.None, attempt);
+        try
+        {
+            if (maker == "apply")
+            {
+                Assert.False(restart.Now(() => throw new TurnRunningException()));
+            }
+
+            var making = new Caller<bool>(() =>
+            {
+                try
+                {
+                    if (maker == "apply")
+                    {
+                        restart.Apply(out _);
+                    }
+                    else
+                    {
+                        restart.Now(attempt);
+                    }
+                }
+                catch (BackendStartException)
+                {
+                    // A save's own failure is thrown to the save.
+                }
+
+                return true;
+            });
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the restart was never begun");
+            var run = new Caller<(DeferredRestart.Outcome, Exception?)>(() =>
+                (restart.Begin(() => Interlocked.Increment(ref begun), out Exception? theirs), theirs));
+            Assert.False(run.Finishes(TimeSpan.FromMilliseconds(300)), "the run did not wait for the restart being made");
+
+            release.Set();
+            Assert.True(making.Finishes(TimeSpan.FromSeconds(10)), "the restart never finished");
+            Assert.True(run.Finishes(TimeSpan.FromSeconds(10)), "the run never got an answer");
+
+            (DeferredRestart.Outcome outcome, Exception? told) = run.Result;
+            Assert.Equal(fails ? DeferredRestart.Outcome.Failed : DeferredRestart.Outcome.RestartedMeanwhile, outcome);
+            Assert.Same(fails ? failure : null, told);
+            Assert.Equal(fails ? 0 : 1, Volatile.Read(ref begun));
+            Assert.Equal(1, Volatile.Read(ref attempts));
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    /// <summary>
+    /// A newer save's restart that starts to wait while Begin waits for the lock - the backend's own
+    /// check found a turn - is looked at afresh: the turn holds it back, the run is refused saying
+    /// so, and its step never runs.
+    /// </summary>
+    [Fact]
+    public void BeginLooksAgainAtARestartThatStartedToWaitWhileItWaitedForTheLock()
+    {
+        int hold = (int)DeferredRestart.Hold.None;
+        int begun = 0;
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        using var restart = NewRestart(() => (DeferredRestart.Hold)Volatile.Read(ref hold), () => { });
+        try
+        {
+            var save = new Caller<bool>(() => restart.Now(() =>
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(10));
+                throw new TurnRunningException();
+            }));
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the save never began its restart");
+            var run = new Caller<DeferredRestart.Outcome>(() => restart.Begin(() => Interlocked.Increment(ref begun), out _));
+            Assert.False(run.Finishes(TimeSpan.FromMilliseconds(300)), "the run did not wait for the save's restart");
+
+            Volatile.Write(ref hold, (int)DeferredRestart.Hold.Turn);
+            release.Set();
+            Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
+            Assert.True(run.Finishes(TimeSpan.FromSeconds(10)), "the run never got an answer");
+
+            Assert.False(save.Result);
+            Assert.Equal(DeferredRestart.Outcome.TurnRunning, run.Result);
+            Assert.Equal(0, Volatile.Read(ref begun));
+            Assert.True(restart.Pending);
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    /// <summary>Once disposed, Begin runs nothing and says so.</summary>
+    [Fact]
+    public void BeginOnceDisposedRunsNothing()
+    {
+        int begun = 0;
+        var restart = NewRestart(() => DeferredRestart.Hold.None, () => { });
+        restart.Dispose();
+
+        Assert.Equal(DeferredRestart.Outcome.Stopped, restart.Begin(() => begun++, out Exception? failure));
+        Assert.Null(failure);
+        Assert.Equal(0, begun);
+    }
+
+    /// <summary>
+    /// A restart with the callbacks a test does not care about doing nothing, no remodel run in
+    /// progress unless given a reading of one (owner decision 145A), and a ten-minute poll unless
+    /// given one.
+    /// </summary>
     private static DeferredRestart NewRestart(
         Func<DeferredRestart.Hold> heldBack,
         Action restart,
         Action? restarted = null,
         Action<Exception>? failed = null,
         Action? notAnswered = null,
-        TimeSpan? poll = null) =>
+        TimeSpan? poll = null,
+        Func<bool>? busy = null) =>
         new DeferredRestart(
             heldBack,
+            busy ?? (() => false),
             restart,
             restarted ?? (() => { }),
             failed ?? (_ => { }),
@@ -2158,7 +3234,9 @@ public sealed class DeferredRestartTests
     private sealed class RestartWorld : IDisposable
     {
         private readonly FakeChannel _channel = new FakeChannel();
+        private readonly List<string> _failuresTold = new List<string>();
         private ReviewHost? _host;
+        private int _otherTabsTold;
 
         public RestartWorld()
         {
@@ -2197,6 +3275,34 @@ public sealed class DeferredRestartTests
         /// <summary>Whether a remodel run is in progress on the backend, as the add-in answers it.</summary>
         public Func<bool> BackendBusy { get; set; } = () => false;
 
+        /// <summary>
+        /// How many times the host asked for every other tab to be told the backend restarted
+        /// (owner decision 145A), as the add-in tells the Model check, Standards and Remodel tabs.
+        /// </summary>
+        public int OtherTabsTold => Volatile.Read(ref _otherTabsTold);
+
+        /// <summary>What telling the other tabs does after it is counted; a test makes it throw.</summary>
+        public Action? TellingTheOtherTabs { get; set; }
+
+        /// <summary>
+        /// Every failed restart the host asked for every other tab to be told of, by its words - one
+        /// that failed once the old backend had stopped (owner decision 145A, found on review) - as
+        /// the add-in tells the Model check, Standards and Remodel tabs.
+        /// </summary>
+        public string[] FailuresToldToTheOtherTabs
+        {
+            get
+            {
+                lock (_failuresTold)
+                {
+                    return _failuresTold.ToArray();
+                }
+            }
+        }
+
+        /// <summary>What telling the other tabs of a failure does after it is recorded; a test makes it throw.</summary>
+        public Action? TellingTheOtherTabsOfAFailure { get; set; }
+
         public ReviewHost Host => _host ?? throw new InvalidOperationException("call Open() first");
 
         public void Open()
@@ -2218,6 +3324,20 @@ public sealed class DeferredRestartTests
                 Now = () => Stamp,
                 RestartPoll = Poll,
                 BackendBusy = () => BackendBusy(),
+                BackendRestarted = () =>
+                {
+                    Interlocked.Increment(ref _otherTabsTold);
+                    TellingTheOtherTabs?.Invoke();
+                },
+                BackendRestartFailed = message =>
+                {
+                    lock (_failuresTold)
+                    {
+                        _failuresTold.Add(message);
+                    }
+
+                    TellingTheOtherTabsOfAFailure?.Invoke();
+                },
             });
         }
 

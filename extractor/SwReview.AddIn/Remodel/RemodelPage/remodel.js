@@ -94,7 +94,21 @@
     lostRunDirectory: null,
 
     /** Whether a `ready` is in flight, so a second status does not ask again on top of it. */
-    initPending: false
+    initPending: false,
+
+    /**
+     * A `backend.restarted` arrived while a `ready` was in flight: ask once more after it, since
+     * the host may have read that `init` before the new backend was up (owner decision 145A).
+     */
+    initAgain: false,
+
+    /**
+     * Whether the last banner put up is the add-in's word that the backend did not start - a
+     * failed start or restart, `status {stage: "error", lifecycle: true}`. The next `init` that
+     * names a backend takes it down; no other banner, a run's or a teardown's included (owner
+     * decision 145A, third review).
+     */
+    lifecycleBanner: false
   };
 
   var ui = {};
@@ -175,6 +189,17 @@
         state.token = null;
         renderBackendState('The backend stopped. Reopen the pane to start it again.', true);
         return;
+      case 'backend.restarted':
+        // Owner decision 145A: the host restarted the backend with saved settings, so the port
+        // and token of the last `init` are the old backend's. The page asks again - once more
+        // after an `init` already on its way - and leaves the run on screen as it is: its record
+        // is the run folder, which the restart does not touch (`requestInit(false)`).
+        if (state.initPending) {
+          state.initAgain = true;
+        } else {
+          requestInit(false);
+        }
+        return;
       case 'error':
         showBanner(asError(message.payload).message);
         return;
@@ -251,8 +276,11 @@
         return refreshResult();
       })
       .catch(function (error) {
-        // The start was refused, so no run began and no terminal `status` is coming.
+        // The start was refused, so no run began and no terminal `status` is coming. The line the
+        // press set - "Running...", or the host's word that a settings restart comes first - is no
+        // longer true; the banner says why (owner decision 145A, found on review).
         showBanner(error.message);
+        setRunStatus('');
         endRun();
       });
   }
@@ -955,6 +983,7 @@
 
     if (stage === 'error') {
       showBanner(payload.message || 'the run stopped');
+      state.lifecycleBanner = payload.lifecycle === true;
       return;
     }
 
@@ -963,7 +992,7 @@
       // holds is null. Ask again, as the other pages do. Guarded on `state.backend` so the
       // host's own end-of-phase `status {stage: "ready"}` does not re-initialise the page in
       // the middle of a run.
-      requestInit();
+      requestInit(true);
     }
 
     setRunStatus((payload && payload.message) || '');
@@ -990,6 +1019,7 @@
   }
 
   function showBanner(message) {
+    state.lifecycleBanner = false;
     dom.clear(ui.banner);
     dom.write(ui.banner, message || '');
     ui.banner.hidden = !message;
@@ -1076,7 +1106,7 @@
     renderResult(null);
     renderPlan(null);
 
-    requestInit();
+    requestInit(true);
   }
 
   function openRun(type) {
@@ -1089,24 +1119,37 @@
     });
   }
 
-  /** Ask the host for `init` and apply it. */
-  function requestInit() {
+  /**
+   * Ask the host for `init` and apply it.
+   *
+   * `loadLatest` is false when the page asks because the backend was restarted (owner decision
+   * 145A): the run on screen is the one the page was showing, the host reads it out of its run
+   * folder rather than from the backend, and reading it again would only re-render what the
+   * engineer is looking at. `initAgain` asks once more after an `init` a restart arrived during.
+   */
+  function requestInit(loadLatest) {
     if (state.initPending) {
       return;
     }
 
     state.initPending = true;
     send('ready', {})
-      .then(applyInit)
+      .then(function (payload) {
+        applyInit(payload, loadLatest);
+      })
       .catch(function (error) {
         showBanner(error.message);
       })
       .then(function () {
         state.initPending = false;
+        if (state.initAgain) {
+          state.initAgain = false;
+          requestInit(false);
+        }
       });
   }
 
-  function applyInit(payload) {
+  function applyInit(payload, loadLatest) {
     state.backend = payload.backend || null;
     state.token = payload.token || null;
     state.runRoot = payload.run_root || null;
@@ -1121,13 +1164,17 @@
     renderDocument();
     renderLimits();
     renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', !state.backend);
+    if (state.backend && state.lifecycleBanner) {
+      // The add-in's word that the backend did not start is no longer true: one is up.
+      hideBanner();
+    }
 
     if (!state.remodelAvailable) {
       showBanner(state.remodelAvailabilityMessage || NO_SEAT_MESSAGE);
     }
 
     var latest = payload.latest_run;
-    if (latest && latest.run_dir) {
+    if (loadLatest && latest && latest.run_dir) {
       renderRun(latest.run_dir);
 
       // Decision 24A, amended on review: the host tells a lost plan once, so a page that has

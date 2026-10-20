@@ -98,6 +98,31 @@ public sealed class RemodelHostOptions
     /// scheduler so the message order they read is the order the page would see.
     /// </summary>
     public Action<Action> Schedule { get; set; } = work => Task.Run(work);
+
+    /// <summary>
+    /// Owner decision 145A: begins a plan or a run - what <see cref="RemodelHost.RunInProgress"/>
+    /// covers - as a turn begins, so a settings restart and a remodel run never overlap. Called
+    /// with the step that marks the host busy, after every refusal that needs no call: a settings
+    /// restart that waits is made first, or the one being made is waited for, then the step is run
+    /// under the restart's own lock and null answered; or the step is not run and the refusal is
+    /// answered - what holds the restart back, or the restart's failure - with its class, words and
+    /// flag. The add-in answers it through the review host (`ReviewHost.BeginRemodelRun`), which
+    /// keeps the restart on another pump. By default there is no restart to wait for, and the
+    /// step runs at once.
+    /// </summary>
+    public Func<Action, BackendRequestException?> BeginRun { get; set; } = begin =>
+    {
+        begin();
+        return null;
+    };
+
+    /// <summary>
+    /// Whether a settings restart stands before a plan or a run - one waits to be made, or one is
+    /// being made - which the gate (<see cref="BeginRun"/>) makes, or waits for, first (owner
+    /// decision 145A, found on review). Read only to tell the page so; the gate decides. The add-in
+    /// answers it through the review host (`ReviewHost.RestartAhead`). By default none does.
+    /// </summary>
+    public Func<bool> RestartAhead { get; set; } = () => false;
 }
 
 /// <summary>
@@ -216,6 +241,38 @@ public sealed class RemodelHost : IDisposable
     public const string SourceIsRemodelCopyMessage =
         "The active document is a copy the re-modeler made, not your own part. Make your own part "
         + "the active document and press Remodel a copy again.";
+
+    /// <summary>
+    /// What `remodel.plan` answers when the active document, read again once the settings-restart
+    /// gate has marked the host busy, is not the one the press was for (owner decision 145A, found on
+    /// review): the gate can wait through a restart, and the engineer can switch documents - or
+    /// configurations - meanwhile. True of a configuration switched alone, and of an earlier plan
+    /// waiting for Start, which is kept (third review). No path: the tab says whose document it
+    /// means without one.
+    /// </summary>
+    public const string DocumentChangedMessage =
+        "The active document or its configuration changed after Remodel a copy was pressed, so nothing "
+        + "was copied and no new plan was made. " + PartNotChanged + " Make your part the active document "
+        + "and press Remodel a copy again.";
+
+    /// <summary>
+    /// How the run status line's word on a settings restart before a press begins: true whether the
+    /// gate makes the restart, waits for one being made, or finds a turn or a backend that does not
+    /// answer holding it back and refuses the press - a look that can take a round trip's timeout
+    /// per chat (owner decision 145A, third review: the words said the backend was restarting).
+    /// </summary>
+    private const string WaitingForTheRestart =
+        "Waiting for the review backend to restart with the saved settings, then ";
+
+    /// <summary>
+    /// What the page's run status line is told before a plan whose gate meets a settings restart
+    /// that waits or is being made (owner decision 145A, found on review). Posted as
+    /// `status {stage: "backend_starting"}`.
+    /// </summary>
+    public const string PlanAfterRestartMessage = WaitingForTheRestart + "reading the part...";
+
+    /// <summary>...before a Start's run.</summary>
+    public const string StartAfterRestartMessage = WaitingForTheRestart + "starting the run...";
 
     /// <summary>
     /// The full no-change reassurance for refusals before any copy change. Loss and cleanup
@@ -410,6 +467,10 @@ public sealed class RemodelHost : IDisposable
     /// bridge session goes with the old attachment, and `remodel.start` refuses that plan as
     /// `SessionLost` rather than start it on a dispatcher that never saw its copy. The page is
     /// told at the re-attach itself, before Start (decision 24A, <see cref="AnnounceLostPlan"/>).
+    ///
+    /// Read too by the review host's settings restart, which waits while it is true (owner
+    /// decision 145A): it is set only through <see cref="RemodelHostOptions.BeginRun"/>, under that
+    /// restart's own lock, so a restart and a plan or a run never overlap.
     /// </summary>
     public bool RunInProgress => _busy;
 
@@ -489,6 +550,19 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>Posts one `status`, with every secret masked out of it (FR-015).</summary>
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
+
+    /// <summary><see cref="PostStatus(string, string)"/>, marked as the add-in's own word on the backend when <paramref name="lifecycle"/> (owner decision 145A).</summary>
+    public void PostStatus(string stage, string message, bool lifecycle) => _actions.PostStatus(stage, message, lifecycle);
+
+    /// <summary>
+    /// Tells the page the backend was restarted with saved settings, so it asks `ready` again for
+    /// the new port and token (owner decision 145A). This page makes no call of its own - its
+    /// backend work is this host's, which reads the endpoint per call - but it keeps them, so one
+    /// `init` field means one thing on every tab. The add-in calls it after every restart the
+    /// review host makes. No sentence travels with it: the Review tab's sentences about a restart
+    /// that waited are shown on the Review tab alone.
+    /// </summary>
+    public void BackendRestarted() => _actions.PostBackendRestarted(Array.Empty<string>());
 
     /// <summary>
     /// The `status` stages this page has a branch for, closed by
@@ -1025,9 +1099,29 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        _busy = true;
+        // Owner decision 145A: a plan holds the backend for as long as it runs, as a turn does.
+        // After every refusal that needs no call, a settings restart that waits is made first - or
+        // the one being made waited for - and the host is marked busy under that restart's own
+        // lock, so no restart can begin under the plan; or the plan is refused, saying why.
+        if (!BeganRun(id, PlanAfterRestartMessage))
+        {
+            return;
+        }
+
         try
         {
+            // The document was read before the gate, and the gate can wait through a settings
+            // restart - seconds, up to the backend's handshake - in which the engineer can make
+            // another document active. Read again now the host is busy, before any call: a plan of
+            // another document than the one the press was for is refused in plain words, rather
+            // than met at the bridge's open as `scope_not_probed`, both paths in its words (owner
+            // decision 145A, found on review).
+            if (!document.IsSameDocument(_options.CurrentDocument()))
+            {
+                _actions.SendError(id, "DocumentChanged", DocumentChangedMessage, retryable: true);
+                return;
+            }
+
             // Decision 22A: the attachment this plan's bridge session will live on. Read once
             // the host is busy - from here the tool service begins no re-attach of its own - and
             // before the probe, so it is the attachment the probe, the copy and the session go
@@ -1184,12 +1278,10 @@ public sealed class RemodelHost : IDisposable
         }
         finally
         {
-            _busy = false;
-
             // Decision 24A: a re-attach that landed while this plan held the host was not told
             // then. It is asked about now, of whichever plan is on screen - the one just
             // recorded, or the earlier one if this plan was refused.
-            AnnounceLostPlan();
+            FreeTheHost();
         }
     }
 
@@ -1511,15 +1603,10 @@ public sealed class RemodelHost : IDisposable
         // anything. Ahead of the seat check on purpose: mid-restart the seat reads as still
         // being checked, and asking the engineer to wait would only earn this answer next time.
         // 004 T173: a plan planning again closed is lost the same way, in its own words.
-        if (run.ClosedByPlanAgain)
+        string? lost = LostSessionWords(run);
+        if (lost != null)
         {
-            _actions.SendError(id, "SessionLost", PlanClosedMessage, retryable: false);
-            return;
-        }
-
-        if (run.SessionEnded || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()))
-        {
-            _actions.SendError(id, "SessionLost", SessionLostMessage, retryable: false);
+            _actions.SendError(id, "SessionLost", lost, retryable: false);
             return;
         }
 
@@ -1542,18 +1629,68 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        _busy = true;
-        run.Phase = RemodelRunPhase.Running;
-        _active = run;
-
-        // The reply goes first, so the page has the chat id before the first `status` or
-        // `remodel.change` arrives on it.
-        _actions.Send("remodel.started", id, new Dictionary<string, object?>
+        // Owner decision 145A: a run begins as a plan does (Plan, above), after every refusal that
+        // needs no call and before `remodel.started`.
+        if (!BeganRun(id, StartAfterRestartMessage))
         {
-            { "chat_id", run.RunId },
-        });
+            return;
+        }
 
-        _options.Schedule(() => Execute(pipeline, run));
+        // From here the run holds the host. Whatever ends Start before the run is handed to its
+        // scheduler - the refusal below, or anything that throws - frees it again: a host left busy
+        // would hold back every settings restart, and every new review with it, until SOLIDWORKS
+        // restarts (owner decision 145A, found on review).
+        RemodelRunPhase phaseBefore = run.Phase;
+        bool started = false;
+        bool handedOver = false;
+        try
+        {
+            // The gate may have waited through a settings restart - seconds in which the host was
+            // not busy, so the tool service was free to re-attach, or a teardown to end the plan's
+            // session. Read again now the host is busy, which a re-attach of the service's own asks
+            // before it moves: a run never starts on a session that went while the gate waited
+            // (decision 22A).
+            lost = LostSessionWords(run);
+            if (lost != null)
+            {
+                _actions.SendError(id, "SessionLost", lost, retryable: false);
+                return;
+            }
+
+            run.Phase = RemodelRunPhase.Running;
+            _active = run;
+
+            // The reply goes first, so the page has the chat id before the first `status` or
+            // `remodel.change` arrives on it.
+            _actions.Send("remodel.started", id, new Dictionary<string, object?>
+            {
+                { "chat_id", run.RunId },
+            });
+            started = true;
+
+            _options.Schedule(() => Execute(pipeline, run));
+            handedOver = true;
+        }
+        catch (Exception failure) when (started)
+        {
+            // The page was told the run began, and none is coming: it is told the run is over by
+            // the status a run's end posts, and the failure is answered as any failure is.
+            PostStatus("error", failure.Message);
+            throw;
+        }
+        finally
+        {
+            if (!handedOver)
+            {
+                // Nothing runs: what Start set is undone, the plan stays startable, and nothing is
+                // left in flight for Stop.
+                run.Phase = phaseBefore;
+                _active = null;
+                // Decision 24A: a re-attach or a teardown that took the plan's session while Start
+                // held the host was not announced then; it is now, as the end of a plan announces it.
+                FreeTheHost();
+            }
+        }
     }
 
     /// <summary>
@@ -1636,6 +1773,25 @@ public sealed class RemodelHost : IDisposable
                 { "changes_applied", outcome.ChangesApplied },
             });
         }
+    }
+
+    /// <summary>
+    /// The words Start refuses a plan whose bridge session is gone with (`SessionLost`), or null
+    /// while the plan holds it: <see cref="PlanClosedMessage"/> for one planning again closed (004
+    /// T173), and <see cref="SessionLostMessage"/> for one whose session a teardown ended or whose
+    /// attachment is not the one listening now (decision 22A). One reading for Start's check
+    /// before the restart gate and its check again once the host is busy (owner decision 145A).
+    /// </summary>
+    private string? LostSessionWords(RemodelRun run)
+    {
+        if (run.ClosedByPlanAgain)
+        {
+            return PlanClosedMessage;
+        }
+
+        return run.SessionEnded || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment())
+            ? SessionLostMessage
+            : null;
     }
 
     /// <summary>
@@ -2278,6 +2434,78 @@ public sealed class RemodelHost : IDisposable
 
     private static string? Text(JsonDocument? document, string name) =>
         document == null ? null : PagePayload.Text(document.RootElement, name);
+
+    // ---- a settings restart and a plan or a run (owner decision 145A) -----------------------
+
+    /// <summary>
+    /// Marks the host busy for a plan or a run through <see cref="RemodelHostOptions.BeginRun"/>
+    /// (owner decision 145A), so a settings restart that waits is made first, or the one being
+    /// made is waited for, and none can begin under the plan or the run. Answers whether the host
+    /// is now busy; when it is not, the press has been answered with the gate's refusal - its class,
+    /// words and flag - and the host is still free, since a gate that refuses runs no step
+    /// (<see cref="ReviewHost.BeginRemodelRun"/>). A gate that throws leaves the host free
+    /// too, whether or not it ran the step, so one failure cannot hold every later plan, and the
+    /// restart waiting on the run, back for good; the throw is the press's answer, as `Receive`
+    /// gives any failure.
+    /// </summary>
+    /// <param name="id">The press's id, which a refusal answers.</param>
+    /// <param name="restartFirst">What the page is told before the gate when a settings restart
+    /// stands before the press (<see cref="RemodelHostOptions.RestartAhead"/>): the gate can wait
+    /// through it for seconds, up to the backend's handshake, in which the page would otherwise say
+    /// only what the press set (owner decision 145A, found on review).</param>
+    private bool BeganRun(string? id, string restartFirst)
+    {
+        if (RestartAhead())
+        {
+            PostStatus("backend_starting", restartFirst);
+        }
+
+        BackendRequestException? held;
+        try
+        {
+            held = _options.BeginRun(() => _busy = true);
+        }
+        catch (Exception)
+        {
+            _busy = false;
+            throw;
+        }
+
+        if (held == null)
+        {
+            return true;
+        }
+
+        _actions.SendError(id, held.ErrorClass, held.Message, held.Retryable);
+        return false;
+    }
+
+    /// <summary>
+    /// Frees the host once a plan, or a Start that did not hand its run on, is over, and tells the
+    /// page of a plan lost while the host was busy, which nothing told it then (decision 24A). One
+    /// copy for Plan's `finally` and Start's (owner decision 145A, third review).
+    /// </summary>
+    private void FreeTheHost()
+    {
+        _busy = false;
+        AnnounceLostPlan();
+    }
+
+    /// <summary>
+    /// Whether a settings restart stands before the press. Only words for the page hang on it, so
+    /// a reading that throws is none: the press goes on through the gate, which decides.
+    /// </summary>
+    private bool RestartAhead()
+    {
+        try
+        {
+            return _options.RestartAhead();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
 
     // ---- the refusals two handlers share --------------------------------------------------
 

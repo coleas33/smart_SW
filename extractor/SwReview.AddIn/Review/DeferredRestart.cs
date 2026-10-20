@@ -22,14 +22,23 @@ namespace SwReview.AddIn.Review;
 /// holds one lock for the whole restart and asks again, once it has it, whether a restart is
 /// still waiting - so however many ask, the backend restarts once - and the restart reads the
 /// settings only then, so several saves during one turn restart it once, with the last of them.
-/// A save made when no turn runs restarts it at once (<see cref="Now"/>), under the same lock,
-/// and that restart is the one for the settings in force, so anything still waiting is dropped.
-/// A caller that waited for a restart someone else was making - or a save was - is told what
-/// became of it: made, or failed with that failure, and never "restarted" when it was not.
+/// A save made when no turn runs restarts it at once (<see cref="Now(Action)"/>), under the same
+/// lock, and that restart is the one for the settings in force, so anything still waiting is
+/// dropped. A caller that waited for a restart someone else was making - or a save was - is told
+/// what became of it: made, or failed with that failure, and never "restarted" when it was not.
 ///
 /// <b>Nothing waits for a turn.</b> <see cref="Apply"/> answers at once, naming what holds the
 /// restart back, while something does; the only thing a caller waits for is a restart already
 /// being made, which the backend's own start timeouts bound.
+///
+/// <b>Work the restart would end is treated as a turn (owner decision 145A).</b> A remodel run
+/// holds the backend as a turn does, and is known without asking it (<c>busy</c>). Every restart
+/// reads it under the restart's own lock - a save's before it asks the backend anything
+/// (<see cref="Now(Action, out Hold)"/>), any other after its look (<see cref="Apply"/>), which
+/// can answer without reading the run - and waits while a run is in progress. A run begins
+/// through <see cref="Begin"/>, which makes a waiting restart first, or waits for the one being
+/// made, and marks the run under that same lock, so a run begins only once no restart waits or is
+/// being made: a restart and a run never overlap.
 ///
 /// <b>A backend that does not answer is watched, but not for ever.</b> Not knowing whether a turn
 /// runs is not knowing that none does, so a look the backend leaves without a usable answer
@@ -90,7 +99,11 @@ internal sealed class DeferredRestart : IDisposable
         /// </summary>
         TurnRunning,
 
-        /// <summary>A remodel run holds the restart back: nothing was changed, and it still waits.</summary>
+        /// <summary>
+        /// A remodel run holds the restart back - the look found one, or the restart's own lock
+        /// found one the look did not read (owner decision 145A): nothing was changed, and it
+        /// still waits.
+        /// </summary>
         RemodelRunning,
 
         /// <summary>
@@ -125,6 +138,7 @@ internal sealed class DeferredRestart : IDisposable
     private static readonly TimeSpan ShortestPoll = TimeSpan.FromMilliseconds(1);
 
     private readonly Func<Hold> _heldBack;
+    private readonly Func<bool> _busy;
     private readonly Action _restart;
     private readonly Action _restarted;
     private readonly Action<Exception> _failed;
@@ -132,16 +146,27 @@ internal sealed class DeferredRestart : IDisposable
     private readonly TimeSpan _poll;
 
     /// <summary>
-    /// Guards <see cref="_pending"/>, <see cref="_deferrals"/>, <see cref="_disposed"/> and
-    /// <see cref="_watcher"/>, and is what the watcher waits on between polls. Never held while
-    /// anything slow runs.
+    /// Guards <see cref="_pending"/>, <see cref="_making"/>, <see cref="_deferrals"/>,
+    /// <see cref="_disposed"/> and <see cref="_watcher"/>, and is what the watcher waits on between
+    /// polls. Never held while anything slow runs.
     /// </summary>
     private readonly object _state = new object();
 
-    /// <summary>Held for the whole of one restart, so that two never overlap.</summary>
+    /// <summary>
+    /// Held for the whole of one restart, so that two never overlap, and while work the restart
+    /// would end is marked in progress (<see cref="Begin"/>), so that the work and a restart never
+    /// overlap either (owner decision 145A). Taken before <see cref="_state"/>, never after it.
+    /// </summary>
     private readonly object _restarting = new object();
 
     private bool _pending;
+
+    /// <summary>
+    /// Whether a save's restart is being made at once, under <see cref="_restarting"/>
+    /// (<see cref="Ahead"/>): such a restart never waits, so <see cref="_pending"/> does not say so,
+    /// while one that waited stays pending until it ends. Guarded by <see cref="_state"/>.
+    /// </summary>
+    private bool _making;
 
     /// <summary>
     /// One more each time a restart is refused and starts waiting: a newer refusal is a newer
@@ -164,6 +189,10 @@ internal sealed class DeferredRestart : IDisposable
 
     /// <param name="heldBack">What holds the restart back - a turn running, a remodel run the
     /// restart would end, or a backend that does not answer - or nothing; never throws.</param>
+    /// <param name="busy">Whether work the restart would end is in progress - a remodel run - known
+    /// without asking the backend (owner decision 145A). Every restart reads it under the restart's
+    /// own lock, and <see cref="Begin"/> marks such work under that lock, so the two never overlap;
+    /// a throw is read as busy. Read under the lock, so it must be quick and must not block.</param>
     /// <param name="restart">Restarts the backend with the settings in force when it is called.
     /// Throws <see cref="TurnRunningException"/> when the backend's own check finds a turn, and
     /// anything else when the restart fails.</param>
@@ -175,6 +204,7 @@ internal sealed class DeferredRestart : IDisposable
     /// <param name="poll">How often the watcher looks at what holds the restart back.</param>
     public DeferredRestart(
         Func<Hold> heldBack,
+        Func<bool> busy,
         Action restart,
         Action restarted,
         Action<Exception> failed,
@@ -182,6 +212,7 @@ internal sealed class DeferredRestart : IDisposable
         TimeSpan poll)
     {
         _heldBack = heldBack ?? throw new ArgumentNullException(nameof(heldBack));
+        _busy = busy ?? throw new ArgumentNullException(nameof(busy));
         _restart = restart ?? throw new ArgumentNullException(nameof(restart));
         _restarted = restarted ?? throw new ArgumentNullException(nameof(restarted));
         _failed = failed ?? throw new ArgumentNullException(nameof(failed));
@@ -195,6 +226,25 @@ internal sealed class DeferredRestart : IDisposable
         }
 
         _poll = poll;
+    }
+
+    /// <summary>
+    /// Whether a restart stands before new work: one waits - from the moment it is refused until it
+    /// is made or fails, so while it is being made too - or a save's is being made at once, which
+    /// never waits (owner decision 145A, found on review). What the Remodel tab reads to tell the
+    /// engineer a press makes the restart first, or waits for it; the gate itself
+    /// (<see cref="Begin"/>) decides. None once disposed, when the gate answers that the add-in is
+    /// unloading, a restart still under way included.
+    /// </summary>
+    public bool Ahead
+    {
+        get
+        {
+            lock (_state)
+            {
+                return !_disposed && (_pending || _making);
+            }
+        }
     }
 
     /// <summary>Whether a restart is waiting for the turns that are running to end.</summary>
@@ -214,11 +264,23 @@ internal sealed class DeferredRestart : IDisposable
     /// holds: the two never overlap, and whichever comes second reads the newer settings.
     /// </summary>
     /// <param name="restart">The restart, with the settings just saved.</param>
-    /// <returns>True when the backend was restarted now; false when the backend's own check
-    /// found a turn that started after the save's, in which case the restart waits for it.</returns>
+    /// <returns>True when the backend was restarted now; false when the restart waits instead -
+    /// for a remodel run in progress, or for a turn the backend's own check found, which started
+    /// after the save's (<see cref="Now(Action, out Hold)"/> says which).</returns>
     /// <exception cref="Exception">Whatever <paramref name="restart"/> throws other than
     /// <see cref="TurnRunningException"/>, unchanged: the save answers it as it always has.</exception>
-    public bool Now(Action restart)
+    public bool Now(Action restart) => Now(restart, out _);
+
+    /// <summary>
+    /// <see cref="Now(Action)"/>, saying what the restart waits for when it waits (owner decision
+    /// 145A), so the save can say it: a remodel run in progress - read under the lock before
+    /// anything is asked of the backend, since the restart would end the run with its copy half
+    /// changed - or a turn the backend's own check found.
+    /// </summary>
+    /// <param name="restart">The restart, with the settings just saved.</param>
+    /// <param name="heldBy"><see cref="Hold.RemodelRun"/> or <see cref="Hold.Turn"/> when the
+    /// restart waits; <see cref="Hold.None"/> when the backend was restarted now.</param>
+    public bool Now(Action restart, out Hold heldBy)
     {
         if (restart == null)
         {
@@ -227,6 +289,16 @@ internal sealed class DeferredRestart : IDisposable
 
         lock (_restarting)
         {
+            if (Busy())
+            {
+                // Read under this lock, which a run takes to begin (Begin): none can begin between
+                // this reading and the restart, so a save never ends one.
+                Defer();
+                heldBy = Hold.RemodelRun;
+                return false;
+            }
+
+            Making(true);
             try
             {
                 restart();
@@ -234,6 +306,7 @@ internal sealed class DeferredRestart : IDisposable
             catch (TurnRunningException)
             {
                 Defer();
+                heldBy = Hold.Turn;
                 return false;
             }
             catch (Exception caught)
@@ -244,8 +317,13 @@ internal sealed class DeferredRestart : IDisposable
                 End(caught);
                 throw;
             }
+            finally
+            {
+                Making(false);
+            }
 
             End(null);
+            heldBy = Hold.None;
             return true;
         }
     }
@@ -307,6 +385,17 @@ internal sealed class DeferredRestart : IDisposable
                 return settled.Value;
             }
 
+            // Owner decision 145A: the look above can answer that nothing holds the restart back
+            // without reading the remodel run - the review host's does so when there is no backend
+            // process at all, and a look that cannot be made counts as such an answer - so the run
+            // is read here, under the lock a run begins under (Begin), and the restart never ends
+            // one. Nothing was changed, so the restart still waits. (A run cannot begin after the
+            // look while a restart waits: Begin makes or waits for the restart first.)
+            if (Busy())
+            {
+                return Outcome.RemodelRunning;
+            }
+
             try
             {
                 _restart();
@@ -330,6 +419,96 @@ internal sealed class DeferredRestart : IDisposable
             End(null);
             Report(_restarted);
             return Outcome.Restarted;
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 145A: begins work the restart would end - a remodel run - as a turn begins,
+    /// so that the two never overlap. A restart that waits is made first, as a new review makes it
+    /// (<see cref="Apply"/>), or the one being made is waited for, on the restart's own lock - a
+    /// save's made at once included, which is never waiting and which <see cref="Apply"/> does not
+    /// wait for. Then <paramref name="begin"/>, the step that marks the work in progress - what the
+    /// busy reading reads - runs under that lock. Every restart reads the busy reading under the
+    /// same lock, so none can begin between this answer and the work, and none is under way when
+    /// the work begins.
+    ///
+    /// The step never runs while something holds a waiting restart back, nor when a restart this
+    /// call made or waited for failed - the work would run on a backend about to be replaced, or on
+    /// one that kept the settings the engineer replaced. A newer save's restart that starts to wait
+    /// while this call waits for the lock is looked at again, from the top.
+    /// </summary>
+    /// <param name="begin">Marks the work in progress. Run under the restart's lock, so it must be
+    /// quick, must not block and must call nothing back into this restart.</param>
+    /// <param name="failure">The failure when the answer is <see cref="Outcome.Failed"/>, else null.</param>
+    /// <returns><see cref="Outcome.NotPending"/>, <see cref="Outcome.Restarted"/> or
+    /// <see cref="Outcome.RestartedMeanwhile"/> once <paramref name="begin"/> has run; otherwise
+    /// what holds the restart back (<see cref="Outcome.TurnRunning"/>,
+    /// <see cref="Outcome.RemodelRunning"/>, <see cref="Outcome.NotAnswered"/>),
+    /// <see cref="Outcome.Failed"/> or <see cref="Outcome.Stopped"/>, and it has not run.</returns>
+    public Outcome Begin(Action begin, out Exception? failure)
+    {
+        if (begin == null)
+        {
+            throw new ArgumentNullException(nameof(begin));
+        }
+
+        while (true)
+        {
+            failure = null;
+            Outcome? settled = Settled(out long seen);
+            if (settled == Outcome.Stopped)
+            {
+                return Outcome.Stopped;
+            }
+
+            Outcome outcome = Outcome.NotPending;
+            if (!settled.HasValue)
+            {
+                // A restart waits: made first, or waited for, as a new review makes it.
+                outcome = Apply(out failure);
+                if (outcome != Outcome.NotPending
+                    && outcome != Outcome.Restarted
+                    && outcome != Outcome.RestartedMeanwhile)
+                {
+                    return outcome;
+                }
+            }
+
+            lock (_restarting)
+            {
+                // No restart is being made now, and none can begin until this lock is let go. One
+                // made, or tried and failed, since this call first looked - by anyone, a save's
+                // made at once included - is its answer, as the last such restart left it: the
+                // work begins only on a backend that restarted, and a failure is this call's too.
+                if (EndedSince(seen, out Exception? theirs))
+                {
+                    if (theirs != null)
+                    {
+                        failure = theirs;
+                        return Outcome.Failed;
+                    }
+
+                    if (outcome == Outcome.NotPending)
+                    {
+                        outcome = Outcome.RestartedMeanwhile;
+                    }
+                }
+
+                settled = Settled(out _);
+                if (settled == Outcome.Stopped)
+                {
+                    return Outcome.Stopped;
+                }
+
+                if (!settled.HasValue)
+                {
+                    // A newer save's restart started to wait meanwhile: it is looked at afresh.
+                    continue;
+                }
+
+                begin();
+                return outcome;
+            }
         }
     }
 
@@ -379,6 +558,22 @@ internal sealed class DeferredRestart : IDisposable
     }
 
     /// <summary>
+    /// Whether work the restart would end is in progress (owner decision 145A), read under the
+    /// restart's lock. Not knowing whether a run is in progress is not knowing that none is.
+    /// </summary>
+    private bool Busy()
+    {
+        try
+        {
+            return _busy();
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
     /// Whether a restart has ended since <paramref name="seen"/> was read, and if so its failure,
     /// or null when it was made.
     /// </summary>
@@ -414,6 +609,15 @@ internal sealed class DeferredRestart : IDisposable
                 Name = "swreview-settings-restart",
             };
             _watcher.Start();
+        }
+    }
+
+    /// <summary>Whether a save's restart is being made at once; set under the restart's own lock, read through <see cref="Ahead"/>.</summary>
+    private void Making(bool making)
+    {
+        lock (_state)
+        {
+            _making = making;
         }
     }
 

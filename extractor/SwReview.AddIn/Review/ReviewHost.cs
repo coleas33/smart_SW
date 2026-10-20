@@ -272,10 +272,31 @@ public sealed class ReviewHostOptions
     /// <summary>
     /// Whether the backend is busy with work other than a review turn that a restart would end -
     /// a remodel run (feature 004) - asked before the turns are asked of the backend, whenever a
-    /// restart for settings saved during a turn looks at what holds it back (owner decision 143A).
-    /// False when the caller has none.
+    /// restart for settings saved during a turn looks at what holds it back (owner decision 143A),
+    /// and again under the restart's own lock by every restart, a save's made at once included
+    /// (owner decision 145A). Read under that lock, so it must be quick and must not block. False
+    /// when the caller has none.
     /// </summary>
     public Func<bool> BackendBusy { get; set; } = () => false;
+
+    /// <summary>
+    /// Tells every other tab that holds the backend's port and token - Model check, Standards and
+    /// Remodel - that the backend was restarted with saved settings, so each asks for its `init`
+    /// again (owner decision 145A). Called after every restart this host makes, a save's made at
+    /// once or one made after it waited, and never after one that failed; the Review page is told
+    /// by the save's reply or by `backend.restarted`. Nothing when the caller has no other tab.
+    /// </summary>
+    public Action BackendRestarted { get; set; } = () => { };
+
+    /// <summary>
+    /// Tells every other tab that holds the backend's port and token that a restart this host made
+    /// failed once the old backend had stopped, with the failure, masked (owner decision 145A, found
+    /// on review): no backend answers the token those tabs hold, and they are told as a failed first
+    /// start is told to every page, `status {stage: "error"}`. A restart that failed before it
+    /// stopped anything left the old backend up, and is not told to them; the Review page is told of
+    /// every failure by this host itself. Nothing when the caller has no other tab.
+    /// </summary>
+    public Action<string> BackendRestartFailed { get; set; } = _ => { };
 
     internal static string DefaultLogFolder() => System.IO.Path.Combine(
         System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
@@ -309,7 +330,9 @@ public sealed class ReviewHostOptions
 /// starts after that check and before the restart, which the backend refuses with the file
 /// already written: the restart then waits until nothing holds it back, and a new review waits
 /// for the restart rather than running on the old backend (owner decision 143A,
-/// <see cref="DeferredRestart"/>).
+/// <see cref="DeferredRestart"/>). A remodel run is treated as a turn (owner decision 145A): a
+/// save made during one is kept and its restart waits for the run, and a run begins only once no
+/// restart waits (<see cref="BeginRemodelRun"/>).
 ///
 /// <b>A model the provider does not offer is refused, and the fresh list is pushed with the
 /// refusal</b>, so the engineer re-picks from what exists instead of meeting it later as an
@@ -443,15 +466,32 @@ public sealed class ReviewHost : IDisposable
 
         _restart = new DeferredRestart(
             RestartHeldBack,
+            RemodelRunInProgress,
             RestartWithSettingsInForce,
-            () => Post("backend.restarted", new Dictionary<string, object?> { { "sentences", RestartSentences } }),
-            failure => PostStatus("error", failure.Message),
+            () =>
+            {
+                _actions.PostBackendRestarted(RestartSentences);
+                TellTheOtherTabs();
+            },
+            failure =>
+            {
+                PostStatus("error", failure.Message);
+                TellTheOtherTabsTheRestartFailed(failure);
+            },
             () => PostStatus("error", RestartNotAnswered),
             options.RestartPoll);
     }
 
     /// <summary>The settings in force. Replaced by a successful `settings.save`.</summary>
     public UserSettings Settings => _settings;
+
+    /// <summary>
+    /// Whether a settings restart stands before new work: one waits to be made, or one is being
+    /// made now (owner decision 145A, found on review). The add-in hands it to the Remodel host,
+    /// which tells its page a plan or a Start makes the restart first; the gate itself
+    /// (<see cref="BeginRemodelRun"/>) decides.
+    /// </summary>
+    public bool RestartAhead => _restart.Ahead;
 
     /// <summary>
     /// The chats this host started, newest last. A snapshot: the list itself is guarded, and a
@@ -1165,17 +1205,34 @@ public sealed class ReviewHost : IDisposable
         string? restartFailure = null;
         try
         {
-            if (!_restart.Now(() => _options.Backend.Restart(next, key)))
+            if (!_restart.Now(() => _options.Backend.Restart(next, key), out DeferredRestart.Hold waitsFor))
             {
-                // A turn started between the gate above and here. The settings are already
-                // written, so the honest answer is "saved, not yet in force" - and the restart
-                // waits for the turn to end rather than being dropped (owner decision 143A).
-                restartFailure = RestartPromise;
+                // A turn started between the gate above and here, or a remodel run is in progress,
+                // which the restart would end. The settings are already written, so the honest
+                // answer is "saved, not yet in force" - and the restart waits for what holds it
+                // back rather than being dropped, and the sentence names it (owner decisions 143A
+                // and 145A).
+                restartFailure = Promise(waitsFor);
+            }
+            else
+            {
+                // The Review page learns of it from the reply; the other tabs from this.
+                TellTheOtherTabs();
             }
         }
         catch (BackendStartException failure)
         {
             restartFailure = failure.Message;
+            TellTheOtherTabsTheRestartFailed(failure);
+        }
+        catch (Exception failure)
+        {
+            // Any other failure of the restart - the new backend's log not opened, outside the
+            // wrapper that makes a BackendStartException - can come after the old backend stopped:
+            // the other tabs are told as for any failure, which only a backend no longer up does
+            // (owner decision 145A, third review). The save is answered as it always was.
+            TellTheOtherTabsTheRestartFailed(failure);
+            throw;
         }
 
         SendSettings("settings.saved", id);
@@ -1239,7 +1296,7 @@ public sealed class ReviewHost : IDisposable
         PostStatus("error", string.Join(" ", problems.ToArray()));
     }
 
-    // ---- a restart for settings saved during a turn (owner decision 143A) ---------------
+    // ---- a restart for settings saved during a turn or a remodel run (143A, 145A) ----------
 
     /// <summary>
     /// The Review tab's sentence for a save a turn started during: the settings are written and in
@@ -1249,21 +1306,56 @@ public sealed class ReviewHost : IDisposable
         "the settings are saved; the backend restarts when the running turn ends.";
 
     /// <summary>
+    /// ...for a save made while a remodel run is in progress, which the restart would end with its
+    /// copy half changed, so the restart waits for the run (owner decision 145A).
+    /// </summary>
+    private const string RemodelRunPromise =
+        "the settings are saved; the backend restarts when the remodel run ends.";
+
+    /// <summary>...for one made during a remodel run that a turn also started during, so it waits for both.</summary>
+    private const string TurnAndRemodelRunPromise =
+        "the settings are saved; the backend restarts when the running turn and the remodel run end.";
+
+    /// <summary>
     /// What the page is told when the watcher stops looking at a backend that does not answer
     /// (<see cref="DeferredRestart.UnansweredLooks"/>): the restart has not been made, it still
-    /// waits for the next review or follow-up, and a save made now - which asks whether a turn
-    /// runs leniently - restarts the backend.
+    /// waits for the next review, follow-up or remodel run, and a save made now - which asks
+    /// whether a turn runs leniently - restarts the backend. "The saved settings", since owner
+    /// decision 145A: a save made during a remodel run was not made during a turn. Saving again is
+    /// still the way on, because the watcher reads a remodel run before the turns, so it says this
+    /// only once no run holds the restart, and no run can begin while the backend gives no answer.
     /// </summary>
     private const string RestartNotAnswered =
-        "the review backend is not answering, so it has not been restarted with the settings saved during "
-        + "the turn yet. It will be before the next review or follow-up, once it answers; to restart it "
+        "the review backend is not answering, so it has not been restarted with the saved settings yet. "
+        + "It will be before the next review, follow-up or remodel run, once it answers; to restart it "
         + "now, save the settings again.";
 
     /// <summary>
     /// The host's sentences about a restart that waits, as `backend.restarted` carries them once it
     /// is made: the page takes whichever of them is on its banner off it, and nothing else there.
     /// </summary>
-    private static readonly string[] RestartSentences = { RestartPromise, RestartNotAnswered };
+    private static readonly string[] RestartSentences =
+        { RestartPromise, RemodelRunPromise, TurnAndRemodelRunPromise, RestartNotAnswered };
+
+    /// <summary>
+    /// The sentence for a save whose restart waits, naming what it waits for (owner decision 145A):
+    /// a turn that started during the save, which the backend's own check found; a remodel run in
+    /// progress; or both - a remodel run, and a turn that started during the save, which is asked
+    /// of the backend now, since the run was read before the backend's own check could be reached.
+    /// A backend that gives no answer about a chat is no turn here: the sentence names the run, and
+    /// the watcher says, once the run is over, if the backend still does not answer.
+    /// </summary>
+    private string Promise(DeferredRestart.Hold waitsFor)
+    {
+        if (waitsFor != DeferredRestart.Hold.RemodelRun)
+        {
+            return RestartPromise;
+        }
+
+        return LookAtTheTurns(stopAtNoAnswer: true) == TurnsSeen.Running
+            ? TurnAndRemodelRunPromise
+            : RemodelRunPromise;
+    }
 
     /// <summary>A new review, or a page call that would start a turn, while a turn holds the restart back.</summary>
     private const string TurnHoldsTheRestart =
@@ -1282,11 +1374,47 @@ public sealed class ReviewHost : IDisposable
         + "it, then try again.";
 
     /// <summary>
+    /// A remodel run - a plan or a Start - refused while a turn holds the restart back (owner
+    /// decision 145A). On the Remodel tab, whose own Stop stops the run, so it names the Review
+    /// tab's, which stops the turn.
+    /// </summary>
+    private const string TurnHoldsTheRemodelRun =
+        "the backend restarts with the saved settings when the running review turn ends, and no remodel run "
+        + "starts before then. Wait for the turn to end, or press Stop on the Review tab, then try again.";
+
+    /// <summary>...while the backend does not answer whether a turn runs; the settings are saved on the Review tab.</summary>
+    private const string NoAnswerHoldsTheRemodelRun =
+        "the review backend did not answer whether a turn is running, so it has not been restarted with the "
+        + "saved settings, and no remodel run starts before then. Save the settings again on the Review tab "
+        + "to restart it, then try again.";
+
+    /// <summary>
+    /// Whether a remodel run is in progress (<see cref="ReviewHostOptions.BackendBusy"/>), which a
+    /// restart would end with its copy half changed. One reading for the restart's look and for its
+    /// check under its own lock (owner decision 145A). Not knowing whether a run is in progress is
+    /// not knowing that none is.
+    /// </summary>
+    private bool RemodelRunInProgress()
+    {
+        try
+        {
+            return _options.BackendBusy();
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
     /// What holds the restart back. Read in the order the add-in can know it: no backend process
     /// at all holds nothing - the restart is what brings one back; then a remodel run in progress,
     /// which the restart would end with its copy half changed, and which the add-in knows without
     /// asking the backend; then the turns, asked of the backend: a turn running, or a backend that
-    /// gave no answer, since not knowing whether a turn runs is not knowing that none does.
+    /// gave no answer, since not knowing whether a turn runs is not knowing that none does. The
+    /// remodel run is read again under the restart's own lock, after this look (owner decision
+    /// 145A), so one still in progress holds the restart back even with no backend: it cannot
+    /// last, since every call it makes then fails.
     /// </summary>
     private DeferredRestart.Hold RestartHeldBack()
     {
@@ -1295,18 +1423,7 @@ public sealed class ReviewHost : IDisposable
             return DeferredRestart.Hold.None;
         }
 
-        bool remodelling;
-        try
-        {
-            remodelling = _options.BackendBusy();
-        }
-        catch (Exception)
-        {
-            // Not knowing whether a run is in progress is not knowing that none is.
-            remodelling = true;
-        }
-
-        if (remodelling)
+        if (RemodelRunInProgress())
         {
             return DeferredRestart.Hold.RemodelRun;
         }
@@ -1334,6 +1451,47 @@ public sealed class ReviewHost : IDisposable
     {
         UserSettings settings = _settings;
         _options.Backend.Restart(settings, settings.ResolveApiKey(_options.Environment));
+    }
+
+    /// <summary>
+    /// Tells every other tab that holds the backend's port and token that this host has just
+    /// restarted the backend (owner decision 145A, <see cref="ReviewHostOptions.BackendRestarted"/>).
+    /// Never throws: a tab that cannot be told must not turn a restart that was made into a save
+    /// answered with an error, or into a restart reported as failed.
+    /// </summary>
+    private void TellTheOtherTabs()
+    {
+        try
+        {
+            _options.BackendRestarted();
+        }
+        catch (Exception)
+        {
+            // Each host's post swallows its own failures; this guards anything else the add-in does.
+        }
+    }
+
+    /// <summary>
+    /// A restart this host made failed (owner decision 145A, found on review). When the old backend
+    /// stopped with it - no backend is up, so the port and token every other tab holds answer
+    /// nothing - those tabs are told, with the failure masked, as a failed first start is told to
+    /// every page (<see cref="ReviewHostOptions.BackendRestartFailed"/>). One that failed before it
+    /// stopped anything left the old backend up, and their tokens with it: they are told nothing.
+    /// Never throws, for the reason <see cref="TellTheOtherTabs"/> gives.
+    /// </summary>
+    private void TellTheOtherTabsTheRestartFailed(Exception failure)
+    {
+        try
+        {
+            if (_options.Backend.Endpoint == null)
+            {
+                _options.BackendRestartFailed(Redact(failure.Message));
+            }
+        }
+        catch (Exception)
+        {
+            // Each host's post swallows its own failures; this guards anything else the add-in does.
+        }
     }
 
     /// <summary>
@@ -1384,7 +1542,8 @@ public sealed class ReviewHost : IDisposable
 
         if (outcome == DeferredRestart.Outcome.Failed)
         {
-            SendError(id, "BackendUnavailable", failure!.Message, retryable: true);
+            BackendRequestException failed = RestartFailed(failure!);
+            SendError(id, failed.ErrorClass, failed.Message, failed.Retryable);
             return false;
         }
 
@@ -1431,12 +1590,69 @@ public sealed class ReviewHost : IDisposable
                 return new BackendRequestException("UnknownChat", ChatEndedWithTheRestart, retryable: false);
 
             case DeferredRestart.Outcome.Failed:
-                return new BackendRequestException("BackendUnavailable", Redact(failure!.Message), retryable: true);
+                return RestartFailed(failure!);
 
             default:
-                // Stopped: the add-in is unloading, and its backend with it.
-                return new BackendRequestException(
-                    "BackendUnavailable", "the review backend is stopping with the add-in.", retryable: false);
+                return StoppingWithTheAddIn();
+        }
+    }
+
+    /// <summary>
+    /// The answer to a new review, a page call or a remodel run when the restart it made or waited
+    /// for failed: the failure, masked, as the backend's own `BackendUnavailable`, retryable. One
+    /// copy for the three answers that give it.
+    /// </summary>
+    private BackendRequestException RestartFailed(Exception failure) =>
+        new BackendRequestException("BackendUnavailable", Redact(failure.Message), retryable: true);
+
+    /// <summary>
+    /// The answer once the add-in is unloading, and its backend with it
+    /// (<see cref="DeferredRestart.Outcome.Stopped"/>). One copy for the two answers that give it.
+    /// </summary>
+    private static BackendRequestException StoppingWithTheAddIn() =>
+        new BackendRequestException("BackendUnavailable", "the review backend is stopping with the add-in.", retryable: false);
+
+    /// <summary>
+    /// Owner decision 145A: the gate a remodel run - a plan or a Start - begins through, from the
+    /// Remodel page's own pump, so that it is treated as a turn. A settings restart that waits is
+    /// made first, as a new review makes it, or the one being made is waited for - a save's made at
+    /// once included - and then <paramref name="begin"/>, which marks the run in progress, runs
+    /// under the restart's own lock (<see cref="DeferredRestart.Begin"/>): no restart can begin
+    /// under the run, and none is under way when it begins, so the run never meets a backend that
+    /// is going, nor runs on the old one with settings saved since.
+    ///
+    /// Null once <paramref name="begin"/> has run. Otherwise the refusal, and it has not run: while
+    /// something holds the restart back, what - a turn (`TurnRunning`), a backend that does not
+    /// answer (`BackendUnavailable`), or a remodel run (`RemodelRunning`), which only a reading that
+    /// throws can give, since the Remodel host refuses a second run itself - in words for the
+    /// Remodel tab; the failure of the restart this call made or waited for (`BackendUnavailable`),
+    /// masked; or the add-in unloading. Retryable, as this host's refusals of a review are, except
+    /// the last. Throws only what <paramref name="begin"/> throws.
+    /// </summary>
+    public BackendRequestException? BeginRemodelRun(Action begin)
+    {
+        DeferredRestart.Outcome outcome = _restart.Begin(begin, out Exception? failure);
+        switch (outcome)
+        {
+            case DeferredRestart.Outcome.NotPending:
+            case DeferredRestart.Outcome.Restarted:
+            case DeferredRestart.Outcome.RestartedMeanwhile:
+                return null;
+
+            case DeferredRestart.Outcome.TurnRunning:
+                return new BackendRequestException("TurnRunning", TurnHoldsTheRemodelRun, retryable: true);
+
+            case DeferredRestart.Outcome.RemodelRunning:
+                return new BackendRequestException("RemodelRunning", RemodelRunHoldsTheRestart, retryable: true);
+
+            case DeferredRestart.Outcome.NotAnswered:
+                return new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheRemodelRun, retryable: true);
+
+            case DeferredRestart.Outcome.Failed:
+                return RestartFailed(failure!);
+
+            default:
+                return StoppingWithTheAddIn();
         }
     }
 
