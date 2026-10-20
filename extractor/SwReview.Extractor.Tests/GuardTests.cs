@@ -913,10 +913,12 @@ public class DrawingFamilyDenylistTests
     /// (<c>Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes</c>). Edited deliberately
     /// for owner decision 148A (2026-10-20, T184), which made one such denial on purpose: the bare
     /// <c>OpenDoc7</c>, whose key <c>ISldWorks.OpenDoc7</c> joined the allowlist as the sixth key that
-    /// overrides a read-only denial. It is the one, named; any other fails as before.
+    /// overrides a read-only denial. It is the one, named; any other fails as before. Renamed on the
+    /// decision's review (T193): it was <c>NoMemberOfTheTableIsTheBareNameOfAStage1AllowlistKey</c>, which
+    /// the decision made untrue.
     /// </summary>
     [Fact]
-    public void NoMemberOfTheTableIsTheBareNameOfAStage1AllowlistKey()
+    public void OnlyTheNamedMembersOfTheTableAreBareNamesOfStage1AllowlistKeys()
     {
         var bareKeys = new HashSet<string>(
             RemodelGuard.AllowedKeys.Select(CallKey.BareName), StringComparer.OrdinalIgnoreCase);
@@ -1615,11 +1617,17 @@ public class DrawingFamilyReadAuditTests
     /// half here as before.
     /// </summary>
     internal static string Judged(string literal) =>
-        CallKey.IsQualified(literal)
-            && !RemodelGuard.AllowedKeys.Contains(literal)
-            && !DrawingOpenGuard.AllowedKeys.Contains(literal)
-            ? CallKey.BareName(literal)
+        !RemodelGuard.AllowedKeys.Contains(literal) && !DrawingOpenGuard.AllowedKeys.Contains(literal)
+            ? MemberHalf(literal)
             : literal;
+
+    /// <summary>
+    /// A literal by its member half when it is an interface-qualified key, and whole otherwise - as the
+    /// read-only guard judges any name, a key of an allowlist guard included. <see cref="Judged"/> is this
+    /// but for the two allowlist guards' keys (owner decision 148A's review, T193).
+    /// </summary>
+    private static string MemberHalf(string literal) =>
+        CallKey.IsQualified(literal) ? CallKey.BareName(literal) : literal;
 
     /// <summary>The pane seat's file, by its path under the extractor folder (decision 144A).</summary>
     internal const string PaneSeatFile = "SwReview.AddIn/Remodel/SwRemodelSeat.cs";
@@ -1690,7 +1698,7 @@ public class DrawingFamilyReadAuditTests
     /// Edited deliberately for decision 144A (2026-10-19): a literal of <c>probe remodel</c>'s host that
     /// the probe's own guard lets through is not a read but the probe's own call
     /// (<see cref="IsTheProbesOwnCall"/>), as decision 21A's audit judges the probe's creation calls;
-    /// <see cref="TheProbesOwnCallsAreExactlyItsTwoWritersAndOnlyItsGuardLetsThemThrough"/> pins which.
+    /// <see cref="TheProbesOwnCallsAreExactlyTheDeclaredWritersAndOnlyTheirCallersGuardsLetThemThrough"/> pins which.
     /// And on the decision's review (T173), a literal of the pane seat's file that is one of its guard's
     /// two keys is the seat's own call (<see cref="IsTheSeatsOwnKey"/>), in that file only.
     /// </summary>
@@ -1728,24 +1736,38 @@ public class DrawingFamilyReadAuditTests
     /// guard left allowed until then - <c>NewDocument</c> and <c>MoveToFolder</c> - and its guard lets
     /// each through, so the exception is exercised and no wider: a later literal of the probe host the
     /// table refuses fails here until someone decides what it is.
+    ///
+    /// Edited deliberately on owner decision 148A's review (feature 011 T193, research R12.8): the
+    /// decision gave the probe a third writer the table refuses, its reopen by <c>ISldWorks.OpenDoc7</c>,
+    /// which <see cref="Judged"/> reads whole as a key of <see cref="RemodelGuard"/>, so this test, reading
+    /// the host's literals as the audit judges them, could not see it. It reads each by its member half
+    /// now, as the read-only guard judges a qualified key, and the key is let through by exactly the
+    /// guards of its three callers - the probe's, the stage-1 allowlist and the pane seat's. Renamed with
+    /// the edit: it was <c>TheProbesOwnCallsAreExactlyItsTwoWritersAndOnlyItsGuardLetsThemThrough</c>.
     /// </summary>
     [Fact]
-    public void TheProbesOwnCallsAreExactlyItsTwoWritersAndOnlyItsGuardLetsThemThrough()
+    public void TheProbesOwnCallsAreExactlyTheDeclaredWritersAndOnlyTheirCallersGuardsLetThemThrough()
     {
         var table = new HashSet<string>(DrawingFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
         var named = Literals()
-            .Where(literal => literal.Where == CreationFamilyReadAuditTests.ProbeHostFile && table.Contains(Judged(literal.Literal)))
+            .Where(literal => literal.Where == CreationFamilyReadAuditTests.ProbeHostFile
+                && table.Contains(MemberHalf(literal.Literal)))
             .Select(literal => literal.Literal)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(literal => literal, StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(new[] { "MoveToFolder", "NewDocument" }, named);
+        Assert.Equal(new[] { "ISldWorks.OpenDoc7", "MoveToFolder", "NewDocument" }, named);
         Assert.All(named, member => new RemodelProbeGuard().Assert(member));
 
-        // Only its guard (the decision's review, T176): every other gate the product builds refuses each.
+        // Only its callers' guards (decision 144A's review, T176; decision 148A's, T193): every other gate
+        // the product builds refuses each.
         Assert.Equal(
-            new[] { "RemodelProbeGuard MoveToFolder", "RemodelProbeGuard NewDocument" },
+            new[]
+            {
+                "RemodelProbeGuard ISldWorks.OpenDoc7", "RemodelProbeGuard MoveToFolder", "RemodelProbeGuard NewDocument",
+                "RemodelGuard ISldWorks.OpenDoc7", "RemodelSeatGuard ISldWorks.OpenDoc7",
+            },
             GuardSweep.LetThrough(GuardSweep.ProductGates(), named));
     }
 

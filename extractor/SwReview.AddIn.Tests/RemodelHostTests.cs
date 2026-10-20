@@ -2391,6 +2391,33 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// Decision 148A's review (feature 011 T193, research R12.8): a plan in flight holds the host as a run
+    /// does - the decision says "a plan or a run" - so Open copy of an earlier plan's copy, sent while a
+    /// second plan is being made, is refused <c>RunInProgress</c> and nothing is activated. The page cannot
+    /// send it then, since its messages wait on the one thread the plan holds (research R12.4); this pins
+    /// the host's own answer, which the three tests above, each pressing it during a run, could not.
+    /// </summary>
+    [Fact]
+    public void OpenCopyOfAnEarlierPlanWhileAPlanIsInFlightIsRefusedToo()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string earlier = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            world.Pipeline.DuringPlan = () => world.Receive("remodel.open_copy", "o1", new { run_dir = earlier });
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement error = world.Reply("error", "o1");
+            Assert.Equal("RunInProgress", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.OpenCopyWhileARunIsInProgressMessage, error.GetProperty("message").GetString());
+            Assert.Equal(0, world.Pipeline.Count("activate"));
+            Assert.NotEqual(earlier, world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString());
+        }
+    }
+
     /// <summary>Decision 148A: once the run has finished, Open copy is answered again, as before it began.</summary>
     [Fact]
     public void OpenCopyAfterTheRunHasFinishedActivatesTheCopyAgain()

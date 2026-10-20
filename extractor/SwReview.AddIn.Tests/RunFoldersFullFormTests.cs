@@ -63,6 +63,25 @@ public sealed class RunFoldersFullFormTests : IDisposable
     }
 
     /// <summary>
+    /// Decision 148A's review (feature 011 T193, research R12.8): the folder made for a second run of the
+    /// same kind in the same second - a double-click's, suffixed <c>-2</c> - is named under the run root's
+    /// full form as the first is, whatever spelling of the root the setting holds; one named as the root
+    /// was spelled would carry its <c>..</c> to the backend, which refuses it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(KindsAndSpellings))]
+    public void AFolderMadeInTheSameSecondIsMadeInItsFullFormToo(string kind, string spelling)
+    {
+        string first = Create(kind, Spell(spelling));
+        string second = Create(kind, Spell(spelling));
+
+        Assert.Equal(first + "-2", second);
+        Assert.Equal(Path.GetFullPath(second), second);
+        Assert.DoesNotContain('/', second);
+        Assert.True(Directory.Exists(second), $"the helper did not create {second}");
+    }
+
+    /// <summary>
     /// A folder made and the same folder found are one spelling: the Model check's and the Standards
     /// check's newest folder, and the waiting review the search finds, answer in the full form the folder
     /// was made in, so the review host's comparison of a removed review's folder with a found one holds.
