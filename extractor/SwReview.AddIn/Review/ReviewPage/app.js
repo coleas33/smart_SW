@@ -61,6 +61,12 @@
    */
   var DOT = ' · ';
 
+  /**
+   * What the strip says after a save whose restart failed, until an `init` names a backend (owner
+   * decision 150A), as the check pages' and the Remodel page's strips say it.
+   */
+  var NOT_RUNNING = 'Backend not running';
+
   var pending = Object.create(null);
   var nextId = 0;
 
@@ -3021,6 +3027,14 @@
         // force, and the backend there is now - the old one, or none - are what `init` names: the
         // page asks for it, as after a save that restarted the backend.
         state.notRunning = true;
+        // And the backend may be gone: an `init` that names none carries no token, so the next
+        // that names a backend would have none to compare its own with. Marked as `backend.restarted`
+        // marks it, the first such `init` naming a token other than the one held now is believed to
+        // be a new backend - the old one still up names this one (150A review, S1).
+        if (!state.backendReplaced) {
+          state.backendReplaced = true;
+          state.replacedToken = state.token;
+        }
         requestInit(false);
       }
     }).then(function () {
@@ -3079,7 +3093,7 @@
         state.notRunning = false;
       }
       renderBackendState(
-        state.backend ? 'Backend ready' : (state.notRunning ? 'Backend not running' : 'Backend starting'),
+        state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),
         state.notRunning);
       if (loadModels && state.backend) {
         refreshModels();

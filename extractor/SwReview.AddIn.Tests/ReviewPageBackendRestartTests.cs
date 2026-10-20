@@ -442,6 +442,84 @@ return JSON.stringify({
     }
 
     /// <summary>
+    /// A save whose restart failed once the old backend had stopped, then a save that restarted it.
+    /// The `init` between the two named no backend, so the next one has no token to compare its own
+    /// with; the page still knows the backend was replaced, and asks the new one nothing of the old
+    /// chat's stream - which it does not hold - as after any restart (143A). Until the 150A review
+    /// it asked, and a 404 and a reconnect after it began (S1).
+    /// </summary>
+    [Fact]
+    public void AfterASaveWhoseRestartFailedTheNextRestartAsksNothingOfTheOldChatsStream()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await driver.HoldTimers();
+            await driver.StartReview();
+            string chatId = Assert.Single(driver.Posted("events.open")).GetProperty("chat_id").GetString()!;
+            await driver.Push(chatId, 7, "text.delta", "{\"text\":\"FICT\"}");
+            await driver.Settle();
+
+            await SaveWhoseRestartFailsOnceTheOldBackendStopped(driver);
+            int opens = driver.Posted("events.open").Length;
+
+            await SaveThatRestartsTheBackend(driver);
+            await driver.RunHeldTimers();
+            await driver.RunHeldTimers();
+
+            Assert.Equal(opens, driver.Posted("events.open").Length);
+        });
+    }
+
+    /// <summary>
+    /// ...and a live waiting review on screen is restored from its folder, read-only with Send
+    /// offered, by the restart that worked (feature 015 FR-042), as by any other: until the 150A
+    /// review it stayed live, and its Send went to a backend that did not hold its chat (S1).
+    /// </summary>
+    [Fact]
+    public void AfterASaveWhoseRestartFailedTheNextRestartRestoresALiveWaitingReview()
+    {
+        RestoredReviewFixture fixture = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(driver => fixture.Configure(driver, refuseSend: true), async driver =>
+        {
+            await ReviewPageRecheckTests.PressSend(driver);
+            Assert.False((await driver.Read(ReviewPageRecheckTests.ReadState)).GetProperty("readOnly").GetBoolean());
+            await driver.Route("GET", "/sessions/" + fixture.RecheckedChat + "/snapshot", 404, ReviewPageRecheckTests.UnknownChat);
+            int reviews = (await driver.Calls()).Count(call => call.GetProperty("path").GetString() == fixture.ReviewPath);
+
+            await SaveWhoseRestartFailsOnceTheOldBackendStopped(driver);
+            await SaveThatRestartsTheBackend(driver);
+
+            JsonElement state = await driver.Read(ReviewPageRecheckTests.ReadState);
+            Assert.True(state.GetProperty("readOnly").GetBoolean(), state.GetRawText());
+            Assert.Equal(
+                reviews + 1,
+                (await driver.Calls()).Count(call => call.GetProperty("path").GetString() == fixture.ReviewPath));
+        });
+    }
+
+    /// <summary>A save answered `BackendNotRestarted`, and the `init` after it naming no backend: the old one stopped.</summary>
+    private static async System.Threading.Tasks.Task SaveWhoseRestartFailsOnceTheOldBackendStopped(ReviewPageDriver driver)
+    {
+        int readies = driver.Posted("ready").Length;
+        driver.SettingsSaveError = NotRestarted;
+        driver.HoldReady = true;
+        await driver.Click("save-settings");
+        await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for init after the failed save");
+        await driver.ReleaseReady(backendUp: false);
+    }
+
+    /// <summary>A save answered `settings.saved`: its restart made, a new backend with a new token.</summary>
+    private static async System.Threading.Tasks.Task SaveThatRestartsTheBackend(ReviewPageDriver driver)
+    {
+        int readies = driver.Posted("ready").Length;
+        driver.SettingsSaveError = null;
+        driver.BackendToken = RestartedToken;
+        await driver.Click("save-settings");
+        await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for init after the save");
+        await driver.Settle();
+    }
+
+    /// <summary>
     /// `backend.stopped` names the way that starts the backend again: the add-in starts it when it
     /// loads, and a settings save restarts it, so on this tab, where the settings are saved, the
     /// sentence sends the engineer to Save Settings - not to reopen the pane, which starts nothing.
