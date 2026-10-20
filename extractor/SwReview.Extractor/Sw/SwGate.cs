@@ -53,10 +53,14 @@ public sealed class SwGate
     /// everywhere but the engineer-run suppress-test, which passes a
     /// <see cref="SuppressTestGuard"/>; null means the read-only guard, so the add-in, the
     /// bridge and every dump still refuse ForceRebuild3 and SetSuppression2 (research R6).
-    /// (Corrected 2026-10-19 on decision 144A's review: the exceptions and the allowlisted seams
-    /// pass their own guards too - <c>probe remodel</c>'s, the re-modeler's, the confirmed drawing's
-    /// open and the re-modeler's pane seat - each from its one construction site; every other gate
-    /// passes null.)
+    /// (Corrected 2026-10-19 on decision 144A's review, and again on its second review: the
+    /// exceptions and the allowlisted seams pass their own guards too - the suppress-test's and
+    /// <c>probe remodel</c>'s from the console's gate factories, the confirmed drawing's open from
+    /// <c>DrawingOpenScope</c>, the re-modeler's pane seat from <c>SwRemodelSeat.Gate</c>, and the
+    /// re-modeler's <see cref="RemodelGuard"/> from two places, the add-in's tool service and the
+    /// bridge's dispatcher when it is handed no gate; <c>probe standards</c> and <c>dump</c> pass
+    /// <see cref="ReadOnlyCallGuard.Instance"/>, what null stands for, so the guard each carries is a
+    /// decision a test can see; every other gate passes null.)
     /// </summary>
     public SwGate(CircuitBreaker breaker, ICallGuard? guard = null)
     {

@@ -34,8 +34,12 @@ namespace SwReview.AddIn.Tests;
 /// open anything for a dump; or touch a document that is not the run's copy.
 ///
 /// The seat runs only on the pilot workstation, so these list exactly the calls it makes: the gate's
-/// journal places every interop call under the gate entry it was made under, and a call made outside
-/// the gate, or one more than listed, fails here rather than at the seat.
+/// journal places every interop call under the latest gate entry before it, so each call must follow
+/// an entry for its own member - the guard consulted before the call is made - and a call with no
+/// entry of its own before it, or one more than listed, fails here rather than at the seat.
+/// (Corrected on decision 144A's second review: this said a call made outside the gate fails here,
+/// and the journal cannot tell a call made inside the gate's <c>Call</c> from one made after the gate
+/// was asked about it.)
 /// </summary>
 public sealed class SwRemodelSeatTests
 {
@@ -998,9 +1002,10 @@ public sealed class SwRemodelSeatTests
 
     /// <summary>
     /// The seat's gate as a journal: each member the gate was asked about, with how many calls each
-    /// stand-in had recorded at that moment, so every interop call can be placed under the gate entry it
-    /// was made under. A gate entry is told before its call is made (<see cref="SwGate"/>), so a call
-    /// recorded before the first entry was made outside the gate.
+    /// stand-in had recorded at that moment, so every interop call can be placed under the latest gate
+    /// entry before it. A gate entry is told before its call is made (<see cref="SwGate"/>), so a call
+    /// recorded before the first entry was made outside the gate; after it, the journal shows that the
+    /// gate was asked before each call, not that the call was made inside the gate.
     /// </summary>
     private sealed class GateJournal : ISwGateObserver
     {
