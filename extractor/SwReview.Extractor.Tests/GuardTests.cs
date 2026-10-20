@@ -1659,7 +1659,7 @@ public class DrawingFamilyReadAuditTests
     /// 144A's review - by their path under the extractor folder: the confirmed drawing's guard its scope, the
     /// stage-1 guard the bridge's dispatcher (the gate it builds when it is handed none) and the tool service
     /// host, and the pane seat's guard the seat.
-    /// <see cref="EachAllowlistGuardIsBuiltInExactlyTheFilesTheAuditReadsItsKeysWholeIn"/> holds the list to
+    /// <see cref="NoProductFileButAnAllowlistGuardsBuildersNamesItButForTheNamedLines"/> holds the list to
     /// the source.
     /// </summary>
     internal static readonly IReadOnlyDictionary<Type, string[]> BuildersOf = new Dictionary<Type, string[]>
@@ -1702,34 +1702,97 @@ public class DrawingFamilyReadAuditTests
     }
 
     /// <summary>
-    /// Decision 151A (T201): <see cref="BuildersOf"/> names every allowlist guard the product builds, and each
-    /// guard is built - <c>new DrawingOpenGuard(</c>, or a target-typed <c>new()</c> declared as one - in
-    /// exactly the product files it names, on a line that is not a comment. A file that comes to build one, or
-    /// one that no longer does, fails here, so the audit reads a guard's keys whole only where its gate is built.
-    /// For the pane seat's guard this is beside its own construction test, which reads any naming of it
-    /// (<see cref="RemodelSeatGuardTests.OnlyThePaneSeatNamesTheGuardOrItsGate"/>).
+    /// Decision 151A's review (T206): the lines that name an allowlist guard in a product file that does not
+    /// build it, each keyed by the guard, the file - its path under the extractor folder - and the line as it
+    /// stands, trimmed, with what it is: probe D14's read of the confirmed drawing's guard's static list of
+    /// keys, and words the console prints. Neither builds a gate. An entry whose line is gone or changed fails
+    /// <see cref="NoProductFileButAnAllowlistGuardsBuildersNamesItButForTheNamedLines"/>, as a naming this list
+    /// does not hold does. (A guard's builders may name it as they will: <c>ToolServiceHost.cs</c>'s
+    /// <c>RemodelGuard.IsAllowlisted</c> and the confirmed drawing's scope's key constants stand in builders'
+    /// files.)
+    /// </summary>
+    private static readonly IReadOnlyDictionary<(Type Guard, string Where, string Line), string> NamingsThatBuildNothing =
+        new Dictionary<(Type Guard, string Where, string Line), string>
+        {
+            [(typeof(DrawingOpenGuard), "SwReview.Extractor/Probes/DrawingOpenProbe.cs",
+                "_seam.SeamObserver.Members.Any(member => DrawingOpenGuard.AllowedKeys.Contains(member));")] =
+                "probe D14 reads the guard's static list of keys, to tell whether the confirmed open's seam gated one",
+            [(typeof(DrawingOpenGuard), "SwReview.Extractor.Console/Program.cs",
+                "\"gate log: the confirmed open's guard (DrawingOpenGuard, D14 only): \"")] =
+                "the words that open probe drawings' report line for the confirmed open's own gate",
+        };
+
+    /// <summary>
+    /// Decision 151A (T201), replaced on the decision's review (T206; its finding S1): every allowlist guard's
+    /// construction-site test, in the shape of the pane seat's own
+    /// (<see cref="RemodelSeatGuardTests.OnlyThePaneSeatNamesTheGuardOrItsGate"/>). <see cref="BuildersOf"/>
+    /// names every allowlist guard the product builds; no product file but a guard's builders names it, on a
+    /// line that is not a comment, but for the lines <see cref="NamingsThatBuildNothing"/> holds, each still as
+    /// it stands; and each of the builders builds it. A target-typed <c>new()</c> cannot build an abstract class
+    /// or an interface, so building a guard names it - <c>new X(</c> or <c>new X { }</c>, a field, a local or a
+    /// return declared as <c>X</c>, an <c>X[]</c>, <c>typeof(X)</c>, <c>Activator.CreateInstance&lt;X&gt;()</c>,
+    /// <c>new X</c> with its <c>(</c> on the next line - and fails here in any file but its builders', so the
+    /// audit reads a guard's keys whole only where its gate is built (<see cref="Judged"/>). A construction
+    /// that names no type at all, by reflection over the assembly with a name it computes, would pass it, as it
+    /// would pass the seat's.
+    ///
+    /// It was <c>EachAllowlistGuardIsBuiltInExactlyTheFilesTheAuditReadsItsKeysWholeIn</c>, which read
+    /// <c>new X(</c> and <c>X x = new()</c> alone: a field declared as the guard and set by <c>new()</c> on
+    /// another line, or <c>new X { }</c>, built one in a file it did not name with every test green.
     /// </summary>
     [Fact]
-    public void EachAllowlistGuardIsBuiltInExactlyTheFilesTheAuditReadsItsKeysWholeIn()
+    public void NoProductFileButAnAllowlistGuardsBuildersNamesItButForTheNamedLines()
     {
         Assert.Equal(
             Allowlists.Select(guard => guard.GetType().Name).OrderBy(name => name, StringComparer.Ordinal),
             BuildersOf.Keys.Select(type => type.Name).OrderBy(name => name, StringComparer.Ordinal));
 
+        var namesIt = BuildersOf.Keys.ToDictionary(
+            guard => guard,
+            guard => new Regex(@"\b" + Regex.Escape(guard.Name) + @"\b", RegexOptions.CultureInvariant));
         string root = ExtractorRoot();
+        var namings = new List<(Type Guard, string Where, string Line)>();
+        foreach (string file in ProductSourceFiles())
+        {
+            string where = PathUnder(root, file);
+            foreach (string line in File.ReadAllLines(file).Where(line => !IsWholeLineComment(line)))
+            {
+                namings.AddRange(namesIt.Where(name => name.Value.IsMatch(line)).Select(name => (name.Key, where, line.Trim())));
+            }
+        }
+
+        var unexplained = namings
+            .Where(naming => !BuildersOf[naming.Guard].Contains(naming.Where, StringComparer.Ordinal)
+                && !NamingsThatBuildNothing.ContainsKey(naming))
+            .Select(naming => $"{naming.Guard.Name} in {naming.Where}: {naming.Line}")
+            .ToList();
+        Assert.True(
+            unexplained.Count == 0,
+            "An allowlist guard is named where it is not built. Building one names it, so a file that builds one is "
+                + "one of its builders, and BuildersOf says so; a line that builds none is named in "
+                + "NamingsThatBuildNothing with what it is: " + string.Join("; ", unexplained));
+
+        foreach (KeyValuePair<(Type Guard, string Where, string Line), string> named in NamingsThatBuildNothing)
+        {
+            Assert.True(
+                namings.Contains(named.Key),
+                $"{named.Key.Guard.Name} is no longer named in {named.Key.Where} as {named.Key.Line}; drop it, or say what it is now.");
+            Assert.DoesNotContain(named.Key.Where, BuildersOf[named.Key.Guard]);
+            Assert.False(string.IsNullOrWhiteSpace(named.Value), named.Key + " has no reason.");
+        }
+
         foreach (KeyValuePair<Type, string[]> builders in BuildersOf)
         {
             string name = Regex.Escape(builders.Key.Name);
-            var built = new Regex(
-                @"\bnew\s+(?:[\w.]+\.)?" + name + @"\s*\(|\b" + name + @"\s+\w+\s*=\s*new\s*\(\s*\)",
+            var builds = new Regex(
+                @"\bnew\s+(?:[\w.]+\.)?" + name + @"\b|\b" + name + @"\??\s+\w+\s*=\s*new\s*\(",
                 RegexOptions.CultureInvariant);
-            var sites = ProductSourceFiles()
-                .Where(file => File.ReadAllLines(file).Any(line => !IsWholeLineComment(line) && built.IsMatch(line)))
-                .Select(file => PathUnder(root, file))
-                .OrderBy(file => file, StringComparer.Ordinal)
-                .ToList();
-
-            Assert.Equal(builders.Value.OrderBy(file => file, StringComparer.Ordinal), sites);
+            foreach (string file in builders.Value)
+            {
+                Assert.True(
+                    namings.Any(naming => naming.Guard == builders.Key && naming.Where == file && builds.IsMatch(naming.Line)),
+                    $"{file} is named as a builder of {builders.Key.Name}, and builds none.");
+            }
         }
     }
 
