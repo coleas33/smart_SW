@@ -228,6 +228,8 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("Clear review", "extractor/SwReview.AddIn/Review/ReviewPage/index.html"),
     ("Remodel a copy", "extractor/SwReview.AddIn/Remodel/RemodelPage/index.html"),
     ("Discard copy", "extractor/SwReview.AddIn/Remodel/RemodelPage/index.html"),
+    # Step 5.3's item B presses it for 011 T171 (decision 144A, 2026-10-19).
+    ("Open copy", "extractor/SwReview.AddIn/Remodel/RemodelPage/index.html"),
     ("Before this review", "extractor/SwReview.AddIn/Review/ReviewPage/index.html"),
     ("Review available evidence", "extractor/SwReview.AddIn/Review/ReviewPage/index.html"),
     ("component instances are not resolved.",
@@ -1960,6 +1962,10 @@ RETEST_2026_09_28_IN_STEP_5 = 20
 """Step 5.3's retest items A to C and the read-only option (2026-09-28): crash capture, the box
 and its markers, 20 minutes."""
 
+DECISION_144A_IN_STEP_5 = 5
+"""Step 5.3's item B for 011 T171 (decision 144A, 2026-10-19): the box's Open copy, then Start,
+and the run's four `seat=` lines, 5 minutes."""
+
 
 def minutes(estimate: str) -> int:
     """`3 h 55 min`, `3 h` or `50 min` as minutes."""
@@ -1981,7 +1987,10 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     (015 T114, decision 4A, 2026-10-14, edited deliberately) adds 35 minutes to step 4's row
     for the unticked review, Send, restarts and timings at step 4.10. Feature 014
     (014 T221, 2026-10-17, edited deliberately) adds 10 minutes to step 4's row for the
-    smoke checks at step 4.11, reading step 4.1's review without another paid review."""
+    smoke checks at step 4.11, reading step 4.1's review without another paid review. Decision
+    144A (011 T171, 2026-10-19, edited deliberately) adds `DECISION_144A_IN_STEP_5` to step 5.1
+    to 5.4's row, for the pane seat's gate at step 5.3's item B, which the decision 18A range
+    leaves out too."""
     section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
     rows = re.findall(r"^\| ([^|]+) \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
     [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
@@ -1989,9 +1998,13 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
 
     assert len(rows) == 8
     assert abs(sum(estimates.values()) - (int(hours) * 60 + int(mins or 0))) <= 7
-    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 85
+    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 90
     decision_18a_in_step_5 = (
-        estimates["5.1 to 5.4"] - 35 - FEATURE_013_IN_STEP_5 - RETEST_2026_09_28_IN_STEP_5
+        estimates["5.1 to 5.4"]
+        - 35
+        - FEATURE_013_IN_STEP_5
+        - RETEST_2026_09_28_IN_STEP_5
+        - DECISION_144A_IN_STEP_5
     )
     assert 30 <= estimates["5.6"] + (estimates["1"] - 50) + decision_18a_in_step_5 <= 45
     assert (estimates["2"], estimates["4"]) == (40, 300)

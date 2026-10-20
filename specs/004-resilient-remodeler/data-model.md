@@ -548,7 +548,7 @@ the naming convention stays in one place: `<run_root>/<yyyyMMdd-HHmmss>-<doc>-re
 | `source-attestation.json` | `remodel/runner.py` | Section 5 |
 | `report.md` | `remodel/runner.py` | Change list, grade delta, geometry comparison, rebuild list with a reason each |
 | `events.jsonl`, `session.json` | the shared `EventSink` and `SessionSink` | Section 10 |
-| `remodel.log` | the bridge host | One line per request: command, elapsed, gated members, target path |
+| `remodel.log` | the bridge host; and its `seat=` lines, the re-modeler's pane seat (feature 011, owner decision 144A) | One line per request: command, elapsed, gated members, target path. *Amended 2026-10-20 (decision 144A's second review)*: the request lines are the `id=` and `command=` lines, a begin line and a completed line per request since 2026-09-28; the pane seat writes its `seat=` lines beside them, two per action; a count of requests counts request lines only (`contracts/run-artifacts.md`) |
 
 **Discard** closes the copy without saving and deletes `copy/` only. Every other file stays:
 deleting the folder would lose the evidence Principle VI asks for, and "what did it propose?"

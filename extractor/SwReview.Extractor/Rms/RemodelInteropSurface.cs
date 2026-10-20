@@ -691,6 +691,9 @@ public static class RemodelInteropSurface
         // pane seat is outside the bridge and its guard, a row records a member and never permits
         // one, and ActivateDoc3 stays on the read-only guard's denylist. OpenDoc7,
         // GetOpenDocumentByName and GetPathName, which the bridge calls too, name its commands above.
+        // Since decision 144A (2026-10-19, feature 011 research R11) the seat calls each through a
+        // gate of its own, whose guard, RemodelSeatGuard, allows ISldWorks.ActivateDoc3 and
+        // ISldWorks.OpenDoc7 by those keys; "allowlisted" here is the stage-1 allowlist's.
 
         // Activate the copy by its title, the user's preferences not consulted, without a rebuild.
         Call("ISldWorks", "ActivateDoc3", Method, "System.Object", false,

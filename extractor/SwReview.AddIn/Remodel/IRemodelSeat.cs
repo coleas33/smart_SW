@@ -24,7 +24,9 @@ public interface IRemodelSeat
     /// Activates the copy, opening it again if the engineer closed it.
     ///
     /// <paramref name="copyPath"/> is always a file inside a run folder's `copy/`, resolved by
-    /// the caller from a run this host created: the page never supplies a path.
+    /// the caller from a run this host created: the page never supplies a path. Since owner
+    /// decision 144A the seat refuses any other path before SOLIDWORKS is asked anything, and
+    /// calls SOLIDWORKS only through a gate of its own (<see cref="SwRemodelSeat"/>).
     /// </summary>
     void ActivateOrOpen(string copyPath);
 

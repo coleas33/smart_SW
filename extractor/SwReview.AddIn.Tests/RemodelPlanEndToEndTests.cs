@@ -109,6 +109,17 @@ public sealed class RemodelPlanEndToEndTests
                 Assert.Single(world.Solidworks.Application.Calls, call => call.Member == "ActivateDoc3").Arguments[0]);
             Assert.True(File.Exists(Path.Combine(runDirectory, "package-before.json")));
 
+            // Decision 144A (feature 011 T163, T174): the activation went through the pane seat's own
+            // gate, and the run folder's remodel.log has its two lines - the begin line, then the copy
+            // activated with every call it made, nothing refused.
+            List<string> seat = PlanWorld.SeatLines(runDirectory);
+            Assert.Equal(2, seat.Count);
+            Assert.EndsWith(" seat=activate_before_dump begin", seat[0], StringComparison.Ordinal);
+            Assert.EndsWith(
+                " seat=activate_before_dump status=ok outcome=activated gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3,ActiveDoc",
+                seat[1],
+                StringComparison.Ordinal);
+
             // 004 T176: the session is over before the page hears the plan was made - the copy closed
             // unsaved and still in copy/, the tag off, CommandInProgress set for the open and back,
             // last - and nothing was left, so no status error was posted.
@@ -147,6 +158,52 @@ public sealed class RemodelPlanEndToEndTests
             Assert.Single(world.Log, entry => entry == "backend:close");
             Assert.False(Directory.Exists(Path.Combine(runDirectory, "copy")));
             Assert.Empty(world.StatusErrors(postedBeforeDiscard));
+        }
+    }
+
+    /// <summary>
+    /// Decision 144A (feature 011 T163): Open copy after a plan - whose session closed the copy, since
+    /// Start is switched off (004 T176) - opens the copy again through the pane seat's own gate, at its
+    /// own path and writable (the request <c>Silent</c> and <c>LoadModel</c>, never <c>ReadOnly</c> or
+    /// <c>ViewOnly</c>), and the run folder's remodel.log has the open's line beside the plan's, with
+    /// nothing refused.
+    /// </summary>
+    [Fact]
+    public void OpenCopyAfterAPlanOpensTheCopyAgainWritableThroughThePaneSeatsGate()
+    {
+        using (var world = new PlanWorld())
+        {
+            world.Receive("remodel.plan", "p1");
+            string runDirectory = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            string copyPath = Path.GetFullPath(RemodelCopy.CopyPathFor(runDirectory, world.SourcePath));
+            Assert.False(world.Solidworks.CopyOpen);
+            int requestCalls = world.Solidworks.Specification.Calls.Count;
+
+            world.Receive("remodel.open_copy", "o1", new { run_dir = runDirectory });
+
+            world.Reply("ok", "o1");
+            Assert.True(world.Solidworks.CopyOpen);
+            Assert.Equal(copyPath, world.Solidworks.CopyPath);
+            Assert.Equal(
+                new object?[] { copyPath },
+                world.Solidworks.Application.Calls.Last(call => call.Member == "GetOpenDocSpec").Arguments);
+            Assert.Equal(2, world.Solidworks.Application.Calls.Count(call => call.Member == "OpenDoc7"));
+            Assert.Equal(
+                new[]
+                {
+                    "set_DocumentType 1", "set_Silent True", "set_ReadOnly False", "set_ViewOnly False", "set_LoadModel True",
+                },
+                world.Solidworks.Specification.Calls.Skip(requestCalls)
+                    .Select(call => call.Member + " " + string.Join(",", call.Arguments)));
+
+            List<string> seat = PlanWorld.SeatLines(runDirectory);
+            Assert.Equal(4, seat.Count);
+            Assert.EndsWith(" seat=open_copy begin", seat[2], StringComparison.Ordinal);
+            Assert.EndsWith(
+                " seat=open_copy status=ok outcome=opened gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7,GetPathName",
+                seat[3],
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(seat, line => line.Contains(" refused=") || line.Contains(" error="));
         }
     }
 
@@ -367,6 +424,18 @@ public sealed class RemodelPlanEndToEndTests
                 .Where(message => message.GetProperty("type").GetString() == "status"
                     && message.GetProperty("payload").GetProperty("stage").GetString() == "error")
                 .ToList();
+
+        /// <summary>
+        /// The pane seat's lines of the run folder's <c>remodel.log</c>, in order (decision 144A): each
+        /// stamped, then <c>seat=</c>, as <see cref="RemodelRunLog"/> writes every line of that file.
+        /// </summary>
+        public static List<string> SeatLines(string runDirectory)
+        {
+            string log = Path.Combine(runDirectory, RemodelRunLog.FileName);
+            return File.Exists(log)
+                ? File.ReadAllLines(log).Where(line => line.Contains("] seat=")).ToList()
+                : new List<string>();
+        }
 
         /// <summary>A <c>remodel.*</c> command straight to the bridge, with the remodel secret.</summary>
         public PipeReply Remodel(string command, object parameters)
