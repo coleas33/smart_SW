@@ -48,6 +48,7 @@ namespace SwReview.AddIn.Tests;
 /// backend's real answer to "is a turn running" uses the real <see cref="BackendClient"/>
 /// against a loopback listener, as <see cref="BackendClientSessionBodyTests"/> does.
 /// </summary>
+[Collection(StubChildrenCollection.Name)]
 public sealed class DeferredRestartTests
 {
     /// <summary>The Review tab's sentence for a save a turn started during, pinned word for word.</summary>
@@ -69,10 +70,14 @@ public sealed class DeferredRestartTests
         + "the saved settings, and nothing new starts before then. Save the settings again to restart "
         + "it, then try again.";
 
-    /// <summary>The status the host posts when it stops waiting for a backend that does not answer.</summary>
-    private const string StoppedWaiting =
-        "the review backend stopped answering, so it was not restarted with the settings saved during the "
-        + "turn. Save the settings again to restart it.";
+    /// <summary>
+    /// The status the host posts when its watcher stops looking at a backend that does not answer:
+    /// the restart still waits, for the next review or follow-up.
+    /// </summary>
+    private const string NotAnsweringYet =
+        "the review backend is not answering, so it has not been restarted with the settings saved during "
+        + "the turn yet. It will be before the next review or follow-up, once it answers; to restart it "
+        + "now, save the settings again.";
 
     /// <summary>Fictional keys, built from fragments and in no provider's format (AGENTS.md rule 2).</summary>
     private static readonly string OpenAiKey = string.Concat("FICT", "-saved-", "openai-", "143a-0001");
@@ -142,9 +147,13 @@ public sealed class DeferredRestartTests
         Assert.Equal("settings", key.Source);
 
         // One message after the restart, and nothing else: the promise is the only status, and the
-        // message carries it back so the page takes it, and nothing else, off its banner.
+        // message carries the host's sentences about the wait back - the promise, and the one for
+        // a backend that does not answer - so the page takes whichever it shows, and nothing else,
+        // off its banner.
         Assert.Equal("backend.restarted", world.Types().Last());
-        Assert.Equal(Promise, world.Last("backend.restarted").GetProperty("promise").GetString());
+        Assert.Equal(
+            new[] { Promise, NotAnsweringYet },
+            world.Last("backend.restarted").GetProperty("sentences").EnumerateArray().Select(sentence => sentence.GetString()));
         Assert.Single(world.Posted("status"));
         world.AssertNothingPostedContains(OpenAiKey);
 
@@ -200,26 +209,31 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// The real client tells a refusal the backend sent from no answer at all: `UnknownChat` (404)
-    /// for a chat it does not hold and `InvalidRequest` (400) for an id it cannot read are
-    /// answers, and a call nothing listens for is not. Only the last leaves the turn unknown, and
-    /// may hold the restart back.
+    /// The real client keeps the status the backend answered with, so the host can tell the
+    /// answers that rule a turn out - `UnknownChat` (404) for a chat it does not hold,
+    /// `InvalidRequest` (400) for an id it cannot read - from one that says nothing of it, such as
+    /// a 500 whose body is not the backend's, and from no answer at all, which has no status.
     /// </summary>
     [Fact]
-    public void TheRealClientTellsARefusalFromAMissingAnswer()
+    public void TheRealClientKeepsTheStatusTheBackendAnsweredWith()
     {
-        using (var server = new SessionStateServer("chat-1") { InvalidChat = "FICT-not-an-id" })
+        using (var server = new SessionStateServer("chat-1") { InvalidChat = "FICT-not-an-id", BrokenChat = "FICT-broken" })
         using (var answering = new RealClient(server.Port))
         {
             BackendRequestException unknown = Assert.Throws<BackendRequestException>(
                 () => answering.Client.IsTurnRunning("FICT-other-chat"));
             Assert.Equal("UnknownChat", unknown.ErrorClass);
-            Assert.False(unknown.Unanswered);
+            Assert.Equal(404, unknown.Status);
 
             BackendRequestException invalid = Assert.Throws<BackendRequestException>(
                 () => answering.Client.IsTurnRunning("FICT-not-an-id"));
             Assert.Equal("InvalidRequest", invalid.ErrorClass);
-            Assert.False(invalid.Unanswered);
+            Assert.Equal(400, invalid.Status);
+
+            BackendRequestException broken = Assert.Throws<BackendRequestException>(
+                () => answering.Client.IsTurnRunning("FICT-broken"));
+            Assert.Equal("HttpError", broken.ErrorClass);
+            Assert.Equal(500, broken.Status);
         }
 
         var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
@@ -231,7 +245,7 @@ public sealed class DeferredRestartTests
             BackendRequestException missing = Assert.Throws<BackendRequestException>(
                 () => silent.Client.IsTurnRunning("chat-1"));
             Assert.Equal("BackendUnavailable", missing.ErrorClass);
-            Assert.True(missing.Unanswered);
+            Assert.Null(missing.Status);
         }
     }
 
@@ -285,11 +299,61 @@ public sealed class DeferredRestartTests
         world.Backend.StopsAnswering(questions: DeferredRestart.UnansweredLooks - 1);
         Polls(world.Backend, DeferredRestart.UnansweredLooks + 2);
         Assert.Equal(0, world.Backend.Attempts);
-        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("message").GetString() == StoppedWaiting);
+        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("message").GetString() == NotAnsweringYet);
 
         world.Backend.EndTurn("chat-1");
         Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted once answered");
         Assert.Equal(1, world.Backend.Attempts);
+    }
+
+    /// <summary>
+    /// After the watcher has stopped looking, the backend answers again, the turn over: the next
+    /// review - or follow-up - restarts it first, and the review runs on the restarted backend,
+    /// never on the old one with the new settings. A follow-up is told its chat ended only once a
+    /// restart has really been made, and the page is told of it, with both of the host's sentences
+    /// about the wait.
+    /// </summary>
+    [Theory]
+    [InlineData("review")]
+    [InlineData("follow-up")]
+    public void AfterTheWatcherStopsTheNextReviewOrFollowUpRestartsTheBackendOnceItAnswers(string next)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(model: "gpt-5.6-mini", effort: "low"));
+        world.Backend.StopsAnswering();
+        Eventually(
+            () => world.Posted("status").Any(posted => posted.GetProperty("message").GetString() == NotAnsweringYet),
+            "the watcher stopping");
+
+        world.Backend.AnswersAgain();
+        world.Backend.EndTurn("chat-1");
+        Assert.Empty(world.Backend.Restarts);
+
+        if (next == "review")
+        {
+            world.Receive("review.start", "start", new { });
+
+            world.Reply("review.started", "start");
+            (NewSessionRequest request, int generation) = Assert.Single(world.Backend.Sessions);
+            Assert.Equal(1, generation);
+            Assert.Equal("gpt-5.6-mini", request.Model);
+        }
+        else
+        {
+            BackendRequestException? refusal = world.Host.PageTurnRefusal();
+
+            Assert.NotNull(refusal);
+            Assert.Equal("UnknownChat", refusal!.ErrorClass);
+            Assert.Equal(ChatEndedWithTheRestart, refusal.Message);
+        }
+
+        Assert.Single(world.Backend.Restarts);
+        Assert.Equal(
+            new[] { Promise, NotAnsweringYet },
+            Assert.Single(world.Posted("backend.restarted")).GetProperty("sentences").EnumerateArray()
+                .Select(sentence => sentence.GetString()));
     }
 
     /// <summary>
@@ -311,38 +375,92 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// Any answer that names no running state is an answer, whatever its status: a 400 for an id
-    /// the backend cannot read, its own refusal of a chat that failed, a 500 whose body it could
-    /// not write. Only a backend that gives no answer at all leaves the turn unknown. Held back
-    /// by such an answer, the restart would wait for ever.
+    /// The refusals that rule a turn out, besides a readable state: 404 `UnknownChat`, a chat the
+    /// backend does not hold, and 400 `InvalidRequest`, an id it could not hold. The restart is
+    /// not held back by a chat answered so.
     /// </summary>
     [Theory]
-    [InlineData("InvalidRequest")]
-    [InlineData("SessionFailed")]
-    [InlineData("HttpError")]
-    public void AnAnswerThatNamesNoRunningStateIsNoTurnWhateverItsStatus(string errorClass)
+    [InlineData("UnknownChat", 404)]
+    [InlineData("InvalidRequest", 400)]
+    public void ARefusalThatRulesATurnOutDoesNotHoldTheRestartBack(string errorClass, int status)
     {
         using var world = new RestartWorld();
         world.Backend.Refusals["FICT-odd-id"] = new BackendRequestException(
-            errorClass, "FICT the backend refused this one", retryable: false);
+            errorClass, "FICT the backend refused this one", retryable: false, inner: null, status: status);
         world.Open();
         world.Track("FICT-odd-id");
         world.Track("chat-1");
         SaveAsATurnStarts(world, "save", Save(effort: "low"));
 
         world.Backend.EndTurn("chat-1");
-        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted past a " + errorClass);
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted past a " + status);
     }
 
     /// <summary>
-    /// A backend that has stopped answering is waited for, but not for ever: after
-    /// <see cref="DeferredRestart.UnansweredLooks"/> looks in a row without an answer the host
-    /// stops waiting, restarts nothing, and tells the engineer so - and how to go on - in place of
-    /// the promise it can no longer keep. Saving the settings again then restarts the backend at
-    /// once: the save's own check, and the backend's, read a missing answer as no turn.
+    /// Every other answer says nothing of the turn - a 500, the backend's refusal of a chat that
+    /// failed, a class answered with a status that is not its own - and holds the restart back as
+    /// no answer does: the save's own check, and the backend's, read it as no turn, so the restart
+    /// that waits must not. Within the bound: the watcher then stops, and says so.
+    /// </summary>
+    [Theory]
+    [InlineData("HttpError", 500)]
+    [InlineData("SessionFailed", 409)]
+    [InlineData("InvalidRequest", 500)]
+    [InlineData("UnknownChat", 400)]
+    public void AnyOtherAnswerLeavesTheTurnUnknownAndHoldsTheRestartBack(string errorClass, int status)
+    {
+        using var world = new RestartWorld();
+        world.Backend.Refusals["FICT-odd-id"] = new BackendRequestException(
+            errorClass, "FICT the backend refused this one", retryable: false, inner: null, status: status);
+        world.Open();
+        world.Track("FICT-odd-id");
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        int asked = world.Backend.RestartsAsked;
+
+        world.Backend.EndTurn("chat-1");
+        Eventually(
+            () => world.Posted("status").Any(posted => posted.GetProperty("message").GetString() == NotAnsweringYet),
+            "the watcher stopping, held back by a " + status);
+        Assert.Equal(asked, world.Backend.RestartsAsked);
+        Assert.Empty(world.Posted("backend.restarted"));
+    }
+
+    /// <summary>
+    /// A backend that answers 500 to the turn question while a turn runs is never restarted under
+    /// it: the 500 is no answer, so the host never asks the backend to restart - whose own check,
+    /// as lenient as the save's, would read the same 500 as no turn and let it through.
     /// </summary>
     [Fact]
-    public void ABackendThatStopsAnsweringIsWaitedForABoundedTimeThenTheEngineerIsToldHowToGoOn()
+    public void ABackendThatAnswers500DuringATurnIsNeverAskedToRestartUnderIt()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        int asked = world.Backend.RestartsAsked;
+
+        world.Backend.Refuses("chat-1", new BackendRequestException(
+            "HttpError", "the backend answered 500.", retryable: true, inner: null, status: 500));
+        Eventually(
+            () => world.Posted("status").Any(posted => posted.GetProperty("message").GetString() == NotAnsweringYet),
+            "the watcher stopping");
+
+        // Only the save itself asked, and was refused for the turn it saw.
+        Assert.Equal(asked, world.Backend.RestartsAsked);
+        Assert.Empty(world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// A backend that has stopped answering is watched, but not for ever: after
+    /// <see cref="DeferredRestart.UnansweredLooks"/> looks in a row without an answer the watcher
+    /// stops, restarts nothing, and tells the engineer so - and how to go on. The restart still
+    /// waits: a turn call is refused, saying the backend does not answer, rather than sent to the
+    /// old backend. Saving the settings again restarts it, once the save's round trips have timed
+    /// out: the save's own check, and the backend's, read a missing answer as no turn.
+    /// </summary>
+    [Fact]
+    public void ABackendThatStopsAnsweringIsWatchedForABoundedTimeThenTheEngineerIsToldHowToGoOn()
     {
         using var world = new RestartWorld();
         world.Backend.CheckAsksTheSameQuestion = true;
@@ -352,26 +470,33 @@ public sealed class DeferredRestartTests
 
         world.Backend.StopsAnswering();
         Eventually(
-            () => world.Posted("status").Any(status => status.GetProperty("message").GetString() == StoppedWaiting),
+            () => world.Posted("status").Any(status => status.GetProperty("message").GetString() == NotAnsweringYet),
             "the status that the host stopped waiting");
 
         JsonElement status = world.Last("status");
         Assert.Equal("error", status.GetProperty("stage").GetString());
-        Assert.Equal(StoppedWaiting, status.GetProperty("message").GetString());
+        Assert.Equal(NotAnsweringYet, status.GetProperty("message").GetString());
         Assert.Equal(0, world.Backend.Attempts);
         Assert.Empty(world.Posted("backend.restarted"));
 
-        // Nothing waits any more, so nothing asks: the watcher has gone, and a turn call is sent on.
-        Assert.Null(world.Host.PageTurnRefusal());
+        // The watcher has gone, so nothing asks of its own accord...
         int asked = world.Backend.Questions;
         Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
         Assert.Equal(asked, world.Backend.Questions);
+
+        // ...but the restart still waits: a turn call looks once, and is refused while the
+        // backend still does not answer, rather than sent to the old backend.
+        BackendRequestException? refusal = world.Host.PageTurnRefusal();
+        Assert.NotNull(refusal);
+        Assert.Equal("BackendUnavailable", refusal!.ErrorClass);
+        Assert.Equal(NoAnswerHoldsIt, refusal.Message);
+        Assert.Equal(asked + 1, world.Backend.Questions);
 
         world.Receive("settings.save", "again", Save(effort: "medium"));
 
         Assert.Equal("medium", Assert.Single(world.Backend.Restarts).Settings.Effort);
         world.Reply("settings.saved", "again");
-        Assert.Single(world.Posted("status"), posted => posted.GetProperty("message").GetString() == StoppedWaiting);
+        Assert.Single(world.Posted("status"), posted => posted.GetProperty("message").GetString() == NotAnsweringYet);
     }
 
     /// <summary>
@@ -631,7 +756,7 @@ public sealed class DeferredRestartTests
         int from = Volatile.Read(ref looks);
         Eventually(() => Volatile.Read(ref looks) >= from + DeferredRestart.UnansweredLooks * 3, "the host's looks");
 
-        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("message").GetString() == StoppedWaiting);
+        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("message").GetString() == NotAnsweringYet);
         world.Receive("review.start", "start", new { });
         JsonElement error = world.Reply("error", "start");
         Assert.Equal("RemodelRunning", error.GetProperty("error_class").GetString());
@@ -1409,22 +1534,24 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// The watcher stops waiting after <see cref="DeferredRestart.UnansweredLooks"/> looks in a
+    /// The watcher stops looking after <see cref="DeferredRestart.UnansweredLooks"/> looks in a
     /// row the backend leaves unanswered - not one more, not one fewer - says so once, tries no
-    /// restart, and ends.
+    /// restart, and ends. The restart still waits: a caller's look that is still unanswered is
+    /// refused, and one the backend answers with nothing holding the restart back makes it.
     /// </summary>
     [Fact]
-    public void TheWatcherStopsWaitingAfterABoundedRunOfUnansweredLooksAndSaysSo()
+    public void TheWatcherStopsLookingAfterABoundedRunOfUnansweredLooksAndTheRestartStillWaits()
     {
         int looks = 0;
         int looksWhenTold = -1;
         int told = 0;
         int tried = 0;
+        var hold = DeferredRestart.Hold.NoAnswer;
         using var restart = NewRestart(
             () =>
             {
                 Interlocked.Increment(ref looks);
-                return DeferredRestart.Hold.NoAnswer;
+                return hold;
             },
             () => tried++,
             notAnswered: () =>
@@ -1435,14 +1562,128 @@ public sealed class DeferredRestartTests
             poll: TimeSpan.FromMilliseconds(5));
         Assert.False(restart.Now(() => throw new TurnRunningException()));
 
-        Eventually(() => Volatile.Read(ref told) == 1, "the watcher saying it stopped waiting");
-        Eventually(() => !restart.Pending, "nothing waiting");
+        Eventually(() => Volatile.Read(ref told) == 1, "the watcher saying it stopped looking");
         Thread.Sleep(100);
 
         Assert.Equal(DeferredRestart.UnansweredLooks, looksWhenTold);
         Assert.Equal(DeferredRestart.UnansweredLooks, Volatile.Read(ref looks));
         Assert.Equal(1, Volatile.Read(ref told));
         Assert.Equal(0, tried);
+        Assert.True(restart.Pending);
+
+        Assert.Equal(DeferredRestart.Outcome.NotAnswered, restart.Apply(out _));
+        Assert.True(restart.Pending);
+
+        hold = DeferredRestart.Hold.None;
+        Assert.Equal(DeferredRestart.Outcome.Restarted, restart.Apply(out _));
+        Assert.Equal(1, tried);
+        Assert.False(restart.Pending);
+        Assert.Equal(1, Volatile.Read(ref told));
+    }
+
+    /// <summary>
+    /// A save refused again while the watcher is deciding to stop - inside the restart's own lock,
+    /// where the decision is made - is a newer save: the watcher does not stop on the strength of
+    /// looks made for the older one, and says nothing yet; it counts the newer save's looks
+    /// afresh, and stops after the full run of them.
+    /// </summary>
+    [Fact]
+    public void ASaveRefusedAgainWhileTheWatcherDecidesToStopIsWatchedAfresh()
+    {
+        int looks = 0;
+        int looksWhenTold = -1;
+        using var saving = new ManualResetEventSlim(false);
+        using var lookMade = new ManualResetEventSlim(false);
+        using var refuse = new ManualResetEventSlim(false);
+        DeferredRestart? restart = null;
+        restart = NewRestart(
+            () =>
+            {
+                if (Interlocked.Increment(ref looks) == DeferredRestart.UnansweredLooks)
+                {
+                    // The last look of the run returns only once the save below holds the
+                    // restart's lock, so the watcher's decision to stop has to wait for it.
+                    lookMade.Set();
+                    saving.Wait(TimeSpan.FromSeconds(10));
+                }
+
+                return DeferredRestart.Hold.NoAnswer;
+            },
+            () => { },
+            notAnswered: () => looksWhenTold = Volatile.Read(ref looks),
+            poll: TimeSpan.FromMilliseconds(5));
+        using (restart)
+        {
+            Assert.False(restart.Now(() => throw new TurnRunningException()));
+            Assert.True(lookMade.Wait(TimeSpan.FromSeconds(10)), "the watcher never made its last look");
+
+            var save = new Caller<bool>(() => restart.Now(() =>
+            {
+                saving.Set();
+                refuse.Wait(TimeSpan.FromSeconds(10));
+                throw new TurnRunningException();
+            }));
+            Assert.True(saving.Wait(TimeSpan.FromSeconds(10)), "the save never took the restart's lock");
+
+            // The watcher now wants the lock the save holds, to decide whether to stop.
+            Thread.Sleep(200);
+            refuse.Set();
+            Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
+            Assert.False(save.Result);
+
+            Eventually(() => Volatile.Read(ref looksWhenTold) > 0, "the watcher stopping for the newer save");
+            Assert.Equal(DeferredRestart.UnansweredLooks * 2, looksWhenTold);
+            Assert.True(restart.Pending);
+        }
+    }
+
+    /// <summary>
+    /// The watcher says it stopped looking while it holds the restart's own lock, so a save made
+    /// meanwhile - refused under that lock, its promise posted after - comes after it: the page
+    /// never shows "not answering" above a newer save's promise.
+    /// </summary>
+    [Fact]
+    public void TheWatchersReportIsMadeUnderTheRestartsLockSoALaterSaveComesAfterIt()
+    {
+        var order = new List<string>();
+        using var reporting = new ManualResetEventSlim(false);
+        using var reported = new ManualResetEventSlim(false);
+        using var restart = NewRestart(
+            () => DeferredRestart.Hold.NoAnswer,
+            () => { },
+            notAnswered: () =>
+            {
+                reporting.Set();
+                reported.Wait(TimeSpan.FromSeconds(10));
+                lock (order)
+                {
+                    order.Add("not answering");
+                }
+            },
+            poll: TimeSpan.FromMilliseconds(5));
+        Assert.False(restart.Now(() => throw new TurnRunningException()));
+        Assert.True(reporting.Wait(TimeSpan.FromSeconds(10)), "the watcher never said it stopped looking");
+
+        var save = new Caller<bool>(() =>
+        {
+            bool restarted = restart.Now(() => throw new TurnRunningException());
+            lock (order)
+            {
+                order.Add("promise");
+            }
+
+            return restarted;
+        });
+        Assert.False(save.Finishes(TimeSpan.FromMilliseconds(500)), "the save went ahead while the watcher was still saying it stopped");
+
+        reported.Set();
+        Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
+        Assert.False(save.Result);
+        lock (order)
+        {
+            // The newer save's own watcher may say so too, later; what matters is what came first.
+            Assert.Equal(new[] { "not answering", "promise" }, order.Take(2));
+        }
     }
 
     /// <summary>
@@ -1878,6 +2119,7 @@ public sealed class DeferredRestartTests
         private int _questions;
         private int _attempts;
         private int _unanswered;
+        private int _restartsAsked;
         private bool _down;
 
         /// <summary>Thrown by each restart the backend's own check lets through.</summary>
@@ -1894,9 +2136,21 @@ public sealed class DeferredRestartTests
         /// <summary>Chats this backend does not hold: their question is answered `UnknownChat`.</summary>
         public HashSet<string> Unknown { get; } = new HashSet<string>(StringComparer.Ordinal);
 
-        /// <summary>Chats whose question is answered with a refusal that names no running state.</summary>
+        /// <summary>
+        /// Chats whose question is answered with this refusal rather than their state; set before
+        /// the host is opened, or through <see cref="Refuses"/> once it may be asking.
+        /// </summary>
         public Dictionary<string, BackendRequestException> Refusals { get; } =
             new Dictionary<string, BackendRequestException>(StringComparer.Ordinal);
+
+        /// <summary>From now on, answers <paramref name="chatId"/>'s question with <paramref name="refusal"/>.</summary>
+        public void Refuses(string chatId, BackendRequestException refusal)
+        {
+            lock (_gate)
+            {
+                Refusals[chatId] = refusal;
+            }
+        }
 
         /// <summary>
         /// Gives no answer to the next <paramref name="questions"/> questions about a turn, from
@@ -1910,6 +2164,9 @@ public sealed class DeferredRestartTests
                 _unanswered = questions;
             }
         }
+
+        /// <summary>Answers every question again.</summary>
+        public void AnswersAgain() => StopsAnswering(questions: 0);
 
         /// <summary>
         /// Gives no answer to the questions <paramref name="asking"/> asks on the calling thread -
@@ -1981,6 +2238,12 @@ public sealed class DeferredRestartTests
             get { lock (_gate) { return _attempts; } }
         }
 
+        /// <summary>Every restart the host asked for, the ones the backend's own check refused too.</summary>
+        public int RestartsAsked
+        {
+            get { lock (_gate) { return _restartsAsked; } }
+        }
+
         public (UserSettings Settings, ResolvedApiKey Key)[] Restarts
         {
             get { lock (_gate) { return _restarts.ToArray(); } }
@@ -2038,12 +2301,13 @@ public sealed class DeferredRestartTests
                         _unanswered--;
                     }
 
-                    throw BackendRequestException.NotAnswered("the review backend did not answer: FICT timed out");
+                    throw new BackendRequestException(
+                        "BackendUnavailable", "the review backend did not answer: FICT timed out", retryable: true);
                 }
 
                 if (Unknown.Contains(chatId))
                 {
-                    throw new BackendRequestException("UnknownChat", "no chat " + chatId, retryable: false);
+                    throw new BackendRequestException("UnknownChat", "no chat " + chatId, retryable: false, inner: null, status: 404);
                 }
 
                 if (Refusals.TryGetValue(chatId, out BackendRequestException? refusal))
@@ -2071,6 +2335,8 @@ public sealed class DeferredRestartTests
         {
             lock (_gate)
             {
+                _restartsAsked++;
+
                 // The backend's own check, made before anything is stopped - blind to the turns
                 // while the question goes unanswered, when it asks the same question.
                 bool blind = CheckAsksTheSameQuestion && Unanswered();
@@ -2197,6 +2463,9 @@ public sealed class DeferredRestartTests
         /// <summary>A chat id answered `400 InvalidRequest`, as the backend answers one it cannot read.</summary>
         public string? InvalidChat { get; set; }
 
+        /// <summary>A chat id answered 500 with a body that is not the backend's JSON.</summary>
+        public string? BrokenChat { get; set; }
+
         public void Dispose()
         {
             try
@@ -2231,12 +2500,16 @@ public sealed class DeferredRestartTests
                         && context.Request.Url!.AbsolutePath == "/sessions/" + _chatId;
                     bool invalid = InvalidChat != null
                         && context.Request.Url!.AbsolutePath == "/sessions/" + InvalidChat;
+                    bool broken = BrokenChat != null
+                        && context.Request.Url!.AbsolutePath == "/sessions/" + BrokenChat;
                     byte[] body = Encoding.UTF8.GetBytes(known
                         ? "{\"chat_id\":\"" + _chatId + "\",\"state\":\"" + _state + "\"}"
                         : invalid
                             ? "{\"error_class\":\"InvalidRequest\",\"message\":\"not a chat id\",\"retryable\":false}"
-                            : "{\"error_class\":\"UnknownChat\",\"message\":\"no such chat\",\"retryable\":false}");
-                    context.Response.StatusCode = known ? 200 : invalid ? 400 : 404;
+                            : broken
+                                ? "FICT Internal Server Error"
+                                : "{\"error_class\":\"UnknownChat\",\"message\":\"no such chat\",\"retryable\":false}");
+                    context.Response.StatusCode = known ? 200 : invalid ? 400 : broken ? 500 : 404;
                     context.Response.ContentType = "application/json";
                     context.Response.ContentLength64 = body.Length;
                     context.Response.OutputStream.Write(body, 0, body.Length);

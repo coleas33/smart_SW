@@ -288,11 +288,12 @@
         // ran. The port and token of the last `init` are the old child's and nothing else says
         // so, so the page asks again, as after a save that restarted it at once - after the
         // `init` already on its way, if there is one, since the host may have read that before
-        // the new child was up. The host's sentence that it would restart is done with: the
-        // message carries it, and it is taken off the banner - and nothing else there is.
+        // the new child was up. The host's sentences about the restart that waited - that it
+        // would restart, and that the backend was not answering - are done with: the message
+        // carries them, and whichever is on the banner is taken off it, and nothing else there.
         state.backendReplaced = true;
         state.replacedToken = state.token;
-        if (payload.promise && ui.banner.textContent === payload.promise) {
+        if (Array.isArray(payload.sentences) && payload.sentences.indexOf(ui.banner.textContent) >= 0) {
           showBanner('');
         }
         if (state.initPending) {

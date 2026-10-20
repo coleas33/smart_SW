@@ -142,17 +142,17 @@ public sealed class ChatSessionHandle
 public sealed class BackendRequestException : Exception
 {
     public BackendRequestException(string errorClass, string message, bool retryable, Exception? inner = null)
-        : this(errorClass, message, retryable, inner, unanswered: false)
+        : this(errorClass, message, retryable, inner, status: null)
     {
     }
 
-    private BackendRequestException(
-        string errorClass, string message, bool retryable, Exception? inner, bool unanswered)
+    /// <param name="status">The HTTP status the backend answered with (<see cref="Status"/>).</param>
+    public BackendRequestException(string errorClass, string message, bool retryable, Exception? inner, int? status)
         : base(message, inner)
     {
         ErrorClass = errorClass;
         Retryable = retryable;
-        Unanswered = unanswered;
+        Status = status;
     }
 
     public string ErrorClass { get; }
@@ -160,18 +160,13 @@ public sealed class BackendRequestException : Exception
     public bool Retryable { get; }
 
     /// <summary>
-    /// True when the backend gave no HTTP answer at all - the connection was refused, reset or
-    /// timed out - and false for every answer it gave, whatever its status. Whether a turn runs
-    /// is known from an answer, never from its absence (owner decision 143A).
+    /// The HTTP status the backend answered the call with; null when no HTTP answer came back -
+    /// the connection was refused, reset or timed out, or there was no backend to ask - and for
+    /// a refusal that is the add-in's own rather than the backend's. Whether a turn runs is read
+    /// from what the backend answered, and only some answers rule one out (owner decision 143A,
+    /// ReviewHost.LookAtTheTurns).
     /// </summary>
-    public bool Unanswered { get; }
-
-    /// <summary>
-    /// A call the backend gave no HTTP answer to: `BackendUnavailable`, retryable, and
-    /// <see cref="Unanswered"/>.
-    /// </summary>
-    public static BackendRequestException NotAnswered(string message, Exception? inner = null) =>
-        new BackendRequestException("BackendUnavailable", message, retryable: true, inner, unanswered: true);
+    public int? Status { get; }
 }
 
 /// <summary>

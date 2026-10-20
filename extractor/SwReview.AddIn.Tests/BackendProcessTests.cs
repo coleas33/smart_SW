@@ -40,6 +40,7 @@ namespace SwReview.AddIn.Tests;
 ///   provider (`--settings-key-provider`, owner decision 138A), because the backend cannot
 ///   tell that from its environment and the session has to name the credential to revoke.
 /// </summary>
+[Collection(StubChildrenCollection.Name)]
 public sealed class BackendProcessTests
 {
     private const string Key = "sk-proj-EXAMPLE-not-a-real-key-0123456789";
@@ -1077,8 +1078,9 @@ public sealed class BackendProcessTests
     /// Nothing in the add-in ever does this - it is how the test runner impersonates the
     /// console-less GUI process the add-in really lives in, because
     /// <see cref="ChildProcess.StartSuspended"/> decides how the child gets a console from
-    /// whether this process has one. Every test in this class runs in the same xUnit
-    /// collection, so none of them can be starting a child while the console is gone.
+    /// whether this process has one. Every class that starts a stub child runs in one xUnit
+    /// collection (<see cref="StubChildrenCollection"/>), so none of them can be starting or
+    /// stopping a child while the console is gone.
     /// </summary>
     private static IDisposable Detached() => new DetachedConsole();
 

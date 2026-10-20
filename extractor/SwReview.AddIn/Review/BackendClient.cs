@@ -386,12 +386,17 @@ public sealed class BackendClient : IBackendClient, IDisposable
         var response = failure.Response as HttpWebResponse;
         if (response == null)
         {
-            return BackendRequestException.NotAnswered(
-                "the review backend did not answer: " + failure.Message, failure);
+            // No HTTP answer at all, so no status.
+            return new BackendRequestException(
+                "BackendUnavailable",
+                "the review backend did not answer: " + failure.Message,
+                retryable: true,
+                failure);
         }
 
         using (response)
         {
+            int status = (int)response.StatusCode;
             string text = Read(response);
             JsonElement body;
             try
@@ -402,16 +407,18 @@ public sealed class BackendClient : IBackendClient, IDisposable
             {
                 return new BackendRequestException(
                     "HttpError",
-                    $"the backend answered {(int)response.StatusCode}.",
-                    retryable: (int)response.StatusCode >= 500,
-                    failure);
+                    $"the backend answered {status}.",
+                    retryable: status >= 500,
+                    failure,
+                    status);
             }
 
             return new BackendRequestException(
                 Text(body, "error_class") ?? "HttpError",
-                Text(body, "message") ?? $"the backend answered {(int)response.StatusCode}.",
+                Text(body, "message") ?? $"the backend answered {status}.",
                 Flag(body, "retryable"),
-                failure);
+                failure,
+                status);
         }
     }
 

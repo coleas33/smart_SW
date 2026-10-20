@@ -8,17 +8,27 @@ namespace SwReview.AddIn.Tests;
 /// Owner decision 143A, the Review page's half, against the real page in an offscreen WebView2.
 ///
 /// When a settings save meets a turn that started during it, the host restarts the backend once
-/// no turn runs and tells the page with `backend.restarted {promise}`. Nothing else tells it: the
-/// save's own reply came long before, while the old backend still ran. The new backend has a new
-/// port and a new token, and the page holds the old ones from its last `init` - every call it made
-/// with them would be refused - so on that message it asks `ready` again, as it does after a save
-/// that restarted the backend at once, and takes the host's sentence - the `promise` - off the
-/// banner, since it is no longer true once the restart is made; anything else there stays.
+/// nothing holds it back and tells the page with `backend.restarted {sentences}`. Nothing else
+/// tells it: the save's own reply came long before, while the old backend still ran. The new
+/// backend has a new port and a new token, and the page holds the old ones from its last `init` -
+/// every call it made with them would be refused - so on that message it asks `ready` again, as it
+/// does after a save that restarted the backend at once, and takes whichever of the host's
+/// sentences about the wait is on the banner off it, since neither is true once the restart is
+/// made; anything else there stays.
 /// </summary>
 public sealed class ReviewPageBackendRestartTests
 {
     /// <summary>The host's sentence for a save a turn started during (ReviewHost, `settings.save`).</summary>
     private const string Promise = "the settings are saved; the backend restarts when the running turn ends.";
+
+    /// <summary>The host's sentence when its watcher stops looking at a backend that does not answer.</summary>
+    private const string NotAnswering =
+        "the review backend is not answering, so it has not been restarted with the settings saved during "
+        + "the turn yet. It will be before the next review or follow-up, once it answers; to restart it "
+        + "now, save the settings again.";
+
+    /// <summary>`backend.restarted` as the host posts it: both of its sentences about the wait.</summary>
+    private static readonly object Restarted = new { sentences = new[] { Promise, NotAnswering } };
 
     private const string RestartedToken = "FICT-restarted-backend-token";
 
@@ -38,7 +48,7 @@ public sealed class ReviewPageBackendRestartTests
             await driver.ClearCalls();
             driver.BackendToken = RestartedToken;
 
-            await driver.Post("backend.restarted", new { promise = Promise });
+            await driver.Post("backend.restarted", Restarted);
             await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init again");
             await driver.Settle();
 
@@ -57,7 +67,30 @@ public sealed class ReviewPageBackendRestartTests
     }
 
     /// <summary>
-    /// The restart takes back only its own sentence: a banner that has said something else since -
+    /// The host's other sentence about the wait - its watcher stopped looking at a backend that
+    /// did not answer - is done with too once the restart is made, and comes off the banner.
+    /// </summary>
+    [Fact]
+    public void ABackendRestartedTakesTheNotAnsweringSentenceOffTheBanner()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await driver.Post("status", new { stage = "error", message = NotAnswering });
+            Assert.Equal(NotAnswering, (await driver.Read(Banner)).GetProperty("text").GetString());
+            int readies = driver.Posted("ready").Length;
+            driver.BackendToken = RestartedToken;
+
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init again");
+            await driver.Settle();
+
+            JsonElement banner = await driver.Read(Banner);
+            Assert.True(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+        });
+    }
+
+    /// <summary>
+    /// The restart takes back only its own sentences: a banner that has said something else since -
     /// a later failure the engineer has not read yet - stays.
     /// </summary>
     [Fact]
@@ -71,7 +104,7 @@ public sealed class ReviewPageBackendRestartTests
             int readies = driver.Posted("ready").Length;
             driver.BackendToken = RestartedToken;
 
-            await driver.Post("backend.restarted", new { promise = Promise });
+            await driver.Post("backend.restarted", Restarted);
             await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init again");
             await driver.Settle();
 
@@ -172,7 +205,7 @@ public sealed class ReviewPageBackendRestartTests
             await driver.ClearCalls();
 
             // ...the restart, announced while it is on its way...
-            await driver.Post("backend.restarted", new { promise = Promise });
+            await driver.Post("backend.restarted", Restarted);
             driver.BackendToken = RestartedToken;
 
             // ...and then it arrives, naming the old backend.
@@ -241,7 +274,7 @@ public sealed class ReviewPageBackendRestartTests
 
             int readies = driver.Posted("ready").Length;
             driver.BackendToken = RestartedToken;
-            await driver.Post("backend.restarted", new { promise = Promise });
+            await driver.Post("backend.restarted", Restarted);
             await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init again");
             await driver.Settle();
             await driver.RunHeldTimers();

@@ -10,6 +10,7 @@ using Xunit;
 
 namespace SwReview.AddIn.Tests;
 
+[Collection(StubChildrenCollection.Name)]
 public sealed class BackendClientSessionBodyTests
 {
     [Theory]

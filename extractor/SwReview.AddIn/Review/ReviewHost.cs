@@ -444,7 +444,7 @@ public sealed class ReviewHost : IDisposable
         _restart = new DeferredRestart(
             RestartHeldBack,
             RestartWithSettingsInForce,
-            () => Post("backend.restarted", new Dictionary<string, object?> { { "promise", RestartPromise } }),
+            () => Post("backend.restarted", new Dictionary<string, object?> { { "sentences", RestartSentences } }),
             failure => PostStatus("error", failure.Message),
             () => PostStatus("error", RestartNotAnswered),
             options.RestartPoll);
@@ -699,21 +699,24 @@ public sealed class ReviewHost : IDisposable
         /// <summary>A chat has a turn running.</summary>
         Running,
 
-        /// <summary>No chat was seen running, and the backend gave no answer about one at least.</summary>
+        /// <summary>
+        /// No chat was seen running, and of one at least the backend gave no answer that rules a
+        /// turn out (<see cref="RulesOutATurn"/>).
+        /// </summary>
         NoAnswer,
     }
 
     /// <summary>
-    /// Whether any chat this host started has a turn in flight. A chat the backend gives no answer
-    /// about counts as none here: refusing every save because the backend is down would leave the
-    /// engineer unable to fix the settings that are keeping it down.
+    /// Whether any chat this host started has a turn in flight. A chat the backend gives no usable
+    /// answer about counts as none here: refusing every save because the backend is down would
+    /// leave the engineer unable to fix the settings that are keeping it down.
     /// </summary>
     public bool AnyTurnRunning() => LookAtTheTurns(stopAtNoAnswer: false) == TurnsSeen.Running;
 
-    /// <param name="stopAtNoAnswer">Stop at the first chat the backend gives no answer about, as the
-    /// restart for saved settings does (owner decision 143A): a missing answer holds it back
-    /// whatever the other chats say, and its look must cost one round trip's timeout, not one per
-    /// chat.</param>
+    /// <param name="stopAtNoAnswer">Stop at the first chat the backend gives no usable answer
+    /// about, as the restart for saved settings does (owner decision 143A): such a chat holds it
+    /// back whatever the other chats say, and its look must cost one round trip's timeout, not one
+    /// per chat.</param>
     private TurnsSeen LookAtTheTurns(bool stopAtNoAnswer)
     {
         // A snapshot, because this is asked from the tool-service gate's thread while the page
@@ -745,17 +748,14 @@ public sealed class ReviewHost : IDisposable
                     return TurnsSeen.Running;
                 }
             }
-            catch (BackendRequestException answer) when (!answer.Unanswered)
+            catch (BackendRequestException refusal) when (RulesOutATurn(refusal))
             {
-                // An answer that names no running state - `UnknownChat` for a chat this backend
-                // does not hold (one found on disk, or one an earlier backend held),
-                // `InvalidRequest` for an id it cannot read, any other refusal: no turn of this
-                // chat runs here.
+                // No turn of this chat runs here: the backend does not hold it, or could not.
             }
             catch (Exception)
             {
-                // No answer at all: the connection was refused, reset or timed out, or the reply
-                // broke off.
+                // No usable answer: none at all - the connection was refused, reset or timed out,
+                // or the reply broke off - or one that rules nothing out.
                 if (stopAtNoAnswer)
                 {
                     return TurnsSeen.NoAnswer;
@@ -767,6 +767,17 @@ public sealed class ReviewHost : IDisposable
 
         return unanswered ? TurnsSeen.NoAnswer : TurnsSeen.None;
     }
+
+    /// <summary>
+    /// The refusals of `GET /sessions/{chat_id}` that rule a turn out, besides a readable state:
+    /// 404 `UnknownChat`, a chat this backend does not hold - one found on disk, or one an earlier
+    /// backend held - and 400 `InvalidRequest`, an id it could not hold. Every other answer - a
+    /// 5xx, a body that is not the backend's own, any other refusal - says nothing of the turn,
+    /// and neither does no answer at all (owner decision 143A).
+    /// </summary>
+    private static bool RulesOutATurn(BackendRequestException refusal) =>
+        (refusal.Status == 404 && refusal.ErrorClass == "UnknownChat")
+        || (refusal.Status == 400 && refusal.ErrorClass == "InvalidRequest");
 
     /// <summary>Handles one message from the page. Never throws.</summary>
     public void Receive(string json)
@@ -1232,21 +1243,27 @@ public sealed class ReviewHost : IDisposable
 
     /// <summary>
     /// The Review tab's sentence for a save a turn started during: the settings are written and in
-    /// force in the host, and the backend is restarted with them once nothing holds it back. The
-    /// same words go back to the page with `backend.restarted`, which takes them, and only them,
-    /// off the banner.
+    /// force in the host, and the backend is restarted with them once nothing holds it back.
     /// </summary>
     private const string RestartPromise =
         "the settings are saved; the backend restarts when the running turn ends.";
 
     /// <summary>
-    /// What the page is told when the restart stops waiting for a backend that does not answer
-    /// (<see cref="DeferredRestart.UnansweredLooks"/>): no restart, and how to go on. A save made
-    /// then asks whether a turn runs leniently, and restarts the backend.
+    /// What the page is told when the watcher stops looking at a backend that does not answer
+    /// (<see cref="DeferredRestart.UnansweredLooks"/>): the restart has not been made, it still
+    /// waits for the next review or follow-up, and a save made now - which asks whether a turn
+    /// runs leniently - restarts the backend.
     /// </summary>
     private const string RestartNotAnswered =
-        "the review backend stopped answering, so it was not restarted with the settings saved during the "
-        + "turn. Save the settings again to restart it.";
+        "the review backend is not answering, so it has not been restarted with the settings saved during "
+        + "the turn yet. It will be before the next review or follow-up, once it answers; to restart it "
+        + "now, save the settings again.";
+
+    /// <summary>
+    /// The host's sentences about a restart that waits, as `backend.restarted` carries them once it
+    /// is made: the page takes whichever of them is on its banner off it, and nothing else there.
+    /// </summary>
+    private static readonly string[] RestartSentences = { RestartPromise, RestartNotAnswered };
 
     /// <summary>A new review, or a page call that would start a turn, while a turn holds the restart back.</summary>
     private const string TurnHoldsTheRestart =
@@ -1414,9 +1431,10 @@ public sealed class ReviewHost : IDisposable
                     "BackendUnavailable", "the review backend is stopping with the add-in.", retryable: false);
 
             default:
-                // Restarted by this call, or by whoever got there first: either way the backend
-                // the call was for has gone, and the chat with it. Unless that restart failed,
-                // and there is no backend at all.
+                // Restarted by this call, or by whoever got there first - the watcher, a review, a
+                // save: nothing else ends the wait, not even the watcher's giving up on a backend
+                // that does not answer. Either way the backend the call was for has gone, and the
+                // chat with it. Unless that restart failed, and there is no backend at all.
                 return _options.Backend.Endpoint == null
                     ? new BackendRequestException(
                         "BackendUnavailable", "the review backend is not running.", retryable: true)

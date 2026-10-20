@@ -32,6 +32,7 @@ namespace SwReview.AddIn.Tests;
 /// and so is worth its own case. The pipe-name half is proved against <see cref="PipeNames"/>,
 /// the generator the in-process tool service (T047) names its pipe with.
 /// </summary>
+[Collection(StubChildrenCollection.Name)]
 public sealed class ProcessLifetimeTests
 {
     /// <summary>Shared with <see cref="BackendProcessTests"/>: a PID that is gone answers false

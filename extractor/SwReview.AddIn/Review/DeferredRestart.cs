@@ -29,11 +29,13 @@ namespace SwReview.AddIn.Review;
 /// restart back, while something does; the only thing a caller waits for is a restart already
 /// being made, which the backend's own start timeouts bound.
 ///
-/// <b>A backend that does not answer is waited for, but not for ever.</b> Not knowing whether a
-/// turn runs is not knowing that none does, so a look the backend leaves unanswered holds the
-/// restart back; after <see cref="UnansweredLooks"/> such looks in a row the watcher stops
-/// waiting, and the engineer is told how to go on (<c>notAnswered</c>) rather than left with a
-/// promise nothing will keep.
+/// <b>A backend that does not answer is watched, but not for ever.</b> Not knowing whether a turn
+/// runs is not knowing that none does, so a look the backend leaves without a usable answer
+/// holds the restart back; after <see cref="UnansweredLooks"/> such looks in a row the watcher
+/// stops looking and the engineer is told (<c>notAnswered</c>). The restart still waits: the
+/// next review or turn call looks once more, through <see cref="Apply"/>, and makes it if the
+/// backend has answered that nothing holds it back - so nothing ever runs on the old backend.
+/// A save refused again starts a new watcher.
 ///
 /// <b>Disposing</b> stops the watcher and refuses every restart that has not begun. A restart
 /// already under way - past the lock's check that one is still waiting - is neither stopped nor
@@ -61,7 +63,7 @@ internal sealed class DeferredRestart : IDisposable
         /// <summary>A remodel run is in progress, which the restart would end with its copy half changed.</summary>
         RemodelRun,
 
-        /// <summary>The backend gave no answer, so whether a turn runs is not known.</summary>
+        /// <summary>The backend gave no usable answer, so whether a turn runs is not known.</summary>
         NoAnswer,
     }
 
@@ -87,8 +89,9 @@ internal sealed class DeferredRestart : IDisposable
         RemodelRunning,
 
         /// <summary>
-        /// The backend did not answer whether a turn runs: nothing was changed, and it still waits
-        /// - for <see cref="UnansweredLooks"/> such looks of the watcher's in a row at most.
+        /// The backend gave no usable answer to whether a turn runs: nothing was changed, and it
+        /// still waits. After <see cref="UnansweredLooks"/> such looks of the watcher's in a row
+        /// the watcher stops looking, and the restart waits for the next caller's look.
         /// </summary>
         NotAnswered,
 
@@ -149,8 +152,9 @@ internal sealed class DeferredRestart : IDisposable
     /// anything else when the restart fails.</param>
     /// <param name="restarted">Tells the page the backend was replaced.</param>
     /// <param name="failed">Tells the engineer why the restart failed.</param>
-    /// <param name="notAnswered">Tells the engineer the watcher stopped waiting for a backend that
-    /// does not answer, and how to go on.</param>
+    /// <param name="notAnswered">Tells the engineer the watcher stopped looking at a backend that
+    /// does not answer, and how to go on. Called while the restart's own lock is held, so that it
+    /// lands before anything a later save posts; it must not block.</param>
     /// <param name="poll">How often the watcher looks at what holds the restart back.</param>
     public DeferredRestart(
         Func<Hold> heldBack,
@@ -387,8 +391,8 @@ internal sealed class DeferredRestart : IDisposable
 
     /// <summary>
     /// The watcher: waits a poll, then asks. It ends when nothing waits any more - the restart
-    /// was made, by it or by anyone, or failed, or it stopped waiting for a backend that does
-    /// not answer, or the owner was disposed.
+    /// was made, by it or by anyone, or failed, or the owner was disposed - and when it stops
+    /// looking at a backend that does not answer, the restart still waiting for the next caller.
     /// </summary>
     private void Watch()
     {
@@ -430,9 +434,9 @@ internal sealed class DeferredRestart : IDisposable
                     unanswered = 0;
                 }
 
-                if (++unanswered >= UnansweredLooks)
+                if (++unanswered >= UnansweredLooks && StopWatching(since))
                 {
-                    StopWaiting(since);
+                    return;
                 }
             }
             catch (Exception)
@@ -445,11 +449,14 @@ internal sealed class DeferredRestart : IDisposable
     }
 
     /// <summary>
-    /// Stops waiting for a backend that has not answered, and says so - unless the restart was
-    /// made meanwhile, or a newer save is the one now waiting. Under the restart's own lock, so a
-    /// restart being made is never reported as one that was not.
+    /// Stops this watcher looking at a backend that has not answered, and says so - unless the
+    /// restart was made meanwhile, or a newer save is the one now waiting, whose looks are counted
+    /// afresh. The restart itself still waits. All of it under the restart's own lock: a restart
+    /// being made is never reported as one that was not, and a later save's refusal - made under
+    /// the same lock - and the promise it posts after it come after this report, never before.
     /// </summary>
-    private void StopWaiting(long since)
+    /// <returns>True when this watcher stops.</returns>
+    private bool StopWatching(long since)
     {
         lock (_restarting)
         {
@@ -457,14 +464,18 @@ internal sealed class DeferredRestart : IDisposable
             {
                 if (_disposed || !_pending || _deferrals != since)
                 {
-                    return;
+                    return false;
                 }
 
-                _pending = false;
+                if (_watcher == Thread.CurrentThread)
+                {
+                    _watcher = null;
+                }
             }
-        }
 
-        Report(_notAnswered);
+            Report(_notAnswered);
+            return true;
+        }
     }
 
     /// <summary>A report that cannot be made must not turn a made restart into a thrown one.</summary>
