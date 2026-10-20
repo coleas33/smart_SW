@@ -668,7 +668,8 @@ RESTART_HOLDS = {
     "TurnRunning": "A review turn is still running. Wait for it to finish, or press Stop.",
     "RemodelRunning": "A remodel run is in progress. Wait for it to finish, then try again.",
     "BackendUnavailable": (
-        "The review backend is not running. Save Settings to start it again, then retry."
+        "The review backend is not running or not answering. Save Settings to start it again, "
+        "then retry."
     ),
 }
 """The classes the add-in refuses a new review or a turn call with while the backend waits to be
