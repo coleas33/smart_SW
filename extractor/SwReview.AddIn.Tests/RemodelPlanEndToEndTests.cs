@@ -109,11 +109,15 @@ public sealed class RemodelPlanEndToEndTests
                 Assert.Single(world.Solidworks.Application.Calls, call => call.Member == "ActivateDoc3").Arguments[0]);
             Assert.True(File.Exists(Path.Combine(runDirectory, "package-before.json")));
 
-            // Decision 144A (feature 011 T163): the activation went through the pane seat's own gate,
-            // and the run folder's remodel.log has its line - every call it made, nothing refused.
+            // Decision 144A (feature 011 T163, T174): the activation went through the pane seat's own
+            // gate, and the run folder's remodel.log has its two lines - the begin line, then the copy
+            // activated with every call it made, nothing refused.
+            List<string> seat = PlanWorld.SeatLines(runDirectory);
+            Assert.Equal(2, seat.Count);
+            Assert.EndsWith(" seat=activate_before_dump begin", seat[0], StringComparison.Ordinal);
             Assert.EndsWith(
-                " seat=activate_before_dump status=ok gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3,ActiveDoc",
-                Assert.Single(PlanWorld.SeatLines(runDirectory)),
+                " seat=activate_before_dump status=ok outcome=activated gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3,ActiveDoc",
+                seat[1],
                 StringComparison.Ordinal);
 
             // 004 T176: the session is over before the page hears the plan was made - the copy closed
@@ -193,12 +197,13 @@ public sealed class RemodelPlanEndToEndTests
                     .Select(call => call.Member + " " + string.Join(",", call.Arguments)));
 
             List<string> seat = PlanWorld.SeatLines(runDirectory);
-            Assert.Equal(2, seat.Count);
+            Assert.Equal(4, seat.Count);
+            Assert.EndsWith(" seat=open_copy begin", seat[2], StringComparison.Ordinal);
             Assert.EndsWith(
-                " seat=open_copy status=ok gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7,GetPathName",
-                seat[1],
+                " seat=open_copy status=ok outcome=opened gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7,GetPathName",
+                seat[3],
                 StringComparison.Ordinal);
-            Assert.DoesNotContain(seat, line => line.Contains(" refused="));
+            Assert.DoesNotContain(seat, line => line.Contains(" refused=") || line.Contains(" error="));
         }
     }
 

@@ -34,19 +34,20 @@ namespace SwReview.AddIn.Remodel;
 /// <b>Every call goes through a gate</b> (owner decision 144A, feature 011 research R11): each action
 /// builds one, <see cref="Gate"/>, whose guard is <see cref="RemodelSeatGuard"/> - an allowlist of
 /// <c>ISldWorks.ActivateDoc3</c> and <c>ISldWorks.OpenDoc7</c> by their qualified keys, every other
-/// qualified key refused, every bare read handed to the read-only guard - and writes what the gate was
-/// asked as one line of the run folder's <c>remodel.log</c> (<see cref="RemodelSeatGateLog"/>). The
-/// open request's property sets are made inside the gate entry that asks for the request, and read
-/// back inside the open's, as the bridge makes them inside its open: they set a throwaway request,
-/// not a document.
+/// qualified key refused, every bare name handed to the read-only guard - and writes what the gate was
+/// asked to the run folder's <c>remodel.log</c> (<see cref="RemodelSeatGateLog"/>): a begin line before
+/// its first call, and its outcome after its last. The open request's property sets are made inside
+/// the gate entry that asks for the request, and read back inside the open's, as the bridge makes them
+/// inside its open: they set a throwaway request, not a document.
 ///
 /// <b>Only the run's copy</b> (decision 144A), as the re-modeler's every other exception is scoped to
-/// its run: a path that is not a rooted part inside a run folder's <c>copy/</c> is refused before
-/// SOLIDWORKS is asked anything (<see cref="RemodelCopy.RunDirectoryOf"/>'s rule, the bridge seat's),
-/// and a document SOLIDWORKS answers - the lookup's, or the open's - is activated, or taken as the copy
-/// opened, only once its own path is the copy's (<see cref="OpenDrawingDiscovery.SamePath"/>). A
-/// document that is not is never activated, asked its title or closed, and is not named: it may be the
-/// engineer's.
+/// its own documents: a path that is not the run's copy (<see cref="RemodelSeatCopyPath"/>) is refused
+/// before SOLIDWORKS is asked anything, and from then on the seat uses the full, canonical form it was
+/// checked in; and a document SOLIDWORKS answers - the lookup's, the activation's or the open's - is
+/// activated, or taken as the copy, only once its own path is the copy's
+/// (<see cref="OpenDrawingDiscovery.SamePath"/>, the rule the pipeline compares the active document by
+/// after each activation). A document that is not is never activated, asked its title or closed, and is
+/// not named: it may be the engineer's.
 ///
 /// Everything that decides anything else is in <see cref="BackendRemodelPipeline"/>, which is tested
 /// over a fake of this interface. This class is tested over the recording stand-ins of feature
@@ -61,6 +62,14 @@ public sealed class SwRemodelSeat : IRemodelSeat
 
     /// <summary>The gate log's name for the activation before each dump (<see cref="ActivateOpenCopy"/>).</summary>
     public const string ActivateBeforeDumpAction = "activate_before_dump";
+
+    // The outcomes the gate log names: the copy activated, or opened again; and, for the activation
+    // before a dump, which answers rather than refuses, why nothing was activated.
+    private const string ActivatedOutcome = "activated";
+    private const string OpenedOutcome = "opened";
+    private const string NotOpenOutcome = "not_open";
+    private const string NotTheCopyOutcome = "not_the_copy";
+    private const string NotActivatedOutcome = "not_activated";
 
     // The two calls beyond reading, by the qualified keys RemodelSeatGuard allowlists: the seat's own
     // literals, as BridgeDispatcher spells RemodelGuard's, so the file that makes each call names it.
@@ -86,7 +95,7 @@ public sealed class SwRemodelSeat : IRemodelSeat
     }
 
     /// <param name="observer">Told every member each action's gate is asked about, and every refusal; null for none.</param>
-    /// <param name="log">Writes an action's gate-log line to the run folder it is handed.</param>
+    /// <param name="log">Writes a gate-log line to the run folder it is handed.</param>
     internal SwRemodelSeat(ISldWorks swApp, IApplicationThread thread, ISwGateObserver? observer, Action<string, string> log)
     {
         _swApp = swApp ?? throw new ArgumentNullException(nameof(swApp));
@@ -109,7 +118,9 @@ public sealed class SwRemodelSeat : IRemodelSeat
             throw new ArgumentNullException(nameof(copyPath));
         }
 
-        string runDirectory = RequireTheRunsCopy(copyPath);
+        // From here on the path is the canonical one the check was made on: what SOLIDWORKS is handed
+        // and what every document is compared with.
+        (copyPath, string runDirectory) = RemodelSeatCopyPath.Of(copyPath);
 
         _thread.Invoke<object?>(() => Gated<object?>(OpenCopyAction, runDirectory, gate =>
         {
@@ -117,7 +128,7 @@ public sealed class SwRemodelSeat : IRemodelSeat
             if (open == null)
             {
                 Open(gate, copyPath);
-                return null;
+                return (null, OpenedOutcome);
             }
 
             if (!IsTheCopy(gate, open, copyPath))
@@ -128,7 +139,7 @@ public sealed class SwRemodelSeat : IRemodelSeat
             }
 
             Activate(gate, open, copyPath);
-            return null;
+            return (null, ActivatedOutcome);
         }));
     }
 
@@ -153,70 +164,50 @@ public sealed class SwRemodelSeat : IRemodelSeat
             throw new ArgumentNullException(nameof(copyPath));
         }
 
-        string runDirectory = RequireTheRunsCopy(copyPath);
+        // As above: the canonical path, from here on.
+        (copyPath, string runDirectory) = RemodelSeatCopyPath.Of(copyPath);
 
         return _thread.Invoke<string?>(() => Gated<string?>(ActivateBeforeDumpAction, runDirectory, gate =>
         {
             var open = gate.Call(LookupMember, () => _swApp.GetOpenDocumentByName(copyPath)) as IModelDoc2;
-            if (open == null || !IsTheCopy(gate, open, copyPath) || ActivateWithoutRebuild(gate, open, out _) == null)
+            if (open == null)
             {
-                return null;
+                return (null, NotOpenOutcome);
+            }
+
+            if (!IsTheCopy(gate, open, copyPath))
+            {
+                return (null, NotTheCopyOutcome);
+            }
+
+            if (ActivateWithoutRebuild(gate, open, out _) == null)
+            {
+                return (null, NotActivatedOutcome);
             }
 
             var active = gate.Call(ActiveDocumentMember, () => _swApp.ActiveDoc) as IModelDoc2;
-            return active == null ? null : gate.Call(PathMember, () => active.GetPathName());
+            return (active == null ? null : gate.Call(PathMember, () => active.GetPathName()), ActivatedOutcome);
         }));
     }
 
     /// <summary>
-    /// The run's copy, as the seat takes it (decision 144A): a rooted path to a part inside a run
-    /// folder's <c>copy/</c>, refused otherwise before SOLIDWORKS is asked anything; and the run folder
-    /// it sits in, where the gate log is written. A refusal here is the caller's mistake - the pipeline
-    /// resolves the copy from a run this host made - so it is an argument error, as the bridge seat's is.
+    /// One action through a gate of its own, on the application thread: its begin line written before
+    /// its first call, so an action SOLIDWORKS never returns from still leaves its line (as every bridge
+    /// request's begin line does, U27), and its outcome line once it is done, whatever it did. A log that
+    /// cannot be written fails nothing: the action's own answer, or its own error, is what the caller gets.
     /// </summary>
-    private static string RequireTheRunsCopy(string copyPath)
+    private T Gated<T>(string action, string runDirectory, Func<SwGate, (T Result, string Outcome)> work)
     {
-        if (!Path.IsPathRooted(copyPath))
-        {
-            throw new ArgumentException(
-                "'" + copyPath + "' is not a rooted path, so it names no document; the seat opens and "
-                + "activates the run's copy only.",
-                nameof(copyPath));
-        }
+        Write(runDirectory, RemodelSeatGateLog.BeginLine(action));
 
-        string runDirectory;
-        try
-        {
-            runDirectory = RemodelCopy.RunDirectoryOf(copyPath);
-        }
-        catch (Exception refusal) when (refusal is MutatingCallError || refusal is RemodelCopyError)
-        {
-            throw new ArgumentException(refusal.Message, nameof(copyPath), refusal);
-        }
-
-        if (!string.Equals(Path.GetExtension(copyPath.Trim()), RemodelCopy.PartExtension, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ArgumentException(
-                "'" + copyPath + "' is not a part (" + RemodelCopy.PartExtension + "): the run's copy is a "
-                + "part, and the seat opens and activates nothing else.",
-                nameof(copyPath));
-        }
-
-        return runDirectory;
-    }
-
-    /// <summary>
-    /// One action through a gate of its own, on the application thread, and its gate-log line written
-    /// once it is done, whatever it did. A log that cannot be written fails nothing: the action's own
-    /// answer, or its own error, is what the caller gets.
-    /// </summary>
-    private T Gated<T>(string action, string runDirectory, Func<SwGate, T> work)
-    {
         var gateLog = new RemodelSeatGateLog(_observer);
+        string? outcome = null;
         Exception? failure = null;
         try
         {
-            return work(Gate(gateLog));
+            (T result, string ended) = work(Gate(gateLog));
+            outcome = ended;
+            return result;
         }
         catch (Exception error)
         {
@@ -225,21 +216,31 @@ public sealed class SwRemodelSeat : IRemodelSeat
         }
         finally
         {
-            try
-            {
-                _log(runDirectory, gateLog.Line(action, failure));
-            }
-            catch (Exception)
-            {
-                // A log that cannot be written must not fail the action it describes.
-            }
+            Write(runDirectory, gateLog.Line(action, outcome, failure));
         }
     }
 
-    /// <summary>Whether <paramref name="document"/>'s own path is the copy's: the one rule for "the same document" in the product.</summary>
+    private void Write(string runDirectory, string line)
+    {
+        try
+        {
+            _log(runDirectory, line);
+        }
+        catch (Exception)
+        {
+            // A log that cannot be written must not fail the action it describes.
+        }
+    }
+
+    /// <summary>Whether <paramref name="document"/>'s own path is the copy's, by the rule the pipeline compares the active document with.</summary>
     private static bool IsTheCopy(SwGate gate, IModelDoc2 document, string copyPath) =>
         OpenDrawingDiscovery.SamePath(gate.Call(PathMember, () => document.GetPathName()), copyPath);
 
+    /// <summary>
+    /// `remodel.open_copy`'s activation: refused when SOLIDWORKS activates nothing or reports error
+    /// bits, and - since <c>ActivateDoc3</c> activates by title - when the document it answers is not the
+    /// copy (decision 144A's review), so the engineer's document is never reported activated as the copy.
+    /// </summary>
     private void Activate(SwGate gate, IModelDoc2 open, string copyPath)
     {
         object? activated = ActivateWithoutRebuild(gate, open, out int errors);
@@ -250,6 +251,13 @@ public sealed class SwRemodelSeat : IRemodelSeat
                 "SOLIDWORKS would not activate the copy that is already open ("
                 + copyPath + "): ActivateDoc3 reported "
                 + errors.ToString(CultureInfo.InvariantCulture) + ".");
+        }
+
+        if (!(activated is IModelDoc2 document) || !IsTheCopy(gate, document, copyPath))
+        {
+            throw new InvalidOperationException(
+                "SOLIDWORKS answered the activation of the copy (" + copyPath + ") with a document that is "
+                + "not this run's copy.");
         }
     }
 

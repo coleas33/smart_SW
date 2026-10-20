@@ -79,8 +79,9 @@ public class ReadOnlyGuardTests
     /// Feature 011 review (2026-09-23): an interface-qualified key is judged by its member half,
     /// so a read-only gate refuses <c>IDrawingDoc.ActivateSheet</c> exactly as it refuses
     /// <c>ActivateSheet</c>. Only the allowlist guards (<see cref="RemodelGuard"/>,
-    /// <see cref="DrawingOpenGuard"/>) accept a qualified writer key, and they judge it before this
-    /// guard is asked; a qualified key on a read-only gate had passed whatever it named.
+    /// <see cref="DrawingOpenGuard"/> and, since decision 144A, <see cref="RemodelSeatGuard"/>, which
+    /// accepts <c>ISldWorks.ActivateDoc3</c> below) accept a qualified writer key, and they judge it
+    /// before this guard is asked; a qualified key on a read-only gate had passed whatever it named.
     /// </summary>
     [Theory]
     [InlineData("IDrawingDoc.ActivateSheet")]
@@ -1569,23 +1570,56 @@ public class DrawingFamilyReadAuditTests
     /// <summary>
     /// A literal as the read-only guard judges it: its member half when it is an
     /// interface-qualified key (feature 011 review, 2026-09-23), unless it is a key of one of the
-    /// allowlist guards, which judge their own keys before the read-only guard is asked. Edited
-    /// deliberately for decision 144A (2026-10-19): the pane seat's guard is the third, and its two
-    /// keys are literals of the seat that makes the calls.
+    /// two allowlist guards, which judge their own keys before the read-only guard is asked. The pane
+    /// seat's guard (decision 144A) is not among them: its keys are judged whole only in the seat's own
+    /// file (<see cref="IsTheSeatsOwnKey"/>), so a key carried to another file is judged by its member
+    /// half here as before.
     /// </summary>
     internal static string Judged(string literal) =>
         CallKey.IsQualified(literal)
             && !RemodelGuard.AllowedKeys.Contains(literal)
             && !DrawingOpenGuard.AllowedKeys.Contains(literal)
-            && !RemodelSeatGuard.AllowedKeys.Contains(literal)
             ? CallKey.BareName(literal)
             : literal;
+
+    /// <summary>The pane seat's file, by its path under the extractor folder (decision 144A).</summary>
+    internal const string PaneSeatFile = "SwReview.AddIn/Remodel/SwRemodelSeat.cs";
+
+    /// <summary>
+    /// Decision 144A's review (T173): a literal of the pane seat's own file that is one of its guard's
+    /// two keys is the seat's own call, which its own guard judges first - in that file and nowhere else,
+    /// as <see cref="IsTheProbesOwnCall"/> keys the probe's calls by its file.
+    /// </summary>
+    private static bool IsTheSeatsOwnKey((string Literal, string Where) literal) =>
+        literal.Where == PaneSeatFile && RemodelSeatGuard.AllowedKeys.Contains(literal.Literal);
+
+    /// <summary>
+    /// Decision 144A's review (T173): the pane seat's two keys are literals of its own file and of no
+    /// other product file, so its guard's exemption is exercised and stays its own; a key carried to
+    /// another file fails here and in the audit.
+    /// </summary>
+    [Fact]
+    public void TheSeatsOwnKeysAreLiteralsOfItsOwnFileAlone()
+    {
+        var named = Literals()
+            .Where(literal => RemodelSeatGuard.AllowedKeys.Contains(literal.Literal))
+            .Select(literal => literal.Literal + " in " + literal.Where)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(entry => entry, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(
+            new[] { "ISldWorks.ActivateDoc3 in " + PaneSeatFile, "ISldWorks.OpenDoc7 in " + PaneSeatFile },
+            named);
+    }
 
     /// <summary>
     /// Edited deliberately for decision 144A (2026-10-19): a literal of <c>probe remodel</c>'s host that
     /// the probe's own guard lets through is not a read but the probe's own call
     /// (<see cref="IsTheProbesOwnCall"/>), as decision 21A's audit judges the probe's creation calls;
     /// <see cref="TheProbesOwnCallsAreExactlyItsTwoWritersAndOnlyItsGuardLetsThemThrough"/> pins which.
+    /// And on the decision's review (T173), a literal of the pane seat's file that is one of its guard's
+    /// two keys is the seat's own call (<see cref="IsTheSeatsOwnKey"/>), in that file only.
     /// </summary>
     [Fact]
     public void NoLiteralOfTheProductSourceIsRefusedByTheTableExceptTheNamedOnes()
@@ -1594,7 +1628,8 @@ public class DrawingFamilyReadAuditTests
         var refused = Literals()
             .Where(literal => table.Contains(Judged(literal.Literal))
                 && !NamedLiterals.ContainsKey(literal)
-                && !IsTheProbesOwnCall(literal))
+                && !IsTheProbesOwnCall(literal)
+                && !IsTheSeatsOwnKey(literal))
             .Select(literal => $"\"{literal.Literal}\" in {literal.Where}")
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -1634,6 +1669,11 @@ public class DrawingFamilyReadAuditTests
 
         Assert.Equal(new[] { "MoveToFolder", "NewDocument" }, named);
         Assert.All(named, member => new RemodelProbeGuard().Assert(member));
+
+        // Only its guard (the decision's review, T176): every other gate the product builds refuses each.
+        Assert.Equal(
+            new[] { "RemodelProbeGuard MoveToFolder", "RemodelProbeGuard NewDocument" },
+            GuardSweep.LetThrough(GuardSweep.ProductGates(), named));
     }
 
     /// <summary>
@@ -1791,34 +1831,64 @@ internal static class GuardSweep
 /// </summary>
 public class GuardSweepTests
 {
+    /// <summary>
+    /// A type declared to implement <see cref="ICallGuard"/>: a class, a struct or a record, generic or
+    /// not, with a primary constructor or not. Widened on the decision's review (T173), which found the
+    /// first form read classes alone.
+    /// </summary>
     private static readonly Regex GuardDeclaration = new Regex(
-        @"\bclass\s+(\w+)\s*(?::[^{]*)?\bICallGuard\b", RegexOptions.CultureInvariant);
+        @"\b(?:class|struct|record(?:\s+(?:class|struct))?)\s+(\w+)\s*(?:<[^>{]*>)?\s*(?:\([^)]*\))?\s*:[^{;]*\bICallGuard\b",
+        RegexOptions.CultureInvariant);
 
     /// <summary>
-    /// One of every concrete <see cref="ICallGuard"/> of the extractor's assembly, where every guard
-    /// lives (its <c>Guard</c> folder), and none declared anywhere else in the product's source.
+    /// One of every concrete <see cref="ICallGuard"/> the extractor's and the console's assemblies
+    /// define - where every guard lives is the extractor's <c>Guard</c> folder - and none declared in any
+    /// other source file of the three projects (the add-in's own assembly, which this suite does not
+    /// load, is read by the add-in suite's <c>TheAddInDefinesNoGuardOfItsOwn</c>). Widened on the
+    /// decision's review (T173): it read the extractor's assembly alone and the read audit's files, which
+    /// skip every folder named <c>Guard</c>.
     /// </summary>
     [Fact]
     public void TheProductsGatesHoldOneOfEveryGuardTheProductDefines()
     {
-        var defined = typeof(ICallGuard).Assembly.GetTypes()
-            .Where(type => typeof(ICallGuard).IsAssignableFrom(type) && type.IsClass && !type.IsAbstract)
-            .Select(type => type.Name)
+        var defined = new[] { typeof(ICallGuard).Assembly, typeof(SwReview.Extractor.Console.Program).Assembly }
+            .SelectMany(assembly => assembly.GetTypes())
+            .Where(type => typeof(ICallGuard).IsAssignableFrom(type) && !type.IsInterface && !type.IsAbstract)
+            .Select(type => type.FullName!)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
         var swept = GuardSweep.ProductGates()
-            .Select(gate => gate.GetType().Name)
+            .Select(gate => gate.GetType().FullName!)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
-        Assert.Contains(nameof(RemodelSeatGuard), defined);
+        Assert.Contains(typeof(RemodelSeatGuard).FullName, defined);
         Assert.Equal(defined, swept);
 
-        var elsewhere = DrawingFamilyReadAuditTests.ProductSourceFiles()
+        string root = DrawingFamilyReadAuditTests.ExtractorRoot();
+        string guardFolder = Path.Combine(root, "SwReview.Extractor", "Guard") + Path.DirectorySeparatorChar;
+        var elsewhere = new[] { "SwReview.Extractor", "SwReview.AddIn", "SwReview.Extractor.Console" }
+            .SelectMany(project => Directory.EnumerateFiles(Path.Combine(root, project), "*.cs", SearchOption.AllDirectories))
+            .Where(file => !file.Split(Path.DirectorySeparatorChar).Any(part => part == "obj" || part == "bin"))
+            .Where(file => !file.StartsWith(guardFolder, StringComparison.OrdinalIgnoreCase))
             .SelectMany(file => GuardDeclaration.Matches(File.ReadAllText(file)).Cast<Match>()
-                .Select(match => match.Groups[1].Value + " in " + Path.GetFileName(file)))
+                .Select(match => match.Groups[1].Value + " in " + file.Substring(root.Length).TrimStart('\\', '/')))
             .ToList();
         Assert.True(elsewhere.Count == 0, "Guards declared outside the extractor's Guard folder: " + string.Join(", ", elsewhere));
+    }
+
+    /// <summary>The declaration pattern reads every form a guard could be declared in, and nothing else.</summary>
+    [Theory]
+    [InlineData("public sealed class RemodelSeatGuard : ICallGuard", true)]
+    [InlineData("internal class Guard<T> : Base, ICallGuard", true)]
+    [InlineData("public struct StructGuard : ICallGuard", true)]
+    [InlineData("public record RecordGuard(string Name) : ICallGuard", true)]
+    [InlineData("public record struct RecordStructGuard : ICallGuard", true)]
+    [InlineData("public sealed class SwRemodelSeat : IRemodelSeat", false)]
+    [InlineData("private readonly ICallGuard _guard;", false)]
+    public void TheDeclarationPatternReadsEveryFormOfAGuard(string declaration, bool isGuard)
+    {
+        Assert.Equal(isGuard, GuardDeclaration.IsMatch(declaration));
     }
 }
 
@@ -1923,7 +1993,7 @@ public class DocumentLifecycleFamilyTests
 
     internal static bool BelongsToAFamily(string name) => Family.IsMatch(name);
 
-    /// <summary>Every family member of the three interfaces, interface-qualified, readers included.</summary>
+    /// <summary>Every family member of the four interfaces, interface-qualified, readers included.</summary>
     internal static IReadOnlyList<string> FamilyMembers() => GuardSweep.Members(Interfaces, Family);
 
     private static IEnumerable<string> RefusedFamilyMembers() => GuardSweep.ToRefuse(FamilyMembers(), Allowed.Keys);
@@ -2123,8 +2193,9 @@ public class DocumentLifecycleFamilyTests
 public class DocumentWriteFamilyTests
 {
     /// <summary>
-    /// The 34 interfaces the generated tables are written against: the three of
-    /// <see cref="DocumentLifecycleFamilyTests"/>; the document types a model document also is, whose
+    /// The 34 interfaces the generated tables are written against: the four of
+    /// <see cref="DocumentLifecycleFamilyTests"/> (three until decision 144A added <c>IAssemblyDoc</c>,
+    /// which this list named already); the document types a model document also is, whose
     /// saves, replaces and rebuilds act on that same document (004's guard-allowlist.md had recorded
     /// <c>IPartDoc.SaveToFile</c> to <c>SaveToFile3</c> as open); and every interface one of the
     /// guard's generated tables reflects - decision 21A's creation interfaces, <c>IFeatureManager</c>

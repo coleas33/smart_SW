@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SwReview.AddIn.Remodel;
@@ -15,21 +16,22 @@ using Xunit;
 namespace SwReview.AddIn.Tests;
 
 /// <summary>
-/// Feature 004 T159 (build order lane E) and owner decision 144A (feature 011 T163, research R11):
-/// <see cref="SwRemodelSeat"/>, the re-modeler's pane seat - <c>remodel.open_copy</c>
+/// Feature 004 T159 (build order lane E) and owner decision 144A (feature 011 T163 and T174,
+/// research R11): <see cref="SwRemodelSeat"/>, the re-modeler's pane seat - <c>remodel.open_copy</c>
 /// (<see cref="SwRemodelSeat.ActivateOrOpen"/>) and the activation both dumps make
 /// (<see cref="SwRemodelSeat.ActivateOpenCopy"/>) - over the recording stand-ins: no COM object
 /// exists and SOLIDWORKS is never started.
 ///
 /// What it must do is small and exact. Find the copy among the documents SOLIDWORKS already has open,
 /// confirm the document found is the run's copy, and activate it by its title without a rebuild; for
-/// <c>remodel.open_copy</c>, open it again when SOLIDWORKS does not have it - writable, through the
-/// one open request (<c>Silent | LoadModel = 17</c>, never <c>ReadOnly</c> or <c>ViewOnly</c>), for
-/// the engineer's Save As - and confirm the document opened is the copy; all on the application
-/// thread. What it must never do is reach SOLIDWORKS except through its gate, whose guard
-/// (<see cref="RemodelSeatGuard"/>) allows <c>ISldWorks.ActivateDoc3</c> and <c>ISldWorks.OpenDoc7</c>
-/// by their qualified keys and hands every bare read to the read-only guard; open anything for a dump;
-/// or touch a document that is not the run's copy.
+/// <c>remodel.open_copy</c>, confirm the document activated is the copy, and open the copy again when
+/// SOLIDWORKS does not have it - writable, through the one open request (<c>Silent | LoadModel = 17</c>,
+/// never <c>ReadOnly</c> or <c>ViewOnly</c>), for the engineer's Save As - and confirm the document
+/// opened is the copy; all on the application thread, each action between a begin line and an outcome
+/// line in the run's <c>remodel.log</c>. What it must never do is reach SOLIDWORKS except through its
+/// gate, whose guard (<see cref="RemodelSeatGuard"/>) allows <c>ISldWorks.ActivateDoc3</c> and
+/// <c>ISldWorks.OpenDoc7</c> by their qualified keys and hands every bare name to the read-only guard;
+/// open anything for a dump; or touch a document that is not the run's copy.
 ///
 /// The seat runs only on the pilot workstation, so these list exactly the calls it makes: the gate's
 /// journal places every interop call under the gate entry it was made under, and a call made outside
@@ -41,8 +43,11 @@ public sealed class SwRemodelSeatTests
 
     private const string SourcePath = "C:\\work\\bracket.SLDPRT";
 
-    private static readonly string RunDirectory =
-        Path.Combine(Path.GetTempPath(), "swreview-seat", "20260927-100000-bracket-remodel");
+    private const string RunDirectory = "C:\\Fictional\\runs\\20260927-100000-bracket-remodel";
+
+    private const string OpenCopyBegin = "seat=open_copy begin";
+
+    private const string DumpBegin = "seat=activate_before_dump begin";
 
     private static readonly string CopyPath = RemodelCopy.CopyPathFor(RunDirectory, SourcePath);
 
@@ -232,8 +237,8 @@ public sealed class SwRemodelSeatTests
     /// <summary>
     /// Decision 144A: every call of the activation goes through the seat's gate, one gate entry per
     /// interop call, in this order - the lookup, the copy's path, its title, the activation by the
-    /// qualified key, the active document and its path - and the gate log says so in one line of the
-    /// run folder's <c>remodel.log</c>, with nothing refused.
+    /// qualified key, the active document and its path - and the gate log says so in the run folder's
+    /// <c>remodel.log</c>: a begin line before the calls, then the outcome with nothing refused.
     /// </summary>
     [Fact]
     public void ActivateOpenCopy_EveryCallGoesThroughTheSeatsGateAndTheLogSaysSo()
@@ -253,10 +258,15 @@ public sealed class SwRemodelSeatTests
             _journal.Timeline());
         Assert.Empty(_journal.Refusals);
         Assert.Equal(
-            (RunDirectory,
-             "seat=activate_before_dump status=ok gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3,ActiveDoc",
-             true),
-            Assert.Single(_log));
+            new[]
+            {
+                (RunDirectory, DumpBegin, true),
+                (RunDirectory,
+                 "seat=activate_before_dump status=ok outcome=activated "
+                 + "gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3,ActiveDoc",
+                 true),
+            },
+            _log);
     }
 
     /// <summary>
@@ -276,15 +286,45 @@ public sealed class SwRemodelSeatTests
             _journal.Timeline());
         Assert.Equal(new[] { "GetPathName" }, _other.Document.Members);
         Assert.Equal(
-            "seat=activate_before_dump status=ok gated=GetOpenDocumentByName,GetPathName",
-            Assert.Single(_log).Line);
+            new[] { DumpBegin, "seat=activate_before_dump status=ok outcome=not_the_copy gated=GetOpenDocumentByName,GetPathName" },
+            Lines());
+    }
+
+    /// <summary>
+    /// Decision 144A's review (T174): each way the activation ends is the line's outcome, so a line
+    /// that says <c>status=ok</c> also says whether the copy was activated.
+    /// </summary>
+    [Theory]
+    [InlineData("the copy is open", "activated")]
+    [InlineData("the copy is not open", "not_open")]
+    [InlineData("the lookup answers another document", "not_the_copy")]
+    [InlineData("the activation answers nothing", "not_activated")]
+    public void ActivateOpenCopy_EachWayItEndsIsTheLinesOutcome(string state, string outcome)
+    {
+        switch (state)
+        {
+            case "the copy is not open":
+                _application.Answer("GetOpenDocumentByName", null);
+                break;
+            case "the lookup answers another document":
+                _application.Answer("GetOpenDocumentByName", _other.Instance);
+                break;
+            case "the activation answers nothing":
+                _application.Answer("ActivateDoc3", null);
+                break;
+        }
+
+        Seat().ActivateOpenCopy(CopyPath);
+
+        Assert.StartsWith("seat=activate_before_dump status=ok outcome=" + outcome + " gated=", Lines().Last(), StringComparison.Ordinal);
     }
 
     // ---- ActivateOrOpen: remodel.open_copy (decision 144A's seat-level tests) ---------------------
 
     /// <summary>
     /// The copy SOLIDWORKS has open is confirmed to be the copy, then activated by its title, the user's
-    /// preferences not consulted and with no rebuild; nothing is opened and nothing else is read.
+    /// preferences not consulted and with no rebuild, and the document activated is confirmed to be the
+    /// copy too (T174); nothing is opened and nothing else is read.
     /// </summary>
     [Fact]
     public void ActivateOrOpen_AnOpenCopyIsActivatedByItsTitleWithNoRebuildAndNothingIsOpened()
@@ -298,6 +338,7 @@ public sealed class SwRemodelSeatTests
                 "gate GetPathName", "copy.GetPathName",
                 "gate GetTitle", "copy.GetTitle",
                 "gate ISldWorks.ActivateDoc3", "ISldWorks.ActivateDoc3",
+                "gate GetPathName", "copy.GetPathName",
             },
             _journal.Timeline());
         Assert.Equal(new object?[] { CopyPath }, _application.Calls[0].Arguments);
@@ -307,8 +348,12 @@ public sealed class SwRemodelSeatTests
         Assert.Empty(_request.Calls);
         Assert.Empty(_journal.Refusals);
         Assert.Equal(
-            (RunDirectory, "seat=open_copy status=ok gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3", true),
-            Assert.Single(_log));
+            new[]
+            {
+                (RunDirectory, OpenCopyBegin, true),
+                (RunDirectory, "seat=open_copy status=ok outcome=activated gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3", true),
+            },
+            _log);
     }
 
     /// <summary>
@@ -339,8 +384,12 @@ public sealed class SwRemodelSeatTests
         Assert.DoesNotContain("ActivateDoc3", _application.Members);
         Assert.Empty(_journal.Refusals);
         Assert.Equal(
-            (RunDirectory, "seat=open_copy status=ok gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7,GetPathName", true),
-            Assert.Single(_log));
+            new[]
+            {
+                (RunDirectory, OpenCopyBegin, true),
+                (RunDirectory, "seat=open_copy status=ok outcome=opened gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7,GetPathName", true),
+            },
+            _log);
     }
 
     /// <summary>
@@ -395,8 +444,12 @@ public sealed class SwRemodelSeatTests
             new[] { "gate ISldWorks.OpenDoc7", "ISldWorks.OpenDoc7", "request.get_Error", "request.get_Warning" },
             _journal.Timeline().SkipWhile(entry => entry != "gate ISldWorks.OpenDoc7"));
         Assert.Equal(
-            "seat=open_copy status=error gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7 error=InvalidOperationException",
-            Assert.Single(_log).Line);
+            new[]
+            {
+                OpenCopyBegin,
+                "seat=open_copy status=error gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7 error=InvalidOperationException",
+            },
+            Lines());
     }
 
     /// <summary>
@@ -416,8 +469,12 @@ public sealed class SwRemodelSeatTests
         Assert.Equal(new[] { "GetOpenDocumentByName", "GetOpenDocSpec", "OpenDoc7" }, _application.Members);
         Assert.Equal(new[] { "GetPathName" }, _other.Document.Members);
         Assert.Equal(
-            "seat=open_copy status=error gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7,GetPathName error=InvalidOperationException",
-            Assert.Single(_log).Line);
+            new[]
+            {
+                OpenCopyBegin,
+                "seat=open_copy status=error gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7,GetPathName error=InvalidOperationException",
+            },
+            Lines());
     }
 
     /// <summary>
@@ -438,8 +495,8 @@ public sealed class SwRemodelSeatTests
         Assert.Equal(new[] { "GetPathName" }, _other.Document.Members);
         Assert.Empty(_request.Calls);
         Assert.Equal(
-            "seat=open_copy status=error gated=GetOpenDocumentByName,GetPathName error=InvalidOperationException",
-            Assert.Single(_log).Line);
+            new[] { OpenCopyBegin, "seat=open_copy status=error gated=GetOpenDocumentByName,GetPathName error=InvalidOperationException" },
+            Lines());
     }
 
     /// <summary>An activation SOLIDWORKS refuses, or answers with error bits, is an error naming what it reported.</summary>
@@ -460,11 +517,53 @@ public sealed class SwRemodelSeatTests
         Assert.Contains("ActivateDoc3 reported " + errors, refusal.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("OpenDoc7", _application.Members);
         Assert.Equal(
-            "seat=open_copy status=error gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3 error=InvalidOperationException",
-            Assert.Single(_log).Line);
+            new[]
+            {
+                OpenCopyBegin,
+                "seat=open_copy status=error gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3 error=InvalidOperationException",
+            },
+            Lines());
     }
 
-    /// <summary>Both ways, every call and the log line are made inside one hop onto the application thread.</summary>
+    /// <summary>
+    /// Decision 144A's review (T174): <c>ActivateDoc3</c> activates by title, so the document it answers
+    /// is asked its path too, and one that is not the copy is a refusal that does not name it - the
+    /// engineer's document is never reported activated as the copy.
+    /// </summary>
+    [Fact]
+    public void ActivateOrOpen_AnActivationThatAnswersAnotherDocumentIsRefused()
+    {
+        _application.Answer("ActivateDoc3", _other.Instance);
+
+        var refusal = Assert.Throws<InvalidOperationException>(() => Seat().ActivateOrOpen(CopyPath));
+
+        Assert.Contains(CopyPath, refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(SourcePath, refusal.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(new[] { "GetPathName" }, _other.Document.Members);
+        Assert.DoesNotContain("OpenDoc7", _application.Members);
+        Assert.Equal(
+            "seat=open_copy status=error gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3 error=InvalidOperationException",
+            Lines().Last());
+    }
+
+    /// <summary>
+    /// Decision 144A's review (T174): a request SOLIDWORKS will not describe is refused before any open
+    /// is asked for, and the log names the one gate entry that failed.
+    /// </summary>
+    [Fact]
+    public void ActivateOrOpen_ARequestSolidworksWillNotDescribeIsRefusedAndNothingIsOpened()
+    {
+        _application.Answer("GetOpenDocumentByName", null).Answer("GetOpenDocSpec", null);
+
+        Assert.Throws<InvalidOperationException>(() => Seat().ActivateOrOpen(CopyPath));
+
+        Assert.Equal(new[] { "GetOpenDocumentByName", "GetOpenDocSpec" }, _application.Members);
+        Assert.Equal(
+            new[] { OpenCopyBegin, "seat=open_copy status=error gated=GetOpenDocumentByName,GetOpenDocSpec error=InvalidOperationException" },
+            Lines());
+    }
+
+    /// <summary>Both ways, every call and both log lines are made inside one hop onto the application thread.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -491,7 +590,8 @@ public sealed class SwRemodelSeatTests
 
         Assert.Equal(1, _thread.Invocations);
         Assert.False(outside);
-        Assert.True(Assert.Single(_log).OnTheApplicationThread);
+        Assert.Equal(2, _log.Count);
+        Assert.All(_log, entry => Assert.True(entry.OnTheApplicationThread, entry.Line));
     }
 
     [Fact]
@@ -504,12 +604,16 @@ public sealed class SwRemodelSeatTests
         Assert.Empty(_log);
     }
 
+    // ---- both actions: the copy's path, a call that throws, the begin line ------------------------
+
     /// <summary>
-    /// Decision 144A, the copy's scope: both actions take only the run's copy - a rooted part inside a
-    /// run folder's <c>copy/</c> (<c>RemodelCopy.RunDirectoryOf</c>'s rule) - and refuse any other path
-    /// before SOLIDWORKS is asked anything, with no hop and no log line: the engineer's part, an assembly
-    /// or a drawing in a <c>copy/</c> folder, a part in any other folder, a path that is not rooted, and
-    /// an empty one.
+    /// Decision 144A, the copy's scope: both actions take only the run's copy - a full path to a part
+    /// inside a run folder's <c>copy/</c> (<c>RemodelCopy.RunDirectoryOf</c>'s rule) - and refuse any
+    /// other path before SOLIDWORKS is asked anything, with no hop and no log line: the engineer's
+    /// part, an assembly or a drawing in a <c>copy/</c> folder, a part in any other folder, a path that
+    /// is not rooted and an empty one; and, since the review (T174), a <c>copy/</c> folder at the root of
+    /// a drive or a share, which is in no run folder, a path relative to a drive's own folder or to the
+    /// root of the current drive, a path that climbs out of a folder (<c>..</c>), and a device path.
     /// </summary>
     [Theory]
     [MemberData(nameof(PathsThatAreNotARunsCopy))]
@@ -538,20 +642,112 @@ public sealed class SwRemodelSeatTests
             Path.Combine(RemodelCopy.CopyFolderName, "bracket-RMS.SLDPRT"),
             string.Empty,
             "   ",
+            "C:\\copy\\bracket-RMS.SLDPRT",
+            "\\\\server\\share\\copy\\bracket-RMS.SLDPRT",
+            "C:copy\\bracket-RMS.SLDPRT",
+            "\\Fictional\\runs\\20260927-100000-bracket-remodel\\copy\\bracket-RMS.SLDPRT",
+            Path.Combine(RunDirectory, "copy", "..", "copy", "bracket-RMS.SLDPRT"),
+            "\\\\?\\" + CopyPath,
         };
 
         return paths.SelectMany(path => new[] { new object[] { path, true }, new object[] { path, false } });
     }
 
+    /// <summary>
+    /// Decision 144A's review (T174): a path is checked in its full, canonical form, and that form is what
+    /// SOLIDWORKS is handed and what the log is written beside - spaces around it and forward slashes do
+    /// not reach SOLIDWORKS.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void APathIsHandedToSolidworksInTheFormItWasCheckedIn(bool open)
+    {
+        foreach (string spelling in new[] { "  " + CopyPath + " ", CopyPath.Replace('\\', '/') })
+        {
+            _application.Calls.Clear();
+            _log.Clear();
+            SwRemodelSeat seat = Seat();
+            if (open)
+            {
+                seat.ActivateOrOpen(spelling);
+            }
+            else
+            {
+                seat.ActivateOpenCopy(spelling);
+            }
+
+            Assert.Equal(new object?[] { CopyPath }, _application.Calls[0].Arguments);
+            Assert.All(_log, entry => Assert.Equal(RunDirectory, entry.RunDirectory));
+        }
+    }
+
+    /// <summary>
+    /// Decision 144A's review (T174): a call SOLIDWORKS fails reaches the caller as it was thrown, the
+    /// same exception, and the log names its type and the members gated up to it.
+    /// </summary>
+    [Theory]
+    [InlineData("GetOpenDocumentByName", "GetOpenDocumentByName")]
+    [InlineData("OpenDoc7", "GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7")]
+    [InlineData("ActivateDoc3", "GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3")]
+    public void ACallThatThrowsReachesTheCallerUnchangedAndTheLogNamesItsType(string member, string gated)
+    {
+        var failure = new COMException("The remote procedure call failed.", unchecked((int)0x800706BE));
+        if (member == "OpenDoc7")
+        {
+            _application.Answer("GetOpenDocumentByName", null);
+        }
+
+        _application.Fail(member, failure);
+
+        COMException thrown = Assert.Throws<COMException>(() => Seat().ActivateOrOpen(CopyPath));
+
+        Assert.Same(failure, thrown);
+        Assert.Equal(new[] { OpenCopyBegin, "seat=open_copy status=error gated=" + gated + " error=COMException" }, Lines());
+    }
+
+    /// <summary>
+    /// Decision 144A's review (T174): the begin line is written before the first call, so an action that
+    /// SOLIDWORKS never returns from - a native exit inside the open, say - still leaves its line in the
+    /// run's <c>remodel.log</c>, as every bridge request's begin line does (U27).
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TheBeginLineIsWrittenBeforeTheFirstCall(bool open)
+    {
+        int linesAtTheFirstCall = -1;
+        _application.Handle("GetOpenDocumentByName", _ =>
+        {
+            linesAtTheFirstCall = _log.Count;
+            return _copy.Instance;
+        });
+
+        if (open)
+        {
+            Seat().ActivateOrOpen(CopyPath);
+        }
+        else
+        {
+            Seat().ActivateOpenCopy(CopyPath);
+        }
+
+        Assert.Equal(1, linesAtTheFirstCall);
+        Assert.Equal(open ? OpenCopyBegin : DumpBegin, Lines()[0]);
+    }
+
     // ---- the seat's gate and its log -------------------------------------------------------------
 
     /// <summary>
-    /// The gate each action builds is the seat's own: its two keys and the bare reads pass, and any
-    /// other qualified key, or a bare name the read-only guard refuses, is refused and told to the
-    /// observer - so a call outside the allowlist cannot reach SOLIDWORKS from the seat.
+    /// The gate each action builds is the seat's own: its two keys pass, any other qualified key is
+    /// refused and told to the observer, and a bare name is the read-only guard's answer - the reads pass,
+    /// and so do the bare names the read-only guard leaves allowed (<c>CloseDoc</c>, <c>OpenDoc6</c>,
+    /// <c>OpenDoc7</c>), which is why the seat names its two calls by their qualified keys. Renamed on
+    /// decision 144A's review (T176): it was <c>TheSeatsGateAllowsItsTwoKeysAndTheReadsAndRefusesAnyOtherCall</c>,
+    /// which said more than the guard does.
     /// </summary>
     [Fact]
-    public void TheSeatsGateAllowsItsTwoKeysAndTheReadsAndRefusesAnyOtherCall()
+    public void TheSeatsGateAllowsItsTwoKeysAndHandsEveryBareNameToTheReadOnlyGuard()
     {
         var observer = new RecordingGateObserver();
         SwGate gate = SwRemodelSeat.Gate(observer);
@@ -559,7 +755,7 @@ public sealed class SwRemodelSeatTests
         foreach (string allowed in new[]
                  {
                      "ISldWorks.ActivateDoc3", "ISldWorks.OpenDoc7", "GetOpenDocumentByName", "GetPathName", "GetTitle",
-                     "ActiveDoc", "GetOpenDocSpec",
+                     "ActiveDoc", "GetOpenDocSpec", "CloseDoc", "OpenDoc6", "OpenDoc7",
                  })
         {
             Assert.True(gate.Call(allowed, () => true), allowed);
@@ -570,6 +766,7 @@ public sealed class SwRemodelSeatTests
             "ISldWorks.CloseDoc", "ISldWorks.OpenDoc6", "ISldWorks.CloseAllDocuments", "ISldWorks.IActivateDoc3",
             "ISldWorks.ActivateDoc2", "IModelDoc2.Save3", "IModelDoc2.ForceRebuild3", "IModelDoc2.GetPathName",
             "isldworks.activatedoc3", "ActivateDoc3", "Save3", "SaveAs", "ForceRebuild3", "CloseAllDocuments",
+            "NewDocument", "MoveToFolder", "Isolate",
         };
         foreach (string key in refused)
         {
@@ -579,6 +776,21 @@ public sealed class SwRemodelSeatTests
         }
 
         Assert.Equal(refused, observer.Refusals.Select(refusal => refusal.MemberName));
+    }
+
+    /// <summary>
+    /// Decision 144A's review (T173): the add-in defines no guard of its own - the pane seat's is the
+    /// extractor's <see cref="RemodelSeatGuard"/>, where every guard lives - so the extractor suite's
+    /// <c>GuardSweepTests</c>, which cannot load this assembly, sweeps every guard the product builds.
+    /// </summary>
+    [Fact]
+    public void TheAddInDefinesNoGuardOfItsOwn()
+    {
+        Type[] guards = typeof(SwRemodelSeat).Assembly.GetTypes()
+            .Where(type => typeof(ICallGuard).IsAssignableFrom(type) && !type.IsInterface)
+            .ToArray();
+
+        Assert.Empty(guards);
     }
 
     /// <summary>A log that cannot be written fails nothing: the action answers as it would, and a failed one throws its own error.</summary>
@@ -595,9 +807,17 @@ public sealed class SwRemodelSeatTests
         Assert.Throws<InvalidOperationException>(() => seat.ActivateOrOpen(CopyPath));
     }
 
-    /// <summary>The line names the action, the status and the distinct members gated, in the order first seen.</summary>
+    /// <summary>The begin line names the action alone.</summary>
     [Fact]
-    public void TheGateLogLineNamesTheActionTheStatusAndEachMemberOnceInTheOrderFirstSeen()
+    public void TheBeginLineNamesTheActionAlone()
+    {
+        Assert.Equal(OpenCopyBegin, RemodelSeatGateLog.BeginLine(SwRemodelSeat.OpenCopyAction));
+        Assert.Equal(DumpBegin, RemodelSeatGateLog.BeginLine(SwRemodelSeat.ActivateBeforeDumpAction));
+    }
+
+    /// <summary>The line names the action, the status, the outcome and the distinct members gated, in the order first seen.</summary>
+    [Fact]
+    public void TheGateLogLineNamesTheActionTheStatusTheOutcomeAndEachMemberOnceInTheOrderFirstSeen()
     {
         var log = new RemodelSeatGateLog(null);
         foreach (string member in new[] { "GetOpenDocumentByName", "GetPathName", "GetTitle", "getpathname", "ISldWorks.ActivateDoc3" })
@@ -606,14 +826,14 @@ public sealed class SwRemodelSeatTests
         }
 
         Assert.Equal(
-            "seat=open_copy status=ok gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3",
-            log.Line(SwRemodelSeat.OpenCopyAction, null));
-        Assert.Equal("seat=open_copy status=ok gated=", log.Line(SwRemodelSeat.OpenCopyAction, null));
+            "seat=open_copy status=ok outcome=activated gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3",
+            log.Line(SwRemodelSeat.OpenCopyAction, "activated", null));
+        Assert.Equal("seat=open_copy status=ok outcome=opened gated=", log.Line(SwRemodelSeat.OpenCopyAction, "opened", null));
     }
 
     /// <summary>
-    /// A refusal is named in <c>refused=</c>, and a failure by its exception's type alone: a message can
-    /// quote a path, and the run folder's log names no document.
+    /// A refusal is named in <c>refused=</c>, and a failure by its exception's type alone, with no
+    /// outcome: a message can quote a path, and the run folder's log names no document.
     /// </summary>
     [Fact]
     public void TheGateLogLineNamesARefusalAndAFailureByItsTypeOnly()
@@ -627,6 +847,7 @@ public sealed class SwRemodelSeatTests
 
         string line = log.Line(
             SwRemodelSeat.ActivateBeforeDumpAction,
+            "activated",
             new InvalidOperationException("SOLIDWORKS would not open 'C:\\work\\bracket.SLDPRT'."));
 
         Assert.Equal(
@@ -636,6 +857,8 @@ public sealed class SwRemodelSeatTests
         Assert.Equal(new[] { "GetOpenDocumentByName", "ISldWorks.CloseDoc" }, also.Members);
         Assert.Same(refusal, Assert.Single(also.Refusals));
     }
+
+    private IReadOnlyList<string> Lines() => _log.Select(entry => entry.Line).ToList();
 
     private SwRemodelSeat Seat() =>
         new SwRemodelSeat(

@@ -149,32 +149,32 @@ public class RemodelSeatGuardTests
 
     /// <summary>
     /// Its scope is the one class built with it: the pane seat, <c>SwRemodelSeat</c>, which opens and
-    /// activates the run's copy only. A second construction site would carry the two keys to a gate the
-    /// decision never reviewed.
+    /// activates the run's copy only. A second site would carry the two keys to a gate the decision never
+    /// reviewed, so no product file but the seat's names the guard - however it is built, <c>new()</c>
+    /// included - or the seat's gate factory. Widened on the decision's review (T173): it read
+    /// <c>new RemodelSeatGuard(</c> alone, and another add-in file could have built the seat's gate
+    /// through <c>SwRemodelSeat.Gate</c>.
     /// </summary>
     [Fact]
-    public void TheGuardIsBuiltInExactlyOnePlaceThePaneSeat()
+    public void OnlyThePaneSeatNamesTheGuardOrItsGate()
     {
-        var construction = new Regex(@"new\s+(?:[\w.]+\.)?RemodelSeatGuard\s*\(", RegexOptions.CultureInvariant);
+        var named = new Regex(
+            @"\bRemodelSeatGuard\b|\bSwRemodelSeat\s*\.\s*Gate\b|\busing\s+static\s+[\w.]*\bSwRemodelSeat\b",
+            RegexOptions.CultureInvariant);
         string root = DrawingFamilyReadAuditTests.ExtractorRoot();
         var sites = DrawingFamilyReadAuditTests.ProductSourceFiles()
-            .SelectMany(file => construction.Matches(File.ReadAllText(file)).Cast<Match>()
-                .Select(match => file.Substring(root.Length).TrimStart('\\', '/').Replace('\\', '/')))
+            .Where(file => File.ReadAllLines(file)
+                .Any(line => !DrawingFamilyReadAuditTests.IsWholeLineComment(line) && named.IsMatch(line)))
+            .Select(file => file.Substring(root.Length).TrimStart('\\', '/').Replace('\\', '/'))
             .ToList();
 
-        Assert.Equal(new[] { "SwReview.AddIn/Remodel/SwRemodelSeat.cs" }, sites);
+        Assert.Equal(new[] { DrawingFamilyReadAuditTests.PaneSeatFile }, sites);
+        Assert.Contains(
+            "new SwGate(new CircuitBreaker(), new RemodelSeatGuard())",
+            File.ReadAllText(Path.Combine(root, DrawingFamilyReadAuditTests.PaneSeatFile)),
+            StringComparison.Ordinal);
     }
 
-    private static bool Refuses(Action assert)
-    {
-        try
-        {
-            assert();
-            return false;
-        }
-        catch (MutatingCallError)
-        {
-            return true;
-        }
-    }
+    /// <summary>Whether <paramref name="assert"/> refuses: <see cref="GuardSweep.Refuses"/>, the one copy of the rule.</summary>
+    private static bool Refuses(Action assert) => GuardSweep.Refuses(_ => assert(), string.Empty);
 }
