@@ -727,3 +727,23 @@ carries its class, and says what to do."""
 def test_each_refusal_of_a_run_folder_says_what_is_true_of_it() -> None:
     errors = load_words().labels.errors
     assert {key: errors.get(key) for key in RUN_DIR_REFUSALS} == RUN_DIR_REFUSALS
+
+
+DOCUMENT_CHANGED = {
+    "DocumentChanged": (
+        "The active document or its configuration changed while the review was starting, so "
+        "nothing was extracted. Make the part or assembly you want reviewed the active document, "
+        "then press Review again."
+    ),
+}
+"""The class the add-in refuses a new review with when the active document, read again once the
+backend is ready, is not the one read when the review was asked for (owner decision 149A): a
+settings restart the start makes or waits for takes seconds, in which the engineer can make
+another document active, and the dump attaches to whatever is active when it runs. The add-in's
+own class, as on the Remodel tab, whose page prints its message and reads no words file; the
+backend never sends it. The sentence names no path and says what to do."""
+
+
+def test_a_review_whose_document_changed_as_it_started_says_so_and_what_to_do() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in DOCUMENT_CHANGED} == DOCUMENT_CHANGED
