@@ -2224,11 +2224,23 @@ public sealed class ReviewHost : IDisposable
     {
         if (!document.IsSameDocument(retried.Document))
         {
-            SendError(id, "ReviewNotActive", "Open or switch to the reviewed document and configuration before retrying its review with saved context.", retryable: true);
+            SendContextRetryNotActive(id);
             return;
         }
         if (!BackendReady(id))
         {
+            return;
+        }
+
+        // Owner decision 149A, found on review: a context Retry extracts nothing, but its checks run
+        // first, and the first of them, the live interference check, runs over the bridge the
+        // session is given - the tool service's, which follows the active document - and writes its
+        // rows into this review's package. Getting the backend ready can make or wait for a settings
+        // restart, in which the engineer can make another document active, so the document is read
+        // again now, and a change is refused as a Retry pressed on another document is.
+        if (!document.IsSameDocument(_options.CurrentDocument()))
+        {
+            SendContextRetryNotActive(id);
             return;
         }
 
@@ -2237,6 +2249,15 @@ public sealed class ReviewHost : IDisposable
             retried.ContextExtraction ?? new DumpSummary(retried.RunDirectory, 0, 0),
             attachment: retried.EngineeringContext);
     }
+
+    /// <summary>
+    /// A context review's Retry refused because the review's document is not the active one - when
+    /// Retry is pressed, or once the backend is ready (owner decision 149A) - written once, so both
+    /// give the one answer and the one way on: the review's own document, then Retry, which keeps
+    /// the saved context.
+    /// </summary>
+    private void SendContextRetryNotActive(string? id) =>
+        SendError(id, "ReviewNotActive", "Open or switch to the reviewed document and configuration before retrying its review with saved context.", retryable: true);
 
     private bool CanReviewDocument(PageDocument document, string? id)
     {

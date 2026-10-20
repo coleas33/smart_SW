@@ -1207,44 +1207,109 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// A Recheck (feature 015) and a context review's Retry (owner decision 108A) extract nothing:
-    /// each starts its session on the evidence already saved in its own run folder, so a document
-    /// made active during the restart it makes cannot put one document's evidence in a folder named
-    /// for another, and neither reads its document again (owner decision 149A; research). Pinned,
-    /// so that a change to either - a dump added, or a reading after the gate - is deliberate.
+    /// A new review the add-in starts as it always does, through a preparation (`review.prepare`,
+    /// then `review.start` with its `preparation_id`), reads its document again too: the
+    /// preparation is checked against the first reading, before the restart, and the second reading
+    /// comes after it.
     /// </summary>
-    [Theory]
-    [InlineData("review.recheck")]
-    [InlineData("a context review's Retry")]
-    public void AStartThatExtractsNothingRunsOnItsSavedEvidenceWhateverIsActiveAfterTheRestart(string start)
+    [Fact]
+    public void APreparedReviewWhoseDocumentChangedDuringTheRestartIsRefusedAndMakesNothing()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10), Prepares = true };
+        world.Open();
+        world.Track("chat-1");
+        PageDocument pressed = world.Document!;
+        world.Receive("review.prepare", "prepare", new { });
+        string preparation = world.Reply("review.prepared", "prepare").GetProperty("preparation_id").GetString()!;
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        string[] folders = FoldersUnderTheRunRoot(world);
+        world.Backend.DuringRestart = () => world.Document = Changed(pressed, "another document");
+
+        world.Receive("review.start", "start", new { preparation_id = preparation });
+
+        AssertRefusedForADocumentThatChanged(world, "start", folders, pressed);
+        Assert.Single(world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// A Recheck (feature 015) extracts nothing and asks the seat nothing: it re-runs the checks on
+    /// the evidence saved in its own run folder and carries the first run's live detection over
+    /// rather than detecting again (015 `contracts/recheck.md` section 3). A document made active
+    /// during the restart it makes cannot put another document's evidence in its folder, so it does
+    /// not read its document again (owner decision 149A; research). Pinned, so that a change to it -
+    /// a dump, a live call, or a reading after the gate - is deliberate.
+    /// </summary>
+    [Fact]
+    public void ARecheckRunsOnItsSavedEvidenceWhateverIsActiveAfterTheRestart()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        world.Track("waiting");
+        PageDocument pressed = world.Document!;
+        int sessions = world.Backend.Sessions.Length;
+        string[] folders = FoldersUnderTheRunRoot(world);
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        world.Backend.DuringRestart = () => world.Document = Changed(pressed, "another document");
+
+        world.Receive("review.recheck", "again", new { chat_id = "waiting" });
+
+        world.Reply("review.rechecked", "again");
+        (NewSessionRequest request, int generation) = world.Backend.Sessions.Last();
+        Assert.Equal(sessions + 1, world.Backend.Sessions.Length);
+        Assert.Equal(1, generation);
+        Assert.Equal(ReviewMode.Recheck, request.Mode);
+        Assert.Equal(Path.Combine(world.Settings.RunRoot, "20261019-101500-waiting"), request.RunDirectory);
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.Equal(folders, FoldersUnderTheRunRoot(world));
+    }
+
+    /// <summary>
+    /// What a context review's Retry is refused with when the review's document is not the active
+    /// one (owner decision 108A), pinned word for word.
+    /// </summary>
+    private const string ContextRetryNotActiveWords =
+        "Open or switch to the reviewed document and configuration before retrying its review with saved context.";
+
+    /// <summary>
+    /// A context review's Retry (owner decision 108A) extracts nothing, but its session is more than
+    /// its saved evidence: every pane review runs its checks first, a Retry carries none of them
+    /// over, and the first of them, the live interference check, runs over the bridge the session is
+    /// given - the tool service's, which follows the active document - and writes its rows into the
+    /// review's package (owner decision 149A, found on review). A document made active during the
+    /// restart would have that check run over it, and its rows judged as this review's. So the Retry
+    /// reads its document again once the backend is ready, and refuses one that changed as it
+    /// refuses one active when Retry is pressed: `ReviewNotActive`, retryable, in the same words,
+    /// since the way on is the review's own document and Retry, which keeps the saved context.
+    /// Nothing is created; the restart stands; pressed again with its document active, the Retry
+    /// runs on the restarted backend, in its own folder, with its saved context.
+    /// </summary>
+    [Fact]
+    public void AContextReviewsRetryWhoseDocumentChangedDuringTheRestartIsRefusedAsWhenPressedOnAnother()
     {
         using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
         world.Open();
         world.Track("chat-1");
         PageDocument pressed = world.Document!;
-        string chatId;
-        string runDirectory;
-        if (start == "review.recheck")
+        world.Receive("context.prepare", "prepare", new { });
+        JsonElement prepared = world.Reply("context.prepared", "prepare");
+        world.Receive("context.review", "review", new
         {
-            world.Track("waiting");
-            chatId = "waiting";
-            runDirectory = Path.Combine(world.Settings.RunRoot, "20261019-101500-waiting");
-        }
-        else
-        {
-            world.Receive("context.prepare", "prepare", new { });
-            JsonElement prepared = world.Reply("context.prepared", "prepare");
-            world.Receive("context.review", "review", new
-            {
-                run_id = prepared.GetProperty("run_id").GetString(),
-                context_id = Guid.NewGuid().ToString(),
-                head_digest = new string('a', 64),
-                package_sha256 = prepared.GetProperty("package_sha256").GetString(),
-            });
-            JsonElement first = world.Reply("review.started", "review");
-            chatId = first.GetProperty("chat_id").GetString()!;
-            runDirectory = first.GetProperty("run_dir").GetString()!;
-        }
+            run_id = prepared.GetProperty("run_id").GetString(),
+            context_id = Guid.NewGuid().ToString(),
+            head_digest = new string('a', 64),
+            package_sha256 = prepared.GetProperty("package_sha256").GetString(),
+        });
+        JsonElement first = world.Reply("review.started", "review");
+        string chatId = first.GetProperty("chat_id").GetString()!;
+        string runDirectory = first.GetProperty("run_dir").GetString()!;
+
+        world.Document = Changed(pressed, "another document");
+        world.Receive("review.start", "pressed on another", new { retry_of = chatId });
+        JsonElement whenPressed = world.Reply("error", "pressed on another");
+        world.Document = pressed;
 
         int dumps = world.Dump.Runs;
         int sessions = world.Backend.Sessions.Length;
@@ -1253,23 +1318,29 @@ public sealed class DeferredRestartTests
         world.Backend.EndTurn("chat-1");
         world.Backend.DuringRestart = () => world.Document = Changed(pressed, "another document");
 
-        if (start == "review.recheck")
-        {
-            world.Receive("review.recheck", "again", new { chat_id = chatId });
-            world.Reply("review.rechecked", "again");
-        }
-        else
-        {
-            world.Receive("review.start", "again", new { retry_of = chatId });
-            world.Reply("review.started", "again");
-        }
+        world.Receive("review.start", "retry", new { retry_of = chatId });
 
+        JsonElement error = world.Reply("error", "retry");
+        Assert.Equal("ReviewNotActive", error.GetProperty("error_class").GetString());
+        Assert.Equal(ContextRetryNotActiveWords, error.GetProperty("message").GetString());
+        Assert.True(error.GetProperty("retryable").GetBoolean());
+        Assert.Equal(whenPressed.GetRawText(), error.GetRawText());
+        Assert.Equal(sessions, world.Backend.Sessions.Length);
+        Assert.Equal(dumps, world.Dump.Runs);
+        Assert.Equal(folders, FoldersUnderTheRunRoot(world));
+        Assert.Equal("low", Assert.Single(world.Backend.Restarts).Settings.Effort);
+
+        world.Backend.DuringRestart = null;
+        world.Document = pressed;
+        world.Receive("review.start", "again", new { retry_of = chatId });
+
+        world.Reply("review.started", "again");
         (NewSessionRequest request, int generation) = world.Backend.Sessions.Last();
         Assert.Equal(sessions + 1, world.Backend.Sessions.Length);
         Assert.Equal(1, generation);
         Assert.Equal(runDirectory, request.RunDirectory);
-        Assert.Equal(dumps, world.Dump.Runs);
-        Assert.Equal(folders, FoldersUnderTheRunRoot(world));
+        Assert.NotNull(request.EngineeringContext);
+        Assert.Single(world.Backend.Restarts);
     }
 
     /// <summary>The run folders under the run root, in a stable order.</summary>
@@ -3569,6 +3640,12 @@ public sealed class DeferredRestartTests
         /// </summary>
         public Func<int, PageDocument?>? DocumentAtRead { get; set; }
 
+        /// <summary>
+        /// Whether the host prepares a review before it starts one, as the add-in's always does:
+        /// a preparation of the active document, its tree empty (owner decision 149A, on review).
+        /// </summary>
+        public bool Prepares { get; set; }
+
         /// <summary>How often the host asks whether the turn has ended; short, so the tests are.</summary>
         public TimeSpan Poll { get; set; } = TimeSpan.FromMilliseconds(10);
 
@@ -3623,6 +3700,15 @@ public sealed class DeferredRestartTests
                 },
                 Environment = _ => null,
                 Dump = Dump,
+                PrepareReview = Prepares
+                    ? () => new ReviewPreparation(
+                        new ComponentTreeResult
+                        {
+                            RootDocumentPath = Document!.Path,
+                            ActiveConfiguration = Document.Configuration ?? string.Empty,
+                        },
+                        new GapCollector())
+                    : (Func<ReviewPreparation>?)null,
                 EngineeringSelection = Selection,
                 Engineer = "FICT-engineer",
                 Now = () => Stamp,
