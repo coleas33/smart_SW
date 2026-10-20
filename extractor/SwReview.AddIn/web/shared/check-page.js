@@ -114,6 +114,9 @@
     var nextId = 0;
     var nextSubject = 0;
 
+    /** The backend calls waiting for the `init` on its way to settle (`initSettled`). */
+    var initWaiters = [];
+
     var state = {
       backend: null,
       token: null,
@@ -143,6 +146,14 @@
        * 145A).
        */
       initAgain: false,
+
+      /**
+       * A read of the latest check an `init` named failed - the backend refused the call or did
+       * not answer, as the one a restart replaced does. The next `init`, a restart's included,
+       * reads it again while the tab shows no result and no check is in flight, so a tab opened
+       * while the backend restarted does not stay blank (owner decision 145A, found on review).
+       */
+      latestUnread: false,
 
       /** Which buckets are showing, by bucket name. */
       buckets: Object.create(null),
@@ -242,8 +253,32 @@
      * One authenticated call to the loopback backend, rejecting with the backend's own
      * `{error_class, message, retryable}` so "this scope is not offered yet" can be said
      * differently from "the backend is gone".
+     *
+     * Made once no `init` is on its way (owner decision 145A, found on review). The page asks
+     * again on `backend.restarted`, and the host answers that `ready` on the tab's own pump, behind
+     * an extraction already running there - whose reply reaches the page first. A call made then
+     * would carry the token of the backend the restart replaced, which the new one refuses, and
+     * waste the extraction; so it waits for that `init`, and for the one more ask after it a
+     * restart announced meanwhile makes, and carries the token they leave.
      */
     function call(path, method, body) {
+      return initSettled().then(function () {
+        return callNow(path, method, body);
+      });
+    }
+
+    /** Resolves once no `init` is on its way: at once when none is. */
+    function initSettled() {
+      if (!state.initPending) {
+        return Promise.resolve();
+      }
+
+      return new Promise(function (resolve) {
+        initWaiters.push(resolve);
+      });
+    }
+
+    function callNow(path, method, body) {
       if (!state.backend || !state.token) {
         return Promise.reject(backendError(
           'BackendUnavailable', 'the reviewer backend is not running.', true));
@@ -307,7 +342,9 @@
         })
         .catch(function () {
           // A check folder that has been tidied away is not an error the engineer has to read;
-          // the tab simply has nothing to show until the next press.
+          // the tab simply has nothing to show until the next press. Nor is a backend that
+          // refused the token, as the one a restart replaced does: the next `init` reads it again.
+          state.latestUnread = true;
           setCheckState('');
         });
     }
@@ -1339,9 +1376,11 @@
      *
      * `loadLatest` is false when the page is re-asking because the backend has only just started,
      * or has been restarted: the first `init` already loaded whatever check this session left
-     * behind, and re-reading it would race whatever the page is rendering now. `initPending` keeps
-     * two statuses in quick succession from producing two in-flight asks, and `initAgain` asks
-     * once more after one a restart arrived during.
+     * behind, and re-reading it would race whatever the page is rendering now - unless that read
+     * failed and the tab still shows nothing (`latestUnread`). `initPending` keeps two statuses in
+     * quick succession from producing two in-flight asks, and `initAgain` asks once more after one
+     * a restart arrived during. The calls waiting for the `init` (`call`) go on once the last of
+     * them is applied.
      */
     function requestInit(loadLatest) {
       if (state.initPending) {
@@ -1361,6 +1400,13 @@
           if (state.initAgain) {
             state.initAgain = false;
             requestInit(false);
+            return;
+          }
+
+          var waiting = initWaiters;
+          initWaiters = [];
+          for (var index = 0; index < waiting.length; index++) {
+            waiting[index]();
           }
         });
     }
@@ -1379,7 +1425,7 @@
       if (page.onInit) {
         page.onInit(payload, api);
       }
-      if (loadLatest) {
+      if (loadLatest || (state.latestUnread && !state.result && !state.checking)) {
         loadLatestCheck();
       }
     }

@@ -117,6 +117,164 @@ public sealed class TabPagesBackendRestartTests
     }
 
     /// <summary>
+    /// A check pressed just as the backend restarts. The host extracts on the check tab's own pump,
+    /// so the `ready` the page asks on `backend.restarted` waits there behind the extraction, and
+    /// the extraction's reply reaches the page first. The page's call to the check route waits for
+    /// the `init` on its way and carries the restarted backend's token: made at once, it carried the
+    /// old one, which the new backend refuses, and the extraction was wasted (owner decision 145A,
+    /// found on review).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void ACheckPressedWhileAnInitIsOnItsWayCallsWithTheRestartedBackendsToken(string tab)
+    {
+        TabPageDriver.Run(tab, null, async driver =>
+        {
+            int readies = driver.Readies;
+            await driver.ClearCalls();
+            driver.HoldReady = true;
+
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for init again");
+            await driver.Click("run-check");
+            await driver.Settle();
+
+            // The extraction has answered, and the call waits for the `init` on its way.
+            Assert.DoesNotContain(await driver.Calls(), call => call.GetProperty("method").GetString() == "POST");
+
+            driver.Token = RestartedToken;
+            await driver.ReleaseReady();
+            await driver.UntilCall("POST", "the check's call once the init arrived");
+
+            JsonElement[] calls = await driver.Calls();
+            JsonElement check = Assert.Single(calls, call => call.GetProperty("method").GetString() == "POST");
+            Assert.Equal("Bearer " + RestartedToken, check.GetProperty("authorization").GetString());
+            Assert.DoesNotContain(calls, call =>
+                call.GetProperty("authorization").GetString() == "Bearer " + TabPageDriver.FirstToken);
+        });
+    }
+
+    /// <summary>
+    /// The call waits for the last `init` a restart asks for, not the first: a second restart
+    /// announced while the first `init` was on its way makes the page ask once more after it, since
+    /// the host may have answered the first before the new backend was up - with the old token, as
+    /// here - and the call carries the token the last one leaves.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void ACallWaitsForTheOneMoreAskARestartAnnouncedMeanwhileMakes(string tab)
+    {
+        TabPageDriver.Run(tab, null, async driver =>
+        {
+            int readies = driver.Readies;
+            await driver.ClearCalls();
+            driver.HoldReady = true;
+
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for init again");
+            await driver.Click("run-check");
+            await driver.Post("backend.restarted", Restarted);
+
+            // The first `init` names the old token; the page asks once more after it.
+            await driver.ReleaseOneReady();
+            await driver.Until(() => driver.Readies == readies + 2, "asked once more");
+            await driver.Settle();
+            Assert.DoesNotContain(await driver.Calls(), call => call.GetProperty("method").GetString() == "POST");
+
+            driver.Token = RestartedToken;
+            await driver.ReleaseReady();
+            await driver.UntilCall("POST", "the check's call once the last init arrived");
+
+            JsonElement check = Assert.Single(
+                await driver.Calls(), call => call.GetProperty("method").GetString() == "POST");
+            Assert.Equal("Bearer " + RestartedToken, check.GetProperty("authorization").GetString());
+        });
+    }
+
+    /// <summary>
+    /// A check tab opened while the backend restarts: the host's `init` names the backend that is
+    /// going, so the page's read of its latest check is refused by the one that replaced it, and the
+    /// tab has nothing to show. The `init` the restart's message asks for reads it again, with the
+    /// new token, so the tab does not stay blank (owner decision 145A, found on review). A latest
+    /// check the page did read is not read again (the case below).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void ALatestCheckTheOldTokenCouldNotReadIsReadAgainAfterTheRestart(string tab)
+    {
+        TabPageDriver.Run(
+            tab,
+            driver =>
+            {
+                driver.WithLatestResult = true;
+                driver.AcceptedToken = RestartedToken;
+            },
+            async driver =>
+            {
+                await driver.UntilTheLatestResultIsRead();
+                await driver.Settle();
+                Assert.Equal(0, await driver.RowsShown());
+                int readies = driver.Readies;
+                driver.Token = RestartedToken;
+
+                await driver.Post("backend.restarted", Restarted);
+                await driver.Until(() => driver.Readies > readies, "asked for init again");
+                await driver.UntilReads(2, "read its latest check again");
+                await driver.Settle();
+
+                JsonElement[] reads = (await driver.Calls())
+                    .Where(call => call.GetProperty("method").GetString() == "GET")
+                    .ToArray();
+                Assert.Equal(2, reads.Length);
+                Assert.Equal("Bearer " + TabPageDriver.FirstToken, reads[0].GetProperty("authorization").GetString());
+                Assert.Equal("Bearer " + RestartedToken, reads[1].GetProperty("authorization").GetString());
+                await driver.WhatIsShown();
+            });
+    }
+
+    /// <summary>
+    /// A latest check the old token could not read is read again only while it is still what the tab
+    /// would show: not under a check the engineer has pressed since, whose result is on its way, nor
+    /// over the result that check left - the result on screen is the engineer's, and stays.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void ALatestCheckTheOldTokenCouldNotReadIsNotReadOverACheckPressedSince(string tab)
+    {
+        TabPageDriver.Run(
+            tab,
+            driver =>
+            {
+                driver.WithLatestResult = true;
+                driver.AcceptedToken = RestartedToken;
+            },
+            async driver =>
+            {
+                await driver.UntilTheLatestResultIsRead();
+                await driver.Settle();
+                int readies = driver.Readies;
+                driver.HoldReady = true;
+                driver.Token = RestartedToken;
+
+                // The engineer presses Check while the restart's `init` is on its way.
+                await driver.Post("backend.restarted", Restarted);
+                await driver.Until(() => driver.Readies == readies + 1, "asked for init again");
+                await driver.Click("run-check");
+                await driver.ReleaseReady();
+                await driver.UntilCall("POST", "the check's call");
+                await driver.Settle();
+
+                // And the backend restarts once more, the check's result on screen.
+                await driver.Post("backend.restarted", Restarted);
+                await driver.Until(() => driver.Readies == readies + 2, "asked for init again");
+                await driver.Settle();
+
+                Assert.Equal(1, await driver.LatestResultReads());
+                await driver.WhatIsShown();
+            });
+    }
+
+    /// <summary>
     /// The page keeps what the engineer is looking at. A check page's result - read back from its
     /// latest check when the page loaded - stays on screen as it was, and is not read again: the
     /// restart changed the backend, not the check, and a re-read would race whatever the page
@@ -227,6 +385,13 @@ public sealed class TabPagesBackendRestartTests
         /// <summary>Holds every `ready` after the boot until <see cref="ReleaseReady"/>: an `init` on its way.</summary>
         public bool HoldReady { get; set; }
 
+        /// <summary>
+        /// The one token the stubbed backend accepts, or null for any: a call with another is refused
+        /// 401 `Unauthorized`, as the backend refuses a token that is not its own. Set before the
+        /// page loads, since the stub is put in place at the boot.
+        /// </summary>
+        public string? AcceptedToken { get; set; }
+
         public int Readies => Count("ready");
 
         public int HeldReady
@@ -258,19 +423,27 @@ public sealed class TabPagesBackendRestartTests
         }
 
         /// <summary>Waits, bounded, until the page has read the latest result its `init` named.</summary>
-        public async Task UntilTheLatestResultIsRead()
+        public Task UntilTheLatestResultIsRead() => UntilReads(1, "read the latest result its init named");
+
+        /// <summary>Waits, bounded, until the page has read its result back <paramref name="reads"/> times.</summary>
+        public async Task UntilReads(int reads, string what)
         {
             var bound = System.Diagnostics.Stopwatch.StartNew();
-            while (await LatestResultReads() == 0)
+            while (await LatestResultReads() < reads)
             {
                 if (bound.Elapsed > TimeSpan.FromSeconds(30))
                 {
-                    throw new TimeoutException("the page never read the latest result its init named.");
+                    throw new TimeoutException("the page never " + what + ".");
                 }
 
                 await Task.Delay(5);
             }
         }
+
+        /// <summary>How many rows of a result are on screen: a check's rules, or a run's changes.</summary>
+        public async Task<int> RowsShown() =>
+            JsonDocument.Parse(await Page.ExecuteScriptAsync(
+                "document.querySelectorAll('.rule, #change-list li').length")).RootElement.GetInt32();
 
         public static void Run(string kind, Action<TabPageDriver>? configure, Func<TabPageDriver, Task> script)
         {
@@ -340,6 +513,18 @@ public sealed class TabPagesBackendRestartTests
                 {
                     Reply("init", _heldReady.Dequeue(), Init());
                 }
+            }
+
+            await Settle();
+        }
+
+        /// <summary>Answers the oldest `ready` held, with <see cref="Token"/>, and goes on holding the rest.</summary>
+        public async Task ReleaseOneReady()
+        {
+            lock (_gate)
+            {
+                Assert.NotEmpty(_heldReady);
+                Reply("init", _heldReady.Dequeue(), Init());
             }
 
             await Settle();
@@ -421,7 +606,7 @@ public sealed class TabPagesBackendRestartTests
             Assert.True(_bootReady != null, "the " + _kind + " page never sent `ready`.");
             if (_kind != Remodel)
             {
-                await Page.ExecuteScriptAsync(FetchStub(SampleJson()));
+                await Page.ExecuteScriptAsync(FetchStub(SampleJson(), AcceptedToken));
             }
 
             lock (_gate)
@@ -560,12 +745,15 @@ public sealed class TabPagesBackendRestartTests
 
         /// <summary>
         /// Every check route answered with this page's sample, each call recorded with its method,
-        /// its path with the origin stripped, and its `Authorization` header.
+        /// its path with the origin stripped, and its `Authorization` header. A call that does not
+        /// carry <paramref name="accepted"/>, when there is one, is refused as the backend refuses a
+        /// token that is not its own (chat/server.py).
         /// </summary>
-        private static string FetchStub(string sample) => @"
+        private static string FetchStub(string sample, string? accepted) => @"
 (function () {
   var origin = '" + Origin + @"';
   var sample = " + sample + @";
+  var accepted = " + JsonSerializer.Serialize(accepted) + @";
   window.__calls = [];
   window.fetch = function (url, request) {
     var path = String(url);
@@ -576,6 +764,19 @@ public sealed class TabPagesBackendRestartTests
       path: path,
       authorization: headers.Authorization || ''
     });
+    if (accepted !== null && headers.Authorization !== 'Bearer ' + accepted) {
+      return Promise.resolve({
+        ok: false,
+        status: 401,
+        text: function () {
+          return Promise.resolve(JSON.stringify({
+            error_class: 'Unauthorized',
+            message: 'this request carried no valid bearer token',
+            retryable: false
+          }));
+        }
+      });
+    }
     return Promise.resolve({
       ok: true,
       status: 200,
