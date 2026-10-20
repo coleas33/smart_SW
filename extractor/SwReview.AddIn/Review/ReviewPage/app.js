@@ -196,7 +196,10 @@
     backendReplaced: false,
     // The token the page held when `backend.restarted` arrived: an `init` that names it was read
     // before the restart, and is not the new backend.
-    replacedToken: null
+    replacedToken: null,
+    // A save's restart failed and no `init` has named a backend since (owner decision 150A): the
+    // strip says the backend is not running, not that it is starting.
+    notRunning: false
   };
 
   var ui = {};
@@ -281,7 +284,7 @@
         state.token = null;
         closeStream();
         setTurnRunning(false);
-        renderBackendState('The backend stopped. Reopen the pane to start it again.', true);
+        renderBackendState('The backend stopped. Save Settings to start it again.', true);
         return;
       case 'backend.restarted':
         // Owner decision 143A: the host restarted the backend with settings saved while a turn
@@ -3008,10 +3011,18 @@
       // child's. Nothing else tells the page that.
       requestInit(false);
     }).catch(function (error) {
+      var notRestarted = error.errorClass === 'BackendNotRestarted';
       ui.saveState.className = 'note bad';
-      errorInto(ui.saveState, error, error.errorClass === 'TurnRunning'
+      errorInto(ui.saveState, error, error.errorClass === 'TurnRunning' || notRestarted
         ? error.message
         : (error.errorClass + ': ' + error.message));
+      if (notRestarted) {
+        // Owner decision 150A: the save was kept and only its restart failed, so the settings in
+        // force, and the backend there is now - the old one, or none - are what `init` names: the
+        // page asks for it, as after a save that restarted the backend.
+        state.notRunning = true;
+        requestInit(false);
+      }
     }).then(function () {
       ui.save.disabled = false;
     });
@@ -3064,7 +3075,12 @@
       renderSettings(payload.settings, payload.key_source);
       renderDocument();
       renderBinding();
-      renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', false);
+      if (state.backend) {
+        state.notRunning = false;
+      }
+      renderBackendState(
+        state.backend ? 'Backend ready' : (state.notRunning ? 'Backend not running' : 'Backend starting'),
+        state.notRunning);
       if (loadModels && state.backend) {
         refreshModels();
       }

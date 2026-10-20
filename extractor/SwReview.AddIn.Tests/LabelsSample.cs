@@ -37,6 +37,10 @@ internal static class LabelsSample
 
     public const string InvalidSettings = "Check the provider, the model and the effort, then save again.";
 
+    /// <summary>A save whose restart failed (owner decision 150A): the words file's sentence for it.</summary>
+    public const string BackendNotRestarted =
+        "The settings are saved, but the review backend did not restart with them. Save Settings again to retry the restart.";
+
     public static string Json() => JsonSerializer.Serialize(Value());
 
     public static object Value() => new Dictionary<string, object>
@@ -101,6 +105,7 @@ internal static class LabelsSample
                 { "DrawingActive", DrawingActive },
                 { "AlreadyAnswered", AlreadyAnswered },
                 { "InvalidSettings", InvalidSettings },
+                { "BackendNotRestarted", BackendNotRestarted },
             }
         },
     };
