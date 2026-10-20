@@ -62,8 +62,9 @@ from swreview.chat.sessions import ChatSession, ChatState
 from swreview.checks.rms.run import is_check_folder
 from swreview.checks.standards.run import run_standards_check
 from swreview.ir.loader import save_package
+from swreview.ir.models import EvidencePackage
 from swreview.prerun import DIGEST_HEADER, RMS_PRERUN_TOOLS
-from swreview.remodel.artifacts import grade_remodel_run
+from swreview.remodel.artifacts import GradedRun, grade_remodel_run, write_package
 from swreview.report.attention import rank
 from swreview.report.attention_record import (
     ATTENTION_FILE_NAME,
@@ -929,19 +930,32 @@ def standards_check_folder(run_root: Path) -> Path:
     return target
 
 
-def grade_check_folder(run_root: Path) -> Path:
-    """The re-modeler's grade of the copy at open: `rms-before/` under its remodel run."""
+REMODEL_RUN = "20261019-101500-bracket-remodel"
+"""A remodel run's folder in the run root, as `RunFolders.CreateForRemodel` names one."""
+
+
+def remodel_copy_package() -> EvidencePackage:
+    """The `ModelCheck` dump of a remodel run's copy: one core feature and one detail."""
     tree = [
         folder("3-Core", feature("Boss-Extrude1", "Extrusion", description="")),
         folder("4-Detail", feature("Hole1", "HoleWzd")),
     ]
-    package = remodel_package(tree, document_id="doc:copy", name="bracket-RMS")
-    remodel_run = run_root / "20261019-101500-bracket-remodel"
+    return remodel_package(tree, document_id="doc:copy", name="bracket-RMS")
+
+
+def graded_remodel_run(run_root: Path) -> GradedRun:
+    """A remodel run that graded its copy before and after: `rms-before/` and `rms-after/`."""
+    remodel_run = run_root / REMODEL_RUN
     remodel_run.mkdir()
-    graded = grade_remodel_run(
+    package = remodel_copy_package()
+    return grade_remodel_run(
         remodel_run, before=package, after=package, source_design_id="dsn:FICT-source"
     )
-    return graded.before.check_file.parent
+
+
+def grade_check_folder(run_root: Path) -> Path:
+    """The re-modeler's grade of the copy at open: `rms-before/` under its remodel run."""
+    return graded_remodel_run(run_root).before.check_file.parent
 
 
 CHECK_FOLDERS: dict[str, tuple[str, Callable[[Path], Path]]] = {
@@ -1009,6 +1023,20 @@ def check_folder_refusal(check_dir: Path, family: str) -> dict[str, Any]:
             f"{check_dir.resolve()} holds the {family} check that ran in it and no review "
             "session: a Retry replaces only a review's session, and only a Model check's "
             "folder is handed to a new review; review into a new run folder"
+        ),
+        "retryable": False,
+    }
+
+
+def grade_refusal(grade_dir: Path, side: str) -> dict[str, Any]:
+    """The body a start or a Retry meets on a re-modeler grade's folder (owner decision 146A)."""
+    folder = grade_dir.resolve()
+    return {
+        "error_class": "RunDirTaken",
+        "message": (
+            f"{folder} is the folder of the {side} grade of the remodel run in {folder.parent}: "
+            "a review never claims a grade's folder, which only the remodel run writes; review "
+            "into a new run folder"
         ),
         "retryable": False,
     }
@@ -1091,7 +1119,10 @@ def test_a_retry_is_refused_on_every_family_s_check_folder_and_moves_nothing(
     """A check's folder holds no review session for a Retry to replace. Before 142A a Retry
     skipped the folder check, so any `retry_of` rotated the check's session aside and wrote
     a review into its folder. The folder is refused before the chat is looked up, so a chat
-    this backend holds and an id it never issued meet the same 400."""
+    this backend holds and an id it never issued meet the same 400.
+
+    A grade's folder is refused with the grade's words since owner decision 146A, which a
+    start meets too, where 142A refused it as any check's."""
     family, build = CHECK_FOLDERS[kind]
     reviewed = start_session(client, run_dir)
     settle(client, reviewed["chat_id"])
@@ -1103,7 +1134,11 @@ def test_a_retry_is_refused_on_every_family_s_check_folder_and_moves_nothing(
     response = client.post("/sessions", json=session_body(check_dir, retry_of=retry_of))
 
     assert response.status_code == 400
-    assert response.json() == check_folder_refusal(check_dir, family)
+    assert response.json() == (
+        grade_refusal(check_dir, "before")
+        if kind == "re-modeler grade"
+        else check_folder_refusal(check_dir, family)
+    )
     assert folder_hashes(check_dir) == before
     assert list(app.state.server.chats) == [UUID(reviewed["chat_id"])]
     assert len(provider_control.built) == built
@@ -1128,22 +1163,102 @@ def test_a_start_on_a_standards_folder_is_refused_with_the_body_a_retry_gets(
     assert provider_control.built == []
 
 
-@pytest.mark.parametrize("kind", ["model check", "re-modeler grade"])
-def test_a_start_still_claims_an_rms_check_s_folder(
-    client: TestClient, run_root: Path, kind: str
-) -> None:
-    """Unchanged by 142A. Feature 003's User Story 6 scenario 11 hands a Model check's folder
-    to a review, which rotates the check's session aside (feature 007 FR-021). The
-    re-modeler's grade is the same rms record, so a start claims it as well; only a Retry is
-    refused on either."""
-    _, build = CHECK_FOLDERS[kind]
-    check_dir = build(run_root)
+def test_a_start_still_claims_a_model_check_s_folder(client: TestClient, run_root: Path) -> None:
+    """Unchanged by 142A and 146A. Feature 003's User Story 6 scenario 11 hands a Model check's
+    folder to a review, which rotates the check's session aside (feature 007 FR-021). Its case
+    for the re-modeler's grade, which a start claimed as the same rms record, is gone: owner
+    decision 146A refuses a grade's folder to every start (below)."""
+    check_dir = model_check_folder(run_root)
     check_session = load_session(check_dir / "session.json").session_id
 
     settle(client, start_session(client, check_dir)["chat_id"])
 
     assert load_session(check_dir / "session.1.json").session_id == check_session
     assert load_session(check_dir / "session.json").session_id != check_session
+
+
+# --- a review never claims a re-modeler grade's folder (owner decision 146A) ---------------
+
+
+@pytest.mark.parametrize("side", ["before", "after"])
+def test_a_start_on_a_re_modeler_grade_s_folder_is_refused_and_moves_nothing(
+    app: Any, client: TestClient, run_root: Path, provider_control: ProviderControl, side: str
+) -> None:
+    """A grade's `check.json` is `run_rms_check`'s own rms record, so 142A's rule took the folder
+    for a Model check's and a start claimed it: the grade's session went aside, the review
+    wrote over the grade's `report.md`, and the run's `rms-<side>.json` then named the review's
+    files. A grade is its remodel run's, and nothing in the run's folder moves."""
+    graded = graded_remodel_run(run_root)
+    grade_dir = getattr(graded, side).check_file.parent
+    before = folder_hashes(graded.run_dir)
+
+    response = client.post("/sessions", json=session_body(grade_dir))
+
+    assert response.status_code == 400
+    assert response.json() == grade_refusal(grade_dir, side)
+    assert folder_hashes(graded.run_dir) == before
+    named = json.loads((graded.run_dir / f"rms-{side}.json").read_text(encoding="utf-8"))
+    assert load_session(graded.run_dir / named["session"]).session_id == (
+        getattr(graded, side).session.session_id
+    )
+    assert app.state.server.chats == {}
+    assert provider_control.built == []
+
+
+def test_a_grade_s_folder_is_refused_before_its_grade_is_written(
+    app: Any, client: TestClient, run_root: Path, provider_control: ProviderControl
+) -> None:
+    """`grade_remodel_run` files a side's dump in the grade's folder, and beside it, before it
+    grades anything. Until the grade's session was written the folder held none, so a start
+    claimed it - and the grade would then have written its own session and report over the
+    review's. A grade's folder is refused whatever it holds."""
+    remodel_run = run_root / REMODEL_RUN
+    remodel_run.mkdir()
+    write_package(remodel_run, remodel_copy_package(), side="before")
+    grade_dir = remodel_run / "rms-before"
+    before = folder_hashes(remodel_run)
+
+    response = client.post("/sessions", json=session_body(grade_dir))
+
+    assert response.status_code == 400
+    assert response.json() == grade_refusal(grade_dir, "before")
+    assert folder_hashes(remodel_run) == before
+    assert app.state.server.chats == {}
+    assert provider_control.built == []
+
+
+def test_a_model_check_s_folder_named_like_a_grade_s_is_still_claimed(
+    client: TestClient, run_root: Path
+) -> None:
+    """A grade's folder is told by its remodel run's layout - its side's dump filed beside it -
+    and neither by its record, which is a Model check's too, nor by its name alone: a Model
+    check's folder called `rms-before` in the run root is handed to a review as any is."""
+    check_dir = run_root / "rms-before"
+    shutil.copytree(ATTENTION_CHECK_FOLDER, check_dir)
+    check_session = load_session(check_dir / "session.json").session_id
+
+    settle(client, start_session(client, check_dir)["chat_id"])
+
+    assert load_session(check_dir / "session.1.json").session_id == check_session
+
+
+def test_a_re_run_naming_a_grade_s_folder_is_refused_as_no_waiting_review(
+    client: TestClient, run_root: Path
+) -> None:
+    """A re-run (`recheck`, feature 015) re-runs a waiting review in its own folder, so the
+    grade's refusal is not asked of it: the grade's session waits for nothing, and the re-run
+    is refused `NotWaiting` with nothing moved, as before 146A."""
+    graded = graded_remodel_run(run_root)
+    grade_dir = graded.before.check_file.parent
+    before = folder_hashes(graded.run_dir)
+
+    response = client.post(
+        "/sessions", json=session_body(grade_dir, send_when_checked=False, recheck=True)
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error_class"] == "NotWaiting"
+    assert folder_hashes(graded.run_dir) == before
 
 
 def test_a_retry_naming_no_chat_this_backend_holds_is_refused_and_moves_nothing(

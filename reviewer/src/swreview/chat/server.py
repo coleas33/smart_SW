@@ -138,6 +138,7 @@ from swreview.engineering_context.models import ContextArtifact
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
+from swreview.remodel.artifacts import grade_side_of
 from swreview.report.attention import rank
 from swreview.report.attention_record import ATTENTION_FILE_NAME
 from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
@@ -241,11 +242,12 @@ class RunDirTaken(ChatError):
     """`run_dir` already holds another run's files, which this start may not write over.
 
     Every refusal `_claim_run_dir` makes for what a folder holds (owner decisions 142A and
-    146A): a check's folder to a Retry, and a Standards check's to a start as well; any other
-    folder that holds a session to a start. A class of its own because the page shows its
-    class's sentence first, and the way on from all of these is a new run folder, where the
-    path rule's, `InvalidRunDir`'s, is the run root in Settings. A chat that is live on the
-    folder, or being set up in it, is `RunDirInUse`.
+    146A): a re-modeler grade's folder, whatever it holds, to any start; a check's folder to a
+    Retry, and a Standards check's to a start as well; any other folder that holds a session to
+    a start. A class of its own because the page shows its class's sentence first, and the way
+    on from all of these is a new run folder, where the path rule's, `InvalidRunDir`'s, is the
+    run root in Settings. A chat that is live on the folder, or being set up in it, is
+    `RunDirInUse`.
     """
 
     error_class = "RunDirTaken"
@@ -2192,8 +2194,14 @@ class ChatServer:
         for it to replace, and a start on a Standards check's folder, which feature 007 left
         unclaimable (its FR-021 names the rms check's folder only): one 400 with one wording
         from both routes. `is_check_folder` knows every family's folder, and the family is
-        the record's own, as `GET /checks/{check_id}` reads it; the re-modeler's grade is an
-        rms record, so a start claims it as it claims a Model check's folder.
+        the record's own, as `GET /checks/{check_id}` reads it.
+
+        The re-modeler's grade is an rms record too, and no request claims its folder (owner
+        decision 146A): the grade is its remodel run's, whose `rms-<side>.json` names its
+        session and report. It is told from a Model check's folder by the run's layout
+        (`grade_side_of`), the record being the same, and refused before the folder's files are
+        looked at, so whatever it holds: a start into it before the grade is written found no
+        session, and the grade would then have written over the review.
 
         A re-run (feature 015, `recheck`; `contracts/recheck.md` section 2) re-runs a waiting
         review's checks in its own folder, so the session it holds is its point, not a
@@ -2219,6 +2227,13 @@ class ChatServer:
             )
         if recheck:
             return None
+        side = grade_side_of(run_dir)
+        if side is not None:
+            raise RunDirTaken(
+                f"{run_dir} is the folder of the {side} grade of the remodel run in "
+                f"{run_dir.parent}: a review never claims a grade's folder, which only the "
+                "remodel run writes; review into a new run folder"
+            )
         if not _session_files(run_dir):
             return None
         if is_check_folder(run_dir):

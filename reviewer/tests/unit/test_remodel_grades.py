@@ -57,6 +57,7 @@ from swreview.remodel.artifacts import (
     NotAModelCheckDumpError,
     carry_forward_exceptions,
     grade_remodel_run,
+    grade_side_of,
     write_package,
 )
 from swreview.remodel.plan import PACKAGE_BEFORE
@@ -642,6 +643,54 @@ class TestRebindAndFreeze:
         flagged = run.exceptions.refresh(after_package())
 
         assert [item.id for item in flagged] == [item.id for item in run.exceptions.exceptions]
+
+
+# --- 7. which folder is a grade's (owner decision 146A) ---------------------------
+
+
+class TestGradeFolders:
+    """`grade_side_of`: what `POST /sessions` asks before it claims a folder. A grade's
+    `check.json` is `run_rms_check`'s own, the record a Model check's folder holds too, so
+    the record cannot say which a folder is; the run's layout does - a side's folder with that
+    side's dump filed beside it - and a review claims a Model check's folder and never a
+    grade's."""
+
+    def test_each_grade_s_folder_names_its_side(self, run_dir: Path) -> None:
+        run = graded(run_dir)
+
+        assert grade_side_of(run.before.check_file.parent) == "before"
+        assert grade_side_of(run.after.check_file.parent) == "after"
+        assert grade_side_of(str(run.after.check_file.parent)) == "after"
+
+    def test_a_grade_s_folder_is_one_from_the_moment_its_dump_is_filed(
+        self, run_dir: Path
+    ) -> None:
+        """`write_package` files the dump in the folder and beside it before anything is
+        graded, so a folder holding no session yet is already the grade's."""
+        write_package(run_dir, before_package(), side="before")
+
+        assert sorted(path.name for path in (run_dir / "rms-before").iterdir()) == [
+            PACKAGE_FILE_NAME
+        ]
+        assert grade_side_of(run_dir / "rms-before") == "before"
+        assert grade_side_of(run_dir / "rms-after") is None
+
+    def test_no_other_folder_is_a_grade_s(self, run_root: Path, run_dir: Path) -> None:
+        """The run's own folder, a Model check's, and a folder named like a grade's with no dump
+        beside it, or only the other side's, are no grade's."""
+        graded(run_dir)
+        check = check_run(run_root, "20260916-141500-bracket-check", design_id=SOURCE_DESIGN)
+        named_alone = run_root / "rms-before"
+        save_package(source_package(), named_alone)
+        other_side = run_root / "20260916-150000-bracket-remodel"
+        write_package(other_side, before_package(), side="after")
+        (other_side / "rms-before").mkdir()
+
+        assert grade_side_of(run_dir) is None
+        assert grade_side_of(check) is None
+        assert grade_side_of(named_alone) is None
+        assert grade_side_of(other_side / "rms-before") is None
+        assert grade_side_of(other_side / "rms-after") == "after"
 
 
 # --- helpers ----------------------------------------------------------------------
