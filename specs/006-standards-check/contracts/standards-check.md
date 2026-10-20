@@ -229,9 +229,9 @@ it decides document kind from the last three characters of a path that is empty 
 
 | type | payload |
 |------|---------|
-| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}`. *Amended 2026-10-19 (feature 002, owner decision 145A, found on review):* `error` also when a settings restart failed once the old backend had stopped, with the failure, masked, as a failed first start is told: no backend answers the token of the page's last `init`. *Amended on the third review the same day:* the add-in marks its own word on the backend - `backend_starting`, `ready`, and `error` for a failed start or restart - `lifecycle: true`, and the page takes down a banner it put up for such an `error` once a later `init` names a backend; no other banner |
+| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}`. *Amended 2026-10-19 (feature 002, owner decision 145A, found on review):* `error` also when a settings restart failed once the old backend had stopped, with the failure, masked, as a failed first start is told: no backend answers the token of the page's last `init`. *Amended on the third review the same day:* the add-in marks its own word on the backend - `backend_starting`, `ready`, and `error` for a failed start or restart - `lifecycle: true`, and the page takes down a banner it put up for such an `error` once a later `init` names a backend; no other banner *Amended 2026-10-20 (feature 002, owner decision 150A):* from such an `error` the page's backend strip says "Backend not running" until an `init` names a backend - through an `init` that names none, and whatever banner is put up meanwhile - where it followed `init` alone and said "Backend ready" under that banner; any other `error` leaves the strip as it was |
 | `document.changed` | `{path, configuration, kind} \| null` when the active document changes |
-| `backend.stopped` | `{exit_code, log_path}` |
+| `backend.stopped` | `{exit_code, log_path}`. *Amended 2026-10-20 (feature 002, owner decision 150A):* the page says "The backend stopped. Save Settings on the Review tab to start it again.": the add-in starts the backend when it loads and a settings save, made on the Review tab, restarts it, so reopening the pane, which the sentence named before, starts nothing. No host posts it |
 | `backend.restarted` | `{sentences}` - *added 2026-10-19 (feature 002, owner decision 145A):* the add-in restarted the backend with saved settings, a save's restart made at once or one made after it waited (feature 002 `pane-host-messages.md`, `settings.save`). `sentences` is empty: the Review tab's sentences about a restart that waited are shown there alone |
 
 Identical to the Model check page's table, including the two backend stages and why they are
@@ -246,7 +246,10 @@ again. *Amended 2026-10-19 (feature 002, owner decision 145A, found on review):*
 check page, a call made while such an `init` is on its way waits for it, answered or refused, a
 latest check the old token could not read is read again by the next `init` until it is read or a
 check is pressed, and an Accept's re-read is shown only while its check is the one on screen
-(third review the same day).
+(third review the same day). *Amended 2026-10-20 (feature 002, owner decision 150A):* a re-read
+not shown is said in the banner, with the exception the Accept wrote, as on the Model check page;
+its words say a newer check was "pressed", not shown, since this page clears its verdict when a
+check fails before anything is graded, and a dropped re-read may then leave no check on screen.
 
 `kind` is what the page decides with. **[D]** The Model check page uses it to say whether a
 check can run at all, because only a part can be model-checked; here **all three kinds can be

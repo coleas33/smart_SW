@@ -78,6 +78,12 @@
   /** How long a pointed-at row stays lit, in milliseconds. */
   var FLASH_MS = 1500;
 
+  /**
+   * What the strip says from the add-in's word that the backend did not start until an `init`
+   * names a backend (owner decision 150A).
+   */
+  var NOT_RUNNING = 'Backend not running';
+
   /** A run folder's own name, which is also the backend's `check_id`. */
   function folderName(runDirectory) {
     var text = String(runDirectory || '').replace(/[\\/]+$/, '');
@@ -169,6 +175,14 @@
        */
       lifecycleBanner: false,
 
+      /**
+       * Whether the add-in's last word on the backend is that it did not start, and no `init` has
+       * named a backend since: the strip says it is not running until one does (owner decision
+       * 150A). Not the banner's mark above, which any banner put up since clears while the backend
+       * is still not running.
+       */
+      notRunning: false,
+
       /** Which buckets are showing, by bucket name. */
       buckets: Object.create(null),
 
@@ -240,7 +254,7 @@
         case 'backend.stopped':
           state.backend = null;
           state.token = null;
-          renderBackendState('The backend stopped. Reopen the pane to start it again.', true);
+          renderBackendState('The backend stopped. Save Settings on the Review tab to start it again.', true);
           return;
         case 'backend.restarted':
           // Owner decision 145A: the host restarted the backend with saved settings. The port and
@@ -430,15 +444,16 @@
             .then(function (shown) {
               if (shown) {
                 markAccepted(findingId, exceptionId);
+              } else {
+                // Dropped for a newer check, the exception written all the same (owner decision 150A).
+                acceptedWithoutReRead(
+                  exceptionId,
+                  ', and the exception is saved; a newer check was pressed before this check was re-read.');
               }
             })
             .catch(function (error) {
-              // The exception is written; only the re-read failed. Both are said, because a page
-              // that reported only the failure would invite a second acceptance of the same rule.
-              showBanner(
-                'Accepted as ' + (exceptionId || 'a new exception')
-                  + ', but the check could not be re-read: ' + error.message
-                  + ' Press the check again to see where it stands.');
+              // The exception is written; only the re-read failed.
+              acceptedWithoutReRead(exceptionId, ', but the check could not be re-read: ' + error.message);
             });
         })
         .catch(function (error) {
@@ -466,6 +481,17 @@
         renderResult(result);
         return true;
       });
+    }
+
+    /**
+     * An Accept whose exception is written but whose check is not shown again: the exception, why
+     * it is not shown, and the way on, in the banner. Both the exception and why are said, because
+     * a page that said only why would invite a second acceptance of the same rule.
+     */
+    function acceptedWithoutReRead(exceptionId, why) {
+      showBanner(
+        'Accepted as ' + (exceptionId || 'a new exception') + why
+          + ' Press the check again to see where it stands.');
     }
 
     /** Points at the row that was just accepted, and names the exception that covers it. */
@@ -1291,6 +1317,12 @@
       if (payload && payload.stage === 'error') {
         showBanner(payload.message || 'the check stopped');
         state.lifecycleBanner = payload.lifecycle === true;
+        if (state.lifecycleBanner) {
+          // The add-in's word that the backend did not start: the strip says so until an `init`
+          // names a backend (owner decision 150A).
+          state.notRunning = true;
+          renderBackendState(NOT_RUNNING, true);
+        }
         return;
       }
 
@@ -1477,7 +1509,12 @@
 
       renderDocument();
       renderBinding();
-      renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', !state.backend);
+      if (state.backend) {
+        state.notRunning = false;
+      }
+      renderBackendState(
+        state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),
+        !state.backend);
       if (state.backend && state.lifecycleBanner) {
         // The add-in's word that the backend did not start is no longer true: one is up.
         hideBanner();
