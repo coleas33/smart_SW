@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using SwReview.Extractor.Guard;
 using Xunit;
 
@@ -344,4 +345,187 @@ public class AllowlistGuardAnswersTests
             ReadOnlyGuard.Assert(key);
         }
     }
+}
+
+/// <summary>
+/// Owner decision 151A (feature 011 T201, 2026-10-20; research R13.1, contracts/guard.md section 9): the three
+/// allowlist guards answer through one shared rule, <see cref="AllowlistGuard"/>, where each wrote it in its
+/// own code, and the tests read each guard's keys and bare-name policy through it rather than name each by its
+/// type: the read audit's <c>Judged</c>, the creation tests' <c>AllowlistsByName</c> and the confirmed open's
+/// read check. Each guard keeps its own list, its own words, its own construction site and its matching -
+/// exact and ordinal - and <see cref="RemodelGuard"/>'s fourth answer stays its own. That no answer moved is
+/// <see cref="AllowlistGuardAnswersTests"/>'.
+/// </summary>
+public class AllowlistGuardTests
+{
+    /// <summary>
+    /// The product's allowlist guards are exactly the confirmed drawing's, the stage-1 re-modeler's and the
+    /// pane seat's: of every guard a gate the product builds is built with (<see cref="GuardSweep.ProductGates"/>,
+    /// which <see cref="GuardSweepTests"/> holds to every guard the product defines), these three are built on
+    /// the shared rule, and the read-only guard and the two exemptions over it are not.
+    /// </summary>
+    [Fact]
+    public void TheProductsAllowlistGuardsAreExactlyTheThree()
+    {
+        Assert.Equal(
+            new[] { nameof(DrawingOpenGuard), nameof(RemodelGuard), nameof(RemodelSeatGuard) },
+            GuardSweep.AllowlistGuards().Select(guard => guard.GetType().Name).OrderBy(name => name, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Each guard answers through the one shared <see cref="AllowlistGuard.Assert"/>: none declares an
+    /// <c>Assert</c> of its own or implements <see cref="ICallGuard"/> again beside it, so the rule cannot
+    /// differ guard by guard, and the shared one cannot be overridden.
+    /// </summary>
+    [Fact]
+    public void EveryAllowlistGuardAnswersThroughTheOneSharedAssert()
+    {
+        MethodInfo shared = typeof(AllowlistGuard).GetMethod(nameof(AllowlistGuard.Assert))!;
+        Assert.True(!shared.IsVirtual || shared.IsFinal, "AllowlistGuard.Assert can be overridden.");
+
+        AllowlistGuard[] guards = GuardSweep.AllowlistGuards();
+        Assert.NotEmpty(guards);
+        foreach (AllowlistGuard guard in guards)
+        {
+            Type type = guard.GetType();
+            InterfaceMapping map = type.GetInterfaceMap(typeof(ICallGuard));
+            MethodInfo target = Assert.Single(map.TargetMethods);
+            Assert.Equal(typeof(AllowlistGuard), target.DeclaringType);
+            Assert.Equal(shared.MethodHandle, target.MethodHandle);
+            Assert.Null(type.GetMethod(
+                nameof(ICallGuard.Assert),
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+        }
+    }
+
+    /// <summary>
+    /// Read through the shared rule, each guard's keys are its own list exactly - the set its class declares,
+    /// to which its own tests pin it - and its bare names have its own policy: the confirmed drawing's and the
+    /// stage-1's are the read-only guard's answer, with no reads of their own, and the pane seat's are its five
+    /// reads alone. What the tests read is a copy: nothing done to it changes what a guard allows.
+    /// </summary>
+    [Fact]
+    public void EachGuardsKeysAndBareNamePolicyAreItsOwn()
+    {
+        var guards = GuardSweep.AllowlistGuards().ToDictionary(guard => guard.GetType().Name, StringComparer.Ordinal);
+
+        AssertSameSet(DrawingOpenGuard.AllowedKeys, guards[nameof(DrawingOpenGuard)].Keys);
+        Assert.Equal(BareNamePolicy.ReadOnlyGuardsAnswer, guards[nameof(DrawingOpenGuard)].BareNames);
+        Assert.Empty(guards[nameof(DrawingOpenGuard)].Reads);
+
+        AssertSameSet(RemodelGuard.AllowedKeys, guards[nameof(RemodelGuard)].Keys);
+        Assert.Equal(BareNamePolicy.ReadOnlyGuardsAnswer, guards[nameof(RemodelGuard)].BareNames);
+        Assert.Empty(guards[nameof(RemodelGuard)].Reads);
+
+        AssertSameSet(RemodelSeatGuard.AllowedKeys, guards[nameof(RemodelSeatGuard)].Keys);
+        Assert.Equal(BareNamePolicy.OwnReadsOnly, guards[nameof(RemodelSeatGuard)].BareNames);
+        AssertSameSet(RemodelSeatGuard.AllowedReads, guards[nameof(RemodelSeatGuard)].Reads);
+
+        foreach (AllowlistGuard guard in guards.Values)
+        {
+            Assert.Throws<NotSupportedException>(() => ((ICollection<string>)guard.Keys).Add("IModelDoc2.EditDelete"));
+            Assert.Throws<NotSupportedException>(() => ((ICollection<string>)guard.Reads).Add("CloseDoc"));
+            Assert.Throws<MutatingCallError>(() => guard.Assert("IModelDoc2.EditDelete"));
+        }
+    }
+
+    /// <summary>
+    /// The shared rule, for each guard, read through its keys and its bare-name policy: each key passes, padded
+    /// too, and in another case is refused naming it; a key of another guard, a read spelled qualified and a
+    /// writer spelled qualified are refused naming them; a bare name is answered as the policy says - exactly
+    /// the read-only guard's answer, or passed only if it is one of the guard's own reads and refused naming it
+    /// otherwise - and a missing name is an argument error. The bare names: the reads the product makes, the
+    /// bare names of every guard's keys, writers the read-only guard refuses and writers it leaves allowed, and
+    /// a read in another case. <see cref="RemodelGuard"/>'s own refusals by name are the next test's.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AllowlistGuardAnswersTests.EveryAllowlistGuard), MemberType = typeof(AllowlistGuardAnswersTests))]
+    public void EachGuardAnswersByTheSharedRuleItsKeysAndItsBareNamePolicy(string name)
+    {
+        AllowlistGuard guard = GuardSweep.AllowlistGuards().Single(each => each.GetType().Name == name);
+        Assert.NotEmpty(guard.Keys);
+
+        foreach (string key in guard.Keys)
+        {
+            guard.Assert(key);
+            guard.Assert("  " + key + "  ");
+            AssertRefusedNaming(guard, key.ToUpperInvariant());
+            AssertRefusedNaming(guard, key.ToLowerInvariant());
+        }
+
+        IEnumerable<string> qualified = GuardSweep.AllowlistGuards()
+            .SelectMany(other => other.Keys)
+            .Except(guard.Keys, StringComparer.Ordinal)
+            .Concat(new[] { "IModelDoc2.GetPathName", "IDrawingDoc.GetViews", "IModelDoc2.IsOpenedReadOnly", "IModelDoc2.EditDelete", "ISldWorks.OpenDoc" });
+        foreach (string key in qualified)
+        {
+            AssertRefusedNaming(guard, key);
+        }
+
+        IEnumerable<string> bare = RemodelSeatGuard.AllowedReads
+            .Concat(GuardSweep.AllowlistGuards().SelectMany(each => each.Keys).Select(CallKey.BareName))
+            .Concat(new[] { "IsOpenedReadOnly", "GetDocuments", "GetViews", "GetTitle2", "Save3", "SaveAs3", "EditDelete", "DeleteConfiguration2", "SaveBMP", "getpathname" })
+            .Distinct(StringComparer.Ordinal);
+        foreach (string member in bare)
+        {
+            if (guard.BareNames == BareNamePolicy.ReadOnlyGuardsAnswer)
+            {
+                Assert.Equal(AllowlistGuardAnswersTests.Answer(ReadOnlyGuard.Assert, member), AllowlistGuardAnswersTests.Answer(guard.Assert, member));
+            }
+            else if (guard.Reads.Contains(member, StringComparer.Ordinal))
+            {
+                guard.Assert(member);
+            }
+            else
+            {
+                AssertRefusedNaming(guard, member);
+            }
+        }
+
+        Assert.Throws<ArgumentException>(() => guard.Assert(null!));
+        Assert.Throws<ArgumentException>(() => guard.Assert(string.Empty));
+        Assert.Throws<ArgumentException>(() => guard.Assert("   "));
+    }
+
+    /// <summary>
+    /// <see cref="RemodelGuard"/>'s fourth answer stays its own and explicit: a member it refuses by name - the
+    /// undo stack's and undo recording's, which the read-only guard does not refuse - is refused bare, where its
+    /// bare-name policy would hand it to the read-only guard and have it pass, in any case, and qualified with
+    /// any interface, each in the exclusion's words rather than the words for a key off its list: its refusal by
+    /// name is asked after its keys and before the rest of the shared rule. Neither other guard has it: the
+    /// confirmed drawing's answers the bare name as the read-only guard does, and the pane seat's refuses it as
+    /// a name off its list.
+    /// </summary>
+    [Fact]
+    public void TheStage1GuardsFourthAnswerIsItsOwnRefusalByNameBeforeTheRestOfTheRule()
+    {
+        var stage1 = new RemodelGuard();
+        Assert.NotEmpty(RemodelGuard.ExcludedMembers);
+        foreach (string member in RemodelGuard.ExcludedMembers)
+        {
+            ReadOnlyGuard.Assert(member);
+            foreach (string spelling in new[] { member, member.ToUpperInvariant(), "IModelDoc2." + member, "IModelDocExtension." + member })
+            {
+                MutatingCallError refusal = Assert.Throws<MutatingCallError>(() => stage1.Assert(spelling));
+                Assert.Equal(spelling, refusal.MemberName);
+                Assert.StartsWith(spelling + " is excluded from the stage-1 re-modeler surface by name", refusal.Message, StringComparison.Ordinal);
+            }
+
+            new DrawingOpenGuard().Assert(member);
+            MutatingCallError seat = Assert.Throws<MutatingCallError>(() => new RemodelSeatGuard().Assert(member));
+            Assert.DoesNotContain("excluded", seat.Message, StringComparison.Ordinal);
+        }
+    }
+
+    private static void AssertRefusedNaming(ICallGuard guard, string name)
+    {
+        MutatingCallError refusal = Assert.Throws<MutatingCallError>(() => guard.Assert(name));
+        Assert.Equal(name.Trim(), refusal.MemberName);
+        Assert.Contains(name.Trim(), refusal.Message, StringComparison.Ordinal);
+    }
+
+    private static void AssertSameSet(IEnumerable<string> expected, IEnumerable<string> actual) =>
+        Assert.Equal(
+            expected.OrderBy(name => name, StringComparer.Ordinal),
+            actual.OrderBy(name => name, StringComparer.Ordinal));
 }

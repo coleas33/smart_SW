@@ -36,8 +36,14 @@ namespace SwReview.Extractor.Guard;
 /// since owner decision 148A, which had the open's two other callers - <c>remodel.open</c>, under
 /// <see cref="RemodelGuard"/>, and <c>probe remodel</c>'s reopen, under <see cref="RemodelProbeGuard"/> -
 /// name it by this key too, and the read-only guard refuse the bare name.
+///
+/// Since owner decision 151A (2026-10-20; research R13.1) the three answers are
+/// <see cref="AllowlistGuard"/>'s, the rule the product's three allowlist guards share, with this guard's
+/// bare names its own reads alone (<see cref="BareNamePolicy.OwnReadsOnly"/>): this class keeps its keys,
+/// its reads, its words for a refusal - one sentence for any name off its list, as before - and its one
+/// construction site.
 /// </summary>
-public sealed class RemodelSeatGuard : ICallGuard
+public sealed class RemodelSeatGuard : AllowlistGuard
 {
     /// <summary>
     /// <c>ISldWorks.ActivateDoc3(title, false, swDontRebuildActiveDoc = 1, ref errors)</c>: the run's
@@ -78,26 +84,16 @@ public sealed class RemodelSeatGuard : ICallGuard
     /// <summary>The reads the seat makes, for reading: the tests assert them as an exact set.</summary>
     public static readonly IReadOnlyCollection<string> AllowedReads = AllowedReadSet;
 
-    /// <inheritdoc />
-    public void Assert(string interopMemberName)
+    /// <summary>A closed allowlist: the seat's two keys and its five reads, and no other name.</summary>
+    public RemodelSeatGuard()
+        : base(AllowedKeySet, AllowedReadSet)
     {
-        if (string.IsNullOrWhiteSpace(interopMemberName))
-        {
-            throw new ArgumentException("An interop member name is required.", nameof(interopMemberName));
-        }
-
-        string key = interopMemberName.Trim();
-
-        if (AllowedKeySet.Contains(key) || AllowedReadSet.Contains(key))
-        {
-            return;
-        }
-
-        throw new MutatingCallError(
-            key,
-            $"{key} is not on the re-modeler pane seat's allowlist, which holds the seat's own calls and "
-            + $"nothing else: {ActivateDocKey}, {OpenDocKey} and the reads "
-            + string.Join(", ", AllowedReadSet)
-            + " (specs/004-resilient-remodeler/contracts/guard-allowlist.md).");
     }
+
+    /// <inheritdoc />
+    protected override string Refusal(string key) =>
+        $"{key} is not on the re-modeler pane seat's allowlist, which holds the seat's own calls and "
+        + $"nothing else: {ActivateDocKey}, {OpenDocKey} and the reads "
+        + string.Join(", ", AllowedReadSet)
+        + " (specs/004-resilient-remodeler/contracts/guard-allowlist.md).";
 }

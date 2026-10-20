@@ -31,8 +31,15 @@ namespace SwReview.Extractor.Guard;
 /// This guard adds nothing to <see cref="ReadOnlyGuard"/> and reads nothing from it but the
 /// answer to <c>Assert</c>. Stage 2 gets a second, additive allowlist reviewed on its own;
 /// this list is never widened to accommodate it.
+///
+/// Since owner decision 151A (2026-10-20; feature 011 research R13.1) answers 1, 3 and 4 are
+/// <see cref="AllowlistGuard"/>'s, the rule the product's three allowlist guards share, with this
+/// guard's bare names the read-only guard's answer (<see cref="BareNamePolicy.ReadOnlyGuardsAnswer"/>);
+/// answer 2 stays this guard's own, explicit in <see cref="RefuseByName"/>, which the shared rule asks
+/// after the keys and before the rest, as here. This class keeps its keys, its refusals by name, its
+/// words and its construction sites.
 /// </summary>
-public sealed class RemodelGuard : ICallGuard
+public sealed class RemodelGuard : AllowlistGuard
 {
     /// <summary>
     /// The stage-1 write surface, exactly as contracts/guard-allowlist.md tabulates it. Every
@@ -145,50 +152,41 @@ public sealed class RemodelGuard : ICallGuard
     /// "was that call a write?", asked by the tool service's remodel observer so the log
     /// records a target path for every mutating call and for nothing else (T058).
     ///
-    /// It is a lookup on the same set <see cref="Assert"/> uses, ordinal and O(1), rather than
-    /// a scan of <see cref="AllowedKeys"/>: it runs inside every gated interop call, on the
-    /// SOLIDWORKS thread.
+    /// It is a lookup on the same set <see cref="AllowlistGuard.Assert"/> is built with, ordinal and
+    /// O(1), rather than a scan of <see cref="AllowedKeys"/>: it runs inside every gated interop call,
+    /// on the SOLIDWORKS thread. (Since decision 151A the shared rule matches its own ordinal copy of
+    /// the set, made once per guard.)
     /// </summary>
     public static bool IsAllowlisted(string? key) =>
         !string.IsNullOrWhiteSpace(key) && AllowedKeySet.Contains(key!.Trim());
 
-    /// <inheritdoc />
-    public void Assert(string interopMemberName)
+    /// <summary>
+    /// The stage-1 keys; a bare member name - what the remodel family's read call sites pass, exactly
+    /// as the reviewer's do - is the read-only guard's answer, unchanged.
+    /// </summary>
+    public RemodelGuard()
+        : base(AllowedKeySet)
     {
-        if (string.IsNullOrWhiteSpace(interopMemberName))
-        {
-            throw new ArgumentException(
-                "An interop member name is required.", nameof(interopMemberName));
-        }
+    }
 
-        string key = interopMemberName.Trim();
-
-        if (AllowedKeySet.Contains(key))
-        {
-            return;
-        }
-
-        string member = CallKey.BareName(key);
-
-        if (ExcludedMemberSet.Contains(member))
+    /// <summary>
+    /// Answer 2, this guard's own: a member on <see cref="ExcludedMembers"/> is refused however it is
+    /// spelled, bare or qualified with any interface, in words that say it is excluded by name.
+    /// </summary>
+    protected override void RefuseByName(string key)
+    {
+        if (ExcludedMemberSet.Contains(CallKey.BareName(key)))
         {
             throw new MutatingCallError(
                 key,
                 $"{key} is excluded from the stage-1 re-modeler surface by name "
                 + "(contracts/guard-allowlist.md).");
         }
-
-        if (CallKey.IsQualified(key))
-        {
-            throw new MutatingCallError(
-                key,
-                $"{key} is not on the stage-1 re-modeler allowlist. The re-modeler's write "
-                + "surface is a closed set (contracts/guard-allowlist.md); stage 2 gets its "
-                + "own additive list.");
-        }
-
-        // A bare member name is a read call site, in the remodel family exactly as in the
-        // reviewer's. The read-only rules apply to it unchanged.
-        ReadOnlyGuard.Assert(key);
     }
+
+    /// <inheritdoc />
+    protected override string Refusal(string key) =>
+        $"{key} is not on the stage-1 re-modeler allowlist. The re-modeler's write "
+        + "surface is a closed set (contracts/guard-allowlist.md); stage 2 gets its "
+        + "own additive list.";
 }
