@@ -15,7 +15,9 @@ What the contract makes this module responsible for:
 - **every bridge `error_code` becomes a named refusal class.** The mapping is the one
   table of the contract, asserted token by token, and a token this build has never heard of
   becomes `RunFolderFailed` carrying the host's own sentence rather than being guessed into
-  a nearer class.
+  a nearer class. The two codes `ScopeRefused` carries are the exception: they reach the page
+  in plain words that name no path, and the host's sentence goes to the log (owner decision
+  149A).
 - **`preexisting_rebuild_errors` is not an error body.** It answers `200` with
   `copy_present: false` and the count, because the host already has a path for it and the
   count is what the engineer reads.
@@ -664,6 +666,47 @@ REFUSALS: tuple[tuple[str, str], ...] = (
 )
 """The contract's mapping, token by token, plus a token this build has never heard of."""
 
+SCOPE_WORDS: dict[str, str] = {
+    "scope_not_probed": (
+        "The part to be copied is not one this remodel checked, so nothing was copied and no new "
+        "plan was made. Your part was not changed. Make your part the active document and press "
+        "Remodel a copy again."
+    ),
+    "scope_changed": (
+        "The part no longer reads as it did when this remodel checked it, so no copy was kept and "
+        "no new plan was made. Your part was not changed. Press Remodel a copy again to check it "
+        "afresh."
+    ),
+}
+"""What the Remodel tab reads for each of the two codes `ScopeRefused` carries from the bridge
+(owner decision 149A), pinned word for word: plain words that name no path, and the way on."""
+
+SCOPE_SENTENCES: tuple[tuple[str, str], ...] = (
+    (
+        "scope_not_probed",
+        "'probe:0f3a9c' is not a probe this bridge session performed. Every run is probed first, "
+        "so that every scope refusal happens before any copy is made (FR-001).",
+    ),
+    (
+        "scope_not_probed",
+        "probe 'probe:0f3a9c' was minted for 'C:\\Fictional\\FICT-frame.SLDPRT' and this request "
+        "names 'C:\\Fictional\\FICT-bracket.SLDPRT'. The verdict was reached on a different file.",
+    ),
+    (
+        "scope_changed",
+        "the copy's scope signals differ from the probe's in solid_body_count. The document being "
+        "changed is not the one the verdict was reached on.",
+    ),
+    (
+        "scope_changed",
+        "'C:\\Fictional\\FICT-bracket.SLDPRT' is open read-only and SOLIDWORKS now discards "
+        "changes to read-only documents without asking, so whether it has unsaved changes can no "
+        "longer be read before the copy is made.",
+    ),
+)
+"""Every sentence the bridge refuses `remodel.open` with under the two codes, as
+`RemodelScopeProbe.Require` and `BridgeDispatcher.OpenIn` write them, with fictional paths."""
+
 
 class TestTheRefusalMapping:
     @pytest.mark.parametrize(("code", "error_class"), REFUSALS)
@@ -684,7 +727,13 @@ class TestTheRefusalMapping:
         assert response.status_code == 400, response.text
         body = response.json()
         assert body["error_class"] == error_class
-        assert sentence in body["message"], "the host's own sentence is what the page reads"
+        if code in SCOPE_WORDS:
+            # Owner decision 149A: a scope refusal is read in plain words, and never in the host's
+            # sentence, which names the part's full path (`TestAScopeRefusalInPlainWords`).
+            assert body["message"] == SCOPE_WORDS[code]
+            assert sentence not in body["message"]
+        else:
+            assert sentence in body["message"], "the host's own sentence is what the page reads"
 
     def test_an_open_circuit_is_a_retryable_bridge_failure(
         self, client: TestClient, run_dir: Path, source: Path, bridge: ProbingBridge
@@ -706,6 +755,64 @@ class TestTheRefusalMapping:
         bridge.probe_returns = CircuitOpen(command="remodel.probe_scope", last_error=None)
 
         assert probe(client, source).json()["error_class"] == "BridgeUnavailable"
+
+
+class TestAScopeRefusalInPlainWords:
+    """Owner decision 149A: `ScopeRefused` reaches the Remodel tab in plain words, with no path.
+
+    The bridge refuses `remodel.open` with `scope_not_probed` when the open names a file no probe
+    of its session was minted for - a part made active between the plan's reading of the document
+    and its probe - and with `scope_changed` when the source no longer reads as it did at the
+    probe. Its sentences name the probe and the source's full path, both paths for a probe minted
+    for another file; the Remodel page prints a refusal's message as it is, on a tab whose words
+    name no path. So the page is given plain words for each code, true of every sentence under it,
+    and the bridge's sentence goes to the backend's log, where whoever needs it can read it.
+    """
+
+    @pytest.mark.parametrize(("code", "sentence"), SCOPE_SENTENCES)
+    def test_a_scope_refusal_reaches_the_page_in_plain_words_naming_no_path(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        caplog: pytest.LogCaptureFixture,
+        code: str,
+        sentence: str,
+    ) -> None:
+        bridge.open_raises = RemodelError(sentence, code, {})
+
+        with caplog.at_level("WARNING", logger="swreview.chat.remodel"):
+            response = open_copy(client, run_dir, source)
+
+        assert response.status_code == 400, response.text
+        body = response.json()
+        assert body["error_class"] == "ScopeRefused"
+        assert body["message"] == SCOPE_WORDS[code]
+        assert body["retryable"] is False
+        for named in (":\\", "Fictional", "probe:", source.name, run_dir.name, "solid_body_count"):
+            assert named not in response.text, named
+        logged = [record.getMessage() for record in caplog.records]
+        assert any(code in line and sentence in line for line in logged), logged
+
+    def test_the_plain_words_are_the_tab_s_own(self) -> None:
+        """Each sentence names the button the engineer presses by the label the Remodel page
+        gives it, and says what the tab's own refusals of a plan say of the engineer's part
+        (`RemodelHost.PartNotChanged`), so the two kinds of refusal read alike."""
+        page = REPO_ROOT / "extractor" / "SwReview.AddIn" / "Remodel" / "RemodelPage" / "index.html"
+        button = re.search(
+            r'<button[^>]*\bid="plan-run"[^>]*>([^<]+)</button>', page.read_text(encoding="utf-8")
+        )
+        assert button is not None, "index.html has no plan-run button"
+        host = REPO_ROOT / "extractor" / "SwReview.AddIn" / "Remodel" / "RemodelHost.cs"
+        unchanged = re.search(
+            r'PartNotChanged = "([^"]+)";', host.read_text(encoding="utf-8")
+        )
+        assert unchanged is not None, "RemodelHost.cs has no PartNotChanged sentence"
+
+        for words in SCOPE_WORDS.values():
+            assert re.search(rf"[Pp]ress {re.escape(button.group(1).strip())} again", words), words
+            assert unchanged.group(1) in words
 
 
 # --- 4. POST /remodel/open --------------------------------------------------------------
