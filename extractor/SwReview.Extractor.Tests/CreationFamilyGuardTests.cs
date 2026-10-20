@@ -747,15 +747,14 @@ public class ThrowawayPartExemptionTests
 /// <summary>The guard answers the decision 21A tests share.</summary>
 internal static class GuardAnswers
 {
-    /// <summary>A fresh instance of every <see cref="ICallGuard"/> the product builds a gate with.</summary>
-    public static IEnumerable<ICallGuard> EveryGateTheProductBuilds() => new ICallGuard[]
-    {
-        ReadOnlyCallGuard.Instance,
-        new SuppressTestGuard(),
-        new RemodelProbeGuard(),
-        new RemodelGuard(),
-        new DrawingOpenGuard(),
-    };
+    /// <summary>
+    /// A fresh instance of every <see cref="ICallGuard"/> the product builds a gate with. Edited
+    /// deliberately for decision 144A (2026-10-19): it was a second hand-written copy of
+    /// <see cref="GuardSweep.ProductGates"/>, and reads that list now, which
+    /// <see cref="GuardSweepTests"/> holds to every guard the product defines - the pane seat's among
+    /// them - so no sweep here misses a guard.
+    /// </summary>
+    public static IEnumerable<ICallGuard> EveryGateTheProductBuilds() => GuardSweep.ProductGates();
 
     public static bool ReadOnlyRefuses(string member)
     {
@@ -771,10 +770,12 @@ internal static class GuardAnswers
     }
 
     /// <summary>
-    /// True when <paramref name="gate"/> is one of the two allowlist guards and <paramref name="key"/> is
-    /// one of its own keys, which it accepts before <see cref="ReadOnlyGuard"/> is asked.
+    /// True when <paramref name="gate"/> is one of the allowlist guards and <paramref name="key"/> is
+    /// one of its own keys, which it accepts before <see cref="ReadOnlyGuard"/> is asked - since
+    /// decision 144A, the pane seat's as the third.
     /// </summary>
     public static bool AllowlistsByName(ICallGuard gate, string key) =>
         (gate is RemodelGuard && RemodelGuard.AllowedKeys.Contains(key))
-        || (gate is DrawingOpenGuard && DrawingOpenGuard.AllowedKeys.Contains(key));
+        || (gate is DrawingOpenGuard && DrawingOpenGuard.AllowedKeys.Contains(key))
+        || (gate is RemodelSeatGuard && RemodelSeatGuard.AllowedKeys.Contains(key));
 }

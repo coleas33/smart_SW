@@ -1264,10 +1264,10 @@ public class DrawingFamilyReadAuditTests
                 "a member probe standards asserts is absent from its gate log",
             [("ActivateDoc3", "SwReview.Extractor/Rms/RemodelInteropSurface.cs")] =
                 "the frozen interop manifest's row for ISldWorks.ActivateDoc3 (feature 004 T181), which the pane seat "
-                + "calls on the copy directly, outside the bridge and every gate; a row records a member and permits "
-                + "none. Named on decision 140A's review, whose keying by file found it: the literal's earlier entry "
-                + "named Program.cs only. That the seat's call passes no gate, though the read-only guard refuses "
-                + "ActivateDoc3, is research R10.4 item 6, a question for the owner (2026-10-19)",
+                + "calls on the copy outside the bridge; a row records a member and permits none. Named on decision "
+                + "140A's review, whose keying by file found it: the literal's earlier entry named Program.cs only. "
+                + "Since decision 144A (research R11, settling R10.4 item 6) the seat calls it through a gate of its "
+                + "own, by the qualified key its own guard, RemodelSeatGuard, allowlists",
             [("LoadFile4", "SwReview.Extractor.Console/Program.cs")] =
                 "a member probe standards asserts is absent from its gate log",
             [("dimensions", "SwReview.Extractor/Ir/DrawingSheet.cs")] =
@@ -1458,12 +1458,15 @@ public class DrawingFamilyReadAuditTests
     /// <summary>
     /// A literal as the read-only guard judges it: its member half when it is an
     /// interface-qualified key (feature 011 review, 2026-09-23), unless it is a key of one of the
-    /// two allowlist guards, which judge their own keys before the read-only guard is asked.
+    /// allowlist guards, which judge their own keys before the read-only guard is asked. Edited
+    /// deliberately for decision 144A (2026-10-19): the pane seat's guard is the third, and its two
+    /// keys are literals of the seat that makes the calls.
     /// </summary>
     internal static string Judged(string literal) =>
         CallKey.IsQualified(literal)
             && !RemodelGuard.AllowedKeys.Contains(literal)
             && !DrawingOpenGuard.AllowedKeys.Contains(literal)
+            && !RemodelSeatGuard.AllowedKeys.Contains(literal)
             ? CallKey.BareName(literal)
             : literal;
 
@@ -1524,7 +1527,9 @@ internal static class GuardSweep
 {
     /// <summary>
     /// Every guard a gate the product builds is built with: the read-only guard every gate gets by
-    /// default, and the four the exceptions and the confirmed drawing's open build their gates with.
+    /// default, and the five the exceptions, the confirmed drawing's open and, since decision 144A, the
+    /// re-modeler's pane seat build their gates with. <see cref="GuardSweepTests"/> holds it to every
+    /// guard the product defines, so a guard added later cannot be left out of the sweeps.
     /// </summary>
     internal static ICallGuard[] ProductGates() => new ICallGuard[]
     {
@@ -1533,6 +1538,7 @@ internal static class GuardSweep
         new RemodelProbeGuard(),
         new RemodelGuard(),
         new DrawingOpenGuard(),
+        new RemodelSeatGuard(),
     };
 
     /// <summary>
@@ -1587,6 +1593,83 @@ internal static class GuardSweep
             return true;
         }
     }
+
+    /// <summary>
+    /// Every gate the product builds lets through exactly <paramref name="exceptions"/> of
+    /// <paramref name="spellings"/> - keyed "<c>Guard spelling</c>", as <see cref="LetThrough"/> reports
+    /// them - each with a reason: a guard that comes to let another member through, or no longer lets
+    /// one of these through, fails, so an exception cannot widen, or outlive its guard, unnoticed.
+    /// Shared by the family sweeps of decisions 136A and 140A since decision 144A gave the first its own.
+    /// </summary>
+    internal static void AssertLetThroughExactly(
+        IReadOnlyCollection<string> spellings, IReadOnlyDictionary<string, (string Where, string Reason)> exceptions)
+    {
+        IReadOnlyList<string> letThrough = LetThrough(ProductGates(), spellings);
+
+        Assert.True(
+            new HashSet<string>(letThrough, StringComparer.Ordinal).SetEquals(exceptions.Keys),
+            "Family members a gate the product builds lets through: " + string.Join(", ", letThrough)
+                + "; expected exactly: " + string.Join(", ", exceptions.Keys));
+        Assert.All(exceptions, entry => Assert.False(string.IsNullOrWhiteSpace(entry.Value.Reason), entry.Key + " has no reason."));
+    }
+
+    /// <summary>
+    /// Each exception's key is still a literal of the product file named with it - its path under the
+    /// extractor folder, as the read audit's scan reports it - so one guard's exception cannot be kept
+    /// alive by another's call of the same member.
+    /// </summary>
+    internal static void AssertEveryExceptionIsStillNamed(IReadOnlyDictionary<string, (string Where, string Reason)> exceptions)
+    {
+        IReadOnlyList<(string Literal, string Where)> literals = DrawingFamilyReadAuditTests.Literals();
+
+        foreach (KeyValuePair<string, (string Where, string Reason)> exception in exceptions)
+        {
+            string key = exception.Key.Substring(exception.Key.IndexOf(' ') + 1);
+            Assert.True(
+                literals.Any(literal => literal.Literal == key && literal.Where == exception.Value.Where),
+                $"{exception.Key} is no longer named in {exception.Value.Where}; drop it, or say what calls it now.");
+        }
+    }
+}
+
+/// <summary>
+/// Decision 144A (feature 011 T163): "every gate the product builds" is every guard the product
+/// defines. The family sweeps, the creation and import-repair sweeps and the confirmed open's read
+/// check all read <see cref="GuardSweep.ProductGates"/>, so a guard added and left out of it would be
+/// swept by none of them - the pane seat's guard, which lets <c>ISldWorks.ActivateDoc3</c> through,
+/// above all.
+/// </summary>
+public class GuardSweepTests
+{
+    private static readonly Regex GuardDeclaration = new Regex(
+        @"\bclass\s+(\w+)\s*(?::[^{]*)?\bICallGuard\b", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// One of every concrete <see cref="ICallGuard"/> of the extractor's assembly, where every guard
+    /// lives (its <c>Guard</c> folder), and none declared anywhere else in the product's source.
+    /// </summary>
+    [Fact]
+    public void TheProductsGatesHoldOneOfEveryGuardTheProductDefines()
+    {
+        var defined = typeof(ICallGuard).Assembly.GetTypes()
+            .Where(type => typeof(ICallGuard).IsAssignableFrom(type) && type.IsClass && !type.IsAbstract)
+            .Select(type => type.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        var swept = GuardSweep.ProductGates()
+            .Select(gate => gate.GetType().Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Contains(nameof(RemodelSeatGuard), defined);
+        Assert.Equal(defined, swept);
+
+        var elsewhere = DrawingFamilyReadAuditTests.ProductSourceFiles()
+            .SelectMany(file => GuardDeclaration.Matches(File.ReadAllText(file)).Cast<Match>()
+                .Select(match => match.Groups[1].Value + " in " + Path.GetFileName(file)))
+            .ToList();
+        Assert.True(elsewhere.Count == 0, "Guards declared outside the extractor's Guard folder: " + string.Join(", ", elsewhere));
+    }
 }
 
 /// <summary>
@@ -1601,9 +1684,10 @@ internal static class GuardSweep
 /// activate, new, load, close or quit families (<see cref="BelongsToAFamily"/>) to one of three answers:
 /// a reader by section 2's prefixes, which stays allowed (FR-006); one of the <see cref="Allowed"/>
 /// members, each with its reason; or refused by <see cref="ReadOnlyGuard"/> in both spellings a call
-/// site can hand it - bare, and qualified with its interface - and by every gate the product builds.
-/// A member a later interop adds fails here until someone decides which it is. Only metadata is read;
-/// SOLIDWORKS is never started.
+/// site can hand it - bare, and qualified with its interface - and by every gate the product builds
+/// but for the exceptions a guard was written for, each named with its reason
+/// (<see cref="Exceptions"/>, since decision 144A). A member a later interop adds fails here until
+/// someone decides which it is. Only metadata is read; SOLIDWORKS is never started.
 /// </summary>
 public class DocumentLifecycleFamilyTests
 {
@@ -1642,6 +1726,24 @@ public class DocumentLifecycleFamilyTests
         // because the bridge handed the command name remodel.close to the read-only guard, which
         // judged it by its member half. The dispatcher no longer does, and nothing calls the member.
     };
+
+    /// <summary>
+    /// What a guard written for an exception lets through of these families, as the guard's type and
+    /// the key, each with the product file whose call needs it - its path under the extractor folder,
+    /// as the read audit's scan reports it - and the exception it is: exactly these (decision 144A,
+    /// 2026-10-19, which gave this class the exceptions <see cref="DocumentWriteFamilyTests"/> has). The
+    /// read-only guard, the suppress-test's, the re-modeler's and the confirmed drawing's let none
+    /// through.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, (string Where, string Reason)> Exceptions =
+        new Dictionary<string, (string Where, string Reason)>(StringComparer.Ordinal)
+        {
+            ["RemodelSeatGuard ISldWorks.ActivateDoc3"] = ("SwReview.AddIn/Remodel/SwRemodelSeat.cs",
+                "the re-modeler's pane seat makes the run's copy the active document, by its title and without a "
+                + "rebuild, for remodel.open_copy and before each dump (feature 004 T159); its own guard allowlists "
+                + "the qualified key and nothing else of the families but ISldWorks.OpenDoc7, which the read-only "
+                + "guard leaves allowed (decision 144A)"),
+        };
 
     internal static bool BelongsToAFamily(string name) => Family.IsMatch(name);
 
@@ -1717,14 +1819,25 @@ public class DocumentLifecycleFamilyTests
                 + "contracts/guard.md section 1) or name it in Allowed with its reason: " + string.Join(", ", callable));
     }
 
+    /// <summary>
+    /// Every gate the product builds refuses them in both spellings, except exactly
+    /// <see cref="Exceptions"/>. Edited deliberately for decision 144A (2026-10-19): this was
+    /// <c>EveryGateTheProductBuildsRefusesThem</c>, which asserted that no gate let any member through;
+    /// the pane seat's own guard lets <c>ISldWorks.ActivateDoc3</c> through, the one call the seat makes
+    /// that the read-only guard refuses, so the test names it as an exception, with the file whose call
+    /// needs it, as <see cref="DocumentWriteFamilyTests"/> names its own - and any other member a gate
+    /// lets through, or an exception no guard lets through any longer, fails it as before.
+    /// </summary>
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
-    public void EveryGateTheProductBuildsRefusesThem()
-    {
-        IReadOnlyList<string> letThrough = GuardSweep.LetThrough(
-            GuardSweep.ProductGates(), GuardSweep.Spellings(RefusedFamilyMembers()));
+    public void EveryGateTheProductBuildsLetsThroughOnlyTheNamedExceptions() =>
+        GuardSweep.AssertLetThroughExactly(GuardSweep.Spellings(RefusedFamilyMembers()), Exceptions);
 
-        Assert.True(letThrough.Count == 0, "Family members a gate the product builds lets through: " + string.Join(", ", letThrough));
-    }
+    /// <summary>
+    /// Each exception's key is still a literal of the product file whose call needs it (decision 144A),
+    /// so one guard's exception cannot be kept alive by another's call of the same member.
+    /// </summary>
+    [Fact]
+    public void EveryExceptionIsStillNamedByTheProduct() => GuardSweep.AssertEveryExceptionIsStillNamed(Exceptions);
 
     /// <summary>The reads among the families stay allowed in both spellings (FR-006): the lookups the product calls above all.</summary>
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
@@ -2020,17 +2133,8 @@ public class DocumentWriteFamilyTests
     /// unnoticed.
     /// </summary>
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
-    public void EveryGateTheProductBuildsLetsThroughOnlyTheNamedExceptions()
-    {
-        IReadOnlyList<string> letThrough = GuardSweep.LetThrough(
-            GuardSweep.ProductGates(), GuardSweep.Spellings(RefusedFamilyMembers()));
-
-        Assert.True(
-            new HashSet<string>(letThrough, StringComparer.Ordinal).SetEquals(Exceptions.Keys),
-            "Family members a gate the product builds lets through: " + string.Join(", ", letThrough)
-                + "; expected exactly: " + string.Join(", ", Exceptions.Keys));
-        Assert.All(Exceptions, entry => Assert.False(string.IsNullOrWhiteSpace(entry.Value.Reason), entry.Key + " has no reason."));
-    }
+    public void EveryGateTheProductBuildsLetsThroughOnlyTheNamedExceptions() =>
+        GuardSweep.AssertLetThroughExactly(GuardSweep.Spellings(RefusedFamilyMembers()), Exceptions);
 
     /// <summary>The reads among the families stay allowed in both spellings (FR-006): the two the product calls above all.</summary>
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
@@ -2079,18 +2183,7 @@ public class DocumentWriteFamilyTests
     /// exception cannot be kept alive by another's call of the same member.
     /// </summary>
     [Fact]
-    public void EveryExceptionIsStillNamedByTheProduct()
-    {
-        IReadOnlyList<(string Literal, string Where)> literals = DrawingFamilyReadAuditTests.Literals();
-
-        foreach (KeyValuePair<string, (string Where, string Reason)> exception in Exceptions)
-        {
-            string key = exception.Key.Substring(exception.Key.IndexOf(' ') + 1);
-            Assert.True(
-                literals.Any(literal => literal.Literal == key && literal.Where == exception.Value.Where),
-                $"{exception.Key} is no longer named in {exception.Value.Where}; drop it, or say what calls it now.");
-        }
-    }
+    public void EveryExceptionIsStillNamedByTheProduct() => GuardSweep.AssertEveryExceptionIsStillNamed(Exceptions);
 }
 
 /// <summary>
@@ -2180,20 +2273,17 @@ public class ImportRepairDenylistTests
     /// <summary>
     /// No gate the product builds is exempted from any of them: the suppress-test gate's two
     /// exemptions, <c>probe remodel</c>'s throwaway-part recipe, the re-modeler's stage-1
-    /// allowlist and the confirmed drawing's open all refuse every member, bare or qualified.
+    /// allowlist, the confirmed drawing's open and the re-modeler's pane seat all refuse every
+    /// member, bare or qualified. Edited deliberately for decision 144A (2026-10-19): the gates are
+    /// <see cref="GuardSweep.ProductGates"/>, which holds every guard the product defines - the read-only
+    /// guard and the pane seat's as well as the four this listed by hand.
     /// </summary>
     [Theory]
     [MemberData(nameof(EveryQualifiedMember))]
     public void EveryGateTheProductBuildsRefusesThem(string key)
     {
         string member = CallKey.BareName(key);
-        foreach (ICallGuard gate in new ICallGuard[]
-                 {
-                     new SuppressTestGuard(),
-                     new RemodelProbeGuard(),
-                     new RemodelGuard(),
-                     new DrawingOpenGuard(),
-                 })
+        foreach (ICallGuard gate in GuardSweep.ProductGates())
         {
             Assert.Throws<MutatingCallError>(() => gate.Assert(member));
             Assert.Throws<MutatingCallError>(() => gate.Assert(key));
