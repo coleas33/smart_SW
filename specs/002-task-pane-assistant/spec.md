@@ -50,6 +50,8 @@ The engineer opens the Settings section of the Review tab, chooses OpenAI (the d
 
 The engineer switches to the Terminal tab, picks Codex or Gemini, and gets that CLI running inside the Task Pane in the current run folder. The CLI can inspect the open assembly through the same read-only tools the reviewer uses (queries over the extracted package, measurements, captures), and cannot run shell commands, modify the SOLIDWORKS model, save documents, or write files. The Codex CLI ships first; the Gemini CLI terminal is deferred to a later verification on the workstation (Gemini remains a review-mode provider). The engineer can ask anything: "what is the heaviest part", "show me the mates on the cover", "screenshot the screw pattern".
 
+*Owner decision 151A amendment, 2026-10-20:* the pane does not show this tab, and has not since 2026-09-19. `TaskPaneControl.AskTabShown` is false, so the tab - captioned Ask in the pane, the Terminal tab of this story - and its terminal are built and hidden: the tab is not added to the pane, its page is not loaded, and its host is not attached, so nothing looks for a CLI or writes a generated profile, and no CLI runs in the pane. Showing it again is that one value; this story, its scenarios and FR-020 say what the tab does then. It would follow Review (FR-001's 147A note), and the third step would read "review or ask".
+
 **Why this priority**: It is the second half of the request and the fastest way for an engineer to ask ad hoc questions, but it depends on the tool server and the bridge from the first two stories.
 
 **Independent Test**: Launch Codex in the Terminal tab with the generated profile, ask it to list the components of the open assembly and capture the first one; confirm the answer came through our tool (the tool call is visible in the CLI and recorded in the run folder), and that an attempt to run a write command is refused by the CLI's sandbox.
@@ -136,7 +138,7 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 
 **General chat**
 
-- **FR-020**: The Terminal tab MUST run the chosen CLI (Codex or Gemini) inside the pane with the run folder as its working directory and MUST reflow on resize.
+- **FR-020**: The Terminal tab MUST run the chosen CLI (Codex or Gemini) inside the pane with the run folder as its working directory and MUST reflow on resize. *Owner decision 151A amendment, 2026-10-20:* the pane does not show the Terminal tab - captioned Ask in the pane - and has not since 2026-09-19 (`TaskPaneControl.AskTabShown` is false; User Story 3's note): the tab and its terminal are built and hidden, so no CLI runs in the pane. Were the tab shown again, this requirement holds as written.
 - **FR-021**: The pane MUST generate the CLI's profile on every launch such that our tool server is registered, file writes are refused, the CLI's shell and file-editing tools are disabled, and SOLIDWORKS and the run folder are reachable only through our tools; the profile MUST be regenerated even if the engineer edited it.
 - **FR-022**: The tool server exposed to the CLI MUST offer exactly the read-only subset of the feature 001 contract (package query tools, measurement tools, `request_capture`, and the bridge capture and measure tools) and MUST record every call in a chat log in the run folder.
 - **FR-023**: The pane MUST detect a missing or too-old CLI before launch and MUST show the install steps and versions.

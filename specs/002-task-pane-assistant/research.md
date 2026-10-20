@@ -1395,7 +1395,11 @@ does not answer as well as one that is not running.
      (feature 004) and Standards (feature 006), each built with its purpose sentence as banner and
      tooltip; and the step strip names the tabs step 3 is done on as the pane shows them, so it
      reads `3 Review` (139A). 139A left FR-001 as it was. User Story 3 and FR-020 still describe
-     the Terminal tab, which is built and hidden; they are not changed.
+     the Terminal tab, which is built and hidden; they are not changed. *Amended 2026-10-20 (owner
+     decision 151A; its record is feature 011's research R13.3, its task 011's T204)*: each carries a
+     dated note now, saying what the pane shows - the tab, captioned Ask, built and hidden since
+     2026-09-19 (`TaskPaneControl.AskTabShown` false), its page not loaded and its host not attached
+     - and that it holds as written were the tab shown again; no requirement's meaning changed.
 4. **`BackendUnavailable`'s label** (`reviewer/src/swreview/report/review_words_v1.yaml`).
    - Old: "The review backend is not running. Save Settings to start it again, then retry."
    - New: "The review backend is not running or not answering. Save Settings to start it again,

@@ -1594,6 +1594,9 @@ or calls any of them: a search of the product for each as a literal and as a cal
 *Amended 2026-10-19 (owner decision 144A, R11)*: items 1, 2, 5 and 6 are settled, each with its
 line below; items 3 and 4 stay recorded as they are.
 
+*Amended 2026-10-20 (owner decision 151A, R13)*: items 3 and 4 stay recorded as they are - the
+decision names "the 186 members no product path calls" among what stays; nothing was widened.
+
 1. **The lifecycle families on `IAssemblyDoc`.** 136A's grammar (`Open`, `Activate`, `New`, `Load`,
    `Reload`, `Close`, `Quit`, `Exit` ...) reads three interfaces. On `IAssemblyDoc` it would find
    members the guard lets through: `OpenCompFile` and `SelectiveOpen`, which open component
@@ -2216,6 +2219,10 @@ Nothing here was changed; each is the owner's call.
 *Amended 2026-10-20 (owner decision 148A, R12)*: items 1, 2, 3, 5 and 9 are settled, each with its
 line below; items 4, 6, 7, 8 and 10 stay recorded as they are.
 
+*Amended 2026-10-20 (owner decision 151A, R13)*: items 6 and 10 are settled, each with its line
+below - item 6 built, item 10 measured and left as it is, since the table would have lost seven
+writers; items 4, 7 and 8 stay recorded as they are, and so do R10.4 items 3 and 4.
+
 1. **`OpenDoc7` stands as `NewDocument` did** (the review's finding 12 too). The read-only guard
    leaves the bare name allowed (section 3), for `remodel.open`, which gates it bare under
    `RemodelGuard` - whose bare branch asks the read-only guard - and for `probe remodel`'s reopen of its
@@ -2282,12 +2289,19 @@ line below; items 4, 6, 7, 8 and 10 stay recorded as they are.
    base, which the tests could query, would hold the rule once; and `Judged` could key each guard's
    keys by its builder's file, as the seat's are now, which would narrow the audit for `RemodelGuard`'s
    and `DrawingOpenGuard`'s keys too.
+   *Settled 2026-10-20 by decision 151A (R13.1)*: built - `Guard/AllowlistGuard.cs` holds the rule
+   once, the three guards answer through it with their own lists, words and construction sites, and
+   `RemodelGuard`'s fourth answer is its own override; every guard answers every name the tables and
+   the product use as before. The tests read the guards through it, and `Judged` keys each guard's
+   keys by the files that build it, which fell out of it and narrows the audit as this item said.
 7. **The lifecycle grammar over the 34 interfaces.** Measured on 32.5.0.48, the grammar finds on the
    30 interfaces it does not read only members already refused - `IPartDoc`'s `CreateNewBody` twins by
    decision 21A, the drawing families' by their rows or feature 006's table, and
    `IDrawingDoc.INewGtol` by R11.4 - so `DocumentLifecycleFamilyTests.Interfaces` could read all 34, as
    `DocumentWriteFamilyTests` does, at no cost, and would catch a later interop's member there. The
    decision names `IAssemblyDoc`, so it reads four.
+   *Kept as recorded by decision 151A (2026-10-20, R13)*, which names it among what stays: the
+   lifecycle grammar still reads four interfaces.
 8. **`RemodelGuardTests`' example is R10.4 item 3's.** Should the owner refuse the writers of other
    words, `IModelDoc2.DeleteConfiguration2` among them, the example needs another member again.
 9. **Open copy during a run** (the second review; there before decision 144A). `RemodelHost.OpenCopy`
@@ -2303,6 +2317,11 @@ line below; items 4, 6, 7, 8 and 10 stay recorded as they are.
     one of the 28 families would be read as a writer and refused. None is today: the grammar's
     matches grew from 646 to 652 by the six names R11.4 meant. After an interop upgrade, the read
     audit would catch such a name the product reads.
+    *Settled 2026-10-20 by decision 151A (R13.2)*: measured, and not changed. The decision reads the
+    verbs as whole words provided the regenerated table loses no name; read so, it loses seven
+    writers of `IDrawingDoc` - `Dimensions`, which inserts the model's dimensions into the drawing,
+    and `SetupSheet` to `SetupSheet6`, which set a sheet up - and gains none, so the grammar, both
+    tables and the tests' copy stay as they are, and this item's question stands as written.
 
 ## R12. Decision 148A: the re-modeler's pane seat and its open path closed (owner, 2026-10-20)
 
@@ -2822,3 +2841,369 @@ Each is beyond what decision 148A names, so nothing here was changed.
    Discard copy and Stop behaved so before this decision, which adds Open copy; item 4 covers only the
    window at a run's end. The fix would be a flag on `init.latest_run` that a run is in flight, which
    `applyInit` reads. Unreachable until Start is switched on, as 004's T172 now says.
+
+## R13. Decision 151A: the allowlist guards' one rule, the grammar's verbs, and 002's Terminal tab (owner, 2026-10-20)
+
+**Source.** Decision 148A left five of R11.8's items recorded (4, 6, 7, 8 and 10). The owner's
+decision 151A of 2026-10-20 ("4A", the register's row 151A) takes two of them, and the text decision
+147A left in 002's spec, test first, with an adversarial review: one shared allowlist-guard base,
+which the tests query, for `DrawingOpenGuard`, `RemodelSeatGuard` and `RemodelGuard` (item 6, R13.1);
+the grammar's verbs read as whole words, provided the regenerated table loses no name (item 10,
+R13.2); and 002's User Story 3 and FR-020 say what the pane shows of the Terminal tab (R13.3). **The
+lifecycle grammar over all 34 interfaces (item 7) and the 186 members no product path calls (R10.4
+item 4, with item 3) stay recorded**, as do items 4 and 8. The tasks are T200 to T205 (Phase 10H)
+and, on the decision's adversarial review, T206 to T209 (R13.6).
+SOLIDWORKS was not started: the C# tests run over fakes and the interop stand-ins, the interop
+(`SolidWorks.Interop.sldworks` 32.5.0.48) was read as metadata only, and the API's help as the help
+file the install ships. Measured on the development machine: `SwReview.Extractor.Tests` 10,007 tests
+before and 10,043 after (10,059 after the review's fixes, R13.6), `SwReview.AddIn.Tests` 3,003 before
+and after, all green, the build at zero
+warnings from scratch (`--no-incremental`); the Python suite 18,089 passed and 5 skipped before, on
+3.12 and on 3.11, and the same after, on both (no Python file changed; the change is the extractor's
+and the records').
+
+### R13.1 One shared allowlist-guard base (T200, T201, T202)
+
+**Decision**: `Guard/AllowlistGuard.cs` holds the rule the three allowlist guards each wrote in their
+own code, and they answer through it. In order: a missing name is an argument error, and any other
+is judged trimmed; one of the guard's own interface-qualified keys (`Keys`), matched ordinally,
+passes; a name the guard refuses by name itself is refused, however it is spelled (`RefuseByName`);
+any other qualified key is refused, naming it, in the guard's own words (`Refusal`); and a bare name
+is answered by the guard's policy (`BareNames`) - the read-only guard's answer, unchanged, for the
+confirmed drawing's guard and the stage-1 guard (`ReadOnlyGuardsAnswer`), or, for the pane seat's
+closed allowlist (R12.1), passed only if it is one of the seat's five reads (`Reads`) and refused,
+naming it, otherwise (`OwnReadsOnly`).
+
+Each guard keeps its own list, in its own static set as before - so `guard-table-helpers.ps1` still
+reads `RemodelGuard`'s keys and exclusions from its source - its own words, its matching, exact and
+ordinal, and its construction sites. The base adds no name to any list and widens no guard: its
+`Assert` is not virtual, and its one hook, asked after the keys and before the rest of the rule,
+returns nothing, so it can refuse and never allow. `RemodelGuard`'s fourth answer - its
+`ExcludedMembers`, the undo stack's members, which the read-only guard does not refuse - is that
+hook's one override, explicit in `RemodelGuard` with its words. `Keys` and `Reads` are read-only
+copies of the sets the base matches, so nothing the tests do to what they read changes what a guard
+allows.
+
+**Engineered as small as it can be.** Two constructors - keys alone, a guard whose bare names are the
+read-only guard's answer, and keys with the guard's own reads, a closed allowlist - so a guard can be
+built with the two policies the guards have and no other; one abstract member, the refusal's words;
+and the one hook. No option was added for a guard that does not exist.
+
+**Not folded in: `RemodelProbeGuard` and `SuppressTestGuard`.** They are exemptions over the read-only
+guard, not allowlists: a name on their lists passes, matched ignoring case, and every other, bare or
+qualified, is the read-only guard's answer - so `IModelDoc2.GetTitle` passes both, where every
+allowlist guard refuses it - and the probe's list mixes bare names and qualified keys in one set. On
+the base each would answer otherwise, or the base would need options for them; they stay as they are,
+and `RemodelProbeGuard`'s matching ignoring case stays R12.9 item 3's.
+
+**The tests read the guards through it.** `GuardSweep.AllowlistGuards` is the product's gates built
+on the rule. The read audit's `Judged`, the creation tests' `GuardAnswers.AllowlistsByName` and the
+confirmed open's read check read each guard's keys and policy there, rather than name a guard by its
+type or read its class's list; and `GuardSweepTests`' declaration pattern reads a guard declared on
+the base, whose declaration names no `ICallGuard`.
+
+**`Judged` keyed by its builder's file: it fell out, and narrows the audit.** The audit judged a key of
+`RemodelGuard` or `DrawingOpenGuard` whole in every file, and the seat's keys whole in the seat's own
+file alone (`IsTheSeatsOwnKey`, R11.7). Read through the base, one rule serves all three: a key of an
+allowlist guard is judged whole in a file that builds that guard, and by its member half anywhere
+else, as the read-only guard judges it. `DrawingFamilyReadAuditTests.BuildersOf` names the files - the
+confirmed drawing's guard its scope (`Sw/DrawingOpenScope.cs`); the stage-1 guard the bridge's
+dispatcher, the gate it builds when it is handed none, and the add-in's tool service host; the seat's
+guard the seat - and `EachAllowlistGuardIsBuiltInExactlyTheFilesTheAuditReadsItsKeysWholeIn` holds the
+list to the source: every product file that builds one, by `new` or by a target-typed `new()`
+declared as one, and no other. *Corrected on the decision's review (R13.6)*: that check read those
+two forms alone, so it held no construction to the list - a field set by `new()` on another line, or
+`new RemodelGuard { }`, built a guard in a file it did not name with every test green; since T206
+`NoProductFileButAnAllowlistGuardsBuildersNamesItButForTheNamedLines` holds every naming of a guard to
+its builders' files, but for two named lines that build nothing. So the seat's keys are read as
+before by the feature 011 audit - and by decision 21A's and 17A's, which call `Judged` and never had
+the seat's exemption, a little more widely: they judged the seat's `ISldWorks.ActivateDoc3` in the
+seat's file as `ActivateDoc3` and judge it whole now, which moves neither, since neither table holds
+`ActivateDoc3` (noted on the review, R13.6) - and the other two guards' more narrowly:
+`ISldWorks.OpenDoc7` is whole in the dispatcher, the tool service host and the seat, and by
+its member half in the probe host, where the audit's exemption for the probe's own calls
+(`IsTheProbesOwnCall`) takes it, the probe's guard letting it through; the stage-1 keys
+`Rms/RemodelEquations.cs` and `Rms/RemodelSystemToggles.cs` name are read by their member halves, none
+of which a table refuses; and of the confirmed drawing's keys only `ISldWorks.CloseDoc` stands as a
+literal outside the `Guard` folder, in the dispatcher, as the stage-1 guard's key - the scope names
+its keys through the guard's constants - so none is read whole on the confirmed drawing's account.
+Every audit is green read so. `IsTheSeatsOwnKey` is the general rule's own case and
+is gone. And the two guards that had no construction-site test have one, since the decision's review
+(T206; the check first written here read two forms of construction alone, and was not one); the
+seat's own (`OnlyThePaneSeatNamesTheGuardOrItsGate`) stands beside it.
+
+**No answer moved.** Before the code moved, T200 pinned the guards' answers
+(`AllowlistGuardAnswersTests`): each guard's `Assert` as it stood at `5685def` is kept verbatim as the
+oracle, and each guard must answer as its oracle does - allowed, or refused naming the same member in
+the same words, or the same argument error - every name the generated tables and the product use: the
+feature 011 and decision 21A tables, bare and qualified with each row's interface, and the names each
+leaves allowed; the hand-kept 006, 010 and 17A tables and the read-only guard's denials; every string
+literal of the product source; each guard's keys, reads and refusals; and blank and malformed names -
+each as written, in upper and lower case and padded with spaces - and, where the interop is
+installed, every member of the 34 interfaces, bare and qualified. A third test holds the oracle to the
+guards' own pinned cases, so a slip in the copy cannot agree with a slip in a guard. The oracle reads
+each guard's lists and the read-only guard live, as the guards do, so a list changed on purpose later
+moves both sides. Green before the change and after it. Beside them, each guard's whole answer to
+each of the same 48,560 names was written out before the change and after it (a scratch test, not
+kept), and the two are the same, byte for byte:
+
+| Guard | Names | Allowed | Refused | Argument error | SHA-256 of the answers, before and after |
+|---|---|---|---|---|---|
+| `DrawingOpenGuard` | 48,560 | 22,399 | 26,148 | 13 | `16636dff1ff86e3b399fcc87ff9f781abbfe44af548fb57ee11625b4ce1cf51a` |
+| `RemodelSeatGuard` | 48,560 | 16 | 48,531 | 13 | `35e24e0bd74afab40cd7517900bf2fd17e46a2e8d8189ce759cbee0a826778d3` |
+| `RemodelGuard` | 48,560 | 22,420 | 26,127 | 13 | `a6bcd3d2856b16b01ae63af96c7c5b4d9ff1ccf91011aec086b6cfce778bba6e` |
+
+(The seat's 16: its two keys and five reads, each also padded, and two more with a tab beside them.)
+Both generators reproduce the two tables and their C# blocks byte for byte.
+
+**Tests.** T200, `AllowlistGuardAnswersTests`: the oracle over every name the tables and the product
+use, a case per guard; over the interop's members; and the oracle's own check - 5 cases of 3 tests,
+green before and after. T201, `AllowlistGuardTests`: the product's allowlist guards are exactly the
+three; each answers through the one shared `Assert`, which none declares again or overrides; each
+one's keys and policy, read through the base, are its own, and cannot be changed through it; the
+shared rule for each, through its keys and its policy - its keys pass, padded too, and are refused in
+another case; another guard's keys, and reads and writers spelled qualified, are refused naming them;
+bare names as its policy says; and a missing name is an argument error; and `RemodelGuard`'s fourth
+answer, refused bare in any case and qualified with any interface, in the exclusion's words. In
+`GuardTests.cs`, `AnAllowlistGuardsKeyIsJudgedWholeOnlyInAFileThatBuildsThatGuard` (20 cases) and the
+builders' check (replaced on the review by the construction-site test, R13.6); and three cases more
+for the declaration pattern. Red for want of T202 - the base
+written and no guard on it yet: 19 cases of 10 tests.
+
+**Edited deliberately**: `Judged` (it took the literal alone and named two guards; it takes the
+literal and its file and reads every allowlist guard through the base, keyed by its builders' files),
+and the audits that call it pass the file; `IsTheSeatsOwnKey`, gone, and
+`NoLiteralOfTheProductSourceIsRefusedByTheTableExceptTheNamedOnes` without it - it exempted what
+`Judged` reads whole now, the seat's keys in the seat's file, and nothing else; `GuardAnswers.AllowlistsByName`
+(through the base, no type named); `DrawingOpenGuardTests.TheReadOnlyCheckIsABareReadEveryGuardButThePaneSeatsAllows`
+(the seat told by its policy, and the guards that refuse the read asserted to be exactly the seat's,
+which it did not check); and `GuardSweepTests`' declaration pattern (the base's name too). Each asserts
+as much as before or more, but for one clause: decision 21A's and 17A's audits, which call `Judged`
+and never had the seat's own exemption, judge the seat's `ISldWorks.ActivateDoc3` in the seat's file
+whole where they judged it as `ActivateDoc3`, and neither table holds `ActivateDoc3`, so neither
+answers otherwise (noted on the review, R13.6).
+
+**Evidence**: commits `6683cec` (T200) and `7097730` (T201, T202); M71 to M87 (R13.4); and on the
+decision's review, `f518628` (T206) and `004e188` (T207, T208), M88 to M102 (R13.6).
+
+### R13.2 The grammar's verbs as whole words: measured, and not changed (T203)
+
+**What was tried.** Section 2's writer grammar reads its verbs as prefixes:
+`^(set_|I?(Set|Add|...|Unfreeze))`. Read as whole words, a verb is followed by an uppercase letter, a
+digit or the end of the name - the pattern ending `...|Unfreeze)(?=[A-Z0-9]|$))`. Two readings were
+decided with it: the COM twin's `I` stays where it is, before the verb, so `ISelectEntity` is a
+writer and a twin like `IClosestDistance` would not be; and a digit ends a word, so `Crop2`,
+`Select3` and `Create1stAngleViews` stay writers. The form of the reader rule, "not followed by a
+lowercase letter" (`(?![a-z])`), which reads an underscore as a word's end too, was run as well; on
+32.5.0.48 the two give the same tables.
+
+**The check.** Both generators were run from a scratch copy of `extractor/tools/` whose writer
+pattern differed in that one line, in the order a new interop is regenerated in -
+`list-writer-members.ps1`, its C# block written where `list-creation-members.ps1` reads it, then
+`list-creation-members.ps1` - and the outputs compared with the committed ones, which the unchanged
+generators reproduce byte for byte:
+
+- **The feature 011 table loses seven names and gains none**, all of `IDrawingDoc`: `Dimensions`,
+  `SetupSheet`, `SetupSheet2`, `SetupSheet3`, `SetupSheet4`, `SetupSheet5` and `SetupSheet6`. The
+  grammar's matches on the 28 families fall from 652 to 645 and the new names from 758 to 751, and
+  `ReadOnlyGuard.Drawing.cs` loses the same seven.
+- **Decision 21A's creation table is unchanged**, byte for byte, as is `ReadOnlyGuard.Creation.cs`.
+
+**Why they are lost.** Each begins with a verb's letters that run on into a word of its own:
+`Dimensions` is the verb `Dimension` followed by `s`, and `SetupSheet` is `Set` followed by `up`. All
+seven are writers by the API's help (`sldworksapi.chm`, read in the scratchpad): `IDrawingDoc.Dimensions`
+"adds dimensions to the drawing from model", opening the Insert Model Items dialog, and `SetupSheet` to
+`SetupSheet6` set a sheet up - its name, paper size, template, scale and projection. Read as whole
+words, the table would no longer refuse them, and every read-only gate would let them through. The
+read audit's named literal `dimensions` in `Ir/DrawingSheet.cs`, there because the table refuses
+`IDrawingDoc.Dimensions`, would have gone stale with it (`EveryNamedLiteralIsStillInTheSourceAndStillRefused`).
+
+**So nothing is changed**, as the decision provides: the generator's pattern, the tests' copy of
+section 2, both tables, `ReadOnlyGuard.Drawing.cs` and the tests stand as they were. R11.8 item 10's
+question stands as written - a reader whose name starts with a verb's letters on one of the 28
+families would be refused, and the read audit would catch it should the product read one - and a
+whole-word rule that kept these seven would need them named, `Setup` as a verb or the rows by hand,
+which is a decision of its own.
+
+**Evidence**: the scratch runs of 2026-10-20 and the diff above; no commit, since nothing changes.
+
+### R13.3 002's User Story 3 and FR-020 (T204)
+
+Decision 147A amended FR-001 to the tabs the pane shows and left User Story 3 and FR-020, which
+describe the Terminal tab as shown (002 research 147A item 3; the register's row 147A). Verified
+against the code on the branch: `TaskPaneControl.AskTabShown` is false, as it has been since
+2026-09-19 (`a35f457`); the tab - captioned Ask in the pane, the story's Terminal tab - is built, and
+added to the pane only while that value is true; its page is loaded only then
+(`TaskPaneControl.InitializeAsync`); and the add-in attaches its host, `TerminalHost`, only then
+(`SwReviewAddIn`), so nothing looks for a CLI, makes the terminal's run folder or writes a generated
+profile, and no CLI runs in the pane. Each now carries a dated note, in the style of FR-001's: what
+the pane shows, and that the story and the requirement hold as written were the tab shown again -
+after Review, the third step reading "review or ask", as FR-001's note says. No requirement's meaning
+changed. 002's research entry for 147A, which said the two were not changed, has a dated note
+pointing here; the task is this phase's T204, so 002's own task list has no phase for it. Docs only:
+no test reads either.
+
+**Evidence**: commit `15f6355`.
+
+### R13.4 The mutations
+
+Each change taken out once, by an exact replacement in one file, in the branch's worktree, its code
+`7097730`'s: the solution built and the extractor's suite run, then the file restored byte for byte and
+checked so by its SHA-256. M71 to M79 take out a piece of the shared rule, M80 to M82 a piece of a
+guard's own, M83, M84, M86 and M87 a piece of the tests' reading of the guards, and M85 puts a
+construction site where none is named. Every mutation is red. The three guards' own test classes,
+the pins of T200 and the tests of T201 are where each turns red; a mutation of the rule's bare-name
+branch can turn only the guards that take that branch red, and each branch is mutated.
+
+| Id | Taken out | T200's pins red | Red |
+|---|---|---|---|
+| M71 | the shared rule: a qualified key off the list handed to the read-only guard | `DrawingOpenGuard`, `RemodelSeatGuard`, `RemodelGuard`; the interop's members | 23 cases of 12 tests: `AnyOtherQualifiedKeyIsRefusedNamingIt`, `Assert_BareWriterTheDenylistMisses_PassesWhichIsWhyWritesAreQualified`, `Assert_ExcludedMember_IsRefused` and 9 more |
+| M72 | the shared rule: a bare name refused where the policy is the read-only guard's answer | `DrawingOpenGuard`, `RemodelGuard`; the interop's members | 413 cases of 306 tests: `ABareReadIsAllowedExactlyAsTheReadOnlyGuardAllowsIt`, `ACandidateRowSpelledDifferentlyButNamingTheSameFileIsRead`, `ACandidateSolidWorksDidNotOpenReadOnlyIsARefusalSayingWhy_ClosedUnreadAndMergingNothing` and 303 more |
+| M73 | the shared rule: a closed allowlist's own reads refused | `RemodelSeatGuard`; the interop's members | 9 cases of 4 tests: `EachGuardAnswersByTheSharedRuleItsKeysAndItsBareNamePolicy`, `EachOfTheFiveReadsIsAllowed`, `EveryMemberOfTheInterfacesTheTablesAreWrittenAgainstIsAnsweredAsBeforeDecision151A` and 1 more |
+| M74 | the shared rule: keys matched in any case | `DrawingOpenGuard`, `RemodelSeatGuard`, `RemodelGuard`; the interop's members | 17 cases of 6 tests: `AnyOtherQualifiedKeyIsRefusedNamingIt`, `Assert_MisCasedKey_IsRefused`, `Assert_TheOpenOfTheCopyPassesByItsQualifiedKeyAndIsRefusedBare` and 3 more |
+| M75 | the shared rule: a closed allowlist's reads matched in any case | `RemodelSeatGuard`; the interop's members | 6 cases of 4 tests: `AnyOtherBareNameIsRefusedNamingItWhateverTheReadOnlyGuardAnswers`, `EachGuardAnswersByTheSharedRuleItsKeysAndItsBareNamePolicy`, `EveryMemberOfTheInterfacesTheTablesAreWrittenAgainstIsAnsweredAsBeforeDecision151A` and 1 more |
+| M76 | the shared rule: a guard's refusal by name asked after the qualified-key refusal | `RemodelGuard`; the interop's members | 3 cases of 3 tests: `EveryMemberOfTheInterfacesTheTablesAreWrittenAgainstIsAnsweredAsBeforeDecision151A`, `EveryNameTheTablesAndTheProductUseIsAnsweredAsBeforeDecision151A`, `TheStage1GuardsFourthAnswerIsItsOwnRefusalByNameBeforeTheRestOfTheRule` |
+| M77 | the shared rule: a guard's refusal by name never asked | `RemodelGuard`; the interop's members | 7 cases of 4 tests: `Assert_ExcludedMember_IsRefused`, `EveryMemberOfTheInterfacesTheTablesAreWrittenAgainstIsAnsweredAsBeforeDecision151A`, `EveryNameTheTablesAndTheProductUseIsAnsweredAsBeforeDecision151A` and 1 more |
+| M78 | the shared rule: the name not trimmed | `DrawingOpenGuard`, `RemodelSeatGuard`, `RemodelGuard`; the interop's members | 10 cases of 6 tests: `Assert_AllowlistedKey_IsTrimmedBeforeItIsJudged`, `EachGuardAnswersByTheSharedRuleItsKeysAndItsBareNamePolicy`, `EachOfTheFiveReadsIsAllowed` and 3 more |
+| M79 | the shared rule: only a null name an argument error, a blank one judged | `RemodelSeatGuard`, `RemodelGuard` | 5 cases of 3 tests: `EachGuardAnswersByTheSharedRuleItsKeysAndItsBareNamePolicy`, `EveryNameTheTablesAndTheProductUseIsAnsweredAsBeforeDecision151A`, `NoMemberIsAnArgumentError` |
+| M80 | the confirmed drawing's guard built as a closed allowlist with no reads | `DrawingOpenGuard`; the interop's members | 111 cases of 93 tests: `ABareReadIsAllowedExactlyAsTheReadOnlyGuardAllowsIt`, `ACandidateRowSpelledDifferentlyButNamingTheSameFileIsRead`, `ACandidateSolidWorksDidNotOpenReadOnlyIsARefusalSayingWhy_ClosedUnreadAndMergingNothing` and 90 more |
+| M81 | the pane seat's guard built handing its bare names to the read-only guard | `RemodelSeatGuard`; the interop's members | 18 cases of 7 tests: `ANameTheReadOnlyGuardAllowsIsRefusedWhenTheSeatDoesNotMakeIt`, `AnyOtherBareNameIsRefusedNamingItWhateverTheReadOnlyGuardAnswers`, `EachGuardsKeysAndBareNamePolicyAreItsOwn` and 4 more |
+| M82 | the stage-1 guard's fourth answer reading the bare name alone, as the read-only guard does | `RemodelGuard`; the interop's members | 3 cases of 3 tests: `EveryMemberOfTheInterfacesTheTablesAreWrittenAgainstIsAnsweredAsBeforeDecision151A`, `EveryNameTheTablesAndTheProductUseIsAnsweredAsBeforeDecision151A`, `TheStage1GuardsFourthAnswerIsItsOwnRefusalByNameBeforeTheRestOfTheRule` |
+| M83 | the read audit judging an allowlist guard's key whole in every file again (test side) | none | 8 cases of 1 test: `AnAllowlistGuardsKeyIsJudgedWholeOnlyInAFileThatBuildsThatGuard` |
+| M84 | a file that builds no stage-1 guard named among its builders (test side) | none | 3 cases of 2 tests: `AnAllowlistGuardsKeyIsJudgedWholeOnlyInAFileThatBuildsThatGuard`, `EachAllowlistGuardIsBuiltInExactlyTheFilesTheAuditReadsItsKeysWholeIn` |
+| M85 | a stage-1 guard built in a product file the audit does not name | none | 1 case of 1 test: `EachAllowlistGuardIsBuiltInExactlyTheFilesTheAuditReadsItsKeysWholeIn` |
+| M86 | AllowlistsByName answering for any allowlist guard whatever the key (test side) | none | 9 cases of 2 tests: `EveryGateRefusesTheMemberQualified`, `TheOnlyAllowlistKeyAmongTheQualifiedSpellingsIsTheStage1Folder` |
+| M87 | the declaration pattern reading ICallGuard alone again (test side) | none | 2 cases of 1 test: `TheDeclarationPatternReadsEveryFormOfAGuard` |
+
+Under M79 the confirmed drawing's guard answers as before, so its pin stays green: a blank name it
+hands on, trimmed to nothing, is the read-only guard's own argument error, in the same words and for
+the same parameter - an equivalent mutant for that guard, and red for the other two. Under M83 every
+audit stays green, since the old rule, the looser, finds nothing in today's source to refuse; the
+narrowing is held by the rule's own theory. And under M76 and M82 `RemodelGuardTests` stays green,
+since it asserts that an excluded member is refused and not in which words; the pins and
+`TheStage1GuardsFourthAnswerIsItsOwnRefusalByNameBeforeTheRestOfTheRule` are what turn red.
+
+*Added on the decision's review (R13.6)*: M88 to M102, the same way, in the branch's worktree on
+`6609c60` - M88 to M99 against T206's test, M100 to M102 against T207's - then a build from scratch at
+zero warnings and both suites green. M88 and M89 are the review's own probes, which the builders check
+T206 replaces let through with every test green; each of M88 to M99 turns T206's test red and no
+other, and none moves a guard's answer.
+
+| Id | Taken out, or put in | Red |
+|---|---|---|
+| M88 | the review's first probe, in `Probes/DrawingOpenProbe.cs`: a field `private static DrawingOpenGuard? _drawing;` set by `_drawing = new();` on another line | 1 case of 1 test: `NoProductFileButAnAllowlistGuardsBuildersNamesItButForTheNamedLines` |
+| M89 | the review's second probe, there: `new SwGate(new CircuitBreaker(), new RemodelGuard { })` | the same |
+| M90 | there: a nullable local, `RemodelGuard? guard = new();` | the same |
+| M91 | there: `Activator.CreateInstance<RemodelGuard>()` | the same |
+| M92 | there: `Activator.CreateInstance(typeof(DrawingOpenGuard))` | the same |
+| M93 | there: a factory, `static DrawingOpenGuard MutantMake() => new();` | the same |
+| M94 | there: an array, `DrawingOpenGuard[] MutantArray = { new() };` | the same |
+| M95 | there: `new RemodelGuard` with its `(` on the next line | the same |
+| M96 | the stage-1 guard built in `Sw/DrawingOpenScope.cs`, a builder of another guard | the same |
+| M97 | the stage-1 guard built in the add-in's `Remodel/SwRemodelSeat.cs`, which builds its own alone | the same |
+| M98 | a named line that builds nothing, changed (probe D14's read of the keys) | the same |
+| M99 | a named builder that builds none: the tool service's remodel gate built on the read-only guard, its static `RemodelGuard.IsAllowlisted` kept | the same |
+| M100 | the shared rule built with no check of its keys | 8 cases of 1 test: `AGuardBuiltWithAKeyThatIsNotQualifiedFailsAsItIsBuilt` |
+| M101 | the shared rule built with no check of its reads | 7 cases of 1 test: `AGuardBuiltWithAReadThatIsNotABareNameFailsAsItIsBuilt` |
+| M102 | the reads checked only for being unqualified, as `CallKey.IsQualified` reads them | 5 cases of 1 test: `AGuardBuiltWithAReadThatIsNotABareNameFailsAsItIsBuilt` |
+
+### R13.5 Found on the way
+
+1. **004's `guard-allowlist.md` described the stage-1 guard's rule wrongly.** Its "Keys are
+   interface-qualified" section said a qualified key off the list is handed to the read-only guard by
+   its bare name. The guard has refused such a key outright since it landed (`ceada16`, 2026-09-16),
+   as its own comment and tests say and as the shared rule does. Corrected there with a dated note,
+   the old words kept (T205).
+2. **002's other words for the hidden tab.** Beside User Story 3 and FR-020, the spec speaks of the
+   terminal as shown in User Story 4 ("or by the terminal CLI"), an edge case ("The Terminal tab is
+   opened before any review"), FR-021 to FR-023, and SC-003, SC-004 and SC-008. The decision names the
+   two, so the others are as they were; for the owner, should they say so too.
+   *Completed on the decision's review (R13.6)*: the list was short. Each place below was read in
+   `spec.md` and speaks of the general chat, its CLI or its terminal as the pane shows them:
+   - the **Input** line, the request as it was made ("plus an embedded Codex or Gemini CLI terminal for
+     read-only general chat");
+   - **User Story 4**: its title ("from Both Modes"), its story ("or by the terminal CLI"), its
+     Independent Test ("a measurement from the terminal CLI") and its first scenario ("either mode");
+   - the **edge cases** of a CLI older than the minimum, of the CLI's generated profile edited by the
+     engineer, of Gemini's tool naming limits (the CLI's tool server, named `swreview`, per
+     `contracts/mcp-toolset.md`) and of the Terminal tab opened before any review;
+   - **FR-021 to FR-023**, and **FR-024** ("Neither mode"), **FR-025** ("The general chat") and
+     **FR-029** ("Both WebView2 pages", the Review page and the terminal's);
+   - the **key entities** Tool Service ("that both modes use"), Terminal Session, Tool Server Profile
+     and Chat Log;
+   - **SC-003** ("either mode"), **SC-004** ("a 30-minute general chat session") and **SC-008**; and
+   - the **assumptions** that the CLIs are signed in for general chat, that Codex's `apply_patch`
+     cannot be disabled, that Gemini's core-tool allowlist is uncertain, that the terminal embedding
+     reimplements ConPTY and xterm.js, that the CLIs' session resume is not surfaced in the pane, that
+     the Gemini CLI's settings-home override is unverified, that the general-chat CLI can read its own
+     generated profile, and that Codex's read-only shell stays enabled.
+3. **The guards' own lists can be cast back.** Each guard's static `AllowedKeys`, and the seat's
+   `AllowedReads`, is its `HashSet` typed as a read-only collection, so code in the process could cast
+   it back and add a name, as before the decision. The base's `Keys` and `Reads` are copies, and the
+   base matches its own copy, made when a guard is built, so such an addition would reach only guards
+   built after it, and `RemodelGuard.IsAllowlisted`. Nothing in the product does so; left as it is.
+
+### R13.6 The adversarial review: what it found and what changed (T206 to T209)
+
+**Source.** An independent, adversarial review of the branch, with main's merge of decision 148A in
+(`6609c60`, no change of content), found no must-fix. It confirmed that the three guards answer
+exactly as before - by a fuzz probe of its own over 1,278,490 names per guard - that the grammar's
+measurement (R13.2) holds, and that 002's notes (R13.3) match the code. Its findings, and what each
+became:
+
+- **The builders check was no construction-site test** (finding S1, should-fix).
+  `EachAllowlistGuardIsBuiltInExactlyTheFilesTheAuditReadsItsKeysWholeIn` read `new X(` and
+  `X x = new()` alone. The review built a second gate in `Probes/DrawingOpenProbe.cs` two ways - a
+  field `private static DrawingOpenGuard? _drawing;` set by `_drawing = new();` on another line, and
+  `new SwGate(new CircuitBreaker(), new RemodelGuard { })` - and the build stayed clean and all 3,248
+  related tests green, this one among them; a nullable local, `Activator.CreateInstance<X>()`,
+  `typeof(X)`, a factory returning `new()`, an `X[]` of `new()` and `new X` with its `(` on the next
+  line would have passed as well. Yet R13.1, `contracts/guard.md` and the test's own summary called it a
+  construction-site test. `NoProductFileButAnAllowlistGuardsBuildersNamesItButForTheNamedLines`
+  replaces it, in the shape of the seat's `OnlyThePaneSeatNamesTheGuardOrItsGate`: every naming of an
+  allowlist guard on a product line that is not a comment stands in one of the files `BuildersOf` names
+  for it, or is one of two lines held exactly as they stand, each with what it is
+  (`NamingsThatBuildNothing`) - probe D14's read of `DrawingOpenGuard.AllowedKeys` in
+  `Probes/DrawingOpenProbe.cs`, and the words that open `probe drawings`' report line for the confirmed
+  open's gate in `Program.cs`; each named line must still stand as it is; and each builder must still
+  build its guard. A target-typed `new()` cannot build an abstract class or an interface, so building a
+  guard names it, and a naming anywhere else fails. The review listed `ToolServiceHost.cs`'s
+  `RemodelGuard.IsAllowlisted` as a third exception; verified, it needs none, since the file builds the
+  stage-1 guard and is one of its builders - as the confirmed drawing's scope, whose key constants are
+  the other static reads of a guard, is its guard's. Only a construction that names no type at all, by
+  reflection over the assembly with a name it computes, would pass unseen, as it would pass the seat's
+  test. Green on the code; red under M88 to M99, each in this test alone, the review's two probes M88
+  and M89 among them (R13.4). Edited deliberately: the builders check, replaced; and R13.1's and
+  `contracts/guard.md`'s claims for it, corrected (T206, T209).
+- **`Judged` is a little wider for two audits** (N2). Decision 21A's creation-family audit and
+  decision 17A's import-repair audit call `Judged` and never had the seat's exemption, so they judged the
+  seat's `ISldWorks.ActivateDoc3` in the seat's file as `ActivateDoc3` and judge it whole now. Neither
+  table holds `ActivateDoc3`, so neither audit answers otherwise; but R13.1's "the seat's keys are read
+  as before" and "each asserts as much as before or more", and section 1 of `contracts/guard.md`, said
+  more than that. Each says it now (T209).
+- **R13.5's list of 002's words for the hidden tab was short** (N3). Every place the review named was
+  read in `spec.md` and holds, and the list now has them and the rest found beside them: the Input line,
+  User Story 4's title and first scenario, Gemini's tool-naming edge case, the Tool Service entity, and
+  the assumptions on Codex's `apply_patch`, Gemini's core-tool allowlist and Codex's read-only shell
+  (T209).
+- **The base did not hold its own invariant** (N4). A later guard built with
+  `base(new[] { "SaveAs3" })` would have passed the bare `SaveAs3` before the read-only guard was asked,
+  and one built with a qualified read would have passed it through a closed allowlist; today's three
+  were kept from that by their exact-list pins alone. The base's constructor now checks both as a guard
+  is built, before it is asked anything: every key is interface-qualified (`CallKey.IsQualified`), and
+  every read is a bare member name - not blank, and with no separator at all, which also refuses
+  `.GetTitle` and `GetTitle.`, names `CallKey.IsQualified` does not call qualified - and either failure
+  is an `ArgumentException` naming what it was handed (T208). Tests first (T207), with a throwaway guard
+  of the test's own: eight keys that are not qualified, under both policies, seven reads that are not
+  bare names, and a control built right; red before the check, 15 cases of 2 tests; red under M100 to
+  M102. No answer moved: T200's pins stay green, and each guard's whole answer to the 48,560 names was
+  written out again and is byte for byte as before.
+- **The register's row** (N5) is the owner's to mark; nothing here touches it.
+
+**Evidence**: commits `f518628` (T206), `004e188` (T207, T208) and the records commit that adds T209;
+M88 to M102 (R13.4). Measured: `SwReview.Extractor.Tests` 10,059 passed - 10,043 before the review's
+fixes, T206 replacing a test and T207 adding 16 cases - and `SwReview.AddIn.Tests` 3,003, the build at
+zero warnings from scratch after every mutation was restored; both generators reproduce their outputs
+byte for byte. No Python file changed; the Python tests that read the records changed here -
+`test_workstation_test_plan.py`, which holds every `tasks.md` to defining each task id once, and
+`test_workstation_handover.py` - passed, 246 tests, on 3.12 and on 3.11.

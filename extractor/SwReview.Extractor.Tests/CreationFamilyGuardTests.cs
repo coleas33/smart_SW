@@ -539,7 +539,7 @@ public class CreationFamilyReadAuditTests
     {
         var table = new HashSet<string>(CreationFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
         var refused = DrawingFamilyReadAuditTests.Literals()
-            .Where(literal => table.Contains(DrawingFamilyReadAuditTests.Judged(literal.Literal)))
+            .Where(literal => table.Contains(DrawingFamilyReadAuditTests.Judged(literal)))
             .Where(literal => !IsTheProbesOwnCreationCall(literal) && !NamedLiterals.ContainsKey(literal))
             .Select(literal => $"\"{literal.Literal}\" in {literal.Where}")
             .Distinct(StringComparer.Ordinal)
@@ -825,10 +825,12 @@ internal static class GuardAnswers
     /// <summary>
     /// True when <paramref name="gate"/> is one of the allowlist guards and <paramref name="key"/> is
     /// one of its own keys, which it accepts before <see cref="ReadOnlyGuard"/> is asked - since
-    /// decision 144A, the pane seat's as the third.
+    /// decision 144A, the pane seat's as the third. Edited deliberately for owner decision 151A
+    /// (2026-10-20, feature 011 T201): it named the three guards by their types and read each one's keys
+    /// from its class; it reads any guard built on the shared rule, and its keys, ordinally as the guard
+    /// matches them, through <see cref="AllowlistGuard"/>, so a fourth allowlist guard would be read
+    /// without an edit here.
     /// </summary>
     public static bool AllowlistsByName(ICallGuard gate, string key) =>
-        (gate is RemodelGuard && RemodelGuard.AllowedKeys.Contains(key))
-        || (gate is DrawingOpenGuard && DrawingOpenGuard.AllowedKeys.Contains(key))
-        || (gate is RemodelSeatGuard && RemodelSeatGuard.AllowedKeys.Contains(key));
+        gate is AllowlistGuard allowlist && allowlist.Keys.Contains(key, StringComparer.Ordinal);
 }

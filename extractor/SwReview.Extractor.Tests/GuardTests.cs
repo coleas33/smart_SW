@@ -1609,36 +1609,192 @@ public class DrawingFamilyReadAuditTests
     }
 
     /// <summary>
-    /// A literal as the read-only guard judges it: its member half when it is an
-    /// interface-qualified key (feature 011 review, 2026-09-23), unless it is a key of one of the
-    /// two allowlist guards, which judge their own keys before the read-only guard is asked. The pane
-    /// seat's guard (decision 144A) is not among them: its keys are judged whole only in the seat's own
-    /// file (<see cref="IsTheSeatsOwnKey"/>), so a key carried to another file is judged by its member
-    /// half here as before.
+    /// A literal as the gate its file builds judges it: its member half when it is an interface-qualified
+    /// key (feature 011 review, 2026-09-23), as the read-only guard judges any name, unless it is a key of an
+    /// allowlist guard built in the literal's own file (<see cref="BuildersOf"/>), which judges its own keys
+    /// whole before anything else is asked. Edited deliberately for owner decision 151A (2026-10-20, T201): it
+    /// read the literal alone and named two guards by their types, judging a key of <see cref="RemodelGuard"/>
+    /// or <see cref="DrawingOpenGuard"/> whole in every file, while the pane seat's were judged whole in the
+    /// seat's own file alone (<c>IsTheSeatsOwnKey</c>, decision 144A's review). It reads every allowlist
+    /// guard's keys through the shared rule (<see cref="GuardSweep.AllowlistGuards"/>) now, each keyed by the
+    /// files that build it, as the seat's were: the same for the seat's keys, and narrower for the other two
+    /// guards' (research R11.8 item 6).
     /// </summary>
-    internal static string Judged(string literal) =>
-        !RemodelGuard.AllowedKeys.Contains(literal) && !DrawingOpenGuard.AllowedKeys.Contains(literal)
-            ? MemberHalf(literal)
-            : literal;
+    internal static string Judged((string Literal, string Where) literal) =>
+        IsAKeyOfAnAllowlistGuardBuiltInItsFile(literal) ? literal.Literal : MemberHalf(literal.Literal);
 
     /// <summary>
     /// A literal by its member half when it is an interface-qualified key, and whole otherwise - as the
     /// read-only guard judges any name, a key of an allowlist guard included. <see cref="Judged"/> is this
-    /// but for the two allowlist guards' keys (owner decision 148A's review, T193).
+    /// but for a key of an allowlist guard in a file that builds it (owner decision 148A's review, T193;
+    /// keyed by file since decision 151A).
     /// </summary>
     private static string MemberHalf(string literal) =>
         CallKey.IsQualified(literal) ? CallKey.BareName(literal) : literal;
 
+    /// <summary>
+    /// Decision 151A (T201): whether <paramref name="literal"/> is one of the keys of an allowlist guard that
+    /// its own file builds - read through the shared rule (<see cref="AllowlistGuard.Keys"/>), ordinally, as
+    /// the guard matches it.
+    /// </summary>
+    private static bool IsAKeyOfAnAllowlistGuardBuiltInItsFile((string Literal, string Where) literal) =>
+        Allowlists.Any(guard => guard.Keys.Contains(literal.Literal, StringComparer.Ordinal)
+            && BuildersOf[guard.GetType()].Contains(literal.Where, StringComparer.Ordinal));
+
+    /// <summary>The product's allowlist guards, read once: <see cref="Judged"/> asks them about every literal.</summary>
+    private static readonly AllowlistGuard[] Allowlists = GuardSweep.AllowlistGuards();
+
     /// <summary>The pane seat's file, by its path under the extractor folder (decision 144A).</summary>
     internal const string PaneSeatFile = "SwReview.AddIn/Remodel/SwRemodelSeat.cs";
 
+    /// <summary>The confirmed drawing's scope, by its path under the extractor folder (decision 151A).</summary>
+    internal const string DrawingOpenScopeFile = "SwReview.Extractor/Sw/DrawingOpenScope.cs";
+
+    /// <summary>The add-in's tool service host, by its path under the extractor folder (decision 151A).</summary>
+    internal const string ToolServiceHostFile = "SwReview.AddIn/ToolService/ToolServiceHost.cs";
+
     /// <summary>
-    /// Decision 144A's review (T173): a literal of the pane seat's own file that is one of its guard's
-    /// two keys is the seat's own call, which its own guard judges first - in that file and nowhere else,
-    /// as <see cref="IsTheProbesOwnCall"/> keys the probe's calls by its file.
+    /// Decision 151A (T201): the product files that build each allowlist guard - the files whose literals the
+    /// audit reads that guard's keys whole in (<see cref="Judged"/>), as it read the pane seat's since decision
+    /// 144A's review - by their path under the extractor folder: the confirmed drawing's guard its scope, the
+    /// stage-1 guard the bridge's dispatcher (the gate it builds when it is handed none) and the tool service
+    /// host, and the pane seat's guard the seat.
+    /// <see cref="NoProductFileButAnAllowlistGuardsBuildersNamesItButForTheNamedLines"/> holds the list to
+    /// the source.
     /// </summary>
-    private static bool IsTheSeatsOwnKey((string Literal, string Where) literal) =>
-        literal.Where == PaneSeatFile && RemodelSeatGuard.AllowedKeys.Contains(literal.Literal);
+    internal static readonly IReadOnlyDictionary<Type, string[]> BuildersOf = new Dictionary<Type, string[]>
+    {
+        [typeof(DrawingOpenGuard)] = new[] { DrawingOpenScopeFile },
+        [typeof(RemodelGuard)] = new[] { BridgeDispatcherFile, ToolServiceHostFile },
+        [typeof(RemodelSeatGuard)] = new[] { PaneSeatFile },
+    };
+
+    /// <summary>
+    /// Decision 151A (T201): a key of an allowlist guard is judged whole in a file that builds that guard, and
+    /// by its member half in every other, as the read-only guard judges it - where until the decision a key of
+    /// the stage-1 or the confirmed drawing's guard was judged whole in every file. A bare name is judged as it
+    /// is, and a qualified name that is no guard's key by its member half wherever it stands.
+    /// </summary>
+    [Theory]
+    [InlineData("ISldWorks.OpenDoc7", BridgeDispatcherFile, "ISldWorks.OpenDoc7")]
+    [InlineData("ISldWorks.OpenDoc7", ToolServiceHostFile, "ISldWorks.OpenDoc7")]
+    [InlineData("ISldWorks.OpenDoc7", PaneSeatFile, "ISldWorks.OpenDoc7")]
+    [InlineData("ISldWorks.OpenDoc7", CreationFamilyReadAuditTests.ProbeHostFile, "OpenDoc7")]
+    [InlineData("ISldWorks.OpenDoc7", "SwReview.Extractor/Rms/RemodelEquations.cs", "OpenDoc7")]
+    [InlineData("ISldWorks.ActivateDoc3", PaneSeatFile, "ISldWorks.ActivateDoc3")]
+    [InlineData("ISldWorks.ActivateDoc3", BridgeDispatcherFile, "ActivateDoc3")]
+    [InlineData("ISldWorks.DocumentVisible", DrawingOpenScopeFile, "ISldWorks.DocumentVisible")]
+    [InlineData("ISldWorks.DocumentVisible", BridgeDispatcherFile, "DocumentVisible")]
+    [InlineData("ISldWorks.DocumentVisible", PaneSeatFile, "DocumentVisible")]
+    [InlineData("ISldWorks.CloseDoc", DrawingOpenScopeFile, "ISldWorks.CloseDoc")]
+    [InlineData("ISldWorks.CloseDoc", BridgeDispatcherFile, "ISldWorks.CloseDoc")]
+    [InlineData("ISldWorks.CloseDoc", PaneSeatFile, "CloseDoc")]
+    [InlineData("IModelDoc2.Save3", ToolServiceHostFile, "IModelDoc2.Save3")]
+    [InlineData("IModelDoc2.Save3", "SwReview.Extractor/Rms/RemodelEquations.cs", "Save3")]
+    [InlineData("IModelDoc2.Save3", DrawingOpenScopeFile, "Save3")]
+    [InlineData("isldworks.opendoc7", BridgeDispatcherFile, "opendoc7")]
+    [InlineData("IDrawingDoc.ActivateSheet", DrawingOpenScopeFile, "ActivateSheet")]
+    [InlineData("GetTitle", PaneSeatFile, "GetTitle")]
+    [InlineData("OpenDoc7", BridgeDispatcherFile, "OpenDoc7")]
+    public void AnAllowlistGuardsKeyIsJudgedWholeOnlyInAFileThatBuildsThatGuard(string literal, string where, string judged)
+    {
+        Assert.Equal(judged, Judged((literal, where)));
+    }
+
+    /// <summary>
+    /// Decision 151A's review (T206): the lines that name an allowlist guard in a product file that does not
+    /// build it, each keyed by the guard, the file - its path under the extractor folder - and the line as it
+    /// stands, trimmed, with what it is: probe D14's read of the confirmed drawing's guard's static list of
+    /// keys, and words the console prints. Neither builds a gate. An entry whose line is gone or changed fails
+    /// <see cref="NoProductFileButAnAllowlistGuardsBuildersNamesItButForTheNamedLines"/>, as a naming this list
+    /// does not hold does. (A guard's builders may name it as they will: <c>ToolServiceHost.cs</c>'s
+    /// <c>RemodelGuard.IsAllowlisted</c> and the confirmed drawing's scope's key constants stand in builders'
+    /// files.)
+    /// </summary>
+    private static readonly IReadOnlyDictionary<(Type Guard, string Where, string Line), string> NamingsThatBuildNothing =
+        new Dictionary<(Type Guard, string Where, string Line), string>
+        {
+            [(typeof(DrawingOpenGuard), "SwReview.Extractor/Probes/DrawingOpenProbe.cs",
+                "_seam.SeamObserver.Members.Any(member => DrawingOpenGuard.AllowedKeys.Contains(member));")] =
+                "probe D14 reads the guard's static list of keys, to tell whether the confirmed open's seam gated one",
+            [(typeof(DrawingOpenGuard), "SwReview.Extractor.Console/Program.cs",
+                "\"gate log: the confirmed open's guard (DrawingOpenGuard, D14 only): \"")] =
+                "the words that open probe drawings' report line for the confirmed open's own gate",
+        };
+
+    /// <summary>
+    /// Decision 151A (T201), replaced on the decision's review (T206; its finding S1): every allowlist guard's
+    /// construction-site test, in the shape of the pane seat's own
+    /// (<see cref="RemodelSeatGuardTests.OnlyThePaneSeatNamesTheGuardOrItsGate"/>). <see cref="BuildersOf"/>
+    /// names every allowlist guard the product builds; no product file but a guard's builders names it, on a
+    /// line that is not a comment, but for the lines <see cref="NamingsThatBuildNothing"/> holds, each still as
+    /// it stands; and each of the builders builds it. A target-typed <c>new()</c> cannot build an abstract class
+    /// or an interface, so building a guard names it - <c>new X(</c> or <c>new X { }</c>, a field, a local or a
+    /// return declared as <c>X</c>, an <c>X[]</c>, <c>typeof(X)</c>, <c>Activator.CreateInstance&lt;X&gt;()</c>,
+    /// <c>new X</c> with its <c>(</c> on the next line - and fails here in any file but its builders', so the
+    /// audit reads a guard's keys whole only where its gate is built (<see cref="Judged"/>). A construction
+    /// that names no type at all, by reflection over the assembly with a name it computes, would pass it, as it
+    /// would pass the seat's.
+    ///
+    /// It was <c>EachAllowlistGuardIsBuiltInExactlyTheFilesTheAuditReadsItsKeysWholeIn</c>, which read
+    /// <c>new X(</c> and <c>X x = new()</c> alone: a field declared as the guard and set by <c>new()</c> on
+    /// another line, or <c>new X { }</c>, built one in a file it did not name with every test green.
+    /// </summary>
+    [Fact]
+    public void NoProductFileButAnAllowlistGuardsBuildersNamesItButForTheNamedLines()
+    {
+        Assert.Equal(
+            Allowlists.Select(guard => guard.GetType().Name).OrderBy(name => name, StringComparer.Ordinal),
+            BuildersOf.Keys.Select(type => type.Name).OrderBy(name => name, StringComparer.Ordinal));
+
+        var namesIt = BuildersOf.Keys.ToDictionary(
+            guard => guard,
+            guard => new Regex(@"\b" + Regex.Escape(guard.Name) + @"\b", RegexOptions.CultureInvariant));
+        string root = ExtractorRoot();
+        var namings = new List<(Type Guard, string Where, string Line)>();
+        foreach (string file in ProductSourceFiles())
+        {
+            string where = PathUnder(root, file);
+            foreach (string line in File.ReadAllLines(file).Where(line => !IsWholeLineComment(line)))
+            {
+                namings.AddRange(namesIt.Where(name => name.Value.IsMatch(line)).Select(name => (name.Key, where, line.Trim())));
+            }
+        }
+
+        var unexplained = namings
+            .Where(naming => !BuildersOf[naming.Guard].Contains(naming.Where, StringComparer.Ordinal)
+                && !NamingsThatBuildNothing.ContainsKey(naming))
+            .Select(naming => $"{naming.Guard.Name} in {naming.Where}: {naming.Line}")
+            .ToList();
+        Assert.True(
+            unexplained.Count == 0,
+            "An allowlist guard is named where it is not built. Building one names it, so a file that builds one is "
+                + "one of its builders, and BuildersOf says so; a line that builds none is named in "
+                + "NamingsThatBuildNothing with what it is: " + string.Join("; ", unexplained));
+
+        foreach (KeyValuePair<(Type Guard, string Where, string Line), string> named in NamingsThatBuildNothing)
+        {
+            Assert.True(
+                namings.Contains(named.Key),
+                $"{named.Key.Guard.Name} is no longer named in {named.Key.Where} as {named.Key.Line}; drop it, or say what it is now.");
+            Assert.DoesNotContain(named.Key.Where, BuildersOf[named.Key.Guard]);
+            Assert.False(string.IsNullOrWhiteSpace(named.Value), named.Key + " has no reason.");
+        }
+
+        foreach (KeyValuePair<Type, string[]> builders in BuildersOf)
+        {
+            string name = Regex.Escape(builders.Key.Name);
+            var builds = new Regex(
+                @"\bnew\s+(?:[\w.]+\.)?" + name + @"\b|\b" + name + @"\??\s+\w+\s*=\s*new\s*\(",
+                RegexOptions.CultureInvariant);
+            foreach (string file in builders.Value)
+            {
+                Assert.True(
+                    namings.Any(naming => naming.Guard == builders.Key && naming.Where == file && builds.IsMatch(naming.Line)),
+                    $"{file} is named as a builder of {builders.Key.Name}, and builds none.");
+            }
+        }
+    }
 
     /// <summary>
     /// Decision 144A's review (T173): the pane seat's two keys are literals of its own file and of no
@@ -1648,7 +1804,8 @@ public class DrawingFamilyReadAuditTests
     /// bridge's <c>remodel.open</c>, whose <see cref="RemodelGuard"/> allowlists it, and <c>probe remodel</c>'s
     /// reopen, whose <see cref="RemodelProbeGuard"/> does: it was <c>TheSeatsOwnKeysAreLiteralsOfItsOwnFileAlone</c>.
     /// Each key is a literal of exactly the files whose guards let it through, and of no other, since the
-    /// audit judges a <see cref="RemodelGuard"/> key whole in every file (<see cref="Judged"/>).
+    /// audit judged a <see cref="RemodelGuard"/> key whole in every file (<see cref="Judged"/>); since decision
+    /// 151A it judges it whole only in the files that build that guard, and the pin stands as it was.
     /// </summary>
     [Fact]
     public void TheSeatsKeysAreLiteralsOfTheFilesWhoseGuardsLetThemThroughAlone()
@@ -1700,17 +1857,19 @@ public class DrawingFamilyReadAuditTests
     /// (<see cref="IsTheProbesOwnCall"/>), as decision 21A's audit judges the probe's creation calls;
     /// <see cref="TheProbesOwnCallsAreExactlyTheDeclaredWritersAndOnlyTheirCallersGuardsLetThemThrough"/> pins which.
     /// And on the decision's review (T173), a literal of the pane seat's file that is one of its guard's
-    /// two keys is the seat's own call (<see cref="IsTheSeatsOwnKey"/>), in that file only.
+    /// two keys is the seat's own call, in that file only - which since decision 151A (T201) is
+    /// <see cref="Judged"/>'s own rule for every allowlist guard's keys, so the seat's own exemption
+    /// (<c>IsTheSeatsOwnKey</c>) is gone from here, edited deliberately: it exempted what <see cref="Judged"/>
+    /// now reads whole, the seat's keys in the seat's file, and nothing else.
     /// </summary>
     [Fact]
     public void NoLiteralOfTheProductSourceIsRefusedByTheTableExceptTheNamedOnes()
     {
         var table = new HashSet<string>(DrawingFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
         var refused = Literals()
-            .Where(literal => table.Contains(Judged(literal.Literal))
+            .Where(literal => table.Contains(Judged(literal))
                 && !NamedLiterals.ContainsKey(literal)
-                && !IsTheProbesOwnCall(literal)
-                && !IsTheSeatsOwnKey(literal))
+                && !IsTheProbesOwnCall(literal))
             .Select(literal => $"\"{literal.Literal}\" in {literal.Where}")
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -1744,6 +1903,8 @@ public class DrawingFamilyReadAuditTests
     /// now, as the read-only guard judges a qualified key, and the key is let through by exactly the
     /// guards of its three callers - the probe's, the stage-1 allowlist and the pane seat's. Renamed with
     /// the edit: it was <c>TheProbesOwnCallsAreExactlyItsTwoWritersAndOnlyItsGuardLetsThemThrough</c>.
+    /// (Since decision 151A <see cref="Judged"/> reads that key by its member half in the probe host too, which
+    /// builds no allowlist guard; this test reads every literal there so anyway.)
     /// </summary>
     [Fact]
     public void TheProbesOwnCallsAreExactlyTheDeclaredWritersAndOnlyTheirCallersGuardsLetThemThrough()
@@ -1797,7 +1958,7 @@ public class DrawingFamilyReadAuditTests
             Assert.True(
                 literals.Contains(entry.Key),
                 $"\"{entry.Key.Literal}\" is no longer a literal of {entry.Key.Where}; drop it, or say what it is now.");
-            Assert.Contains(Judged(entry.Key.Literal), table, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(Judged(entry.Key), table, StringComparer.OrdinalIgnoreCase);
         }
     }
 }
@@ -1825,6 +1986,14 @@ internal static class GuardSweep
         new DrawingOpenGuard(),
         new RemodelSeatGuard(),
     };
+
+    /// <summary>
+    /// Owner decision 151A (feature 011 T201): those of <see cref="ProductGates"/> built on the one shared
+    /// allowlist rule, <see cref="AllowlistGuard"/> - the confirmed drawing's, the stage-1 re-modeler's and
+    /// the pane seat's - through which the tests read each guard's keys and bare-name policy rather than name
+    /// it by its type.
+    /// </summary>
+    internal static AllowlistGuard[] AllowlistGuards() => ProductGates().OfType<AllowlistGuard>().ToArray();
 
     /// <summary>
     /// Every member of <paramref name="interfaces"/> whose name <paramref name="family"/> matches,
@@ -1929,10 +2098,12 @@ public class GuardSweepTests
     /// <summary>
     /// A type declared to implement <see cref="ICallGuard"/>: a class, a struct or a record, generic or
     /// not, with a primary constructor or not. Widened on the decision's review (T173), which found the
-    /// first form read classes alone.
+    /// first form read classes alone. Widened deliberately for decision 151A (2026-10-20, T201): a guard
+    /// built on the shared allowlist rule implements the interface through <see cref="AllowlistGuard"/>,
+    /// and names only that in its declaration, so the pattern reads that name too.
     /// </summary>
     private static readonly Regex GuardDeclaration = new Regex(
-        @"\b(?:class|struct|record(?:\s+(?:class|struct))?)\s+(\w+)\s*(?:<[^>{]*>)?\s*(?:\([^)]*\))?\s*:[^{;]*\bICallGuard\b",
+        @"\b(?:class|struct|record(?:\s+(?:class|struct))?)\s+(\w+)\s*(?:<[^>{]*>)?\s*(?:\([^)]*\))?\s*:[^{;]*\b(?:ICallGuard|AllowlistGuard)\b",
         RegexOptions.CultureInvariant);
 
     /// <summary>
@@ -1979,7 +2150,10 @@ public class GuardSweepTests
     [InlineData("public struct StructGuard : ICallGuard", true)]
     [InlineData("public record RecordGuard(string Name) : ICallGuard", true)]
     [InlineData("public record struct RecordStructGuard : ICallGuard", true)]
+    [InlineData("public sealed class DrawingOpenGuard : AllowlistGuard", true)]
+    [InlineData("internal sealed class LocalGuard\r\n    : AllowlistGuard", true)]
     [InlineData("public sealed class SwRemodelSeat : IRemodelSeat", false)]
+    [InlineData("private readonly AllowlistGuard _guard;", false)]
     [InlineData("private readonly ICallGuard _guard;", false)]
     public void TheDeclarationPatternReadsEveryFormOfAGuard(string declaration, bool isGuard)
     {
@@ -2700,7 +2874,7 @@ public class ImportRepairDenylistTests
     {
         var table = new HashSet<string>(ExpectedMembers, StringComparer.OrdinalIgnoreCase);
         var refused = DrawingFamilyReadAuditTests.Literals()
-            .Where(literal => table.Contains(DrawingFamilyReadAuditTests.Judged(literal.Literal)))
+            .Where(literal => table.Contains(DrawingFamilyReadAuditTests.Judged(literal)))
             .Select(literal => $"\"{literal.Literal}\" in {literal.Where}")
             .Distinct(StringComparer.Ordinal)
             .ToList();

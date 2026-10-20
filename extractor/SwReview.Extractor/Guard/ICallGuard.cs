@@ -13,7 +13,9 @@ namespace SwReview.Extractor.Guard;
 /// <see cref="DrawingOpenGuard"/>, by the confirmed drawing's scope; <see cref="RemodelSeatGuard"/>,
 /// by the re-modeler's pane seat; and <see cref="RemodelGuard"/>, by the add-in's tool service and by
 /// the bridge's dispatcher when it is handed no gate - and the extractor's <c>GuardSweepTests</c>
-/// holds the list the tests sweep to every guard the product defines.)
+/// holds the list the tests sweep to every guard the product defines. Since owner decision 151A,
+/// 2026-10-20, the last three - the allowlists - answer through one shared rule,
+/// <see cref="AllowlistGuard"/>.)
 /// </summary>
 public interface ICallGuard
 {
