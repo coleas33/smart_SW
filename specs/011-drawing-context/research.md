@@ -1107,6 +1107,8 @@ bridge judges its own commands and `Close`, `Save` and `Rebuild` are refused (R1
 every unused writer the third names, with the families it belongs to (R10.3). The items stay below
 as the record of what was asked. *On merging decision 141A, the same day*: the first is settled and
 the fourth decided by 141A (R9), each with its line below; the fifth and sixth are unchanged.
+*On merging decision 147A, the same day*: the sixth is settled by 147A, with its line below; the
+fifth is unchanged.
 
 1. **When the count of ten resets.** The opens that left no record are counted per run folder for
    the life of the add-in process (R8.3). A review's Retry and Recheck run in the same folder -
@@ -1154,6 +1156,10 @@ the fourth decided by 141A (R9), each with its line below; the fifth and sixth a
    `SuppressTestTests` pins its words "write access" and "read-only". And R2.2 still calls
    `OpenDoc6` "the extractor's one sanctioned read-only open": that is the record of its day, and
    section 3 of `contracts/guard.md` carries the correction.
+   *Settled by decision 147A (2026-10-19), 002 `research.md` 147A*: the message now says the
+   extractor opens the engineer's documents only read-only, which is true of every path by which
+   it opens them, and `SuppressTestTests` pins its words exactly. R2.2 stays as the record of its
+   day.
 
 ## R9. Decision 141A: the limit of ten counts failed opens per review session (owner, 2026-10-19)
 
