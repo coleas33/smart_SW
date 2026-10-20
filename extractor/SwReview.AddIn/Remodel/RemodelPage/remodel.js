@@ -965,10 +965,13 @@
     ui.planLost.hidden = !lost;
     ui.planAgain.disabled = ui.planRun.disabled;
     ui.stopRun.disabled = !state.running;
-    // Owner decision 148A: neither copy action while a run runs - opening the copy would change the
-    // document SOLIDWORKS has active under the run, and the host refuses it as it refuses a discard.
-    ui.openCopy.disabled = !hasRun || state.running;
-    ui.discardCopy.disabled = !hasRun || state.running;
+    // Owner decision 148A: neither copy action while a plan is made or a run runs. The host refuses
+    // Open copy while either is in flight - opening the copy would change the document SOLIDWORKS has
+    // active under a run - and Discard copy while its run is; and a press mid-plan waits behind the plan
+    // on the host's one message thread, then acts on the earlier run's copy while this page shows the
+    // new plan (feature 011 research R12.8a).
+    ui.openCopy.disabled = !hasRun || busy;
+    ui.discardCopy.disabled = !hasRun || busy;
     ui.openReport.disabled = !hasRun;
     ui.openFolder.disabled = !hasRun;
   }
