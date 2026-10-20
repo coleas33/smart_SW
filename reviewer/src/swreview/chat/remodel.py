@@ -297,23 +297,27 @@ SCOPE_REFUSAL_WORDS: Mapping[str, str] = {
         "Remodel a copy again."
     ),
     "scope_changed": (
-        "The part no longer reads as it did when this remodel checked it, so no copy was kept and "
-        "no new plan was made. Your part was not changed. Press Remodel a copy again to check it "
-        "afresh."
+        "The part, or the copy made of it, no longer reads as it did when this remodel checked it, "
+        "so the remodel stopped and no new plan was made. Your part was not changed. Press "
+        "Remodel a copy again to check it afresh; if the same happens again, the copy reads "
+        "differently from your part once SOLIDWORKS opens it, and this part cannot be remodeled "
+        "as it stands."
     ),
 }
 """What the Remodel tab reads for the two codes `ScopeRefused` carries (owner decision 149A).
 
-The bridge's own sentences name the probe it was handed and the source's full path - both paths
-for a probe minted for another file - and the page prints a refusal's message as it is, on a tab
-whose words name no path. `scope_not_probed` is raised at the open's first step, before anything
-is copied: the open names a file no probe of the bridge's session was minted for, which since
-145A is a part made active between the plan's second reading of the document and its probe.
+The bridge's own sentences can name the probe it was handed and the source's full path - both
+paths, for a probe minted for another file - and the page prints a refusal's message as it is, on
+a tab whose words name no path. `scope_not_probed` is raised at the open's first step, before
+anything is copied: the open names a file no probe of the bridge's session was minted for, which
+since 145A is a part made active between the plan's second reading of the document and its probe.
 `scope_changed` is raised before the copy, when the source can no longer be read as it was
-probed, or after it, the copy then deleted, when the copy does not read as the probe did. Each
-sentence is true of every refusal under its code, and says the way on in the words of the tab's
-own refusals of a plan (`RemodelHost`); pressing again probes afresh, and a reason that still
-stands is then named by the gate. The bridge's sentence goes to the log (`_refusal`)."""
+probed, or after it, when the copy does not read as the probe did; the bridge's unwind then
+deletes the copy when it can. Each sentence is true of every refusal under its code and vouches,
+as the tab's own refusals of a plan do (`RemodelHost`), for the engineer's part alone, never for
+the copy. Pressing again probes afresh: a reason the gate reads is then named by it, the read-only
+option among them, while a copy that reads differently from the part does so on every press,
+which `scope_changed`'s sentence says. The bridge's sentence goes to the log (`_refusal`)."""
 
 PREEXISTING_REBUILD_ERRORS = "preexisting_rebuild_errors"
 """The one refusal that is not an error body; see `RemodelServer._open`."""

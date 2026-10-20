@@ -673,13 +673,17 @@ SCOPE_WORDS: dict[str, str] = {
         "Remodel a copy again."
     ),
     "scope_changed": (
-        "The part no longer reads as it did when this remodel checked it, so no copy was kept and "
-        "no new plan was made. Your part was not changed. Press Remodel a copy again to check it "
-        "afresh."
+        "The part, or the copy made of it, no longer reads as it did when this remodel checked it, "
+        "so the remodel stopped and no new plan was made. Your part was not changed. Press "
+        "Remodel a copy again to check it afresh; if the same happens again, the copy reads "
+        "differently from your part once SOLIDWORKS opens it, and this part cannot be remodeled "
+        "as it stands."
     ),
 }
 """What the Remodel tab reads for each of the two codes `ScopeRefused` carries from the bridge
-(owner decision 149A), pinned word for word: plain words that name no path, and the way on."""
+(owner decision 149A), pinned word for word: plain words that name no path, and the way on.
+`scope_changed`'s changed on review: it promised a copy that was not kept and a retry that names
+the reason, and neither holds after the copy (research 149A)."""
 
 SCOPE_SENTENCES: tuple[tuple[str, str], ...] = (
     (
@@ -762,11 +766,12 @@ class TestAScopeRefusalInPlainWords:
 
     The bridge refuses `remodel.open` with `scope_not_probed` when the open names a file no probe
     of its session was minted for - a part made active between the plan's reading of the document
-    and its probe - and with `scope_changed` when the source no longer reads as it did at the
-    probe. Its sentences name the probe and the source's full path, both paths for a probe minted
-    for another file; the Remodel page prints a refusal's message as it is, on a tab whose words
-    name no path. So the page is given plain words for each code, true of every sentence under it,
-    and the bridge's sentence goes to the backend's log, where whoever needs it can read it.
+    and its probe - and with `scope_changed` when the source, or the copy made of it, no longer
+    reads as it did at the probe. Its sentences can name the probe and the source's full path -
+    both paths, for a probe minted for another file; the Remodel page prints a refusal's message
+    as it is, on a tab whose words name no path. So the page is given plain words for each code,
+    true of every sentence under it, and the bridge's sentence goes to the backend's log as well
+    as to the tool service's.
     """
 
     @pytest.mark.parametrize(("code", "sentence"), SCOPE_SENTENCES)
@@ -813,6 +818,19 @@ class TestAScopeRefusalInPlainWords:
         for words in SCOPE_WORDS.values():
             assert re.search(rf"[Pp]ress {re.escape(button.group(1).strip())} again", words), words
             assert unchanged.group(1) in words
+
+    def test_the_scope_changed_words_vouch_only_for_the_part(self) -> None:
+        """`scope_changed` is raised before the copy is made, or after it, when the bridge's
+        unwind deletes the copy only if it can: the words say nothing of what became of a copy,
+        vouch only for the engineer's part, as the tab's own refusals do, and say what a second
+        refusal means, since a copy that reads differently from the part does so on every press
+        (owner decision 149A, on review)."""
+        words = remodel_routes.SCOPE_REFUSAL_WORDS["scope_changed"]
+
+        for promise in ("kept", "deleted", "removed", "no copy"):
+            assert promise not in words, promise
+        assert "Your part was not changed." in words
+        assert "if the same happens again" in words
 
 
 # --- 4. POST /remodel/open --------------------------------------------------------------
