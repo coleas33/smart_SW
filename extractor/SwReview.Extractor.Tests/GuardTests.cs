@@ -79,8 +79,9 @@ public class ReadOnlyGuardTests
     /// Feature 011 review (2026-09-23): an interface-qualified key is judged by its member half,
     /// so a read-only gate refuses <c>IDrawingDoc.ActivateSheet</c> exactly as it refuses
     /// <c>ActivateSheet</c>. Only the allowlist guards (<see cref="RemodelGuard"/>,
-    /// <see cref="DrawingOpenGuard"/>) accept a qualified writer key, and they judge it before this
-    /// guard is asked; a qualified key on a read-only gate had passed whatever it named.
+    /// <see cref="DrawingOpenGuard"/> and, since decision 144A, <see cref="RemodelSeatGuard"/>, which
+    /// accepts <c>ISldWorks.ActivateDoc3</c> below) accept a qualified writer key, and they judge it
+    /// before this guard is asked; a qualified key on a read-only gate had passed whatever it named.
     /// </summary>
     [Theory]
     [InlineData("IDrawingDoc.ActivateSheet")]
@@ -944,13 +945,15 @@ public class DrawingFamilyDenylistTests
     /// Every exclusion has one of contracts/guard.md section 3's reasons: the bare name of a
     /// stage-1 allowlist key, a member <see cref="RemodelGuard"/> refuses itself, or a member a
     /// sanctioned path already calls by its bare name - the extractor's read-only model open and
-    /// feature 004's two opens of documents it created (found by the read audit, T003), and, since
-    /// decision 140A refused the save and move families, the capture's image, <c>SaveBMP</c>, and
-    /// <c>probe remodel</c>'s move into a folder, <c>MoveToFolder</c>. Edited
+    /// feature 004's opens of the copy and of the throwaway part (found by the read audit, T003),
+    /// and, since decision 140A refused the save family, the capture's image, <c>SaveBMP</c>. Edited
     /// deliberately for decision 136A (2026-10-19), which accepted one exclusion more, <c>Close</c>,
     /// the member half of the bridge command <c>remodel.close</c> while the dispatcher handed command
     /// names to the read-only guard; and narrowed back for decision 140A the same day, when the
-    /// dispatcher stopped doing so: a bridge command's member half is no reason at all now.
+    /// dispatcher stopped doing so: a bridge command's member half is no reason at all now. Narrowed
+    /// again for decision 144A the same day: <c>NewDocument</c> and <c>MoveToFolder</c>, which only
+    /// <c>probe remodel</c> calls, are no exclusions now - the read-only guard refuses them and only the
+    /// probe's own guard lets them through (<see cref="TheProbesTwoWritersAreRefusedByEveryGateButTheProbesOwnBare"/>).
     /// </summary>
     [Fact]
     public void EveryExclusionHasOneOfTheContractsReasons()
@@ -959,9 +962,7 @@ public class DrawingFamilyDenylistTests
         {
             "OpenDoc6",
             "OpenDoc7",
-            "NewDocument",
             "SaveBMP",
-            "MoveToFolder",
         };
         var bareKeys = new HashSet<string>(
             RemodelGuard.AllowedKeys.Select(CallKey.BareName), StringComparer.OrdinalIgnoreCase);
@@ -979,16 +980,16 @@ public class DrawingFamilyDenylistTests
 
     /// <summary>
     /// The sanctioned calls stay allowed whether or not a grammar reached them: the extractor's
-    /// read-only model open, feature 004's copy open and throwaway part, the two shared names
-    /// feature 004's allowlist keys carry, and (decision 140A) the capture's image and
-    /// <c>probe remodel</c>'s move into a folder.
+    /// read-only model open, feature 004's opens of the copy and of the throwaway part, the shared
+    /// names feature 004's allowlist keys carry, and (decision 140A) the capture's image. Edited
+    /// deliberately for decision 144A (2026-10-19): <c>NewDocument</c> and <c>MoveToFolder</c> left
+    /// this list for <see cref="TheProbesTwoWritersAreRefusedByEveryGateButTheProbesOwnBare"/>, which
+    /// asserts they are refused, and let through only where the decision says.
     /// </summary>
     [Theory]
     [InlineData("OpenDoc6")]
     [InlineData("OpenDoc7")]
-    [InlineData("NewDocument")]
     [InlineData("SaveBMP")]
-    [InlineData("MoveToFolder")]
     [InlineData("CloseDoc")]
     [InlineData("SetUserPreferenceToggle")]
     [InlineData("set_Name")]
@@ -996,6 +997,37 @@ public class DrawingFamilyDenylistTests
     public void TheSanctionedCallsStayAllowed(string member)
     {
         ReadOnlyGuard.Assert(member);
+    }
+
+    /// <summary>
+    /// Decision 144A (2026-10-19; research R10.4 item 5): <c>probe remodel</c>'s two writers that the
+    /// read-only guard left allowed - <c>ISldWorks.NewDocument</c>, which creates the throwaway part,
+    /// and <c>IFeatureManager.MoveToFolder</c>, PROBE-5's move into a folder - are refused by it in both
+    /// spellings, and so by every gate the product builds, but for <see cref="RemodelProbeGuard"/>, which
+    /// lets the bare name its host gates through and nothing else: its run-scoped members, as
+    /// <c>ForceRebuild3</c> and <c>SaveAs3</c> are.
+    /// </summary>
+    [Theory]
+    [InlineData("ISldWorks.NewDocument")]
+    [InlineData("IFeatureManager.MoveToFolder")]
+    public void TheProbesTwoWritersAreRefusedByEveryGateButTheProbesOwnBare(string key)
+    {
+        string member = CallKey.BareName(key);
+        Assert.Contains(member, ExpectedMembers, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(member, ExcludedMembers, StringComparer.OrdinalIgnoreCase);
+
+        foreach (ICallGuard gate in GuardSweep.ProductGates())
+        {
+            Assert.Throws<MutatingCallError>(() => gate.Assert(key));
+            if (gate is RemodelProbeGuard)
+            {
+                gate.Assert(member);
+            }
+            else
+            {
+                Assert.Throws<MutatingCallError>(() => gate.Assert(member));
+            }
+        }
     }
 
     /// <summary>
@@ -1091,18 +1123,37 @@ public class DrawingFamilyCompletenessTests
     internal static readonly string[] SharedFamilies =
         { "ISldWorks", "IModelDoc2", "IModelDocExtension", "IPartDoc", "IAssemblyDoc", "IFeatureManager" };
 
-    /// <summary>contracts/guard.md section 2: a name starting with one of these is a reader.</summary>
-    private static readonly string[] ReaderPrefixes = { "get_", "Get", "IGet", "Is" };
+    /// <summary>
+    /// contracts/guard.md section 2: a name starting with one of the reader prefixes - <c>get_</c>,
+    /// <c>Get</c>, <c>IGet</c>, <c>Is</c> - as a whole word is a reader: the prefix followed by the end
+    /// of the name or by anything but a lowercase letter (<c>get_</c> ends a word itself). Edited
+    /// deliberately for decision 144A (2026-10-19; research R10.4 item 2): the prefixes were read by
+    /// their letters, so <c>Is</c> took in two writers, <c>IDrawingDoc.IsolateChangedDimensions</c> and
+    /// <c>IAssemblyDoc.Isolate</c> (<see cref="ReaderLetters"/>, which
+    /// <see cref="EveryNameTheReaderPrefixesTookOnlyByTheirLettersIsRefusedByEveryGate"/> reads).
+    /// </summary>
+    private static readonly Regex ReaderRule = new Regex("^(get_|(Get|IGet|Is)(?![a-z]))", RegexOptions.CultureInvariant);
 
-    /// <summary>contracts/guard.md section 2: the writer grammar.</summary>
+    /// <summary>The reader prefixes read by their letters alone, as section 2 read them until decision 144A.</summary>
+    private static readonly Regex ReaderLetters = new Regex("^(get_|Get|IGet|Is)", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// contracts/guard.md section 2: the writer grammar. Edited deliberately for decision 144A
+    /// (2026-10-19; research R10.4 item 2): the COM twin's <c>I</c> may come before every verb, where it
+    /// came before four (<c>ISet</c>, <c>IAdd</c>, <c>IInsert</c>, <c>ICreate</c>) and the twins of
+    /// other verbs passed - <c>IDrawingDoc.IEditSelectedGtol</c>, <c>IMakeCustomSymbol2</c>,
+    /// <c>INewGtol</c> and <c>IReorderSheets</c>, and <c>IView.ISelectEntity</c>; and <c>Isolate</c>,
+    /// the display writer beside <c>Hide</c> and <c>Show</c>, is a verb, which the reader prefix
+    /// <c>Is</c> had hidden.
+    /// </summary>
     private static readonly Regex WriterGrammar = new Regex(
-        "^(set_|Set|ISet|Add|IAdd|Insert|IInsert|Delete|Remove|Edit|Modify|Change|Reset|Activate|"
-            + "Attach|Detach|Update|Replace|Break|Hide|Show|Move|Align|Suppress|Unsuppress|Rebuild|"
-            + "Convert|Create|ICreate|Make|Lock|Unlock|Sort|Split|Merge|Rotate|Scale|Flip|Link|Unlink|"
+        "^(set_|I?(Set|Add|Insert|Delete|Remove|Edit|Modify|Change|Reset|Activate|"
+            + "Attach|Detach|Update|Replace|Break|Hide|Show|Isolate|Move|Align|Suppress|Unsuppress|Rebuild|"
+            + "Convert|Create|Make|Lock|Unlock|Sort|Split|Merge|Rotate|Scale|Flip|Link|Unlink|"
             + "Import|Explode|Clear|Apply|Restore|Save|Dissolve|Expand|Collapse|Reload|Rename|New|Paste|"
             + "Copy|Cut|Drag|Close|Quit|Open|Load|Unload|Regenerate|Reorder|Auto|Dimension|Reverse|Swap|"
             + "Toggle|Enable|Disable|Select|Purge|Relink|Resolve|Crop|Unbreak|Force|Hatch|Offset|"
-            + "Position|Freeze|Unfreeze)",
+            + "Position|Freeze|Unfreeze))",
         RegexOptions.CultureInvariant);
 
     /// <summary>
@@ -1127,10 +1178,71 @@ public class DrawingFamilyCompletenessTests
 
     /// <summary>contracts/guard.md section 2's reader rule, which decision 21A's creation grammar
     /// applies first as well (<see cref="CreationFamilyCompletenessTests.IsCreation"/>).</summary>
-    internal static bool IsReader(string name) =>
-        ReaderPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal));
+    internal static bool IsReader(string name) => ReaderRule.IsMatch(name);
 
     internal static bool IsWriter(string name) => !IsReader(name) && WriterGrammar.IsMatch(name);
+
+    /// <summary>
+    /// Section 2's grammar, case by case: every verb's COM twin is a writer, and so is
+    /// <c>Isolate</c>; a reader prefix is a whole word, so <c>Is</c> starts a reader only where a word
+    /// begins after it. The rows marked "(144A)" were wrong before decision 144A: the twins and
+    /// <c>Isolate</c> were no writers, and every name a reader prefix starts by its letters only was a
+    /// reader.
+    /// </summary>
+    [Theory]
+    [InlineData("IEditSelectedGtol", false, true)] // (144A)
+    [InlineData("IMakeCustomSymbol2", false, true)] // (144A)
+    [InlineData("INewGtol", false, true)] // (144A)
+    [InlineData("IReorderSheets", false, true)] // (144A)
+    [InlineData("ISelectEntity", false, true)] // (144A)
+    [InlineData("IsolateChangedDimensions", false, true)] // (144A)
+    [InlineData("Isolate", false, true)] // (144A)
+    [InlineData("ISetXform", false, true)]
+    [InlineData("IAddDisplayText", false, true)]
+    [InlineData("IInsertBomTable", false, true)]
+    [InlineData("ICreateText2", false, true)]
+    [InlineData("InsertNewNote2", false, true)]
+    [InlineData("ImportDiagnosis", false, true)]
+    [InlineData("set_Text", false, true)]
+    [InlineData("IsDetailingMode", true, false)]
+    [InlineData("IsOpenedReadOnly", true, false)]
+    [InlineData("Is3DView", true, false)]
+    [InlineData("Is", true, false)]
+    [InlineData("GetViews", true, false)]
+    [InlineData("get_ReadOnly", true, false)]
+    [InlineData("IGetDisplayDimensions", true, false)]
+    [InlineData("Issue", false, false)] // (144A)
+    [InlineData("Getaway", false, false)] // (144A)
+    [InlineData("Title", false, false)]
+    public void TheGrammarReadsEveryVerbsTwinAndTheReaderPrefixesAsWholeWords(string name, bool reader, bool writer)
+    {
+        Assert.Equal(reader, IsReader(name));
+        Assert.Equal(writer, IsWriter(name));
+    }
+
+    /// <summary>
+    /// Decision 144A (2026-10-19; research R10.4 item 2): every member of the 34 interfaces the generated
+    /// tables are written against whose name a reader prefix starts by its letters but not as a word -
+    /// on 32.5.0.48, <c>IDrawingDoc.IsolateChangedDimensions</c>, which the writer grammar now reaches, and
+    /// <c>IAssemblyDoc.Isolate</c>, which no grammar of these interfaces reads and the <c>IAssemblyDoc</c>
+    /// row names - is refused bare and qualified by every gate the product builds. A later interop's member
+    /// of the kind fails here until someone decides what it is.
+    /// </summary>
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void EveryNameTheReaderPrefixesTookOnlyByTheirLettersIsRefusedByEveryGate()
+    {
+        var taken = DocumentWriteFamilyTests.Interfaces
+            .SelectMany(face => MethodNames(face)
+                .Where(name => ReaderLetters.IsMatch(name) && !IsReader(name))
+                .Select(name => face + "." + name))
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(new[] { "IAssemblyDoc.Isolate", "IDrawingDoc.IsolateChangedDimensions" }, taken);
+
+        IReadOnlyList<string> letThrough = GuardSweep.LetThrough(GuardSweep.ProductGates(), GuardSweep.Spellings(taken));
+        Assert.True(letThrough.Count == 0, "Spellings a gate the product builds lets through: " + string.Join(", ", letThrough));
+    }
 
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
     public void EveryFamilyOfTheContractIsOnTheInterop()
@@ -1264,10 +1376,10 @@ public class DrawingFamilyReadAuditTests
                 "a member probe standards asserts is absent from its gate log",
             [("ActivateDoc3", "SwReview.Extractor/Rms/RemodelInteropSurface.cs")] =
                 "the frozen interop manifest's row for ISldWorks.ActivateDoc3 (feature 004 T181), which the pane seat "
-                + "calls on the copy directly, outside the bridge and every gate; a row records a member and permits "
-                + "none. Named on decision 140A's review, whose keying by file found it: the literal's earlier entry "
-                + "named Program.cs only. That the seat's call passes no gate, though the read-only guard refuses "
-                + "ActivateDoc3, is research R10.4 item 6, a question for the owner (2026-10-19)",
+                + "calls on the copy outside the bridge; a row records a member and permits none. Named on decision "
+                + "140A's review, whose keying by file found it: the literal's earlier entry named Program.cs only. "
+                + "Since decision 144A (research R11, settling R10.4 item 6) the seat calls it through a gate of its "
+                + "own, by the qualified key its own guard, RemodelSeatGuard, allowlists",
             [("LoadFile4", "SwReview.Extractor.Console/Program.cs")] =
                 "a member probe standards asserts is absent from its gate log",
             [("dimensions", "SwReview.Extractor/Ir/DrawingSheet.cs")] =
@@ -1458,7 +1570,10 @@ public class DrawingFamilyReadAuditTests
     /// <summary>
     /// A literal as the read-only guard judges it: its member half when it is an
     /// interface-qualified key (feature 011 review, 2026-09-23), unless it is a key of one of the
-    /// two allowlist guards, which judge their own keys before the read-only guard is asked.
+    /// two allowlist guards, which judge their own keys before the read-only guard is asked. The pane
+    /// seat's guard (decision 144A) is not among them: its keys are judged whole only in the seat's own
+    /// file (<see cref="IsTheSeatsOwnKey"/>), so a key carried to another file is judged by its member
+    /// half here as before.
     /// </summary>
     internal static string Judged(string literal) =>
         CallKey.IsQualified(literal)
@@ -1467,12 +1582,54 @@ public class DrawingFamilyReadAuditTests
             ? CallKey.BareName(literal)
             : literal;
 
+    /// <summary>The pane seat's file, by its path under the extractor folder (decision 144A).</summary>
+    internal const string PaneSeatFile = "SwReview.AddIn/Remodel/SwRemodelSeat.cs";
+
+    /// <summary>
+    /// Decision 144A's review (T173): a literal of the pane seat's own file that is one of its guard's
+    /// two keys is the seat's own call, which its own guard judges first - in that file and nowhere else,
+    /// as <see cref="IsTheProbesOwnCall"/> keys the probe's calls by its file.
+    /// </summary>
+    private static bool IsTheSeatsOwnKey((string Literal, string Where) literal) =>
+        literal.Where == PaneSeatFile && RemodelSeatGuard.AllowedKeys.Contains(literal.Literal);
+
+    /// <summary>
+    /// Decision 144A's review (T173): the pane seat's two keys are literals of its own file and of no
+    /// other product file, so its guard's exemption is exercised and stays its own; a key carried to
+    /// another file fails here and in the audit.
+    /// </summary>
+    [Fact]
+    public void TheSeatsOwnKeysAreLiteralsOfItsOwnFileAlone()
+    {
+        var named = Literals()
+            .Where(literal => RemodelSeatGuard.AllowedKeys.Contains(literal.Literal))
+            .Select(literal => literal.Literal + " in " + literal.Where)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(entry => entry, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(
+            new[] { "ISldWorks.ActivateDoc3 in " + PaneSeatFile, "ISldWorks.OpenDoc7 in " + PaneSeatFile },
+            named);
+    }
+
+    /// <summary>
+    /// Edited deliberately for decision 144A (2026-10-19): a literal of <c>probe remodel</c>'s host that
+    /// the probe's own guard lets through is not a read but the probe's own call
+    /// (<see cref="IsTheProbesOwnCall"/>), as decision 21A's audit judges the probe's creation calls;
+    /// <see cref="TheProbesOwnCallsAreExactlyItsTwoWritersAndOnlyItsGuardLetsThemThrough"/> pins which.
+    /// And on the decision's review (T173), a literal of the pane seat's file that is one of its guard's
+    /// two keys is the seat's own call (<see cref="IsTheSeatsOwnKey"/>), in that file only.
+    /// </summary>
     [Fact]
     public void NoLiteralOfTheProductSourceIsRefusedByTheTableExceptTheNamedOnes()
     {
         var table = new HashSet<string>(DrawingFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
         var refused = Literals()
-            .Where(literal => table.Contains(Judged(literal.Literal)) && !NamedLiterals.ContainsKey(literal))
+            .Where(literal => table.Contains(Judged(literal.Literal))
+                && !NamedLiterals.ContainsKey(literal)
+                && !IsTheProbesOwnCall(literal)
+                && !IsTheSeatsOwnKey(literal))
             .Select(literal => $"\"{literal.Literal}\" in {literal.Where}")
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -1481,6 +1638,42 @@ public class DrawingFamilyReadAuditTests
             refused.Count == 0,
             "The feature 011 denials refuse a name the product source uses; a read that needs a refused "
                 + "member is a read that writes and is redesigned, never exempted: " + string.Join(", ", refused));
+    }
+
+    /// <summary>
+    /// Decision 144A (2026-10-19): a literal of <c>probe remodel</c>'s host
+    /// (<see cref="CreationFamilyReadAuditTests.ProbeHostFile"/>) that <see cref="RemodelProbeGuard"/>
+    /// lets through is one of the probe's own calls on its throwaway part, made through the one gate
+    /// built with that guard - never a read the table would refuse.
+    /// </summary>
+    private static bool IsTheProbesOwnCall((string Literal, string Where) literal) =>
+        literal.Where == CreationFamilyReadAuditTests.ProbeHostFile
+        && !GuardSweep.Refuses(new RemodelProbeGuard().Assert, literal.Literal);
+
+    /// <summary>
+    /// Decision 144A: the probe's own calls the table refuses are exactly its two writers the read-only
+    /// guard left allowed until then - <c>NewDocument</c> and <c>MoveToFolder</c> - and its guard lets
+    /// each through, so the exception is exercised and no wider: a later literal of the probe host the
+    /// table refuses fails here until someone decides what it is.
+    /// </summary>
+    [Fact]
+    public void TheProbesOwnCallsAreExactlyItsTwoWritersAndOnlyItsGuardLetsThemThrough()
+    {
+        var table = new HashSet<string>(DrawingFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
+        var named = Literals()
+            .Where(literal => literal.Where == CreationFamilyReadAuditTests.ProbeHostFile && table.Contains(Judged(literal.Literal)))
+            .Select(literal => literal.Literal)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(literal => literal, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(new[] { "MoveToFolder", "NewDocument" }, named);
+        Assert.All(named, member => new RemodelProbeGuard().Assert(member));
+
+        // Only its guard (the decision's review, T176): every other gate the product builds refuses each.
+        Assert.Equal(
+            new[] { "RemodelProbeGuard MoveToFolder", "RemodelProbeGuard NewDocument" },
+            GuardSweep.LetThrough(GuardSweep.ProductGates(), named));
     }
 
     /// <summary>
@@ -1524,7 +1717,9 @@ internal static class GuardSweep
 {
     /// <summary>
     /// Every guard a gate the product builds is built with: the read-only guard every gate gets by
-    /// default, and the four the exceptions and the confirmed drawing's open build their gates with.
+    /// default, and the five the exceptions, the confirmed drawing's open and, since decision 144A, the
+    /// re-modeler's pane seat build their gates with. <see cref="GuardSweepTests"/> holds it to every
+    /// guard the product defines, so a guard added later cannot be left out of the sweeps.
     /// </summary>
     internal static ICallGuard[] ProductGates() => new ICallGuard[]
     {
@@ -1533,6 +1728,7 @@ internal static class GuardSweep
         new RemodelProbeGuard(),
         new RemodelGuard(),
         new DrawingOpenGuard(),
+        new RemodelSeatGuard(),
     };
 
     /// <summary>
@@ -1587,6 +1783,113 @@ internal static class GuardSweep
             return true;
         }
     }
+
+    /// <summary>
+    /// Every gate the product builds lets through exactly <paramref name="exceptions"/> of
+    /// <paramref name="spellings"/> - keyed "<c>Guard spelling</c>", as <see cref="LetThrough"/> reports
+    /// them - each with a reason: a guard that comes to let another member through, or no longer lets
+    /// one of these through, fails, so an exception cannot widen, or outlive its guard, unnoticed.
+    /// Shared by the family sweeps of decisions 136A and 140A since decision 144A gave the first its own.
+    /// </summary>
+    internal static void AssertLetThroughExactly(
+        IReadOnlyCollection<string> spellings, IReadOnlyDictionary<string, (string Where, string Reason)> exceptions)
+    {
+        IReadOnlyList<string> letThrough = LetThrough(ProductGates(), spellings);
+
+        Assert.True(
+            new HashSet<string>(letThrough, StringComparer.Ordinal).SetEquals(exceptions.Keys),
+            "Family members a gate the product builds lets through: " + string.Join(", ", letThrough)
+                + "; expected exactly: " + string.Join(", ", exceptions.Keys));
+        Assert.All(exceptions, entry => Assert.False(string.IsNullOrWhiteSpace(entry.Value.Reason), entry.Key + " has no reason."));
+    }
+
+    /// <summary>
+    /// Each exception's key is still a literal of the product file named with it - its path under the
+    /// extractor folder, as the read audit's scan reports it - so one guard's exception cannot be kept
+    /// alive by another's call of the same member.
+    /// </summary>
+    internal static void AssertEveryExceptionIsStillNamed(IReadOnlyDictionary<string, (string Where, string Reason)> exceptions)
+    {
+        IReadOnlyList<(string Literal, string Where)> literals = DrawingFamilyReadAuditTests.Literals();
+
+        foreach (KeyValuePair<string, (string Where, string Reason)> exception in exceptions)
+        {
+            string key = exception.Key.Substring(exception.Key.IndexOf(' ') + 1);
+            Assert.True(
+                literals.Any(literal => literal.Literal == key && literal.Where == exception.Value.Where),
+                $"{exception.Key} is no longer named in {exception.Value.Where}; drop it, or say what calls it now.");
+        }
+    }
+}
+
+/// <summary>
+/// Decision 144A (feature 011 T163): "every gate the product builds" is every guard the product
+/// defines. The family sweeps, the creation and import-repair sweeps and the confirmed open's read
+/// check all read <see cref="GuardSweep.ProductGates"/>, so a guard added and left out of it would be
+/// swept by none of them - the pane seat's guard, which lets <c>ISldWorks.ActivateDoc3</c> through,
+/// above all.
+/// </summary>
+public class GuardSweepTests
+{
+    /// <summary>
+    /// A type declared to implement <see cref="ICallGuard"/>: a class, a struct or a record, generic or
+    /// not, with a primary constructor or not. Widened on the decision's review (T173), which found the
+    /// first form read classes alone.
+    /// </summary>
+    private static readonly Regex GuardDeclaration = new Regex(
+        @"\b(?:class|struct|record(?:\s+(?:class|struct))?)\s+(\w+)\s*(?:<[^>{]*>)?\s*(?:\([^)]*\))?\s*:[^{;]*\bICallGuard\b",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// One of every concrete <see cref="ICallGuard"/> the extractor's and the console's assemblies
+    /// define - where every guard lives is the extractor's <c>Guard</c> folder - and none declared in any
+    /// other source file of the three projects (the add-in's own assembly, which this suite does not
+    /// load, is read by the add-in suite's <c>TheAddInDefinesNoGuardOfItsOwn</c>). Widened on the
+    /// decision's review (T173): it read the extractor's assembly alone and the read audit's files, which
+    /// skip every folder named <c>Guard</c>.
+    /// </summary>
+    [Fact]
+    public void TheProductsGatesHoldOneOfEveryGuardTheProductDefines()
+    {
+        var defined = new[] { typeof(ICallGuard).Assembly, typeof(SwReview.Extractor.Console.Program).Assembly }
+            .SelectMany(assembly => assembly.GetTypes())
+            .Where(type => typeof(ICallGuard).IsAssignableFrom(type) && !type.IsInterface && !type.IsAbstract)
+            .Select(type => type.FullName!)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        var swept = GuardSweep.ProductGates()
+            .Select(gate => gate.GetType().FullName!)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Contains(typeof(RemodelSeatGuard).FullName, defined);
+        Assert.Equal(defined, swept);
+
+        string root = DrawingFamilyReadAuditTests.ExtractorRoot();
+        string guardFolder = Path.Combine(root, "SwReview.Extractor", "Guard") + Path.DirectorySeparatorChar;
+        var elsewhere = new[] { "SwReview.Extractor", "SwReview.AddIn", "SwReview.Extractor.Console" }
+            .SelectMany(project => Directory.EnumerateFiles(Path.Combine(root, project), "*.cs", SearchOption.AllDirectories))
+            .Where(file => !file.Split(Path.DirectorySeparatorChar).Any(part => part == "obj" || part == "bin"))
+            .Where(file => !file.StartsWith(guardFolder, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(file => GuardDeclaration.Matches(File.ReadAllText(file)).Cast<Match>()
+                .Select(match => match.Groups[1].Value + " in " + file.Substring(root.Length).TrimStart('\\', '/')))
+            .ToList();
+        Assert.True(elsewhere.Count == 0, "Guards declared outside the extractor's Guard folder: " + string.Join(", ", elsewhere));
+    }
+
+    /// <summary>The declaration pattern reads every form a guard could be declared in, and nothing else.</summary>
+    [Theory]
+    [InlineData("public sealed class RemodelSeatGuard : ICallGuard", true)]
+    [InlineData("internal class Guard<T> : Base, ICallGuard", true)]
+    [InlineData("public struct StructGuard : ICallGuard", true)]
+    [InlineData("public record RecordGuard(string Name) : ICallGuard", true)]
+    [InlineData("public record struct RecordStructGuard : ICallGuard", true)]
+    [InlineData("public sealed class SwRemodelSeat : IRemodelSeat", false)]
+    [InlineData("private readonly ICallGuard _guard;", false)]
+    public void TheDeclarationPatternReadsEveryFormOfAGuard(string declaration, bool isGuard)
+    {
+        Assert.Equal(isGuard, GuardDeclaration.IsMatch(declaration));
+    }
 }
 
 /// <summary>
@@ -1597,18 +1900,38 @@ internal static class GuardSweep
 /// <c>INew*</c> creators, and bare <c>LoadFile</c>, <c>LoadAddIn</c> and <c>LoadAdminSettingsFile</c>.
 ///
 /// This class reflects the interop the extractor is built against and holds every member of
-/// <c>ISldWorks</c>, <c>IModelDoc2</c> and <c>IModelDocExtension</c> whose name belongs to the open,
+/// <c>ISldWorks</c>, <c>IModelDoc2</c> and <c>IModelDocExtension</c> - and, since decision 144A,
+/// <c>IAssemblyDoc</c> - whose name belongs to the open,
 /// activate, new, load, close or quit families (<see cref="BelongsToAFamily"/>) to one of three answers:
 /// a reader by section 2's prefixes, which stays allowed (FR-006); one of the <see cref="Allowed"/>
 /// members, each with its reason; or refused by <see cref="ReadOnlyGuard"/> in both spellings a call
-/// site can hand it - bare, and qualified with its interface - and by every gate the product builds.
-/// A member a later interop adds fails here until someone decides which it is. Only metadata is read;
-/// SOLIDWORKS is never started.
+/// site can hand it - bare, and qualified with its interface - and by every gate the product builds
+/// but for the exceptions a guard was written for, each named with its reason
+/// (<see cref="Exceptions"/>, since decision 144A). A member a later interop adds fails here until
+/// someone decides which it is. Only metadata is read; SOLIDWORKS is never started.
 /// </summary>
 public class DocumentLifecycleFamilyTests
 {
-    /// <summary>The interfaces the families are read from.</summary>
-    internal static readonly string[] Interfaces = { "ISldWorks", "IModelDoc2", "IModelDocExtension" };
+    /// <summary>
+    /// The interfaces the families are read from. Edited deliberately for decision 144A (2026-10-19;
+    /// research R10.4 item 1): <c>IAssemblyDoc</c> joined as a fourth, the document type whose
+    /// component opens, reloads and new parts are these families' members too (<c>OpenCompFile</c>,
+    /// <c>ComponentReload2</c>, <c>InsertNewPart2</c>, ...).
+    /// </summary>
+    internal static readonly string[] Interfaces = { "ISldWorks", "IModelDoc2", "IModelDocExtension", "IAssemblyDoc" };
+
+    /// <summary>
+    /// What the grammar finds on <c>IAssemblyDoc</c> on 32.5.0.48 (research R10.4 item 1, decision 144A):
+    /// component documents opened, reloaded or created, a reference loaded, the ground plane activated,
+    /// and the isolate and temporary-fix-group modes left - none a reader, and none called by the product.
+    /// </summary>
+    private static readonly string[] AssemblyFamilyMembers =
+    {
+        "OpenCompFile", "SelectiveOpen", "ComponentReload", "ComponentReload2", "IComponentReload2",
+        "IComponentReload3", "InsertNewPart", "InsertNewPart2", "InsertNewAssembly", "InsertNewVirtualPart",
+        "InsertNewVirtualAssembly", "InsertLoadReference", "ActivateGroundPlane", "ExitIsolate",
+        "TemporaryFixGroupExit",
+    };
 
     /// <summary>
     /// The families, as a word of a member's name: the verb, or a compound of it, beginning with its
@@ -1636,16 +1959,41 @@ public class DocumentLifecycleFamilyTests
         ["ISldWorks.CloseDoc"] = "the bare name of feature 004's stage-1 allowlist key ISldWorks.CloseDoc: denying it "
             + "would make that key override a read-only denial; the confirmed drawing's close and the console "
             + "attach's close of a document it opened that is not read-only both go through the identity check",
-        ["ISldWorks.NewDocument"] = "probe remodel's throwaway part (feature 004 T032, under RemodelProbeGuard)",
 
         // Decision 140A (2026-10-19) removed IModelDoc2.Close from this list: it was left allowed only
         // because the bridge handed the command name remodel.close to the read-only guard, which
         // judged it by its member half. The dispatcher no longer does, and nothing calls the member.
+        //
+        // Decision 144A (the same day) removed ISldWorks.NewDocument: probe remodel's throwaway part is
+        // created with it under the probe's own guard, so the read-only guard refuses it now and only
+        // RemodelProbeGuard lets it through, one of the Exceptions below.
     };
+
+    /// <summary>
+    /// What a guard written for an exception lets through of these families, as the guard's type and
+    /// the key, each with the product file whose call needs it - its path under the extractor folder,
+    /// as the read audit's scan reports it - and the exception it is: exactly these (decision 144A,
+    /// 2026-10-19, which gave this class the exceptions <see cref="DocumentWriteFamilyTests"/> has). The
+    /// read-only guard, the suppress-test's, the re-modeler's and the confirmed drawing's let none
+    /// through.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, (string Where, string Reason)> Exceptions =
+        new Dictionary<string, (string Where, string Reason)>(StringComparer.Ordinal)
+        {
+            ["RemodelSeatGuard ISldWorks.ActivateDoc3"] = ("SwReview.AddIn/Remodel/SwRemodelSeat.cs",
+                "the re-modeler's pane seat makes the run's copy the active document, by its title and without a "
+                + "rebuild, for remodel.open_copy and before each dump (feature 004 T159); its own guard allowlists "
+                + "the qualified key and nothing else of the families but ISldWorks.OpenDoc7, which the read-only "
+                + "guard leaves allowed (decision 144A)"),
+            ["RemodelProbeGuard NewDocument"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
+                "probe remodel creates its throwaway part, and PROBE-8's and PROBE-21's, with it (feature 004 T032): one "
+                + "of RemodelProbeGuard's run-scoped members since decision 144A, under the bare name its host gates, "
+                + "in the one gate built with that guard, which refuses to run while any document is open"),
+        };
 
     internal static bool BelongsToAFamily(string name) => Family.IsMatch(name);
 
-    /// <summary>Every family member of the three interfaces, interface-qualified, readers included.</summary>
+    /// <summary>Every family member of the four interfaces, interface-qualified, readers included.</summary>
     internal static IReadOnlyList<string> FamilyMembers() => GuardSweep.Members(Interfaces, Family);
 
     private static IEnumerable<string> RefusedFamilyMembers() => GuardSweep.ToRefuse(FamilyMembers(), Allowed.Keys);
@@ -1660,11 +2008,21 @@ public class DocumentLifecycleFamilyTests
     [InlineData("DeActivateFeatureMgrView", true)]
     [InlineData("CreateNewWindow", true)]
     [InlineData("Quit", true)]
+    [InlineData("OpenCompFile", true)]
+    [InlineData("SelectiveOpen", true)]
+    [InlineData("IComponentReload3", true)]
+    [InlineData("InsertNewVirtualAssembly", true)]
+    [InlineData("InsertLoadReference", true)]
+    [InlineData("ActivateGroundPlane", true)]
+    [InlineData("ExitIsolate", true)]
+    [InlineData("TemporaryFixGroupExit", true)]
     [InlineData("ClosestDistance", false)]
     [InlineData("IClosestDistance", false)]
     [InlineData("IsOpenedReadOnly", false)]
     [InlineData("DownloadFromMySolidWorksSettings", false)]
     [InlineData("InsertSheetMetalClosedCorner", false)]
+    [InlineData("Isolate", false)]
+    [InlineData("GetOpenDocumentByName", true)]
     public void TheFamilyGrammarReadsWholeWords(string name, bool belongs)
     {
         Assert.Equal(belongs, BelongsToAFamily(name));
@@ -1699,6 +2057,11 @@ public class DocumentLifecycleFamilyTests
         {
             Assert.Contains(named, members);
         }
+
+        // Decision 144A: the members research R10.4 item 1 names on IAssemblyDoc, and no other.
+        Assert.Equal(
+            AssemblyFamilyMembers.Select(name => "IAssemblyDoc." + name).OrderBy(key => key, StringComparer.Ordinal),
+            members.Where(key => key.StartsWith("IAssemblyDoc.", StringComparison.Ordinal)));
     }
 
     /// <summary>The heart of decision 136A: no member of the families is left callable by accident.</summary>
@@ -1717,14 +2080,25 @@ public class DocumentLifecycleFamilyTests
                 + "contracts/guard.md section 1) or name it in Allowed with its reason: " + string.Join(", ", callable));
     }
 
+    /// <summary>
+    /// Every gate the product builds refuses them in both spellings, except exactly
+    /// <see cref="Exceptions"/>. Edited deliberately for decision 144A (2026-10-19): this was
+    /// <c>EveryGateTheProductBuildsRefusesThem</c>, which asserted that no gate let any member through;
+    /// the pane seat's own guard lets <c>ISldWorks.ActivateDoc3</c> through, the one call the seat makes
+    /// that the read-only guard refuses, so the test names it as an exception, with the file whose call
+    /// needs it, as <see cref="DocumentWriteFamilyTests"/> names its own - and any other member a gate
+    /// lets through, or an exception no guard lets through any longer, fails it as before.
+    /// </summary>
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
-    public void EveryGateTheProductBuildsRefusesThem()
-    {
-        IReadOnlyList<string> letThrough = GuardSweep.LetThrough(
-            GuardSweep.ProductGates(), GuardSweep.Spellings(RefusedFamilyMembers()));
+    public void EveryGateTheProductBuildsLetsThroughOnlyTheNamedExceptions() =>
+        GuardSweep.AssertLetThroughExactly(GuardSweep.Spellings(RefusedFamilyMembers()), Exceptions);
 
-        Assert.True(letThrough.Count == 0, "Family members a gate the product builds lets through: " + string.Join(", ", letThrough));
-    }
+    /// <summary>
+    /// Each exception's key is still a literal of the product file whose call needs it (decision 144A),
+    /// so one guard's exception cannot be kept alive by another's call of the same member.
+    /// </summary>
+    [Fact]
+    public void EveryExceptionIsStillNamedByTheProduct() => GuardSweep.AssertEveryExceptionIsStillNamed(Exceptions);
 
     /// <summary>The reads among the families stay allowed in both spellings (FR-006): the lookups the product calls above all.</summary>
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
@@ -1819,8 +2193,9 @@ public class DocumentLifecycleFamilyTests
 public class DocumentWriteFamilyTests
 {
     /// <summary>
-    /// The 34 interfaces the generated tables are written against: the three of
-    /// <see cref="DocumentLifecycleFamilyTests"/>; the document types a model document also is, whose
+    /// The 34 interfaces the generated tables are written against: the four of
+    /// <see cref="DocumentLifecycleFamilyTests"/> (three until decision 144A added <c>IAssemblyDoc</c>,
+    /// which this list named already); the document types a model document also is, whose
     /// saves, replaces and rebuilds act on that same document (004's guard-allowlist.md had recorded
     /// <c>IPartDoc.SaveToFile</c> to <c>SaveToFile3</c> as open); and every interface one of the
     /// guard's generated tables reflects - decision 21A's creation interfaces, <c>IFeatureManager</c>
@@ -1895,18 +2270,17 @@ public class DocumentWriteFamilyTests
                 + "paths: what keeps this path an image is the capture's own code, which names the PNG under the "
                 + "captures folder of the directory the host chose and checks its extension with AssertSaveAs first. "
                 + "SaveAs3 stays refused"),
-            ["IFeatureManager.MoveToFolder"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
-                "probe remodel's PROBE-5 moves a feature of its throwaway part into a folder: SwRemodelProbeHost gates "
-                + "the bare name under RemodelProbeGuard, which hands it to the read-only guard, as it does NewDocument "
-                + "(feature 004 T032); never the engineer's document, which probe remodel refuses to run beside. "
-                + "RemodelGuardTests keeps it as its example of a bare writer the denylist misses, the reason the "
-                + "re-modeler's writes are interface-qualified"),
+
+            // Decision 144A (2026-10-19) moved IFeatureManager.MoveToFolder from here to the Exceptions
+            // below: probe remodel's PROBE-5 needs it, so the read-only guard refuses it now and only
+            // RemodelProbeGuard lets it through, as it does ForceRebuild3 and SaveAs3.
         };
 
     /// <summary>
     /// What a guard written for an exception lets through of these families, as the guard's type and
     /// the key, each with the product file whose call needs it and the exception it is - exactly these.
-    /// The read-only guard and the confirmed drawing's guard let none through.
+    /// The read-only guard, the confirmed drawing's guard and the re-modeler's pane seat's guard let none
+    /// through.
     /// </summary>
     internal static readonly IReadOnlyDictionary<string, (string Where, string Reason)> Exceptions =
         new Dictionary<string, (string Where, string Reason)>(StringComparer.Ordinal)
@@ -1917,6 +2291,10 @@ public class DocumentWriteFamilyTests
                 "probe remodel rebuilds its throwaway part after each step (feature 004 T032)"),
             ["RemodelProbeGuard SaveAs3"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
                 "probe remodel saves its throwaway part into the run folder, behind RemodelProbe.AssertPartSavePath"),
+            ["RemodelProbeGuard MoveToFolder"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
+                "probe remodel's PROBE-5 moves a feature of its throwaway part into a folder (feature 004 T038): one of "
+                + "RemodelProbeGuard's run-scoped members since decision 144A, under the bare name its host gates; never "
+                + "the engineer's document, which probe remodel refuses to run beside"),
             ["RemodelGuard IModelDoc2.ForceRebuild3"] = ("SwReview.Extractor/Bridge/BridgeDispatcher.cs",
                 "the re-modeler's one rebuild of its own copy (feature 004's stage-1 allowlist)"),
             ["RemodelGuard IModelDoc2.Save3"] = ("SwReview.Extractor/Bridge/BridgeDispatcher.cs",
@@ -2020,17 +2398,8 @@ public class DocumentWriteFamilyTests
     /// unnoticed.
     /// </summary>
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
-    public void EveryGateTheProductBuildsLetsThroughOnlyTheNamedExceptions()
-    {
-        IReadOnlyList<string> letThrough = GuardSweep.LetThrough(
-            GuardSweep.ProductGates(), GuardSweep.Spellings(RefusedFamilyMembers()));
-
-        Assert.True(
-            new HashSet<string>(letThrough, StringComparer.Ordinal).SetEquals(Exceptions.Keys),
-            "Family members a gate the product builds lets through: " + string.Join(", ", letThrough)
-                + "; expected exactly: " + string.Join(", ", Exceptions.Keys));
-        Assert.All(Exceptions, entry => Assert.False(string.IsNullOrWhiteSpace(entry.Value.Reason), entry.Key + " has no reason."));
-    }
+    public void EveryGateTheProductBuildsLetsThroughOnlyTheNamedExceptions() =>
+        GuardSweep.AssertLetThroughExactly(GuardSweep.Spellings(RefusedFamilyMembers()), Exceptions);
 
     /// <summary>The reads among the families stay allowed in both spellings (FR-006): the two the product calls above all.</summary>
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
@@ -2079,18 +2448,7 @@ public class DocumentWriteFamilyTests
     /// exception cannot be kept alive by another's call of the same member.
     /// </summary>
     [Fact]
-    public void EveryExceptionIsStillNamedByTheProduct()
-    {
-        IReadOnlyList<(string Literal, string Where)> literals = DrawingFamilyReadAuditTests.Literals();
-
-        foreach (KeyValuePair<string, (string Where, string Reason)> exception in Exceptions)
-        {
-            string key = exception.Key.Substring(exception.Key.IndexOf(' ') + 1);
-            Assert.True(
-                literals.Any(literal => literal.Literal == key && literal.Where == exception.Value.Where),
-                $"{exception.Key} is no longer named in {exception.Value.Where}; drop it, or say what calls it now.");
-        }
-    }
+    public void EveryExceptionIsStillNamedByTheProduct() => GuardSweep.AssertEveryExceptionIsStillNamed(Exceptions);
 }
 
 /// <summary>
@@ -2180,20 +2538,17 @@ public class ImportRepairDenylistTests
     /// <summary>
     /// No gate the product builds is exempted from any of them: the suppress-test gate's two
     /// exemptions, <c>probe remodel</c>'s throwaway-part recipe, the re-modeler's stage-1
-    /// allowlist and the confirmed drawing's open all refuse every member, bare or qualified.
+    /// allowlist, the confirmed drawing's open and the re-modeler's pane seat all refuse every
+    /// member, bare or qualified. Edited deliberately for decision 144A (2026-10-19): the gates are
+    /// <see cref="GuardSweep.ProductGates"/>, which holds every guard the product defines - the read-only
+    /// guard and the pane seat's as well as the four this listed by hand.
     /// </summary>
     [Theory]
     [MemberData(nameof(EveryQualifiedMember))]
     public void EveryGateTheProductBuildsRefusesThem(string key)
     {
         string member = CallKey.BareName(key);
-        foreach (ICallGuard gate in new ICallGuard[]
-                 {
-                     new SuppressTestGuard(),
-                     new RemodelProbeGuard(),
-                     new RemodelGuard(),
-                     new DrawingOpenGuard(),
-                 })
+        foreach (ICallGuard gate in GuardSweep.ProductGates())
         {
             Assert.Throws<MutatingCallError>(() => gate.Assert(member));
             Assert.Throws<MutatingCallError>(() => gate.Assert(key));

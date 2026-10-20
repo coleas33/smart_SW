@@ -7,6 +7,13 @@ namespace SwReview.Extractor.Guard;
 /// which the engineer-run suppress-test builds - and this interface exists so that path does
 /// not reach into <see cref="ReadOnlyGuard"/>'s denylist or copy it. An implementation is
 /// called synchronously on the SOLIDWORKS thread inside every call, so it allocates nothing.
+/// (Corrected 2026-10-19 on decision 144A's review, and again on its second review: that was true
+/// when it was written. The alternatives are five now - <see cref="SuppressTestGuard"/> and
+/// <see cref="RemodelProbeGuard"/>, each built by one of the console's gate factories;
+/// <see cref="DrawingOpenGuard"/>, by the confirmed drawing's scope; <see cref="RemodelSeatGuard"/>,
+/// by the re-modeler's pane seat; and <see cref="RemodelGuard"/>, by the add-in's tool service and by
+/// the bridge's dispatcher when it is handed no gate - and the extractor's <c>GuardSweepTests</c>
+/// holds the list the tests sweep to every guard the product defines.)
 /// </summary>
 public interface ICallGuard
 {

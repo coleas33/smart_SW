@@ -126,6 +126,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 5.3 | 004 T185: crash capture set, or `no administrator rights` (item A) | | | |
 | 5.3 | 004 T185: the box planned; the phases end `open_record.written`, the last two `stage=` lines and the count (item B) | | | |
 | 5.3 | 004 T185: if SOLIDWORKS closed: item C's six answers, and what was kept | | | |
+| 5.3 | 011 T171: the box's Open copy, then Start; exactly four `seat=` lines in `remodel.log`, the activation's and the open's, none with `refused=` or `error=` (item B) | | | |
 | 5.3 | 004 T186: J checked in: planned with the read-only option not ticked, or refused naming it with the option ticked; `IsReadOnly` unchanged | | | |
 | 5.4 | 008 T106: the live Gemini test | | | |
 | 5.5 | 009 T082: Show before and after the fix | | | |

@@ -415,17 +415,23 @@ public class RemodelGuardTests
     /// <summary>
     /// The denylist's known gaps are why the write surface is keyed by interface. Decision 21A
     /// closed the creation family (<see cref="Assert_BareCreationMember_IsRefusedSinceDecision21A"/>),
-    /// but a denylist still cannot enumerate every writer: <c>IFeatureManager.MoveToFolder</c>
-    /// moves features into a folder and no denial names it, so a bare key passes. It is refused
-    /// the moment it is spelled as the qualified key every write call site is required to use
-    /// (<see cref="CallKey.AssertQualified"/>), which is the property this guard actually rests on.
+    /// but a denylist still cannot enumerate every writer: <c>IModelDoc2.DeleteConfiguration2</c>
+    /// deletes a configuration and no denial names it (011 research R10.4 item 3, recorded for the
+    /// owner), so a bare key passes. It is refused the moment it is spelled as the qualified key every
+    /// write call site is required to use (<see cref="CallKey.AssertQualified"/>), which is the
+    /// property this guard actually rests on. Edited deliberately for decision 144A (2026-10-19): the
+    /// example was <c>IFeatureManager.MoveToFolder</c>, which the read-only guard refuses now, so the
+    /// remodel guard refuses it bare as well (011 research R10.4 item 5).
     /// </summary>
     [Fact]
     public void Assert_BareWriterTheDenylistMisses_PassesWhichIsWhyWritesAreQualified()
     {
-        Guard().Assert("MoveToFolder");
+        Guard().Assert("DeleteConfiguration2");
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("IModelDoc2.DeleteConfiguration2"));
+        Assert.Throws<ArgumentException>(() => CallKey.AssertQualified("DeleteConfiguration2"));
+
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("MoveToFolder"));
         Assert.Throws<MutatingCallError>(() => Guard().Assert("IFeatureManager.MoveToFolder"));
-        Assert.Throws<ArgumentException>(() => CallKey.AssertQualified("MoveToFolder"));
     }
 
     /// <summary>

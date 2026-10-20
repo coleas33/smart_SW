@@ -404,7 +404,9 @@ public static class Program
     /// the distinct member names reach the gate log the command prints at the end
     /// (contracts/cli.md row 20). Built here rather than left to <c>SwSession</c>'s default,
     /// so the guard this command carries is a decision the option tests can see - and it is
-    /// never <see cref="SuppressTestGuard"/>, the only other <c>ICallGuard</c> in the product.
+    /// never <see cref="SuppressTestGuard"/> or another of the product's guards. (Corrected on
+    /// decision 144A's second review: this called the suppress-test's guard the only other
+    /// <c>ICallGuard</c> in the product; there are five beside the read-only one.)
     /// </summary>
     internal static SwGate StandardsProbeGate(RecordingGateObserver observer) =>
         new SwGate(new CircuitBreaker(), ReadOnlyCallGuard.Instance) { Observer = observer };

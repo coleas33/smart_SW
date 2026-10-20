@@ -163,7 +163,7 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 ## How long it takes
 
-About **14 hours 10 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
+About **14 hours 15 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
 steps 4 to 6. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
 inside steps 3.1, 4.1, 4.5, 5.1 and 5.2; feature 004's three items (decision 18A) about 40
 minutes more: the FeatureWorks record at step 1.7 (5 minutes), the owner's parts at step 5.1 (10
@@ -175,8 +175,9 @@ retest of 2026-09-28's U25 to U27 about 35 minutes more: step 4.9 (15 minutes) a
 to C and the read-only option (20 minutes); feature 015's unticked review and Send at step 4.10
 about 35 minutes more (decision 4A): two SOLIDWORKS restarts, the waiting review sent, and the big
 assembly's unticked review and timings; feature 014's smoke checks at step 4.11 take 10 minutes
-more, reading step 4.1's review without another paid review. The next sitting, which runs the
-retest first and then starts at step 2.4 after its update, needs about 13 hours 40 minutes. Keep
+more, reading step 4.1's review without another paid review; and decision 144A's check of the
+re-modeler's pane seat at step 5.3's item B (011 T171) about 5 minutes more. The next sitting, which
+runs the retest first and then starts at step 2.4 after its update, needs about 13 hours 45 minutes. Keep
 SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
 the review chips of steps 4.4 and 4.5 live only as long as the SOLIDWORKS session. Before the
 sitting, allow **half a day** to find and note documents C to N, Q and S, and the components of
@@ -189,7 +190,7 @@ A and B step 3.1 asks about (section 0.2), while the owner names the parts P; a 
 | 2 | Profile and key, the profile's version 4, and lever 14's live test | 40 min |
 | 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
 | 4 | The pane reviews, with the findings by type, the timing of A's review, A again with the version 4 profile, a drawing active, and A unticked then sent, with B's timings and A's smoke checks | 5 h |
-| 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel (the retest's box and crash capture first), the Gemini test | 1 h 25 min |
+| 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel (the retest's box, with the pane seat's gate, and crash capture first), the Gemini test | 1 h 30 min |
 | 5.5 | The older build and back: two builds, two SOLIDWORKS restarts, two reviews of A | 1 h |
 | 5.6 | The re-modeler probes: three runs with no document open, and the three options checked | 25 min |
 | 6 | Handoff | 45 min |
@@ -2117,7 +2118,7 @@ not found on S-2, as you know them to be. Record: A-plate's drawing's printed li
 and for S-1 and S-2 the export-control check's bucket; never the statement's text or anything
 else of a title block.
 
-### 5.3 Remodel [004 T185; 004 T186]
+### 5.3 Remodel [004 T185; 004 T186; 011 T171]
 
 This build gives the Remodel tab its seat (feature 004's seat adapter, 004 T152 to T160, and its
 teardown, 004 T167): **Remodel a copy plans on a copy** the tab makes in its own run folder, never
@@ -2161,8 +2162,25 @@ B. **A throwaway box, before any real part.** In the ordinary window:
    ```
 
    Pass: the phases end with `open_record.written`; the last two lines end
-   `stage=before get_Density` and `stage=after get_Density`; the count is 60 or more. Then use
-   **Discard copy**, close the box without saving, and go on to item 1 below with part J.
+   `stage=before get_Density` and `stage=after get_Density`; the count is 60 or more.
+
+   Then the pane seat's own gate (011 T171): press **Open copy**. Pass: the copy opens again - the
+   plan let it go - and is the active document, its window's name ending in `-RMS`. Close that
+   window, choosing **Don't Save** if SOLIDWORKS asks; then press **Start**, which this build refuses
+   by its switch before SOLIDWORKS is asked anything; then:
+
+   ```powershell
+   Select-String -LiteralPath (Join-Path $run.FullName 'remodel.log') -SimpleMatch '] seat=' | ForEach-Object { $_.Line.Substring($_.Line.IndexOf('] seat=') + 2) }
+   ```
+
+   Pass: exactly four lines - the plan's activation of the copy before its dump,
+   `seat=activate_before_dump begin` and then
+   `seat=activate_before_dump status=ok outcome=activated gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3,ActiveDoc`,
+   and the open, `seat=open_copy begin` and then
+   `seat=open_copy status=ok outcome=opened gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7,GetPathName`
+   - none with `refused=` or `error=`. A line with either is a fail, and so is a `begin` line with no
+   line after it: write each down whole (they name no path). Then use **Discard copy**, close the box
+   without saving, and go on to item 1 below with part J.
 C. **If SOLIDWORKS closes, freezes or shows its own error report** at item B or at any item below:
    stop the step, and before you restart SOLIDWORKS:
    1. write down the time on the clock, and whether SOLIDWORKS froze first, vanished at once, or
@@ -2237,8 +2255,9 @@ Record: pass or fail; the refusal if Remodel a copy was refused; how long the pl
 (004 T182 sets the add-in's wait on the copy's open from it); and any line saying not everything
 could be put back. For the retest: item A done or `no administrator rights`; item B's last phase,
 last two `stage=` lines and count; J's `IsReadOnly` and the read-only option as noted; and, if
-SOLIDWORKS closed, item C's six answers. No part name, run folder name or path goes in the findings
-document.
+SOLIDWORKS closed, item C's six answers. For 011 T171: whether Open copy opened the copy, and item
+B's four `seat=` lines as pass or fail, a failing line written whole. No part name, run folder name
+or path goes in the findings document.
 
 **What the Start switch waits on.** The development machine sets it (`RemodelStart.SeatValidated`,
 in a commit of its own) only once a sitting has proved, in this order: first step 5.6's blocking

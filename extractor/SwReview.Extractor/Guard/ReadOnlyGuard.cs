@@ -294,10 +294,10 @@ public static partial class ReadOnlyGuard
     ///
     /// An interface-qualified key (<c>IDrawingDoc.ActivateSheet</c>) is judged by its member half
     /// as well as by the whole key, so no spelling of a denied member passes a read-only gate
-    /// (feature 011 review, 2026-09-23: a qualified key had passed whatever it named). The two
-    /// allowlist guards, <see cref="RemodelGuard"/> and <see cref="DrawingOpenGuard"/>, accept
-    /// their own qualified keys before this guard is asked, and are unchanged by this. The error
-    /// names the key as the caller wrote it.
+    /// (feature 011 review, 2026-09-23: a qualified key had passed whatever it named). The
+    /// allowlist guards - <see cref="RemodelGuard"/>, <see cref="DrawingOpenGuard"/> and, since
+    /// decision 144A, <see cref="RemodelSeatGuard"/> - accept their own qualified keys before this
+    /// guard is asked, and are unchanged by this. The error names the key as the caller wrote it.
     /// </summary>
     public static void Assert(string interopMemberName)
     {

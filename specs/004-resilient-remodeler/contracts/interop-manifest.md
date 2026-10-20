@@ -282,6 +282,14 @@ the audit, with T181's regeneration.
   interop call is typed; `TheAuditTypesTheReceiversTheSeatsOwnFilesState` is the floor that keeps
   it so, and `TheReceiverIsTypedWhereTheFileSaysWhatItIs` pins each rule.
 
+*Amended 2026-10-19 (owner decision 144A; feature 011's research R11.1):* the pane seat no longer
+calls COM directly. Every member above that it calls goes through a gate of its own, built per
+action, whose guard, `RemodelSeatGuard`, allows `ISldWorks.ActivateDoc3` and `ISldWorks.OpenDoc7` by
+those keys and hands every bare read to the read-only guard (`guard-allowlist.md`, "The re-modeler's
+pane seat"). The rows, their `used_by` and their `allowlisted` column - the stage-1 allowlist's,
+which neither key is on - are unchanged, so nothing is regenerated, and the audit still reads the
+seat's file and types every call it makes there.
+
 `EveryMemberTheScopeProbeGatesHasARow` pins, beside it, that every member
 `RemodelScopeProbe.ProbeSurface` gates (T154's reads) and `RemodelSession`'s resolve pair has a row.
 
