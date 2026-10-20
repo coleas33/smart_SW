@@ -261,6 +261,9 @@ public sealed class CheckPaneHost : IDisposable
     /// <summary>Posts one `status`, with every secret masked out of it (FR-015).</summary>
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
 
+    /// <summary><see cref="PostStatus(string, string)"/>, marked as the add-in's own word on the backend when <paramref name="lifecycle"/> (owner decision 145A).</summary>
+    public void PostStatus(string stage, string message, bool lifecycle) => _actions.PostStatus(stage, message, lifecycle);
+
     /// <summary>Tells the page which document the pane is looking at now, or that there is none.</summary>
     public void DocumentChanged() =>
         Post("document.changed", DocumentPayload(_options.CurrentDocument()));

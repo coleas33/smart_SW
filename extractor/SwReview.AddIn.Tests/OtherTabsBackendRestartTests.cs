@@ -85,9 +85,9 @@ public sealed class OtherTabsBackendRestartTests
     /// review). One case per tab.
     /// </summary>
     [Theory]
-    [InlineData("_modelCheckHost?.PostStatus(stage, message);")]
-    [InlineData("_standardsHost?.PostStatus(stage, message);")]
-    [InlineData("_remodelHost?.PostStatus(stage, message);")]
+    [InlineData("_modelCheckHost?.PostStatus(stage, message, lifecycle: true);")]
+    [InlineData("_standardsHost?.PostStatus(stage, message, lifecycle: true);")]
+    [InlineData("_remodelHost?.PostStatus(stage, message, lifecycle: true);")]
     public void TheAddInTellsEachOtherTabARestartFailedAsAFailedStartIsTold(string post)
     {
         string source = AddInSource();
@@ -106,6 +106,55 @@ public sealed class OtherTabsBackendRestartTests
         // The first start's fan-out is the same one, with the Review page in front of it.
         string every = Between(source, "private void PostStatusToPages(string stage, string message) {", "}");
         Assert.Contains("_reviewHost?.PostStatus(stage, message); PostStatusToTheOtherPages(stage, message);", every, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Each other tab's host marks the add-in's own word on the backend - its start, or a restart
+    /// that failed - as such, `lifecycle: true`, when the add-in says so, and nothing else it posts:
+    /// the page takes down a banner it put up for that word once a later `init` names a backend,
+    /// and only that banner (owner decision 145A, third review).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void EachOtherTabsHostMarksTheBackendsOwnWordAndNothingElse(string tab)
+    {
+        var posted = new List<string>();
+        Action<string, string, bool> post = PostingHost(tab, posted);
+
+        post("error", "FICT the review backend did not start.", true);
+        post("error", "FICT the check stopped part way through.", false);
+
+        Assert.Equal(2, posted.Count);
+        JsonElement backends = JsonDocument.Parse(posted[0]).RootElement.GetProperty("payload");
+        Assert.Equal("error", backends.GetProperty("stage").GetString());
+        Assert.Equal("FICT the review backend did not start.", backends.GetProperty("message").GetString());
+        Assert.True(backends.GetProperty("lifecycle").GetBoolean());
+        JsonElement other = JsonDocument.Parse(posted[1]).RootElement.GetProperty("payload");
+        Assert.False(other.TryGetProperty("lifecycle", out _), "only the backend's own word is marked: " + other.GetRawText());
+    }
+
+    /// <summary>The host of <paramref name="tab"/> over a channel that collects what it posts, and its <c>PostStatus</c>.</summary>
+    private static Action<string, string, bool> PostingHost(string tab, List<string> posted)
+    {
+        var channel = new CollectingChannel(posted);
+        Func<string> runRoot = () => Path.Combine(Path.GetTempPath(), "SwReview.OtherTabs.Tests");
+        switch (tab)
+        {
+            case "model-check":
+                ModelCheckHost check = new ModelCheckHost(new ModelCheckHostOptions(channel, runRoot));
+                return (stage, message, lifecycle) => check.PostStatus(stage, message, lifecycle);
+
+            case "standards":
+                StandardsHost standards = new StandardsHost(new StandardsHostOptions(channel, runRoot));
+                return (stage, message, lifecycle) => standards.PostStatus(stage, message, lifecycle);
+
+            case "remodel":
+                RemodelHost remodel = new RemodelHost(new RemodelHostOptions(channel, runRoot));
+                return (stage, message, lifecycle) => remodel.PostStatus(stage, message, lifecycle);
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(tab), tab, "no tab of that name");
+        }
     }
 
     /// <summary>

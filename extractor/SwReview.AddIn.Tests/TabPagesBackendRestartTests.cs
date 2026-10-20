@@ -476,6 +476,82 @@ public sealed class TabPagesBackendRestartTests
         });
     }
 
+    /// <summary>The add-in's word that the backend did not start, as a failed start or restart tells every tab.</summary>
+    private const string BackendFailure = "FICT the review backend did not start: the handshake timed out.";
+
+    /// <summary>
+    /// The banner the page put up for the add-in's word that the backend did not start - a failed
+    /// start or restart, `status {stage: "error", lifecycle: true}` - comes down once a later `init`
+    /// names a backend: the next restart that works makes it untrue. An `init` that names none
+    /// leaves it (owner decision 145A, third review: the banner stayed under "Backend ready" until
+    /// the tab's next press).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void ALifecycleErrorBannerComesDownOnceALaterInitNamesABackend(string tab)
+    {
+        TabPageDriver.Run(tab, null, async driver =>
+        {
+            int readies = driver.Readies;
+            await driver.Post("status", new { stage = "error", message = BackendFailure, lifecycle = true });
+            Assert.Equal(BackendFailure, await driver.Banner());
+
+            driver.NoBackend = true;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for init again");
+            await driver.Settle();
+            Assert.Equal(BackendFailure, await driver.Banner());
+
+            driver.NoBackend = false;
+            driver.Token = RestartedToken;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 2, "asked for init again");
+            await driver.Settle();
+            Assert.Null(await driver.Banner());
+        });
+    }
+
+    /// <summary>
+    /// Only that banner: an error the page was told that is not the backend's own - a check or a run
+    /// that stopped - stays through a restart's `init`, and so does any banner that took the place
+    /// of the backend's word since.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(TabsAndBanners))]
+    public void ABannerThatIsNotTheBackendsWordStaysThroughARestartsInit(string tab, string banner)
+    {
+        const string Other = "FICT the check stopped part way through.";
+        TabPageDriver.Run(tab, null, async driver =>
+        {
+            int readies = driver.Readies;
+            if (banner == "not the backend's")
+            {
+                await driver.Post("status", new { stage = "error", message = Other });
+            }
+            else
+            {
+                await driver.Post("status", new { stage = "error", message = BackendFailure, lifecycle = true });
+                await driver.Post("error", new { error_class = "HostError", message = Other, retryable = false });
+            }
+
+            Assert.Equal(Other, await driver.Banner());
+            driver.Token = RestartedToken;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for init again");
+            await driver.Settle();
+
+            Assert.Equal(Other, await driver.Banner());
+        });
+    }
+
+    /// <summary>Every tab, with a banner of each kind that is not the backend's word on screen.</summary>
+    public static IEnumerable<object[]> TabsAndBanners =>
+        TabPageDriver.Kinds.SelectMany(kind => new[]
+        {
+            new object[] { kind, "not the backend's" },
+            new object[] { kind, "in the backend's place" },
+        });
+
     /// <summary>
     /// The page keeps what the engineer is looking at. A check page's result - read back from its
     /// latest check when the page loaded - stays on screen as it was, and is not read again: the

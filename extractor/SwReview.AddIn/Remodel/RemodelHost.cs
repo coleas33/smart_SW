@@ -542,6 +542,9 @@ public sealed class RemodelHost : IDisposable
     /// <summary>Posts one `status`, with every secret masked out of it (FR-015).</summary>
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
 
+    /// <summary><see cref="PostStatus(string, string)"/>, marked as the add-in's own word on the backend when <paramref name="lifecycle"/> (owner decision 145A).</summary>
+    public void PostStatus(string stage, string message, bool lifecycle) => _actions.PostStatus(stage, message, lifecycle);
+
     /// <summary>
     /// Tells the page the backend was restarted with saved settings, so it asks `ready` again for
     /// the new port and token (owner decision 145A). This page makes no call of its own - its

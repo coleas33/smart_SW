@@ -162,6 +162,13 @@
        */
       checksPressed: 0,
 
+      /**
+       * Whether the last banner put up is the add-in's word that the backend did not start - a
+       * failed start or restart, `status {stage: "error", lifecycle: true}`. The next `init` that
+       * names a backend takes it down; no other banner (owner decision 145A, third review).
+       */
+      lifecycleBanner: false,
+
       /** Which buckets are showing, by bucket name. */
       buckets: Object.create(null),
 
@@ -1283,6 +1290,7 @@
     function showStatus(payload) {
       if (payload && payload.stage === 'error') {
         showBanner(payload.message || 'the check stopped');
+        state.lifecycleBanner = payload.lifecycle === true;
         return;
       }
 
@@ -1330,6 +1338,7 @@
     }
 
     function showBanner(message) {
+      state.lifecycleBanner = false;
       dom.clear(ui.banner);
       dom.write(ui.banner, message || '');
       ui.banner.hidden = !message;
@@ -1469,6 +1478,10 @@
       renderDocument();
       renderBinding();
       renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', !state.backend);
+      if (state.backend && state.lifecycleBanner) {
+        // The add-in's word that the backend did not start is no longer true: one is up.
+        hideBanner();
+      }
       if (page.onInit) {
         page.onInit(payload, api);
       }

@@ -100,7 +100,15 @@
      * A `backend.restarted` arrived while a `ready` was in flight: ask once more after it, since
      * the host may have read that `init` before the new backend was up (owner decision 145A).
      */
-    initAgain: false
+    initAgain: false,
+
+    /**
+     * Whether the last banner put up is the add-in's word that the backend did not start - a
+     * failed start or restart, `status {stage: "error", lifecycle: true}`. The next `init` that
+     * names a backend takes it down; no other banner, a run's or a teardown's included (owner
+     * decision 145A, third review).
+     */
+    lifecycleBanner: false
   };
 
   var ui = {};
@@ -975,6 +983,7 @@
 
     if (stage === 'error') {
       showBanner(payload.message || 'the run stopped');
+      state.lifecycleBanner = payload.lifecycle === true;
       return;
     }
 
@@ -1010,6 +1019,7 @@
   }
 
   function showBanner(message) {
+    state.lifecycleBanner = false;
     dom.clear(ui.banner);
     dom.write(ui.banner, message || '');
     ui.banner.hidden = !message;
@@ -1154,6 +1164,10 @@
     renderDocument();
     renderLimits();
     renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', !state.backend);
+    if (state.backend && state.lifecycleBanner) {
+      // The add-in's word that the backend did not start is no longer true: one is up.
+      hideBanner();
+    }
 
     if (!state.remodelAvailable) {
       showBanner(state.remodelAvailabilityMessage || NO_SEAT_MESSAGE);

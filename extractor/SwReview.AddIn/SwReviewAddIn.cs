@@ -1081,13 +1081,16 @@ public class SwReviewAddIn : ISwAddin
     /// </summary>
     private void PostStatusToTheOtherPages(string stage, string message)
     {
-        _modelCheckHost?.PostStatus(stage, message);
+        // Each marked as the add-in's own word on the backend (`lifecycle: true`), so a page takes
+        // down a banner it put up for a failed start or restart once a later `init` names a backend
+        // (owner decision 145A, third review). The Review page's own Save clears its banner.
+        _modelCheckHost?.PostStatus(stage, message, lifecycle: true);
 
         // The Standards page tracks the backend for the reason the Model check page does: it
         // calls `POST /checks/standards` itself with the endpoint its `init` carried, so a tab
         // opened while the backend was still starting holds a null endpoint, and `ready` is
         // what tells it to ask again.
-        _standardsHost?.PostStatus(stage, message);
+        _standardsHost?.PostStatus(stage, message, lifecycle: true);
 
         // The Remodel page's `status` stages are a closed list that names the three
         // backend-lifecycle stages posted here, so today every one of them goes through; the
@@ -1096,7 +1099,7 @@ public class SwReviewAddIn : ISwAddin
         // boot to ask for its `init` again.
         if (RemodelHost.IsStatusStage(stage))
         {
-            _remodelHost?.PostStatus(stage, message);
+            _remodelHost?.PostStatus(stage, message, lifecycle: true);
         }
     }
 
