@@ -812,6 +812,11 @@ public class SwReviewAddIn : ISwAddin
             // the capability above. A plan records it and Start refuses a run whose attachment
             // has changed, because the plan's bridge session did not survive the re-attach.
             ToolServiceAttachment = () => _toolService?.Attachment,
+
+            // Owner decision 145A: a plan or a run begins as a turn does - once no settings
+            // restart waits, the review host making a waiting one first - and is marked in
+            // progress under that restart's lock, so a restart never ends one.
+            BeginRun = BeginRemodelRun,
             Pipeline = new BackendRemodelPipeline(
                 endpoint,
                 () => _toolService?.RemodelBridge,
@@ -850,6 +855,26 @@ public class SwReviewAddIn : ISwAddin
 
         StartRemodelPump();
         _pane.RemodelPageMessageReceived += OnRemodelPageMessage;
+    }
+
+    /// <summary>
+    /// Owner decision 145A: the gate a plan or a run begins through, which reaches the review
+    /// host's settings restart from the Remodel page's own pump. <see cref="ReviewHost.BeginRemodelRun"/>
+    /// makes a restart that waits first, or waits for the one being made, then marks the run in
+    /// progress under the restart's lock - or refuses the run, saying what holds the restart back.
+    /// The review host is read through its field per call; with none, there is no settings restart
+    /// to wait for, and the run is marked and begins.
+    /// </summary>
+    private BackendRequestException? BeginRemodelRun(Action begin)
+    {
+        ReviewHost? host = _reviewHost;
+        if (host != null)
+        {
+            return host.BeginRemodelRun(begin);
+        }
+
+        begin();
+        return null;
     }
 
     /// <summary>

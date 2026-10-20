@@ -23,12 +23,23 @@ public sealed class ReviewPageBackendRestartTests
 
     /// <summary>The host's sentence when its watcher stops looking at a backend that does not answer.</summary>
     private const string NotAnswering =
-        "the review backend is not answering, so it has not been restarted with the settings saved during "
-        + "the turn yet. It will be before the next review or follow-up, once it answers; to restart it "
+        "the review backend is not answering, so it has not been restarted with the saved settings yet. "
+        + "It will be before the next review, follow-up or remodel run, once it answers; to restart it "
         + "now, save the settings again.";
 
-    /// <summary>`backend.restarted` as the host posts it: both of its sentences about the wait.</summary>
-    private static readonly object Restarted = new { sentences = new[] { Promise, NotAnswering } };
+    /// <summary>The host's sentence for a save made while a remodel run is in progress (owner decision 145A).</summary>
+    private const string RemodelRunPromise =
+        "the settings are saved; the backend restarts when the remodel run ends.";
+
+    /// <summary>...and for one a turn also started during.</summary>
+    private const string TurnAndRemodelRunPromise =
+        "the settings are saved; the backend restarts when the running turn and the remodel run end.";
+
+    /// <summary>`backend.restarted` as the host posts it: every one of its sentences about the wait.</summary>
+    private static readonly object Restarted = new
+    {
+        sentences = new[] { Promise, RemodelRunPromise, TurnAndRemodelRunPromise, NotAnswering },
+    };
 
     private const string RestartedToken = "FICT-restarted-backend-token";
 
@@ -77,6 +88,32 @@ public sealed class ReviewPageBackendRestartTests
         {
             await driver.Post("status", new { stage = "error", message = NotAnswering });
             Assert.Equal(NotAnswering, (await driver.Read(Banner)).GetProperty("text").GetString());
+            int readies = driver.Posted("ready").Length;
+            driver.BackendToken = RestartedToken;
+
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init again");
+            await driver.Settle();
+
+            JsonElement banner = await driver.Read(Banner);
+            Assert.True(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+        });
+    }
+
+    /// <summary>
+    /// Owner decision 145A: the host's sentences for a save whose restart waits for a remodel run,
+    /// or for a turn and a remodel run, are done with too once the restart is made, and come off
+    /// the banner as the turn's does.
+    /// </summary>
+    [Theory]
+    [InlineData(RemodelRunPromise)]
+    [InlineData(TurnAndRemodelRunPromise)]
+    public void ABackendRestartedTakesTheRemodelRunSentencesOffTheBanner(string sentence)
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await driver.Post("status", new { stage = "error", message = sentence });
+            Assert.Equal(sentence, (await driver.Read(Banner)).GetProperty("text").GetString());
             int readies = driver.Posted("ready").Length;
             driver.BackendToken = RestartedToken;
 

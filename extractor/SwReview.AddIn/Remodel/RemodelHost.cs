@@ -98,6 +98,23 @@ public sealed class RemodelHostOptions
     /// scheduler so the message order they read is the order the page would see.
     /// </summary>
     public Action<Action> Schedule { get; set; } = work => Task.Run(work);
+
+    /// <summary>
+    /// Owner decision 145A: begins a plan or a run - what <see cref="RemodelHost.RunInProgress"/>
+    /// covers - as a turn begins, so a settings restart and a remodel run never overlap. Called
+    /// with the step that marks the host busy, after every refusal that needs no call: a settings
+    /// restart that waits is made first, or the one being made is waited for, then the step is run
+    /// under the restart's own lock and null answered; or the step is not run and the refusal is
+    /// answered - what holds the restart back, or the restart's failure - with its class, words and
+    /// flag. The add-in answers it through the review host (`ReviewHost.BeginRemodelRun`), which
+    /// keeps the restart on another pump. By default there is no restart to wait for, and the
+    /// step runs at once.
+    /// </summary>
+    public Func<Action, BackendRequestException?> BeginRun { get; set; } = begin =>
+    {
+        begin();
+        return null;
+    };
 }
 
 /// <summary>
@@ -410,6 +427,10 @@ public sealed class RemodelHost : IDisposable
     /// bridge session goes with the old attachment, and `remodel.start` refuses that plan as
     /// `SessionLost` rather than start it on a dispatcher that never saw its copy. The page is
     /// told at the re-attach itself, before Start (decision 24A, <see cref="AnnounceLostPlan"/>).
+    ///
+    /// Read too by the review host's settings restart, which waits while it is true (owner
+    /// decision 145A): it is set only through <see cref="RemodelHostOptions.BeginRun"/>, under that
+    /// restart's own lock, so a restart and a plan or a run never overlap.
     /// </summary>
     public bool RunInProgress => _busy;
 
@@ -1035,7 +1056,15 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        _busy = true;
+        // Owner decision 145A: a plan holds the backend for as long as it runs, as a turn does.
+        // After every refusal that needs no call, a settings restart that waits is made first - or
+        // the one being made waited for - and the host is marked busy under that restart's own
+        // lock, so no restart can begin under the plan; or the plan is refused, saying why.
+        if (!BeganRun(id))
+        {
+            return;
+        }
+
         try
         {
             // Decision 22A: the attachment this plan's bridge session will live on. Read once
@@ -1552,7 +1581,13 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        _busy = true;
+        // Owner decision 145A: a run begins as a plan does (Plan, above), after every refusal that
+        // needs no call and before `remodel.started`.
+        if (!BeganRun(id))
+        {
+            return;
+        }
+
         run.Phase = RemodelRunPhase.Running;
         _active = run;
 
@@ -2288,6 +2323,40 @@ public sealed class RemodelHost : IDisposable
 
     private static string? Text(JsonDocument? document, string name) =>
         document == null ? null : PagePayload.Text(document.RootElement, name);
+
+    // ---- a settings restart and a plan or a run (owner decision 145A) -----------------------
+
+    /// <summary>
+    /// Marks the host busy for a plan or a run through <see cref="RemodelHostOptions.BeginRun"/>
+    /// (owner decision 145A), so a settings restart that waits is made first, or the one being
+    /// made is waited for, and none can begin under the plan or the run. Answers whether the host
+    /// is now busy; when it is not, the press has been answered with the gate's refusal - its class,
+    /// words and flag - and the host is left free. A gate that throws leaves the host free too, so
+    /// one failure cannot hold every later plan, and the restart waiting on the run, back for good;
+    /// the throw is the press's answer, as `Receive` gives any failure.
+    /// </summary>
+    private bool BeganRun(string? id)
+    {
+        BackendRequestException? held;
+        try
+        {
+            held = _options.BeginRun(() => _busy = true);
+        }
+        catch (Exception)
+        {
+            _busy = false;
+            throw;
+        }
+
+        if (held == null)
+        {
+            return true;
+        }
+
+        _busy = false;
+        _actions.SendError(id, held.ErrorClass, held.Message, held.Retryable);
+        return false;
+    }
 
     // ---- the refusals two handlers share --------------------------------------------------
 

@@ -4804,6 +4804,229 @@ public sealed class RemodelHostTests
         }
     }
 
+    // ---- a settings restart and a plan or a run (owner decision 145A) ---------------------------
+
+    /// <summary>
+    /// Owner decision 145A: a plan holds the backend for as long as it runs, as a turn does, so it
+    /// begins through the review host's restart gate - asked once, after every refusal that needs
+    /// no call and before the first pipeline call - and the host is marked busy by the gate's own
+    /// step, under the restart's lock, and not before.
+    /// </summary>
+    [Fact]
+    public void APlanBeginsThroughTheRestartGateAfterItsOwnRefusalsAndBeforeAnyCall()
+    {
+        using (var world = new RemodelWorld())
+        {
+            var asked = new List<(int Calls, bool BusyBefore, bool BusyAfter)>();
+            world.Open();
+            world.Options.BeginRun = begin =>
+            {
+                bool before = world.Host.RunInProgress;
+                begin();
+                asked.Add((world.Pipeline.Calls.Count, before, world.Host.RunInProgress));
+                return null;
+            };
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Reply("remodel.planned", "p1");
+            (int calls, bool busyBefore, bool busyAfter) = Assert.Single(asked);
+            Assert.Equal(0, calls);
+            Assert.False(busyBefore);
+            Assert.True(busyAfter);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
+    /// A plan the gate refuses - a waiting restart that a turn holds back, say - is answered with
+    /// the gate's own class, words and flag, and nothing else happens: no call, no run folder, no
+    /// run recorded, and the host is left free.
+    /// </summary>
+    [Fact]
+    public void APlanTheRestartGateRefusesIsAnsweredWithItsRefusalAndNothingHappens()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Options.BeginRun = begin =>
+                new BackendRequestException("TurnRunning", "FICT the restart waits for a turn.", retryable: true);
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("TurnRunning", error.GetProperty("error_class").GetString());
+            Assert.Equal("FICT the restart waits for a turn.", error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Empty(world.Pipeline.Calls);
+            Assert.Empty(Directory.GetDirectories(world.RunRoot));
+            Assert.Empty(world.Registered);
+            Assert.Null(world.Host.LatestRun);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
+    /// A plan refused on the spot asks no gate: a press that could never plan makes no restart, and
+    /// waits for none.
+    /// </summary>
+    [Theory]
+    [InlineData("no document")]
+    [InlineData("not a part")]
+    [InlineData("no seat")]
+    public void APlanRefusedOnTheSpotAsksNoRestartGate(string refusal)
+    {
+        using (var world = new RemodelWorld())
+        {
+            if (refusal == "no document")
+            {
+                world.Document = null;
+            }
+            else if (refusal == "not a part")
+            {
+                world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
+            }
+            else
+            {
+                world.RemodelCapability = RemodelAvailability.Unavailable;
+            }
+
+            int asked = 0;
+            world.Open();
+            world.Options.BeginRun = begin =>
+            {
+                asked++;
+                begin();
+                return null;
+            };
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Reply("error", "p1");
+            Assert.Equal(0, asked);
+        }
+    }
+
+    /// <summary>
+    /// Start likewise: the gate is asked once, after every refusal that needs no call and before
+    /// `remodel.started`, and the run is marked in progress by its step.
+    /// </summary>
+    [Fact]
+    public void AStartBeginsThroughTheRestartGateAfterItsOwnRefusals()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string runDir = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            var asked = new List<(int Started, bool BusyBefore, bool BusyAfter)>();
+            world.Options.BeginRun = begin =>
+            {
+                bool before = world.Host.RunInProgress;
+                begin();
+                asked.Add((world.AllPosted("remodel.started").Length, before, world.Host.RunInProgress));
+                return null;
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = runDir });
+
+            world.Reply("remodel.started", "s1");
+            (int started, bool busyBefore, bool busyAfter) = Assert.Single(asked);
+            Assert.Equal(0, started);
+            Assert.False(busyBefore);
+            Assert.True(busyAfter);
+            Assert.Equal(1, world.Pipeline.Count("run"));
+        }
+    }
+
+    /// <summary>
+    /// A Start the gate refuses is answered with the gate's refusal and the run never starts: no
+    /// `remodel.started`, no run call, the plan still planned and startable once nothing holds the
+    /// restart back.
+    /// </summary>
+    [Fact]
+    public void AStartTheRestartGateRefusesIsAnsweredWithItsRefusalAndTheRunNeverStarts()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string runDir = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            Func<Action, BackendRequestException?> allowed = world.Options.BeginRun;
+            world.Options.BeginRun = begin =>
+                new BackendRequestException("BackendUnavailable", "FICT the backend does not answer.", retryable: true);
+
+            world.Receive("remodel.start", "s1", new { run_dir = runDir });
+
+            JsonElement error = world.Reply("error", "s1");
+            Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
+            Assert.Equal("FICT the backend does not answer.", error.GetProperty("message").GetString());
+            Assert.Empty(world.AllPosted("remodel.started"));
+            Assert.Equal(0, world.Pipeline.Count("run"));
+            Assert.Equal(RemodelRunPhase.Planned, world.Host.LatestRun!.Phase);
+            Assert.False(world.Host.RunInProgress);
+
+            world.Options.BeginRun = allowed;
+            world.Receive("remodel.start", "s2", new { run_dir = runDir });
+            world.Reply("remodel.started", "s2");
+            Assert.Equal(1, world.Pipeline.Count("run"));
+        }
+    }
+
+    /// <summary>A Start refused on the spot - Start switched off in this build - asks no gate.</summary>
+    [Fact]
+    public void AStartRefusedOnTheSpotAsksNoRestartGate()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string runDir = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            int asked = 0;
+            world.Options.BeginRun = begin =>
+            {
+                asked++;
+                begin();
+                return null;
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = runDir });
+
+            Assert.Equal("StartNotValidated", world.Reply("error", "s1").GetProperty("error_class").GetString());
+            Assert.Equal(0, asked);
+        }
+    }
+
+    /// <summary>
+    /// A gate that throws leaves the host free: the press is answered as a failure is, and a later
+    /// plan goes ahead - one failure must not hold every later plan, and the settings restart that
+    /// waits on the run, back for good.
+    /// </summary>
+    [Fact]
+    public void ARestartGateThatThrowsLeavesTheHostFree()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            Func<Action, BackendRequestException?> allowed = world.Options.BeginRun;
+            world.Options.BeginRun = begin =>
+            {
+                begin();
+                throw new InvalidOperationException("FICT the gate broke");
+            };
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal("HostError", world.Reply("error", "p1").GetProperty("error_class").GetString());
+            Assert.False(world.Host.RunInProgress);
+            Assert.Empty(world.Pipeline.Calls);
+
+            world.Options.BeginRun = allowed;
+            world.Receive("remodel.plan", "p2", new { });
+            world.Reply("remodel.planned", "p2");
+        }
+    }
+
     private sealed class RemodelWorld : IDisposable
     {
         private readonly string _root;
