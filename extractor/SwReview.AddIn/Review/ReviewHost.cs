@@ -486,6 +486,14 @@ public sealed class ReviewHost : IDisposable
     public UserSettings Settings => _settings;
 
     /// <summary>
+    /// Whether a settings restart stands before new work: one waits to be made, or one is being
+    /// made now (owner decision 145A, found on review). The add-in hands it to the Remodel host,
+    /// which tells its page a plan or a Start makes the restart first; the gate itself
+    /// (<see cref="BeginRemodelRun"/>) decides.
+    /// </summary>
+    public bool RestartAhead => _restart.Ahead;
+
+    /// <summary>
     /// The chats this host started, newest last. A snapshot: the list itself is guarded, and a
     /// caller that walked the live one would be back to enumerating it while the pump appends.
     /// </summary>

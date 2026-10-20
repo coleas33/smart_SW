@@ -687,6 +687,43 @@ public sealed class RemodelPageContractTests
     }
 
     /// <summary>
+    /// A refused Start leaves nothing in the run status line, as a refused plan already does: no
+    /// run began, and the line the press set - "Running...", or the host's word that a settings
+    /// restart comes first (owner decision 145A, found on review) - is no longer true. The banner
+    /// says why.
+    /// </summary>
+    [Fact]
+    public void ARefusedStartLeavesNothingInTheRunStatusLine()
+    {
+        HostStub? stub = null;
+        string? status = null;
+        string? banner = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page =>
+            {
+                stub = new HostStub(
+                    page, startRefusal: ("TurnRunning", "FICT a review turn holds the settings restart back."));
+            },
+            async page =>
+            {
+                await Settled(page);
+                await page.ExecuteScriptAsync("document.getElementById('plan-run').click()");
+                await Settled(page);
+                await page.ExecuteScriptAsync("document.getElementById('start-run').click()");
+                await Settled(page);
+
+                status = await TextOf(page, "run-status");
+                banner = await TextOf(page, "banner");
+            });
+
+        Assert.Equal(1, stub!.Starts);
+        Assert.Equal(string.Empty, status);
+        Assert.Equal("FICT a review turn holds the settings restart back.", banner);
+    }
+
+    /// <summary>
     /// The refusal sends the engineer back to plan, and it says so with the label they will see
     /// on the button, read from the page itself rather than restated, so the two cannot drift.
     /// </summary>

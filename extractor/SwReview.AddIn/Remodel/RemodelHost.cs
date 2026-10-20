@@ -115,6 +115,14 @@ public sealed class RemodelHostOptions
         begin();
         return null;
     };
+
+    /// <summary>
+    /// Whether a settings restart stands before a plan or a run - one waits to be made, or one is
+    /// being made - which the gate (<see cref="BeginRun"/>) makes, or waits for, first (owner
+    /// decision 145A, found on review). Read only to tell the page so; the gate decides. The add-in
+    /// answers it through the review host (`ReviewHost.RestartAhead`). By default none does.
+    /// </summary>
+    public Func<bool> RestartAhead { get; set; } = () => false;
 }
 
 /// <summary>
@@ -244,6 +252,18 @@ public sealed class RemodelHost : IDisposable
         "The active document changed after Remodel a copy was pressed, so nothing was copied and there "
         + "is no plan. " + PartNotChanged + " Make your part the active document and press Remodel a "
         + "copy again.";
+
+    /// <summary>
+    /// What the page's run status line is told before a plan whose gate makes a settings restart
+    /// first, or waits for one being made (owner decision 145A, found on review): the seconds before
+    /// the plan go to the restart. Posted as `status {stage: "backend_starting"}`.
+    /// </summary>
+    public const string PlanAfterRestartMessage =
+        "Restarting the review backend with the saved settings first, then reading the part...";
+
+    /// <summary>...before a Start's run.</summary>
+    public const string StartAfterRestartMessage =
+        "Restarting the review backend with the saved settings first, then starting the run...";
 
     /// <summary>
     /// The full no-change reassurance for refusals before any copy change. Loss and cleanup
@@ -1071,7 +1091,7 @@ public sealed class RemodelHost : IDisposable
         // After every refusal that needs no call, a settings restart that waits is made first - or
         // the one being made waited for - and the host is marked busy under that restart's own
         // lock, so no restart can begin under the plan; or the plan is refused, saying why.
-        if (!BeganRun(id))
+        if (!BeganRun(id, PlanAfterRestartMessage))
         {
             return;
         }
@@ -1601,7 +1621,7 @@ public sealed class RemodelHost : IDisposable
 
         // Owner decision 145A: a run begins as a plan does (Plan, above), after every refusal that
         // needs no call and before `remodel.started`.
-        if (!BeganRun(id))
+        if (!BeganRun(id, StartAfterRestartMessage))
         {
             return;
         }
@@ -2420,8 +2440,18 @@ public sealed class RemodelHost : IDisposable
     /// restart waiting on the run, back for good; the throw is the press's answer, as `Receive`
     /// gives any failure.
     /// </summary>
-    private bool BeganRun(string? id)
+    /// <param name="id">The press's id, which a refusal answers.</param>
+    /// <param name="restartFirst">What the page is told before the gate when a settings restart
+    /// stands before the press (<see cref="RemodelHostOptions.RestartAhead"/>): the gate can wait
+    /// through it for seconds, up to the backend's handshake, in which the page would otherwise say
+    /// only what the press set (owner decision 145A, found on review).</param>
+    private bool BeganRun(string? id, string restartFirst)
     {
+        if (RestartAhead())
+        {
+            PostStatus("backend_starting", restartFirst);
+        }
+
         BackendRequestException? held;
         try
         {
@@ -2440,6 +2470,22 @@ public sealed class RemodelHost : IDisposable
 
         _actions.SendError(id, held.ErrorClass, held.Message, held.Retryable);
         return false;
+    }
+
+    /// <summary>
+    /// Whether a settings restart stands before the press. Only words for the page hang on it, so
+    /// a reading that throws is none: the press goes on through the gate, which decides.
+    /// </summary>
+    private bool RestartAhead()
+    {
+        try
+        {
+            return _options.RestartAhead();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     // ---- the refusals two handlers share --------------------------------------------------

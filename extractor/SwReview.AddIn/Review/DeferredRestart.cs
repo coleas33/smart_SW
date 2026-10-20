@@ -146,9 +146,9 @@ internal sealed class DeferredRestart : IDisposable
     private readonly TimeSpan _poll;
 
     /// <summary>
-    /// Guards <see cref="_pending"/>, <see cref="_deferrals"/>, <see cref="_disposed"/> and
-    /// <see cref="_watcher"/>, and is what the watcher waits on between polls. Never held while
-    /// anything slow runs.
+    /// Guards <see cref="_pending"/>, <see cref="_making"/>, <see cref="_deferrals"/>,
+    /// <see cref="_disposed"/> and <see cref="_watcher"/>, and is what the watcher waits on between
+    /// polls. Never held while anything slow runs.
     /// </summary>
     private readonly object _state = new object();
 
@@ -160,6 +160,13 @@ internal sealed class DeferredRestart : IDisposable
     private readonly object _restarting = new object();
 
     private bool _pending;
+
+    /// <summary>
+    /// Whether a save's restart is being made at once, under <see cref="_restarting"/>
+    /// (<see cref="Ahead"/>): such a restart never waits, so <see cref="_pending"/> does not say so,
+    /// while one that waited stays pending until it ends. Guarded by <see cref="_state"/>.
+    /// </summary>
+    private bool _making;
 
     /// <summary>
     /// One more each time a restart is refused and starts waiting: a newer refusal is a newer
@@ -221,6 +228,25 @@ internal sealed class DeferredRestart : IDisposable
         _poll = poll;
     }
 
+    /// <summary>
+    /// Whether a restart stands before new work: one waits - from the moment it is refused until it
+    /// is made or fails, so while it is being made too - or a save's is being made at once, which
+    /// never waits (owner decision 145A, found on review). What the Remodel tab reads to tell the
+    /// engineer a press makes the restart first, or waits for it; the gate itself
+    /// (<see cref="Begin"/>) decides. None once disposed, when the gate answers that the add-in is
+    /// unloading, a restart still under way included.
+    /// </summary>
+    public bool Ahead
+    {
+        get
+        {
+            lock (_state)
+            {
+                return !_disposed && (_pending || _making);
+            }
+        }
+    }
+
     /// <summary>Whether a restart is waiting for the turns that are running to end.</summary>
     public bool Pending
     {
@@ -272,6 +298,7 @@ internal sealed class DeferredRestart : IDisposable
                 return false;
             }
 
+            Making(true);
             try
             {
                 restart();
@@ -289,6 +316,10 @@ internal sealed class DeferredRestart : IDisposable
                 // the answer of any caller that waited for it.
                 End(caught);
                 throw;
+            }
+            finally
+            {
+                Making(false);
             }
 
             End(null);
@@ -578,6 +609,15 @@ internal sealed class DeferredRestart : IDisposable
                 Name = "swreview-settings-restart",
             };
             _watcher.Start();
+        }
+    }
+
+    /// <summary>Whether a save's restart is being made at once; set under the restart's own lock, read through <see cref="Ahead"/>.</summary>
+    private void Making(bool making)
+    {
+        lock (_state)
+        {
+            _making = making;
         }
     }
 

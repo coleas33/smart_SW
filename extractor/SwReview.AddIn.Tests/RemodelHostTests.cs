@@ -5125,6 +5125,99 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// A press whose gate will make a waiting settings restart first, or wait for one being made,
+    /// says so before the gate: the restart can take seconds, up to the backend's handshake, in
+    /// which the page would say only "Reading the part..." or "Running..." (owner decision 145A,
+    /// found on review). One `status {stage: "backend_starting"}`, which the page writes into its run
+    /// status line - a backend-lifecycle stage, never a run phase - in words for the press.
+    /// </summary>
+    [Theory]
+    [InlineData("plan")]
+    [InlineData("start")]
+    public void APressThatMakesARestartFirstSaysSoBeforeTheGate(string press)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            string? runDir = null;
+            if (press == "start")
+            {
+                world.Receive("remodel.plan", "p1", new { });
+                runDir = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            }
+
+            int before = world.AllPosted("status").Length;
+            int atTheGate = -1;
+            world.Options.RestartAhead = () => true;
+            world.Options.BeginRun = begin =>
+            {
+                atTheGate = world.AllPosted("status").Length;
+                begin();
+                return null;
+            };
+
+            if (press == "plan")
+            {
+                world.Receive("remodel.plan", "p2", new { });
+            }
+            else
+            {
+                world.Receive("remodel.start", "s1", new { run_dir = runDir });
+            }
+
+            JsonElement[] statuses = world.AllPosted("status");
+            Assert.Equal(before + 1, atTheGate);
+            Assert.Equal("backend_starting", statuses[before].GetProperty("stage").GetString());
+            Assert.Equal(
+                press == "plan"
+                    ? "Restarting the review backend with the saved settings first, then reading the part..."
+                    : "Restarting the review backend with the saved settings first, then starting the run...",
+                statuses[before].GetProperty("message").GetString());
+            Assert.Single(statuses, status => status.GetProperty("stage").GetString() == "backend_starting");
+        }
+    }
+
+    /// <summary>
+    /// A press with no restart before it says nothing of one; nor does one refused on the spot,
+    /// which asks no gate; nor one whose reading of a restart ahead throws - the sentence is only
+    /// words for the page, and the press goes on through the gate, which decides.
+    /// </summary>
+    [Theory]
+    [InlineData("none ahead")]
+    [InlineData("refused on the spot")]
+    [InlineData("the reading throws")]
+    public void APressSaysNothingOfARestartItWillNotMakeFirst(string why)
+    {
+        using (var world = new RemodelWorld())
+        {
+            if (why == "refused on the spot")
+            {
+                world.Document = null;
+            }
+
+            world.Open();
+            world.Options.RestartAhead = why == "none ahead"
+                ? () => false
+                : why == "refused on the spot"
+                    ? () => true
+                    : () => throw new InvalidOperationException("FICT the review host cannot be asked");
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.DoesNotContain(
+                world.AllPosted("status"), status => status.GetProperty("stage").GetString() == "backend_starting");
+            if (why == "refused on the spot")
+            {
+                Assert.Equal("NoDocument", world.ErrorClass("p1"));
+            }
+            else
+            {
+                world.Reply("remodel.planned", "p1");
+            }
+        }
+    }
+
+    /// <summary>
     /// The words a plan whose document changed while its gate waited is refused with: plain, and
     /// naming no path, as this tab's words never do.
     /// </summary>

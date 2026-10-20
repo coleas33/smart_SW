@@ -2195,6 +2195,20 @@ public sealed class DeferredRestartTests
         Assert.Contains("begin(); return null;", gate, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The add-in hands the Remodel host the review host's word on whether a settings restart
+    /// stands before a plan or a run, read through the field per call - and none with no review
+    /// host (owner decision 145A, found on review).
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsTheRemodelHostTheReviewHostsWordOnARestartAhead()
+    {
+        string source = OtherTabsBackendRestartTests.AddInSource();
+        string options = OtherTabsBackendRestartTests.Between(
+            source, "_remodelHost = new RemodelHost(new RemodelHostOptions(", "StartRemodelPump();");
+        Assert.Contains("RestartAhead = () => _reviewHost?.RestartAhead == true,", options, StringComparison.Ordinal);
+    }
+
     // ---- the restart itself, with no host ------------------------------------------------------
 
     [Fact]
@@ -2715,6 +2729,81 @@ public sealed class DeferredRestartTests
         Assert.Null(failure);
         Assert.Equal(0, tried);
         Assert.True(restart.Pending);
+    }
+
+    /// <summary>
+    /// A restart stands before new work while one waits, until it is made, and while a save's is
+    /// being made at once - which never waits - and not once it is made, nor once the owner is
+    /// disposed (owner decision 145A, found on review): what the Remodel tab reads to say a press
+    /// makes the restart first. The gate itself decides; this is only what the page is told.
+    /// </summary>
+    [Fact]
+    public void ARestartIsAheadWhileOneWaitsOrIsBeingMade()
+    {
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        Action blocking = () =>
+        {
+            entered.Set();
+            release.Wait(TimeSpan.FromSeconds(10));
+        };
+        using var restart = NewRestart(() => DeferredRestart.Hold.None, blocking);
+        Assert.False(restart.Ahead);
+
+        // A save's restart, being made at once.
+        var save = new Caller<bool>(() => restart.Now(blocking));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the save's restart never began");
+        Assert.True(restart.Ahead);
+        release.Set();
+        Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save's restart never ended");
+        Assert.True(save.Result);
+        Assert.False(restart.Ahead);
+
+        // One that waits, and then is made.
+        entered.Reset();
+        release.Reset();
+        Assert.False(restart.Now(() => throw new TurnRunningException()));
+        Assert.True(restart.Ahead);
+        var made = new Caller<DeferredRestart.Outcome>(() => restart.Apply(out _));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the waiting restart was never made");
+        Assert.True(restart.Ahead);
+        release.Set();
+        Assert.True(made.Finishes(TimeSpan.FromSeconds(10)), "the waiting restart never ended");
+        Assert.Equal(DeferredRestart.Outcome.Restarted, made.Result);
+        Assert.False(restart.Ahead);
+
+        // Once the owner is disposed none stands before anything - the gate answers that the add-in
+        // is unloading - not even a save's restart still under way.
+        entered.Reset();
+        release.Reset();
+        var underWay = new Caller<bool>(() => restart.Now(blocking));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the last save's restart never began");
+        Assert.True(restart.Ahead);
+        restart.Dispose();
+        Assert.False(restart.Ahead);
+        release.Set();
+        Assert.True(underWay.Finishes(TimeSpan.FromSeconds(10)), "the last save's restart never ended");
+    }
+
+    /// <summary>
+    /// Through the host: a settings restart stands before new work while it waits for a turn, and
+    /// not once it is made (owner decision 145A, found on review). The add-in hands this to the
+    /// Remodel host, which says so before a plan or a Start.
+    /// </summary>
+    [Fact]
+    public void TheReviewHostSaysARestartIsAheadWhileOneWaits()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        Assert.False(world.Host.RestartAhead);
+
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        Assert.True(world.Host.RestartAhead);
+
+        world.Backend.EndTurn("chat-1");
+        Eventually(() => world.Backend.Restarts.Length == 1, "the restart once the turn ends");
+        Eventually(() => !world.Host.RestartAhead, "no restart ahead once it is made");
     }
 
     /// <summary>

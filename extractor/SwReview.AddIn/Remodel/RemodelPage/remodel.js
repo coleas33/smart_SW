@@ -268,8 +268,11 @@
         return refreshResult();
       })
       .catch(function (error) {
-        // The start was refused, so no run began and no terminal `status` is coming.
+        // The start was refused, so no run began and no terminal `status` is coming. The line the
+        // press set - "Running...", or the host's word that a settings restart comes first - is no
+        // longer true; the banner says why (owner decision 145A, found on review).
         showBanner(error.message);
+        setRunStatus('');
         endRun();
       });
   }

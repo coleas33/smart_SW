@@ -401,6 +401,12 @@ treated as a turn** (feature 002 `pane-host-messages.md`, `settings.save`).
   path or configuration - changed is refused `DocumentChanged`, in words that name no path. Without
   it the probe would read the document active by then and the bridge would refuse the open as
   `scope_not_probed`, which reaches the page as `ScopeRefused` with both paths in its message.
+- The page is told when a press makes a restart first. Before the gate, when a restart waits or is
+  being made, the host posts `status {stage: "backend_starting"}` - "Restarting the review backend
+  with the saved settings first, then reading the part..." for a plan, "...then starting the run..."
+  for a Start - which the page writes into its run status line, a backend-lifecycle stage and never a
+  run phase. Only words hang on it: the gate decides, and a reading that cannot be made says nothing.
+  A refusal replaces it, and a refused Start, like a refused plan, leaves the run status line empty.
 - The page is told of every restart with `backend.restarted` (below) and asks `ready` again for the new
   port and token, leaving the run on screen as it is: the run's record is its run folder, which the
   restart does not touch, and this host reads `remodel.result` out of it, not the backend.
@@ -412,7 +418,7 @@ treated as a turn** (feature 002 `pane-host-messages.md`, `settings.save`).
 
 | type | payload |
 |------|---------|
-| `status` | `{stage: "copying" \| "dumping" \| "planning" \| "judging" \| "applying" \| "verifying" \| "saving" \| "backend_starting" \| "ready" \| "error", message}`. `backend_starting`, `ready` and `error` are also the backend-lifecycle stages the add-in fans out to every page (feature 002 `pane-host-messages.md`); the page writes the message into its run status line and treats none of them as a run phase. *Amended 2026-10-19 (feature 002, owner decision 145A, found on review):* `error` also when a settings restart failed once the old backend had stopped, with the failure, masked, as the add-in posts a failed first start |
+| `status` | `{stage: "copying" \| "dumping" \| "planning" \| "judging" \| "applying" \| "verifying" \| "saving" \| "backend_starting" \| "ready" \| "error", message}`. `backend_starting`, `ready` and `error` are also the backend-lifecycle stages the add-in fans out to every page (feature 002 `pane-host-messages.md`); the page writes the message into its run status line and treats none of them as a run phase. *Amended 2026-10-19 (feature 002, owner decision 145A, found on review):* `error` also when a settings restart failed once the old backend had stopped, with the failure, masked, as the add-in posts a failed first start; and `backend_starting` from this host itself, before a plan or a Start whose gate makes a waiting settings restart first or waits for one being made ("A settings restart and a remodel run", below) |
 | `remodel.progress` | `{applied, total, current: {seq, kind, subject_name}}` |
 | `remodel.change` | one `ChangeRecord` as it is written, so the change list grows live (`run-artifacts.md`) |
 | `document.changed` | `{path, configuration, kind, remodel: {available: true \| false \| null, message: string \| null}} \| {path, configuration} \| null`. The additive `remodel` field refreshes capability after tool-service attach/detach. If the **copy** goes away mid-run, the run aborts with the change log intact |

@@ -817,8 +817,10 @@ public class SwReviewAddIn : ISwAddin
 
             // Owner decision 145A: a plan or a run begins as a turn does - once no settings
             // restart waits, the review host making a waiting one first - and is marked in
-            // progress under that restart's lock, so a restart never ends one.
+            // progress under that restart's lock, so a restart never ends one. The page is told
+            // first when a restart stands before the press, read through the field per call.
             BeginRun = BeginRemodelRun,
+            RestartAhead = () => _reviewHost?.RestartAhead == true,
             Pipeline = new BackendRemodelPipeline(
                 endpoint,
                 () => _toolService?.RemodelBridge,
