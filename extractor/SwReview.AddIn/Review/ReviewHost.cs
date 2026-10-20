@@ -2161,6 +2161,19 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
+        // Owner decision 149A: the document was read before the backend was ready, and getting it
+        // ready can make or wait for a settings restart - seconds, in which the engineer can make
+        // another document active - while the dump attaches to whatever is active when it runs.
+        // Read again now, before anything is made: a review of another document than the one it
+        // was asked for is refused in plain words, rather than its evidence put in a run folder
+        // named for this one. Always, not only after a restart, as Plan reads its document again
+        // after its gate (RemodelHost.Plan): one rule, true of any change between the readings.
+        if (!document.IsSameDocument(_options.CurrentDocument()))
+        {
+            SendError(id, "DocumentChanged", DocumentChangedMessage, retryable: true);
+            return;
+        }
+
         string runDirectory;
         try
         {
@@ -2251,6 +2264,18 @@ public sealed class ReviewHost : IDisposable
         CreateReviewSession(record.Document, record.RunDirectory, chatId, ReviewMode.Recheck, id,
             new DumpSummary(record.RunDirectory, 0, 0), replacing: record);
     }
+
+    /// <summary>
+    /// What `review.start` answers when the active document, read again once the backend is ready,
+    /// is not the one read when the start began (owner decision 149A): its path, ignoring case, or
+    /// its configuration changed - while a settings restart was made or waited for, or in the
+    /// moment before. True of a configuration switched alone and of no document at all. No path:
+    /// the class's label says what to do, and this sits behind it in the page's fold.
+    /// </summary>
+    private const string DocumentChangedMessage =
+        "the active document or its configuration changed after the review was asked for, so nothing "
+        + "was extracted and no run folder was made. Make the part or assembly you want reviewed the "
+        + "active document, then press Review again.";
 
     private bool BackendReady(string? id)
     {
