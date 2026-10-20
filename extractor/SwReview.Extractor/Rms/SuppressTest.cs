@@ -312,11 +312,17 @@ public sealed class SuppressTest
     /// feature, rebuild nothing, restore nothing - and it would have opened the engineer's
     /// part in their session to do it. The command refuses instead, and the engineer opens
     /// the part themselves.
+    ///
+    /// No other door is any better (decision 147A): every file-opening call the extractor makes
+    /// opens the engineer's documents read-only, and the only ones that open a file for writing -
+    /// feature 004's, of the re-modeler's own copy and of <c>probe remodel</c>'s throwaway part -
+    /// open a file the extractor made. So the sentence says the extractor opens the engineer's
+    /// documents only read-only, not that it has one open path.
     /// </summary>
     public static string DocumentNotOpenMessage(string documentPath) =>
         $"'{documentPath}' is not open in SOLIDWORKS. Open it with write access first: "
-        + "suppress-test never opens a document, because the extractor's only open path is "
-        + "read-only and a read-only document cannot be suppressed.";
+        + "suppress-test never opens a document, because the extractor opens your documents only "
+        + "read-only, and a read-only document cannot be suppressed.";
 
     /// <summary>
     /// The lines the command writes to <c>suppress-test.log</c> and stderr: what the run

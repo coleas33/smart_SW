@@ -1107,6 +1107,8 @@ bridge judges its own commands and `Close`, `Save` and `Rebuild` are refused (R1
 every unused writer the third names, with the families it belongs to (R10.3). The items stay below
 as the record of what was asked. *On merging decision 141A, the same day*: the first is settled and
 the fourth decided by 141A (R9), each with its line below; the fifth and sixth are unchanged.
+*On merging decision 147A, the same day*: the sixth is settled by 147A, with its line below; the
+fifth is unchanged.
 
 1. **When the count of ten resets.** The opens that left no record are counted per run folder for
    the life of the add-in process (R8.3). A review's Retry and Recheck run in the same folder -
@@ -1154,6 +1156,10 @@ the fourth decided by 141A (R9), each with its line below; the fifth and sixth a
    `SuppressTestTests` pins its words "write access" and "read-only". And R2.2 still calls
    `OpenDoc6` "the extractor's one sanctioned read-only open": that is the record of its day, and
    section 3 of `contracts/guard.md` carries the correction.
+   *Settled by decision 147A (2026-10-19), 002 `research.md` 147A*: the message now says the
+   extractor opens the engineer's documents only read-only, which is true of every path by which
+   it opens them, and `SuppressTestTests` pins its words exactly. R2.2 stays as the record of its
+   day.
 
 ## R9. Decision 141A: the limit of ten counts failed opens per review session (owner, 2026-10-19)
 
@@ -1303,6 +1309,11 @@ word for word, as each candidate's reason.
    Review, the surest way on, which it does not; and whether a Recheck should ask a refused
    candidate question again, are the owner's call; neither changes here. (Retry is offered only
    on an error card, and a Recheck only as the Send of a restored waiting review.)
+   *Settled by decision 147A (2026-10-19)*: the sentence names a new review first, and no Retry
+   or Recheck - both limit sentences end "; a new review (press Review) starts its own count, and
+   a drawing already open in SOLIDWORKS is still read, since reading it opens nothing"
+   (`contracts/confirmed-open.md` section 2 item 5; 002 `research.md`, 147A). Whether a Recheck
+   should ask a refused candidate question again is not part of 147A and stays the owner's call.
 2. **Two sessions of one folder at once.** A request is counted for the latest session of its run
    folder, since the request names no session. An older session of the same folder that still asked
    - a context review's failed chat, whose chip is still shown - would count against the latest's.

@@ -542,6 +542,7 @@ the naming convention stays in one place: `<run_root>/<yyyyMMdd-HHmmss>-<doc>-re
 | `changes.jsonl` | `remodel/apply.py` | Two `ChangeRecord` lines per change |
 | `package-before.json`, `package-after.json` | the extractor, ModelCheck profile | The copy's tree at open and after the last change |
 | `rms-before.json`, `rms-after.json` | `checks/rms/run.py` | Rule results, no LLM |
+| `rms-before/`, `rms-after/` | `remodel/artifacts.py` | Each side's grade run folder, which no review claims; `contracts/run-artifacts.md` (*added 2026-10-19, owner decision 146A*) |
 | `grades.json` | `checks/rms/grade.py` | Section 6 |
 | `geometry.json` | `remodel/geometry.py` | The `GeometryReading`s and the `GateResult` |
 | `source-attestation.json` | `remodel/runner.py` | Section 5 |

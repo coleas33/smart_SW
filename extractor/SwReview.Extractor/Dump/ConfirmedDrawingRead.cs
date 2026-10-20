@@ -256,13 +256,16 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
     /// <summary>
     /// The refusal once the limit is reached, with what <paramref name="counted"/> it, and - since
     /// decision 141A (2026-10-19) - how to go on: both ways it names are true whenever it is said,
-    /// since it is said only while the package holds fewer than ten drawings, and a new session's
-    /// count is its own. (The ten-records sentence names neither: a new session keeps the drawings.)
+    /// since it is said only while the package holds fewer than ten drawings, and a new review's
+    /// count is its own. Since decision 147A (2026-10-19) the first is a new review, which Review
+    /// starts in a run folder of its own. A Recheck, or a context review's Retry, starts its own
+    /// count too but is not named: a Recheck carries a refused confirmation forward without reading
+    /// again. (The ten-records sentence names neither way: it is unchanged, and the backend pins it.)
     /// </summary>
     private static string LimitReached(string counted) =>
         $"the limit of ten drawings for this review is reached: {counted}, so this one was not opened; "
-        + "a drawing already open in SOLIDWORKS is still read, since reading it opens nothing, and a new review "
-        + "session (Retry or Recheck) starts its own count";
+        + "a new review (press Review) starts its own count, and a drawing already open in SOLIDWORKS is "
+        + "still read, since reading it opens nothing";
 
     /// <summary>"1 more open that was refused or failed", "3 more opens that were ...", with or without "more ".</summary>
     private static string Opens(int count, string more) =>

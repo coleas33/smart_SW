@@ -86,6 +86,7 @@ __all__ = [
     "Side",
     "carry_forward_exceptions",
     "grade_remodel_run",
+    "grade_side_of",
     "rebind_to_copy",
     "rule_deltas",
     "write_package",
@@ -242,6 +243,30 @@ def write_package(run_dir: Path | str, package: EvidencePackage, *, side: Side) 
     target = directory / _ARTIFACT[side]
     shutil.copyfile(package_file, target)
     return target
+
+
+def grade_side_of(directory: Path | str) -> Side | None:
+    """The side whose grade `directory` is the folder of, or `None` for any other folder.
+
+    `grade_remodel_run` grades each side in a folder of its own inside the run folder,
+    `rms-before/` or `rms-after/` (`_WORK_DIR`), and files that side's dump beside it as
+    `package-before.json` or `package-after.json` (`write_package`) before it grades anything.
+    A folder is a grade's when it is one of the two with its side's dump beside it. Neither the
+    name alone answers that - any folder can be called so - nor the record: a grade's
+    `check.json` is `run_rms_check`'s own, the rms record a Model check's folder holds too, and
+    the two differ only in the prose of the carry-forward's reason. The pair is there before
+    the grade's session is, so a grade not written yet is told as well; `rms-<side>.json`,
+    which names the grade's files, is written only after both grades.
+
+    What `POST /sessions` asks before it claims a folder (`chat/server.py`, `_claim_run_dir`;
+    owner decision 146A): a review is handed a Model check's folder (feature 003 User Story 6
+    scenario 11) and never a grade's, which only its remodel run writes.
+    """
+    folder = Path(directory)
+    for side, name in _WORK_DIR.items():
+        if folder.name == name and (folder.parent / _ARTIFACT[side]).is_file():
+            return side
+    return None
 
 
 # --- 2. the waivers both grades are measured against ------------------------------
