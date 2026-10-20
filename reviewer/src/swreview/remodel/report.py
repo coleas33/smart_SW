@@ -12,7 +12,8 @@ Three things this module will not do.
 two independent records - each `ChangeRecord.target_path`, which is the path `VerifyTarget`
 confirmed for that write, and `remodel.log`'s per-request `target=` - and it is stated with
 the counts. A record that names another path is printed, and the claim is withdrawn in the
-same paragraph rather than being quietly omitted.
+same paragraph rather than being quietly omitted. An entry that names no document
+(`NO_TARGET`) is neither another path nor the copy: it is counted apart and said so.
 
 **It never says "success".** A run that moved 3 of 200 features has reorganized almost
 nothing, and the headline says what is true of the part: this part needs rebuilding. A
@@ -50,12 +51,20 @@ __all__ = [
     "ENGINEER_STOP",
     "GEOMETRY_NOT_READ",
     "LOG_FILE_NAME",
+    "NO_TARGET",
     "REPORT_FILE_NAME",
     "SECTIONS",
     "read_log_targets",
     "render_report",
     "write_report",
 ]
+
+NO_TARGET = "(none)"
+"""What `remodel.log`'s target field holds for a call that names no document
+(`RemodelGateRecorder.NoTarget`): an allowlisted call the tool service saw while the bridge
+held no session for the run, so with no copy to name. `remodel.open` makes every one of its
+calls so - the settings a run changes, the open of the copy, and the copy's tag, rollback
+and rebuild - so every run's log holds one (owner decision 155A)."""
 
 LOG_FILE_NAME = "remodel.log"
 """The bridge's own record of this run, beside the change log `apply_log.py` writes.
@@ -153,8 +162,21 @@ WRITES_WENT_ELSEWHERE = (
 NO_WRITE_RECORD = (
     "No write was recorded for this run, so there is nothing to state about where its "
     "writes went: `{changes}` holds no change with a target and `{log}` holds no mutating "
-    "request."
+    "request that names a document."
 )
+
+CALLS_NAMING_NO_DOCUMENT = (
+    "`{log}` also records {count} request(s) whose calls name no document (`{none}`): calls "
+    "made before the run held its copy, among them the application settings a run changes "
+    "and the open of the copy. They are counted apart, as naming no document, and not as "
+    "writes to another one."
+)
+"""Said after the claim whenever `remodel.log` holds a `NO_TARGET` entry, which every run's
+does (`remodel.open`). Such an entry is not another target, so it never withdraws the claim,
+and it is not a write the log can put on the copy, so it is not counted for it either. The
+words name what the entries are without calling them writes: the settings are the
+application's, and opening the copy is not a write (owner decision 155A; the draft
+constitution amendment, pull request #4)."""
 
 GLOBALS_DRIVE_NOTHING = (
     "The globals added by this run **drive nothing yet**: a v1 global names a value and no "
@@ -202,7 +224,8 @@ def read_log_targets(run_dir: Path | str) -> tuple[str, ...]:
     One entry per path named, so the count in the report is a count of writes and not of
     lines. A request that wrote nothing carries no `target=` field at all and contributes
     nothing here: an empty field would read like a write whose target could not be
-    recorded.
+    recorded. An entry is kept as the log holds it, `NO_TARGET` included; what to make of
+    one is `_where_the_writes_went`'s to say (owner decision 155A).
     """
     path = Path(run_dir) / LOG_FILE_NAME
     if not path.is_file():
@@ -438,32 +461,46 @@ def _where_the_writes_went(
     records: Sequence[ChangeRecord],
     log_targets: Sequence[str],
 ) -> str:
-    """FR-041, stated from the two records that can contradict it."""
+    """FR-041, stated from the two records that can contradict it.
+
+    A `remodel.log` entry that names no document (`NO_TARGET`) is neither: it is counted apart,
+    and said after the claim, rather than read as a write to another target (owner decision
+    155A)."""
     copy = attestation.copy_path
     targets = [row.target_path for row in records if row.target_path]
+    named = [path for path in log_targets if path != NO_TARGET]
+    unnamed = len(log_targets) - len(named)
     on_copy = [path for path in targets if path == copy]
-    log_on_copy = [path for path in log_targets if path == copy]
-    other = sorted({*(set(targets) - {copy}), *(set(log_targets) - {copy})})
-    if not targets and not log_targets:
-        return NO_WRITE_RECORD.format(changes=CHANGES_FILE_NAME, log=LOG_FILE_NAME)
-    if other:
-        return WRITES_WENT_ELSEWHERE.format(
+    log_on_copy = [path for path in named if path == copy]
+    other = sorted({*(set(targets) - {copy}), *(set(named) - {copy})})
+    if not targets and not named:
+        claim = NO_WRITE_RECORD.format(changes=CHANGES_FILE_NAME, log=LOG_FILE_NAME)
+    elif other:
+        claim = WRITES_WENT_ELSEWHERE.format(
             copy=copy,
             records=len(targets) - len(on_copy),
             total_records=len(targets),
             other=", ".join(f"`{path}`" for path in other),
-            requests=len(log_targets) - len(log_on_copy),
-            total_requests=len(log_targets),
+            requests=len(named) - len(log_on_copy),
+            total_requests=len(named),
             log=LOG_FILE_NAME,
         )
-    return WRITES_WENT_TO_THE_COPY.format(
-        copy=copy,
-        records=len(on_copy),
-        total_records=len(targets),
-        changes=CHANGES_FILE_NAME,
-        requests=len(log_on_copy),
-        total_requests=len(log_targets),
-        log=LOG_FILE_NAME,
+    else:
+        claim = WRITES_WENT_TO_THE_COPY.format(
+            copy=copy,
+            records=len(on_copy),
+            total_records=len(targets),
+            changes=CHANGES_FILE_NAME,
+            requests=len(log_on_copy),
+            total_requests=len(named),
+            log=LOG_FILE_NAME,
+        )
+    if not unnamed:
+        return claim
+    return (
+        claim
+        + " "
+        + CALLS_NAMING_NO_DOCUMENT.format(log=LOG_FILE_NAME, count=unnamed, none=NO_TARGET)
     )
 
 

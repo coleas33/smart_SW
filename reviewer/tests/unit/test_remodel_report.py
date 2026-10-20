@@ -68,6 +68,7 @@ from swreview.remodel.plan import (
 from swreview.remodel.report import (
     ENGINEER_STOP,
     LOG_FILE_NAME,
+    NO_TARGET,
     REPORT_FILE_NAME,
     SAVE,
     SECTIONS,
@@ -77,6 +78,7 @@ from swreview.remodel.report import (
 )
 from swreview.remodel.scope import Refusal, ScopeSignals
 from swreview.remodel.tolerances import IDENTITY
+from tests.support.contracts import REPO_ROOT
 from tests.support.features import FeatureSpec, feature, fillet_feature, folder
 from tests.support.remodel import remodel_package, scope_signals
 
@@ -829,6 +831,109 @@ def test_one_request_that_wrote_to_two_paths_names_both(tmp_path: Path) -> None:
     run_dir = logged(tmp_path / "two", request_line(f"{COPY_PATH},{other}"))
 
     assert read_log_targets(run_dir) == (COPY_PATH, other)
+
+
+# --- 11. calls that name no document (owner decision 155A) --------------------------------
+
+
+OPEN_LINE = (
+    "[2026-09-16T14:22:05.6074993+00:00] id=1 command=remodel.open status=ok elapsed_ms=56 "
+    "gated=GetOpenDocumentByName,GetSaveFlag,IsOpenedReadOnly,ListExternalFileReferencesCount2,"
+    "GetUserPreferenceToggle,get_CommandInProgress,ISldWorks.SetUserPreferenceToggle,"
+    "ISldWorks.set_CommandInProgress,ISldWorks.OpenDoc7,ICustomPropertyManager.Add3,"
+    "IFeatureManager.EditRollback,GetFeatures,IsRolledBack,IModelDoc2.ForceRebuild3,"
+    "GetWhatsWrongCount,GetType,GetBodies2,IsWeldment,GetSheetMetalFolder,IsMeshBody,"
+    "IsGraphicsBody,Is3DInterconnectFeature,GetImportedFileName,GetConfigurationNames,"
+    "GetTypeName2,GetUnits target=(none)"
+)
+"""`remodel.open`'s completed request line in `remodel.log`, as the tool service writes it
+(`ToolServiceRequestLogger.Format`): captured on 2026-10-20 from the production chain
+`RemodelPlanEndToEndTests` drives - the real dispatcher, gate and recorder over stand-ins for
+SOLIDWORKS - with this fixture's stamp. Every allowlisted call the open makes - the settings it
+changes, the open of the copy, and the copy's tag, rollback and rebuild - is made before the
+bridge holds the run's session, so the line names no document
+(`RemodelGateRecorder.NoTarget`); `RemodelPlanEndToEndTests` pins that it still does."""
+
+
+def test_no_target_is_the_hosts_own_token() -> None:
+    """The report reads the token the tool service writes, one spelling for both sides."""
+    host = REPO_ROOT / "extractor" / "SwReview.AddIn" / "ToolService" / "ToolServiceHost.cs"
+    token = re.search(
+        r'public const string NoTarget = "([^"]+)";', host.read_text(encoding="utf-8")
+    )
+
+    assert token is not None, "ToolServiceHost.cs has no RemodelGateRecorder.NoTarget"
+    assert token.group(1) == NO_TARGET
+
+
+def test_the_open_of_a_run_is_read_as_a_request_that_names_no_document(tmp_path: Path) -> None:
+    """The reader keeps every entry as the log holds it, `(none)` included: what to make of one
+    is the report's to say, and it says it once (`_where_the_writes_went`)."""
+    run_dir = logged(tmp_path / "opened", OPEN_LINE, *log_lines())
+
+    assert read_log_targets(run_dir) == (NO_TARGET, COPY_PATH, COPY_PATH)
+
+
+class TestCallsThatNameNoDocument:
+    """Owner decision 155A, test first (004 T191): `remodel.open`'s line names no document, so a
+    report that counted `(none)` as another target could never claim that every write went to the
+    copy - on a run where every write did. Those calls are counted as naming no document: not as
+    writes to another document, and not as writes to the copy, which the log cannot show. The words
+    stay true of what they are: the settings a run changes are the application's, and opening the
+    copy is not a write (the draft constitution amendment, pull request #4)."""
+
+    def test_a_run_whose_writes_all_went_to_the_copy_still_claims_it(
+        self, tmp_path: Path, graded: GradedRun
+    ) -> None:
+        run_dir = logged(tmp_path / "claimed", OPEN_LINE, *log_lines())
+
+        text = report(graded, log_targets=read_log_targets(run_dir))
+
+        assert "cannot claim" not in text
+        assert f"Every write of this run went to `{COPY_PATH}`." in text
+        assert "2 of 2 mutating request(s)" in text
+        assert f"`{NO_TARGET}`" in text
+        assert "1 request(s) whose calls name no document" in text
+        assert "not as writes to another one" in text
+
+    def test_a_write_to_another_path_still_withdraws_the_claim_and_none_is_not_named_as_one(
+        self, graded: GradedRun
+    ) -> None:
+        elsewhere = "C:\\work\\bracket.SLDPRT"
+
+        text = report(graded, log_targets=(NO_TARGET, COPY_PATH, elsewhere))
+
+        assert "cannot claim" in text
+        assert f"(`{elsewhere}`)" in text
+        assert f"`{NO_TARGET}`, `" not in text and f", `{NO_TARGET}`" not in text
+        assert "1 of 2 mutating request(s)" in text
+        assert "1 request(s) whose calls name no document" in text
+
+    def test_a_log_that_names_no_document_at_all_records_no_write(
+        self, graded: GradedRun
+    ) -> None:
+        """A run whose only targets name no document has recorded no write: the claim is not
+        made, and nothing is said to have gone elsewhere."""
+        untargeted = [row.model_copy(update={"target_path": None}) for row in changes()]
+
+        text = report(graded, changes=untargeted, log_targets=(NO_TARGET,))
+
+        assert "No write was recorded for this run" in text
+        assert "no mutating request that names a document" in text
+        assert "cannot claim" not in text
+        assert "Every write of this run went to" not in text
+        assert "1 request(s) whose calls name no document" in text
+
+    def test_the_words_never_call_them_writes_to_another_document(
+        self, graded: GradedRun
+    ) -> None:
+        text = report(graded, log_targets=(NO_TARGET, COPY_PATH, COPY_PATH))
+        said = next(line for line in text.splitlines() if "name no document" in line)
+
+        assert "application settings" in said
+        assert "the open of the copy" in said
+        assert "name another target" not in said
+        assert "elsewhere" not in said
 
 
 def test_write_report_writes_the_rendered_report_into_the_run_folder(
