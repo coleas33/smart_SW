@@ -2269,7 +2269,13 @@ line below; items 4, 6, 7, 8 and 10 stay recorded as they are.
    `..` segment on sight, at the bridge as at the seat, rather than canonicalize it away, and the
    folders the host makes carry none, so a run root spelled `C:\work\..\runs` plans; and a device
    path is refused at both seats, since a run makes none the rule could take. The bridge's bind of
-   the host's own folder keeps its own test, which takes a device path (R12.3).
+   the host's own folder keeps its own test, which takes a device path (R12.3). *Its other half - tying
+   the copy's run folder to this run, which neither seat does - is left to the callers on purpose
+   (noted on the second review, R12.8a)*: a path alone cannot say which run it belongs to, and each
+   caller already knows - the bridge compares the copy's run folder with the one the host bound for
+   this run before anything is copied (step 4), and the pane seat is handed only the copy in `copy/`
+   of a run folder its own host made (`BackendRemodelPipeline.CopyIn`) - so `CopyOf` checks what a
+   path can show and answers the run folder for its caller to compare.
 6. **The allowlist guards, written three times** (the review's finding 7). `DrawingOpenGuard`,
    `RemodelSeatGuard` and, with a fourth answer, `RemodelGuard` write the same three answers, and the
    read audit's `Judged` and the creation tests' `AllowlistsByName` name the guards by type. A shared
@@ -2309,16 +2315,18 @@ serves both seats, and run folders are made in their full form (item 5, R12.3); 
 while a remodel run is in progress (item 9, R12.4); and the draft constitution amendment (pull
 request #4) says that activating or opening the run's copy is not a write, the copy's path check
 being its scope (item 3, R12.5). **Items 4, 6, 7, 8 and 10 stay recorded as they are.** The tasks
-are T182 to T190 (Phase 10G) and, on the decision's adversarial review, T191 to T196 (R12.8), with
-T171 amended for the next sitting (R12.6). SOLIDWORKS was not started: the C# tests run over fakes
-and the interop stand-ins, the interop (`SolidWorks.Interop.sldworks` 32.5.0.48) was read as metadata
+are T182 to T190 (Phase 10G) and, on the decision's adversarial review, T191 to T196 (R12.8) and, on
+its second, T197 to T199 (R12.8a), with T171 amended for the next sitting (R12.6). SOLIDWORKS was
+not started: the C# tests run over fakes and the interop stand-ins, the interop (`SolidWorks.Interop.sldworks` 32.5.0.48) was read as metadata
 only, and the frozen interop manifest was regenerated with
 `swreview-extract probe interop --emit-manifest`, which reads assemblies and never a session.
 Measured on the development machine: `SwReview.Extractor.Tests` 9,913 tests before and 10,006
 after, `SwReview.AddIn.Tests` 2,817 before and 2,895 after, and 10,007 and 2,956 after the review's
-fixes (R12.8), all green, the build at zero warnings from scratch (`--no-incremental`); the Python
-suite 18,081 passed and 5 skipped before, on 3.12 and on 3.11, and unchanged after, at the records
-commit and again at the review's (the change is the extractor's and the records').
+fixes (R12.8) - 10,007 and 2,967 with main merged in (`1db5b88`), and 10,007 and 2,968 after the
+second review's (R12.8a) - all green, the build at zero warnings from scratch (`--no-incremental`); the
+Python suite 18,081 passed and 5 skipped before, on 3.12 and on 3.11, and unchanged after, at the
+records commit and again at the review's (the change is the extractor's and the records'; the merge
+brings decision 149A's own Python changes, so "unchanged" speaks of this branch's own commits).
 
 ### R12.1 The seat's guard is a closed allowlist (T182, T183)
 
@@ -2548,7 +2556,9 @@ refusal is a run's in practice; the page's messages are handled while a run exec
 `DiscardCopy` keeps its own rule - refused only while its run is in flight - since deleting another
 run's copy changes nothing the running one reads. The page mirrors what it does for Discard copy
 during a run: Open copy is disabled from `remodel.started` until the run reaches a terminal status
-(`remodel.js`, `renderControls`). Start is switched off in this build (004 T172), so no run can be in
+(`remodel.js`, `renderControls`). *Amended on the second review (R12.8a)*: both are disabled while a
+plan is made too, from the press of Remodel until the plan is answered, the host's "a plan or a run".
+Start is switched off in this build (004 T172), so no run can be in
 progress at the pilot yet; the refusal waits for the switch.
 
 **Tests.** `RemodelHostTests`: Open copy during its own run and during another plan's run refused,
@@ -2593,7 +2603,8 @@ its run-folder comparison and `AssertSaveTarget` refuse those paths as well, a s
 seat does not have, and the seat's turn red. M63 to M68 were added on the review (R12.8), the same
 way, in detached worktrees of `d8542bc` (M63, M64) and `8f62df1` (M65 to M68); M65 and M66 are the
 review's own, and M68 is M48 run again, to show the probe's own-calls test, widened on the review,
-red beside the four M48 turned red, where before it stayed green.
+red beside the four M48 turned red, where before it stayed green. M69 and M70 were added on the
+second review (R12.8a), the same way, in a detached worktree of `7047fc4`.
 
 | Id | Taken out | Red |
 |---|---|---|
@@ -2625,6 +2636,8 @@ red beside the four M48 turned red, where before it stayed green.
 | M66 | the same second's folder named under the run root as it was spelled (the review's) | 15 cases of 1 test: `AFolderMadeInTheSameSecondIsMadeInItsFullFormToo` - the five kinds of run under the three spellings that differ from the full form |
 | M67 | `probe standards`' claims reading a gated key whole again | 1 case of 1 test: `StandardsProbe_GateLogNamesWhatWasTouchedHoweverTheKeyIsSpelled` |
 | M68 | `ISldWorks.OpenDoc7` dropped from `RemodelProbeGuard`'s run-scoped members (M48 again) | 5 cases of 5 tests: M48's four and `TheProbesOwnCallsAreExactlyTheDeclaredWritersAndOnlyTheirCallersGuardsLetThemThrough` |
+| M69 | the page offering Open copy while a plan is made, a run's rule only | 1 case of 1 test: `OpenCopyAndDiscardCopyAreNotOfferedWhileAPlanIsBeingMade` |
+| M70 | the page offering Discard copy while a plan is made, a run's rule only | 1 case of 1 test: `OpenCopyAndDiscardCopyAreNotOfferedWhileAPlanIsBeingMade` |
 
 ### R12.8 The adversarial review: what it found and what changed (T191 to T196)
 
@@ -2708,6 +2721,36 @@ each became:
 **Evidence**: commits `d8542bc`, `278eda4` and `8f62df1`, with M63 to M68 of R12.7. The tests were
 written before the code they pin, and each change was then taken out once: every mutation is red.
 
+### R12.8a The second review: what it found and what changed (T197 to T199)
+
+**Source.** A second independent review of decision 148A, on the branch with main merged in
+(`1db5b88`: decision 149A, pull request #22, and the register's rows), found no must-fix: nothing it
+found would refuse a real path at the pilot, and no gate lets more through. Its own mutations showed
+the tests hold: a typo in `BridgeDispatcher.OpenDocKey` fails 66 tests, and a letter-case typo in the
+probe host's key fails 4 of the read audit's. The merged tree carries 149A's own Python changes, so
+R12 now says that its Python "unchanged" speaks of this branch's commits, which change no Python. Its
+findings, and what each became:
+
+- **The page offered Open copy while a plan was made, which the host refuses** (fixed): the page
+  disabled both copy actions only while a run runs, where the host's rule is "a plan or a run" (R12.4).
+  With an earlier run on screen, Open copy pressed mid-plan waited behind the plan on the host's one
+  remodel message thread and was served once the plan ended - on the earlier run's copy, while the
+  page showed the new plan; Discard copy, which the page offers by the same rule and the host refuses
+  only while its own run is in flight, likewise, its "deleted" words shown beside the new plan. The
+  page disables both while a plan is made or a run runs (T198; M69, M70), red before for want of it
+  (`RemodelPageContractTests.OpenCopyAndDiscardCopyAreNotOfferedWhileAPlanIsBeingMade`, T197, over the
+  real page and transport, a press in between sending nothing). Open report and Open folder, which
+  ask SOLIDWORKS nothing, stay as they are.
+- **R11.8 item 5's other half went unsaid** (recorded): the item noted too that neither seat ties the
+  copy's run folder to the host's run root, and its settlement spoke of the rule alone. The settled
+  note now says that half was left to the callers on purpose, and why (T199).
+- **The run report can never say that every write went to the copy** (for the owner; older than the
+  decision): R12.9 item 8.
+- **A page that loads again mid-run offers what the host refuses** (for the owner; only once Start
+  is switched on): R12.9 item 9.
+
+**Evidence**: commit `7047fc4` (T197, T198), with M69 and M70 of R12.7; the records, T199.
+
 ### R12.9 Found on the way, and left for the owner
 
 Each is beyond what decision 148A names, so nothing here was changed.
@@ -2760,3 +2803,22 @@ Each is beyond what decision 148A names, so nothing here was changed.
    folder and `AssertSaveTarget` - checks the path before the open, with `AssertOpenedAtCopy` after it;
    and the close is handed the scope's own copy, which the bridge seat checks by the one rule (R12.8).
    The backlog, the record of those rounds, is left as it is.
+8. **The run report can never say that every write went to the copy** (the second review's; older
+   than this decision). `remodel/report.py`'s `read_log_targets` keeps every `target=` entry in
+   `remodel.log`, and the report's word on where the writes went counts every one that is not the
+   copy against the claim. The tool service records `(none)` (`RemodelGateRecorder.NoTarget`) for an
+   allowlisted key written before a scope exists, so every successful `remodel.open` writes its
+   request line with `target=(none)`: step 6's toggles always did, and since this decision
+   `ISldWorks.OpenDoc7` does too. So a run's report says it cannot claim that every write went to the
+   copy, naming `(none)` as another target - which the second review's probe confirmed. It stays
+   hidden until Start is switched on (004 T172), since only a run writes the report; and it bears on
+   the draft constitution amendment's sentence that opening the copy is not a write. The options: skip
+   `(none)` in `read_log_targets`, or report such lines as calls with no document behind them.
+9. **A page that loads again mid-run offers what the host refuses** (the second review's; only once
+   Start is switched on). A page that loads asks for `init` (`requestInit(true)`), and `applyInit` sets
+   no running state: `init.latest_run` carries the plan's state, not whether the host is busy. So a
+   page that loads again while a run runs offers Open copy, Discard copy and Start, each of which the
+   host refuses `RunInProgress`, and disables Stop, so the run cannot be stopped from that page. Start,
+   Discard copy and Stop behaved so before this decision, which adds Open copy; item 4 covers only the
+   window at a run's end. The fix would be a flag on `init.latest_run` that a run is in flight, which
+   `applyInit` reads. Unreachable until Start is switched on, as 004's T172 now says.

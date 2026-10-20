@@ -357,7 +357,8 @@ decision 148A; research R12.3 to R12.5)*: the path rule is `RemodelCopy.CopyOf` 
 one rule both seats take the copy by - the bridge's `remodel.open` too, at its step 4 - and
 `RemodelSeatCopyPath` is the seat's door to it; every run folder is made in its full form, so the
 copy the seat is handed carries no `..`. Open copy is refused while a remodel run is in progress
-(`RunInProgress`), and the page offers it no more than Discard copy during a run. Whether activating
+(`RunInProgress`), and the page offers it no more than Discard copy during a run - nor, with Discard
+copy, while a plan is made (*on the decision's second review, research R12.8a*). Whether activating
 or opening the run's copy is a write - the constitution's 2(b) - is answered by the draft constitution
 amendment (pull request #4): it is not, the copy's path check being its scope.
 
