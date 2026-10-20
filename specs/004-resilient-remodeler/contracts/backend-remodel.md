@@ -157,7 +157,7 @@ refusal is still a refusal and is never guessed into a nearer class.
 | `NotAPart` | 400 | `not_a_part`: the source is not an existing `.SLDPRT` |
 | `DocumentDirty` | 400 | `source_dirty`: the open source has unsaved changes. This feature never saves the source |
 | `ExternalReferences` | 400 | `external_refs`: `ListExternalFileReferencesCount2() != 0` |
-| `ScopeRefused` | 400 | `scope_not_probed` or `scope_changed`, with the host's sentence. Also the pure gate's own refusal, which names **every** failing signal |
+| `ScopeRefused` | 400 | `scope_not_probed` or `scope_changed`. Also the pure gate's own refusal, which names **every** failing signal. *Amended 2026-10-20 (feature 002, owner decision 149A):* for the two codes the message is plain words that name no path, one sentence for each code (`SCOPE_REFUSAL_WORDS` in `chat/remodel.py`), where it was the host's sentence, which can name the probe and the part's full path - both paths, for a probe minted for another file; the host's sentence is logged instead |
 | `RunFolderFailed` | 400 | `copy_failed`, `copy_exists`, `tag_failed`, every `error_code` this build has no row for, an `ok` reply this build cannot read, and a run folder that could not be prepared - including a carry-forward candidate that exists and will not parse (FR-029) |
 | `BridgeUnavailable` | 502 | The circuit is open or the transport failed, so the call was never sent. Retryable |
 | `PackageMissing` | 400 | `<run_dir>/package-before.json` is absent: the add-in's ModelCheck dump has not landed |
