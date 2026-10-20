@@ -1750,7 +1750,8 @@ public class GuardSweepTests
 /// <c>INew*</c> creators, and bare <c>LoadFile</c>, <c>LoadAddIn</c> and <c>LoadAdminSettingsFile</c>.
 ///
 /// This class reflects the interop the extractor is built against and holds every member of
-/// <c>ISldWorks</c>, <c>IModelDoc2</c> and <c>IModelDocExtension</c> whose name belongs to the open,
+/// <c>ISldWorks</c>, <c>IModelDoc2</c> and <c>IModelDocExtension</c> - and, since decision 144A,
+/// <c>IAssemblyDoc</c> - whose name belongs to the open,
 /// activate, new, load, close or quit families (<see cref="BelongsToAFamily"/>) to one of three answers:
 /// a reader by section 2's prefixes, which stays allowed (FR-006); one of the <see cref="Allowed"/>
 /// members, each with its reason; or refused by <see cref="ReadOnlyGuard"/> in both spellings a call
@@ -1761,8 +1762,26 @@ public class GuardSweepTests
 /// </summary>
 public class DocumentLifecycleFamilyTests
 {
-    /// <summary>The interfaces the families are read from.</summary>
-    internal static readonly string[] Interfaces = { "ISldWorks", "IModelDoc2", "IModelDocExtension" };
+    /// <summary>
+    /// The interfaces the families are read from. Edited deliberately for decision 144A (2026-10-19;
+    /// research R10.4 item 1): <c>IAssemblyDoc</c> joined as a fourth, the document type whose
+    /// component opens, reloads and new parts are these families' members too (<c>OpenCompFile</c>,
+    /// <c>ComponentReload2</c>, <c>InsertNewPart2</c>, ...).
+    /// </summary>
+    internal static readonly string[] Interfaces = { "ISldWorks", "IModelDoc2", "IModelDocExtension", "IAssemblyDoc" };
+
+    /// <summary>
+    /// What the grammar finds on <c>IAssemblyDoc</c> on 32.5.0.48 (research R10.4 item 1, decision 144A):
+    /// component documents opened, reloaded or created, a reference loaded, the ground plane activated,
+    /// and the isolate and temporary-fix-group modes left - none a reader, and none called by the product.
+    /// </summary>
+    private static readonly string[] AssemblyFamilyMembers =
+    {
+        "OpenCompFile", "SelectiveOpen", "ComponentReload", "ComponentReload2", "IComponentReload2",
+        "IComponentReload3", "InsertNewPart", "InsertNewPart2", "InsertNewAssembly", "InsertNewVirtualPart",
+        "InsertNewVirtualAssembly", "InsertLoadReference", "ActivateGroundPlane", "ExitIsolate",
+        "TemporaryFixGroupExit",
+    };
 
     /// <summary>
     /// The families, as a word of a member's name: the verb, or a compound of it, beginning with its
@@ -1839,11 +1858,21 @@ public class DocumentLifecycleFamilyTests
     [InlineData("DeActivateFeatureMgrView", true)]
     [InlineData("CreateNewWindow", true)]
     [InlineData("Quit", true)]
+    [InlineData("OpenCompFile", true)]
+    [InlineData("SelectiveOpen", true)]
+    [InlineData("IComponentReload3", true)]
+    [InlineData("InsertNewVirtualAssembly", true)]
+    [InlineData("InsertLoadReference", true)]
+    [InlineData("ActivateGroundPlane", true)]
+    [InlineData("ExitIsolate", true)]
+    [InlineData("TemporaryFixGroupExit", true)]
     [InlineData("ClosestDistance", false)]
     [InlineData("IClosestDistance", false)]
     [InlineData("IsOpenedReadOnly", false)]
     [InlineData("DownloadFromMySolidWorksSettings", false)]
     [InlineData("InsertSheetMetalClosedCorner", false)]
+    [InlineData("Isolate", false)]
+    [InlineData("GetOpenDocumentByName", true)]
     public void TheFamilyGrammarReadsWholeWords(string name, bool belongs)
     {
         Assert.Equal(belongs, BelongsToAFamily(name));
@@ -1878,6 +1907,11 @@ public class DocumentLifecycleFamilyTests
         {
             Assert.Contains(named, members);
         }
+
+        // Decision 144A: the members research R10.4 item 1 names on IAssemblyDoc, and no other.
+        Assert.Equal(
+            AssemblyFamilyMembers.Select(name => "IAssemblyDoc." + name).OrderBy(key => key, StringComparer.Ordinal),
+            members.Where(key => key.StartsWith("IAssemblyDoc.", StringComparison.Ordinal)));
     }
 
     /// <summary>The heart of decision 136A: no member of the families is left callable by accident.</summary>

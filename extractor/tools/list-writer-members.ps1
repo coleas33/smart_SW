@@ -84,6 +84,12 @@ $familyCount = $drawingFamilies.Count
 # ForceRebuild); and those decision 21A's creation table denies (MoveOrCopy, RotateOrCopy,
 # ScaleOrCopy, SaveSelection) - list-creation-members.ps1 reads this table's names as already denied,
 # so naming one here would move it out of that table.
+#
+# Decision 144A (2026-10-19) reads 136A's families on IAssemblyDoc too, as a fourth interface: its
+# row names every member of the open, activate, new, load, close and quit families there - component
+# documents opened, reloaded or created, a reference loaded, the ground plane activated, the isolate
+# and temporary-fix-group modes left - and DocumentLifecycleFamilyTests reads IAssemblyDoc to prove
+# the row complete.
 $sharedRows = [ordered]@{
     'ISldWorks' = @(
         'ActivateDoc', 'ActivateDoc2', 'ActivateDoc3', 'DocumentVisible', 'CloseAllDocuments',
@@ -126,7 +132,11 @@ $sharedRows = [ordered]@{
     )
     'IAssemblyDoc' = @(
         'SaveIsolate', 'CopyWithMates', 'CopyWithMates2', 'ReplaceComponents', 'ReplaceComponents2',
-        'ReplacePLMComponents', 'ForceRebuild2', 'set_EnableAssemblyRebuild'
+        'ReplacePLMComponents', 'ForceRebuild2', 'set_EnableAssemblyRebuild',
+        'OpenCompFile', 'SelectiveOpen', 'ComponentReload', 'ComponentReload2', 'IComponentReload2',
+        'IComponentReload3', 'InsertNewPart', 'InsertNewPart2', 'InsertNewAssembly', 'InsertNewVirtualPart',
+        'InsertNewVirtualAssembly', 'InsertLoadReference', 'ActivateGroundPlane', 'ExitIsolate',
+        'TemporaryFixGroupExit'
     )
     'IFeatureManager' = @(
         'MoveRotateLiveSectionPlane', 'set_MoveSizeFeatures', 'MoveToFolder'

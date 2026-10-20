@@ -111,7 +111,7 @@ is the output of `extractor/tools/list-writer-members.ps1` over `SolidWorks.Inte
 with `-CSharp`. `DrawingFamilyDenylistTests` (in `GuardTests.cs`) parses the table below and
 `DrawingFamilyCompletenessTests` reflects the interop to prove it complete. The "Already denied"
 column names members an earlier feature (or a denied prefix) refuses; they are not added twice.
-735 names are new; 646 distinct names match the writer grammar on the 28 families.
+750 names are new; 646 distinct names match the writer grammar on the 28 families.
 
 | Members refused (feature 011) | Interface; already denied |
 |---|---|
@@ -141,7 +141,7 @@ column names members an earlier feature (or a denied prefix) refuses; they are n
 | `ActivateFeatureMgrView`, `ActivateSelectedFeature`, `Close`, `CloseFamilyTable`, `ClosePrintPreview`, `DeActivateFeatureMgrView`, `EditCopy`, `FileReload`, `ForceReleaseLocks`, `IRelease3rdPartyStorage`, `Lock`, `LockAllExternalReferences`, `LockFramePoint`, `LockLightToModel`, `Quit`, `Rebuild`, `ReloadOrReplace`, `Save`, `Save2`, `SaveAs`, `SaveAs2`, `SaveAs4`, `SaveAsSilent`, `SaveSilent`, `SetReadOnlyState`, `SetSaveAsFileName`, `UnLock`, `UnlockAllExternalReferences`, `UnlockFramePoint` | `IModelDoc2`; already denied: - |
 | `CloseMessageBar`, `CloseUserNotification`, `CopyDraftingStandard`, `EditRebuildAll`, `IRelease3rdPartyStorageStore`, `LoadDraftingStandard`, `MoveDecal`, `Rebuild`, `ReleaseStream`, `ReloadOrReplace`, `RenameDocument`, `RenameDraftingStandard`, `SaveAs`, `SaveAs2`, `SaveDeFeaturedFile`, `SaveDraftingStandard`, `SavePackAndGo`, `SaveTo3DExperience`, `SaveViewToSolidworks`, `SetUserPreferenceDouble`, `SetUserPreferenceInteger`, `SetUserPreferenceString`, `SetUserPreferenceTextFormat`, `set_ShowPartRebuildIndicators` | `IModelDocExtension`; already denied: - |
 | `SaveToFile`, `SaveToFile2`, `SaveToFile3` | `IPartDoc`; already denied: - |
-| `CopyWithMates`, `CopyWithMates2`, `ForceRebuild2`, `ReplaceComponents`, `ReplaceComponents2`, `ReplacePLMComponents`, `SaveIsolate`, `set_EnableAssemblyRebuild` | `IAssemblyDoc`; already denied: - |
+| `ActivateGroundPlane`, `ComponentReload`, `ComponentReload2`, `CopyWithMates`, `CopyWithMates2`, `ExitIsolate`, `ForceRebuild2`, `IComponentReload2`, `IComponentReload3`, `InsertLoadReference`, `InsertNewAssembly`, `InsertNewPart`, `InsertNewPart2`, `InsertNewVirtualAssembly`, `InsertNewVirtualPart`, `OpenCompFile`, `ReplaceComponents`, `ReplaceComponents2`, `ReplacePLMComponents`, `SaveIsolate`, `SelectiveOpen`, `TemporaryFixGroupExit`, `set_EnableAssemblyRebuild` | `IAssemblyDoc`; already denied: - |
 | `MoveRotateLiveSectionPlane`, `MoveToFolder`, `set_MoveSizeFeatures` | `IFeatureManager`; already denied: - |
 
 Interfaces of the 28 whose every writer was already denied: `IGtolFrame` (`AddIndicator`, `DeleteIndicator`, `SetFrameToleranceType`, `SetIndicator`, `SetSymbolXml`).
