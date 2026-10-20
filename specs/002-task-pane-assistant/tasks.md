@@ -234,6 +234,19 @@ description: "Task list for the Task Pane Assistant"
 
 ---
 
+## Phase 11: Owner decision 146A - three run-folder fixes left by 142A (2026-10-19)
+
+**Purpose**: 142A left three things noticed and not changed. `InvalidRunDir`'s sentence, which the page shows first, sent an engineer refused for a folder another run holds to the run root in Settings; a start still claimed the re-modeler's grade folders as Model check folders, moving the grade's session aside and writing over its report; and `GET /reviews/{run_id}` refused any folder holding `check.json`, so a review that claimed a Model check's folder could not be restored after a restart. [research.md](research.md) records the decision, the designs weighed and the edge cases under 146A.
+
+- [X] T106 [P] [US1] Write the tests for the refusals' words: `reviewer/tests/unit/test_review_words.py` pins `InvalidRunDir`'s sentence, the path rule's, and the new `RunDirTaken`'s, word for word; `test_chat_server.py`: a start on a check's folder whose record cannot be read, or names no session, is `400 RunDirTaken` saying the folder holds a session, and no review's, and moves nothing and builds no provider. Existing cases change deliberately, for one reason - a folder that passes the path rule and holds another run's files is `RunDirTaken`, where it was `InvalidRunDir`, whose sentence is the path rule's: 142A's body for a check's folder (`check_folder_refusal`: a Retry on each family's folder, naming a chat the backend holds or an id it never issued, and a start on a Standards check's folder), a start on a folder holding a review's session (`test_a_run_dir_that_already_holds_a_session_is_refused_without_a_retry`, `test_an_empty_retry_of_is_no_retry_and_meets_a_start_s_refusal`, which also take "a session" for "a review session", untrue of a remodel run's own folder or a check's whose record cannot be read), and `test_chat_checks_routes.py`'s `test_a_folder_a_review_already_holds_is_still_refused`. Acceptance: all 13 cases fail before T107 (3 new, 10 changed); the path rule's `InvalidRunDir` cases, on `/sessions`, both check routes and the remodel routes, are unchanged and pass before and after
+- [X] T107 [US1] Implement it: `RunDirTaken` in `reviewer/src/swreview/chat/server.py`, raised by every refusal `_claim_run_dir` makes for what a folder holds, `InvalidRunDir` left to `resolve_run_dir`; both sentences in `report/review_words_v1.yaml`; the pane fixtures regenerated with `generate_pane_fixture.py --write` and `generate_waiting_fixtures.py --write` (`review-big-assembly.json`, `review-waiting.json`, `review-waiting-big-assembly.json`, `review-waiting-restored.json`: the changed sentence and the added one, nothing else; `review-not-sent-session.json` unchanged), and `review-send-failure-events.json`'s pin of `review-waiting.json` moved; `review-waiting-apply-failure.json`, a capture with no generator whose `labels` block nothing reads, left as captured (research 146A). Acceptance: T106 green; `ruff check` clean; C# 0 warnings, 9,732 and 2,608 passed, the pin's case among them
+
+**Order**: T106 before T107.
+
+**Checkpoint**: A run folder refused for its path says to check the run root; one refused because another run's files are in it says so, and to review into a new run folder.
+
+---
+
 ## Dependencies & Execution Order
 
 - **Setup (Phase 1)** → **Foundational (Phase 2)** → **US2 (Phase 3)** → **US1 (Phase 4)** → **US4 (Phase 5)** → **US3 (Phase 6)** → **Polish**

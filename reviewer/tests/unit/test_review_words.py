@@ -681,3 +681,29 @@ never sends it."""
 def test_each_thing_that_holds_a_restart_back_has_a_true_sentence() -> None:
     errors = load_words().labels.errors
     assert {key: errors.get(key) for key in RESTART_HOLDS} == RESTART_HOLDS
+
+
+RUN_DIR_REFUSALS = {
+    "InvalidRunDir": (
+        "The backend refused the run folder's path: it writes only into a local folder inside "
+        "the run root. Check the run root in Settings."
+    ),
+    "RunDirTaken": (
+        "This run folder already holds another run's files, which a new review must not write "
+        "over. Press Review to start the review in a new run folder."
+    ),
+}
+"""The two classes a run folder is refused with before anything is written (owner decision 146A).
+`InvalidRunDir` is the path rule's alone, and its sentence states the rule rather than that the
+folder is outside the run root, which is untrue of a network path under a network run root or of
+a path spelled with `..`. `RunDirTaken` is every refusal `chat/server.py`'s `_claim_run_dir`
+makes for a folder that already holds another run's files - a check's, a re-modeler grade's, a
+review's or any other session - which `InvalidRunDir`'s old sentence, "The run folder is not
+inside the run root. Check the run root in Settings.", sent to the wrong place. The page shows a
+class's sentence first and its message in a fold, so each sentence is true of every refusal that
+carries its class, and says what to do."""
+
+
+def test_each_refusal_of_a_run_folder_says_what_is_true_of_it() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in RUN_DIR_REFUSALS} == RUN_DIR_REFUSALS

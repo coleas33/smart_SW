@@ -226,10 +226,29 @@ class ChatError(Exception):
 
 
 class InvalidRunDir(ChatError):
-    """`run_dir` broke the path rule (`chat-api.md`, Path rule for `run_dir`), or holds a
-    session this start may not write over: a review's, or a check's (`_claim_run_dir`)."""
+    """`run_dir` broke the path rule (`chat-api.md`, Path rule for `run_dir`; `resolve_run_dir`).
+
+    The path rule's alone (owner decision 146A). A folder that passes it and already holds
+    another run's files is `RunDirTaken`: this class's sentence in the words file sends the
+    engineer to the run root in Settings, which is the way on from the path rule and from
+    nothing else.
+    """
 
     error_class = "InvalidRunDir"
+
+
+class RunDirTaken(ChatError):
+    """`run_dir` already holds another run's files, which this start may not write over.
+
+    Every refusal `_claim_run_dir` makes for what a folder holds (owner decisions 142A and
+    146A): a check's folder to a Retry, and a Standards check's to a start as well; any other
+    folder that holds a session to a start. A class of its own because the page shows its
+    class's sentence first, and the way on from all of these is a new run folder, where the
+    path rule's, `InvalidRunDir`'s, is the run root in Settings. A chat that is live on the
+    folder, or being set up in it, is `RunDirInUse`.
+    """
+
+    error_class = "RunDirTaken"
 
 
 class InvalidPackage(ChatError):
@@ -2154,10 +2173,10 @@ class ChatServer:
         already been shown, and `session.json` holds only the later of the two sessions.
 
         So: a folder a live chat is reviewing is a 409, and a folder that already holds a
-        session is a 400 - unless this request is the Retry that replaces it, which
-        `_rotate_previous` moves the old pair aside for rather than writing over. It has to be
-        that Retry (owner decision 142A): `_require_retried` holds a Retry to the chat that
-        wrote the session, so one naming any other chat moves nothing.
+        session is a 400, `RunDirTaken` - unless this request is the Retry that replaces it,
+        which `_rotate_previous` moves the old pair aside for rather than writing over. It has
+        to be that Retry (owner decision 142A): `_require_retried` holds a Retry to the chat
+        that wrote the session, so one naming any other chat moves nothing.
 
         A Model check's folder is the one other exception, and for the same reason read
         the other way: a check writes `session.json` and **no** `events.jsonl`, so there
@@ -2206,15 +2225,18 @@ class ChatServer:
             family = self._family_of(run_dir)
             if retry_of is None and family == RMS_FAMILY.check_file_family:
                 return None
-            raise InvalidRunDir(
+            raise RunDirTaken(
                 f"{run_dir} holds the {family} check that ran in it and no review session: "
                 "a Retry replaces only a review's session, and only a Model check's folder "
                 "is handed to a new review; review into a new run folder"
             )
         if retry_of is None:
-            raise InvalidRunDir(
-                f"{run_dir} already holds a review session; retry it with 'retry_of' or "
-                f"review into a new run folder"
+            # "a session", not "a review session": it is a review's as a rule, but a remodel
+            # run's own folder holds the re-modeler's, and a check's folder whose record cannot
+            # be read holds the check's, which `is_check_folder` cannot tell from a review's.
+            raise RunDirTaken(
+                f"{run_dir} already holds a session that a start does not write over: review "
+                "into a new run folder, or retry the chat that wrote it with 'retry_of'"
             )
         self._require_retried(run_dir, retry_of)
         return None

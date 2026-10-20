@@ -796,13 +796,17 @@ def test_a_second_chat_on_a_run_dir_a_live_chat_holds_is_refused(
 def test_a_run_dir_that_already_holds_a_session_is_refused_without_a_retry(
     client: TestClient, run_dir: Path
 ) -> None:
-    """A second session in the folder would restart `seq` mid-file and lose the first."""
+    """A second session in the folder would restart `seq` mid-file and lose the first.
+
+    `RunDirTaken`, not `InvalidRunDir` (owner decision 146A): the folder is inside the run root,
+    and the path rule's sentence sent the engineer to Settings for a folder that only holds
+    another run's files."""
     settle(client, start_session(client, run_dir)["chat_id"])
 
     response = client.post("/sessions", json=session_body(run_dir))
 
     assert response.status_code == 400
-    assert response.json()["error_class"] == "InvalidRunDir"
+    assert response.json() == held_session_refusal(run_dir)
 
 
 def test_a_retry_into_the_same_run_dir_starts_a_clean_stream_and_keeps_the_old_one(
@@ -995,13 +999,31 @@ def test_the_record_is_not_in_session_files(run_dir: Path) -> None:
 
 
 def check_folder_refusal(check_dir: Path, family: str) -> dict[str, Any]:
-    """The one body a check's folder is refused with, by a Retry and by a start alike."""
+    """The one body a check's folder is refused with, by a Retry and by a start alike.
+
+    `RunDirTaken` since owner decision 146A, where 142A answered `InvalidRunDir`: the page shows
+    a class's sentence first, and `InvalidRunDir`'s is the path rule's."""
     return {
-        "error_class": "InvalidRunDir",
+        "error_class": "RunDirTaken",
         "message": (
             f"{check_dir.resolve()} holds the {family} check that ran in it and no review "
             "session: a Retry replaces only a review's session, and only a Model check's "
             "folder is handed to a new review; review into a new run folder"
+        ),
+        "retryable": False,
+    }
+
+
+def held_session_refusal(run_dir: Path) -> dict[str, Any]:
+    """A start into a folder that already holds a session and is no check's to hand over.
+
+    "a session", not "a review session" (owner decision 146A): the folder's session is a
+    review's as a rule, but it may be a remodel run's, or a check's whose record cannot be read."""
+    return {
+        "error_class": "RunDirTaken",
+        "message": (
+            f"{run_dir.resolve()} already holds a session that a start does not write over: "
+            "review into a new run folder, or retry the chat that wrote it with 'retry_of'"
         ),
         "retryable": False,
     }
@@ -1374,20 +1396,40 @@ def test_a_retry_of_that_is_no_uuid_is_refused_before_the_folder_is_looked_at(
 def test_an_empty_retry_of_is_no_retry_and_meets_a_start_s_refusal(
     client: TestClient, run_dir: Path
 ) -> None:
+    """The start's refusal is `RunDirTaken` with words true of any session (owner decision
+    146A), where 142A pinned `InvalidRunDir` and "already holds a review session"."""
     first = start_session(client, run_dir)
     settle(client, first["chat_id"])
 
     response = client.post("/sessions", json=session_body(run_dir, retry_of=""))
 
     assert response.status_code == 400
-    assert response.json() == {
-        "error_class": "InvalidRunDir",
-        "message": (
-            f"{run_dir.resolve()} already holds a review session; retry it with 'retry_of' "
-            "or review into a new run folder"
-        ),
-        "retryable": False,
-    }
+    assert response.json() == held_session_refusal(run_dir)
+
+
+@pytest.mark.parametrize("record", ["not json", "names no session"])
+def test_a_start_on_a_check_s_folder_whose_record_cannot_be_read_is_told_it_holds_a_session(
+    client: TestClient, check_run_dir: Path, provider_control: ProviderControl, record: str
+) -> None:
+    """A check's folder whose `check.json` cannot show whose its session is, is no check's folder
+    (`is_check_folder`), so a start meets the refusal for any folder that holds a session. The
+    session there is the check's, not a review's, so the words name a session and no review
+    (owner decision 146A); and nothing is guessed through, so nothing moves."""
+    check_file = check_run_dir / "check.json"
+    if record == "not json":
+        check_file.write_text("{ not json", encoding="utf-8")
+    else:
+        body = json.loads(check_file.read_text(encoding="utf-8"))
+        del body["session_id"]
+        check_file.write_text(json.dumps(body), encoding="utf-8")
+    before = folder_hashes(check_run_dir)
+
+    response = client.post("/sessions", json=session_body(check_run_dir))
+
+    assert response.status_code == 400
+    assert response.json() == held_session_refusal(check_run_dir)
+    assert folder_hashes(check_run_dir) == before
+    assert provider_control.built == []
 
 
 def test_two_retries_of_one_chat_rotate_its_folder_once(
