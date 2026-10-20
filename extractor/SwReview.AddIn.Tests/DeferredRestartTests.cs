@@ -357,6 +357,34 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
+    /// A watcher that has stopped looking is gone, so a save refused again later starts a new one:
+    /// the backend stops answering until the watcher stops, answers again, and the turn ends; a
+    /// second save then meets a turn of its own, and when that turn ends the new watcher restarts
+    /// the backend with it - nothing else is asking.
+    /// </summary>
+    [Fact]
+    public void ASaveRefusedAfterTheWatcherStoppedIsWatchedByANewWatcher()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "first", Save(effort: "low"));
+        world.Backend.StopsAnswering();
+        Eventually(
+            () => world.Posted("status").Any(posted => posted.GetProperty("message").GetString() == NotAnsweringYet),
+            "the watcher stopping");
+        world.Backend.AnswersAgain();
+        world.Backend.EndTurn("chat-1");
+
+        SaveAsATurnStarts(world, "second", Save(effort: "medium"));
+        Assert.Empty(world.Backend.Restarts);
+        world.Backend.EndTurn("chat-1");
+
+        Eventually(() => world.Backend.Restarts.Length == 1, "a new watcher restarting the backend");
+        Assert.Equal("medium", world.Backend.Restarts[0].Settings.Effort);
+    }
+
+    /// <summary>
     /// A chat the backend does not hold - a review found on disk, or one an earlier backend held -
     /// is answered `UnknownChat`, which is an answer: no turn of it runs here.
     /// </summary>
@@ -1271,10 +1299,10 @@ public sealed class DeferredRestartTests
 
     /// <summary>
     /// A call that waited for a restart another caller was making, which then failed, is not told
-    /// the backend restarted: there is no backend at all, and it is told so.
+    /// the backend restarted: it is told the failure, as the caller that made the attempt was.
     /// </summary>
     [Fact]
-    public void ATurnCallWhoseRestartFailedForAnotherCallerIsToldTheBackendIsNotRunning()
+    public void ATurnCallWhoseRestartFailedForAnotherCallerIsToldThatFailure()
     {
         using var world = new RestartWorld();
         using var hold = new ManualResetEventSlim(false);
@@ -1296,8 +1324,121 @@ public sealed class DeferredRestartTests
             BackendRequestException? refusal = call.Result;
             Assert.NotNull(refusal);
             Assert.Equal("BackendUnavailable", refusal!.ErrorClass);
-            Assert.Equal("the review backend is not running.", refusal.Message);
+            Assert.Equal("FICT the backend would not start", refusal.Message);
             Assert.True(refusal.Retryable);
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    /// <summary>
+    /// A restart can fail before it stops anything - the configured launcher has gone, and the
+    /// start options cannot be built - leaving the old backend up, still holding its chats. A turn
+    /// call, or a new review, that waited for that restart is told the failure, masked, as the
+    /// caller that made the attempt was: never that the backend restarted, and never let through
+    /// to the old backend with the new settings.
+    /// </summary>
+    [Theory]
+    [InlineData("turn call")]
+    [InlineData("review")]
+    public void ACallThatWaitedForARestartThatFailedBeforeStoppingAnythingIsToldThatFailure(string caller)
+    {
+        string failure = "the `python` setting names 'C:\\Fictional\\FICT-gone\\swreview.exe', which does not exist "
+            + "(" + OpenAiKey + ")";
+        using var world = new RestartWorld();
+        using var hold = new ManualResetEventSlim(false);
+        try
+        {
+            world.Backend.Hold = hold;
+            world.Backend.EarlyRestartFailure = new BackendStartException(failure);
+            world.Open();
+            world.Track("chat-1");
+            SaveAsATurnStarts(world, "save", Save(effort: "low"));
+            world.Backend.EndTurn("chat-1");
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the host never began the restart");
+
+            var call = new Caller<JsonElement?>(() =>
+            {
+                if (caller == "turn call")
+                {
+                    BackendRequestException? refusal = world.Host.PageTurnRefusal();
+                    return refusal == null
+                        ? (JsonElement?)null
+                        : JsonDocument.Parse(JsonSerializer.Serialize(new
+                        {
+                            error_class = refusal.ErrorClass,
+                            message = refusal.Message,
+                        })).RootElement;
+                }
+
+                world.Receive("review.start", "start", new { });
+                return world.Reply("error", "start");
+            });
+            Assert.False(call.Finishes(TimeSpan.FromMilliseconds(300)), "the call did not wait for the restart being made");
+            hold.Set();
+            Assert.True(call.Finishes(TimeSpan.FromSeconds(10)), "the call never got an answer");
+
+            // The old backend is still up: the restart failed before it stopped anything.
+            Assert.NotNull(world.Backend.Endpoint);
+            Assert.Equal(0, world.Backend.Generation);
+            string reported = world.Last("status").GetProperty("message").GetString()!;
+            Assert.Contains(Redaction.Mask, reported, StringComparison.Ordinal);
+
+            JsonElement? answer = call.Result;
+            Assert.NotNull(answer);
+            Assert.Equal("BackendUnavailable", answer!.Value.GetProperty("error_class").GetString());
+            Assert.Equal(reported, answer.Value.GetProperty("message").GetString());
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.Backend.Sessions);
+            world.AssertNothingPostedContains(OpenAiKey);
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    /// <summary>
+    /// ...and so is one that waited for a save's own restart, made when no turn ran, that failed
+    /// so: the save is told, as a failed start is, and the call that waited is told the same.
+    /// </summary>
+    [Fact]
+    public void ATurnCallThatWaitedForASavesRestartThatFailedIsToldThatFailure()
+    {
+        string failure = "the `python` setting names 'C:\\Fictional\\FICT-gone\\swreview.exe', which does not exist";
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        using var hold = new ManualResetEventSlim(false);
+        try
+        {
+            world.Open();
+            world.Track("chat-1");
+            SaveAsATurnStarts(world, "first", Save(effort: "low"));
+            world.Backend.EndTurn("chat-1");
+            world.Backend.Hold = hold;
+            world.Backend.EarlyRestartFailure = new BackendStartException(failure);
+
+            var save = new Caller<bool>(() =>
+            {
+                world.Receive("settings.save", "second", Save(effort: "medium"));
+                return true;
+            });
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the save never began its restart");
+            var call = new Caller<BackendRequestException?>(() => world.Host.PageTurnRefusal());
+            Assert.False(call.Finishes(TimeSpan.FromMilliseconds(300)), "the call did not wait for the save's restart");
+
+            hold.Set();
+            Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
+            Assert.True(call.Finishes(TimeSpan.FromSeconds(10)), "the call never got an answer");
+
+            Assert.Equal(failure, world.Last("status").GetProperty("message").GetString());
+            BackendRequestException? refusal = call.Result;
+            Assert.NotNull(refusal);
+            Assert.Equal("BackendUnavailable", refusal!.ErrorClass);
+            Assert.Equal(failure, refusal.Message);
+            Assert.NotNull(world.Backend.Endpoint);
+            Assert.Empty(world.Backend.Restarts);
         }
         finally
         {
@@ -1434,8 +1575,80 @@ public sealed class DeferredRestartTests
             Assert.True(first.Finishes(TimeSpan.FromSeconds(10)), "the first caller never finished");
             Assert.True(second.Finishes(TimeSpan.FromSeconds(10)), "the second caller never finished");
             Assert.Equal(DeferredRestart.Outcome.Restarted, first.Result);
-            Assert.Equal(DeferredRestart.Outcome.NotPending, second.Result);
+            Assert.Equal(DeferredRestart.Outcome.RestartedMeanwhile, second.Result);
             Assert.Equal(1, restarts);
+            Assert.False(restart.Pending);
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    /// <summary>
+    /// A caller that waited for a restart another was making is told what became of it: made -
+    /// by another caller's Apply, or by a save - or failed, with that same failure. It never makes
+    /// a second attempt of its own, and is never told nothing was waiting.
+    /// </summary>
+    [Theory]
+    [InlineData("apply", false)]
+    [InlineData("apply", true)]
+    [InlineData("save", false)]
+    [InlineData("save", true)]
+    public void AWaiterIsToldWhatBecameOfTheRestartItWaitedFor(string maker, bool fails)
+    {
+        var failure = new BackendStartException("FICT the launcher has gone");
+        int attempts = 0;
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        Action attempt = () =>
+        {
+            Interlocked.Increment(ref attempts);
+            entered.Set();
+            release.Wait(TimeSpan.FromSeconds(10));
+            if (fails)
+            {
+                throw failure;
+            }
+        };
+        using var restart = NewRestart(() => DeferredRestart.Hold.None, attempt);
+        try
+        {
+            Assert.False(restart.Now(() => throw new TurnRunningException()));
+
+            var making = new Caller<bool>(() =>
+            {
+                try
+                {
+                    if (maker == "apply")
+                    {
+                        restart.Apply(out _);
+                    }
+                    else
+                    {
+                        restart.Now(attempt);
+                    }
+                }
+                catch (BackendStartException)
+                {
+                    // A save's own failure is thrown to the save.
+                }
+
+                return true;
+            });
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the restart was never begun");
+            var waiting = new Caller<(DeferredRestart.Outcome, Exception?)>(() =>
+                (restart.Apply(out Exception? theirs), theirs));
+            Assert.False(waiting.Finishes(TimeSpan.FromMilliseconds(300)), "the waiter did not wait for the restart being made");
+
+            release.Set();
+            Assert.True(making.Finishes(TimeSpan.FromSeconds(10)), "the restart never finished");
+            Assert.True(waiting.Finishes(TimeSpan.FromSeconds(10)), "the waiter never got an answer");
+
+            (DeferredRestart.Outcome outcome, Exception? told) = waiting.Result;
+            Assert.Equal(fails ? DeferredRestart.Outcome.Failed : DeferredRestart.Outcome.RestartedMeanwhile, outcome);
+            Assert.Same(fails ? failure : null, told);
+            Assert.Equal(1, attempts);
             Assert.False(restart.Pending);
         }
         finally
@@ -2122,8 +2335,14 @@ public sealed class DeferredRestartTests
         private int _restartsAsked;
         private bool _down;
 
-        /// <summary>Thrown by each restart the backend's own check lets through.</summary>
+        /// <summary>Thrown by each restart the backend's own check lets through, the old backend stopped.</summary>
         public Exception? RestartFailure { get; set; }
+
+        /// <summary>
+        /// Thrown by each restart the backend's own check lets through before it stops anything -
+        /// the launcher has gone, say - so the old backend is still up.
+        /// </summary>
+        public Exception? EarlyRestartFailure { get; set; }
 
         /// <summary>
         /// Whether the backend's own check asks the host's question, as production's does
@@ -2353,6 +2572,11 @@ public sealed class DeferredRestartTests
 
             lock (_gate)
             {
+                if (EarlyRestartFailure != null)
+                {
+                    throw EarlyRestartFailure;
+                }
+
                 if (RestartFailure != null)
                 {
                     _down = true;

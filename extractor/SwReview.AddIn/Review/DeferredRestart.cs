@@ -24,6 +24,8 @@ namespace SwReview.AddIn.Review;
 /// settings only then, so several saves during one turn restart it once, with the last of them.
 /// A save made when no turn runs restarts it at once (<see cref="Now"/>), under the same lock,
 /// and that restart is the one for the settings in force, so anything still waiting is dropped.
+/// A caller that waited for a restart someone else was making - or a save was - is told what
+/// became of it: made, or failed with that failure, and never "restarted" when it was not.
 ///
 /// <b>Nothing waits for a turn.</b> <see cref="Apply"/> answers at once, naming what holds the
 /// restart back, while something does; the only thing a caller waits for is a restart already
@@ -70,14 +72,17 @@ internal sealed class DeferredRestart : IDisposable
     /// <summary>What one <see cref="Apply"/> did.</summary>
     internal enum Outcome
     {
-        /// <summary>
-        /// No restart was waiting once the lock was taken: there was none, or another caller had
-        /// just made it.
-        /// </summary>
+        /// <summary>No restart was waiting when the call came: nothing was asked, nothing changed.</summary>
         NotPending,
 
         /// <summary>This call restarted the backend with the settings in force.</summary>
         Restarted,
+
+        /// <summary>
+        /// Another caller - the watcher, a review, a turn call or a save - made the restart while
+        /// this one waited for it: the backend this call was for has gone.
+        /// </summary>
+        RestartedMeanwhile,
 
         /// <summary>
         /// A turn holds the restart back - the look found one, or the backend's own check found
@@ -96,8 +101,10 @@ internal sealed class DeferredRestart : IDisposable
         NotAnswered,
 
         /// <summary>
-        /// The restart was tried and failed. The failure has been reported, and nothing waits
-        /// any more: the next save is the engineer's retry, as after any failed start.
+        /// The restart was tried and failed - by this call, or by the caller it waited for, whose
+        /// failure is this call's answer too. The failure has been reported once, by the caller
+        /// that made the attempt, and nothing waits any more: the next save is the engineer's
+        /// retry, as after any failed start.
         /// </summary>
         Failed,
 
@@ -141,6 +148,16 @@ internal sealed class DeferredRestart : IDisposable
     /// save, and the watcher counts its unanswered looks from that save on.
     /// </summary>
     private long _deferrals;
+
+    /// <summary>
+    /// One more each time a restart is made or tried and fails, by any caller or a save, with
+    /// <see cref="_lastFailure"/> what became of the last of them: a caller that waited for one
+    /// reads them against the count it saw before it waited, and is told what became of it.
+    /// </summary>
+    private long _ended;
+
+    /// <summary>The last restart's failure, or null when it was made.</summary>
+    private Exception? _lastFailure;
 
     private bool _disposed;
     private Thread? _watcher;
@@ -219,15 +236,16 @@ internal sealed class DeferredRestart : IDisposable
                 Defer();
                 return false;
             }
-            catch (Exception)
+            catch (Exception caught)
             {
                 // The restart for the settings in force was tried and failed. Retrying it when
-                // the turns end would fail the same way; the failure is the save's to report.
-                Drop();
+                // the turns end would fail the same way; the failure is the save's to report, and
+                // the answer of any caller that waited for it.
+                End(caught);
                 throw;
             }
 
-            Drop();
+            End(null);
             return true;
         }
     }
@@ -240,7 +258,7 @@ internal sealed class DeferredRestart : IDisposable
     public Outcome Apply(out Exception? failure)
     {
         failure = null;
-        Outcome? settled = Settled();
+        Outcome? settled = Settled(out long seen);
         if (settled.HasValue)
         {
             return settled.Value;
@@ -274,7 +292,16 @@ internal sealed class DeferredRestart : IDisposable
 
         lock (_restarting)
         {
-            settled = Settled();
+            // A restart made, or tried and failed, while this call waited for the lock - by
+            // another caller or a save - is this call's answer: it is told the backend restarted
+            // only when it did, and a failure as the caller that met it was.
+            if (EndedSince(seen, out Exception? theirs))
+            {
+                failure = theirs;
+                return theirs == null ? Outcome.RestartedMeanwhile : Outcome.Failed;
+            }
+
+            settled = Settled(out _);
             if (settled.HasValue)
             {
                 return settled.Value;
@@ -294,13 +321,13 @@ internal sealed class DeferredRestart : IDisposable
                 // Every failure, not only a BackendStartException: this runs on the watcher's
                 // thread or a proxied request's, where nothing may escape, and a restart that
                 // failed unseen is the silence this class exists to end.
-                Drop();
+                End(caught);
                 failure = caught;
                 Report(() => _failed(caught));
                 return Outcome.Failed;
             }
 
-            Drop();
+            End(null);
             Report(_restarted);
             return Outcome.Restarted;
         }
@@ -333,17 +360,34 @@ internal sealed class DeferredRestart : IDisposable
         }
     }
 
-    /// <summary>The outcome when there is nothing to restart, or null when a restart waits.</summary>
-    private Outcome? Settled()
+    /// <summary>
+    /// The outcome when there is nothing to restart, or null when a restart waits; and, read with
+    /// it, how many restarts have ended so far.
+    /// </summary>
+    private Outcome? Settled(out long ended)
     {
         lock (_state)
         {
+            ended = _ended;
             if (_disposed)
             {
                 return Outcome.Stopped;
             }
 
             return _pending ? (Outcome?)null : Outcome.NotPending;
+        }
+    }
+
+    /// <summary>
+    /// Whether a restart has ended since <paramref name="seen"/> was read, and if so its failure,
+    /// or null when it was made.
+    /// </summary>
+    private bool EndedSince(long seen, out Exception? failure)
+    {
+        lock (_state)
+        {
+            failure = _lastFailure;
+            return _ended != seen;
         }
     }
 
@@ -373,11 +417,14 @@ internal sealed class DeferredRestart : IDisposable
         }
     }
 
-    private void Drop()
+    /// <summary>A restart was made, or tried and failed: nothing waits, and waiters are told which.</summary>
+    private void End(Exception? failure)
     {
         lock (_state)
         {
             _pending = false;
+            _ended++;
+            _lastFailure = failure;
         }
     }
 

@@ -1366,7 +1366,9 @@ public sealed class ReviewHost : IDisposable
     /// backend, or waits for the one being made, so the review runs on the restarted backend
     /// with those settings and never on the old one. Answers false, having sent the refusal, when
     /// it cannot: something still holds the restart back, and the refusal says what; or the
-    /// restart failed, which has been reported as a failed start is. True when nothing waits.
+    /// restart failed - this call's, or the one it waited for - which has been reported as a
+    /// failed start is, and is this review's answer too. True when nothing waits, or once the
+    /// restart has been made.
     /// </summary>
     private bool RestartedForNewReview(string? id)
     {
@@ -1403,17 +1405,14 @@ public sealed class ReviewHost : IDisposable
     /// restarted with settings saved during a turn, or null to send it on as always. Such a call
     /// is for a chat of the backend being replaced, so it is never sent: while something holds
     /// the restart back it is refused, saying what; otherwise the restart is made first, or
-    /// waited for, and the call is answered `UnknownChat` - the class, status and flag the
-    /// restarted backend would answer it with, since that backend does not hold the chat - in
-    /// words that say why. Never throws, and asks nothing when nothing waits.
+    /// waited for. Once one has been made the call is answered `UnknownChat` - the class, status
+    /// and flag the restarted backend would answer it with, since that backend does not hold the
+    /// chat - in words that say why; when the restart failed, made by this call or by the one it
+    /// waited for, the call is answered with that failure, the old backend perhaps still up and
+    /// holding its chat. Never throws, and asks nothing when nothing waits.
     /// </summary>
     public BackendRequestException? PageTurnRefusal()
     {
-        if (!_restart.Pending)
-        {
-            return null;
-        }
-
         DeferredRestart.Outcome outcome = _restart.Apply(out Exception? failure);
         BackendRequestException? held = HeldBackBy(outcome);
         if (held != null)
@@ -1423,22 +1422,21 @@ public sealed class ReviewHost : IDisposable
 
         switch (outcome)
         {
+            case DeferredRestart.Outcome.NotPending:
+                return null;
+
+            case DeferredRestart.Outcome.Restarted:
+            case DeferredRestart.Outcome.RestartedMeanwhile:
+                // The backend the call was for has gone, and the chat with it.
+                return new BackendRequestException("UnknownChat", ChatEndedWithTheRestart, retryable: false);
+
             case DeferredRestart.Outcome.Failed:
                 return new BackendRequestException("BackendUnavailable", Redact(failure!.Message), retryable: true);
 
-            case DeferredRestart.Outcome.Stopped:
+            default:
+                // Stopped: the add-in is unloading, and its backend with it.
                 return new BackendRequestException(
                     "BackendUnavailable", "the review backend is stopping with the add-in.", retryable: false);
-
-            default:
-                // Restarted by this call, or by whoever got there first - the watcher, a review, a
-                // save: nothing else ends the wait, not even the watcher's giving up on a backend
-                // that does not answer. Either way the backend the call was for has gone, and the
-                // chat with it. Unless that restart failed, and there is no backend at all.
-                return _options.Backend.Endpoint == null
-                    ? new BackendRequestException(
-                        "BackendUnavailable", "the review backend is not running.", retryable: true)
-                    : new BackendRequestException("UnknownChat", ChatEndedWithTheRestart, retryable: false);
         }
     }
 
