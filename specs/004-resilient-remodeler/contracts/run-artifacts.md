@@ -36,7 +36,7 @@ source: one bad path join beside a source inside an EPDM vault writes into the v
 | `report.md` | `remodel/report.py` | prose | The engineer-facing summary |
 | `events.jsonl` | `agent/events.py` | feature 002 `contracts/chat-events.schema.json` | The agent run, same shape as a review, through the **extracted** sink |
 | `session.json` | the recorded `ToolRegistry` steps | feature 001 session schema | So `tool_result_ids` reference steps that exist |
-| `remodel.log` | `BridgeDispatcher` | one line per request (and, since 2026-09-28, a begin line ahead of it and the markers below) | Command, elapsed, gated members, and the **target path** of every mutating call. *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167, landed 2026-09-27):* plus one teardown line when a session ends without `remodel.close` - a tool-service re-attach or an add-in unload - carrying the gated set of the clean-up and its outcome (settings restored, copy closed, each failure); the same line goes to the tool-service log. A teardown writes no other file: `plan.json` stays `planned`, and `copy/` keeps the unsaved byte copy |
+| `remodel.log` | `BridgeDispatcher`; and, since 2026-10-19, the re-modeler's pane seat (`RemodelSeatGateLog`) | one line per request (and, since 2026-09-28, a begin line ahead of it and the markers below); and the pane seat's two `seat=` lines per action, below | Command, elapsed, gated members, and the **target path** of every mutating call. *Amended 2026-10-20 (owner decision 144A's second review; feature 011 T181):* the request lines are the `id=` and `command=` lines - a begin line and a completed line per request - and the `seat=` lines are the pane seat's, never a request; a count of requests counts request lines only, since a seat's closing line carries `status=` too. *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167, landed 2026-09-27):* plus one teardown line when a session ends without `remodel.close` - a tool-service re-attach or an add-in unload - carrying the gated set of the clean-up and its outcome (settings restored, copy closed, each failure); the same line goes to the tool-service log. A teardown writes no other file: `plan.json` stays `planned`, and `copy/` keeps the unsaved byte copy |
 
 Added 2026-09-28 after U27: `remodel.log` also carries timestamped
 `command=remodel.geometry stage=before <member>`, `stage=after <member>`, and (on a managed
@@ -59,7 +59,9 @@ T185, research R16.1):*
 - A `[<time>] id=<id> command=<command> begin` line for every request, written before the command
   runs - to the tool-service log always, and to `remodel.log` for a remodel command once its run
   exists - so a request that never completed still has a line. The completed line follows as
-  before; a reader counting requests counts completed lines.
+  before; a reader counting requests counts completed lines. *Amended 2026-10-20 (owner decision
+  144A's second review)*: completed request lines, those with `id=` and `command=`; the pane seat's
+  closing lines (`seat=`, below) carry `status=` as well and are not requests.
 - In `addin.log`, while a remodel plan or run is in flight, `active document changed during a
   remodel run: fan-out begin` and `... fan-out end` around the add-in's document-change fan-out,
   which `OpenDoc7` on the copy raises inside the bridge's open.

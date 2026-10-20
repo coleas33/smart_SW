@@ -1795,12 +1795,12 @@ probe's own guard (item 5, R11.2); and the lifecycle families on `IAssemblyDoc` 
 the drawing grammar's gaps - the `I` twins it missed and the writers its `Is` reader prefix let in
 (item 2, R11.4) - are refused. **Items 3 and 4 stay recorded**: the writers of other words on the
 covered interfaces, and the families on the interop's other interfaces, are as R10.4 leaves them;
-nothing was widened to read the whole interop. The tasks are T163 to T177 (Phase 10F), with T171
+nothing was widened to read the whole interop. The tasks are T163 to T181 (Phase 10F), with T171
 for the next sitting. SOLIDWORKS was not started: the C# tests run over fakes and the interop
 stand-ins, and the interop (`SolidWorks.Interop.sldworks` 32.5.0.48) was read as metadata only.
 Measured on the development machine: `SwReview.Extractor.Tests` 9,732 tests before and 9,913
-after, `SwReview.AddIn.Tests` 2,608 before and 2,670 after, all green, the build at zero warnings
-from scratch (`--no-incremental`).
+after, `SwReview.AddIn.Tests` 2,608 before and 2,670 after (2,691 after the second review's T178,
+R11.7a), all green, the build at zero warnings from scratch (`--no-incremental`).
 
 ### R11.1 The pane seat calls SOLIDWORKS through a gate of its own (T163, T164)
 
@@ -1877,9 +1877,13 @@ does, lets those bare spellings through: a guard judges the name a call site giv
 seat to its two keys is that its call sites name them qualified, which `SwRemodelSeatTests` pins call
 by call. R11.8 records `OpenDoc7`'s standing, and a closed allowlist, for the owner.
 
-**Tests.** `SwRemodelSeatTests` (add-in) places every interop call of both actions under the gate
-entry it is made under - a journal that notes, at each entry, how many calls each stand-in had
-recorded - so a call made outside the gate, or one more than listed, fails there; it pins
+**Tests.** `SwRemodelSeatTests` (add-in) places every interop call of both actions under the latest
+gate entry before it - a journal that notes, at each entry, how many calls each stand-in had
+recorded - so each call must follow an entry for its own member, the guard consulted before the
+call is made, and a call with no entry of its own before it, or one more than listed, fails there
+(*corrected on the second review, R11.7a*: this said a call made outside the gate fails there; the
+journal cannot tell a call made inside the gate's `Call` from one made just after the gate was
+asked about it); it pins
 `ActivateOrOpen`'s two ways, the activation by title without a rebuild and the writable open through
 the one request (`Silent | LoadModel = 17`, never `ReadOnly` or `ViewOnly`, asserted as the values set
 and as the integer they compose); an open that answers no document, refused naming the load errors
@@ -1909,7 +1913,14 @@ file and reason, and any other member a gate lets through failing it as before);
 allowlist guard; undone on the review, R11.7); and three hand-written lists of the product's gates -
 `GuardAnswers.EveryGateTheProductBuilds`, `DrawingOpenGuardTests.TheReadOnlyCheckIsABareReadEveryGuardAllows`
 and `ImportRepairDenylistTests.EveryGateTheProductBuildsRefusesThem` - which read
-`GuardSweep.ProductGates` now, each sweeping more guards than it did. No assertion was weakened.
+`GuardSweep.ProductGates` now, each sweeping more guards than it did; and
+`GuardAnswers.AllowlistsByName`, which gained the seat's guard as a third allowlist (*named here on
+the second review, R11.7a*). *Corrected on the second review*: this ended "No assertion was
+weakened". `EveryGateTheProductBuildsRefusesThem`, now `...LetsThroughOnlyTheNamedExceptions`,
+lets through exactly two named exceptions - `RemodelSeatGuard` the qualified
+`ISldWorks.ActivateDoc3`, and since T165 `RemodelProbeGuard` the bare `NewDocument` - each
+narrower than what the product allowed before: the seat called `ActivateDoc3` through no gate at
+all, and every read-only gate let `NewDocument` through.
 
 **Evidence**: commit `8e54c67`. Twelve throwaway mutations, each red (R11.5).
 
@@ -1921,7 +1932,11 @@ allowed by the read-only guard itself, so every read-only gate let them through,
 remodel` calls them. They stand now as `ForceRebuild3` and `SaveAs3` do: `list-writer-members.ps1` no
 longer excludes them, so the shared `ISldWorks` and `IFeatureManager` rows refuse them, and
 `RemodelProbeGuard`'s run-scoped members exempt the bare names its host gates, for the one gate built
-with that guard, which refuses to run while any document is open. The qualified spellings stay
+with that guard, which refuses to run while any document is open. (*Amended on the second review,
+R11.7a*: `ThrowawayPartExemptionTests.OnlyTheProbeRunBuildsTheProbesGuardOrCallsItsGate` holds the
+exemption to that gate - no product file but `Program.cs` names the guard, and the gate's factory
+is called by `probe remodel`'s run alone; the test it replaced read `new RemodelProbeGuard(`
+alone, T179.) The qualified spellings stay
 refused by every gate. A search of the product for each name, as a literal, a qualified key, a
 `nameof` and a call, finds only `probe remodel`'s own: `SwRemodelProbeHost.cs`'s gate keys and calls,
 its interface's method of that name and PROBE-5's executor and question (`RemodelProbe.cs`,
@@ -1946,8 +1961,11 @@ the new theory `TheProbesTwoWritersAreRefusedByEveryGateButTheProbesOwnBare` (bo
 audit fact, and the bare-writer example. Edited deliberately: `DocumentWriteFamilyTests` (`MoveToFolder`
 from `Allowed` to `Exceptions`), `DocumentLifecycleFamilyTests` (`NewDocument` from `Allowed` to
 `Exceptions`), `EveryExclusionHasOneOfTheContractsReasons` and `TheSanctionedCallsStayAllowed` (both
-names out, narrowed), and the bare-writer example. The table and `ReadOnlyGuard.Drawing.cs`
-regenerated from one run, 735 new names; the creation table unchanged.
+names out, narrowed), the bare-writer example, and
+`DrawingFamilyReadAuditTests.NoLiteralOfTheProductSourceIsRefusedByTheTableExceptTheNamedOnes`,
+which judges a literal of the probe host its guard lets through as the probe's own call
+(`IsTheProbesOwnCall`; *named here on the second review, R11.7a*). The table and
+`ReadOnlyGuard.Drawing.cs` regenerated from one run, 735 new names; the creation table unchanged.
 
 ### R11.3 The lifecycle families on `IAssemblyDoc` (T167, T168)
 
@@ -1997,6 +2015,9 @@ test's reader prefixes and writer grammar.
 
 Each fix taken out once, by an exact replacement in one file, the suite built and the named tests
 run, then the file restored byte for byte; the build at the end is from scratch.
+*M34 to M40, on the second review (R11.7a)*: the behaviour T178's and T179's tests pin, changed
+the same way once each; the tests were written against the code as it stood and were green, and
+each change is red.
 
 | Id | Taken out | Red |
 |---|---|---|
@@ -2033,6 +2054,13 @@ run, then the file restored byte for byte; the build at the end is from scratch.
 | M31 | open_copy: no check that the document activated is the copy | 2 cases of 2 tests: `ActivateOrOpen_AnActivationThatAnswersAnotherDocumentIsRefused`, `ActivateOrOpen_AnOpenCopyIsActivatedByItsTitleWithNoRebuildAndNothingIsOpened` |
 | M32 | no begin line | 19 cases of 14 tests: `ACallThatThrowsReachesTheCallerUnchangedAndTheLogNamesItsType`, `APlanRunsThroughTheSeatAdapterAndEndsItsSessionStartIsRefusedByTheSwitchAndDiscardDeletesTheCopy`, `ActivateOpenCopy_ADocumentThatIsNotTheCopyIsNeitherActivatedNorAskedItsTitle` and 11 more |
 | M33 | no outcome on the closing line | 11 cases of 8 tests: `APlanRunsThroughTheSeatAdapterAndEndsItsSessionStartIsRefusedByTheSwitchAndDiscardDeletesTheCopy`, `ActivateOpenCopy_ADocumentThatIsNotTheCopyIsNeitherActivatedNorAskedItsTitle`, `ActivateOpenCopy_EachWayItEndsIsTheLinesOutcome` and 5 more |
+| M34 | the copy path: a share's path no longer a full path (`IsFullyQualified` refusing every `\\` path) | 9 cases of 1 test: `APathInARunRootAPilotHasIsTheRunsCopy` |
+| M35 | the copy path: a run folder directly under a share's root refused as a root | 3 cases of 1 test: `APathInARunRootAPilotHasIsTheRunsCopy` |
+| M36 | the copy path: a run folder directly under a drive's root refused as a root | 3 cases of 1 test: `APathInARunRootAPilotHasIsTheRunsCopy` |
+| M37 | the same-path rule case sensitive (`OpenDrawingDiscovery.SamePath`, which the seat applies) | 3 cases of 1 test: `ACopyWhosePathSolidworksAnswersInAnotherCaseIsTheCopy` |
+| M38 | the probe's guard named by a target-typed `new()` in another product file (the probe host) | 1 case of 1 test: `OnlyTheProbeRunBuildsTheProbesGuardOrCallsItsGate` |
+| M39 | a second call of the probe's gate in `Program.cs`, outside `ExecuteProbeRemodel` (the suppress-test's gate factory) | 1 case of 1 test: `OnlyTheProbeRunBuildsTheProbesGuardOrCallsItsGate` |
+| M40 | a call of the probe's gate from another console file | 1 case of 1 test: `OnlyTheProbeRunBuildsTheProbesGuardOrCallsItsGate` |
 
 ### R11.6 The next sitting (T171)
 
@@ -2061,9 +2089,11 @@ names. Its findings, and what each became:
   - and the seat's gate factory, `SwRemodelSeat.Gate`, was reachable from any add-in file, which the
   construction test did not read. `Judged` is back to the two guards it named before the decision;
   the audit exempts the seat's keys in the seat's own file alone (`IsTheSeatsOwnKey`), and
-  `TheSeatsOwnKeysAreLiteralsOfItsOwnFileAlone` pins them there; `OnlyThePaneSeatNamesTheGuardOrItsGate`
-  replaces the construction test, reading any naming of the guard, `new()` included, and any use of
-  the gate factory outside the seat (T173).
+  `TheSeatsOwnKeysAreLiteralsOfItsOwnFileAlone` pins them there - an edit of
+  `NoLiteralOfTheProductSourceIsRefusedByTheTableExceptTheNamedOnes`, made deliberately (*named on the
+  second review, R11.7a*); `OnlyThePaneSeatNamesTheGuardOrItsGate` replaces the construction test,
+  reading any naming of the guard, `new()` included, and any use of the gate factory outside the
+  seat (T173).
 - **The guard does not allow only the seat's own calls** (finding 3, the owner's): it hands every bare
   name to the read-only guard, as the decision's chosen option and `DrawingOpenGuard` do, so bare
   `CloseDoc`, `OpenDoc6` and `OpenDoc7` pass it. The test that said it "refuses any other call" is
@@ -2110,6 +2140,62 @@ names. Its findings, and what each became:
 **Evidence**: commit `a096bae`, with M23 to M33 of R11.5. The tests were written before the code
 they pin, and each change was then taken out once: every mutation is red.
 
+### R11.7a The second review: what it found and what changed (T178 to T181)
+
+**Source.** A second independent review, of the branch at `9e2af88` - the decision's commits, the
+first review's fixes and their records, with main merged - on 2026-10-20, found no must-fix. Its
+findings - two should-fix, four nits numbered N4 to N7, and four points for the owner - and what
+each became:
+
+- **No test took the run-root forms a pilot most likely has** (F1, should-fix). The seat's tests
+  listed fourteen refused paths, but the only accepted input was the canonical `C:\Fictional\...`
+  path and its padded and forward-slash spellings, so an edit to `RemodelSeatCopyPath.IsFullyQualified`
+  or to its root check that refused every share path, or a run folder directly under a share's root,
+  would have passed the whole suite; and the default run root, the Documents folder, is a share when
+  Documents is redirected. `APathInARunRootAPilotHasIsTheRunsCopy` takes six fictional paths - a
+  share's, the same with `/` separators, a run folder directly under a share's root and under a
+  mapped drive's, a path with spaces, and `COPY\...sldprt` in another case - by every way the seat
+  reaches the copy, asserting the canonical form handed to the lookup and to the open's request and
+  the run folder its lines are written beside; and `ACopyWhosePathSolidworksAnswersInAnotherCaseIsTheCopy`
+  takes a copy whose path SOLIDWORKS answers in another letter case (T178; M34 to M37, R11.5).
+- **The probe guard's construction test was narrower than the seat's** (F2, should-fix). It matched
+  `new [ns.]RemodelProbeGuard(` alone, so a `RemodelProbeGuard g = new();` in any product file, or a
+  second caller of `Program.RemodelProbeGate`, would have given another gate the bare `NewDocument`
+  and `MoveToFolder` with every test green, and R11.2's "the one gate built with that guard" rests on
+  it. `OnlyTheProbeRunBuildsTheProbesGuardOrCallsItsGate` replaces it, in the seat's test's shape: no
+  product file but `Program.cs` names the guard, `new()` included; there it is named once, in the
+  gate factory; and the factory is named where it is declared and where `ExecuteProbeRemodel` calls
+  it, and nowhere else (T179; M38 to M40).
+- **The "Edited deliberately" lists were incomplete** (N4).
+  `NoLiteralOfTheProductSourceIsRefusedByTheTableExceptTheNamedOnes` gained `IsTheProbesOwnCall`
+  (T165) and `IsTheSeatsOwnKey` (T173), and `GuardAnswers.AllowlistsByName` gained the seat's guard
+  (T163); and R11.1's "No assertion was weakened" was not the plain truth. R11.1, R11.2 and R11.7,
+  and T163, T165 and T173, say so now (T181).
+- **Comments still untrue after T176** (N5): `SwGate`'s "each from its one construction site", where
+  `RemodelGuard` is built in two places and `probe standards` and `dump` pass
+  `ReadOnlyCallGuard.Instance` explicitly; `ICallGuard`'s "each built in its own place"; and
+  `Program.StandardsProbeGate`'s and `CommandLineOptionsTests`' "the only other ICallGuard in the
+  product" (T180).
+- **004's records of `remodel.log`** (N6): `run-artifacts.md`'s row named `BridgeDispatcher` as its
+  only writer, one line per request; its "a reader counting requests counts completed lines" would
+  now count the seat's closing lines, which carry `status=` too; and `data-model.md` was stale the
+  same way. They say now that the request lines are the `id=` and `command=` lines and the `seat=`
+  lines the pane seat's, and that a count of requests counts request lines only. No reader counts
+  `status=` lines today - the report reads `target=` alone, and the test plan counts `stage=` and
+  `seat=` lines - so the change is to the records only (T181).
+- **What the seat's journal pins** (N7): R11.1 said "a call made outside the gate ... fails there",
+  but the journal places each call under the latest gate entry before it, so it cannot tell a call
+  made inside the gate's `Call` from one made just after the gate was asked about its key; it pins
+  that the guard is consulted for each call before the call is made. R11.1 and the test's summaries
+  say so (T180, T181).
+- **For the owner**: the `..` asymmetry between the seat and the run folders the host makes, Open
+  copy during a run once Start is on, the grammar's verbs read as prefixes, and the reviewer's view
+  of a closed allowlist for the seat - R11.8 items 5, 9, 10 and 2.
+
+**Evidence**: commits `742a4b5` (T178), `2dd34b4` (T179) and `a851d0c` (T180), and the records
+commit that adds T181; M34 to M40 of R11.5, each red, and under each of M38 to M40 only the new test
+of its class.
+
 ### R11.8 Found on the way, and left for the owner
 
 Nothing here was changed; each is the owner's call.
@@ -2128,6 +2214,8 @@ Nothing here was changed; each is the owner's call.
    `CloseDoc`, `OpenDoc6`, `OpenDoc7` and any writer the denylist misses. The seat's surface is closed
    - its two keys and five bare reads, pinned call by call - so an allowlist of those seven names
    would be strictly narrower at no cost. The guard keeps the chosen shape until the owner says.
+   *The second review's view (R11.7a)*: "cheap, strictly narrower: two keys plus the five reads; I
+   would take it" - put to the owner as the recommended option, and not built.
 3. **Does the constitution's 2(b) reach the seat?** (the review's finding 11). 2(b) has the target
    document's path, session tag and COM identity re-verified before each write. The seat activates a
    document and opens one writable, and writes nothing to either; it checks the path, and after the
@@ -2142,7 +2230,13 @@ Nothing here was changed; each is the owner's call.
    `RunDirectoryOf` only, the pane seat its stricter rule; neither ties the run folder to the host's
    run root, as `RemodelHost.IsRemodelCopy` does, so neither can tell this run's copy from another's -
    the callers resolve that. One `RemodelCopy` rule that returns the canonical path, for both seats,
-   would be DRY.
+   would be DRY. *Added on the second review (R11.7a)*: the `..` asymmetry. The seat refuses `..` in
+   the path it is handed; `BridgeDispatcher.BindRemodelRun` canonicalizes it away; and
+   `RunFolders.Create` returns `Path.Combine(runRoot, stem)` unnormalized. So under a run root such
+   as `C:\work\..\runs` every plan ends `CopyNotActive` - retryable, so Plan loops - and the message
+   does not point at the setting. A `\\?\` path, likewise, the bridge's `IsFullyQualified` accepts
+   and the seat refuses. Either `RunFolders.Create` returns `Path.GetFullPath` of the folder, or the
+   seat checks only the canonical form.
 6. **The allowlist guards, written three times** (the review's finding 7). `DrawingOpenGuard`,
    `RemodelSeatGuard` and, with a fourth answer, `RemodelGuard` write the same three answers, and the
    read audit's `Judged` and the creation tests' `AllowlistsByName` name the guards by type. A shared
@@ -2157,3 +2251,13 @@ Nothing here was changed; each is the owner's call.
    decision names `IAssemblyDoc`, so it reads four.
 8. **`RemodelGuardTests`' example is R10.4 item 3's.** Should the owner refuse the writers of other
    words, `IModelDoc2.DeleteConfiguration2` among them, the example needs another member again.
+9. **Open copy during a run** (the second review; there before decision 144A). `RemodelHost.OpenCopy`
+   has no busy check, where `DiscardCopy` refuses while its run is in flight, and the page leaves
+   **Open copy** enabled during a run (`remodel.js`, which disables it only when there is no run).
+   Once Start is on, Open copy pressed mid-run would activate the copy between the run's bridge
+   requests. It cannot be reached in this build, whose Start is switched off.
+10. **The grammar's verbs are read as prefixes** (the second review). A reader whose name starts
+    with a verb's letters - one named like `ClosestDistance`, or its twin `IClosestDistance` - on
+    one of the 28 families would be read as a writer and refused. None is today: the grammar's
+    matches grew from 646 to 652 by the six names R11.4 meant. After an interop upgrade, the read
+    audit would catch such a name the product reads.

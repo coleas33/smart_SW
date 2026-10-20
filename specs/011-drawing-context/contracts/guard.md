@@ -341,4 +341,8 @@ and that no product file but the seat names the guard or its gate, and the add-i
 `SwRemodelSeatTests` the seat's every call, placed under the gate entry it is made under, its open
 options (`Silent | LoadModel = 17`, never `ReadOnly` or `ViewOnly`), its scope and its log; section 5
 says how the sweeps read the guard, and the read audit exempts the seat's two keys in the seat's own
-file alone. Task T171 runs it at the next sitting.
+file alone. *Amended 2026-10-20 (decision 144A's second review, T178)*: the scope both ways - the
+fourteen paths the seat refuses, and six it takes, the run-root forms a pilot most likely has (a
+share's path with either separator, a run folder directly under a share's or a mapped drive's root,
+spaces, the copy folder and extension in another case) - and a copy whose path SOLIDWORKS answers in
+another letter case. Task T171 runs it at the next sitting.

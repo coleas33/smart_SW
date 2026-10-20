@@ -370,7 +370,11 @@ so `RemodelProbeGuard` exempts exactly the ones it calls - the recipe's box, cut
 shell and folder, the profile sketches, and PROBE-8's cylinder - under the bare names
 `SwRemodelProbeHost` gates them by, and no other. The exemption is the throwaway part's scope: the
 guard is built only by `probe remodel`'s gate (`Program.RemodelProbeGate`), which refuses to run
-while any document is open and addresses only the part it created with `NewDocument`.
+while any document is open and addresses only the part it created with `NewDocument`. *Amended
+2026-10-20 (feature 011, owner decision 144A's second review, T179)*:
+`ThrowawayPartExemptionTests.OnlyTheProbeRunBuildsTheProbesGuardOrCallsItsGate` holds it so - no
+product file but `Program.cs` names the guard, `new()` included, and the gate's factory is called
+by `probe remodel`'s run alone.
 `ThrowawayPartExemptionTests` pins the set to the probe host's own literals and asserts that every
 other gate the product builds refuses each member, bare or qualified, and that `RemodelProbeGuard`
 itself refuses every other member of the tables and every interface-qualified spelling of its own
