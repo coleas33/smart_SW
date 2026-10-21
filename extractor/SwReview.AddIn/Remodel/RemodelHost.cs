@@ -555,6 +555,7 @@ public sealed class RemodelHost : IDisposable
         {
             RunRootsInForce = () => options.RunRootsInForce(),
             RunRootSaved = () => options.RunRootSaved(),
+            RunRootProbe = () => options.RunRootProbe,
             LogFolder = options.LogFolder,
             EntityResolver = options.EntityResolver,
             Opener = options.Opener,
@@ -1338,7 +1339,7 @@ public sealed class RemodelHost : IDisposable
             string runDirectory;
             try
             {
-                runDirectory = RunFolders.CreateForRemodel(runRoot, document.Path, _options.Now());
+                runDirectory = RunFolders.CreateForRemodel(runRoot, document.Path, _options.Now(), _options.RunRootProbe);
             }
             catch (Exception failure)
             {
@@ -1848,7 +1849,7 @@ public sealed class RemodelHost : IDisposable
                 return;
             }
 
-            if (!RunFolders.IsUnder(run.RunDirectory, runRoot))
+            if (!RunFolders.IsUnder(run.RunDirectory, runRoot, _options.RunRootProbe))
             {
                 _actions.SendError(id, "RunRootChanged", StartRunRootChangedMessage, retryable: false);
                 return;

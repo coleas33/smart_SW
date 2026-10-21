@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using SwReview.AddIn.Native;
 using SwReview.AddIn.Review;
 
@@ -68,6 +69,21 @@ internal sealed class FakeRunRootProbe : IRunRootProbe
 
     /// <summary>A probe that answers every drive as local and every folder as reached by its own path.</summary>
     public static FakeRunRootProbe Local() => new FakeRunRootProbe();
+
+    /// <summary>
+    /// <see cref="Local"/>, but with every folder from the drive's root down to <paramref name="folder"/> there and every
+    /// other part missing: a run root below it not made yet, as the rule's walk reads it (the review of owner decision 160A).
+    /// </summary>
+    public static FakeRunRootProbe ExistingDownTo(string folder)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (string? at = WindowsRunRootProbe.LexicalFullPathOf(folder); at != null && at.Length > 3; at = Path.GetDirectoryName(at))
+        {
+            existing.Add(at);
+        }
+
+        return new FakeRunRootProbe { Existing = existing };
+    }
 
     /// <summary>
     /// The things the rule refuses a run root as, for a host's tests to be refused each way - the fifth, a

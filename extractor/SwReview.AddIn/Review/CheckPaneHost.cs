@@ -70,6 +70,12 @@ public sealed class CheckPaneHostOptions
     /// </summary>
     public Func<string?> RunRootSaved { get; set; } = () => null;
 
+    /// <summary>
+    /// What the owner's run root rule reads of Windows: the run folders are handed it for the newest check found and for
+    /// the folders held to the run root (the review of owner decision 160A). Windows' own by default.
+    /// </summary>
+    public Func<IRunRootProbe> RunRootProbe { get; set; } = () => Native.WindowsRunRootProbe.Instance;
+
     /// <summary>`check.start` for the Model check tab, `standards.start` for the Standards tab.</summary>
     public string StartType { get; }
 
@@ -196,6 +202,7 @@ public sealed class CheckPaneHost : IDisposable
         {
             RunRootsInForce = () => options.RunRootsInForce(),
             RunRootSaved = () => options.RunRootSaved(),
+            RunRootProbe = () => options.RunRootProbe(),
             LogFolder = () => options.LogFolder(),
             EntityResolver = () => options.EntityResolver(),
             Opener = () => options.Opener(),
@@ -372,7 +379,7 @@ public sealed class CheckPaneHost : IDisposable
         }
 
         string? directory = RunFolders.NewestCheckFolder(
-            _options.RunRoot(), _options.LatestCheckSuffix!);
+            _options.RunRoot(), _options.LatestCheckSuffix!, _options.RunRootProbe());
         if (directory == null)
         {
             return null;

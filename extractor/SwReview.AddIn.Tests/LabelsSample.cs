@@ -46,10 +46,11 @@ internal static class LabelsSample
 
     /// <summary>
     /// A run root the run root rule refuses (owner decision 154A): the words file's sentence for it, true since the
-    /// reviews of 154A's merge (F1) of a folder name ending in a space or a period too.
+    /// reviews of 154A's merge (F1) of a folder name ending in a space or a period too, and since the review of owner
+    /// decision 160A of a name Windows cannot use for a folder.
     /// </summary>
     public const string RunRootRefused =
-        "Runs are made only in a local folder reached by its own path - not on a network share, not through a link, and with no folder name ending in a space or a period - and the add-in must be able to check that it is one. Choose a local folder for runs in Settings.";
+        "Runs are made only in a local folder reached by its own path - not on a network share, not through a link, and with folder names Windows can use: none longer than 255 characters, none with \\ / : * ? \" < > | or a control character, none ending in a space or a period - and the add-in must be able to check that it is one. Choose a local folder for runs in Settings.";
 
     public static string Json() => JsonSerializer.Serialize(Value());
 

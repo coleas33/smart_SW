@@ -525,13 +525,13 @@ public sealed class RunRootRuleTests : IDisposable
         FakeRunRootProbe probe = FakeRunRootProbe.Local();
 
         RunRootVerdict verdict = RunRootRule.Judge(runRoot, probe);
-        Assert.Equal("InvalidFolderName", verdict.ToString());
+        Assert.Equal(RunRootVerdict.InvalidFolderName, verdict);
         Assert.Empty(probe.Asked);
         Assert.Empty(probe.Normalized);
         Assert.Equal(
             "The folder chosen for runs has a name Windows cannot use for a folder, so the run root was not "
-            + "changed; the other settings were saved. Use folder names of at most 255 characters, with no "
-            + "invalid characters, then save again.",
+            + "changed; the other settings were saved. Use folder names of at most 255 characters, with none of "
+            + "\\ / : * ? \" < > | and no control characters in them, then save again.",
             RunRootRule.ChosenRefusal(verdict));
     }
 
@@ -568,7 +568,7 @@ public sealed class RunRootRuleTests : IDisposable
     public void AFolderNameLongerThanWindowsAllowsIsRefusedBeforeAnythingIsAsked()
     {
         FakeRunRootProbe tooLong = FakeRunRootProbe.Local();
-        Assert.Equal("InvalidFolderName", RunRootRule.Judge(Fictional + @"\" + new string('a', 256) + @"\runs", tooLong).ToString());
+        Assert.Equal(RunRootVerdict.InvalidFolderName, RunRootRule.Judge(Fictional + @"\" + new string('a', 256) + @"\runs", tooLong));
         Assert.Empty(tooLong.Asked);
         Assert.Empty(tooLong.Normalized);
 
@@ -836,6 +836,14 @@ public sealed class RunRootRuleTests : IDisposable
         + "drive, and runs are made only in a local folder reached by its own path, so nothing was checked. The "
         + "folder chosen for runs in Settings on the Review tab is not in force until the review backend restarts "
         + "with it: save the settings again to retry the restart, then press Model check again.")]
+    [InlineData(
+        RunRootVerdict.InvalidFolderName,
+        "nothing was checked",
+        RunRootRule.InSettingsOnTheReviewTab,
+        "press Model check again",
+        "The run root in force has a name Windows cannot use for a folder, so nothing was checked. The folder chosen "
+        + "for runs in Settings on the Review tab is not in force until the review backend restarts with it: save the "
+        + "settings again to retry the restart, then press Model check again.")]
     public void ARunStartUnderARefusedRunRootWhileAnotherIsChosenSaysToRetryTheRestart(
         RunRootVerdict verdict, string notDone, string where, string wayOn, string words)
     {
@@ -1029,7 +1037,7 @@ public sealed class RunRootRuleTests : IDisposable
 
         Assert.Equal(RunRootEntry.Unreadable, WindowsRunRootProbe.Instance.EntryOf(tooLong));
         Assert.Equal(RunRootEntry.Missing, WindowsRunRootProbe.Instance.EntryOf(Path.Combine(_root, new string('a', 255))));
-        Assert.Equal("InvalidFolderName", RunRootRule.Judge(Path.Combine(tooLong, "runs"), WindowsRunRootProbe.Instance).ToString());
+        Assert.Equal(RunRootVerdict.InvalidFolderName, RunRootRule.Judge(Path.Combine(tooLong, "runs"), WindowsRunRootProbe.Instance));
     }
 
     /// <summary>

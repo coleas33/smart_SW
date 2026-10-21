@@ -574,6 +574,7 @@ public sealed class ReviewHost : IDisposable
         {
             RunRootsInForce = () => RunRootsInForce,
             RunRootSaved = () => _settings.RunRoot,
+            RunRootProbe = () => _options.RunRootProbe,
             LogFolder = () => _options.LogFolder,
             EntityResolver = () => _options.EntityResolver,
             Opener = () => _options.Opener,
@@ -2381,7 +2382,7 @@ public sealed class ReviewHost : IDisposable
         if (document == null || !document.IsAttachable) return;
         if (Reviews().Any(record => document.IsSameDocument(record.Document))) return;
 
-        SessionRecord? found = RunFolders.FindNotSentReview(RunRoot, document, _options.OpenSessionHead);
+        SessionRecord? found = RunFolders.FindNotSentReview(RunRoot, document, _options.OpenSessionHead, _options.RunRootProbe);
         if (found == null) return;
         lock (_sessionsLock)
         {
@@ -2589,7 +2590,7 @@ public sealed class ReviewHost : IDisposable
         if (runRoot == null) return;
         try
         {
-            string directory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now());
+            string directory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now(), _options.RunRootProbe);
             PostStatus("extracting", "Extracting saved evidence for engineering context; no review tokens used.");
             DumpSummary summary = _options.Dump.Run(directory, message => PostStatus("extracting", message));
             if (!SameDocument(_options.CurrentDocument(), document)
@@ -2865,7 +2866,7 @@ public sealed class ReviewHost : IDisposable
         string runDirectory;
         try
         {
-            runDirectory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now());
+            runDirectory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now(), _options.RunRootProbe);
         }
         catch (Exception failure)
         {
@@ -3262,7 +3263,7 @@ public sealed class ReviewHost : IDisposable
             return false;
         }
 
-        if (!RunFolders.IsUnder(runDirectory, runRoot))
+        if (!RunFolders.IsUnder(runDirectory, runRoot, _options.RunRootProbe))
         {
             SendError(id, "RunRootChanged", runRootChangedWords, retryable: false);
             return false;

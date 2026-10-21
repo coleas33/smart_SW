@@ -169,6 +169,7 @@ public sealed class ModelCheckHost : IDisposable
         {
             RunRootsInForce = () => options.RunRootsInForce(),
             RunRootSaved = () => options.RunRootSaved(),
+            RunRootProbe = () => options.RunRootProbe,
             Backend = () => options.Backend(),
             BackendStartFailed = () => options.BackendStartFailed(),
             CurrentDocument = () => options.CurrentDocument(),
@@ -296,7 +297,7 @@ public sealed class ModelCheckHost : IDisposable
         try
         {
             runDirectory = RunFolders.CreateForCheck(
-                runRoot, document.Path, _options.Now());
+                runRoot, document.Path, _options.Now(), _options.RunRootProbe);
         }
         catch (Exception failure)
         {

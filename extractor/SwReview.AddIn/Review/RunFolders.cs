@@ -23,14 +23,14 @@ namespace SwReview.AddIn.Review;
 /// inside a CLI's working-directory switch, where the message no longer points here.
 ///
 /// <b>In its full, long-name form</b> (owner decisions 148A and 160A; feature 011 research R12.3): every folder
-/// made, and every folder found, is named under the existing run root's long-name form, whatever spelling
-/// of it the setting holds. The folder is handed on as
-/// it is named: to the backend, whose rule for a run folder refuses a <c>..</c> segment rather than
+/// made, and every folder found, is named under the existing run root's final path - its long-name form, in the
+/// disk's own letter case since the decision's review - whatever spelling of it the setting holds. The folder is
+/// handed on as it is named: to the backend, whose rule for a run folder refuses a <c>..</c> segment rather than
 /// resolve it, to the bridge's bind, and, as the folder of a re-modeler's copy, to the pane seat,
 /// whose rule for the copy's path refuses one too - so under a run root spelled
 /// <c>C:\work\..\runs</c> a folder named as it was spelled ended every plan before it began
-/// (research R11.8 item 5). A folder made and the same folder found are spelled one way, which the
-/// review host's comparison of a removed review's folder with the one its search finds relies on.
+/// (research R11.8 item 5). A folder made and the same folder found are spelled one way, letter for letter,
+/// which the review host's comparison of a removed review's folder with the one its search finds relies on.
 /// </summary>
 public static class RunFolders
 {
@@ -483,12 +483,15 @@ public static class RunFolders
 
         string stem = timestamp.ToString(TimestampFormat, CultureInfo.InvariantCulture) + "-" + label;
 
-        // The caller has judged the root before anything is made (154A). Once it exists, read its
-        // long name once, outside any lock, so the backend and the re-modeler's seat name it alike (160A).
+        // Every caller but the hidden Terminal tab's has judged the root by the run root rule before anything
+        // is made (154A); the Terminal tab judges nothing. Once the root exists, read its final path once,
+        // outside any lock - its long-name form in the disk's own letter case, which the rule hands a search
+        // and the backend's own resolution reads - so the backend, the re-modeler's seat and a later search
+        // name it alike, letter for letter (160A, and its review).
         string root = FullFormOf(runRoot);
         Directory.CreateDirectory(root);
-        root = (probe ?? Native.WindowsRunRootProbe.Instance).LongPathOf(root)
-            ?? throw new IOException("The run root's long name could not be read.");
+        root = (probe ?? Native.WindowsRunRootProbe.Instance).FinalPathOf(root)
+            ?? throw new IOException("The run root's full name on the disk could not be read.");
 
         // Two reviews of the same document inside one second is a double-click, not an error,
         // and the second one must not be written into the first one's folder.
@@ -509,8 +512,8 @@ public static class RunFolders
     /// below. The run root rule judges the same folder from the root's
     /// text without reading anything (owner decision 154A and its reviews, <see cref="RunRootRule"/>), where
     /// this form can expand an 8.3 short name by reading the folders of the path - and, under the newer path
-    /// handling, can leave one as written. Creation and searches therefore read the existing root's long
-    /// form explicitly, outside any lock (decision 160A), before any run folder is named under it.
+    /// handling, can leave one as written. Creation and searches therefore read the existing root's final
+    /// path explicitly, outside any lock (decision 160A, and its review), before any run folder is named under it.
     /// </summary>
     private static string FullFormOf(string runRoot) => Path.GetFullPath(runRoot);
 
@@ -518,7 +521,8 @@ public static class RunFolders
     /// The search's root in its long-name form, only after the run-root rule has checked every existing
     /// ancestor. Searches can run before a run start has judged the root; no long-name lookup or enumeration
     /// may read over a share or through a link. The rule's final-path reading already names an existing root
-    /// in long names, and its 8.3 comparison reads that long name once, so reuse that answer.
+    /// in long names, in the disk's own letter case - checked against its long-name form once when the root is
+    /// spelled with 8.3 names - so reuse that answer.
     /// </summary>
     private static string? ExistingLongRoot(string runRoot, IRunRootProbe? probe)
     {

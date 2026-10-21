@@ -278,8 +278,10 @@ public static class RunRootRule
             return RunRootVerdict.Unverified;
         }
 
+        // The final path, not the long-name form, which keeps the letter case a long name is written in: a
+        // search's root is spelled as the folder a run is made in is named (the review of decision 160A).
         if (!SameFolder(final, longForm)) return RunRootVerdict.Link;
-        if (SameFolder(reached, full)) existingLongRoot = longForm;
+        if (SameFolder(reached, full)) existingLongRoot = final;
         return RunRootVerdict.Accepted;
     }
 
@@ -341,13 +343,14 @@ public static class RunRootRule
     /// A save's words for a folder chosen for runs in Settings that the rule refuses (the owner's follow-up to
     /// decision 154A): the save goes through, and this one field is not saved - the run root in force is
     /// unchanged and every other setting was saved - so the words speak of the folder chosen, not of the run
-    /// root.
+    /// root. A name Windows cannot use for a folder is told with the characters a name cannot have, so the engineer
+    /// can see what to take out (the review of owner decision 160A).
     /// </summary>
     public static string ChosenRefusal(RunRootVerdict verdict) =>
         verdict == RunRootVerdict.InvalidFolderName
         ? "The folder chosen for runs has a name Windows cannot use for a folder, so the run root was not "
-            + "changed; the other settings were saved. Use folder names of at most 255 characters, with no "
-            + "invalid characters, then save again."
+            + "changed; the other settings were saved. Use folder names of at most 255 characters, with none of "
+            + "\\ / : * ? \" < > | and no control characters in them, then save again."
         : "The folder chosen for runs " + Kind(verdict) + Rule
         + ", so the run root was not changed; the other settings were saved. Choose a local folder for runs, then save again.";
 

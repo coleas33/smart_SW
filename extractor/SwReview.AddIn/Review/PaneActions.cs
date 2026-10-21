@@ -109,6 +109,12 @@ public sealed class PaneActionsOptions
     /// </summary>
     public Func<string?> RunRootSaved { get; set; } = () => null;
 
+    /// <summary>
+    /// What the run root rule reads of Windows, as the owner's own rule reads it: the run folders are handed it when a
+    /// folder is held to the run root (the review of owner decision 160A). Windows' own by default.
+    /// </summary>
+    public Func<IRunRootProbe> RunRootProbe { get; set; } = () => Native.WindowsRunRootProbe.Instance;
+
     public PaneRunLookup Runs { get; }
 
     /// <summary>%LOCALAPPDATA%\SwReview\logs by default; what `log.open` opens.</summary>
@@ -461,7 +467,8 @@ public sealed class PaneActions
         // UNC and Win32 device paths are refused by name as well as by containment: a run root
         // that is itself a share would otherwise make `\\server\share\...` a descendant.
         string canonical = full;
-        if (full.StartsWith(@"\\", StringComparison.Ordinal) || !roots.Any(root => RunFolders.IsUnder(canonical, root)))
+        if (full.StartsWith(@"\\", StringComparison.Ordinal)
+            || !roots.Any(root => RunFolders.IsUnder(canonical, root, _options.RunRootProbe())))
         {
             SendError(
                 id,
@@ -573,7 +580,7 @@ public sealed class PaneActions
             return true;
         }
 
-        if (!RunFolders.IsUnder(runDirectory, runRootNow))
+        if (!RunFolders.IsUnder(runDirectory, runRootNow, _options.RunRootProbe()))
         {
             SendError(id, "RunRootChanged", RunRootRule.ChangedRefusal(during, notDone, wayOn), retryable: false);
             return true;
