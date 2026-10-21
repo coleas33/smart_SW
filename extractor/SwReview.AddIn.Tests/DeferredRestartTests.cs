@@ -3175,6 +3175,100 @@ public sealed class DeferredRestartTests
         }
     }
 
+    /// <summary>
+    /// Found on review (S2): while the saved settings are not in force the backend holds the key it
+    /// was started with - here the OpenAI key, after a switch to Gemini whose restart failed before
+    /// the old backend stopped - and the host masks it as it masks the saved key: a session's
+    /// failure that quotes it reaches the page masked, in the `status` and in the review's refusal.
+    /// The backend masks the keys in its own environment as well; this is the add-in's layer, which
+    /// masked only the saved key. With no switch the key the backend holds is the saved one, masked
+    /// before and after (a guard).
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TheKeyTheBackendWasStartedWithIsMaskedAsTheSavedKeyIs(bool switched)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        if (switched)
+        {
+            SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "at once", ASwitchToGemini());
+        }
+
+        world.Backend.SessionFailure = new BackendRequestException(
+            "ProviderError", "FICT the provider refused the key " + OpenAiKey, retryable: false);
+
+        world.Receive("review.start", "start", new { });
+
+        string refusal = world.Reply("error", "start").GetProperty("message").GetString()!;
+        Assert.StartsWith("FICT the provider refused the key ", refusal, StringComparison.Ordinal);
+        Assert.EndsWith(Redaction.Mask, refusal, StringComparison.Ordinal);
+        Assert.EndsWith(Redaction.Mask, world.Last("status").GetProperty("message").GetString()!, StringComparison.Ordinal);
+        world.AssertNothingPostedContains(OpenAiKey);
+    }
+
+    /// <summary>
+    /// ...and the keys the host masks, which the add-in hands every other tab to mask, are the saved
+    /// key and the key the backend that is up was started with: both while they differ, and the
+    /// saved one alone, as before, once a restart has put the saved settings in force.
+    /// </summary>
+    [Fact]
+    public void TheKeysToMaskAreTheSavedKeyAndTheKeyTheBackendWasStartedWith()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        Assert.Equal(new string?[] { OpenAiKey }, world.Host.KeysToMask().Distinct());
+
+        SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "at once", ASwitchToGemini());
+        Assert.Equal(
+            new string?[] { GeminiKey, OpenAiKey },
+            world.Host.KeysToMask().OrderBy(key => key, StringComparer.Ordinal));
+
+        world.Backend.EarlyRestartFailure = null;
+        world.Receive("settings.save", "again", ASwitchToGemini());
+        world.Reply("settings.saved", "again");
+        Assert.Equal(new string?[] { GeminiKey }, world.Host.KeysToMask().Distinct());
+    }
+
+    /// <summary>
+    /// ...and the add-in hands every other tab those keys to mask - read through the review host's
+    /// field per call, as it read the saved key, and with no review host the default settings' key,
+    /// as before - the Remodel tab its bridge's secret besides. The add-in cannot be built without a
+    /// live SOLIDWORKS, so its source is read, as the wiring tests do.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsEveryOtherTabTheKeysTheReviewHostMasks()
+    {
+        string source = OtherTabsBackendRestartTests.AddInSource();
+        Assert.Contains(
+            "private IEnumerable<string?> KeysToMask() => _reviewHost?.KeysToMask() "
+                + "?? new[] { UserSettings.Defaults().ResolveApiKey().Key };",
+            source,
+            StringComparison.Ordinal);
+
+        foreach ((string start, string end) in new[]
+        {
+            ("_modelCheckHost = new ModelCheckHost(new ModelCheckHostOptions(", "StartModelCheckPump();"),
+            ("_standardsHost = new StandardsHost(new StandardsHostOptions(", "StartStandardsPump();"),
+        })
+        {
+            string options = OtherTabsBackendRestartTests.Between(source, start, end);
+            Assert.Contains("Secrets = KeysToMask,", options, StringComparison.Ordinal);
+            Assert.DoesNotContain("ResolveApiKey()", options, StringComparison.Ordinal);
+        }
+
+        string remodel = OtherTabsBackendRestartTests.Between(
+            source, "_remodelHost = new RemodelHost(new RemodelHostOptions(", "StartRemodelPump();");
+        Assert.Contains(
+            "Secrets = () => KeysToMask().Concat(new[] { _toolService?.RemodelBridge?.Secret }),",
+            remodel,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("ResolveApiKey()", remodel, StringComparison.Ordinal);
+    }
+
     /// <summary>A switch from the world's OpenAI settings to Gemini, with a Gemini key and another model and effort.</summary>
     private static Dictionary<string, object?> ASwitchToGemini() =>
         Save(provider: "gemini", model: "gemini-3.5-flash", effort: "low", apiKey: GeminiKey);
@@ -4605,6 +4699,9 @@ public sealed class DeferredRestartTests
         /// <summary>Builds the start options each restart would be made with; null builds none.</summary>
         public Func<UserSettings, ResolvedApiKey, BackendStartOptions>? Options { get; set; }
 
+        /// <summary>Thrown by each `POST /sessions`, which creates nothing; null creates sessions.</summary>
+        public Exception? SessionFailure { get; set; }
+
         public BackendEndpoint? Endpoint
         {
             get
@@ -4722,6 +4819,11 @@ public sealed class DeferredRestartTests
         {
             lock (_gate)
             {
+                if (SessionFailure != null)
+                {
+                    throw SessionFailure;
+                }
+
                 _sessions.Add((request, _generation));
                 return new ChatSessionHandle("chat-new-" + _sessions.Count, "review-new-" + _sessions.Count);
             }

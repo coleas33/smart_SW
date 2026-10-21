@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -588,13 +589,10 @@ public class SwReviewAddIn : ISwAddin
                 _pane?.RefreshSteps();
             },
 
-            // The same secret the Review host masks out of its own messages. This host is
+            // The same secrets the Review host masks out of its own messages. This host is
             // handed the backend's start-up failures too, and a key-resolution failure is
             // exactly the kind of message that carries one (FR-015).
-            Secrets = () => new[]
-            {
-                (_reviewHost?.Settings ?? UserSettings.Defaults()).ResolveApiKey().Key,
-            },
+            Secrets = KeysToMask,
         });
 
         StartModelCheckPump();
@@ -699,12 +697,9 @@ public class SwReviewAddIn : ISwAddin
                 _pane?.RefreshSteps();
             },
 
-            // The same secret the Review host masks out of its own messages: this host is handed
+            // The same secrets the Review host masks out of its own messages: this host is handed
             // the backend's start-up failures too (FR-015).
-            Secrets = () => new[]
-            {
-                (_reviewHost?.Settings ?? UserSettings.Defaults()).ResolveApiKey().Key,
-            },
+            Secrets = KeysToMask,
         });
 
         StartStandardsPump();
@@ -847,19 +842,24 @@ public class SwReviewAddIn : ISwAddin
                 _pane?.RefreshSteps();
             },
 
-            // The configured key, and the remodel secret as well: this host relays the
+            // The keys the Review host masks, and the remodel secret as well: this host relays the
             // backend's own sentences to the page, and a `/remodel/*` failure is exactly the
             // kind of message that could quote the credential it was called with (FR-015).
-            Secrets = () => new[]
-            {
-                (_reviewHost?.Settings ?? UserSettings.Defaults()).ResolveApiKey().Key,
-                _toolService?.RemodelBridge?.Secret,
-            },
+            Secrets = () => KeysToMask().Concat(new[] { _toolService?.RemodelBridge?.Secret }),
         });
 
         StartRemodelPump();
         _pane.RemodelPageMessageReceived += OnRemodelPageMessage;
     }
+
+    /// <summary>
+    /// The keys every pane host masks (FR-015): the review host's, read through the field per call -
+    /// the saved key and the key the backend that is up was started with, which differ until a
+    /// restart has put the saved settings in force (owner decision 153A, found on review) - and with
+    /// no review host the default settings' key, as before.
+    /// </summary>
+    private IEnumerable<string?> KeysToMask() => _reviewHost?.KeysToMask()
+        ?? new[] { UserSettings.Defaults().ResolveApiKey().Key };
 
     /// <summary>
     /// Owner decision 145A: the gate a plan or a run begins through, which reaches the review

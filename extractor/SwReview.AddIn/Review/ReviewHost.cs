@@ -464,7 +464,7 @@ public sealed class ReviewHost : IDisposable
             LogFolder = () => _options.LogFolder,
             EntityResolver = () => _options.EntityResolver,
             Opener = () => _options.Opener,
-            Secrets = () => new[] { _settings.ResolveApiKey(_options.Environment).Key },
+            Secrets = KeysToMask,
         });
 
         // Both callbacks run on the pump's reader thread. They go out through `Post`, which is
@@ -508,6 +508,19 @@ public sealed class ReviewHost : IDisposable
     /// (owner decision 153A).
     /// </summary>
     public UserSettings Settings => _settings;
+
+    /// <summary>
+    /// The keys no page and no log may show (FR-015): the saved key, and the key the backend that is
+    /// up was started with - the same one once a restart has put the saved settings in force, and
+    /// until then the one that backend holds, and could quote (owner decision 153A, found on review).
+    /// What this host masks, and what the add-in hands every other host to mask. Each resolved per
+    /// call, as the key changes under a live host.
+    /// </summary>
+    public IReadOnlyList<string?> KeysToMask() => new[]
+    {
+        _settings.ResolveApiKey(_options.Environment).Key,
+        _inForce.ResolveApiKey(_options.Environment).Key,
+    };
 
     /// <summary>
     /// Whether a settings restart stands before new work: one waits to be made, or one is being
