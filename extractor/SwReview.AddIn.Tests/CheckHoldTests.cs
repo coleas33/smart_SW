@@ -490,8 +490,10 @@ public sealed class CheckHoldTests
 
     /// <summary>
     /// A page that never evaluates its check - reloaded, or closed, once its run was handed to it - holds the restart
-    /// back for the hand-over's limit and no longer, measured from the hand-over: a moment short of it the check is in
-    /// progress, at it not; and an evaluation that comes after the limit is not held.
+    /// back for the hand-over's limit and no longer, measured from the hand-over, its reply reaching the page at once
+    /// here: a moment short of it the check is in progress, at it not; and an evaluation that comes after the limit,
+    /// once a restart has been made, is not held. (Changed deliberately on the reviews of 157A: an evaluation after the
+    /// limit is held again while the backend its check began on is still the one up, so the restart here is made.)
     /// </summary>
     [Theory]
     [MemberData(nameof(Tabs))]
@@ -507,6 +509,7 @@ public sealed class CheckHoldTests
         world.Advance(TimeSpan.FromTicks(1));
         Assert.False(world.CheckInProgress);
 
+        world.Backend = new BackendEndpoint(52001, "FICT-token-1");
         Assert.Null(world.HoldEvaluation(runDirectory));
         Assert.False(world.CheckInProgress);
     }
@@ -623,6 +626,152 @@ public sealed class CheckHoldTests
         Assert.False(world.CheckInProgress);
     }
 
+    // ---- 4. the hand-over's minute, and an evaluation held up past it (the reviews of 157A) -----------
+
+    /// <summary>
+    /// A run's minute starts once its reply has reached the page: in the add-in the reply waits on SOLIDWORKS'
+    /// application thread, which another tab's extraction holds for its whole length, and until it is delivered the
+    /// page cannot read it, let alone evaluate. The check holds the restart however long that takes, and its page has
+    /// its whole minute once it has the reply (the reviews of 157A: the race review, Codex and the mutation review).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void AHandOversMinuteStartsOnceItsReplyHasReachedThePage(string tab)
+    {
+        using var world = new HoldWorld(tab) { HoldDelivery = true };
+        world.Open();
+        world.Press("c1");
+        string runDirectory = world.Extracted("c1");
+
+        world.Advance(TimeSpan.FromHours(1));
+        Assert.True(world.CheckInProgress, "a reply not yet delivered let the restart go");
+
+        world.Deliver();
+        world.Advance(CheckHoldOptions.DefaultHandOverLimit - TimeSpan.FromTicks(1));
+        Assert.True(world.CheckInProgress);
+        IDisposable? evaluation = world.HoldEvaluation(runDirectory);
+        Assert.NotNull(evaluation);
+        Assert.Equal(0, world.WhileNoRestartRunsAsked);
+        evaluation!.Dispose();
+        Assert.False(world.CheckInProgress);
+    }
+
+    /// <summary>
+    /// The minute runs out once the reply has been delivered and no evaluation came: a page that has gone frees the
+    /// restart a minute after its reply reached it. A delivery that cannot be awaited - the pane cannot queue behind its
+    /// posts - starts the minute at the hand-over, so nothing waits for good on a mark that never comes.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check", false)]
+    [InlineData("Standards", false)]
+    [InlineData("Model check", true)]
+    [InlineData("Standards", true)]
+    public void AHandOverNotTakenWithinItsMinuteOfDeliveryHoldsNothingMore(string tab, bool deliveryFails)
+    {
+        using var world = new HoldWorld(tab) { HoldDelivery = !deliveryFails, AfterPostsFails = deliveryFails };
+        world.Open();
+        world.Press("c1");
+        world.Extracted("c1");
+        world.Advance(TimeSpan.FromMinutes(10));
+        world.Deliver();
+
+        world.Advance(deliveryFails ? TimeSpan.Zero : CheckHoldOptions.DefaultHandOverLimit);
+
+        Assert.False(world.CheckInProgress);
+    }
+
+    /// <summary>
+    /// An evaluation that reaches the proxy after its run's minute - its page held up once it had the reply, behind
+    /// SOLIDWORKS' application thread - takes its check's hold back while the backend the check began on is still the
+    /// one up: no restart has been made since its gate, and the evaluation is held as it would have been in its minute,
+    /// so a restart waiting meanwhile waits for it. Decided while no restart can begin or be made, once.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void AnEvaluationHeldUpPastItsMinuteIsHeldWhileTheBackendItBeganOnIsUp(string tab)
+    {
+        using var world = new HoldWorld(tab);
+        world.Open();
+        world.Press("c1");
+        string runDirectory = world.Extracted("c1");
+        world.Advance(CheckHoldOptions.DefaultHandOverLimit);
+        Assert.False(world.CheckInProgress);
+
+        IDisposable? evaluation = world.HoldEvaluation(runDirectory);
+
+        Assert.NotNull(evaluation);
+        Assert.Equal(1, world.WhileNoRestartRunsAsked);
+        Assert.True(world.CheckInProgress);
+        Assert.Null(world.HoldEvaluation(runDirectory));
+        evaluation!.Dispose();
+        Assert.False(world.CheckInProgress);
+        evaluation.Dispose();
+        Assert.False(world.CheckInProgress);
+    }
+
+    /// <summary>
+    /// ...but not once the backend the check began on has gone - a restart was made since its gate, or the backend
+    /// stopped - since its page's evaluation carries that backend's token and is refused as any call to a backend that
+    /// stopped is, and holding it would only hold the next restart back; nor once the restart can no longer be asked,
+    /// stopping with the add-in, nor when asking it throws. The evaluation goes on unheld, as before 157A.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check", "a restart was made")]
+    [InlineData("Standards", "a restart was made")]
+    [InlineData("Model check", "the backend stopped")]
+    [InlineData("Standards", "stopping with the add-in")]
+    [InlineData("Model check", "the restart cannot be asked")]
+    public void AnEvaluationPastItsMinuteIsNotHeldOnceTheBackendItBeganOnHasGone(string tab, string why)
+    {
+        using var world = new HoldWorld(tab);
+        world.Open();
+        world.Press("c1");
+        string runDirectory = world.Extracted("c1");
+        world.Advance(CheckHoldOptions.DefaultHandOverLimit);
+        if (why == "a restart was made")
+        {
+            world.Backend = new BackendEndpoint(52001, "FICT-token-1");
+        }
+        else if (why == "the backend stopped")
+        {
+            world.Backend = null;
+        }
+
+        world.Stopping = why == "stopping with the add-in";
+        world.WhileNoRestartRunsFails = why == "the restart cannot be asked";
+
+        Assert.Null(world.HoldEvaluation(runDirectory));
+        Assert.False(world.CheckInProgress);
+    }
+
+    /// <summary>
+    /// A hold whose minute has passed stays to be taken back while no restart has been made: the tab's next press -
+    /// a page that was not gone after all, pressing again - neither drops it nor is held up by it, and the evaluation it
+    /// was handed over for is still held when it comes.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void AHoldPastItsMinuteOutlivesTheTabsNextPressWhileItsBackendIsUp(string tab)
+    {
+        using var world = new HoldWorld(tab);
+        world.Open();
+        world.Press("c1");
+        string first = world.Extracted("c1");
+        world.Advance(CheckHoldOptions.DefaultHandOverLimit);
+
+        world.Press("c2");
+        string second = world.Extracted("c2");
+
+        IDisposable? late = world.HoldEvaluation(first);
+        Assert.NotNull(late);
+        IDisposable? inTime = world.HoldEvaluation(second);
+        Assert.NotNull(inTime);
+        late!.Dispose();
+        Assert.True(world.CheckInProgress);
+        inTime!.Dispose();
+        Assert.False(world.CheckInProgress);
+    }
+
     // ---- the world -------------------------------------------------------------------------------
 
     /// <summary>
@@ -636,6 +785,7 @@ public sealed class CheckHoldTests
         private readonly List<string> _posted = new List<string>();
         private ModelCheckHost? _modelCheck;
         private StandardsHost? _standards;
+        private readonly Queue<Action> _undelivered = new Queue<Action>();
         private TimeSpan _clock;
 
         public HoldWorld(string tab)
@@ -700,6 +850,24 @@ public sealed class CheckHoldTests
         /// <summary>Whether the check was in progress just after the gate's last step ran.</summary>
         public bool InProgressAfterTheStep { get; private set; }
 
+        /// <summary>The backend up, as the host reads it; a case changes it as a restart or a stop would.</summary>
+        public BackendEndpoint? Backend { get; set; } = new BackendEndpoint(52000, "FICT-token-0");
+
+        /// <summary>Whether what is queued behind the page's posts waits for <see cref="Deliver"/>, as behind a busy application thread.</summary>
+        public bool HoldDelivery { get; set; }
+
+        /// <summary>Whether queuing behind the page's posts throws, as a pane that cannot queue would.</summary>
+        public bool AfterPostsFails { get; set; }
+
+        /// <summary>Whether the restart can no longer be asked, stopping with the add-in: its step is not run.</summary>
+        public bool Stopping { get; set; }
+
+        /// <summary>Whether asking for a step while no restart runs throws.</summary>
+        public bool WhileNoRestartRunsFails { get; set; }
+
+        /// <summary>How many times a step was asked to run while no restart runs.</summary>
+        public int WhileNoRestartRunsAsked { get; private set; }
+
         public string StartType => Tab == "Model check" ? "check.start" : "standards.start";
 
         public string ExtractedType => Tab == "Model check" ? "check.extracted" : "standards.extracted";
@@ -720,6 +888,15 @@ public sealed class CheckHoldTests
 
         public void Advance(TimeSpan by) => _clock += by;
 
+        /// <summary>The application thread frees: what waited behind the page's posts runs, in order.</summary>
+        public void Deliver()
+        {
+            while (_undelivered.Count > 0)
+            {
+                _undelivered.Dequeue()();
+            }
+        }
+
         public void Open()
         {
             Func<string> runRoot = () => RunRootSpelling ?? RunRoot;
@@ -733,12 +910,15 @@ public sealed class CheckHoldTests
                     LogFolder = () => Path.Combine(Root, "logs"),
                     Now = () => Stamp,
                     RunRootProbe = Probe ?? FakeRunRootProbe.Local(),
+                    Backend = () => Backend,
                     Hold =
                     {
                         BeginCheck = Gate,
                         RestartAhead = () => RestartAhead,
                         HandOverLimit = HandOverLimit,
                         Clock = () => _clock,
+                        AfterPosts = AfterPosts,
+                        WhileNoRestartRuns = WhileNoRestartRuns,
                     },
                 };
                 if (RunRootForANewRun != null)
@@ -759,12 +939,15 @@ public sealed class CheckHoldTests
                     LogFolder = () => Path.Combine(Root, "logs"),
                     Now = () => Stamp,
                     RunRootProbe = Probe ?? FakeRunRootProbe.Local(),
+                    Backend = () => Backend,
                     Hold =
                     {
                         BeginCheck = Gate,
                         RestartAhead = () => RestartAhead,
                         HandOverLimit = HandOverLimit,
                         Clock = () => _clock,
+                        AfterPosts = AfterPosts,
+                        WhileNoRestartRuns = WhileNoRestartRuns,
                     },
                 };
                 if (RunRootForANewRun != null)
@@ -839,6 +1022,33 @@ public sealed class CheckHoldTests
             catch (UnauthorizedAccessException)
             {
             }
+        }
+
+        private void AfterPosts(Action delivered)
+        {
+            if (AfterPostsFails)
+            {
+                throw new InvalidOperationException("FICT the pane cannot queue");
+            }
+
+            if (HoldDelivery)
+            {
+                _undelivered.Enqueue(delivered);
+                return;
+            }
+
+            delivered();
+        }
+
+        private bool WhileNoRestartRuns(Func<bool> step)
+        {
+            WhileNoRestartRunsAsked++;
+            if (WhileNoRestartRunsFails)
+            {
+                throw new InvalidOperationException("FICT the review host cannot be asked");
+            }
+
+            return !Stopping && step();
         }
 
         private BackendRequestException? Gate(Action begin)

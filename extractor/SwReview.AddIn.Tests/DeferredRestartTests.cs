@@ -6866,6 +6866,148 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
+    /// The reviews of 157A (the race review, Codex and the mutation review): a check's reply, its page's `init` and its
+    /// evaluation all wait on SOLIDWORKS' application thread, which another tab's extraction holds for its whole
+    /// length. A reply held up there for over a minute - while a save waits for the check - still holds the restart:
+    /// the run's minute starts once the reply has reached the page, which then evaluates on the backend the check began
+    /// on, and the restart is made once that evaluation is answered. Before, the minute ran from the hand-over, ran out
+    /// while the page could not yet read its reply, and the restart was made under it - its evaluation refused, with the
+    /// token of the backend the restart replaced.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check")]
+    [InlineData("Standards")]
+    public void ACheckWhoseReplyWaitsOnABusyApplicationThreadHoldsTheRestartUntilItIsEvaluated(string tab)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        using var check = new CheckTab(world, tab);
+        world.Pane.Hold();
+        check.Press("c1");
+        string runDirectory = check.Extracted("c1");
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        world.Reply("settings.saved", "save");
+
+        check.Advance(TimeSpan.FromMinutes(5));
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+        Assert.True(check.CheckInProgress);
+
+        world.Pane.Release();
+        Assert.Equal(201, check.Evaluate(runDirectory).Status);
+
+        CheckTab.Evaluation evaluation = Assert.Single(check.Evaluations);
+        Assert.True(evaluation.Authorized);
+        Assert.Equal(0, evaluation.Generation);
+        Assert.Equal(0, evaluation.RestartsAskedWhenAnswered);
+        Eventually(() => world.Backend.Restarts.Length == 1, "the restart once the evaluation is answered");
+    }
+
+    /// <summary>
+    /// The reviews of 157A (Codex's regression): two checks pressed back to back, a save made while the second reads its
+    /// model, and the first's reply held up behind that extraction on SOLIDWORKS' application thread for over a minute.
+    /// Each check's minute starts once its reply has reached its page, so the restart waits for both evaluations, in
+    /// whichever order they come, and each is answered by the backend the checks began on. Before, the first check's
+    /// minute ran out during the second's extraction, and the restart was made the moment the second's evaluation was
+    /// answered, while the first's page had not yet called.
+    /// </summary>
+    [Fact]
+    public void TwoChecksBackToBackWithTheirRepliesHeldUpAreEachEvaluatedBeforeTheRestart()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        using var model = new CheckTab(world, "Model check");
+        using var standards = new CheckTab(world, "Standards");
+        world.Pane.Hold();
+        model.Press("m1");
+        string modelRun = model.Extracted("m1");
+        world.Dump.OnRun = () =>
+        {
+            world.Receive("settings.save", "save", Save(effort: "low"));
+            model.Advance(CheckHoldOptions.DefaultHandOverLimit + TimeSpan.FromMinutes(1));
+            standards.Advance(CheckHoldOptions.DefaultHandOverLimit + TimeSpan.FromMinutes(1));
+        };
+
+        standards.Press("s1");
+        world.Dump.OnRun = null;
+        string standardsRun = standards.Extracted("s1");
+        world.Reply("settings.saved", "save");
+        world.Pane.Release();
+
+        Assert.Equal(201, standards.Evaluate(standardsRun).Status);
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+        Assert.True(model.CheckInProgress);
+        Assert.Equal(201, model.Evaluate(modelRun).Status);
+
+        foreach (CheckTab.Evaluation evaluation in model.Evaluations.Concat(standards.Evaluations))
+        {
+            Assert.True(evaluation.Authorized);
+            Assert.Equal(0, evaluation.Generation);
+            Assert.Equal(0, evaluation.RestartsAskedWhenAnswered);
+        }
+
+        Eventually(() => world.Backend.Restarts.Length == 1, "the restart once both evaluations are answered");
+    }
+
+    /// <summary>
+    /// The reviews of 157A (the race review's second case): two checks pressed back to back, and a save made once both
+    /// have passed their gates. The second's extraction holds SOLIDWORKS' application thread, through which the first's
+    /// page evaluates, until long after the first's minute - modelled by moving its clock past it during that
+    /// extraction. The first's evaluation, held up past its minute, takes its hold back, since no restart has been
+    /// made since its gate: the restart waits for it, though the second's evaluation is answered first, and is made
+    /// once it is answered.
+    /// </summary>
+    [Fact]
+    public void AnEvaluationHeldUpBehindAnotherChecksExtractionIsStillHeld()
+    {
+        using var world = new RestartWorld();
+        using var standardsAnswered = new ManualResetEventSlim(false);
+        using var entered = new ManualResetEventSlim(false);
+        world.Open();
+        using var model = new CheckTab(world, "Model check");
+        using var standards = new CheckTab(world, "Standards");
+        model.Press("m1");
+        string modelRun = model.Extracted("m1");
+        world.Dump.OnRun = () =>
+        {
+            world.Receive("settings.save", "save", Save(effort: "low"));
+            model.Advance(CheckHoldOptions.DefaultHandOverLimit + TimeSpan.FromSeconds(1));
+        };
+
+        standards.Press("s1");
+        world.Dump.OnRun = null;
+
+        string standardsRun = standards.Extracted("s1");
+        world.Reply("settings.saved", "save");
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+        Assert.False(model.CheckInProgress);
+        Assert.True(standards.CheckInProgress);
+
+        model.WhileEvaluating = () =>
+        {
+            entered.Set();
+            Assert.True(standardsAnswered.Wait(TimeSpan.FromSeconds(10)), "the Standards evaluation was never answered");
+            Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        };
+        var late = new Caller<ProxiedResponse>(() => model.Evaluate(modelRun));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the Model check's evaluation was never sent");
+        Assert.Equal(201, standards.Evaluate(standardsRun).Status);
+        standardsAnswered.Set();
+        Assert.True(late.Finishes(TimeSpan.FromSeconds(20)), "the Model check's evaluation was never answered");
+
+        CheckTab.Evaluation evaluation = Assert.Single(model.Evaluations);
+        Assert.True(evaluation.Authorized);
+        Assert.Equal(0, evaluation.Generation);
+        Assert.True(
+            evaluation.RestartsAskedWhenAnswered == 0,
+            "the backend restarted while the Model check's evaluation was out: restarts asked when it was answered = "
+                + evaluation.RestartsAskedWhenAnswered);
+        Eventually(() => world.Backend.Restarts.Length == 1, "the restart once the Model check's evaluation is answered");
+    }
+
+    /// <summary>
     /// A check started while a turn holds the restart back is refused, in this tab's words, before anything is read,
     /// made or extracted, and holds nothing; the restart still waits for the turn alone, and once it ends the next
     /// press makes it first (owner decision 157A). A check refused on the spot - no document - makes no restart.
@@ -7135,6 +7277,33 @@ public sealed class DeferredRestartTests
         Assert.Contains("ReviewHost? host = _reviewHost;", gate, StringComparison.Ordinal);
         Assert.Contains("return host.BeginCheck(begin);", gate, StringComparison.Ordinal);
         Assert.Contains("begin(); return null;", gate, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The reviews of 157A: the add-in hands each check host the pane's queue behind its posts, so a run's minute starts
+    /// once its reply has reached the page, and the review host's step that runs while no restart can begin or be made,
+    /// so an evaluation held up past its minute is taken back while the backend its check began on is up. Each is read
+    /// through its field per call - the pane is built before the hosts, the review host after - and with none, there is
+    /// nothing to wait behind, or no settings restart, and the action or the step runs at once.
+    /// </summary>
+    [Theory]
+    [InlineData("_modelCheckHost = new ModelCheckHost(new ModelCheckHostOptions(", "StartModelCheckPump();")]
+    [InlineData("_standardsHost = new StandardsHost(new StandardsHostOptions(", "StartStandardsPump();")]
+    public void TheAddInHandsEachCheckHostThePanesDeliveryAndTheRestartsLock(string start, string end)
+    {
+        string source = OtherTabsBackendRestartTests.AddInSource();
+        string options = OtherTabsBackendRestartTests.Between(source, start, end);
+        Assert.Contains("AfterPosts = AfterPagePosts,", options, StringComparison.Ordinal);
+        Assert.Contains("WhileNoRestartRuns = WhileNoRestartRuns,", options, StringComparison.Ordinal);
+
+        string delivery = OtherTabsBackendRestartTests.Between(source, "private void AfterPagePosts(Action action) {", "private ");
+        Assert.Contains("TaskPaneControl? pane = _pane;", delivery, StringComparison.Ordinal);
+        Assert.Contains("pane.AfterPosts(action); return;", delivery, StringComparison.Ordinal);
+        Assert.Contains("action(); }", delivery, StringComparison.Ordinal);
+
+        string step = OtherTabsBackendRestartTests.Between(source, "private bool WhileNoRestartRuns(Func<bool> step) {", "private ");
+        Assert.Contains("ReviewHost? host = _reviewHost;", step, StringComparison.Ordinal);
+        Assert.Contains("return host != null ? host.WhileNoRestartRuns(step) : step();", step, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -8301,6 +8470,58 @@ public sealed class DeferredRestartTests
     /// would read as the call waiting - or, for "it did not finish in time", as the call holding
     /// back when it had not begun - so the call starts at once, and is timed only once it has.
     /// </summary>
+    /// <summary>
+    /// SOLIDWORKS' application thread, as far as a page's deliveries go: what is queued behind the pages' posts runs at
+    /// once, or - while a case holds the thread, as another tab's extraction does - once the case lets it go, in order.
+    /// </summary>
+    private sealed class PaneThread
+    {
+        private readonly Queue<Action> _queued = new Queue<Action>();
+        private bool _held;
+
+        public void Hold()
+        {
+            lock (_queued)
+            {
+                _held = true;
+            }
+        }
+
+        public void Release()
+        {
+            while (true)
+            {
+                Action next;
+                lock (_queued)
+                {
+                    if (_queued.Count == 0)
+                    {
+                        _held = false;
+                        return;
+                    }
+
+                    next = _queued.Dequeue();
+                }
+
+                next();
+            }
+        }
+
+        public void AfterPosts(Action action)
+        {
+            lock (_queued)
+            {
+                if (_held)
+                {
+                    _queued.Enqueue(action);
+                    return;
+                }
+            }
+
+            action();
+        }
+    }
+
     private sealed class Caller<T>
     {
         private readonly ManualResetEventSlim _started = new ManualResetEventSlim(false);
@@ -8394,6 +8615,9 @@ public sealed class DeferredRestartTests
         public IBackendClient? BackendOverride { get; set; }
 
         public FakeDump Dump { get; } = new FakeDump();
+
+        /// <summary>SOLIDWORKS' application thread, as far as what is queued behind the pages' posts goes.</summary>
+        public PaneThread Pane { get; } = new PaneThread();
 
         public FakeSelection Selection { get; } = new FakeSelection();
 
@@ -9248,6 +9472,8 @@ public sealed class DeferredRestartTests
                         BeginCheck = begin => world.Host.BeginCheck(begin),
                         RestartAhead = () => world.Host.RestartAhead,
                         Clock = clock,
+                        AfterPosts = world.Pane.AfterPosts,
+                        WhileNoRestartRuns = step => world.Host.WhileNoRestartRuns(step),
                     },
                 });
                 world.ModelChecking = () => _modelCheck.CheckInProgress;
@@ -9273,6 +9499,8 @@ public sealed class DeferredRestartTests
                         BeginCheck = begin => world.Host.BeginCheck(begin),
                         RestartAhead = () => world.Host.RestartAhead,
                         Clock = clock,
+                        AfterPosts = world.Pane.AfterPosts,
+                        WhileNoRestartRuns = step => world.Host.WhileNoRestartRuns(step),
                     },
                 });
                 world.StandardsChecking = () => _standards.CheckInProgress;

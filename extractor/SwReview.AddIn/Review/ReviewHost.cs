@@ -2339,6 +2339,15 @@ public sealed class ReviewHost : IDisposable
     public BackendRequestException? BeginCheck(Action begin) => BeginWork(begin, "check");
 
     /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="step"/> while no settings restart can begin or be made,
+    /// making none, and answers its answer (<see cref="DeferredRestart.WhileNoneRuns"/>); false once the host is
+    /// disposed. A check's evaluation takes back a hold whose time has passed in it, from the pane's proxy, if the
+    /// backend its check began on is still the one up - so a page held up past its minute is still held, unless a
+    /// restart was made meanwhile.
+    /// </summary>
+    public bool WhileNoRestartRuns(Func<bool> step) => _restart.WhileNoneRuns(step);
+
+    /// <summary>
     /// The one gate work the restart would end begins through (owner decisions 145A and 157A): the
     /// restart's <see cref="DeferredRestart.Begin(Action, out Exception?, out DeferredRestart.Work)"/>, its outcome
     /// answered in words for the tab the <paramref name="work"/> - "remodel run" or "check" - is pressed on.

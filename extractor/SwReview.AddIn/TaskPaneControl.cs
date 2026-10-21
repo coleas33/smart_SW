@@ -1313,6 +1313,48 @@ public sealed class TaskPaneControl : UserControl
         }
     }
 
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="action"/> on this pane's thread - SOLIDWORKS' application
+    /// thread - behind every message posted to a page before it, so it runs once those have been delivered, however
+    /// long another tab's extraction holds the thread meanwhile. Queued and never waited for, as a post is. Run at once
+    /// when it cannot be queued - the pane closed, or never shown - so what waits for it never waits for good; and a
+    /// failure inside it stays inside it, on SOLIDWORKS' thread.
+    /// </summary>
+    public void AfterPosts(Action action)
+    {
+        if (action == null)
+        {
+            throw new ArgumentNullException(nameof(action));
+        }
+
+        try
+        {
+            if (!IsDisposed && IsHandleCreated)
+            {
+                BeginInvoke(new Action(() => RunAfterPosts(action)));
+                return;
+            }
+        }
+        catch (Exception)
+        {
+            // The pane closed between the check and the call: nothing is left to deliver behind.
+        }
+
+        RunAfterPosts(action);
+    }
+
+    private static void RunAfterPosts(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception)
+        {
+            // Never out of a callback on SOLIDWORKS' application thread.
+        }
+    }
+
     private void PostOnUiThread(Func<WebView2?> selector, string json)
     {
         try

@@ -672,6 +672,11 @@ public class SwReviewAddIn : ISwAddin
             {
                 BeginCheck = BeginCheck,
                 RestartAhead = () => _reviewHost?.RestartAhead == true,
+
+                // The reviews of 157A: the page's minute from when its reply reached it, and an evaluation
+                // held up past it taken back while the backend its check began on is still the one up.
+                AfterPosts = AfterPagePosts,
+                WhileNoRestartRuns = WhileNoRestartRuns,
             },
         });
 
@@ -789,6 +794,8 @@ public class SwReviewAddIn : ISwAddin
             {
                 BeginCheck = BeginCheck,
                 RestartAhead = () => _reviewHost?.RestartAhead == true,
+                AfterPosts = AfterPagePosts,
+                WhileNoRestartRuns = WhileNoRestartRuns,
             },
         });
 
@@ -999,6 +1006,36 @@ public class SwReviewAddIn : ISwAddin
 
         begin();
         return null;
+    }
+
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="action"/> behind every message posted to the pane's
+    /// pages so far, once they have been delivered on SOLIDWORKS' application thread
+    /// (<see cref="TaskPaneControl.AfterPosts"/>), so a check's minute starts when its page has its reply. The pane is
+    /// read through its field per call; with none there is nothing to wait behind, and the action runs at once.
+    /// </summary>
+    private void AfterPagePosts(Action action)
+    {
+        TaskPaneControl? pane = _pane;
+        if (pane != null)
+        {
+            pane.AfterPosts(action);
+            return;
+        }
+
+        action();
+    }
+
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="step"/> while no settings restart can begin or be made
+    /// (<see cref="ReviewHost.WhileNoRestartRuns"/>), for a check's evaluation held up past its page's minute. The
+    /// review host is read through its field per call; with none there is no settings restart, and the step runs at
+    /// once.
+    /// </summary>
+    private bool WhileNoRestartRuns(Func<bool> step)
+    {
+        ReviewHost? host = _reviewHost;
+        return host != null ? host.WhileNoRestartRuns(step) : step();
     }
 
     /// <summary>
