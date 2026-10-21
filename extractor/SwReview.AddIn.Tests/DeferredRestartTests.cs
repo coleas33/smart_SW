@@ -162,6 +162,15 @@ public sealed class DeferredRestartTests
         + "the settings it was started with, and every tab makes its runs in the folder for runs it was started with, "
         + "not the one saved. " + RetryTheRestart;
 
+    /// <summary>
+    /// ...and instead while the run root in force is one the rule refuses (the reviews of 154A's merge, N4): no tab
+    /// makes runs there - every start is refused - so the sentence says no run can start until the backend
+    /// restarts with the settings saved, pinned word for word.
+    /// </summary>
+    private const string NotInForceWhileTheRunRootIsRefused =
+        "The saved settings are not in force yet: the review backend did not restart with them, and no run can start "
+        + "until it does, since the folder for runs it was started with is refused. " + RetryTheRestart;
+
     /// <summary>A restart's failure before it stops anything: the configured launcher cannot be found.</summary>
     private const string LauncherGone = "FICT the launcher could not be resolved";
 
@@ -4478,7 +4487,8 @@ public sealed class DeferredRestartTests
     /// the status of a restart that waited and failed. The sentence is 153A's, with where every tab makes its runs
     /// meanwhile: the folder for runs the backend was started with, not the one saved, which the Settings panel's
     /// field shows - whether the run root alone changed or other settings with it. `init` names the run root in
-    /// force, and its settings the one saved.
+    /// force, and its settings the one saved. Changed deliberately for the reviews of 154A's merge, N3: the failed
+    /// start adds nothing to the run roots in force, which a start appended before it was made would.
     /// </summary>
     [Theory]
     [InlineData("the run root alone", "at once")]
@@ -4506,6 +4516,7 @@ public sealed class DeferredRestartTests
         Assert.Equal(loaded, init.GetProperty("run_root").GetString());
         Assert.Equal(chosen, init.GetProperty("settings").GetProperty("run_root").GetString());
         Assert.Equal(loaded, world.Host.RunRoot);
+        Assert.Equal(new[] { loaded }, world.Host.RunRootsInForce);
     }
 
     /// <summary>
@@ -4550,7 +4561,8 @@ public sealed class DeferredRestartTests
     /// a new run under: the run root for a new run is none, and the Model check, Standards and Remodel tabs refuse
     /// a start on it. Once the start ends it is the one the start left in force: the one it brought in, or, when it
     /// failed, the one before. A start under way that keeps the run root moves nothing, and runs go on under it.
-    /// Every start: a save's restart, one that waited for a turn, and the add-in's first.
+    /// Every start: a save's restart, one that waited for a turn, and the add-in's first. Changed deliberately for
+    /// the reviews of 154A's merge, N3: a start's run root joins those in force only once the start has succeeded.
     /// </summary>
     [Theory]
     [InlineData("a save's restart that brings another run root in")]
@@ -4639,6 +4651,7 @@ public sealed class DeferredRestartTests
 
             Assert.Equal(after, world.Host.RunRoot);
             Assert.Equal(after, world.Host.RunRootForANewRun());
+            Assert.Equal(after == loaded ? new[] { loaded } : new[] { loaded, chosen }, world.Host.RunRootsInForce);
         }
         finally
         {
@@ -4713,6 +4726,53 @@ public sealed class DeferredRestartTests
         {
             letGo.Set();
         }
+    }
+
+    /// <summary>
+    /// The reviews of 154A's merge, N4 (feature 002 T204): the run root the add-in loaded is one the rule refuses -
+    /// here its last folder a link - so every start is refused, and the engineer chooses a local folder in Settings,
+    /// whose save's restart fails before the old backend stops. The run root in force is still the old one, so every
+    /// start is still refused, and both what the Review tab is told and the refusal must be true: `init`, and the
+    /// status of a restart that waited, say no run can start until the backend restarts with the settings saved -
+    /// not where runs are made, since none is - and a review start is refused `RunRootChosenNotInForce`, whose way
+    /// on is to save the settings again to retry the restart, not to choose a local folder, which the engineer has
+    /// just done. Nothing is made or asked of the backend.
+    /// </summary>
+    [Theory]
+    [InlineData("at once")]
+    [InlineData("after waiting")]
+    public void UnderARefusedRunRootAFolderChosenWhoseRestartFailedIsToldTrulyWithTheWayOnToRetryTheRestart(string when)
+    {
+        FakeRunRootProbe probe = FakeRunRootProbe.Local();
+        using var world = new RestartWorld { Probe = probe };
+        probe.Links.Add(world.Settings.RunRoot);
+        world.Open();
+        world.Track("chat-1");
+        string chosen = ChosenRoot(world);
+
+        SaveWhoseRestartFailsBeforeTheOldBackendStops(world, when, Choosing(chosen, Save()));
+
+        if (when == "after waiting")
+        {
+            Assert.Equal(
+                LauncherGone + ". " + NotInForceWhileTheRunRootIsRefused,
+                world.Last("status").GetProperty("message").GetString());
+        }
+
+        Assert.Equal(NotInForceWhileTheRunRootIsRefused, Init(world, "init").GetProperty("settings_not_in_force").GetString());
+        int sessions = world.Backend.Sessions.Length;
+
+        world.Receive("review.start", "start", new { });
+
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("RunRootChosenNotInForce", error.GetProperty("error_class").GetString());
+        Assert.False(error.GetProperty("retryable").GetBoolean());
+        Assert.Equal(
+            RunRootRule.ChosenNotInForceRefusal(RunRootVerdict.Link, "nothing was started", RunRootRule.InSettings, "try again"),
+            error.GetProperty("message").GetString());
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.Equal(sessions, world.Backend.Sessions.Length);
+        Assert.False(Directory.Exists(chosen));
     }
 
     /// <summary>A folder for runs beside the world's own run root, under its temporary folder: one a save chooses.</summary>

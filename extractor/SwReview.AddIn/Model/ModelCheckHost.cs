@@ -30,12 +30,20 @@ public sealed class ModelCheckHostOptions
     public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
 
     /// <summary>
-    /// The run root a check's folder is made under, read once per check (owner decision 154A, with 153A's record of
-    /// the settings in force): the run root in force, or null while a start of the backend under way would bring
-    /// another into force - the backend coming up makes runs only under its own, and may yet fail and leave the
-    /// one it would replace - which `check.start` refuses. The run root in force by default.
+    /// The run root a check's folder is made under, read once to judge it and make the folder (owner decision 154A,
+    /// with 153A's record of the settings in force), and again once the extraction is over (the reviews of 154A's
+    /// merge, N6): the run root in force, or null while a start of the backend under way would bring another into
+    /// force - the backend coming up makes runs only under its own, and may yet fail and leave the one it would
+    /// replace - which `check.start` refuses. The run root in force by default.
     /// </summary>
     public Func<string?> RunRootForANewRun { get; set; }
+
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
 
     /// <summary>
     /// The backend's endpoint, or null before it is listening. The page calls the check routes
@@ -157,6 +165,7 @@ public sealed class ModelCheckHost : IDisposable
             options.Channel, () => options.RunRoot(), StartType, StartCheck)
         {
             RunRootsInForce = () => options.RunRootsInForce(),
+            RunRootSaved = () => options.RunRootSaved(),
             Backend = () => options.Backend(),
             CurrentDocument = () => options.CurrentDocument(),
 
@@ -319,6 +328,15 @@ public sealed class ModelCheckHost : IDisposable
             // half-written package must not become the folder Show and the Ask tab read from.
             PostStatus("error", failure.Message);
             actions.SendError(id, "ExtractionFailed", failure.Message, retryable: true);
+            return;
+        }
+
+        // The reviews of 154A's merge, N6: the extraction took minutes, in which a settings save's restart on the
+        // Review tab - which no check holds back - can have brought another run root into force. Read again: the
+        // check goes on only while its folder is under the run root in force, and is answered here otherwise.
+        if (actions.AnsweredForAMovedRunRoot(
+                id, runDirectory, _options.RunRootForANewRun(), "the feature tree was read", NothingChecked, PressAgain))
+        {
             return;
         }
 

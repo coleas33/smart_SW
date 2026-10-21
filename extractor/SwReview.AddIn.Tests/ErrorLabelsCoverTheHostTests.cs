@@ -43,7 +43,7 @@ public sealed class ErrorLabelsCoverTheHostTests
                      "FakeProviderNotAllowed", "InvalidRequest", "UnknownMessage", "HostError", "PathRefused",
                      "NotFound", "OpenFailed", "UnknownChat", "UnknownCheck", "HttpError", "SettingNotSaved", "ReviewNotActive",
                      "RemodelRunning", "DocumentChanged", "BackendNotRestarted", "RunRootRefused", "RunRootChanged",
-                     "RunRootNotFullPath",
+                     "RunRootNotFullPath", "RunRootChosenNotInForce",
                  })
         {
             Assert.Contains(expected, classes);

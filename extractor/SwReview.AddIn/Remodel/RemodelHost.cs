@@ -43,6 +43,13 @@ public sealed class RemodelHostOptions
     /// </summary>
     public Func<string?> RunRootForANewRun { get; set; }
 
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
+
     /// <summary>The backend's endpoint, or null before it is listening.</summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
 
@@ -527,6 +534,7 @@ public sealed class RemodelHost : IDisposable
                 runDir => FindRun(runDir)?.RunDirectory))
         {
             RunRootsInForce = () => options.RunRootsInForce(),
+            RunRootSaved = () => options.RunRootSaved(),
             LogFolder = options.LogFolder,
             EntityResolver = options.EntityResolver,
             Opener = options.Opener,

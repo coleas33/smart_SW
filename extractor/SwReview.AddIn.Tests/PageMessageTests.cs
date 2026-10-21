@@ -1078,6 +1078,110 @@ public sealed class PageMessageTests
     }
 
     /// <summary>
+    /// The reviews of 154A's merge, finding F1 (feature 002 T204): a folder chosen for runs with a folder name that
+    /// ends in a space or a period - <c>C:\Work \runs</c>, <c>C:\Work..\runs</c> - is read two ways by Windows, and
+    /// under SOLIDWORKS' path handling every run would be made under another folder than the backend's run root.
+    /// It is the one field not saved: every other setting is written and the backend restarted with them, the run
+    /// root in force stays, and the answer says why, with the way on and no path.
+    /// </summary>
+    [Theory]
+    [InlineData("Work ")]
+    [InlineData("Work..")]
+    [InlineData("runs.")]
+    public void AFolderChosenForRunsWithANameEndingInASpaceOrAPeriodIsNotSaved(string name)
+    {
+        using (var world = new HostWorld())
+        {
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            world.Probe = probe;
+            world.Open();
+            string inForce = world.Settings.RunRoot;
+            string chosen = name == "runs."
+                ? Path.Combine(Path.GetDirectoryName(inForce)!, "FICT-chosen", name)
+                : Path.Combine(Path.GetDirectoryName(inForce)!, "FICT-chosen", name, "runs");
+            Dictionary<string, object?> payload = Save(effort: "low");
+            payload["run_root"] = chosen;
+
+            world.Receive("settings.save", "save", payload);
+
+            JsonElement saved = world.Reply("settings.saved", "save");
+            JsonElement refusal = saved.GetProperty("run_root_refusal");
+            Assert.Equal("RunRootRefused", refusal.GetProperty("error_class").GetString());
+            Assert.False(refusal.GetProperty("retryable").GetBoolean());
+            Assert.Equal(
+                RunRootRule.ChosenRefusal(RunRootVerdict.NameEndsInSpaceOrPeriod),
+                refusal.GetProperty("message").GetString());
+            Assert.DoesNotContain("FICT-chosen", refusal.GetProperty("message").GetString()!);
+            Assert.Empty(probe.Asked);
+            SettingsLoadResult file = UserSettings.Load(world.SettingsPath, BuildMode.Development);
+            Assert.Equal("low", file.Settings.Effort);
+            Assert.Equal(inForce, file.Settings.RunRoot);
+            Assert.Equal(inForce, world.Host.RunRoot);
+            Assert.Equal(1, world.Backend.Restarts);
+            Assert.Equal(inForce, world.Backend.RestartedWith!.RunRoot);
+        }
+    }
+
+    /// <summary>
+    /// The reviews of 154A's merge, finding F2 (feature 002 T204): Windows 11's "Copy as path" (Ctrl+Shift+C) puts
+    /// the path in double quotes, and a folder pasted so was called not a full path. One pair around the folder
+    /// chosen - after the field is trimmed, and with what they hold trimmed again - is taken off, and the folder is
+    /// judged and saved as any other; a pair around nothing chooses the default run root, as an empty field does.
+    /// </summary>
+    [Theory]
+    [InlineData("\"{0}\"")]
+    [InlineData("  \"{0}\"  ")]
+    [InlineData("\" {0} \"")]
+    [InlineData("\"\"")]
+    public void AFolderCopiedWithItsQuotesIsSavedWithoutThem(string typed)
+    {
+        using (var world = new HostWorld())
+        {
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            world.Probe = probe;
+            world.Open();
+            string chosen = Path.Combine(Path.GetDirectoryName(world.Settings.RunRoot)!, "chosen", "runs");
+            string expected = typed == "\"\"" ? UserSettings.DefaultRunRoot() : chosen;
+            Dictionary<string, object?> payload = Save(effort: "low");
+            payload["run_root"] = string.Format(System.Globalization.CultureInfo.InvariantCulture, typed, chosen);
+
+            world.Receive("settings.save", "save", payload);
+
+            JsonElement saved = world.Reply("settings.saved", "save");
+            Assert.False(saved.TryGetProperty("run_root_refusal", out _));
+            Assert.Equal(expected, saved.GetProperty("settings").GetProperty("run_root").GetString());
+            Assert.Equal(expected, UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.RunRoot);
+            Assert.Equal(expected, world.Host.RunRoot);
+            Assert.Equal(expected, world.Backend.RestartedWith!.RunRoot);
+        }
+    }
+
+    /// <summary>
+    /// ...but only a pair: a quote before the folder alone is the folder's text, which is not written as a full
+    /// path, and is answered so, nothing taken off and the rule not asked.
+    /// </summary>
+    [Fact]
+    public void AFolderWithAQuoteBeforeItAloneIsNotAFullPath()
+    {
+        using (var world = new HostWorld())
+        {
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            world.Probe = probe;
+            world.Open();
+            string inForce = world.Settings.RunRoot;
+            Dictionary<string, object?> payload = Save(effort: "low");
+            payload["run_root"] = "\"" + Path.Combine(Path.GetDirectoryName(inForce)!, "chosen", "runs");
+
+            world.Receive("settings.save", "save", payload);
+
+            JsonElement refusal = world.Reply("settings.saved", "save").GetProperty("run_root_refusal");
+            Assert.Equal("RunRootNotFullPath", refusal.GetProperty("error_class").GetString());
+            Assert.Empty(probe.Asked);
+            Assert.Equal(inForce, world.Host.Settings.RunRoot);
+        }
+    }
+
+    /// <summary>
     /// ...while a relative run root the settings file already names keeps working as before: a save that sends
     /// it back unchanged writes it again and says nothing of it.
     /// </summary>

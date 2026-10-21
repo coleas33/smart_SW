@@ -6522,6 +6522,41 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// The reviews of 154A's merge, N4 (feature 002 T204): under a run root in force that the rule refuses, with a
+    /// folder chosen for runs in the Review tab's Settings that is not in force - its save's restart failed - a plan
+    /// is refused `RunRootChosenNotInForce`, not retryable, in this tab's words: the folder chosen is not in force
+    /// until the review backend restarts with it, and the way on is to save the settings again to retry the restart -
+    /// not to choose a local folder, which the engineer has just done. Nothing is asked of the pipeline or copied,
+    /// and no path reaches the page.
+    /// </summary>
+    [Fact]
+    public void UnderARefusedRunRootAFolderChosenNotInForceIsToldWithTheWayOnToRetryTheRestart()
+    {
+        using (var world = new RemodelWorld())
+        {
+            var refusing = FakeRunRootProbe.Refusing("on a share", world.RunRoot);
+            world.RunRootSpelling = refusing.RunRoot;
+            world.Probe = refusing.Probe;
+            world.Open();
+            world.Options.RunRootSaved = () => Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "FICT-chosen", "runs");
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("RunRootChosenNotInForce", error.GetProperty("error_class").GetString());
+            Assert.False(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal(
+                RunRootRule.ChosenNotInForceRefusal(
+                    refusing.Verdict, "nothing was copied", RunRootRule.InSettingsOnTheReviewTab, "press Remodel a copy again"),
+                error.GetProperty("message").GetString());
+            Assert.Empty(world.Pipeline.Calls);
+            Assert.False(world.Host.RunInProgress);
+            Assert.DoesNotContain(world.Posted, message => message.Contains("FICT-chosen"));
+            world.AssertNothingWasCopied();
+        }
+    }
+
     private sealed class RemodelWorld : IDisposable
     {
         private readonly string _root;

@@ -63,6 +63,13 @@ public sealed class CheckPaneHostOptions
     /// </summary>
     public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
 
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
+
     /// <summary>`check.start` for the Model check tab, `standards.start` for the Standards tab.</summary>
     public string StartType { get; }
 
@@ -185,6 +192,7 @@ public sealed class CheckPaneHost : IDisposable
                 runId => FindCheck(runId)?.RunDirectory))
         {
             RunRootsInForce = () => options.RunRootsInForce(),
+            RunRootSaved = () => options.RunRootSaved(),
             LogFolder = () => options.LogFolder(),
             EntityResolver = () => options.EntityResolver(),
             Opener = () => options.Opener(),

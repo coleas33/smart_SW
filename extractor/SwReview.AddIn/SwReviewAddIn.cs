@@ -565,6 +565,14 @@ public class SwReviewAddIn : ISwAddin
     private IReadOnlyList<string> RunRootsInForce() => _reviewHost?.RunRootsInForce ?? new[] { RunRootInForce() };
 
     /// <summary>
+    /// The run root saved in the review host's Settings, which the next restart brings into force (the reviews of
+    /// 154A's merge, N4): a start on the Model check, Standards or Remodel tab refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None when there is no review
+    /// host, as the add-in unloads.
+    /// </summary>
+    private string? RunRootSaved() => _reviewHost?.Settings.RunRoot;
+
+    /// <summary>
     /// The run root a new run's folder is made under, the review host's (owner decision 154A, with 153A's record of
     /// the settings in force): the run root in force, or none while a start of the backend under way would bring
     /// another into force, which the Model check, Standards and Remodel tabs refuse a start on. One reading of the
@@ -603,6 +611,7 @@ public class SwReviewAddIn : ISwAddin
         {
             RunRootsInForce = RunRootsInForce,
             RunRootForANewRun = RunRootForANewRun,
+            RunRootSaved = RunRootSaved,
             Backend = () => _backend?.Endpoint,
             CurrentDocument = CurrentDocument,
 
@@ -716,6 +725,7 @@ public class SwReviewAddIn : ISwAddin
         {
             RunRootsInForce = RunRootsInForce,
             RunRootForANewRun = RunRootForANewRun,
+            RunRootSaved = RunRootSaved,
             Backend = () => _backend?.Endpoint,
             CurrentDocument = CurrentDocument,
             Dump = reviewOptions.Dump,
@@ -836,6 +846,7 @@ public class SwReviewAddIn : ISwAddin
         {
             RunRootsInForce = RunRootsInForce,
             RunRootForANewRun = RunRootForANewRun,
+            RunRootSaved = RunRootSaved,
             Backend = endpoint,
             CurrentDocument = CurrentDocument,
             RemodelAvailability = () => _toolService?.RemodelCapability

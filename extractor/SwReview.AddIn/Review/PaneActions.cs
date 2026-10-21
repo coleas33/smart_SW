@@ -102,6 +102,13 @@ public sealed class PaneActionsOptions
     /// </summary>
     public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
 
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a run start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
+
     public PaneRunLookup Runs { get; }
 
     /// <summary>%LOCALAPPDATA%\SwReview\logs by default; what `log.open` opens.</summary>
@@ -513,6 +520,12 @@ public sealed class PaneActions
     /// chosen in the Review tab's Settings (the owner's follow-up) - in the rule's words for what the root is,
     /// with the host's own <paramref name="notDone"/> and <paramref name="wayOn"/>, and no path. Each caller
     /// asks before it does anything else, so a refused start reads, makes and restarts nothing.
+    ///
+    /// The reviews of 154A's merge, N4: while another folder is saved for runs than the run root in force - a save
+    /// chose it and its restart failed - the engineer has chosen a folder already, so the refusal is
+    /// <c>RunRootChosenNotInForce</c>, whose way on is the restart that brings the folder chosen in
+    /// (<see cref="RunRootRule.ChosenNotInForceRefusal"/>); the saved folder is told apart from the one in force by
+    /// <see cref="RunRootRule.SameRunRoot"/>.
     /// </summary>
     /// <param name="runRoot">The run root in force, the one the start would make its folder under.</param>
     /// <param name="probe">What the rule reads of Windows.</param>
@@ -528,8 +541,45 @@ public sealed class PaneActions
             return false;
         }
 
+        string? saved = _options.RunRootSaved();
+        if (saved != null && !RunRootRule.SameRunRoot(saved, runRoot))
+        {
+            SendError(
+                id, "RunRootChosenNotInForce", RunRootRule.ChosenNotInForceRefusal(verdict, notDone, where, wayOn), retryable: false);
+            return true;
+        }
+
         SendError(id, "RunRootRefused", RunRootRule.Refusal(verdict, notDone, where, wayOn), retryable: false);
         return true;
+    }
+
+    /// <summary>
+    /// The reviews of 154A's merge, N6: whether a Model check or a Standards run, whose folder was made before its
+    /// extraction, is answered here because the run root moved meanwhile - a settings save's restart on the Review tab,
+    /// which no check holds back, can bring another in during the minutes an extraction takes, and the backend would
+    /// refuse the folder at the page's first call. <paramref name="runRootNow"/> is the run root for a new run read
+    /// again once the extraction is over: none, while a start of the backend under way would bring another in, is
+    /// answered as a start then is (<see cref="SendRunRootMoving"/>); one that no longer holds the folder,
+    /// <c>RunRootChanged</c>, not retryable, in the rule's words (<see cref="RunRootRule.ChangedRefusal"/>). The
+    /// folder is left as the evidence. A restart that lands after this reading, before the backend reads the folder,
+    /// is not seen: one round trip, the page's first call.
+    /// </summary>
+    public bool AnsweredForAMovedRunRoot(
+        string? id, string runDirectory, string? runRootNow, string during, string notDone, string wayOn)
+    {
+        if (runRootNow == null)
+        {
+            SendRunRootMoving(id, notDone, wayOn);
+            return true;
+        }
+
+        if (!RunFolders.IsUnder(runDirectory, runRootNow))
+        {
+            SendError(id, "RunRootChanged", RunRootRule.ChangedRefusal(during, notDone, wayOn), retryable: false);
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>

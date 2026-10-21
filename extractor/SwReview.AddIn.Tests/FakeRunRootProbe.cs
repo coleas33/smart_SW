@@ -69,20 +69,25 @@ internal sealed class FakeRunRootProbe : IRunRootProbe
     /// <summary>A probe that answers every drive as local and every folder as reached by its own path.</summary>
     public static FakeRunRootProbe Local() => new FakeRunRootProbe();
 
-    /// <summary>The four things the rule refuses a run root as, for a host's tests to be refused each way.</summary>
+    /// <summary>
+    /// The five things the rule refuses a run root as, for a host's tests to be refused each way - the fifth, a
+    /// folder name ending in a period, since the reviews of 154A's merge (F1).
+    /// </summary>
     public static IEnumerable<object[]> RefusedKinds() => new[]
     {
         new object[] { "on a share" },
         new object[] { "through a link" },
         new object[] { "a device path" },
         new object[] { "could not be checked" },
+        new object[] { "a name ending in a period" },
     };
 
     /// <summary>
     /// A run root and a probe the rule refuses as <paramref name="kind"/>, made from a host's local root:
     /// the root on a mapped network drive, the root on a substituted drive, the root written as a device
-    /// path, or the root below a folder that cannot be read. Nothing is made or touched: the probe is faked,
-    /// and a device path is refused on sight.
+    /// path, the root below a folder that cannot be read, or the root with a period after its last folder's
+    /// name. Nothing is made or touched: the probe is faked, and a device path and a name ending in a period
+    /// are refused on sight.
     /// </summary>
     public static (string RunRoot, FakeRunRootProbe Probe, RunRootVerdict Verdict) Refusing(string kind, string localRoot)
     {
@@ -100,6 +105,8 @@ internal sealed class FakeRunRootProbe : IRunRootProbe
                 var unreadable = new FakeRunRootProbe();
                 unreadable.Unreadable.Add(TopFolderOf(localRoot));
                 return (localRoot, unreadable, RunRootVerdict.Unverified);
+            case "a name ending in a period":
+                return (localRoot.TrimEnd('\\') + ".", Local(), RunRootVerdict.NameEndsInSpaceOrPeriod);
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), kind, "not a kind the rule refuses");
         }

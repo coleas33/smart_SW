@@ -201,7 +201,9 @@ the pane refuses a run that would go on in a folder under the old run root befor
 (`RunRootChanged`; `pane-host-messages.md`, "The run root rule"). *Amended 2026-10-21 (owner
 decision 154A, with 153A's record of the settings in force):* a run root chosen in a save whose restart
 failed with no backend up comes into force with the add-in's first start of the backend, which is made
-with the settings saved by then.
+with the settings saved by then. *Amended on the reviews of 154A's merge (F1):* the pane refuses a run root
+with a folder name ending in a space or a period too, which this rule keeps as written while .NET's legacy
+path handling trims it, so the pane's run folders would lie outside the run root the backend was given.
 
 `check_id` is the check run folder's *name*, so a check is addressable after a restart
 without any server-side registry. It is caller-supplied too and goes through the same

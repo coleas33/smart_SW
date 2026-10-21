@@ -2919,7 +2919,10 @@ public sealed class ReviewHostTests
     /// The owner's follow-up to decision 154A (feature 002 T194, added when mutations H16 and H17 survived):
     /// while a folder chosen for runs waits for the restart that brings it in - here, after one that failed -
     /// a review start judges the run root in force, the one its folder would be made under, and not the folder
-    /// chosen; and `init` names the run root in force as `run_root`, beside the settings' own.
+    /// chosen; and `init` names the run root in force as `run_root`, beside the settings' own. Changed
+    /// deliberately for the reviews of 154A's merge, N4: the folder chosen not being in force, the start is
+    /// refused `RunRootChosenNotInForce`, whose way on is to retry the restart, where `RunRootRefused` sent the
+    /// engineer to choose a local folder, which they had just done.
     /// </summary>
     [Fact]
     public void WhileAFolderChosenWaitsAReviewStartJudgesTheRunRootInForceAndInitNamesIt()
@@ -2951,9 +2954,9 @@ public sealed class ReviewHostTests
             world.Receive("review.start", "start", new { });
 
             JsonElement refused = world.Reply("error", "start");
-            Assert.Equal("RunRootRefused", refused.GetProperty("error_class").GetString());
+            Assert.Equal("RunRootChosenNotInForce", refused.GetProperty("error_class").GetString());
             Assert.Equal(
-                RunRootRule.Refusal(RunRootVerdict.Share, "nothing was started", RunRootRule.InSettings, "try again"),
+                RunRootRule.ChosenNotInForceRefusal(RunRootVerdict.Share, "nothing was started", RunRootRule.InSettings, "try again"),
                 refused.GetProperty("message").GetString());
             Assert.Empty(world.Backend.Created);
 
@@ -3032,10 +3035,12 @@ public sealed class ReviewHostTests
     }
 
     /// <summary>
-    /// The reviews' finding F6, and N8: a save can move the run root while a review's evidence is extracted -
-    /// minutes, in which no turn runs to hold its restart back - so the folder the review made is under a run
-    /// root no longer in force. The review is not started, in plain words with the way on, and no session is
-    /// asked for; the backend would have refused the folder.
+    /// The reviews' finding F6, and N8: the run root can move while a review's evidence is extracted - minutes -
+    /// so the folder the review made is under a run root no longer in force. The review is not started, in plain
+    /// words with the way on, and no session is asked for; the backend would have refused the folder. Corrected
+    /// on the reviews of 154A's merge (N5): in the add-in only its first start, under way when the review began,
+    /// can move it then (<c>DeferredRestartTests</c>, T201) - the page's messages are handled one at a time, so no
+    /// save is made during a start - and the save made from the dump here stands in for it.
     /// </summary>
     [Fact]
     public void AReviewWhoseRunRootMovesWhileItsEvidenceIsExtractedIsNotStarted()

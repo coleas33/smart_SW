@@ -419,7 +419,7 @@ public sealed class ReviewHost : IDisposable
     private UserSettings _settings;
 
     /// <summary>
-    /// Every run root that has been in force in this SOLIDWORKS session, each once (<see cref="SameRunRoot"/>), in
+    /// Every run root that has been in force in this SOLIDWORKS session, each once (<see cref="RunRootRule.SameRunRoot"/>), in
     /// the order it came into force (owner decision 154A, the reviews' finding F6): a run made under any of them is
     /// this pane's to open, and a re-modeler's copy under any of them is a copy, after a save has moved the run
     /// root. The run root of the settings loaded, then each one a start of the backend brings into force - the
@@ -522,6 +522,7 @@ public sealed class ReviewHost : IDisposable
         _actions = new PaneActions(new PaneActionsOptions(options.Channel, () => RunRoot, _runs)
         {
             RunRootsInForce = () => RunRootsInForce,
+            RunRootSaved = () => _settings.RunRoot,
             LogFolder = () => _options.LogFolder,
             EntityResolver = () => _options.EntityResolver,
             Opener = () => _options.Opener,
@@ -603,19 +604,8 @@ public sealed class ReviewHost : IDisposable
     {
         UserSettings? starting = _starting;
         UserSettings inForce = _inForce;
-        return starting != null && !SameRunRoot(starting.RunRoot, inForce.RunRoot) ? null : inForce.RunRoot;
+        return starting != null && !RunRootRule.SameRunRoot(starting.RunRoot, inForce.RunRoot) ? null : inForce.RunRoot;
     }
-
-    /// <summary>
-    /// Whether two run roots are the same (owner decision 154A): as written, ignoring letter case, as Windows names a
-    /// folder. The one rule for the run roots in force (<see cref="_runRootsInForce"/>), for whether the run root
-    /// saved is the one in force (<see cref="SameBackendSettings"/>), and for whether a start under way moves it
-    /// (<see cref="RunRootForANewRun"/>). Another spelling of the same folder - a trailing separator, an 8.3 short
-    /// name - counts as another run root: telling them apart would read the disk, which the restart's lock must not
-    /// wait on.
-    /// </summary>
-    private static bool SameRunRoot(string first, string second) =>
-        string.Equals(first, second, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The keys no page and no log may show (FR-015): the saved key, and the key the backend that is
@@ -1469,7 +1459,9 @@ public sealed class ReviewHost : IDisposable
     /// <summary>
     /// The folder a save chooses for runs: `run_root`, trimmed as every text field is, and an empty one the
     /// default run root, as a blank run root in the settings file is. Null when the save names none - absent,
-    /// null or not text - which leaves the run root as it is.
+    /// null or not text - which leaves the run root as it is. The reviews of 154A's merge, F2: Explorer's
+    /// "Copy as path" puts a path in double quotes, so one pair around the whole is taken off, and what it held
+    /// trimmed again; a quote on one side alone is left, and is no full path.
     /// </summary>
     private static string? ChosenRunRoot(JsonElement payload)
     {
@@ -1480,6 +1472,11 @@ public sealed class ReviewHost : IDisposable
         }
 
         string trimmed = text.Trim();
+        if (trimmed.Length >= 2 && trimmed[0] == '"' && trimmed[trimmed.Length - 1] == '"')
+        {
+            trimmed = trimmed.Substring(1, trimmed.Length - 2).Trim();
+        }
+
         return trimmed.Length == 0 ? UserSettings.DefaultRunRoot() : trimmed;
     }
 
@@ -1644,6 +1641,16 @@ public sealed class ReviewHost : IDisposable
         + "run with the settings it was started with";
 
     /// <summary>
+    /// What the Review tab is told instead while the run root saved is not the one in force and the one in force is
+    /// itself one the rule refuses (the reviews of 154A's merge, N4): no tab makes runs there - every start is
+    /// refused - so the sentence says no run can start until the backend restarts with the settings saved, where
+    /// <see cref="NotInForceWithTheRunRoot"/> would say where runs are made, and none is.
+    /// </summary>
+    private const string NotInForceWhileTheRunRootIsRefused =
+        "The saved settings are not in force yet: the review backend did not restart with them, and no run can start "
+        + "until it does, since the folder for runs it was started with is refused. " + RetryTheRestart;
+
+    /// <summary>
     /// <see cref="NotInForce"/> while it is true, or null: never with no backend up - nothing is in
     /// force, and the add-in's word that the backend did not start or restart says how to go on
     /// (owner decision 150A) - nor while a restart waits or is being made, when 143A's and 145A's
@@ -1653,10 +1660,12 @@ public sealed class ReviewHost : IDisposable
     /// those while the ones recorded are older (found on Codex's re-review, R1); and otherwise only while
     /// the saved settings differ from the ones in force (<see cref="SameBackendSettings"/>) - and then
     /// <see cref="NotInForceWithTheRunRoot"/> when the run root saved is not the one in force (owner
-    /// decision 154A). The endpoint is read before the start under way: a start whose endpoint was read
-    /// is still under way, or has recorded its settings. Read by `init`, and by a restart that waited and
-    /// failed for its way on, under the restart's lock, which is taken before the state's
-    /// (<see cref="DeferredRestart.Ahead"/>).
+    /// decision 154A), or <see cref="NotInForceWhileTheRunRootIsRefused"/> when the one in force is one the
+    /// rule refuses (the reviews of 154A's merge, N4) - judged here, and the rule reads nothing over the
+    /// network or through a link before it refuses, so the restart's lock waits on no share. The endpoint is
+    /// read before the start under way: a start whose endpoint was read is still under way, or has recorded
+    /// its settings. Read by `init`, and by a restart that waited and failed for its way on, under the
+    /// restart's lock, which is taken before the state's (<see cref="DeferredRestart.Ahead"/>).
     /// </summary>
     private string? SettingsNotInForce()
     {
@@ -1673,7 +1682,14 @@ public sealed class ReviewHost : IDisposable
             return null;
         }
 
-        return SameRunRoot(saved.RunRoot, inForce.RunRoot) ? NotInForce : NotInForceWithTheRunRoot;
+        if (RunRootRule.SameRunRoot(saved.RunRoot, inForce.RunRoot))
+        {
+            return NotInForce;
+        }
+
+        return RunRootRule.Judge(inForce.RunRoot, _options.RunRootProbe) == RunRootVerdict.Accepted
+            ? NotInForceWithTheRunRoot
+            : NotInForceWhileTheRunRootIsRefused;
     }
 
     /// <summary>
@@ -1722,7 +1738,7 @@ public sealed class ReviewHost : IDisposable
     /// The key as it resolves, by its value and where it came from, and not as it is stored, since
     /// DPAPI stores the same key anew each time it is typed. And the run root, which a save writes
     /// since owner decision 154A's follow-up and the start hands the backend, which makes runs only
-    /// under it - by <see cref="SameRunRoot"/>, ignoring letter case, as a folder is named. Python,
+    /// under it - by <see cref="RunRootRule.SameRunRoot"/>, ignoring letter case, as a folder is named. Python,
     /// which the start reads too, is no part of a save, which keeps the one the add-in loaded, so it
     /// cannot differ; nor are the Send box and the Standards profile, which the backend is not started
     /// with.
@@ -1731,7 +1747,7 @@ public sealed class ReviewHost : IDisposable
     {
         ResolvedApiKey savedKey = saved.ResolveApiKey(environment);
         ResolvedApiKey keyInForce = inForce.ResolveApiKey(environment);
-        return SameRunRoot(saved.RunRoot, inForce.RunRoot)
+        return RunRootRule.SameRunRoot(saved.RunRoot, inForce.RunRoot)
             && string.Equals(saved.Provider, inForce.Provider, StringComparison.Ordinal)
             && string.Equals(saved.Model, inForce.Model, StringComparison.Ordinal)
             && string.Equals(saved.Effort, inForce.Effort, StringComparison.Ordinal)
@@ -1932,7 +1948,7 @@ public sealed class ReviewHost : IDisposable
 
             // Owner decision 154A (the reviews' F6): the run root the start brought in joins those in force this
             // session before it is the one in force, so whoever finds it in force finds it among them.
-            if (!_runRootsInForce.Any(runRoot => SameRunRoot(runRoot, settings.RunRoot)))
+            if (!_runRootsInForce.Any(runRoot => RunRootRule.SameRunRoot(runRoot, settings.RunRoot)))
             {
                 _runRootsInForce = _runRootsInForce.Concat(new[] { settings.RunRoot }).ToArray();
             }
@@ -2795,9 +2811,12 @@ public sealed class ReviewHost : IDisposable
 
     /// <summary>
     /// The run root a start goes on under once the backend is ready (the reviews of decision 154A, N8): the run
-    /// root in force, judged again when a restart made since moved it from <paramref name="judged"/> - one the
-    /// readiness check made, waiting since a save during a turn, or a save's own while the evidence was
-    /// extracted; null once the start is answered with the refusal.
+    /// root in force, judged again when a start of the backend made since moved it from <paramref name="judged"/> -
+    /// the restart the readiness check made, waiting since a save during a turn, before the run's folder is made;
+    /// and the add-in's first start, under way when the start began, which can end while the evidence is
+    /// extracted. Null once the start is answered with the refusal. Not a save's own restart: the page's
+    /// messages are handled one at a time, so no save is made while a start runs (corrected on the reviews of
+    /// 154A's merge, N5).
     /// </summary>
     private string? RunRootToUse(string? id, string judged)
     {

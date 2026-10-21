@@ -66,6 +66,20 @@ public sealed class RunRootWiringTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The reviews of 154A's merge, N4 (feature 002 T204): each of the three is handed the run root saved in the
+    /// review host's Settings, so a start refused for the run root in force while another folder is chosen and not in
+    /// force says to retry the restart, not to choose a folder again.
+    /// </summary>
+    [Fact]
+    public void EveryOtherTabIsHandedTheRunRootSaved()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+
+        Assert.Equal(3, source.Split(new[] { "RunRootSaved = RunRootSaved," }, StringSplitOptions.None).Length - 1);
+        Assert.Contains("private string? RunRootSaved() => _reviewHost?.Settings.RunRoot;", source, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheRunRootInForceIsTheReviewHosts()
     {

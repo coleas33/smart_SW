@@ -31,6 +31,14 @@ public enum RunRootVerdict
     /// attributes are denied while Windows still lets every user pass through it.
     /// </summary>
     Unverified,
+
+    /// <summary>
+    /// Has a folder whose name ends in a space or a period (the reviews of 154A's merge, finding F1), which Windows
+    /// reads two ways: <c>GetFullPathNameW</c> and the backend's own resolution keep <c>Work </c> and <c>Work..</c>
+    /// as written, while .NET's legacy path handling - SOLIDWORKS' most likely - trims them when the add-in makes its
+    /// run folders, so every run's folder would lie under another folder than the backend's run root.
+    /// </summary>
+    NameEndsInSpaceOrPeriod,
 }
 
 /// <summary>What kind of drive a drive root is, as the run root rule reads it.</summary>
@@ -123,9 +131,11 @@ public interface IRunRootProbe
 /// <b>What is read, and in what order</b> - so that nothing is opened over the network or through a link
 /// before the rule has refused what it can (the reviews of decision 154A, finding F1): the root as it is
 /// written, a UNC or device path refused on sight, as the backend refuses it, before anything is read or made
-/// of it. Then its full path, made from the text alone (<see cref="IRunRootProbe.FullPathOf"/>), which spells
-/// forward slashes and <c>..</c> away and reads nothing - unlike <c>Path.GetFullPath</c>, which expands an 8.3
-/// short name by reading each folder of the path, over the network for a share - and which names a share
+/// of it - and, since the reviews of 154A's merge (F1), a folder name ending in a space or a period, which
+/// Windows reads both with and without it. Then its full path, made from the text alone
+/// (<see cref="IRunRootProbe.FullPathOf"/>), which spells forward slashes and <c>..</c> away and reads nothing -
+/// unlike <c>Path.GetFullPath</c>, which expands an 8.3 short name by reading each folder of the path, over the
+/// network for a share - and which names a share
 /// when a relative root lies under a current folder on one. Then the drive: a mapped network drive is refused,
 /// and so is a substituted drive, by what Windows says of the letter alone. Then each part from the top, by
 /// what it is and never by opening through it: a junction or a symbolic link (any name-surrogate reparse
@@ -137,8 +147,9 @@ public interface IRunRootProbe
 /// form, read only now that no part is a link: one that differs from both other than by letter case is
 /// reached through a link of some other kind, and refused; one that is an 8.3 short name's long name is not
 /// (finding F3); and one that cannot be read leaves the root unverified. A root no folder can be made under -
-/// blank, written with a character no folder can have, on a drive letter that names no drive - is not refused:
-/// the run folder reports it, as before.
+/// blank, written with a character no folder can have or a name longer than a folder's can be (the reviews of
+/// 154A's merge, N8), on a drive letter that names no drive - is not refused: the run folder reports it, as
+/// before.
 /// </summary>
 public static class RunRootRule
 {
@@ -163,9 +174,15 @@ public static class RunRootRule
             return named.Value;
         }
 
-        if (HasCharactersNoFolderCanHave(written))
+        if (NamesNoFolderCanHave(written))
         {
             return RunRootVerdict.Accepted;
+        }
+
+        // The reviews of 154A's merge, F1: a name Windows reads two ways, on its text too.
+        if (HasANameEndingInASpaceOrAPeriod(written))
+        {
+            return RunRootVerdict.NameEndsInSpaceOrPeriod;
         }
 
         // Its full path, made from the text alone: a relative root under a current folder on a share is on it.
@@ -335,8 +352,42 @@ public static class RunRootRule
     /// pages print it whole.
     /// </summary>
     public static string MovingRefusal(string notDone, string wayOn) =>
-        "The review backend is being started with another folder for runs, so " + notDone + ". "
-        + char.ToUpperInvariant(wayOn[0]) + wayOn.Substring(1) + " in a moment.";
+        "The review backend is being started with another folder for runs, so " + notDone + ". " + Begun(wayOn)
+        + " in a moment.";
+
+    /// <summary>
+    /// A run start's words while a folder chosen for runs in Settings is not in force - its save's restart failed -
+    /// and the run root in force is one the rule refuses (the reviews of 154A's merge, N4): what the run root in
+    /// force is, the rule, what was not done, and the way on, the restart that brings the folder chosen in - not a
+    /// local folder chosen again, which <see cref="Refusal"/> says and the engineer has just done. No path.
+    /// </summary>
+    public static string ChosenNotInForceRefusal(RunRootVerdict verdict, string notDone, string where, string wayOn) =>
+        "The run root in force " + Kind(verdict) + Rule + ", so " + notDone + ". The folder chosen for runs " + where
+        + " is not in force until the review backend restarts with it: save the settings again to retry the restart, then "
+        + wayOn + ".";
+
+    /// <summary>
+    /// What a Model check or a Standards run is answered with when, read again once its extraction is over, the run
+    /// root in force no longer holds its folder (the reviews of 154A's merge, N6): what changed and while what
+    /// (<paramref name="during"/>, "the feature tree was read"), why it matters, what was not done and the way on.
+    /// No path; the pages print it whole.
+    /// </summary>
+    public static string ChangedRefusal(string during, string notDone, string wayOn) =>
+        "The run root changed while " + during + ", and the backend makes runs only under the one in force, so " + notDone
+        + ". " + Begun(wayOn) + ".";
+
+    /// <summary>
+    /// Whether two run roots are the same (owner decision 154A): as written, ignoring letter case, as Windows names a
+    /// folder. The one rule for the run roots in force, for whether the run root saved is the one in force, for whether
+    /// a start under way moves it, and for whether a refused run root in force has another chosen in its place.
+    /// Another spelling of the same folder - a trailing separator, an 8.3 short name - counts as another run root:
+    /// telling them apart would read the disk, which the restart's lock must not wait on.
+    /// </summary>
+    public static bool SameRunRoot(string first, string second) =>
+        string.Equals(first, second, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A way on as the start of a sentence: "press Model check again" as "Press Model check again".</summary>
+    private static string Begun(string wayOn) => char.ToUpperInvariant(wayOn[0]) + wayOn.Substring(1);
 
     /// <summary>The rule, as every refusal states it.</summary>
     private const string Rule = ", and runs are made only in a local folder reached by its own path";
@@ -354,17 +405,21 @@ public static class RunRootRule
                 return "is written as a Windows device path";
             case RunRootVerdict.Unverified:
                 return "could not be checked, since a part of its path cannot be read";
+            case RunRootVerdict.NameEndsInSpaceOrPeriod:
+                return "has a folder whose name ends in a space or a period, which Windows reads both with and without it";
             default:
                 throw new ArgumentOutOfRangeException(nameof(verdict), verdict, "an accepted run root is not refused");
         }
     }
 
     /// <summary>
-    /// Whether <paramref name="written"/> holds a character no folder's path can: one Windows refuses in a name,
-    /// a wildcard, a control character, or a colon anywhere but after a drive letter. No folder can be made under
-    /// such a root, and its run folder says so; the rule reads nothing of it.
+    /// Whether <paramref name="written"/> names something no folder's path can: a character Windows refuses in a
+    /// name, a wildcard, a control character, or a colon anywhere but after a drive letter - or, since the reviews of
+    /// 154A's merge (N8), a name longer than the 255 characters a folder's can be, whose open Windows answers as an
+    /// invalid name, which the walk would read as a part that cannot be read. No folder can be made under such a
+    /// root, and its run folder says so in Windows' own words; the rule reads nothing of it.
     /// </summary>
-    private static bool HasCharactersNoFolderCanHave(string written)
+    private static bool NamesNoFolderCanHave(string written)
     {
         for (int index = 0; index < written.Length; index++)
         {
@@ -376,8 +431,40 @@ public static class RunRootRule
             }
         }
 
+        foreach (string name in Names(written))
+        {
+            if (name.Length > LongestName)
+            {
+                return true;
+            }
+        }
+
         return false;
     }
+
+    /// <summary>The longest name a folder can have on Windows' file systems.</summary>
+    private const int LongestName = 255;
+
+    /// <summary>
+    /// Whether a name in <paramref name="written"/> - any of its folders', the last too, but <c>.</c> and <c>..</c>,
+    /// which name a folder and the one above it - ends in a space or a period (the reviews of 154A's merge, F1).
+    /// </summary>
+    private static bool HasANameEndingInASpaceOrAPeriod(string written)
+    {
+        foreach (string name in Names(written))
+        {
+            if (name != "." && name != ".." && (name[name.Length - 1] == ' ' || name[name.Length - 1] == '.'))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The names between the separators of <paramref name="written"/>, either separator counted, none empty.</summary>
+    private static string[] Names(string written) =>
+        written.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
 
     /// <summary>Whether two paths name one folder as Windows spells it: the same but for letter case and a final separator.</summary>
     private static bool SameFolder(string path, string other) =>

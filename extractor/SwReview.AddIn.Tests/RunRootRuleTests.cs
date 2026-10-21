@@ -519,6 +519,73 @@ public sealed class RunRootRuleTests : IDisposable
         Assert.Equal(new[] { @"DriveOf Q:\" }, probe.Asked);
     }
 
+    /// <summary>
+    /// The reviews of 154A's merge, N8 (feature 002 T204): a folder name longer than the 255 characters Windows
+    /// allows names no folder, as a character no folder can have does: it is left to the run folder, whose making
+    /// says so in Windows' own words, before anything is read - not opened, and so not called a part that cannot
+    /// be read, which its open's answer (an invalid name) made it. A name of 255 characters is read as any other.
+    /// </summary>
+    [Fact]
+    public void AFolderNameLongerThanWindowsAllowsIsLeftToTheRunFolder()
+    {
+        FakeRunRootProbe tooLong = FakeRunRootProbe.Local();
+        Assert.Equal(RunRootVerdict.Accepted, RunRootRule.Judge(Fictional + @"\" + new string('a', 256) + @"\runs", tooLong));
+        Assert.Empty(tooLong.Asked);
+        Assert.Empty(tooLong.Normalized);
+
+        FakeRunRootProbe longest = FakeRunRootProbe.Local();
+        Assert.Equal(RunRootVerdict.Accepted, RunRootRule.Judge(Fictional + @"\" + new string('a', 255) + @"\runs", longest));
+        Assert.Contains(@"EntryOf C:\Fictional\" + new string('a', 255), longest.Asked);
+    }
+
+    // ---- a folder name that ends in a space or a period (the reviews of the merge, F1) ---------------------
+
+    /// <summary>
+    /// The reviews of 154A's merge, finding F1 (feature 002 T204): a folder name that ends in a space or a period
+    /// is read two ways. <c>GetFullPathNameW</c>, which the rule's full path is made with, and the backend's own
+    /// resolution, which the backend is started with, keep <c>Work </c> and <c>Work..</c> as written, while .NET's
+    /// legacy path handling - SOLIDWORKS' most likely - trims them when the add-in makes its run folders, so every
+    /// run's folder would be made under another folder than the backend's run root and refused deep in the run. So
+    /// any folder of the path, the last too, ending in a space or a period, one or more, is refused on its text,
+    /// before anything is read or made of it - a relative root the settings file names as well.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Fictional\Work \runs")]
+    [InlineData(@"C:\Fictional\Work..\runs")]
+    [InlineData(@"C:\Fictional\Work.\runs")]
+    [InlineData(@"C:\Fictional\Work...\runs")]
+    [InlineData(@"C:\Fictional\Work .\runs")]
+    [InlineData(@"C:\Fictional\runs.")]
+    [InlineData(@"C:\Fictional\Work \")]
+    [InlineData("C:/Fictional/Work /runs")]
+    [InlineData(@"Work \runs")]
+    public void AFolderNameEndingInASpaceOrAPeriodIsRefusedBeforeAnythingIsAsked(string runRoot)
+    {
+        FakeRunRootProbe probe = FakeRunRootProbe.Local();
+
+        Assert.Equal(RunRootVerdict.NameEndsInSpaceOrPeriod, RunRootRule.Judge(runRoot, probe));
+        Assert.Empty(probe.Asked);
+        Assert.Empty(probe.Normalized);
+    }
+
+    /// <summary>
+    /// ...while <c>.</c> and <c>..</c>, the folder itself and the one above it, are no names, and a name with a
+    /// space or a period inside it, or at its start, is a name like any other.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Fictional\.\runs")]
+    [InlineData(@"C:\Fictional\work\..\runs")]
+    [InlineData(@"C:\Fictional\my work\runs.v2")]
+    [InlineData(@"C:\Fictional\.hidden\runs")]
+    [InlineData(@"C:\Fictional\ leading\runs")]
+    public void DotSegmentsAndNamesWithASpaceOrAPeriodInsideAreJudgedAsAnyOther(string runRoot)
+    {
+        FakeRunRootProbe probe = FakeRunRootProbe.Local();
+
+        Assert.Equal(RunRootVerdict.Accepted, RunRootRule.Judge(runRoot, probe));
+        Assert.NotEmpty(probe.Asked);
+    }
+
     // ---- the default run root ----------------------------------------------------------------------------
 
     /// <summary>
@@ -573,6 +640,11 @@ public sealed class RunRootRuleTests : IDisposable
         "The run root could not be checked, since a part of its path cannot be read, and runs are made only in a "
         + "local folder reached by its own path, so nothing was checked. Choose a local folder for runs in "
         + "Settings on the Review tab, then press Model check again.")]
+    [InlineData(
+        RunRootVerdict.NameEndsInSpaceOrPeriod,
+        "The run root has a folder whose name ends in a space or a period, which Windows reads both with and "
+        + "without it, and runs are made only in a local folder reached by its own path, so nothing was checked. "
+        + "Choose a local folder for runs in Settings on the Review tab, then press Model check again.")]
     public void TheRefusalSaysWhatIsTrueOfTheRootTheRuleAndTheWayOn(RunRootVerdict verdict, string words)
     {
         Assert.Equal(
@@ -617,6 +689,11 @@ public sealed class RunRootRuleTests : IDisposable
         "The folder chosen for runs could not be checked, since a part of its path cannot be read, and runs are "
         + "made only in a local folder reached by its own path, so the run root was not changed; the other "
         + "settings were saved. Choose a local folder for runs, then save again.")]
+    [InlineData(
+        RunRootVerdict.NameEndsInSpaceOrPeriod,
+        "The folder chosen for runs has a folder whose name ends in a space or a period, which Windows reads both "
+        + "with and without it, and runs are made only in a local folder reached by its own path, so the run root "
+        + "was not changed; the other settings were saved. Choose a local folder for runs, then save again.")]
     public void ASaveSaysAFolderChosenForRunsWasRefusedAndTheOtherSettingsWereSaved(RunRootVerdict verdict, string words)
     {
         Assert.Equal(words, RunRootRule.ChosenRefusal(verdict));
@@ -648,6 +725,11 @@ public sealed class RunRootRuleTests : IDisposable
         "The run root could not be checked, since a part of its path cannot be read, and runs are made only in a "
         + "local folder reached by its own path, so every run is refused until it is changed; the settings were "
         + "saved. Choose a local folder for runs, then save again.")]
+    [InlineData(
+        RunRootVerdict.NameEndsInSpaceOrPeriod,
+        "The run root has a folder whose name ends in a space or a period, which Windows reads both with and "
+        + "without it, and runs are made only in a local folder reached by its own path, so every run is refused "
+        + "until it is changed; the settings were saved. Choose a local folder for runs, then save again.")]
     public void ASaveSaysTheRunRootItLeavesInForceIsRefused(RunRootVerdict verdict, string words)
     {
         Assert.Equal(words, RunRootRule.KeptRefusal(verdict));
@@ -691,6 +773,52 @@ public sealed class RunRootRuleTests : IDisposable
     }
 
     /// <summary>
+    /// The reviews of 154A's merge, N4 (feature 002 T204): while a folder chosen for runs in Settings is not in
+    /// force - its save's restart failed - a start refused for the run root in force is told so, and the way on
+    /// is the restart the folder chosen comes into force with, not a local folder chosen again, which the engineer
+    /// has just done: what the run root in force is, the rule, what was not done, and that way on, with no path.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        RunRootVerdict.Share,
+        "nothing was started",
+        RunRootRule.InSettings,
+        "try again",
+        "The run root in force is on a network share or a mapped network drive, and runs are made only in a local "
+        + "folder reached by its own path, so nothing was started. The folder chosen for runs in Settings is not in "
+        + "force until the review backend restarts with it: save the settings again to retry the restart, then try "
+        + "again.")]
+    [InlineData(
+        RunRootVerdict.Link,
+        "nothing was checked",
+        RunRootRule.InSettingsOnTheReviewTab,
+        "press Model check again",
+        "The run root in force is reached through a link, such as a junction, a symbolic link or a substituted "
+        + "drive, and runs are made only in a local folder reached by its own path, so nothing was checked. The "
+        + "folder chosen for runs in Settings on the Review tab is not in force until the review backend restarts "
+        + "with it: save the settings again to retry the restart, then press Model check again.")]
+    public void ARunStartUnderARefusedRunRootWhileAnotherIsChosenSaysToRetryTheRestart(
+        RunRootVerdict verdict, string notDone, string where, string wayOn, string words)
+    {
+        Assert.Equal(words, RunRootRule.ChosenNotInForceRefusal(verdict, notDone, where, wayOn));
+    }
+
+    /// <summary>
+    /// The reviews of 154A's merge, N6 (feature 002 T204): what a Model check or a Standards run is answered with
+    /// when, read again once its extraction is over, the run root in force no longer holds its folder - a
+    /// settings save's restart brought another in meanwhile: what changed and when, why it matters, what was not
+    /// done and the way on, with no path. Its pages print it whole.
+    /// </summary>
+    [Fact]
+    public void ARunWhoseRunRootChangedWhileTheModelWasReadIsAnsweredInWordsThatSaySo()
+    {
+        Assert.Equal(
+            "The run root changed while the feature tree was read, and the backend makes runs only under the one in "
+            + "force, so nothing was checked. Press Model check again.",
+            RunRootRule.ChangedRefusal("the feature tree was read", "nothing was checked", "press Model check again"));
+    }
+
+    /// <summary>
     /// A full path starts with its drive letter and a separator, or with two separators - a share or a device
     /// path, which the rule itself refuses. A relative path, one rooted on the current drive, and one on a drive
     /// with no separator after its letter, which is relative to that drive's current folder, are not.
@@ -723,6 +851,9 @@ public sealed class RunRootRuleTests : IDisposable
                 RunRootVerdict.Accepted, "nothing was checked", RunRootRule.InSettings, "press Model check again"));
         Assert.Throws<ArgumentOutOfRangeException>(() => RunRootRule.ChosenRefusal(RunRootVerdict.Accepted));
         Assert.Throws<ArgumentOutOfRangeException>(() => RunRootRule.KeptRefusal(RunRootVerdict.Accepted));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => RunRootRule.ChosenNotInForceRefusal(
+                RunRootVerdict.Accepted, "nothing was checked", RunRootRule.InSettings, "press Model check again"));
     }
 
     // ---- the real thing, under the temp folder -----------------------------------------------------------
@@ -846,6 +977,22 @@ public sealed class RunRootRuleTests : IDisposable
         string link = MakeJunction(Path.Combine(deep, "link"), target);
 
         Assert.Equal(RunRootVerdict.Link, RunRootRule.Judge(Path.Combine(link, "runs"), WindowsRunRootProbe.Instance));
+    }
+
+    /// <summary>
+    /// The reviews of 154A's merge, N8 (feature 002 T204), for real: Windows answers the open of a folder name
+    /// longer than 255 characters as an invalid name, which the probe reads as a part that cannot be read - true of
+    /// the probe, and why the rule never asks it: the rule leaves such a root to the run folder, where the first
+    /// answer called it a root that could not be checked. A name of 255 characters, not made, is not there.
+    /// </summary>
+    [Fact]
+    public void ARealRootWithAFolderNameLongerThanWindowsAllowsIsLeftToTheRunFolder()
+    {
+        string tooLong = Path.Combine(_root, new string('a', 256));
+
+        Assert.Equal(RunRootEntry.Unreadable, WindowsRunRootProbe.Instance.EntryOf(tooLong));
+        Assert.Equal(RunRootEntry.Missing, WindowsRunRootProbe.Instance.EntryOf(Path.Combine(_root, new string('a', 255))));
+        Assert.Equal(RunRootVerdict.Accepted, RunRootRule.Judge(Path.Combine(tooLong, "runs"), WindowsRunRootProbe.Instance));
     }
 
     /// <summary>
