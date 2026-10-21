@@ -513,7 +513,10 @@ public sealed class CheckHoldTests
 
     /// <summary>
     /// The limit is the tab's own option: shorter or longer, the hand-over waits that long, measured from the hand-over
-    /// whenever it is made, and the add-in runs with a minute.
+    /// whenever it is made, and the add-in runs with a minute. Pressed three hours in, as the add-in's clock is long
+    /// after its first minute, the check holds the restart while its model is read too: a start's hold has no limit
+    /// (owner decision 157A, the reviews: the clock the add-in runs with is a stopwatch started with it, never at zero
+    /// when a check is pressed).
     /// </summary>
     [Theory]
     [InlineData("Model check", 5)]
@@ -523,14 +526,40 @@ public sealed class CheckHoldTests
         using var world = new HoldWorld(tab) { HandOverLimit = TimeSpan.FromSeconds(seconds) };
         world.Open();
         world.Advance(TimeSpan.FromHours(3));
+        bool whileTheModelIsRead = false;
+        world.Dump.OnRun = () => whileTheModelIsRead = world.CheckInProgress;
         world.Press("c1");
         world.Extracted("c1");
+        Assert.True(whileTheModelIsRead, "the check held nothing while its model was read, three hours in");
 
         world.Advance(TimeSpan.FromSeconds(seconds) - TimeSpan.FromTicks(1));
         Assert.True(world.CheckInProgress);
         world.Advance(TimeSpan.FromTicks(1));
         Assert.False(world.CheckInProgress);
         Assert.Equal(TimeSpan.FromSeconds(60), CheckPaneHostOptions.DefaultHandOverLimit);
+    }
+
+    /// <summary>
+    /// The clock the add-in runs with - it passes none, so each check host's default is the one in use - goes forward:
+    /// a clock that stood still would never let a hand-over's limit pass, and a page that never evaluates would hold
+    /// every settings restart back until SOLIDWORKS closed (owner decision 157A, the reviews).
+    /// </summary>
+    [Fact]
+    public void TheClockTheAddInRunsWithMovesAndIsEachCheckHostsDefault()
+    {
+        var channel = new CollectingChannel(new List<string>());
+        Func<string> runRoot = () => @"C:\Fictional\FICT-runs";
+        Func<TimeSpan> pane = new CheckPaneHostOptions(channel, runRoot, "check.start", _ => { }).Clock;
+        Func<TimeSpan> model = new ModelCheckHostOptions(channel, runRoot).Clock;
+        Func<TimeSpan> standards = new StandardsHostOptions(channel, runRoot).Clock;
+        TimeSpan[] before = { CheckPaneHostOptions.MonotonicClock(), pane(), model(), standards() };
+
+        System.Threading.Thread.Sleep(50);
+
+        Assert.True(CheckPaneHostOptions.MonotonicClock() > before[0], "the add-in's clock did not move");
+        Assert.True(pane() > before[1], "the check pane's default clock did not move");
+        Assert.True(model() > before[2], "the Model check host's default clock did not move");
+        Assert.True(standards() > before[3], "the Standards host's default clock did not move");
     }
 
     /// <summary>
