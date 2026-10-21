@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -65,10 +68,11 @@ public interface IToolService : IDisposable
     /// line the launch wrote.
     ///
     /// On the service rather than on the gate because the log belongs to the service: the gate
-    /// outlives any one of them, and the only thing it has to say - "I am not re-attaching to
-    /// the document you just opened, because a turn is running" - is a fact about <i>this</i>
-    /// attachment, and belongs in the file the engineer reads to find out what it is attached
-    /// to. Must not throw; a log that cannot be written is not a reason to fail anything.
+    /// outlives any one of them, and what it has to say - "I am not re-attaching to the document
+    /// you just opened, because a turn is running", and since owner decision 158A "I no longer
+    /// wait for a hold held past its limit" - is a fact about <i>this</i> attachment, and belongs
+    /// in the file the engineer reads to find out what it is attached to. Must not throw; a log
+    /// that cannot be written is not a reason to fail anything.
     /// </summary>
     void WriteLog(string line);
 }
@@ -92,6 +96,24 @@ public interface IToolServiceAccess
 
     /// <summary>The document the scope is attached to, or null before the start.</summary>
     string? DocumentPath { get; }
+}
+
+/// <summary>
+/// Owner decision 158A: the kind of work that holds the tool service's attachment
+/// (<see cref="ToolServiceGate.HoldAttachment"/>). The gate names it, in fixed words, in the
+/// tool-service log when it ignores a hold held past <see cref="ToolServiceGate.HoldLimit"/>, so that
+/// line says what held and never a path. The add-in names one for each host it hands the hold to.
+/// </summary>
+public enum ToolServiceHolder
+{
+    /// <summary>A review session's start, from before it reads the bridge until its session is tracked.</summary>
+    ReviewSession,
+
+    /// <summary>A page call that starts a turn, while the pane's proxy has it out.</summary>
+    TurnCall,
+
+    /// <summary>A Remodel plan or run, until the Remodel host is free again: the host's one hold, for either.</summary>
+    Remodel,
 }
 
 /// <summary>
@@ -155,6 +177,13 @@ public interface IToolServiceAccess
 /// only if, under the lock the holds are taken under, none is held and none was taken since it
 /// noted them before its question.
 ///
+/// <b>And a hold by itself holds the bridge for an hour at most</b> (owner decision 158A). Each holder
+/// lets go when its work ends, but one that never let go would keep the tool service on its document
+/// for good. A hold held longer than <see cref="HoldLimit"/> no longer holds back a follow by itself,
+/// and is said once in the tool-service log by its holder's kind and how long it held. Its work is not
+/// stopped, and the busy question is asked as for no hold, so a follow still waits for a turn the
+/// backend has marked running, or a remodel plan or run in progress - which the limit does not bound.
+///
 /// Thread-safe, because it is not called from one thread: the pane's calls come from the
 /// application thread and the start itself completes on a worker.
 /// </summary>
@@ -168,6 +197,28 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// follow is owed.
     /// </summary>
     public static readonly TimeSpan FollowPoll = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// How long a hold by itself holds back a follow (owner decision 158A): an hour. A hold held longer
+    /// no longer does - the look that finds it so asks the busy question as for no hold - and is said
+    /// once in the tool-service log, by its holder's kind and how long it held. Nothing else is done to
+    /// it: its work is not stopped, and letting it go later lets go of nothing more.
+    ///
+    /// <b>Why an hour.</b> The limit is for the holds the busy question cannot see while they hold: a
+    /// review session's start, which holds until `POST /sessions` gives up, after the backend client's
+    /// 30 seconds, and a page call that starts a turn, which holds until the proxy's 120 seconds, before
+    /// the backend has marked its turn running. An hour is thirty times the longer of the two, so neither
+    /// meets it working, and one that never let go holds the follow back an hour and a poll, not for
+    /// ever. A remodel plan or run is bounded by no time: its hold covers the model's judgement turn,
+    /// which only its steps bound, its twenty minutes of changes (004, <see cref="RemodelLimits"/>), the
+    /// after-dump, the verification, the save and the close, so a healthy one can outlast the hour, and
+    /// its hold is then said. But the Remodel host is busy whenever it holds, and the add-in's busy
+    /// question reads a plan or a run in progress first, so the bridge is never taken down under one,
+    /// past the limit or not, and one that never ended would hold the follow back through the busy
+    /// question, which this limit does not bound. A plan or a run is not exempt: an exemption would
+    /// change only the line (on the decision's review: S1, S3).
+    /// </summary>
+    public static readonly TimeSpan HoldLimit = TimeSpan.FromHours(1);
 
     /// <summary>
     /// What a follow owes (owner decision 152A, ordered so that the larger debt covers the smaller):
@@ -190,6 +241,8 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     private readonly Func<string, string, bool>? _preserveAttachment;
     private readonly Action<IToolService> _afterStopped;
     private readonly Action<Action> _later;
+    private readonly Func<TimeSpan> _clock;
+    private readonly TimeSpan _holdLimit;
     private readonly object _lock = new object();
 
     private IToolService? _service;
@@ -213,10 +266,12 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
 
     /// <summary>
     /// Owner decision 152A, on the Codex review (X2): holds taken on the service listening now and not
-    /// let go - work running over its bridge (<see cref="HoldAttachment"/>). Guarded by
+    /// let go - work running over its bridge (<see cref="HoldAttachment"/>) - each with its holder's
+    /// kind and when it was taken. Owner decision 158A: less any a follow found held longer than
+    /// <see cref="HoldLimit"/>, taken out then, so each is said once and holds nothing after. Guarded by
     /// <see cref="_lock"/>.
     /// </summary>
-    private int _holds;
+    private readonly List<Hold> _held = new List<Hold>();
 
     /// <summary>
     /// ...and every hold ever taken, counted: a follow notes it before it asks whether work holds the
@@ -253,6 +308,13 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// <param name="later">Where a look again runs once a follow is owed while work holds the
     /// bridge (owner decision 152A): once, after <see cref="FollowPoll"/>, off the caller's thread.
     /// Defaults to a delay on the thread pool; injectable so the tests are deterministic.</param>
+    /// <param name="clock">What the time is, off which when each hold was taken and how long it has
+    /// held are read (owner decision 158A). Defaults to a stopwatch of the gate's own: a clock that only
+    /// goes forward, so a change of the system's time neither ages a hold nor keeps one young. Read
+    /// under the gate's lock, so it must not wait; injectable so the tests are deterministic.</param>
+    /// <param name="holdLimit">How long a hold holds back a follow: <see cref="HoldLimit"/>, which the
+    /// add-in keeps. Injectable so a case can see the gate's own clock age a hold in a quarter of a
+    /// second; one of no time or less is refused.</param>
     public ToolServiceGate(
         Func<PageDocument?> activeDocument,
         Func<IToolService> start,
@@ -262,7 +324,9 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         Func<bool>? busy = null,
         Func<string, string, bool>? preserveAttachment = null,
         Action<IToolService>? afterStopped = null,
-        Action<Action>? later = null)
+        Action<Action>? later = null,
+        Func<TimeSpan>? clock = null,
+        TimeSpan? holdLimit = null)
     {
         _activeDocument = activeDocument ?? throw new ArgumentNullException(nameof(activeDocument));
         _start = start ?? throw new ArgumentNullException(nameof(start));
@@ -273,6 +337,18 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         _preserveAttachment = preserveAttachment;
         _afterStopped = afterStopped ?? (_ => { });
         _later = later ?? (work => Task.Delay(FollowPoll).ContinueWith(_ => work(), TaskScheduler.Default));
+        Stopwatch ownClock = Stopwatch.StartNew();
+        _clock = clock ?? (() => ownClock.Elapsed);
+
+        // Refused here, as a poll the restart's watcher could not wait out is (DeferredRestart), rather
+        // than ignoring every hold the moment it is taken (owner decision 158A, on its review: R2).
+        if (holdLimit <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(holdLimit), holdLimit, "a hold limit must be longer than no time at all.");
+        }
+
+        _holdLimit = holdLimit ?? HoldLimit;
     }
 
     /// <summary>
@@ -353,8 +429,14 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// Taken and let go under the gate's lock, which is never held while anything is waited for, so
     /// this never waits either - on the SOLIDWORKS application thread least of all. Disposing the hold
     /// lets it go; disposing it again does nothing.
+    ///
+    /// <b>For an hour at most</b> (owner decision 158A): a hold held longer than <see cref="HoldLimit"/>,
+    /// measured from when it was taken, no longer holds back a follow by itself, and is said once in the
+    /// tool-service log by <paramref name="holder"/>'s kind and how long it held - never a path. Its work
+    /// is not stopped, and letting it go afterwards lets go of nothing more.
     /// </summary>
-    public IDisposable? HoldAttachment()
+    /// <param name="holder">The kind of work that holds: what that line names.</param>
+    public IDisposable? HoldAttachment(ToolServiceHolder holder)
     {
         lock (_lock)
         {
@@ -363,37 +445,105 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
                 return null;
             }
 
-            _holds++;
+            var hold = new Hold(this, holder, _clock());
+            _held.Add(hold);
             _holdsTaken++;
+            return hold;
         }
-
-        return new Hold(this);
     }
 
-    /// <summary>A hold on the gate, let go once (<see cref="HoldAttachment"/>).</summary>
+    /// <summary>
+    /// A hold on the gate, let go once (<see cref="HoldAttachment"/>): what holds, and when on the gate's
+    /// clock it was taken (owner decision 158A).
+    /// </summary>
     private sealed class Hold : IDisposable
     {
         private ToolServiceGate? _gate;
 
-        public Hold(ToolServiceGate gate)
+        public Hold(ToolServiceGate gate, ToolServiceHolder holder, TimeSpan takenAt)
         {
             _gate = gate;
+            Holder = holder;
+            TakenAt = takenAt;
         }
 
-        public void Dispose() => Interlocked.Exchange(ref _gate, null)?.LetGo();
+        public ToolServiceHolder Holder { get; }
+
+        public TimeSpan TakenAt { get; }
+
+        public void Dispose() => Interlocked.Exchange(ref _gate, null)?.LetGo(this);
     }
 
     /// <summary>
     /// A hold let go. A follow it kept owed is looked at when its poll comes due, as any follow owed
-    /// while work holds the bridge is.
+    /// while work holds the bridge is. Owner decision 158A: one a follow ignored past the limit was
+    /// taken out of the holds then, so letting it go now lets go of nothing - of no other hold, as a
+    /// count of holds would have - and says nothing, its line written when it was ignored.
     /// </summary>
-    private void LetGo()
+    private void LetGo(Hold hold)
     {
         lock (_lock)
         {
-            _holds--;
+            _held.Remove(hold);
         }
     }
+
+    /// <summary>
+    /// Owner decision 158A: takes out of the holds every one held longer than the limit, each measured
+    /// from when it was taken - so a hold taken as another passes the limit still holds - and answers
+    /// what each was and how long it had held, for the caller to say once the lock is let go. Under
+    /// <see cref="_lock"/>.
+    /// </summary>
+    private List<(ToolServiceHolder Holder, TimeSpan Held)> TakeHoldsPastTheLimit()
+    {
+        var ignored = new List<(ToolServiceHolder Holder, TimeSpan Held)>();
+        if (_held.Count == 0)
+        {
+            return ignored;
+        }
+
+        TimeSpan now = _clock();
+        for (int index = 0; index < _held.Count;)
+        {
+            Hold hold = _held[index];
+            TimeSpan held = now - hold.TakenAt;
+            if (held > _holdLimit)
+            {
+                _held.RemoveAt(index);
+                ignored.Add((hold.Holder, held));
+            }
+            else
+            {
+                index++;
+            }
+        }
+
+        return ignored;
+    }
+
+    /// <summary>
+    /// Owner decision 158A: the tool-service log's line for a hold ignored past the limit - what held, in
+    /// fixed words, and for how long, and never a path or a document's name. "By itself": the busy
+    /// question still keeps the bridge under a turn the backend has marked running, or a remodel plan or
+    /// run in progress, so the line is true of every holder (on its review).
+    /// </summary>
+    private string IgnoredLine(ToolServiceHolder holder, TimeSpan held) =>
+        "ignoring a hold by " + HolderWords(holder) + ": held for " + HoursMinutesSeconds(held)
+        + ", longer than the " + HoursMinutesSeconds(_holdLimit) + " limit, so it no longer holds back "
+        + "following the active document by itself; its work is not stopped";
+
+    private static string HolderWords(ToolServiceHolder holder) => holder switch
+    {
+        ToolServiceHolder.ReviewSession => "a review session's start",
+        ToolServiceHolder.TurnCall => "a page call that starts a turn",
+        ToolServiceHolder.Remodel => "a Remodel plan or run",
+        _ => "work of kind " + ((int)holder).ToString(CultureInfo.InvariantCulture),
+    };
+
+    /// <summary><c>h:mm:ss</c>, the hours counted on past a day.</summary>
+    private static string HoursMinutesSeconds(TimeSpan span) =>
+        ((long)span.TotalHours).ToString(CultureInfo.InvariantCulture)
+        + span.ToString(@"\:mm\:ss", CultureInfo.InvariantCulture);
 
     /// <summary>The running service, or null. Null is an ordinary state, not a failure.</summary>
     public IToolService? Service
@@ -637,15 +787,23 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         // while the question is out is owed afresh (the 152A review's N2) - and a switch's own follow
         // at least. And the holds taken so far, noted before the question is asked (the Codex review's
         // X2): one taken while it is out keeps the bridge (FollowNow), and one held now is work holding
-        // the bridge, answered without the question's round trip.
+        // the bridge, answered without the question's round trip. Owner decision 158A: less any hold held
+        // longer than the limit, taken out now and said below, once the lock is let go.
         Owed owed;
         long holdsTaken;
         bool held;
+        List<(ToolServiceHolder Holder, TimeSpan Held)> ignored;
         lock (_lock)
         {
             owed = Take();
             holdsTaken = _holdsTaken;
-            held = _holds > 0;
+            ignored = TakeHoldsPastTheLimit();
+            held = _held.Count > 0;
+        }
+
+        foreach ((ToolServiceHolder holder, TimeSpan heldFor) in ignored)
+        {
+            Log(attached, IgnoredLine(holder, heldFor));
         }
 
         if (switchedTo != null && owed < Owed.Path)

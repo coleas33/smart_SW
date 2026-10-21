@@ -165,6 +165,13 @@ hold once more and reads the bridge again under it; with still none to be had, i
 `BridgeOnAnotherDocument`, retryable, rather than given a bridge nothing holds. With nothing
 published, the session is given none, as before.
 
+*Amended 2026-10-21 (owner decision 158A; [research.md](../research.md), 158A):* those holds - a
+session's start's and a turn call's - hold back the tool service's follow by themselves for an hour at
+most (`ToolServiceGate.HoldLimit`), measured from when each was taken: far past `POST /sessions`' 30
+seconds and a turn call's 120. One held longer is said once in the tool-service log by its holder's
+kind and how long it held, never with a path; the start or the call is not stopped, and a turn the
+backend has marked running still keeps the bridge. No message changes.
+
 `report.open` and `folder.open` resolve the path from the host's own session record keyed by
 `chat_id`; the page never supplies a path. `log.open` uses the host's log folder. Every
 resolved path is canonicalized and must be a descendant of `run_root` (or the log folder)
