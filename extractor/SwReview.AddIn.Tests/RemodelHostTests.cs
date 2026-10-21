@@ -7231,6 +7231,36 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 159A, on review (004 T235 - a guard; asked as 158A was merged): a line the add-in's log keeps while
+    /// something else holds the file is the line the host masked, so the key a failure quoted reaches neither the kept
+    /// line nor the file once it is written. The host masks a line before it hands it on (FR-015;
+    /// <see cref="WhatTheLogKeepsIsMasked"/>), and <c>AddInLog</c> keeps only what it is handed.
+    /// </summary>
+    [Fact]
+    public void ALineKeptWhileTheLogIsHeldIsTheMaskedLine()
+    {
+        using (var world = new RemodelWorld())
+        {
+            string log = Path.Combine(world.Root, "FICT-addin.log");
+            File.WriteAllText(log, string.Empty);
+            world.Open();
+            world.Options.Log = line => AddInLog.Append(log, line);
+            world.Pipeline.ProbeFailure = TheBackends("RunFolderFailed", "FICT the backend refused it, quoting 0FAKEtoken.");
+
+            using (new FileStream(log, FileMode.Append, FileAccess.Write, FileShare.Read))
+            {
+                world.Receive("remodel.plan", "p1", new { });
+            }
+
+            AddInLog.Append(log, "FICT a later line");
+            string written = File.ReadAllText(log);
+            Assert.Contains("FICT the backend refused it, quoting", written, StringComparison.Ordinal);
+            Assert.DoesNotContain("0FAKEtoken", written, StringComparison.Ordinal);
+            Assert.Contains("FICT a later line", written, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// Owner decision 159A, on review (004 T229 - a guard): the line the host's log keeps, in the shape research R19.3 and
     /// `run-artifacts.md` give it - `Remodel tab, &lt;what was asked&gt;: &lt;class&gt;: &lt;sentence&gt;` for a refusal,
     /// and for any other failure the whole of it: its type, its message and where it was thrown.

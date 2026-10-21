@@ -2972,3 +2972,30 @@ the 48 new cases of T215 (3), T217 (5), T219 (2), T221 (1), T223 (23), T225 (1),
 with the remodel host, page, end-to-end, pipeline, client and wiring classes, the shared rows, `AddInLogTests`, and
 the restart and tool-service classes, 2,846 cases, green five times in a row. No Python file changed, so the Python
 suites were not run again; RPY1 ran `test_chat_remodel_routes.py`, which only its mutation turned red. No broken link.
+
+### R19.13 The merge of 158A (T235)
+
+`main` at `4f40dae`, with owner decision 158A - a hold holds back the tool service's follow for an hour at most - was
+merged into this branch, not rebased onto it. One conflict, in `RemodelHostTests.RemodelWorld`'s options, kept both
+sides: 158A's `HoldAttachment(ToolServiceHolder.Remodel)` and 159A's collected log. The 004 records merged without a
+conflict, 158A's dated notes beside 159A's. Every hold this branch takes names its holder, and the lost-plan cases that
+run through the real `ToolServiceGate` pass, with 158A's own `ThroughTheGateARunHeldPastTheHoldLimitIsStillNotTakenDownUnder`
+and `APlanOrARunTakesItsHoldOnlyOnceTheHostIsBusy` beside them.
+
+Asked with the merge:
+
+- **The log's tests under load.** `AddInLogTests` and the host's two `addin.log` cases, twenty times in a row while the
+  full add-in suite, 3,676 cases, ran alongside: green every time. Of the two that depend on time, the threads' case is
+  deterministic once the appends are one at a time, and the brief holder holds 30 ms against waits of 300 ms; neither
+  flaked, so neither was changed.
+- **A kept line carries no key.** `AddInLog` keeps the line it is handed, and the host masks a line before it hands it
+  on (FR-015), so a line kept while the file is held is the masked line: the key a failure quoted reaches the file no
+  more than it would have, and is not held in memory either. The add-in's other lines are fixed sentences, a failure's
+  type, an assembly's name and path, and `Report`'s masked text. Pinned: `ALineKeptWhileTheLogIsHeldIsTheMaskedLine`,
+  red with the host's masking taken out (W22b: 2 cases of 2 tests, with `WhatTheLogKeepsIsMasked`).
+
+**Evidence** (2026-10-21, at the merge `e434075` and T235): the C# build, `--no-incremental`, at zero warnings;
+`SwReview.Extractor.Tests` 10,086 passed and `SwReview.AddIn.Tests` 3,676 - this branch's 3,651, 158A's 24 and T235's
+one - with the remodel host, page, end-to-end, pipeline, client and wiring classes, the shared rows, `AddInLogTests`,
+and the restart and tool-service classes, 2,875 cases, green five times in a row. The record readers
+(`test_workstation_test_plan.py`): 240 passed on 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`). No broken link.
