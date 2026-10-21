@@ -2305,6 +2305,54 @@ words for the strip.
     `StartBackend()`, which takes nothing now, where it read `StartBackend(UserSettings settings,
     ResolvedApiKey key)` - an anchor; nothing it asserts moves. The Review page driver's `init`
     carries `settings_not_in_force_revision`, null unless a case sets it.
+- **Third review**: a Codex adversarial review of the fixes at `4c604e2` found one more race (R1,
+  medium), settled test first by T183 to T185:
+  - Every start publishes the backend's endpoint before it records the settings it was made with:
+    `BackendSupervisor.Start` sets `Current` inside the backend client's start, and `StartWith`
+    records the settings once that has returned. After a save that switched the provider and failed
+    with no backend up, the first start - made, since C1, with the saved settings - left a moment in
+    which the backend was up with the saved settings while the record still held the settings
+    loaded. An `init` read then said the saved settings were not in force, numbered above the
+    failure's word, and the page held it: the add-in's `ready` asks for no `init` on a page that has
+    the backend, and one it asks for while another is pending is dropped (`showStatus`,
+    `requestInit`). `DeferredRestart.First` marks nothing, so `init` could not tell that moment from
+    a failed restart's.
+  - The same moment had two more readers. A session made then - a review, a recheck, a context
+    review, their Retries - took its provider, model and effort from the record, the settings
+    loaded, on the backend started with the saved ones' environment: the pairing 153A ended. And the
+    keys masked - the saved key and the recorded one - left out the key that backend was started
+    with once a save made meanwhile had replaced the saved settings.
+  - Fixed where the moment is made. `StartWith`, the one transition every start goes through, marks
+    the start under way from just before it starts the backend until it has recorded the settings,
+    or thrown (`ReviewHost._starting`, the settings it was made with), and records them before it
+    takes the mark off. `SettingsNotInForce` says nothing while a start is under way, as while a
+    restart waits or is being made, and reads the endpoint first, so a start whose endpoint it read
+    is still under way, or has recorded its settings. `CreateReviewSession` makes no session while
+    one is: just before it reads the settings in force it refuses the session as a review asked for
+    before the backend is up is refused - `BackendUnavailable`, retryable, in the same words
+    (`BackendNotRunningYet`, which `BackendReady` now shares). A review extracts first, so its
+    evidence stays in its run folder, as for a backend that stops during an extraction; in practice
+    the moment is over long before an extraction is. `KeysToMask` adds the key of a start under way.
+  - Marking `_making` in `DeferredRestart.First`, as a save's restart is marked, was weighed and
+    left. `Ahead` is what the Remodel tab reads to tell its page that a press waits "for the review
+    backend to restart with the saved settings" (145A, whose third review took out words that said
+    the backend was restarting when it might not be), and a first start is no restart. Nor does
+    `Ahead` reach the other two readers: a review's gate reads only whether a restart waits, and the
+    keys masked read no restart at all. A mark made in `StartWith` covers every start by
+    construction, as the record itself does.
+  - The same window in the restarts, checked as the review asked. `RestartWith` goes through
+    `StartWith`, so a restart, too, publishes the new backend's endpoint before it records the
+    settings. `init` was never wrong there: a save's restart made at once holds `_making` from before
+    it starts the backend until after the record (`DeferredRestart.Now`, its `finally`), and one that
+    waited stays pending until `End`, after the record, so `Ahead` covered the moment. Sessions never
+    met it: a save's restart is made on the page pump that makes sessions, and a review waits under
+    the restart lock for one that waited. The keys masked did, when a save was made during a restart
+    that waited, and the mark covers that now. Two guards pin the `init` read during either restart;
+    they passed before the change.
+  - The page is unchanged: the word it held is no longer said.
+  - Existing cases changed deliberately: none. `MakeASession`'s first three asks moved into
+    `AskForASession`, which the new cases use to expect a refusal, and the test world's backend can
+    hold a start once it has published the backend's endpoint (`Published`).
 - **Not changed**:
   - A backend that dies while the saved settings are not in force: no host posts `backend.stopped`
     (150A), so the Review page goes on saying reviews run with the settings it was started with until
@@ -2316,6 +2364,11 @@ words for the strip.
   - `models.list`, and a save's check of its model, ask the backend that is up for the provider the
     Settings form shows; a backend started for another provider may not list it, and the model is
     then saved unchecked, as on any provider switch.
+  - The mark of a start under way (`_starting`) and the record of the settings in force
+    (`_inForce`) are two references, written in an order no case can pin (mutation W7): the mark
+    comes off only once the record is written, as a comment in `StartWith` says. One reference
+    holding both, written once, would make that order a single write, at the cost of changing every
+    reader of the record; left as it is (third review).
 - **Existing cases changed deliberately**: three cases pinned word for word the `status` a restart
   that waited posts when it failed before it stopped the old backend - the "old backend still up"
   half of `ARestartThatWaitedAndFailedSaysSavingAgainRetriesIt`, the "after waiting" half of
@@ -2406,9 +2459,26 @@ words for the strip.
   | C2f | `app.js`, `holdNotInForce` | the number of a reading taken never kept | 1 |
   | C2g | `app.js`, `holdNotInForce` | a word with no number not taken | 8 |
 
+  For the third review: 7 mutations, the same way - the host's classes, 475 cases - 43 red results in
+  all, six of the seven turning at least one case red. W5, the mark left on a start that threw, turned
+  28 existing cases red - the sessions, `init`'s sentence, the failure's word and the keys masked after
+  a restart that threw - and none of the new ones, whose starts all succeed. W7 survived: it takes the
+  mark off before the settings are recorded, a moment no case can hold, since nothing is called
+  between the two (Not changed, below).
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | W1 | `ReviewHost.StartWith` | no start marked under way | 5 |
+  | W2 | `ReviewHost.SettingsNotInForce` | read while a start is under way | 1 |
+  | W3 | `ReviewHost.CreateReviewSession` | a session made while a start is under way | 3 |
+  | W4 | `ReviewHost.KeysToMask` | the key of a start under way not masked | 1 |
+  | W5 | `ReviewHost.StartWith` | the mark left on a start that threw | 28 |
+  | W6 | `ReviewHost.StartWith` | the mark set once the start has returned | 5 |
+  | W7 | `ReviewHost.StartWith` | the mark taken off before the settings are recorded | 0 |
+
 - **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first; the review's, T171, T173
-  and T175; and the second review's, T178 and T180. 153A's tasks are T166 to T182: it lands first
-  among this round's 002 decisions, so its numbers stand.
+  and T175; the second review's, T178 and T180; and the third's, T183. 153A's tasks are T166 to
+  T185: it lands first among this round's 002 decisions, so its numbers stand.
 
 ### 156A. 002's other words for the hidden Terminal tab, and an invalid escape in a test (2026-10-20)
 
