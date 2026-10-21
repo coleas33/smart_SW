@@ -1384,6 +1384,65 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
+    /// A review's preparation with a restart waiting that nothing holds back makes it first, as the review's start
+    /// makes it, and reads the component tree only then (the final reviews of 157A: the preparation passes the gate a
+    /// new review passes).
+    /// </summary>
+    [Fact]
+    public void AReviewsPreparationMakesARestartNothingHoldsBackFirst()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10), Prepares = true };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        int restartsWhenRead = -1;
+        world.OnPrepare = () => restartsWhenRead = world.Backend.Restarts.Length;
+
+        world.Receive("review.prepare", "prepare", new { });
+
+        world.Reply("review.prepared", "prepare");
+        Assert.Equal(1, restartsWhenRead);
+        Assert.Equal("low", Assert.Single(world.Backend.Restarts).Settings.Effort);
+        Assert.Equal(1, world.Preparations);
+    }
+
+    /// <summary>
+    /// ...and, as after every gate that can wait (owner decision 149A), reads its document again before it reads
+    /// anything from it: one whose document changed during the restart its gate made, or between its two readings
+    /// with no restart waiting, is refused as a review's start is, and reads nothing (the final reviews of 157A).
+    /// </summary>
+    [Theory]
+    [InlineData("during the restart its gate made")]
+    [InlineData("between its readings, no restart waiting")]
+    public void AReviewsPreparationWhoseDocumentChangedAfterItWasAskedForIsRefusedAndReadsNothing(string when)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10), Prepares = true };
+        world.Open();
+        world.Track("chat-1");
+        PageDocument pressed = world.Document!;
+        string[] folders = FoldersUnderTheRunRoot(world);
+        if (when == "during the restart its gate made")
+        {
+            SaveAsATurnStarts(world, "save", Save(effort: "low"));
+            world.Backend.EndTurn("chat-1");
+            world.Backend.DuringRestart = () => world.Document = Changed(pressed, "another document");
+        }
+        else
+        {
+            int before = world.DocumentReads;
+            world.DocumentAtRead = read => read == before + 1 ? pressed : Changed(pressed, "another document");
+        }
+
+        world.Receive("review.prepare", "prepare", new { });
+
+        AssertRefusedForADocumentThatChanged(world, "prepare", folders, pressed);
+        Assert.Equal(0, world.Preparations);
+        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("stage").GetString() == "preparing");
+        Assert.Equal(when == "during the restart its gate made" ? 1 : 0, world.Backend.Restarts.Length);
+    }
+
+    /// <summary>
     /// A Recheck (feature 015) extracts nothing and asks the seat nothing: it re-runs the checks on
     /// the evidence saved in its own run folder and carries the first run's live detection over
     /// rather than detecting again (015 `contracts/recheck.md` section 3). A document made active
@@ -6260,20 +6319,27 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// A check that holds the restart back holds a new review and a turn call back too, as a remodel run does (owner
-    /// decision 157A): neither may run on the old backend, and the restart cannot be made under the check. The
-    /// refusal names the check - one, or one on each check tab - under its own class, `CheckRunning`, whose sentence
-    /// is true of it; a new review is refused retryable, as every refusal of a review is, and a turn call with the
-    /// flag a turn's refusal carries. Nothing is extracted, created or restarted.
+    /// A check that holds the restart back holds a new review - its preparation as well as its start - and a turn
+    /// call back too, as a remodel run does (owner decision 157A): none may run on the old backend, and the restart
+    /// cannot be made under the check. The refusal names the check - one, or one on each check tab - under its own
+    /// class, `CheckRunning`, whose sentence is true of it; a new review is refused retryable, as every refusal of a
+    /// review is, and a turn call with the flag a turn's refusal carries. Nothing is read, extracted, created or
+    /// restarted. (The preparation's rows were added on the final reviews of 157A, when it was given the gate.)
     /// </summary>
     [Theory]
     [InlineData("a new review", "Model check")]
     [InlineData("a new review", "both")]
+    [InlineData("a review's preparation", "Model check")]
+    [InlineData("a review's preparation", "Standards")]
     [InlineData("a turn call", "Standards")]
     [InlineData("a turn call", "both")]
     public void WhileACheckHoldsTheRestartANewReviewOrATurnCallIsRefusedSayingSo(string caller, string checks)
     {
-        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            Prepares = caller == "a review's preparation",
+        };
         world.Checking(checks, () => true);
         world.Open();
         world.Track("chat-1");
@@ -6283,15 +6349,7 @@ public sealed class DeferredRestartTests
         string? errorClass;
         string? message;
         bool retryable;
-        if (caller == "a new review")
-        {
-            world.Receive("review.start", "start", new { });
-            JsonElement error = world.Reply("error", "start");
-            errorClass = error.GetProperty("error_class").GetString();
-            message = error.GetProperty("message").GetString();
-            retryable = error.GetProperty("retryable").GetBoolean();
-        }
-        else
+        if (caller == "a turn call")
         {
             BackendRequestException? refusal = world.Host.PageTurnRefusal();
             Assert.NotNull(refusal);
@@ -6299,10 +6357,20 @@ public sealed class DeferredRestartTests
             message = refusal.Message;
             retryable = refusal.Retryable;
         }
+        else
+        {
+            world.Receive(caller == "a new review" ? "review.start" : "review.prepare", "start", new { });
+            JsonElement error = world.Reply("error", "start");
+            errorClass = error.GetProperty("error_class").GetString();
+            message = error.GetProperty("message").GetString();
+            retryable = error.GetProperty("retryable").GetBoolean();
+        }
 
         Assert.Equal("CheckRunning", errorClass);
         Assert.Equal(checks == "both" ? ChecksHoldIt : CheckHoldsIt, message);
-        Assert.Equal(caller == "a new review", retryable);
+        Assert.Equal(caller != "a turn call", retryable);
+        Assert.Equal(0, world.Preparations);
+        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("stage").GetString() == "preparing");
         Assert.Equal(0, world.Dump.Runs);
         Assert.Empty(world.Backend.Sessions);
         Assert.Equal(0, world.Backend.Attempts);
@@ -7005,6 +7073,44 @@ public sealed class DeferredRestartTests
             "the backend restarted while the Model check's evaluation was out: restarts asked when it was answered = "
                 + evaluation.RestartsAskedWhenAnswered);
         Eventually(() => world.Backend.Restarts.Length == 1, "the restart once the Model check's evaluation is answered");
+    }
+
+    /// <summary>
+    /// A review's preparation while a save's restart waits for a check is refused, as the review's start is, before it
+    /// reads the component tree on SOLIDWORKS' application thread, where the check's page waits to evaluate: so no
+    /// read of it holds the page up past its minute, and the check's evaluation is held and answered by the backend
+    /// the check began on, the restart made once it has been (the final reviews of 157A: the race review's probe,
+    /// which showed the evaluation refused, its extraction wasted, when the preparation passed no gate).
+    /// </summary>
+    [Theory]
+    [InlineData("Model check")]
+    [InlineData("Standards")]
+    public void AReviewsPreparationWhileASaveWaitsForACheckIsRefusedAndTheChecksEvaluationIsHeld(string tab)
+    {
+        using var world = new RestartWorld { Prepares = true };
+        world.Open();
+        using var check = new CheckTab(world, tab);
+        check.Press("c1");
+        string runDirectory = check.Extracted("c1");
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        world.Reply("settings.saved", "save");
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+
+        world.Receive("review.prepare", "prepare", new { });
+
+        JsonElement refused = world.Reply("error", "prepare");
+        Assert.Equal("CheckRunning", refused.GetProperty("error_class").GetString());
+        Assert.Equal(CheckHoldsIt, refused.GetProperty("message").GetString());
+        Assert.True(refused.GetProperty("retryable").GetBoolean());
+        Assert.Equal(0, world.Preparations);
+        Assert.Empty(world.Posted("review.prepared"));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+        Assert.Equal(201, check.Evaluate(runDirectory).Status);
+        CheckTab.Evaluation evaluation = Assert.Single(check.Evaluations);
+        Assert.Equal(0, evaluation.Generation);
+        Assert.Equal(0, evaluation.RestartsAskedWhenAnswered);
+        Eventually(() => world.Backend.Restarts.Length == 1, "the restart once the check's evaluation is answered");
     }
 
     /// <summary>
@@ -8735,6 +8841,7 @@ public sealed class DeferredRestartTests
         private int _otherTabsTold;
         private int _documentReads;
         private int _followsAsked;
+        private int _preparations;
 
         public RestartWorld()
         {
@@ -8788,6 +8895,12 @@ public sealed class DeferredRestartTests
         /// a preparation of the active document, its tree empty (owner decision 149A, on review).
         /// </summary>
         public bool Prepares { get; set; }
+
+        /// <summary>How many times the host read the component tree for a preparation.</summary>
+        public int Preparations => Volatile.Read(ref _preparations);
+
+        /// <summary>Runs as the host reads the component tree for a preparation.</summary>
+        public Action? OnPrepare { get; set; }
 
         /// <summary>How often the host asks whether the turn has ended; short, so the tests are.</summary>
         public TimeSpan Poll { get; set; } = TimeSpan.FromMilliseconds(10);
@@ -8915,13 +9028,18 @@ public sealed class DeferredRestartTests
                 Environment = name => WorkstationEnvironment(name),
                 Dump = Dump,
                 PrepareReview = Prepares
-                    ? () => new ReviewPreparation(
-                        new ComponentTreeResult
-                        {
-                            RootDocumentPath = Document!.Path,
-                            ActiveConfiguration = Document.Configuration ?? string.Empty,
-                        },
-                        new GapCollector())
+                    ? () =>
+                    {
+                        Interlocked.Increment(ref _preparations);
+                        OnPrepare?.Invoke();
+                        return new ReviewPreparation(
+                            new ComponentTreeResult
+                            {
+                                RootDocumentPath = Document!.Path,
+                                ActiveConfiguration = Document.Configuration ?? string.Empty,
+                            },
+                            new GapCollector());
+                    }
                     : (Func<ReviewPreparation>?)null,
                 EngineeringSelection = Selection,
                 Engineer = "FICT-engineer",

@@ -2817,6 +2817,24 @@ public sealed class ReviewHost : IDisposable
             SendError(id, "TurnRunning", "Stop the running review before preparing another.", true);
             return;
         }
+
+        // The final reviews of 157A: the preparation reads the whole component tree on SOLIDWORKS' application thread,
+        // where a check's page waits to evaluate, so it passes the gate the review's start passes - refused while a
+        // restart waits that something holds back, a check's evaluation among them, which a read in front of it would
+        // hold up past its minute; and a restart nothing holds back made first, as the start would make it.
+        if (!RestartedForNewReview(id))
+        {
+            return;
+        }
+
+        // ...and, as after every gate that can wait (owner decision 149A), the document is read again before anything
+        // is read from it: always, and a review of another document than the one it was asked for is refused.
+        if (!document.IsSameDocument(_options.CurrentDocument()))
+        {
+            SendError(id, "DocumentChanged", DocumentChangedMessage, retryable: true);
+            return;
+        }
+
         PostStatus("preparing", "Reading component availability before the review...");
         ReviewPreparation preparation;
         try
