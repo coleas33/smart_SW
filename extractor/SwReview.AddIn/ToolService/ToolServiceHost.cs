@@ -800,9 +800,10 @@ public sealed class ToolServiceHost : IToolService
     public string LogPath => _log.Path;
 
     /// <summary>
-    /// One timestamped line into this launch's log, for the gate: the only thing it has to say
-    /// is why it is leaving this service attached to a document the engineer has switched away
-    /// from, which belongs beside the <c>attached to ...</c> line rather than in the add-in log.
+    /// One timestamped line into this launch's log, for the gate: what it has to say is why it is
+    /// leaving this service attached to a document the engineer has switched away from, or since
+    /// owner decision 158A that a hold held past its limit no longer keeps it attached by itself,
+    /// which belongs beside the <c>attached to ...</c> line rather than in the add-in log.
     /// </summary>
     public void WriteLog(string line) => _log.WriteLine(line);
 

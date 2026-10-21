@@ -616,7 +616,10 @@ the pipe. *Amended 2026-10-20 (owner decision 152A, on the Codex review):* a pla
 the attachment through the add-in's gate while they run, so a follow does not take it down under
 them, even one whose busy question was answered before they began (`pane-remodel-messages.md`,
 decision 22A's section); the `remodel.*` family is not asked the configuration the review's live
-commands are (Serve/PROTOCOL.md).
+commands are (Serve/PROTOCOL.md). *Amended 2026-10-21 (owner decision 158A):* a hold by itself keeps
+a follow back for an hour at most; a plan or a run still going past it is not followed away from all
+the same, since the add-in's busy question reads it in progress (`pane-remodel-messages.md`, decision
+22A's section).
 
 The pane refuses Start first: `RemodelHost` records the attachment each plan was made on and
 answers `remodel.start` with `SessionLost` when it is not the one listening now, before any
