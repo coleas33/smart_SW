@@ -2755,8 +2755,8 @@ public sealed class ReviewHost : IDisposable
         // checks run over whatever document that is attached to. Asked before anything is made, so
         // a bridge left on another document costs no extraction; asked again at the session, which
         // is given the bridge read then (CreateReviewSession). After the run root (merged with 154A,
-        // 2026-10-21), as at the session: a run root refused is answered first, since pressing Review
-        // again - this refusal's way on - would only meet it.
+        // 2026-10-21), as at the session: 154A judges the run root before anything is asked or made
+        // under it, and this asks the tool service (corrected on the final reviews, N1).
         if (!BridgeServes(document))
         {
             RefuseBridgeElsewhere(id, BridgeElsewhereBeforeExtractionMessage);
@@ -3015,6 +3015,30 @@ public sealed class ReviewHost : IDisposable
         + "document once no review turn or remodel holds it: wait a moment, then try again.";
 
     /// <summary>
+    /// Owner decision 152A, on the final review (C1): the hold a session's start takes, and the bridge it
+    /// would hand over, read under it. The hold is asked for first and the bridge read after, so a bridge
+    /// read under a hold is vouched for by the bridge check - which asks the gate whether the service
+    /// listening now, the one held, has its pipe. A hold the gate cannot give - no service listening as it
+    /// was asked for, a re-attach under way - can be followed by a bridge that re-attach published since,
+    /// which nothing would hold while `POST /sessions` is out, and a follow could take it down under the
+    /// review's first checks; so with a bridge published, the hold is asked for again, and the bridge read
+    /// again under it. Answers the hold, or null when there is still none to be had: the caller then hands
+    /// over no bridge - refusing one published, giving none when none is.
+    /// </summary>
+    private IDisposable? HoldForTheBridge(out BridgeConfig? bridge)
+    {
+        IDisposable? hold = _options.HoldToolService();
+        bridge = _options.Bridge;
+        if (hold == null && bridge != null)
+        {
+            hold = _options.HoldToolService();
+            bridge = _options.Bridge;
+        }
+
+        return hold;
+    }
+
+    /// <summary>
     /// Owner decision 152A: whether the bridge published now - the one a session made now would be
     /// given - serves <paramref name="document"/>.
     /// </summary>
@@ -3149,22 +3173,23 @@ public sealed class ReviewHost : IDisposable
         // is read until the session is tracked, at the end of this method - `POST /sessions` runs the
         // review's checks over the bridge, and the gate's busy question sees the session's turn only
         // once it is tracked - so a follow whose question was answered before this session existed
-        // does not take the bridge down under it. With none listening to hold, the session is given
-        // what is published, as before.
-        using IDisposable? hold = _options.HoldToolService();
+        // does not take the bridge down under it. And no bridge is handed over unheld (the final
+        // review, C1): one published with no hold to be had is held at a second asking, or refused
+        // below (HoldForTheBridge). With nothing published, the session is given none, as before.
+        using IDisposable? hold = HoldForTheBridge(out BridgeConfig? bridge);
 
         // Owner decision 152A: every start that makes a session - a new review, a Retry, a context
         // review and its Retry, a Recheck - asks which document the bridge it hands over serves, and
         // hands over only one on the review's. The bridge is read once, here, and that one is given:
         // a pipe serves one attachment for its whole life, so a session given it either reaches the
-        // document asked about or nothing. Merged with 153A and 154A (2026-10-21), it is asked last:
-        // a start under way and a run root that moved are true whatever the bridge serves, and their
-        // ways on - press again once the backend is up, review under the run root in force - are not
-        // this refusal's, whose "wait a moment, then try again" would only meet them. So the session is
-        // given the bridge checked here, a run folder under the run root in force checked above, and
-        // the settings in force read below.
-        BridgeConfig? bridge = _options.Bridge;
-        if (!BridgeServes(document, bridge))
+        // document asked about or nothing. Merged with 153A and 154A (2026-10-21), it is asked last,
+        // in the order those two leave: 153A reads a start under way before anything of the settings
+        // in force, the run root among them, and 154A judges the run root, and the folder under it,
+        // before anything is asked or made under it - and the hold and this question ask the tool
+        // service, and a refusal asks it to follow (corrected on the final reviews, N1). So the
+        // session is given the bridge checked here, a run folder under the run root in force checked
+        // above, and the settings in force read below.
+        if ((hold == null && bridge != null) || !BridgeServes(document, bridge))
         {
             // Nothing runs over this bridge: let it go before the tool service is asked to follow,
             // which a hold still held would put off a poll.

@@ -1279,8 +1279,9 @@ public sealed class RemodelHost : IDisposable
             // reads its attachment, so no follow takes the bridge down under it - the busy question a
             // follow asks can have been answered before this plan began. None listening to hold - none
             // started, or a follow taking one down - is refused as while the tool service attaches.
-            // After the run root (merged with 154A, 2026-10-21): a run root refused is answered first,
-            // since this refusal's way on, pressing Remodel again in a moment, would only meet it.
+            // After the run root (merged with 154A, 2026-10-21): 154A judges the run root before anything
+            // is asked or made under it, and the hold asks the tool service (corrected on the final
+            // reviews, N1).
             if (!HoldTheToolService())
             {
                 SendUnavailable(id, RemodelAvailability.Unknown);
@@ -1852,8 +1853,8 @@ public sealed class RemodelHost : IDisposable
             // Owner decision 152A, on the Codex review (X2): the run holds the tool service until its
             // session is closed (Execute), taken before the session is read again below. None
             // listening to hold means the plan's attachment is gone or going, and its session with it.
-            // After the run root (merged with 154A, 2026-10-21), as at a plan: a plan made under a run
-            // root no longer in force is answered as such, whatever its session.
+            // After the run root (merged with 154A, 2026-10-21), as at a plan: the run root, and the
+            // plan's folder under it, before anything is asked of the tool service.
             if (!HoldTheToolService())
             {
                 _actions.SendError(id, "SessionLost", LostSessionWords(run) ?? SessionLostMessage, retryable: false);

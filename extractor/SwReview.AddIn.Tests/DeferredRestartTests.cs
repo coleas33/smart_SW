@@ -63,6 +63,11 @@ namespace SwReview.AddIn.Tests;
 /// the saved ones, and the Review tab is told the saved settings are not in force yet and that
 /// saving again retries.
 ///
+/// Owner decision 154A adds section 14: <b>the run root in force is the settings in force's</b> - the
+/// one the backend that is up was started with, which moves only with a start that succeeds - so a
+/// folder chosen for runs comes into force with the start that brings it in, every tab makes its runs
+/// under it from then on, and a run whose folder is under another is refused before it begins.
+///
 /// Owner decision 152A adds section 15: <b>a session's bridge serves the review's document</b>.
 /// Every start that makes a session asks which document the bridge it would hand over serves, and
 /// refuses one that is not the review's, making nothing, rather than run its live checks over
@@ -5535,10 +5540,232 @@ public sealed class DeferredRestartTests
         }
     }
 
-    // The merge with 153A and 154A (feature 002 T225): which refusal a start meets first. Each says what is
-    // true; the bridge's way on - wait a moment, then try again - is no way past a start of the backend under
-    // way or a run root that moved, so those are answered first, and the bridge is asked about only by a start
-    // that would otherwise go ahead.
+    /// <summary>
+    /// The final review of 152A (Codex, C1; feature 002 T227). A session's start asked the gate for its hold while
+    /// a follow was re-attaching - no service listening, so none - and the follow then published the new service's
+    /// bridge before the start read the bridge: the start handed that bridge to `POST /sessions` with nothing
+    /// held, and a switch while the call was out let a follow take it down under the review's first checks. In
+    /// that order - the hold refused, the new bridge published, the session asked for, a follow while the call
+    /// is out - the start asks for the hold again once it finds a bridge published, holds the new service and is
+    /// given its bridge; the follow waits until the session is tracked, and is made once nothing holds the bridge.
+    /// </summary>
+    [Fact]
+    public void ASessionAskedForAsAReAttachEndsHoldsTheBridgeItIsGivenSoAFollowWaitsForIt()
+    {
+        using var world = new RestartWorld();
+        using var startingTheSecond = new ManualResetEventSlim(false);
+        using var letTheSecondStart = new ManualResetEventSlim(false);
+        using var secondPublished = new ManualResetEventSlim(false);
+        PageDocument reviewed = world.Document!;
+        PageDocument elsewhere = Changed(reviewed, "another document")!;
+        ToolServiceGate? gate = null;
+        var services = new List<FakeToolService>();
+        var looks = new List<Action>();
+        bool letGoOnce = false;
+        world.BridgeServes = bridge => gate!.DocumentServedBy(bridge);
+        world.Hold = () =>
+        {
+            IDisposable? hold = gate!.HoldAttachment();
+            if (hold == null && !letGoOnce)
+            {
+                // The order the review found: the hold refused mid re-attach, then the new bridge published.
+                letGoOnce = true;
+                letTheSecondStart.Set();
+                Assert.True(secondPublished.Wait(TimeSpan.FromSeconds(10)), "the second service was never published");
+            }
+
+            return hold;
+        };
+        world.Open();
+        world.Track("waiting");
+        world.Document = elsewhere;
+        gate = new ToolServiceGate(
+            () => world.Document,
+            () =>
+            {
+                var service = new FakeToolService(services.Count + 1, world.Document!.Path, world.Document.Configuration);
+                services.Add(service);
+                if (services.Count == 2)
+                {
+                    startingTheSecond.Set();
+                    Assert.True(letTheSecondStart.Wait(TimeSpan.FromSeconds(10)), "the second start was never let go");
+                }
+
+                return service;
+            },
+            service =>
+            {
+                world.Bridge = service?.ReviewBridge;
+                if (service != null && services.Count == 2)
+                {
+                    secondPublished.Set();
+                }
+            },
+            (what, failure) => { },
+            schedule: work => work(),
+            busy: () => world.Host.TurnMayBeRunning(),
+            later: look => looks.Add(look));
+        using (gate)
+        {
+            gate.EnsureStarted();
+            Assert.Equal(services[0].ReviewBridge, world.Bridge);
+
+            // The engineer makes the review's document active, and the gate follows it on a thread of its own.
+            world.Document = reviewed;
+            var follow = new Caller<bool>(() =>
+            {
+                gate.FollowActiveDocument();
+                return true;
+            });
+            Assert.True(startingTheSecond.Wait(TimeSpan.FromSeconds(10)), "the follow never began the second start");
+            bool takenDownDuringTheCall = false;
+            world.Backend.DuringCreate = () =>
+            {
+                Assert.True(follow.Finishes(TimeSpan.FromSeconds(10)), "the follow never finished");
+                world.Document = elsewhere;
+                gate.FollowActiveDocument();
+                takenDownDuringTheCall = services[1].Disposed;
+            };
+
+            world.Receive("review.recheck", "recheck", new { chat_id = "waiting" });
+
+            world.Reply("review.rechecked", "recheck");
+            Assert.True(follow.Result);
+            Assert.Equal(services[1].PipeName, Assert.Single(world.Backend.Sessions).Request.Bridge!.Pipe);
+            Assert.False(takenDownDuringTheCall, "a follow took the session's bridge down while POST /sessions was out");
+            Assert.False(services[1].Disposed);
+            Action look = Assert.Single(looks);
+            looks.Clear();
+
+            look();
+
+            Assert.True(services[1].Disposed);
+            Assert.Equal(3, services.Count);
+            Assert.Equal(elsewhere.Path, gate.DocumentPath);
+        }
+    }
+
+    /// <summary>
+    /// ...and the bridge is read again under the second hold (feature 002 T227): asked for as a re-attach takes the
+    /// old service down - nothing to hold, its bridge still published - the start finds that bridge, asks for the
+    /// hold again once the new service is listening, and is given the new service's bridge, read under the hold,
+    /// not the old one, which no service has any more.
+    /// </summary>
+    [Fact]
+    public void ABridgeReadAsAReAttachTakesItsServiceDownIsReadAgainUnderTheSecondHold()
+    {
+        using var world = new RestartWorld();
+        using var takingTheFirstDown = new ManualResetEventSlim(false);
+        using var letTheFirstGo = new ManualResetEventSlim(false);
+        using var secondPublished = new ManualResetEventSlim(false);
+        PageDocument reviewed = world.Document!;
+        PageDocument elsewhere = Changed(reviewed, "another document")!;
+        ToolServiceGate? gate = null;
+        var services = new List<FakeToolService>();
+        int asked = 0;
+        world.BridgeServes = bridge => gate!.DocumentServedBy(bridge);
+        world.Hold = () =>
+        {
+            if (++asked == 2)
+            {
+                // The second asking comes once the re-attach has ended.
+                letTheFirstGo.Set();
+                Assert.True(secondPublished.Wait(TimeSpan.FromSeconds(10)), "the second service was never published");
+            }
+
+            return gate!.HoldAttachment();
+        };
+        world.Open();
+        world.Track("waiting");
+        world.Document = elsewhere;
+        gate = new ToolServiceGate(
+            () => world.Document,
+            () =>
+            {
+                var service = new FakeToolService(services.Count + 1, world.Document!.Path, world.Document.Configuration);
+                services.Add(service);
+                return service;
+            },
+            service =>
+            {
+                if (service == null && !letTheFirstGo.IsSet)
+                {
+                    // Taking the first service down: no service listening, its bridge still published.
+                    takingTheFirstDown.Set();
+                    Assert.True(letTheFirstGo.Wait(TimeSpan.FromSeconds(10)), "the first service was never let go");
+                }
+
+                world.Bridge = service?.ReviewBridge;
+                if (service != null && services.Count == 2)
+                {
+                    secondPublished.Set();
+                }
+            },
+            (what, failure) => { },
+            schedule: work => work(),
+            busy: () => world.Host.TurnMayBeRunning(),
+            later: _ => { });
+        using (gate)
+        {
+            gate.EnsureStarted();
+            world.Document = reviewed;
+            var follow = new Caller<bool>(() =>
+            {
+                gate.FollowActiveDocument();
+                return true;
+            });
+            Assert.True(takingTheFirstDown.Wait(TimeSpan.FromSeconds(10)), "the follow never began taking the first down");
+            Assert.Equal(services[0].ReviewBridge, world.Bridge);
+
+            world.Receive("review.recheck", "recheck", new { chat_id = "waiting" });
+
+            world.Reply("review.rechecked", "recheck");
+            Assert.True(follow.Finishes(TimeSpan.FromSeconds(10)), "the follow never finished");
+            Assert.True(follow.Result);
+            Assert.Equal(2, asked);
+            Assert.Equal(services[1].PipeName, Assert.Single(world.Backend.Sessions).Request.Bridge!.Pipe);
+        }
+    }
+
+    /// <summary>
+    /// ...and a bridge published that no hold can be had on, though asked for again, is not handed over (feature 002
+    /// T227): the start is refused as one whose bridge is not on its document - retryable, the tool service asked
+    /// to follow the active document, nothing made - whatever the bridge says it serves, rather than given a bridge
+    /// nothing holds. Here the hold is never to be had while the bridge says it serves the review's document, as
+    /// only a service published and taken down again between the two askings would leave it.
+    /// </summary>
+    [Fact]
+    public void ABridgeNoHoldCanBeHadOnIsNotHandedOverThoughItServesTheReviewsDocument()
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge };
+        PageDocument reviewed = world.Document!;
+        int asked = 0;
+        world.BridgeServes = _ => reviewed;
+        world.Hold = () =>
+        {
+            asked++;
+            return null;
+        };
+        world.Open();
+        world.Track("waiting");
+
+        world.Receive("review.recheck", "recheck", new { chat_id = "waiting" });
+
+        JsonElement error = world.Reply("error", "recheck");
+        Assert.Equal("BridgeOnAnotherDocument", error.GetProperty("error_class").GetString());
+        Assert.True(error.GetProperty("retryable").GetBoolean());
+        Assert.Equal(BridgeElsewhereAtTheSession, error.GetProperty("message").GetString());
+        Assert.Empty(world.Backend.Sessions);
+        Assert.Equal(2, asked);
+        Assert.Equal(1, world.FollowsAsked);
+        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("stage").GetString() == "checking");
+    }
+
+    // The merge with 153A and 154A (feature 002 T225): which refusal a start meets first - the order those two
+    // leave: 153A reads a start under way before anything of the settings in force, the run root among them,
+    // and 154A judges the run root, and the folder under it, before anything is asked or made under it, so the
+    // bridge is asked about, and the tool service held and asked to follow, only by a start that would
+    // otherwise go ahead (corrected on the final reviews, N1).
 
     /// <summary>
     /// A start whose run folder is under a run root a save has since moved is refused `RunRootChanged` (154A) -
@@ -5709,6 +5936,83 @@ public sealed class DeferredRestartTests
         Assert.Equal(0, holds.Taken);
         Assert.Equal(0, world.FollowsAsked);
         Assert.Equal(ExtractedButNotReviewed, world.Last("status").GetProperty("message").GetString());
+    }
+
+    /// <summary>
+    /// 153A's MR1, pinnable since the merge (feature 002 T227, the final review's N2): the run root, the hold and
+    /// the bridge are asked between the reading of a start of the backend under way and the reading of the
+    /// settings in force, so a start can end between the two. The start under way is read first: one under way
+    /// refuses the session before any of them is asked, so a start that ends while the bridge is asked about
+    /// cannot leave the session with the settings recorded before it on the backend it started.
+    /// </summary>
+    [Fact]
+    public void AStartUnderWayIsReadBeforeTheQuestionsAskedBetweenItAndTheSettingsInForce()
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge };
+        using var published = new ManualResetEventSlim(false);
+        using var letGo = new ManualResetEventSlim(false);
+        PageDocument reviewed = world.Document!;
+        Caller<bool>? first = null;
+        world.BridgeServes = _ =>
+        {
+            // The start ends while the bridge is asked about.
+            letGo.Set();
+            Assert.True(first!.Finishes(TimeSpan.FromSeconds(10)), "the first start never finished");
+            return reviewed;
+        };
+        try
+        {
+            ASaveThatSwitchedTheProviderFailedWithNoBackendUp(world);
+            first = FirstStartHeldOncePublished(world, published, letGo);
+
+            JsonElement refused = world.Reply("error", AskForASession(world, "recheck"));
+            letGo.Set();
+            Assert.True(first.Finishes(TimeSpan.FromSeconds(10)), "the first start never finished");
+            Assert.True(first.Result);
+
+            Assert.Equal("BackendUnavailable", refused.GetProperty("error_class").GetString());
+            Assert.Empty(world.Backend.Sessions);
+        }
+        finally
+        {
+            letGo.Set();
+        }
+    }
+
+    /// <summary>
+    /// ...and before the run root (feature 002 T227, the final review's N3): a Recheck of a review whose run folder
+    /// is under a run root not in force, asked for while a start of the backend is under way, is refused as one
+    /// asked for before the backend is up - the start under way read first, as 153A reads it before anything of
+    /// the settings in force, the run root among them - and not answered for its run root from a record that
+    /// start is about to replace.
+    /// </summary>
+    [Fact]
+    public void ARecheckUnderARunRootNotInForceAskedForWhileAStartIsUnderWayIsRefusedForTheStart()
+    {
+        using var world = new RestartWorld();
+        using var published = new ManualResetEventSlim(false);
+        using var letGo = new ManualResetEventSlim(false);
+        try
+        {
+            ASaveThatSwitchedTheProviderFailedWithNoBackendUp(world);
+            string earlier = Path.Combine(world.Root, "earlier", "runs", "20261019-101500-earlier");
+            Directory.CreateDirectory(earlier);
+            world.Host.TrackSession("earlier", earlier, world.Document, new DateTimeOffset(Stamp));
+            Caller<bool> first = FirstStartHeldOncePublished(world, published, letGo);
+
+            world.Receive("review.recheck", "recheck", new { chat_id = "earlier" });
+
+            JsonElement refused = world.Reply("error", "recheck");
+            letGo.Set();
+            Assert.True(first.Finishes(TimeSpan.FromSeconds(10)), "the first start never finished");
+            Assert.True(first.Result);
+            Assert.Equal("BackendUnavailable", refused.GetProperty("error_class").GetString());
+            Assert.Empty(world.Backend.Sessions);
+        }
+        finally
+        {
+            letGo.Set();
+        }
     }
 
     /// <summary>
@@ -7367,12 +7671,20 @@ public sealed class DeferredRestartTests
         /// <summary>Thrown by every session the backend is asked to create, when set: a backend that stopped.</summary>
         public Exception? CreateFailure { get; set; }
 
+        /// <summary>
+        /// Run while `POST /sessions` is out, before the session is answered: what a switch and a follow made
+        /// while the call is out do (owner decision 152A, the final review's C1).
+        /// </summary>
+        public Action? DuringCreate { get; set; }
+
         public ChatSessionHandle CreateSession(NewSessionRequest request)
         {
             if (CreateFailure != null)
             {
                 throw CreateFailure;
             }
+
+            DuringCreate?.Invoke();
 
             lock (_gate)
             {

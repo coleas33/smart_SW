@@ -6892,8 +6892,8 @@ public sealed class RemodelHostTests
     /// <summary>
     /// Owner decision 152A merged with 154A (feature 002 T225): a plan whose gate brings in a run root the rule
     /// refuses is refused `RunRootRefused`, its way on a local folder for runs, before it takes its hold on the
-    /// tool service - whether or not one is to be had: refused for the hold instead, its way on, pressing again
-    /// in a moment, would only meet the run root.
+    /// tool service - whether or not one is to be had: 154A judges the run root before anything is asked or made
+    /// under it, and the hold asks the tool service (corrected on the final reviews, N1).
     /// </summary>
     [Theory]
     [InlineData("a hold to be had")]
