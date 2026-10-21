@@ -286,3 +286,11 @@ under - a character no folder can have, or a folder name longer than 255 charact
 the rule refuses, before anything is made or extracted; and the check's run folder is made, and the newest check
 found, under the run root's long-name form (002 [pane-host-messages.md](../../002-task-pane-assistant/contracts/pane-host-messages.md),
 "The run root rule").
+
+*Amended on the review of owner decision 160A, 2026-10-21 (decided on review; the owner may revert):* an Accept
+whose check is not shown again - its re-read failed, or a newer check was pressed first - says so in a place of its
+own beside the check's status, as on the Standards page, where it shared the banner with a check that fails. This
+page keeps its result when a check fails, so a failure that lands before the Accept's re-read leaves the result the
+re-read is shown on - the rule marked accepted on its row and in the check's line, beside the failure - and no notice
+is made; a notice made before a failed check outlasts the press and the failure, which keeps the banner. The notice
+comes down once a result is shown (002 [research.md](../../002-task-pane-assistant/research.md), 160A).
