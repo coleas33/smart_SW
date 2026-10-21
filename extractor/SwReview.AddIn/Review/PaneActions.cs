@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using SwReview.AddIn.Settings;
 
@@ -87,11 +88,26 @@ public sealed class PaneActionsOptions
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
         Runs = runs ?? throw new ArgumentNullException(nameof(runs));
+        RunRootsInForce = () => new[] { RunRoot() };
     }
 
     public IPageChannel Channel { get; }
 
     public Func<string> RunRoot { get; }
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, the one in force among them (owner
+    /// decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open - its report
+    /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
+    /// </summary>
+    public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
+
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a run start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
 
     public PaneRunLookup Runs { get; }
 
@@ -332,7 +348,7 @@ public sealed class PaneActions
 
         // Containment before existence: a path outside the run root is refused as such, and
         // is not probed for what happens to be on disk there.
-        if (!TrySafePath(id, report, _options.RunRoot(), out string full))
+        if (!TrySafePath(id, report, _options.RunRootsInForce(), out string full))
         {
             return;
         }
@@ -358,7 +374,7 @@ public sealed class PaneActions
             return;
         }
 
-        Shell(id, runDirectory, _options.RunRoot());
+        Shell(id, runDirectory, _options.RunRootsInForce());
     }
 
     private void OpenLogFolder(string? id)
@@ -376,7 +392,7 @@ public sealed class PaneActions
             return;
         }
 
-        Shell(id, folder, folder);
+        Shell(id, folder, new[] { folder });
     }
 
     /// <summary>
@@ -413,29 +429,28 @@ public sealed class PaneActions
     }
 
     /// <summary>
-    /// Canonicalizes <paramref name="path"/>, refuses anything that is not inside
-    /// <paramref name="root"/>, and opens what is left (pane-host-messages.md: "Every resolved
+    /// Canonicalizes <paramref name="path"/>, refuses anything that is not inside one of
+    /// <paramref name="roots"/>, and opens what is left (pane-host-messages.md: "Every resolved
     /// path is canonicalized and must be a descendant of `run_root` (or the log folder) before
-    /// it reaches `ShellExecute`").
+    /// it reaches `ShellExecute`") - every run root in force this session, so a run made under one
+    /// a settings save has since moved still opens (owner decision 154A, the reviews' finding F6).
     /// </summary>
-    private void Shell(string? id, string path, string root)
+    private void Shell(string? id, string path, IReadOnlyList<string> roots)
     {
-        if (TrySafePath(id, path, root, out string full))
+        if (TrySafePath(id, path, roots, out string full))
         {
             Open(id, full);
         }
     }
 
-    /// <summary>Canonicalizes and refuses anything that is not inside <paramref name="root"/>.</summary>
-    private bool TrySafePath(string? id, string path, string root, out string full)
+    /// <summary>Canonicalizes and refuses anything that is not inside one of <paramref name="roots"/>.</summary>
+    private bool TrySafePath(string? id, string path, IReadOnlyList<string> roots, out string full)
     {
         full = string.Empty;
 
-        string fullRoot;
         try
         {
             full = System.IO.Path.GetFullPath(path);
-            fullRoot = System.IO.Path.GetFullPath(root);
         }
         catch (Exception)
         {
@@ -445,7 +460,8 @@ public sealed class PaneActions
 
         // UNC and Win32 device paths are refused by name as well as by containment: a run root
         // that is itself a share would otherwise make `\\server\share\...` a descendant.
-        if (full.StartsWith(@"\\", StringComparison.Ordinal) || !Contains(fullRoot, full))
+        string canonical = full;
+        if (full.StartsWith(@"\\", StringComparison.Ordinal) || !roots.Any(root => RunFolders.IsUnder(canonical, root)))
         {
             SendError(
                 id,
@@ -473,20 +489,6 @@ public sealed class PaneActions
         Send("ok", id, new Dictionary<string, object?>());
     }
 
-    /// <summary>Whether <paramref name="candidate"/> is <paramref name="root"/> or below it.</summary>
-    private static bool Contains(string root, string candidate)
-    {
-        string trimmed = root.TrimEnd(System.IO.Path.DirectorySeparatorChar);
-        if (string.Equals(trimmed, candidate.TrimEnd(System.IO.Path.DirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return candidate.StartsWith(
-            trimmed + System.IO.Path.DirectorySeparatorChar,
-            StringComparison.OrdinalIgnoreCase);
-    }
 
     // ---- the envelope -------------------------------------------------------------------
 
@@ -510,16 +512,102 @@ public sealed class PaneActions
         }
     }
 
-    /// <summary>Sends one `error`, with the message masked (FR-015).</summary>
-    public void SendError(string? id, string errorClass, string message, bool retryable)
+    /// <summary>
+    /// Owner decision 154A: refuses a run start whose run root the run root rule refuses
+    /// (<see cref="RunRootRule"/>: on a network share, reached through a link, or written as a device path), and
+    /// says whether it did. The one refusal every host makes, written once: <c>error {error_class:
+    /// "RunRootRefused"}</c>, not retryable - pressing again cannot help until a local folder for runs is
+    /// chosen in the Review tab's Settings (the owner's follow-up) - in the rule's words for what the root is,
+    /// with the host's own <paramref name="notDone"/> and <paramref name="wayOn"/>, and no path. Each caller
+    /// asks before it does anything else, so a refused start reads, makes and restarts nothing.
+    ///
+    /// The reviews of 154A's merge, N4: while another folder is saved for runs than the run root in force - a save
+    /// chose it and its restart failed - the engineer has chosen a folder already, so the refusal is
+    /// <c>RunRootChosenNotInForce</c>, whose way on is the restart that brings the folder chosen in
+    /// (<see cref="RunRootRule.ChosenNotInForceRefusal"/>); the saved folder is told apart from the one in force by
+    /// <see cref="RunRootRule.SameRunRoot"/>.
+    /// </summary>
+    /// <param name="runRoot">The run root in force, the one the start would make its folder under.</param>
+    /// <param name="probe">What the rule reads of Windows.</param>
+    /// <param name="notDone">What was not done, true of this host: "nothing was checked".</param>
+    /// <param name="where">Where the Settings are, seen from this tab: <see cref="RunRootRule.InSettings"/>, or
+    /// <see cref="RunRootRule.InSettingsOnTheReviewTab"/>.</param>
+    /// <param name="wayOn">What to do once the root is a local folder: "press Model check again".</param>
+    public bool RefusedRunRoot(string? id, string runRoot, IRunRootProbe probe, string notDone, string where, string wayOn)
     {
-        Send("error", id, new Dictionary<string, object?>
+        RunRootVerdict verdict = RunRootRule.Judge(runRoot, probe);
+        if (verdict == RunRootVerdict.Accepted)
+        {
+            return false;
+        }
+
+        string? saved = _options.RunRootSaved();
+        if (saved != null && !RunRootRule.SameRunRoot(saved, runRoot))
+        {
+            SendError(
+                id, "RunRootChosenNotInForce", RunRootRule.ChosenNotInForceRefusal(verdict, notDone, where, wayOn), retryable: false);
+            return true;
+        }
+
+        SendError(id, "RunRootRefused", RunRootRule.Refusal(verdict, notDone, where, wayOn), retryable: false);
+        return true;
+    }
+
+    /// <summary>
+    /// The reviews of 154A's merge, N6: whether a Model check or a Standards run, whose folder was made before its
+    /// extraction, is answered here because the run root moved meanwhile - a settings save's restart on the Review tab,
+    /// which no check holds back, can bring another in during the minutes an extraction takes, and the backend would
+    /// refuse the folder at the page's first call. <paramref name="runRootNow"/> is the run root for a new run read
+    /// again once the extraction is over: none, while a start of the backend under way would bring another in, is
+    /// answered as a start then is (<see cref="SendRunRootMoving"/>); one that no longer holds the folder,
+    /// <c>RunRootChanged</c>, not retryable, in the rule's words (<see cref="RunRootRule.ChangedRefusal"/>). The
+    /// folder is left as the evidence. A restart that lands after this reading, before the backend reads the folder,
+    /// is not seen: one round trip, the page's first call.
+    /// </summary>
+    public bool AnsweredForAMovedRunRoot(
+        string? id, string runDirectory, string? runRootNow, string during, string notDone, string wayOn)
+    {
+        if (runRootNow == null)
+        {
+            SendRunRootMoving(id, notDone, wayOn);
+            return true;
+        }
+
+        if (!RunFolders.IsUnder(runDirectory, runRootNow))
+        {
+            SendError(id, "RunRootChanged", RunRootRule.ChangedRefusal(during, notDone, wayOn), retryable: false);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Owner decision 154A, with 153A's record of the settings in force: refuses a run start on the Model check,
+    /// Standards or Remodel tab while a start of the backend under way would bring another run root into force
+    /// (<c>ReviewHost.RunRootForANewRun</c> answering none) - <c>error {error_class: "BackendUnavailable"}</c>, as a
+    /// review asked for while a start is under way is refused, and retryable, since the start ends in seconds -
+    /// in the rule's words (<see cref="RunRootRule.MovingRefusal"/>) with the host's own
+    /// <paramref name="notDone"/> and <paramref name="wayOn"/>. Written once for the three.
+    /// </summary>
+    public void SendRunRootMoving(string? id, string notDone, string wayOn) =>
+        SendError(id, "BackendUnavailable", RunRootRule.MovingRefusal(notDone, wayOn), retryable: true);
+
+    /// <summary>Sends one `error`, with the message masked (FR-015).</summary>
+    public void SendError(string? id, string errorClass, string message, bool retryable) =>
+        Send("error", id, ErrorPayload(errorClass, message, retryable));
+
+    /// <summary>
+    /// One `error`'s payload, with the message masked (FR-015): what <see cref="SendError"/> sends, and what an
+    /// answer that carries an error's shape inside it - a save's `run_root_refusal` - carries.
+    /// </summary>
+    public Dictionary<string, object?> ErrorPayload(string errorClass, string message, bool retryable) =>
+        new Dictionary<string, object?>
         {
             { "error_class", errorClass },
             { "message", Redact(message) },
             { "retryable", retryable },
-        });
-    }
+        };
 
     /// <summary>
     /// Posts one `status` message with every secret masked out of it.

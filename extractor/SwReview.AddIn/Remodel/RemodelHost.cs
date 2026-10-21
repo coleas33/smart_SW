@@ -15,16 +15,40 @@ namespace SwReview.AddIn.Remodel;
 public sealed class RemodelHostOptions
 {
     /// <param name="channel">Where replies and unsolicited messages go.</param>
-    /// <param name="runRoot">The run root in force, read fresh: a settings save moves it.</param>
+    /// <param name="runRoot">The run root in force, read fresh: the restart a settings save makes moves it.</param>
     public RemodelHostOptions(IPageChannel channel, Func<string> runRoot)
     {
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
+        RunRootsInForce = () => new[] { RunRoot() };
+        RunRootForANewRun = () => RunRoot();
     }
 
     public IPageChannel Channel { get; }
 
     public Func<string> RunRoot { get; }
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, the one in force among them (owner
+    /// decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open - its report
+    /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
+    /// </summary>
+    public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
+
+    /// <summary>
+    /// The run root a plan's folder is made under, and a Start's plan must lie under, read once each pass of the
+    /// gate (owner decision 154A, with 153A's record of the settings in force): the run root in force, or null while
+    /// a start of the backend under way would bring another into force, which a plan and a Start refuse. The run
+    /// root in force by default.
+    /// </summary>
+    public Func<string?> RunRootForANewRun { get; set; }
+
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
 
     /// <summary>The backend's endpoint, or null before it is listening.</summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
@@ -123,6 +147,12 @@ public sealed class RemodelHostOptions
     /// answers it through the review host (`ReviewHost.RestartAhead`). By default none does.
     /// </summary>
     public Func<bool> RestartAhead { get; set; } = () => false;
+
+    /// <summary>
+    /// What the run root rule reads of Windows (owner decision 154A): a share, a mapped or substituted drive,
+    /// a link. Windows itself by default; injected so a test fakes each without making one.
+    /// </summary>
+    public IRunRootProbe RunRootProbe { get; set; } = Native.WindowsRunRootProbe.Instance;
 }
 
 /// <summary>
@@ -503,6 +533,8 @@ public sealed class RemodelHost : IDisposable
                 _ => RunNotFoundMessage,
                 runDir => FindRun(runDir)?.RunDirectory))
         {
+            RunRootsInForce = () => options.RunRootsInForce(),
+            RunRootSaved = () => options.RunRootSaved(),
             LogFolder = options.LogFolder,
             EntityResolver = options.EntityResolver,
             Opener = options.Opener,
@@ -1139,6 +1171,16 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     private void Plan(string? id)
     {
+        // Owner decision 154A: first - before a run in progress, the document, the seat, the gate, an earlier
+        // plan's session or the probe is asked about. The run folder is made under the run root, and the backend
+        // refuses one on a share and spells one reached through a link otherwise than this host binds it, so the
+        // copy's open would refuse it (feature 011 research R12.9, items 1 and 2).
+        string judged = _options.RunRoot();
+        if (RunRootRefused(id, judged, "nothing was copied"))
+        {
+            return;
+        }
+
         if (_busy)
         {
             SendRunInProgress(id);
@@ -1208,6 +1250,14 @@ public sealed class RemodelHost : IDisposable
 
         try
         {
+            // The reviews of decision 154A, N8: the gate can make a waiting settings restart, which can bring
+            // another run root into force; it is judged before anything is asked or made under it.
+            string? runRoot = RunRootToUse(id, judged, "nothing was copied");
+            if (runRoot == null)
+            {
+                return;
+            }
+
             // The document was read before the gate, and the gate can wait through a settings
             // restart - seconds, up to the backend's handshake - in which the engineer can make
             // another document active. Read again now the host is busy, before any call: a plan of
@@ -1254,8 +1304,7 @@ public sealed class RemodelHost : IDisposable
             string runDirectory;
             try
             {
-                runDirectory = RunFolders.CreateForRemodel(
-                    _options.RunRoot(), document.Path, _options.Now());
+                runDirectory = RunFolders.CreateForRemodel(runRoot, document.Path, _options.Now());
             }
             catch (Exception failure)
             {
@@ -1263,8 +1312,7 @@ public sealed class RemodelHost : IDisposable
                 _actions.SendError(
                     id,
                     "RunFolderFailed",
-                    $"the run folder could not be created under '{_options.RunRoot()}': "
-                    + failure.Message,
+                    $"the run folder could not be created under '{runRoot}': " + failure.Message,
                     retryable: false);
                 return;
             }
@@ -1530,20 +1578,19 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>
     /// 004 T173: whether <paramref name="documentPath"/> is one of the re-modeler's own copies - a
-    /// file in a <c>copy</c> folder whose run folder is a direct child of the run root in force, by
-    /// <see cref="RemodelCopy.RunDirectoryOf"/>'s rule, canonical and case-insensitive (lane D's
-    /// default, 2026-09-27). A folder merely named <c>copy</c> anywhere else is not one, and a path
-    /// that cannot be read as one is not one either: this check refuses, it never guesses.
+    /// file in a <c>copy</c> folder whose run folder is a direct child of a run root in force this
+    /// session, by <see cref="RemodelCopy.RunDirectoryOf"/>'s rule, canonical and case-insensitive (lane
+    /// D's default, 2026-09-27). Every run root in force this session, not only the one in force now, so
+    /// a copy made under one a settings save has since moved is still a copy (owner decision 154A, the
+    /// reviews' finding F6). A folder merely named <c>copy</c> anywhere else is not one, and a path that
+    /// cannot be read as one is not one either: this check refuses, it never guesses.
     /// </summary>
     private bool IsRemodelCopy(string documentPath)
     {
         string runDirectory;
-        string runRoot;
         try
         {
             runDirectory = RemodelCopy.RunDirectoryOf(documentPath);
-            runRoot = Path.GetFullPath(_options.RunRoot())
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
         catch (Exception error) when (error is Extractor.Guard.MutatingCallError
             || error is Extractor.Bridge.RemodelCommandError
@@ -1557,11 +1604,26 @@ public sealed class RemodelHost : IDisposable
 
         string? parent = Path.GetDirectoryName(
             runDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        return parent != null
-            && string.Equals(
-                parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                runRoot,
-                StringComparison.OrdinalIgnoreCase);
+        return parent != null && _options.RunRootsInForce().Any(runRoot => IsTheRunRoot(parent, runRoot));
+    }
+
+    /// <summary>Whether <paramref name="folder"/> is <paramref name="runRoot"/>, canonical and case-insensitive.</summary>
+    private static bool IsTheRunRoot(string folder, string runRoot)
+    {
+        string root;
+        try
+        {
+            root = Path.GetFullPath(runRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch (Exception error) when (error is ArgumentException
+            || error is NotSupportedException
+            || error is PathTooLongException)
+        {
+            return false;
+        }
+
+        return string.Equals(
+            folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), root, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -1637,6 +1699,14 @@ public sealed class RemodelHost : IDisposable
 
     private void Start(string? id, JsonElement payload)
     {
+        // Owner decision 154A: first, as a plan is refused - the run hands its folder to the backend and the
+        // bridge again.
+        string judged = _options.RunRoot();
+        if (RunRootRefused(id, judged, "the plan was not applied"))
+        {
+            return;
+        }
+
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
@@ -1735,6 +1805,21 @@ public sealed class RemodelHost : IDisposable
         bool handedOver = false;
         try
         {
+            // The reviews of decision 154A, N8 and finding F6: the gate can make a waiting settings restart,
+            // which can bring another run root into force - judged again - and the backend makes runs only under
+            // the one it was started with, so a plan made under one a save has since moved is not applied.
+            string? runRoot = RunRootToUse(id, judged, "the plan was not applied");
+            if (runRoot == null)
+            {
+                return;
+            }
+
+            if (!RunFolders.IsUnder(run.RunDirectory, runRoot))
+            {
+                _actions.SendError(id, "RunRootChanged", StartRunRootChangedMessage, retryable: false);
+                return;
+            }
+
             // The gate may have waited through a settings restart - seconds in which the host was
             // not busy, so the tool service was free to re-attach, or a teardown to end the plan's
             // session. Read again now the host is busy, which a re-attach of the service's own asks
@@ -2709,6 +2794,52 @@ public sealed class RemodelHost : IDisposable
         failure is RemodelRefusal refusal && TabWords.TryGetValue(refusal.ErrorClass, out string? words)
             ? words
             : failure.Message;
+
+    /// <summary>
+    /// Owner decision 154A: a plan or a Start refuses a run root the run root rule refuses, in this tab's words,
+    /// which its page shows whole - <paramref name="notDone"/> says what the press did not do, and the way on
+    /// names the Settings on the Review tab, since this page has none (the reviews' finding F5) - before it does
+    /// anything else.
+    /// </summary>
+    private bool RunRootRefused(string? id, string runRoot, string notDone) =>
+        _actions.RefusedRunRoot(
+            id, runRoot, _options.RunRootProbe, notDone, RunRootRule.InSettingsOnTheReviewTab, PressAgain);
+
+    /// <summary>What a plan or a Start refused for its run root says to do once the cause is gone (owner decision 154A).</summary>
+    private const string PressAgain = "press Remodel a copy again";
+
+    /// <summary>
+    /// The run root a plan or a Start goes on under once its gate is passed (the reviews of decision 154A, N8):
+    /// the run root in force, judged again when the gate's restart moved it from <paramref name="judged"/>; null
+    /// once the press is answered with the refusal. Read once, with 153A's record of the settings in force: the gate
+    /// holds back every settings restart, but not the add-in's first start of the backend, and while one that would
+    /// bring another run root into force is under way there is none to go on under, and the press is refused.
+    /// </summary>
+    private string? RunRootToUse(string? id, string judged, string notDone)
+    {
+        string? inForce = _options.RunRootForANewRun();
+        if (inForce == null)
+        {
+            _actions.SendRunRootMoving(id, notDone, PressAgain);
+            return null;
+        }
+
+        if (string.Equals(inForce, judged, StringComparison.Ordinal))
+        {
+            return inForce;
+        }
+
+        return RunRootRefused(id, inForce, notDone) ? null : inForce;
+    }
+
+    /// <summary>
+    /// What a Start answers, <c>RunRootChanged</c>, when its plan's run folder is under a run root a settings save
+    /// has since moved (the reviews of decision 154A, finding F6): the backend makes runs only under the one in
+    /// force. No path; the way on is a new plan, under the run root in force.
+    /// </summary>
+    private const string StartRunRootChangedMessage =
+        "this plan's run folder is under a run root that is no longer in force, and the backend makes runs only "
+        + "under the one in force, so the plan was not applied. Press Remodel a copy again.";
 
     private void SendRunInProgress(string? id) =>
         _actions.SendError(

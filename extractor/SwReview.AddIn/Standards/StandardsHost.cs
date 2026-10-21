@@ -10,16 +10,41 @@ namespace SwReview.AddIn.Standards;
 public sealed class StandardsHostOptions
 {
     /// <param name="channel">Where replies and unsolicited messages go.</param>
-    /// <param name="runRoot">The run root in force, read fresh: a settings save moves it.</param>
+    /// <param name="runRoot">The run root in force, read fresh: the restart a settings save makes moves it.</param>
     public StandardsHostOptions(IPageChannel channel, Func<string> runRoot)
     {
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
+        RunRootsInForce = () => new[] { RunRoot() };
+        RunRootForANewRun = () => RunRoot();
     }
 
     public IPageChannel Channel { get; }
 
     public Func<string> RunRoot { get; }
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, the one in force among them (owner
+    /// decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open - its report
+    /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
+    /// </summary>
+    public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
+
+    /// <summary>
+    /// The run root a Standards run's folder is made under, read once to judge it and make the folder (owner
+    /// decision 154A, with 153A's record of the settings in force), and again once the extraction is over (the
+    /// reviews of 154A's merge, N6): the run root in force, or null while a start of the backend under way would
+    /// bring another into force - the backend coming up makes runs only under its own, and may yet fail and leave
+    /// the one it would replace - which `standards.start` refuses. The run root in force by default.
+    /// </summary>
+    public Func<string?> RunRootForANewRun { get; set; }
+
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
 
     /// <summary>
     /// The backend's endpoint, or null before it is listening. The page calls
@@ -65,6 +90,12 @@ public sealed class StandardsHostOptions
 
     /// <summary>Values that must never reach the page (FR-015).</summary>
     public Func<IEnumerable<string?>> Secrets { get; set; } = () => new string?[0];
+
+    /// <summary>
+    /// What the run root rule reads of Windows (owner decision 154A): a share, a mapped or substituted drive,
+    /// a link. Windows itself by default; injected so a test fakes each without making one.
+    /// </summary>
+    public IRunRootProbe RunRootProbe { get; set; } = Native.WindowsRunRootProbe.Instance;
 }
 
 /// <summary>
@@ -116,6 +147,12 @@ public sealed class StandardsHost : IDisposable
     /// <summary>The one message type this host answers itself.</summary>
     private const string StartType = "standards.start";
 
+    /// <summary>What a refused `standards.start` did not do, in its words (owner decision 154A).</summary>
+    private const string NothingChecked = "nothing was checked";
+
+    /// <summary>What a refused `standards.start` says to do once the cause is gone (owner decision 154A).</summary>
+    private const string PressAgain = "press Standards check again";
+
     /// <summary>The setting a refusal names, because it is what the engineer has to change.</summary>
     private const string ProfileSetting = "StandardsProfilePath";
 
@@ -139,6 +176,8 @@ public sealed class StandardsHost : IDisposable
         _pane = new CheckPaneHost(new CheckPaneHostOptions(
             options.Channel, () => options.RunRoot(), StartType, Start)
         {
+            RunRootsInForce = () => options.RunRootsInForce(),
+            RunRootSaved = () => options.RunRootSaved(),
             Backend = () => options.Backend(),
             CurrentDocument = () => options.CurrentDocument(),
 
@@ -205,6 +244,23 @@ public sealed class StandardsHost : IDisposable
     private void Start(string? id)
     {
         PaneActions actions = _pane.Actions;
+
+        // Owner decision 154A: first - the run's folder is made under the run root and handed to the backend,
+        // which refuses one on a share - in this tab's words, which its page shows whole. Read once, with 153A's
+        // record: the root judged is the one the folder is made under, and none while a start of the backend
+        // under way would bring another into force.
+        string? runRoot = _options.RunRootForANewRun();
+        if (runRoot == null)
+        {
+            actions.SendRunRootMoving(id, NothingChecked, PressAgain);
+            return;
+        }
+
+        if (actions.RefusedRunRoot(
+                id, runRoot, _options.RunRootProbe, NothingChecked, RunRootRule.InSettingsOnTheReviewTab, PressAgain))
+        {
+            return;
+        }
 
         PageDocument? document = _options.CurrentDocument();
         if (document == null)
@@ -274,7 +330,7 @@ public sealed class StandardsHost : IDisposable
         try
         {
             runDirectory = RunFolders.CreateForStandards(
-                _options.RunRoot(), document.Path, _options.Now());
+                runRoot, document.Path, _options.Now());
         }
         catch (Exception failure)
         {
@@ -282,7 +338,7 @@ public sealed class StandardsHost : IDisposable
             actions.SendError(
                 id,
                 "RunFolderFailed",
-                $"the standards run folder could not be created under '{_options.RunRoot()}': "
+                $"the standards run folder could not be created under '{runRoot}': "
                 + failure.Message,
                 retryable: false);
             return;
@@ -312,6 +368,15 @@ public sealed class StandardsHost : IDisposable
             // half-written package must not become the folder Show and the Ask tab read from.
             PostStatus("error", failure.Message);
             actions.SendError(id, "ExtractionFailed", failure.Message, retryable: true);
+            return;
+        }
+
+        // The reviews of 154A's merge, N6: the extraction took minutes, in which a settings save's restart on the
+        // Review tab - which no check holds back - can have brought another run root into force. Read again: the
+        // run goes on only while its folder is under the run root in force, and is answered here otherwise.
+        if (actions.AnsweredForAMovedRunRoot(
+                id, runDirectory, _options.RunRootForANewRun(), "the document was read", NothingChecked, PressAgain))
+        {
             return;
         }
 

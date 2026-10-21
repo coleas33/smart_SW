@@ -21,6 +21,17 @@ The `-remodel` suffix sorts beside feature 003's `-check` and feature 001's revi
 makes the folder obviously disposable. **The copy lives only here.** It never sits beside the
 source: one bad path join beside a source inside an EPDM vault writes into the vault.
 
+*Amended 2026-10-20 (feature 002, owner decision 154A; its research, 154A):* the run root is a
+local folder reached by its own path. A plan and a Start are refused first, `RunRootRefused`, when
+it is on a network share, reached through a link - a substituted drive, a junction, a symbolic
+link, any root whose final path differs from its full path other than by letter case - or written
+as a device path: the backend refuses a run folder on a share on every route and spells one
+reached through a link by its final path, and `remodel.open` compares the copy's run folder with
+the one this host binds, so such a root ended every plan ([`pane-remodel-messages.md`](pane-remodel-messages.md);
+011 research R12.9, items 1 and 2). *Amended on 154A's reviews (finding F6):* a Start whose plan's run
+folder is not under the run root in force - a settings save moved it after the plan - is refused,
+`RunRootChanged`, once its gate is passed and before the run begins.
+
 ## Files
 
 | File | Written by | Schema | Notes |

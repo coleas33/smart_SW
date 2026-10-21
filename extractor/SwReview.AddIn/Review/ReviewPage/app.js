@@ -273,6 +273,9 @@
     var error = new Error((payload && payload.message) || 'the host reported an error');
     error.errorClass = (payload && payload.error_class) || 'HostError';
     error.retryable = !!(payload && payload.retryable);
+    // What a save says of the run root, which the error of a save whose restart failed carries as its
+    // `settings.saved` would (owner decision 154A, the owner's follow-up); null on every other error.
+    error.runRootRefusal = (payload && payload.run_root_refusal) || null;
     return error;
   }
 
@@ -2951,6 +2954,7 @@
     ui.baseUrl.value = state.settings.base_url || '';
     ui.project.value = state.settings.gemini_enterprise ? state.settings.gemini_enterprise.project : '';
     ui.location.value = state.settings.gemini_enterprise ? state.settings.gemini_enterprise.location : '';
+    ui.runRoot.value = state.settings.run_root || '';
     ui.apiKey.value = '';
     ui.clearKey.checked = false;
     ui.keySource.textContent = describeKeySource(state.keySource);
@@ -3035,7 +3039,9 @@
       base_url: currentProvider() === 'openai' && ui.baseUrl.value.trim()
         ? ui.baseUrl.value.trim()
         : null,
-      gemini_enterprise: null
+      gemini_enterprise: null,
+      // The folder for runs, which the host checks by the run root rule; empty chooses the default.
+      run_root: ui.runRoot.value.trim()
     };
 
     if (currentProvider() === 'gemini' && ui.project.value.trim() && ui.location.value.trim()) {
@@ -3055,6 +3061,7 @@
       // and there is no reason for it to stay in the renderer process.
       renderSettings(reply.settings, reply.key_source);
       ui.saveState.textContent = 'Saved.';
+      showRunRootRefusal(reply.run_root_refusal);
       // The save restarted the backend, so the port and the token this page holds are the old
       // child's. Nothing else tells the page that.
       requestInit(false);
@@ -3065,6 +3072,7 @@
         ? error.message
         : (error.errorClass + ': ' + error.message));
       if (notRestarted) {
+        showRunRootRefusal(error.runRootRefusal);
         // Owner decision 150A: the save was kept and only its restart failed, so the settings in
         // force, and the backend there is now - the old one, or none - are what `init` names: the
         // page asks for it, as after a save that restarted the backend.
@@ -3082,6 +3090,21 @@
     }).then(function () {
       ui.save.disabled = false;
     });
+  }
+
+  /**
+   * What a save that was written says of the run root, under the field (owner decision 154A, the owner's
+   * follow-up): its answer's `run_root_refusal` - the folder chosen and refused, or the run root left in
+   * force and refused - in the class's sentence with the class and the message in a fold, or with no labels
+   * the message as it is; none takes the note down. A save refused before anything was written says nothing
+   * of the run root, and leaves the note as it was.
+   */
+  function showRunRootRefusal(refusal) {
+    render.clear(ui.runRootNote);
+    ui.runRootNote.hidden = !refusal;
+    if (refusal) {
+      errorInto(ui.runRootNote, asError(refusal), String(refusal.message || ''));
+    }
   }
 
   function start() {
@@ -3197,6 +3220,8 @@
     ui.baseUrlField = document.getElementById('base-url-field');
     ui.project = document.getElementById('gcp-project');
     ui.location = document.getElementById('gcp-location');
+    ui.runRoot = document.getElementById('run-root');
+    ui.runRootNote = document.getElementById('run-root-note');
     ui.save = document.getElementById('save-settings');
     ui.saveState = document.getElementById('save-state');
     ui.waitingSettingsNote = document.getElementById('waiting-settings-note');

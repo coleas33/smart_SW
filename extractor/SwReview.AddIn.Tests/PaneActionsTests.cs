@@ -372,6 +372,54 @@ public sealed class PaneActionsTests
         }
     }
 
+    /// <summary>
+    /// The reviews' finding F6: once a settings save has moved the run root, a run made under the one before it
+    /// in this SOLIDWORKS session still opens on every tab - its report and its folder - since every run root
+    /// that has been in force is the pane's; the containment rule refuses only a folder under none of them.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Hosts))]
+    public void ARunMadeUnderAnEarlierRunRootInForceStillOpens(string kind)
+    {
+        using (PaneHostWorld world = PaneHostWorld.For(kind))
+        {
+            world.Open();
+            string earlier = world.CreateRun("earlier");
+            File.WriteAllText(Path.Combine(earlier, "report.md"), "# report");
+            string runId = world.Track(earlier);
+
+            world.MoveRunRoot(Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "moved", "runs"));
+            world.Receive("folder.open", "o1", world.Message(runId));
+            world.Receive("report.open", "o2", world.Message(runId));
+
+            world.Reply("ok", "o1");
+            world.Reply("ok", "o2");
+            Assert.Equal(new[] { earlier, Path.Combine(earlier, "report.md") }, world.Opener.Opened.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// A run recorded in another letter case than the run root's is under it all the same: Windows paths ignore
+    /// letter case, and so does the containment rule (the run roots' rule, owner decision 154A, now one for every
+    /// caller).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Hosts))]
+    public void ARunRecordedInAnotherLetterCaseStillOpens(string kind)
+    {
+        using (PaneHostWorld world = PaneHostWorld.For(kind))
+        {
+            world.Open();
+            string run = world.CreateRun("cased");
+            string runId = world.Track(run.ToUpperInvariant());
+
+            world.Receive("folder.open", "o1", world.Message(runId));
+
+            world.Reply("ok", "o1");
+            Assert.Equal(new[] { run.ToUpperInvariant() }, world.Opener.Opened.ToArray());
+        }
+    }
+
     /// <summary>A `|` prefix means the path is absolute and not relative to the run root.</summary>
     public static IEnumerable<object[]> ContainmentCases =>
         from kind in PaneHostWorld.Kinds
@@ -379,6 +427,9 @@ public sealed class PaneActionsTests
         {
             Path.Combine("..", "..", "Windows"),
             Path.Combine("..", "elsewhere"),
+
+            // A sibling whose name begins with the run root's: under it by its text, not by its folders.
+            Path.Combine("..", "runs-sibling"),
             @"|\\server\share\runs",
             @"|\\.\PhysicalDrive0",
             @"|C:\Windows\System32",
@@ -504,6 +555,7 @@ public sealed class PaneActionsTests
             Settings = UserSettings.Defaults();
             Settings.RunRoot = Path.Combine(_root, "runs");
             Directory.CreateDirectory(Settings.RunRoot);
+            RunRootsInForce.Add(Settings.RunRoot);
         }
 
         public static PaneHostWorld For(string kind)
@@ -533,6 +585,12 @@ public sealed class PaneActionsTests
 
         public string RunRoot => Settings.RunRoot;
 
+        /// <summary>
+        /// The run roots in force this session, the one in force last, as the add-in hands them to a check tab
+        /// (the reviews' F6); a check world's host reads them, the Review world's keeps its own.
+        /// </summary>
+        public List<string> RunRootsInForce { get; } = new List<string>();
+
         public FakeResolver Resolver { get; } = new FakeResolver();
 
         public FakeOpener Opener { get; } = new FakeOpener();
@@ -555,6 +613,12 @@ public sealed class PaneActionsTests
 
         /// <summary>Records <paramref name="runDirectory"/> and returns the id to send.</summary>
         public abstract string Track(string runDirectory);
+
+        /// <summary>
+        /// Brings <paramref name="runRoot"/> into force as a settings save and its restart do: through the Review
+        /// tab's own save, or, on a check tab, as the add-in hands the review host's run roots in force on.
+        /// </summary>
+        public abstract void MoveRunRoot(string runRoot);
 
         protected abstract void Deliver(string json);
 
@@ -674,6 +738,21 @@ public sealed class PaneActionsTests
             return chatId;
         }
 
+        public override void MoveRunRoot(string runRoot)
+        {
+            Receive("settings.save", "move", new Dictionary<string, object?>
+            {
+                { "provider", "openai" },
+                { "model", "gpt-5.6" },
+                { "effort", "high" },
+                { "api_key", null },
+                { "base_url", null },
+                { "gemini_enterprise", null },
+                { "run_root", runRoot },
+            });
+            Reply("settings.saved", "move");
+        }
+
         protected override void Deliver(string json) => Host.Receive(json);
 
         public override void Dispose()
@@ -703,8 +782,9 @@ public sealed class PaneActionsTests
             SaveSettings();
             _host = new SwReview.AddIn.Model.ModelCheckHost(
                 new SwReview.AddIn.Model.ModelCheckHostOptions(
-                    new FakeChannel(Posted), () => RunRoot)
+                    new FakeChannel(Posted), () => RunRootsInForce.Last())
                 {
+                    RunRootsInForce = () => RunRootsInForce.ToArray(),
                     LogFolder = () => LogFolder,
                     EntityResolver = () => UseResolver ? Resolver : null,
                     Opener = () => Opener,
@@ -716,6 +796,8 @@ public sealed class PaneActionsTests
         {
             return Host.TrackCheck(runDirectory).CheckId;
         }
+
+        public override void MoveRunRoot(string runRoot) => RunRootsInForce.Add(runRoot);
 
         protected override void Deliver(string json) => Host.Receive(json);
 
@@ -751,8 +833,9 @@ public sealed class PaneActionsTests
             SaveSettings();
             _host = new SwReview.AddIn.Standards.StandardsHost(
                 new SwReview.AddIn.Standards.StandardsHostOptions(
-                    new FakeChannel(Posted), () => RunRoot)
+                    new FakeChannel(Posted), () => RunRootsInForce.Last())
                 {
+                    RunRootsInForce = () => RunRootsInForce.ToArray(),
                     LogFolder = () => LogFolder,
                     EntityResolver = () => UseResolver ? Resolver : null,
                     Opener = () => Opener,
@@ -764,6 +847,8 @@ public sealed class PaneActionsTests
         {
             return Host.TrackCheck(runDirectory).CheckId;
         }
+
+        public override void MoveRunRoot(string runRoot) => RunRootsInForce.Add(runRoot);
 
         protected override void Deliver(string json) => Host.Receive(json);
 

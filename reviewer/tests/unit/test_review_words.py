@@ -747,3 +747,86 @@ backend never sends it. The sentence names no path and says what to do."""
 def test_a_review_whose_document_changed_as_it_started_says_so_and_what_to_do() -> None:
     errors = load_words().labels.errors
     assert {key: errors.get(key) for key in DOCUMENT_CHANGED} == DOCUMENT_CHANGED
+
+
+RUN_ROOT_REFUSED = {
+    "RunRootRefused": (
+        "Runs are made only in a local folder reached by its own path - not on a network share, "
+        "not through a link, and with no folder name ending in a space or a period - and the "
+        "add-in must be able to check that it is one. Choose a local folder for runs in Settings."
+    ),
+}
+"""The class the add-in refuses every run start with when the run root is not a local folder
+reached by its own path - on a network share, reached through a link, or written as a device path
+(owner decision 154A) - or could not be checked, a part of its path unreadable (the reviews'
+finding F2), before anything is made; and the class of the note a settings save answers with when
+the folder chosen for runs, or the run root it leaves in force, is one, though the save goes through
+(the owner's follow-up, "A Field + don't block"). The backend writes only into a local folder and
+resolves the run folder it is sent, so such a root failed deep in a run. The sentence states the
+rule, true of each of the four, and the way on, the run-root field in Settings - true of a start and
+of a save alike, so it says nothing of what was or was not saved. The add-in's own class; the
+backend never sends it. No path: the message in the fold says which of the four it is. Since the
+reviews of 154A's merge (F1), a fifth: a folder name ending in a space or a period, which Windows
+reads both with and without it, so the add-in's run folders and the backend's run root were two
+folders; the sentence names it."""
+
+
+def test_a_run_root_on_a_share_or_through_a_link_is_refused_with_the_way_on() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in RUN_ROOT_REFUSED} == RUN_ROOT_REFUSED
+
+
+RUN_ROOT_CHANGED = {
+    "RunRootChanged": (
+        "This run's folder is under a run root that is no longer in force, and runs go on only "
+        "under the one in force. Start the run again."
+    ),
+}
+"""The class the add-in refuses a run that would go on in a run folder under a run root a settings
+save has since moved with (the reviews of decision 154A, finding F6): a restored review's Recheck,
+a review with saved context and a context review's Retry, and a review whose run root moved while
+its evidence was extracted - each hands the backend a folder under the old run root, which the
+backend, started with the new one, would refuse deep in the run. The sentence says what is true of
+each and the way on; the message in the fold says which run and what to press. The add-in's own
+class; the backend never sends it. No path."""
+
+
+def test_a_run_under_a_run_root_no_longer_in_force_is_refused_with_the_way_on() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in RUN_ROOT_CHANGED} == RUN_ROOT_CHANGED
+
+
+RUN_ROOT_NOT_FULL_PATH = {
+    "RunRootNotFullPath": (
+        "The folder for runs must be written as a full path, starting with its drive letter. "
+        "Type the folder's full path in Settings."
+    ),
+}
+"""The class of the note a settings save answers with when the folder chosen for runs is not
+written as a full path (the reviews of decision 154A, finding F7): resolved against the current
+folder, the add-in and the backend can each read it as another folder, so that one field is not
+saved and every other is. The add-in's own class; the backend never sends it. No path."""
+
+
+def test_a_folder_for_runs_that_is_not_a_full_path_is_not_saved_with_the_way_on() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in RUN_ROOT_NOT_FULL_PATH} == RUN_ROOT_NOT_FULL_PATH
+
+
+RUN_ROOT_CHOSEN_NOT_IN_FORCE = {
+    "RunRootChosenNotInForce": (
+        "The folder for runs in force is refused, and the one chosen in Settings is not in force "
+        "until the review backend restarts with it. Save the settings again to retry the restart."
+    ),
+}
+"""The class the add-in refuses a run start with when the run root in force is one the rule refuses
+while another folder chosen for runs in Settings is not in force yet, its save's restart having
+failed (the reviews of 154A's merge, N4): the way on is the restart that brings the folder chosen
+in, not a folder chosen again, which the engineer has just done. The add-in's own class; the
+backend never sends it. No path: the message in the fold says what the run root in force is."""
+
+
+def test_a_start_refused_while_a_folder_chosen_is_not_in_force_says_to_retry_the_restart() -> None:
+    errors = load_words().labels.errors
+    chosen = {key: errors.get(key) for key in RUN_ROOT_CHOSEN_NOT_IN_FORCE}
+    assert chosen == RUN_ROOT_CHOSEN_NOT_IN_FORCE

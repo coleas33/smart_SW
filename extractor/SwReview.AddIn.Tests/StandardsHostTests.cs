@@ -786,6 +786,223 @@ public sealed class StandardsHostTests
         }
     }
 
+    // ---- owner decision 154A: a run root on a share or reached through a link -----------
+
+    /// <summary>
+    /// Owner decision 154A (feature 002 T191): `standards.start` refuses a run root the run root rule refuses,
+    /// first - before the document or the profile is asked about - in the Standards tab's words, which its page
+    /// shows whole: what the root is, that nothing was checked, and the way on, a local folder chosen for runs
+    /// in Settings on the Review tab, since this page has none (the reviews' F5), and Standards check pressed
+    /// again. No run folder is made, nothing is extracted or registered, no status is posted and no path
+    /// reaches the page.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FakeRunRootProbe.RefusedKinds), MemberType = typeof(FakeRunRootProbe))]
+    public void StandardsStartRefusesARunRootTheRuleRefusesFirstAndMakesNothing(string kind)
+    {
+        using (var world = new StandardsWorld())
+        {
+            var refusing = FakeRunRootProbe.Refusing(kind, world.RunRoot);
+            world.RunRootSpelling = refusing.RunRoot;
+            world.Probe = refusing.Probe;
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
+            world.WriteProfile();
+            world.Open();
+
+            world.Receive("standards.start", "s1", new { });
+            world.Document = null;
+            world.ProfilePath = null;
+            world.Receive("standards.start", "s2", new { });
+
+            foreach (string id in new[] { "s1", "s2" })
+            {
+                JsonElement error = world.Reply("error", id);
+                Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
+                Assert.False(error.GetProperty("retryable").GetBoolean());
+                Assert.Equal(
+                    RunRootRule.Refusal(
+                        refusing.Verdict, "nothing was checked", RunRootRule.InSettingsOnTheReviewTab, "press Standards check again"),
+                    error.GetProperty("message").GetString());
+            }
+
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.RunFolders());
+            Assert.Empty(world.Registered);
+            Assert.Empty(world.AllPosted("status"));
+            Assert.Empty(world.AllPosted("standards.extracted"));
+            Assert.DoesNotContain(world.Posted, message => message.Contains(Path.GetFileName(Path.GetDirectoryName(world.RunRoot)!)));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 154A, with 153A's record of the settings in force (feature 002 T201): while a start of the
+    /// backend under way would bring another run root into force, `standards.start` is refused first, before the
+    /// run root is judged or the document or the profile asked about, `BackendUnavailable`, retryable, in this
+    /// tab's words: the backend is being started with another folder for runs, nothing was checked, and Standards
+    /// check pressed again in a moment. No folder is made, nothing is extracted, registered or posted, and the rule
+    /// reads nothing.
+    /// </summary>
+    [Fact]
+    public void StandardsStartIsRefusedWhileAStartOfTheBackendWouldBringAnotherRunRootIn()
+    {
+        using (var world = new StandardsWorld())
+        {
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            world.Probe = probe;
+            world.RunRootForANewRun = () => null;
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
+            world.WriteProfile();
+            world.Open();
+
+            world.Receive("standards.start", "s1", new { });
+
+            JsonElement error = world.Reply("error", "s1");
+            Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal(
+                RunRootRule.MovingRefusal("nothing was checked", "press Standards check again"),
+                error.GetProperty("message").GetString());
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.RunFolders());
+            Assert.Empty(world.Registered);
+            Assert.Empty(world.AllPosted("status"));
+            Assert.Empty(probe.Asked);
+        }
+    }
+
+    /// <summary>
+    /// ...and a Standards check reads the run root once to judge it and make its folder (feature 002 T201): the
+    /// one it judges is the one its folder is made under, even when the run root in force moves between. Changed
+    /// deliberately for the reviews of 154A's merge, N6: the run root is read a second time once the extraction is
+    /// over, so the move is now answered there, `RunRootChanged`, where the run was handed on.
+    /// </summary>
+    [Fact]
+    public void AStandardsCheckJudgesAndMakesItsFolderUnderOneReadingOfTheRunRoot()
+    {
+        using (var world = new StandardsWorld())
+        {
+            string moved = Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "moved", "runs");
+            int readings = 0;
+            world.RunRootSource = () => ++readings == 1 ? world.RunRoot : moved;
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
+            world.WriteProfile();
+            world.Open();
+
+            world.Receive("standards.start", "s1", new { });
+
+            Assert.Equal("RunRootChanged", world.Reply("error", "s1").GetProperty("error_class").GetString());
+            Assert.Equal(world.RunRoot, Path.GetDirectoryName(Assert.Single(world.RunFolders())));
+            Assert.False(Directory.Exists(moved), "the run's folder was made under a run root it did not judge");
+            Assert.Equal(2, readings);
+        }
+    }
+
+    /// <summary>
+    /// The reviews of 154A's merge, N4 (feature 002 T204): under a run root in force that the rule refuses, with a
+    /// folder chosen for runs in the Review tab's Settings that is not in force - its save's restart failed - the
+    /// Standards start is refused `RunRootChosenNotInForce`, not retryable, in words that say the folder chosen is not in
+    /// force until the review backend restarts with it and to save the settings again to retry the restart -
+    /// not to choose a local folder, which the engineer has just done. The folder saved in another letter case is
+    /// the run root in force, and the start is refused as before.
+    /// </summary>
+    [Theory]
+    [InlineData("another folder")]
+    [InlineData("the run root in force in another letter case")]
+    public void UnderARefusedRunRootAFolderChosenNotInForceIsToldWithTheWayOnToRetryTheRestart(string saved)
+    {
+        using (var world = new StandardsWorld())
+        {
+            var refusing = FakeRunRootProbe.Refusing("on a share", world.RunRoot);
+            world.RunRootSpelling = refusing.RunRoot;
+            world.Probe = refusing.Probe;
+            world.RunRootSaved = () => saved == "another folder"
+                ? Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "FICT-chosen", "runs")
+                : refusing.RunRoot.ToUpperInvariant();
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
+            world.WriteProfile();
+            world.Open();
+
+            world.Receive("standards.start", "s1", new { });
+
+            JsonElement error = world.Reply("error", "s1");
+            Assert.False(error.GetProperty("retryable").GetBoolean());
+            if (saved == "another folder")
+            {
+                Assert.Equal("RunRootChosenNotInForce", error.GetProperty("error_class").GetString());
+                Assert.Equal(
+                    RunRootRule.ChosenNotInForceRefusal(
+                        refusing.Verdict, "nothing was checked", RunRootRule.InSettingsOnTheReviewTab, "press Standards check again"),
+                    error.GetProperty("message").GetString());
+            }
+            else
+            {
+                Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
+                Assert.Equal(
+                    RunRootRule.Refusal(
+                        refusing.Verdict, "nothing was checked", RunRootRule.InSettingsOnTheReviewTab, "press Standards check again"),
+                    error.GetProperty("message").GetString());
+            }
+
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.RunFolders());
+            Assert.DoesNotContain(world.Posted, message => message.Contains("FICT-chosen"));
+        }
+    }
+
+    /// <summary>
+    /// The reviews of 154A's merge, N6 (feature 002 T204): an extraction takes minutes, and a settings save's restart
+    /// on the Review tab, which no check holds back, can bring another run root into force meanwhile - the backend
+    /// would then refuse the run's folder at the page's first call. The run root is read again once the extraction
+    /// is over: a run whose folder is no longer under the run root in force is answered `RunRootChanged`, not
+    /// retryable, in words the page prints whole, and while a start that would bring another in is still under way
+    /// it is answered as a start is then (`BackendUnavailable`); either way the folder is left as the evidence, and
+    /// it is neither registered nor handed to the page.
+    /// </summary>
+    [Theory]
+    [InlineData("another run root in force")]
+    [InlineData("a start under way that brings another in")]
+    public void ARunWhoseRunRootMovesWhileTheModelIsReadIsAnsweredAndNotHandedOn(string after)
+    {
+        using (var world = new StandardsWorld())
+        {
+            string moved = Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "moved", "runs");
+            int readings = 0;
+            world.RunRootForANewRun = () => ++readings == 1
+                ? world.RunRoot
+                : after == "another run root in force" ? moved : null;
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
+            world.WriteProfile();
+            world.Open();
+
+            world.Receive("standards.start", "s1", new { });
+
+            JsonElement error = world.Reply("error", "s1");
+            if (after == "another run root in force")
+            {
+                Assert.Equal("RunRootChanged", error.GetProperty("error_class").GetString());
+                Assert.False(error.GetProperty("retryable").GetBoolean());
+                Assert.Equal(
+                    RunRootRule.ChangedRefusal("the document was read", "nothing was checked", "press Standards check again"),
+                    error.GetProperty("message").GetString());
+            }
+            else
+            {
+                Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
+                Assert.True(error.GetProperty("retryable").GetBoolean());
+                Assert.Equal(
+                    RunRootRule.MovingRefusal("nothing was checked", "press Standards check again"),
+                    error.GetProperty("message").GetString());
+            }
+
+            Assert.Equal(2, readings);
+            Assert.Equal(1, world.Dump.Runs);
+            Assert.Single(world.RunFolders());
+            Assert.Empty(world.Registered);
+            Assert.Empty(world.AllPosted("standards.extracted"));
+            Assert.False(Directory.Exists(moved));
+        }
+    }
+
     // ---- the world ----------------------------------------------------------------------
 
     private sealed class StandardsWorld : IDisposable
@@ -812,6 +1029,28 @@ public sealed class StandardsHostTests
         public string? ProfilePath { get; set; }
 
         public bool BlankRunRoot { get; set; }
+
+        /// <summary>The run root as the setting spells it, when not <see cref="RunRoot"/> (owner decision 154A).</summary>
+        public string? RunRootSpelling { get; set; }
+
+        /// <summary>
+        /// What each reading of the run root in force answers, when a test makes it move between readings (owner
+        /// decision 154A, with 153A's record); null reads <see cref="RunRootSpelling"/> or <see cref="RunRoot"/>.
+        /// </summary>
+        public Func<string>? RunRootSource { get; set; }
+
+        /// <summary>The run root for a new run, when a test sets it (owner decision 154A, with 153A's record); null keeps the host's default.</summary>
+        public Func<string?>? RunRootForANewRun { get; set; }
+
+        /// <summary>The run root saved in the Review tab's Settings, when a test sets it (the reviews of 154A's merge, N4).</summary>
+        public Func<string?>? RunRootSaved { get; set; }
+
+        /// <summary>
+        /// What the run root rule reads (owner decision 154A); when null, a probe that answers every folder as a
+        /// local one reached by its own path - not Windows, so a temp folder below a junction on a developer's
+        /// machine fails no test that is not about the rule (the reviews' N11).
+        /// </summary>
+        public IRunRootProbe? Probe { get; set; }
 
         public PageDocument? Document { get; set; }
 
@@ -847,8 +1086,9 @@ public sealed class StandardsHostTests
 
         public void Open()
         {
-            _host = new StandardsHost(new StandardsHostOptions(
-                new CollectingChannel(Posted), () => BlankRunRoot ? "   " : RunRoot)
+            var options = new StandardsHostOptions(
+                new CollectingChannel(Posted),
+                () => RunRootSource != null ? RunRootSource() : BlankRunRoot ? "   " : RunRootSpelling ?? RunRoot)
             {
                 Backend = () => Endpoint,
                 CurrentDocument = () => Document,
@@ -858,7 +1098,19 @@ public sealed class StandardsHostTests
                 Opener = () => Opener,
                 LogFolder = () => LogFolder,
                 Now = () => Stamp,
-            });
+            };
+            options.RunRootProbe = Probe ?? FakeRunRootProbe.Local();
+            if (RunRootForANewRun != null)
+            {
+                options.RunRootForANewRun = RunRootForANewRun;
+            }
+
+            if (RunRootSaved != null)
+            {
+                options.RunRootSaved = RunRootSaved;
+            }
+
+            _host = new StandardsHost(options);
         }
 
         public string[] RunFolders() =>

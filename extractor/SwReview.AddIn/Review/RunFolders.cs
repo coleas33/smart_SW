@@ -503,7 +503,41 @@ public static class RunFolders
     /// The run root in its full form - <c>Path.GetFullPath</c>: canonical, rooted, with no <c>.</c> or
     /// <c>..</c> segment and a backslash between segments - the one form every folder this class makes or
     /// finds is named under (owner decision 148A). A root that names no folder throws here as it would
-    /// below; the searches answer it with nothing.
+    /// below; the searches answer it with nothing. The run root rule judges the same folder from the root's
+    /// text without reading anything (owner decision 154A and its reviews, <see cref="RunRootRule"/>), where
+    /// this form can expand an 8.3 short name by reading the folders of the path - and, under the newer path
+    /// handling, can leave one as written - so a run folder made here can be spelled with a short name that
+    /// the backend's own resolution spells in long names.
     /// </summary>
     private static string FullFormOf(string runRoot) => Path.GetFullPath(runRoot);
+
+    /// <summary>
+    /// Whether <paramref name="folder"/> is <paramref name="runRoot"/> or lies below it, each in its full form,
+    /// ignoring letter case; false when either has none. What a run's folder is held to before it is handed to
+    /// the backend, which makes runs only under the run root it was started with, and what a folder the pane
+    /// opens is held to (owner decision 154A, the reviews' finding F6).
+    /// </summary>
+    internal static bool IsUnder(string folder, string runRoot)
+    {
+        string fullFolder;
+        string fullRoot;
+        try
+        {
+            fullFolder = Path.GetFullPath(folder);
+            fullRoot = FullFormOf(runRoot);
+        }
+        catch (Exception failure) when (failure is ArgumentException || failure is NotSupportedException
+            || failure is PathTooLongException || failure is System.Security.SecurityException)
+        {
+            return false;
+        }
+
+        string trimmed = fullRoot.TrimEnd(Path.DirectorySeparatorChar);
+        if (string.Equals(trimmed, fullFolder.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return fullFolder.StartsWith(trimmed + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
 }
