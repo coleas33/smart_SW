@@ -2518,6 +2518,8 @@ path to the copy: `remodel_client.py`'s `probe_scope` and `open` carry the sourc
 change commands carry none. So a real run hands either seat a full drive path in canonical form, its
 run folder in full form, its separators backslashes and no `..` in it, which the rule takes. A run
 root on a share never plans: the backend refuses a UNC run folder before any bridge call (R12.9).
+*Settled by 154A (2026-10-20):* such a root - and one reached through a link - is refused before the
+plan begins, in plain words (R12.9 items 1 and 2).
 The rule takes, on both seats, the forms decision 144A's second review took (T178) - a share's path
 with either separator, a run folder directly under a share's root or a mapped drive's, spaces,
 another letter case - and refuses everything else, in one list of forms both seats' tests read
@@ -2779,6 +2781,12 @@ Each is beyond what decision 148A names, so nothing here was changed.
    the bridge is asked, for a review as for a plan; so a run root on a share - the default, the
    Documents folder, when Documents is redirected to one - plans nothing, though both seats take a
    share's path to a run's copy. Whether run roots on a share are to work is the owner's call.
+   *Settled by 154A (2026-10-20):* they are not to work, and are told so up front. The settings save
+   and every run start - a review, a check, a plan and a Start among them - refuse a run root on a
+   network share (a UNC path, a mapped network drive, a final path on a share) before anything is
+   read, made or asked of the backend, in plain words that name the way on, a local folder, and no
+   path; the backend's rule stays, and so do both seats' rules for the copy's path (002
+   [research.md](../002-task-pane-assistant/research.md), 154A).
 2. **A run root reached through a link is spelled two ways.** The backend resolves the run folder
    it is sent (`Path.resolve()`), which follows a junction, a symbolic link, a `subst` drive or a
    mapped network drive, and builds the copy path from that spelling; the host binds its own. So under
@@ -2786,7 +2794,14 @@ Each is beyond what decision 148A names, so nothing here was changed.
    after this decision alike. The pilot's run root is not one: the copy opened there on 2026-09-28
    (U27). The options: the backend builds the copy path from the run folder as it was sent,
    normalized and not resolved, its containment still checked on the resolved form; or the bridge
-   compares the two run folders by the file they name. Nothing was changed.
+   compares the two run folders by the file they name. Nothing was changed. *Settled by 154A
+   (2026-10-20):* neither option was taken. A run root reached through a link - a substituted
+   drive, a junction or a symbolic link among its existing folders, any root whose final path
+   differs from its full path other than by letter case - is refused by the settings save and every
+   run start before anything is made, so for every run root accepted the backend's spelling of a run
+   folder and the host's differ at most in letter case, which step 4 compares ignoring; the copy
+   path, the bind and step 4's comparison are unchanged (002
+   [research.md](../002-task-pane-assistant/research.md), 154A).
 3. **`RemodelProbeGuard` matches ignoring case.** Its run-scoped members, `ISldWorks.OpenDoc7` now
    among them as the toggles' keys were, are matched ignoring case, where `RemodelGuard` and
    `RemodelSeatGuard` match their keys ordinally so that a mis-spelling fails closed. Its one host
