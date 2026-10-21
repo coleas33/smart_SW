@@ -890,8 +890,10 @@ class TestCallsThatNameNoDocument:
         text = report(graded, log_targets=read_log_targets(run_dir))
 
         assert "cannot claim" not in text
-        assert f"Every write of this run went to `{COPY_PATH}`." in text
-        assert "2 of 2 mutating request(s)" in text
+        # Changed on purpose on the decision's review (004 T198): the claim is of the writes that
+        # name a document, since the open's line is a mutating request too (research R18.8).
+        assert f"Every write of this run that names a document went to `{COPY_PATH}`." in text
+        assert "2 of 2 mutating request(s) in `remodel.log` that name a document name it" in text
         assert f"`{NO_TARGET}`" in text
         assert "1 request(s) whose calls name no document" in text
         assert "not as writes to another one" in text
@@ -903,26 +905,81 @@ class TestCallsThatNameNoDocument:
 
         text = report(graded, log_targets=(NO_TARGET, COPY_PATH, elsewhere))
 
-        assert "cannot claim" in text
+        assert "cannot claim** that every write that names a document went to" in text
         assert f"(`{elsewhere}`)" in text
         assert f"`{NO_TARGET}`, `" not in text and f", `{NO_TARGET}`" not in text
-        assert "1 of 2 mutating request(s)" in text
+        assert "1 of 2 mutating request(s) in `remodel.log` that name a document name one" in text
         assert "1 request(s) whose calls name no document" in text
 
     def test_a_log_that_names_no_document_at_all_records_no_write(
         self, graded: GradedRun
     ) -> None:
-        """A run whose only targets name no document has recorded no write: the claim is not
-        made, and nothing is said to have gone elsewhere."""
+        """A run whose only targets name no document - one that ended before its first change
+        command, its log holding the open's line alone - has recorded no write that names a
+        document: the claim is not made, and nothing is said to have gone elsewhere."""
         untargeted = [row.model_copy(update={"target_path": None}) for row in changes()]
 
         text = report(graded, changes=untargeted, log_targets=(NO_TARGET,))
 
-        assert "No write was recorded for this run" in text
+        # Changed on purpose on the decision's review (004 T198): the log holds the open's
+        # mutating request, so "no write was recorded" was untrue (research R18.8).
+        assert "No write that names a document was recorded for this run" in text
         assert "no mutating request that names a document" in text
         assert "cannot claim" not in text
-        assert "Every write of this run went to" not in text
+        assert "Every write of this run" not in text
         assert "1 request(s) whose calls name no document" in text
+
+    @pytest.mark.parametrize(
+        ("targeted", "log_targets"),
+        [
+            (True, (NO_TARGET, COPY_PATH, COPY_PATH)),
+            (True, (NO_TARGET, COPY_PATH, "C:\\work\\bracket.SLDPRT")),
+            (False, (NO_TARGET,)),
+        ],
+        ids=["claimed", "withdrawn", "no-write"],
+    )
+    def test_no_sentence_speaks_of_every_write_while_the_log_holds_one_that_names_no_document(
+        self, graded: GradedRun, targeted: bool, log_targets: tuple[str, ...]
+    ) -> None:
+        """Owner decision 155A's review (004 T198): the code calls a `(none)` entry's calls writes -
+        the settings a run changes, and the copy's tag, rollback and rebuild before the run holds
+        it - so while the log holds one, no sentence of the claim speaks of every write, or of
+        every mutating request, unqualified: each speaks of those that name a document."""
+        rows = changes() if targeted else [
+            row.model_copy(update={"target_path": None}) for row in changes()
+        ]
+
+        text = report(graded, changes=rows, log_targets=log_targets)
+        said = next(line for line in text.splitlines() if "(FR-041)" in line or "No write" in line)
+
+        for unqualified in (
+            "Every write of this run went to",
+            "that every write went to",
+            "No write was recorded",
+            "mutating request(s) in `remodel.log` name ",
+            "holds no mutating request.",
+        ):
+            assert unqualified not in said, unqualified
+        assert "that names a document" in said or "that name a document" in said
+
+    def test_without_one_the_sentences_are_as_they_were(self, graded: GradedRun) -> None:
+        """And with no `(none)` entry, nothing is qualified: the three sentences read as they did
+        before the decision, the golden report's among them."""
+        untargeted = [row.model_copy(update={"target_path": None}) for row in changes()]
+        elsewhere = "C:\\work\\bracket.SLDPRT"
+
+        claimed = report(graded, log_targets=(COPY_PATH, COPY_PATH))
+        withdrawn = report(graded, log_targets=(COPY_PATH, elsewhere))
+        nothing = report(graded, changes=untargeted, log_targets=())
+
+        assert f"Every write of this run went to `{COPY_PATH}`." in claimed
+        assert "2 of 2 mutating request(s) in `remodel.log` name it (FR-041)." in claimed
+        assert f"cannot claim** that every write went to `{COPY_PATH}`." in withdrawn
+        assert "1 of 2 mutating request(s) in `remodel.log` name one." in withdrawn
+        assert "No write was recorded for this run" in nothing
+        assert "`remodel.log` holds no mutating request." in nothing
+        for text in (claimed, withdrawn, nothing):
+            assert "name a document" not in text and "names a document" not in text
 
     def test_the_words_never_call_them_writes_to_another_document(
         self, graded: GradedRun

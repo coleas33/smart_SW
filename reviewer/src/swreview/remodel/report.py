@@ -146,24 +146,35 @@ Named here because this module selects the headline on it and imports nothing fr
 token, so a rename cannot quietly take the headline back to the limit sentence."""
 
 WRITES_WENT_TO_THE_COPY = (
-    "Every write of this run went to `{copy}`. That is read from evidence rather than "
-    "from intent: {records} of {total_records} change record(s) in `{changes}` name it as "
-    "the target `VerifyTarget` confirmed, and {requests} of {total_requests} mutating "
-    "request(s) in `{log}` name it (FR-041)."
+    "Every write of this run{that_names_a_document} went to `{copy}`. That is read from "
+    "evidence rather than from intent: {records} of {total_records} change record(s) in "
+    "`{changes}` name it as the target `VerifyTarget` confirmed, and {requests} of "
+    "{total_requests} mutating request(s) in `{log}`{that_name_a_document} name it (FR-041)."
 )
 
 WRITES_WENT_ELSEWHERE = (
-    "This run **cannot claim** that every write went to `{copy}`. {records} of "
-    "{total_records} change record(s) name another target ({other}), and {requests} of "
-    "{total_requests} mutating request(s) in `{log}` name one. A run whose own record "
-    "contradicts the claim reports the contradiction; it does not drop it (FR-041)."
+    "This run **cannot claim** that every write{that_names_a_document} went to `{copy}`. "
+    "{records} of {total_records} change record(s) name another target ({other}), and "
+    "{requests} of {total_requests} mutating request(s) in `{log}`{that_name_a_document} name "
+    "one. A run whose own record contradicts the claim reports the contradiction; it does not "
+    "drop it (FR-041)."
 )
 
 NO_WRITE_RECORD = (
-    "No write was recorded for this run, so there is nothing to state about where its "
-    "writes went: `{changes}` holds no change with a target and `{log}` holds no mutating "
-    "request that names a document."
+    "No write{that_names_a_document} was recorded for this run, so there is nothing to state "
+    "about where its writes went: `{changes}` holds no change with a target and `{log}` holds "
+    "no mutating request{that_names_a_document}."
 )
+
+THAT_NAMES_A_DOCUMENT = " that names a document"
+"""How the claim's three sentences above qualify a write while `remodel.log` holds a
+`NO_TARGET` entry (`THAT_NAME_A_DOCUMENT`, its plural, a request): such an entry's calls are
+writes - the settings a run changes, and the copy's tag, rollback and rebuild before the run
+holds it - and a mutating request, so a claim of every write, or a count of every mutating
+request, would leave them out unsaid. With no such entry the sentences read as they always
+did (owner decision 155A's review)."""
+
+THAT_NAME_A_DOCUMENT = " that name a document"
 
 CALLS_NAMING_NO_DOCUMENT = (
     "`{log}` also records {count} request(s) whose calls name no document (`{none}`): calls "
@@ -173,8 +184,9 @@ CALLS_NAMING_NO_DOCUMENT = (
 )
 """Said after the claim whenever `remodel.log` holds a `NO_TARGET` entry, which every run's
 does (`remodel.open`). Such an entry is not another target, so it never withdraws the claim,
-and it is not a write the log can put on the copy, so it is not counted for it either. The
-words name what the entries are without calling them writes: the settings are the
+and the log cannot put its calls on the copy, so it is not counted for it either; the claim
+then speaks of the writes that name a document (`THAT_NAMES_A_DOCUMENT`). The words name what
+the entries are and call none of them a write to a document: the settings are the
 application's, and opening the copy is not a write (owner decision 155A; the draft
 constitution amendment, pull request #4)."""
 
@@ -473,8 +485,14 @@ def _where_the_writes_went(
     on_copy = [path for path in targets if path == copy]
     log_on_copy = [path for path in named if path == copy]
     other = sorted({*(set(targets) - {copy}), *(set(named) - {copy})})
+    qualified = {
+        "that_names_a_document": THAT_NAMES_A_DOCUMENT if unnamed else "",
+        "that_name_a_document": THAT_NAME_A_DOCUMENT if unnamed else "",
+    }
     if not targets and not named:
-        claim = NO_WRITE_RECORD.format(changes=CHANGES_FILE_NAME, log=LOG_FILE_NAME)
+        claim = NO_WRITE_RECORD.format(
+            changes=CHANGES_FILE_NAME, log=LOG_FILE_NAME, **qualified
+        )
     elif other:
         claim = WRITES_WENT_ELSEWHERE.format(
             copy=copy,
@@ -484,6 +502,7 @@ def _where_the_writes_went(
             requests=len(named) - len(log_on_copy),
             total_requests=len(named),
             log=LOG_FILE_NAME,
+            **qualified,
         )
     else:
         claim = WRITES_WENT_TO_THE_COPY.format(
@@ -494,6 +513,7 @@ def _where_the_writes_went(
             requests=len(log_on_copy),
             total_requests=len(named),
             log=LOG_FILE_NAME,
+            **qualified,
         )
     if not unnamed:
         return claim
