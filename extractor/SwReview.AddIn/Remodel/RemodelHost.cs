@@ -197,10 +197,10 @@ public sealed class RemodelHostOptions
 /// Threading: <see cref="Receive"/> is not re-entrant and is delivered one message at a time,
 /// off the SOLIDWORKS UI thread. The run itself executes on
 /// <see cref="RemodelHostOptions.Schedule"/> so that `remodel.stop` can be delivered while it
-/// is running; the only state the two share is the run's stop flag and the pending stop id,
-/// both written atomically, and - owner decision 155A - the run's end: the host freed from it,
-/// and what its ending holds back meanwhile, under one lock, which `init`'s reading of a run in
-/// flight takes too.
+/// is running; the only state the two share is the run's stop flag, written atomically, and -
+/// owner decision 155A - the run's end: the host freed from it, and what its ending holds back
+/// meanwhile, under one lock, which `init`'s reading of a run in flight takes too, and - owner
+/// decision 159A - a stop's decision and the Stops waiting for the run's end.
 /// </summary>
 public sealed class RemodelHost : IDisposable
 {
@@ -500,8 +500,13 @@ public sealed class RemodelHost : IDisposable
     /// <summary>The run the executor is inside, so `remodel.stop` has something to set.</summary>
     private volatile RemodelRun? _active;
 
-    /// <summary>The `remodel.stop` that is waiting for the executor to finalize.</summary>
-    private string? _pendingStopId;
+    /// <summary>
+    /// Every `remodel.stop` that reached the run in flight, waiting for the executor to finalize, each
+    /// answered once at the run's end (owner decision 159A: Stop stays pressable until the run ends, and
+    /// a second press no longer replaces the first). Guarded by <see cref="_endingLock"/>, and taken as
+    /// the host is freed, so none outlives its run.
+    /// </summary>
+    private readonly List<string?> _pendingStops = new List<string?>();
 
     /// <summary>
     /// Owner decision 155A (004 research R18): orders the end of a run - the host freed from it - with what
@@ -510,6 +515,9 @@ public sealed class RemodelHost : IDisposable
     /// fields and to post, which queues the message to the pane and returns, so nothing under it waits on
     /// another thread: SOLIDWORKS' application thread takes it too, when a session's ending is told during
     /// a run (<see cref="PostWhatWasLeft"/>), and a wait on that thread under it could hang SOLIDWORKS.
+    /// Owner decision 159A (004 research R19): a stop - the engineer's (<see cref="Stop"/>) or the copy
+    /// going away (<see cref="DocumentChanged"/>) - is decided and told under it too, so it reaches the run
+    /// before its end or finds the host free.
     /// </summary>
     private readonly object _endingLock = new object();
 
@@ -733,19 +741,26 @@ public sealed class RemodelHost : IDisposable
     {
         Post("document.changed", DocumentPayload(_options.CurrentDocument()));
 
-        RemodelRun? run = _active;
-        if (run == null || run.StopRequested || CopyExists(run))
+        // Owner decision 159A (004 research R19): decided, and told, under the lock that frees the host, as the
+        // engineer's Stop is, so a run that has ended is not stopped, nor told it is stopping after its last
+        // word. The copy is looked for under it too: the run folder is local (owner decision 154A), so the look
+        // waits on no other thread.
+        lock (_endingLock)
         {
-            return;
+            RemodelRun? run = _active;
+            if (run == null || run.StopRequested || CopyExists(run))
+            {
+                return;
+            }
+
+            run.RequestStop();
+
+            // Owner decision 155A: in plain words, naming no path - the run folder holds the copy's - and
+            // told as the engineer's own Stop is told, in a stage the page shows in its run line while the
+            // run goes on to its end, not in one that ends the page's running state while the run still
+            // finishes the change in flight and holds the host.
+            PostStatus("applying", CopyGoneMessage);
         }
-
-        run.RequestStop();
-
-        // Owner decision 155A: in plain words, naming no path - the run folder holds the copy's - and
-        // told as the engineer's own Stop is told, in a stage the page shows in its run line while the
-        // run goes on to its end, not in one that ends the page's running state while the run still
-        // finishes the change in flight and holds the host.
-        PostStatus("applying", CopyGoneMessage);
     }
 
     /// <summary>
@@ -1921,13 +1936,15 @@ public sealed class RemodelHost : IDisposable
     /// `error`, so none is posted while the run holds the host. What the ending says before the host
     /// is free - the failure caught here, the pipeline's own error, T167's words of a close that left
     /// something - is held (<see cref="HoldUntilTheHostIsFree"/>) and told once the session is closed
-    /// and the host freed, in the order it was made, then the run's last word, then the stop's answer.
+    /// and the host freed, in the order it was made, then the run's last word, then the answer to every
+    /// Stop that reached the run (owner decision 159A).
     /// </summary>
     private void Execute(IRemodelPipeline pipeline, RemodelRun run)
     {
         RemodelRunOutcome outcome;
         string? closeProblem = null;
         List<Action> held;
+        List<string?> stops;
         try
         {
             PostStatus("judging", "Running the plan against the copy...");
@@ -1976,7 +1993,7 @@ public sealed class RemodelHost : IDisposable
             // run's own thread (on review, N4): a plan pressed the moment the host is free takes a hold
             // of its own, which letting go after would let go of.
             LetGoOfTheToolService();
-            held = FreeTheHostFromTheRun(run);
+            held = FreeTheHostFromTheRun(run, out stops);
         }
 
         foreach (Action post in held)
@@ -2002,14 +2019,20 @@ public sealed class RemodelHost : IDisposable
 
         // The stop is answered when the executor has finalized, not when the flag was set:
         // `changes_applied` is not knowable until the change in flight has landed or been
-        // inverted.
-        string? stopId = Interlocked.Exchange(ref _pendingStopId, null);
-        if (stopId != null || run.StopRequested)
+        // inverted. Every Stop that reached this run, each once, taken as the host was freed (owner
+        // decision 159A); a run stopped only because its copy went away is answered unasked, as before.
+        var stopped = new Dictionary<string, object?>
         {
-            _actions.Send("remodel.stopped", stopId, new Dictionary<string, object?>
-            {
-                { "changes_applied", outcome.ChangesApplied },
-            });
+            { "changes_applied", outcome.ChangesApplied },
+        };
+        foreach (string? stopId in stops)
+        {
+            _actions.Send("remodel.stopped", stopId, stopped);
+        }
+
+        if (stops.Count == 0 && run.StopRequested)
+        {
+            _actions.Send("remodel.stopped", null, stopped);
         }
     }
 
@@ -2138,24 +2161,41 @@ public sealed class RemodelHost : IDisposable
         });
     }
 
+    /// <summary>
+    /// What the page's run line is told as the engineer's Stop reaches the run, in `applying`: the run goes on
+    /// to its end, which follows once the host is free (owner decision 155A). Named for the page's tests (owner
+    /// decision 159A); the words are as they were.
+    /// </summary>
+    public const string StoppingMessage =
+        "Stopping: the change in flight is finished and the artifacts are finalized first.";
+
+    /// <summary>
+    /// `remodel.stop`: owner decision 159A (004 research R19; R18.7 item 4) decides it under the lock that frees
+    /// the host from the run (<see cref="_endingLock"/>), and tells it under that lock, so a Stop either reaches
+    /// the run - its word told before the run's end, its id answered at that end, with every other Stop of the
+    /// run - or finds the host free and is answered at once, storing nothing. Read outside the lock, a Stop could
+    /// read the run in flight just before the host was freed and store its id just after the end had taken it:
+    /// its word was told after the run's last word, and the next run's end answered it with that run's count.
+    /// </summary>
     private void Stop(string? id)
     {
-        RemodelRun? run = _active;
-        if (run == null)
+        lock (_endingLock)
         {
-            _actions.SendError(
-                id,
-                "RunNotFound",
-                "no remodel run is in flight, so there is nothing to stop.",
-                retryable: false);
-            return;
+            RemodelRun? run = _active;
+            if (run != null)
+            {
+                _pendingStops.Add(id);
+                run.RequestStop();
+                PostStatus("applying", StoppingMessage);
+                return;
+            }
         }
 
-        Interlocked.Exchange(ref _pendingStopId, id);
-        run.RequestStop();
-        PostStatus(
-            "applying",
-            "Stopping: the change in flight is finished and the artifacts are finalized first.");
+        _actions.SendError(
+            id,
+            "RunNotFound",
+            "no remodel run is in flight, so there is nothing to stop.",
+            retryable: false);
     }
 
     // ---- remodel.result ------------------------------------------------------------------
@@ -2778,9 +2818,10 @@ public sealed class RemodelHost : IDisposable
     /// Owner decision 155A: frees the host from <paramref name="run"/>, which has ended, and hands back what
     /// its ending held, in the order it was made, for the caller to tell: one step under
     /// <see cref="_endingLock"/>, so nothing is held after it and an `init` reads the run in flight only
-    /// before it.
+    /// before it. Owner decision 159A: and the Stops that reached the run, in <paramref name="stops"/>, for
+    /// the caller to answer - a Stop decided after this step finds the host free.
     /// </summary>
-    private List<Action> FreeTheHostFromTheRun(RemodelRun run)
+    private List<Action> FreeTheHostFromTheRun(RemodelRun run, out List<string?> stops)
     {
         lock (_endingLock)
         {
@@ -2789,6 +2830,8 @@ public sealed class RemodelHost : IDisposable
             _busy = false;
             var held = new List<Action>(_heldForTheEnd);
             _heldForTheEnd.Clear();
+            stops = new List<string?>(_pendingStops);
+            _pendingStops.Clear();
             return held;
         }
     }

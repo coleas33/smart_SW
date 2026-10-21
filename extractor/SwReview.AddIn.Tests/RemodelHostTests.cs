@@ -6070,6 +6070,205 @@ public sealed class RemodelHostTests
         }
     }
 
+    // ---- owner decision 159A: a Stop and the run's end, decided under one lock ---------------------
+
+    /// <summary>What the host tells the page as the engineer's Stop reaches a run.</summary>
+    private const string StoppingWords = RemodelHost.StoppingMessage;
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T204; research R18.7 item 4): every `remodel.stop` is answered once - at the end
+    /// of the run it reached, with that run's count, or at once when no run is in flight. Stop stays pressable until the run
+    /// ends, so it can be pressed twice; the second press replaced the first's id, and the first was never answered. Neither
+    /// outlives the run: the next run, which no one stops, ends answering no Stop.
+    /// </summary>
+    [Fact]
+    public void EveryStopThatReachesARunIsAnsweredOnceAtItsEndAndNotAtTheNextRunsEnd()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+            {
+                world.Receive("remodel.stop", "x1", new { });
+                world.Receive("remodel.stop", "x2", new { });
+                world.Pipeline.ChangesApplied = 2;
+                world.Pipeline.RunState = "truncated";
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal(2, world.Reply("remodel.stopped", "x1").GetProperty("changes_applied").GetInt32());
+            Assert.Equal(2, world.Reply("remodel.stopped", "x2").GetProperty("changes_applied").GetInt32());
+            Assert.Equal(2, world.AllPosted("remodel.stopped").Length);
+
+            world.Pipeline.DuringRun = null;
+            world.Pipeline.RunState = "saved";
+            world.Receive("remodel.plan", "p2", new { });
+            string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            int before = world.Posted.Count;
+            world.Receive("remodel.start", "s2", new { run_dir = second });
+
+            world.Reply("remodel.started", "s2");
+            Assert.DoesNotContain("remodel.stopped", world.TypesPostedSince(before));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T204; research R18.7 item 4): a Stop and the end of its run are decided under
+    /// the one lock that frees the host, so a Stop either reaches the run - its word told before the run's end, its id
+    /// answered at that end - or finds no run in flight and is answered at once, storing nothing. Here the Stop's word is
+    /// held in its post, on the page's thread, while the run reaches its end on a thread of its own: the run's end waits for
+    /// it. Read and stored outside that lock, the Stop's "Stopping" was told after the run's last word, as the line the
+    /// page ends on, of a run that had ended; and a Stop that read the run just before the host was freed, and stored its id
+    /// just after the end had taken the ids, left its id for the next run's end to answer.
+    /// </summary>
+    [Fact]
+    public void AStopTheRunsEndMeetsIsToldBeforeThatEndAndAnsweredAtIt()
+    {
+        using (var world = new RemodelWorld())
+        {
+            (List<JsonElement> posted, bool closed) = AStopsWordHeldAsTheRunEnds(
+                world, StoppingWords, () => world.Receive("remodel.stop", "x1", new { }));
+
+            Assert.True(closed, "the run never reached its close while the Stop's word was held");
+            int started = posted.FindIndex(message => message.GetProperty("type").GetString() == "remodel.started");
+            int stopping = posted.FindIndex(message => message.GetProperty("type").GetString() == "status"
+                && message.GetProperty("payload").GetProperty("message").GetString() == StoppingWords);
+            int ended = posted.FindIndex(started + 1, EndsTheRunOnThePage);
+            int answered = posted.FindIndex(message => message.GetProperty("type").GetString() == "remodel.stopped");
+            Assert.True(started >= 0 && stopping > started && ended > stopping, "the Stop's word was told after the run's end");
+            Assert.True(answered > ended, "the Stop was answered before the run's last word");
+            JsonElement stopped = Assert.Single(posted, message => message.GetProperty("type").GetString() == "remodel.stopped");
+            Assert.Equal("x1", stopped.GetProperty("id").GetString());
+            Assert.Equal(1, stopped.GetProperty("payload").GetProperty("changes_applied").GetInt32());
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T204): the stop when the copy is gone is decided under the same lock, so its word
+    /// is told before the run's end or not at all. Here the copy goes away mid-run and the stop's word is held in its post, on
+    /// SOLIDWORKS' thread, while the run reaches its end on a thread of its own: the run's end waits for it. Decided outside
+    /// the lock, "the run is stopping" was told after the run's last word.
+    /// </summary>
+    [Fact]
+    public void TheStopWhenTheCopyIsGoneThatTheRunsEndMeetsIsToldBeforeThatEnd()
+    {
+        using (var world = new RemodelWorld())
+        {
+            (List<JsonElement> posted, bool closed) = AStopsWordHeldAsTheRunEnds(world, RemodelHost.CopyGoneMessage, () =>
+            {
+                File.Delete(world.ExpectedCopyPath);
+                world.Document = null;
+                world.Host.DocumentChanged();
+            });
+
+            Assert.True(closed, "the run never reached its close while the stop's word was held");
+            int started = posted.FindIndex(message => message.GetProperty("type").GetString() == "remodel.started");
+            int gone = posted.FindIndex(message => message.GetProperty("type").GetString() == "status"
+                && message.GetProperty("payload").GetProperty("message").GetString() == RemodelHost.CopyGoneMessage);
+            int ended = posted.FindIndex(started + 1, EndsTheRunOnThePage);
+            Assert.True(started >= 0 && gone > started && ended > gone, "the copy-gone stop was told after the run's end");
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T204): a Stop that arrives once its run has ended - pressed the moment the run's last word
+    /// reaches the page - is answered at once, as one with no run in flight is, and stores nothing: the next run, which no one
+    /// stops, ends answering no Stop. A guard, true before the decision and after it.
+    /// </summary>
+    [Fact]
+    public void AStopThatArrivesOnceItsRunHasEndedIsAnsweredAtOnceAndStoresNothing()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            bool pressed = false;
+            world.WhenPosted = root =>
+            {
+                if (!pressed && EndsTheRunOnThePage(root))
+                {
+                    pressed = true;
+                    world.Receive("remodel.stop", "x1", new { });
+                }
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.True(pressed);
+            Assert.Equal("RunNotFound", world.ErrorClass("x1"));
+            world.WhenPosted = null;
+            world.Receive("remodel.plan", "p2", new { });
+            string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            world.Receive("remodel.start", "s2", new { run_dir = second });
+            world.Reply("remodel.started", "s2");
+            Assert.Empty(world.AllPosted("remodel.stopped"));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A: what the page receives when a stop's word - a post carrying <paramref name="held"/> - is held in
+    /// its post, on the thread <paramref name="stop"/> runs on, while the run reaches its end on a thread of its own. The run,
+    /// once stopped, finishes and closes its session; the held post is let go once the run's last word has been posted, or
+    /// half a second after the close if it has not - when the run's end waits on the stop's word. Every wait is bounded, so a
+    /// regression fails rather than hangs. Also answers whether the run reached its close while the word was held.
+    /// </summary>
+    private static (List<JsonElement> Posted, bool Closed) AStopsWordHeldAsTheRunEnds(RemodelWorld world, string held, Action stop)
+    {
+        using (var running = new ManualResetEventSlim())
+        using (var closing = new ManualResetEventSlim())
+        {
+            Thread? run = null;
+            bool closed = false;
+            world.Channel = new PausingChannel(world.Posted, json =>
+            {
+                // A failed assertion here would be swallowed by the post it is in, so the wait is recorded and asserted after.
+                if (Unescaped(json).Contains(held))
+                {
+                    closed = closing.Wait(TimeSpan.FromSeconds(10));
+                    SpinWait.SpinUntil(() => TheRunsLastWordIsPosted(world), TimeSpan.FromMilliseconds(500));
+                }
+            });
+            world.Scheduler = work =>
+            {
+                run = new Thread(() => work()) { IsBackground = true, Name = "fict-remodel-run" };
+                run.Start();
+            };
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+            {
+                running.Set();
+                SpinWait.SpinUntil(() => reporter.StopRequested, TimeSpan.FromSeconds(10));
+                world.Pipeline.ChangesApplied = 1;
+                world.Pipeline.RunState = "truncated";
+            };
+            world.Pipeline.DuringClose = () => closing.Set();
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.True(running.Wait(TimeSpan.FromSeconds(10)), "the run never began");
+            stop();
+            Assert.True(run != null && run.Join(TimeSpan.FromSeconds(10)), "the run never ended");
+
+            lock (world.Posted)
+            {
+                return (world.Posted.Select(json => JsonDocument.Parse(json).RootElement.Clone()).ToList(), closed);
+            }
+        }
+    }
+
+    /// <summary>Whether a `status` that ends the run on the page has been posted since `remodel.started`, read under the posts' lock.</summary>
+    private static bool TheRunsLastWordIsPosted(RemodelWorld world)
+    {
+        lock (world.Posted)
+        {
+            List<JsonElement> posted = world.Posted.Select(json => JsonDocument.Parse(json).RootElement.Clone()).ToList();
+            int started = posted.FindIndex(message => message.GetProperty("type").GetString() == "remodel.started");
+            return started >= 0 && posted.FindIndex(started + 1, EndsTheRunOnThePage) >= 0;
+        }
+    }
+
     // ---- a settings restart and a plan or a run (owner decision 145A) ---------------------------
 
     /// <summary>
