@@ -121,6 +121,11 @@ class and the message behind a fold. The words file has a sentence for every `Ch
 for every class the Review host and `PaneActions` send, and for the classes `app.js` makes
 (`BackendUnavailable`, `HttpError`, `HostError`).
 
+*Amended 2026-10-21 (feature 002, owner decision 160A):* the Review host sends `AddInStopping`
+too - a settings save written while the add-in unloads - whose sentence is "The settings are
+saved. The add-in is stopping; nothing else needs doing."; with no labels the save's line prints
+the message whole, as it does for `BackendNotRestarted`, rather than the class and the message.
+
 ## 6. Model check
 
 `check_result` carries `rule_statements` (data-model section 10). The grade header prints the counts
