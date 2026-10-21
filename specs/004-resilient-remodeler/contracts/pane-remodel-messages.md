@@ -156,13 +156,17 @@ and Start refuses the plan by name.**
   would bring another in) takes none, whether or not one was to be had: 154A judges the run root
   before anything is asked or made under it, and the hold asks the tool service (corrected on 152A's
   final reviews, N1). *Amended 2026-10-21 (owner decision 158A; 002 `research.md`, 158A):* a hold
-  holds back a follow for an hour at most (`ToolServiceGate.HoldLimit`), measured from when it was
-  taken. One held longer is ignored, and said once in the tool-service log by its holder's kind - a
-  plan's or a run's is "a Remodel plan or run" - and how long it held, never with a path. Nothing is
-  stopped: the plan or the run goes on, and the look then asks the busy question, which reads a plan
-  or a run in progress (`RemodelHost.RunInProgress`) first, so a follow still waits for it. A run is
-  not exempt and needs no exemption: an hour is three times its own twenty minutes (`RemodelLimits`),
-  so a working run's hold never meets it.
+  by itself holds back a follow for an hour at most (`ToolServiceGate.HoldLimit`), measured from
+  when it was taken. One held longer is ignored, and said once in the tool-service log by its
+  holder's kind - a plan's or a run's is "a Remodel plan or run" - and how long it held, never with a
+  path. Nothing is stopped: the plan or the run goes on, and the look then asks the busy question,
+  which reads a plan or a run in progress (`RemodelHost.RunInProgress`) first, so a follow still
+  waits for it. A run is not exempt and needs no exemption: the host is busy whenever it holds, so
+  the limit only ever says its hold. *Corrected 2026-10-21 (158A's reviews, S1):* this said an hour is three times a run's own
+  twenty minutes, so a working run's hold never meets it; but `RemodelLimits`' twenty minutes bound
+  only its changes, and its hold also covers the model's judgement turn, which only its steps bound,
+  the after-dump, the verification, the save and the close - so a healthy run can outlast the hour,
+  and its hold is then said, while the busy question keeps the bridge under it.
 - Start pressed twice after a re-attach is refused twice, identically, and leaves the host free to
   plan; the new plan is made on the attachment listening now and starts. A refused plan tracks no
   run, so a Start naming its folder is `RunNotFound`, and it neither rescues nor invalidates an

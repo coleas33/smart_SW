@@ -2234,7 +2234,7 @@ T206, landed on `main` first; the commits that made them carry their first numbe
   "retryable" is true: pressed again once the bridge is on the review's document, every start goes
   ahead with it (pinned for each). One refusal it does not clear: a review of a waiting plan's copy,
   whose attachment the plan keeps (What is left). *Settled by decision 158A (2026-10-21, "2A"):* the
-  owner confirms the extension, asked as 152A's seventh question: a start refused
+  owner confirms the extension, the implementer's, put to the owner here: a start refused
   `BridgeOnAnotherDocument` asks the tool service to follow, having first let go of any hold it took.
   Pinned, unchanged, by `DeferredRestartTests.AStartEndedAtItsSessionLetsGoOfItsHold` (its bridge
   moved: the follow asked once, with no hold held) and by section 15's refusal cases, each of which
@@ -4466,10 +4466,10 @@ Windows' own words (`RunFolderFailed`). The probe's reading is unchanged and tru
 
 - **Question**: 152A left three things with the owner (152A, above): the extension it made to its
   decision's words, that a start refused for its bridge asks the tool service to follow (Asking the
-  tool service to follow, asked as 152A's seventh question); whether to bound a hold in the gate,
-  since nothing did and a holder that never let go would keep the tool service on its document for
-  good (owner question 6, from the review of the Codex fixes, N7); and whether to follow a
-  configuration switch at the switch (owner question 1).
+  tool service to follow, the implementer's extension, put to the owner unnumbered); whether to bound
+  a hold in the gate, since nothing did and a holder that never let go would keep the tool service on
+  its document for good (owner question 6, from the review of the Codex fixes, N7); and whether to
+  follow a configuration switch at the switch (owner question 1).
 - **Decision** (owner decision 158A, "2A", 2026-10-21): "152A's bridge questions, test first, with
   adversarial reviews: a start refused for its bridge asking the tool service to follow is
   confirmed; a hold on the attachment gets a generous time limit, logged, so a holder that never lets
@@ -4499,46 +4499,58 @@ Windows' own words (`RunFolderFailed`). The probe's reading is unchanged and tru
   every second (152A), so a stuck hold is let past within a poll of the limit; with no follow owed
   nothing reads the holds, and a stuck hold holds nothing back until a switch or a review's request
   makes a follow.
-- **The limit, and why an hour**: each holder bounds its own hold, and the gate's limit must be well
-  past the longest.
+- **The limit, and why an hour** (*corrected on the reviews, S1:* first given as three times the
+  longest hold, a remodel run's twenty minutes, which bound only its changes): the limit is for the
+  holds the busy question cannot see while they hold, and must be well past their own bounds; a
+  remodel plan or run is bounded by no time, and the busy question covers it instead.
 
-  | Holder | Its own bound |
-  |---|---|
-  | A remodel run | its executor's twenty minutes of wall clock (004, `RemodelLimits.MaxMinutes`), read before each change; the hold also covers the last change, the verifying dump and the session's close |
-  | A remodel plan | its calls, the re-modeler's client's 30 seconds each, and its dump of the copy |
-  | A review session's start | until `POST /sessions` gives up, the backend client's 30 seconds |
-  | A page call that starts a turn | the proxy's 120 seconds |
+  | Holder | What bounds its hold | What else keeps the bridge while it holds |
+  |---|---|---|
+  | A review session's start | `POST /sessions` giving up, the backend client's 30 seconds | nothing, until its session is tracked |
+  | A page call that starts a turn | the proxy's 120 seconds | nothing, until the backend has marked its turn running |
+  | A remodel plan | no time: its probe, its copy, its dump of the copy, and its plan call, the re-modeler's client's 30 seconds | the busy question, which reads it in progress |
+  | A remodel run | no time: the model's judgement turn first, bounded by its steps alone (200 by default), each model call by the provider SDK's 600-second read; then its changes, twenty minutes of wall clock from their start (004, `RemodelLimits.MaxMinutes`), read before each one; the after-dump, which the backend waits up to 600 seconds for and the add-in's dump bounds no further; the verification, the save and the close | the busy question, which reads it in progress |
 
-  An hour is three times a run's twenty minutes, thirty times a turn call's bound and a hundred and
-  twenty times a session start's: a working hold never meets it, and a holder that never lets go
-  holds the follow back an hour and a poll, not for ever. Shorter - five minutes would still be more
-  than twice a turn call - would cut through a working run's hold, leaving the run to the busy
-  question alone, which it would survive (below), and would write the line for a healthy run, burying
-  the one that matters. Longer - a day - would keep the tool service on the old document that long
-  behind a hold that will never be let go, every review of another document refused
-  `BridgeOnAnotherDocument` meanwhile. `TheHoldLimitIsAnHourAndThreeTimesEveryHoldersOwnBound` reads
-  each bound from its own source - the clients' `CallTimeout`s and `RemodelLimits.Default` - so a
-  bound raised past a third of the limit fails there, for the limit to be weighed again.
+  An hour is thirty times a turn call's bound and a hundred and twenty times a session start's:
+  neither meets it working, and one that never lets go holds the follow back an hour and a poll, not
+  for ever. A healthy remodel run can outlast it - a long judgement turn is enough - and its hold is
+  then said, which changes nothing, since the Remodel host is busy whenever it holds (A real remodel
+  run, below). Shorter - ten minutes would still be five times a turn call - would say the hold of
+  every remodel run whose changes alone take that long, burying the line that matters. Longer, a day
+  say, would keep the tool service on the old document that long behind a session's start or a turn
+  call that will never let go, every review of another document refused `BridgeOnAnotherDocument`
+  meanwhile. `TheHoldLimitIsAnHourFarPastTheHoldsTheBusyQuestionCannotSee` reads both bounds from
+  their own constants, the clients' `CallTimeout`s, so one raised past a tenth of the limit fails
+  there, for the limit to be weighed again.
 - **What expiry does not do**: it ends nothing. The gate has no handle on a holder's work and stops
-  none, and the hold stays its holder's to let go. It only stops the hold holding back a follow,
-  which then asks the busy question as for no hold - so a turn running, or a remodel plan or run in
-  progress, still keeps the bridge.
+  none, and the hold stays its holder's to let go. It only stops the hold holding back a follow by
+  itself, and the follow then asks the busy question as for no hold - so a turn the backend has
+  marked running, or a remodel plan or run in progress, still keeps the bridge (*corrected on the
+  reviews, R1:* first given as "a turn running", which the busy question sees only once the backend
+  has marked it; What is left).
 - **A holder that lets go later**: its hold was taken out of the holds when it was ignored, so
   letting it go lets go of nothing - of no other hold, which a count of holds would have let go of in
   its place, the reason the count became a list - and says nothing, its line written when it was
   ignored. Letting it go twice does nothing either, as before. A hold let go past the limit before any
   follow found it was never ignored, and is said nowhere.
-- **A real remodel run: covered by the margin, not exempt.** A run holds through
-  `RemodelHostOptions.HoldToolService` from its Start until its session is closed, and is in progress
-  for as long (`RemodelHost.RunInProgress`, marked through `RemodelHostOptions.BeginRun`), which the
-  add-in's busy question reads first. Only a run three times its own bound could hold past the limit,
-  and even then its hold is ignored and said, and the look asks the busy question, which answers busy
-  for as long as the run runs: the bridge is not taken down under it, and the switch is followed once
-  it ends (`RemodelHostTests.ThroughTheGateARunHeldPastTheHoldLimitIsStillNotTakenDownUnder`).
-  The hold exists for the moment the busy question cannot see - a plan or a run that began while it
-  was out (152A's X2) - long past by then. An exemption would protect nothing the busy question does
-  not, and would leave one holder that could hold the follow back for ever, which the decision rules
-  out. A plan is the same: in progress through `BeginRun` until the host is free.
+- **A real remodel run: not exempt, and needs no exemption** (*corrected on the reviews, S1 and S3:*
+  first given as covered by the margin, which it is not, and an exemption as leaving one holder that
+  could hold the follow back for ever, which the busy question already does). A run holds through
+  `RemodelHostOptions.HoldToolService` from its Start until its session is closed, and the host is
+  busy for longer - from before the hold is taken until after it is let go
+  (`RemodelHost.RunInProgress`, marked through `RemodelHostOptions.BeginRun`;
+  `RemodelHostTests.APlanOrARunTakesItsHoldOnlyOnceTheHostIsBusy`, and 152A's
+  `APlanOrARunLetsGoOfItsHoldBeforeItFreesTheHost`) - which the add-in's busy question reads first.
+  So whenever a plan or a run holds, the busy question answers busy: past the limit, the hold is
+  ignored and said, and the look still finds the run in progress - the bridge is not taken down
+  under it, and the switch is followed once it ends
+  (`RemodelHostTests.ThroughTheGateARunHeldPastTheHoldLimitIsStillNotTakenDownUnder`). A healthy
+  run can outlast the hour (the table above), so its line can be written while it is still going,
+  and it says only what is true: the hold no longer holds back the follow by itself. The hold exists
+  for the moment the busy question cannot see - a plan or a run that began while it was out (152A's
+  X2) - long past by then. An exemption would change only the line. And the limit does not bound a
+  plan or a run: one that never ended would hold the follow back through the busy question (What is
+  left; owner question 3). A plan is the same: busy through `BeginRun` until the host is free.
 - **No race with a new hold**: the limit is each hold's own, from when it was taken, so a hold taken
   the moment another passes the limit holds the bridge - one taken before the follow notes the holds
   is held then, and one taken while its busy question is out is a hold taken since it noted them,
@@ -4555,10 +4567,13 @@ Windows' own words (`RunFolderFailed`). The probe's reading is unchanged and tru
   follow is looking at, which no follow can have replaced while the hold held - beside the line a
   skipped switch writes, since it is a fact about that attachment: `ignoring a hold by a review
   session's start: held for 1:01:01, longer than the 1:00:00 limit, so it no longer holds back
-  following the active document; its work is not stopped`. The kind is one of three fixed phrases and
-  the times are the gate's own, so no path or document name can reach it; the hours run on past a
-  day. Once per hold, outside the lock, as the gate's other lines are. Not to the add-in log: nothing
-  failed, and the pane has nothing to show the engineer.
+  following the active document by itself; its work is not stopped` (*"by itself" added on the
+  reviews:* the busy question still keeps the bridge under a turn the backend has marked running, or
+  a remodel plan or run in progress, so the first words were untrue of a Remodel holder). The kind is
+  one of three fixed phrases and the times are the gate's own, so no path or document name can reach
+  it; the hours run on past a day, and each part is cut, not rounded. Once per hold, outside the lock,
+  as the gate's other lines are (pinned on the reviews, S4). Not to the add-in log: nothing failed, and
+  the pane has nothing to show the engineer.
 - **The holder's kind**: three, one per host the add-in hands the hold to (`ToolServiceHolder`): a
   review session's start (`ReviewSession`), a page call that starts a turn (`TurnCall`), and a Remodel
   plan or run (`Remodel`) - the Remodel host takes its one hold, through one option, for either, and
@@ -4567,19 +4582,35 @@ Windows' own words (`RunFolderFailed`). The probe's reading is unchanged and tru
 - **What is left** (recorded, not changed):
   - The busy question is not bounded by this decision: a turn the backend says runs, or gives no
     usable answer about (152A's R1), and a remodel plan or run in progress keep a follow owed for as
-    long as they do. Each is bounded where it runs - the backend's turn, the executor's twenty
-    minutes - and a remodel run whose poll never ended would keep `RunInProgress` with it. The
-    decision's words are about holds.
+    long as they do. Each is bounded where it runs, if at all - a turn by the backend; a remodel run's
+    changes by the executor's twenty minutes, but not its judgement turn or its after-dump - and the
+    Remodel host is busy whenever it holds, so a plan or a run that never ended would hold the follow
+    back through the busy question, whatever its hold's limit (*corrected on the reviews, S1 and
+    S3*). The decision's words are about holds.
   - A review session's start whose hold is ignored - possible only if `POST /sessions` outlived its
     30 seconds by an hour - has its bridge taken down under its checks if the active document has
     moved on, since its session is not yet tracked for the busy question to see: failed coverage, as
-    for any closed pipe, and no other document's evidence. That is the decision's trade: a holder that
-    never lets go does not keep the bridge for ever.
-  - While a stuck hold holds - an hour at most - a review of another document is refused
-    `BridgeOnAnotherDocument` and its request to follow waits; reloading the add-in clears it sooner.
+    for any closed pipe, and no other document's evidence. That is the decision's trade: a session's
+    start or a turn call that never lets go does not keep the bridge for ever.
+  - So can a page call that starts a turn whose hold is ignored - possible only if the call stayed out
+    an hour past the proxy's 120 seconds - since it takes its hold before it sends the call
+    (`BackendProxyHandler.TryServe`), and the busy question sees its turn only once the backend has
+    marked it running: the turn's live calls meet a closed pipe, failed coverage again, and no other
+    document's evidence (added on the reviews, R1).
+  - While a stuck session start's or turn call's hold holds - an hour at most - a review of another
+    document is refused `BridgeOnAnotherDocument` and its request to follow waits; reloading the
+    add-in clears it sooner.
 - **Owner questions** (recorded 2026-10-21, behaviour as decided):
-  1. The hour: kept, or another time? Its floor is a remodel run's twenty minutes with its tail, and
-     what it costs is how long a holder that never lets go keeps the tool service on the old document.
+  1. The hour: kept, or another time? *Asked again on the reviews (S1), with what each holder holds
+     for:* the hour bounds the holds the busy question cannot see - a session's start, 30 seconds of
+     its own, and a turn call, 120 - far past either. A remodel plan or run holds for no time the
+     add-in or the backend bounds - the model's judgement turn, its steps alone, then twenty minutes of
+     changes, the after-dump the backend waits ten minutes for, the verification, the save and the
+     close - so a healthy run can outlast any limit, and its hold is then said, while the busy question
+     keeps the bridge under it whatever the limit. Shorter brings a stuck session start or turn call to
+     an end sooner and says more healthy runs' holds; longer, the reverse. Or a limit for those two
+     alone, a Remodel plan's or run's hold never said? Kept at an hour meanwhile: the facts move no
+     holder the limit protects.
   2. Name a remodel plan and a remodel run apart in the line? The Remodel host takes its one hold
      through one option for either, so the add-in names both "a Remodel plan or run"; telling them
      apart would give the host's hold option the kind, a change to the Remodel host.
@@ -4592,8 +4623,12 @@ Windows' own words (`RunFolderFailed`). The probe's reading is unchanged and tru
   kind each of the add-in's three wirings names (tightened). What each pinned is unchanged. 152A's
   YG6 - a hold let go twice lets go twice - is an equivalent mutation now (below): a hold is taken
   out of the holds by itself, which lets go once however often it is asked. The guard that makes a
-  second letting go do nothing (`Interlocked.Exchange` in `Hold.Dispose`) stays, and
-  `LettingAHoldGoTwiceLetsItGoOnce` still pins what it pinned.
+  second letting go do nothing (`Interlocked.Exchange` in `Hold.Dispose`) stays. *Corrected on the
+  reviews, S2:* this said `LettingAHoldGoTwiceLetsItGoOnce` still pinned what it pinned, which was
+  untrue - its first edit gave the second of its two holds another kind, so a hold let go that let go
+  of every hold of its kind passed every case. Its two holds are of one kind again, two turn calls as
+  two chats hold, and so are `AHoldLetGoAfterItWasIgnoredLetsGoOfNoOtherHold`'s; that mutation (RS2)
+  is red in both.
 
 **3. A configuration switch is followed only when a review asks: confirmed.**
 
@@ -4618,12 +4653,14 @@ restart, review, remodel, context and proxy classes run - `ToolServiceWiringTest
 `RemodelHostTests`, `DeferredRestartTests`, `ReviewHostTests`, `EngineeringContextHostTests` and
 `BackendProxyHandlerTests`, 1,051 cases, 1,052 once the case written after was added - and the file
 restored byte for byte (checked by its sha256): the fix's 18 (HB1 to HB18), 74 red results; the
-configuration rule's three (C1 to C3), 4; the extension's two, run again (E1, E2), 25; and 152A's
-holds, run again on the list that replaced their count (YG1r to YG6r) - every one red but YG6r,
-equivalent now (above). One full pass under HB6 also failed a restart case HB6 cannot reach - it
+configuration rule's three (C1 to C3), 4; the extension's two, run again (E1, E2), 25; and four of
+152A's holds, run again on the list that replaced their count (YG1r, YG4r, YG5r and YG6r) - every
+one red but YG6r, equivalent now (above). One full pass under HB6 also failed a case of
+`DeferredRestartTests.ARestartThatWaitedAndFailedSaysSavingAgainRetriesIt`, which HB6 cannot reach - it
 changes a branch taken only when a hold was ignored, and no hold ages in that class - while other
-work loaded the machine; HB6 run again was red in its own five cases alone, and the restart case
-passed then and in every run after, the five below among them.
+work loaded the machine; HB6 run again was red in its own five cases alone, and that case passed
+then and in every run after, the five below among them. *Corrected on the reviews:* HB1's count is 11
+as first run, before the case written after was added; 12 with it, as the reviews counted.
 
 | Id | Taken out | Red |
 |---|---|---|
@@ -4668,3 +4705,103 @@ that read the changed records - `test_workstation_test_plan.py`, which reads eve
 `test_remodel_client.py`, which reads `bridge-remodel.md` - 308 passed on 3.12 (3.12.3) and on 3.11
 (3.11.16, `--isolated`, every extra), with `SWREVIEW_TOKENIZER_DIR` set; no Python changed, and
 `ruff check` clean. No broken link, and every changed file `i/lf`.
+
+**4. The reviews (2026-10-21).**
+
+- **What they were**: two independent reviews of the branch at `cdd6749`, by Opus - one led by
+  mutation, which ran 39 of its own, and one on races, standing in for Codex, which was at its usage
+  limit. Neither found a must-fix, and the race review found no concurrency defect. Their findings,
+  settled test first by T255 to T257, are below; what they corrected above is marked where it stands.
+- **S1: the hour's margin was wrong for a remodel run.** A run holds from its Start until its session
+  is closed (`RemodelHost.Start`, `Execute`'s `finally`), which is the whole backend job: the model's
+  judgement turn first, with no time bound of its own - 200 steps by default
+  (`swreview.agent.events.DEFAULT_MAX_STEPS`; the remodel route sets no lower cap), each model call on
+  the provider SDK's 600-second read - and only then the changes, whose twenty minutes start at
+  `apply_changes` and are read before each change; then the after-dump, which the backend waits up to
+  600 seconds for (`DEFAULT_PACKAGE_AFTER_TIMEOUT_S`) and the add-in's dump bounds no further, and its
+  poll loop none at all; then the verification, the save and the close. `RemodelLimits.MaxMinutes`
+  bounds the changes alone, whatever this record said, so a healthy run with a long judgement turn
+  can pass the hour and have its hold said. Safety held - the busy question reads the run in
+  progress, which the run held past the limit pins. Corrected: the gate's comments, The limit (its
+  table now what each holder holds for), A real remodel run, What is left, 004's two notes and T250's
+  note; and the limit's case, rewritten to what is true -
+  `TheHoldLimitIsAnHourFarPastTheHoldsTheBusyQuestionCannotSee`: a session's start's 30 seconds and a
+  turn call's 120, each read from its own constant, a tenth of the limit at most, red when either is
+  raised to ten minutes (RS1a, RS1b). Owner question 1 is asked again with what a run holds for. The
+  hour is kept: it bounds the holds the busy question cannot see, far past their own bounds, and the
+  facts moved none of those.
+- **S2: letting go by identity was unpinned for two holds of one kind.** A hold let go that let go of
+  every hold of its kind survived every case: the first edit of `LettingAHoldGoTwiceLetsItGoOnce` gave
+  its second hold another kind, and this record said the case still pinned what it pinned. Two chats
+  can each hold a turn call, and the first let go must not let go of the second (152A's X2). Its two
+  holds are of one kind again, and so are `AHoldLetGoAfterItWasIgnoredLetsGoOfNoOtherHold`'s; that
+  mutation (RS2) is red in both.
+- **S3: the overclaim that no holder can keep the bridge for ever.** The Remodel host is busy from
+  before it takes its hold until after it lets it go, so whenever it holds, the busy question answers
+  busy: a plan or a run that never ended would hold the follow back through it, and the limit only
+  says its hold. "What is left" and owner question 3 said so; the gate's comments, The limit, A real
+  remodel run and the checkpoint now agree. The take side was unpinned, the letting go pinned by
+  152A's N4 case: `RemodelHostTests.APlanOrARunTakesItsHoldOnlyOnceTheHostIsBusy`, red when the host
+  takes it before it is busy (RS3).
+- **S4: "written once the lock is let go" was unpinned.** The ignored holds' lines moved under the
+  gate's lock passed every case, which would put a tool-service log's write - its own lock and a file
+  append - under the lock the SOLIDWORKS application thread takes on every document change (155A's
+  lesson, 004 research R18). `AnIgnoredHoldsLineIsWrittenWithTheGatesLockLetGo`: while the line is
+  written (`FakeToolService.DuringWriteLog`), a hold asked for on a thread of its own is had at once,
+  waited for fifteen seconds at most, and keeps the bridge, a hold taken since the follow noted them;
+  red under the lock (RS4).
+- **S5: 002's `contracts/pane-host-messages.md` describes the holds** and had no 158A note: it has
+  one now, dated; T254's claim that no 002 contract changed is corrected.
+- **R1 (race review): a turn call's hold can be ignored before its turn is marked running.** The
+  proxy takes its hold before it sends the call (`BackendProxyHandler.TryServe`), and the busy
+  question sees a turn only once the backend has marked it running; a call out an hour past its 120
+  seconds would lose its bridge. Recorded beside the session's start (What is left), and "a turn
+  running" made "a turn the backend has marked running" in the gate's remarks and What expiry does not
+  do.
+- **R2 (race review): the limit's seam took no time or less.** Refused now when the gate is built,
+  `ArgumentOutOfRangeException`, as `DeferredRestart` refuses a poll: none, a tick less, and an hour
+  less; a tick's is taken. Red without the refusal (RR2a), with no time let through (RR2b), and with a
+  tick's refused (RR2c).
+- **Nits**: the extension's ordinal is dropped - 152A numbers its owner questions 1 to 6, and the
+  extension went to the owner unnumbered (here, 152A's note and T254); the gate's own clock is pinned
+  as a stopwatch from its source, since any clock that moves passed the real-time case, the system's
+  time among them (`TheGatesOwnClockIsAStopwatchOfItsOwn`, RE4); the hours are said cut, not rounded,
+  1:59:59 (`HowLongAHoldHeldIsSaidCutNotRounded`, RC6a for the hours and RC6b for the seconds); the
+  add-in's configuration case reads a method group of `FollowActiveDocument` as well as a call, and no
+  comment line (RG2: under it the scan as first written still counts one caller in the add-in, the
+  widened one two); the first round's mutation records - HB1's count, the four YG reruns named, the
+  flaky restart case named; and the line says the hold no longer holds back the follow "by itself",
+  true of every holder, where for a Remodel holder it was not (RW).
+
+- **Tests**: T255 in [tasks.md](tasks.md). Against `cdd6749`, the line's three kinds and the three
+  refusals failed; the rest are guards, each red under its mutation below.
+- **Mutations**: as before - each taken out once, by one exact replacement, the tree rebuilt, the same
+  classes run (1,060 cases), and the file restored byte for byte (checked by its sha256): 14 mutations,
+  33 red results, every one red.
+
+  | Id | Taken out | Red |
+  |---|---|---|
+  | HB1 | no hold is ever past the limit, run again with every case | 15: as before, with the case written after, a tick's limit, the line written with the lock let go, and the hours cut |
+  | RS1a | a turn call's own bound raised to ten minutes | 1: the limit's case |
+  | RS1b | `POST /sessions`' own bound raised to ten minutes | 1: as RS1a |
+  | RS2 | a hold let go lets go of every hold of its kind | 2: let go twice, and let go after it was ignored |
+  | RS3 | a plan or a run takes its hold before the host is busy | 1: the take side's case |
+  | RS4 | the ignored holds' lines written under the gate's lock | 1: the line written with the lock let go |
+  | RR2a | a limit of no time or less taken | 3: the three refusals |
+  | RR2b | a limit of no time taken | 1: the refusal of no time |
+  | RR2c | a limit of a tick refused too | 1: a tick's limit taken |
+  | RE4 | the gate's own clock the system's time | 1: the stopwatch's case - the real-time case passes under it, as the review found |
+  | RC6a | the hours rounded | 1: the hours cut |
+  | RC6b | the seconds rounded | 1: as RC6a |
+  | RW | the line's first words, untrue of a Remodel holder | 3: the line's three kinds |
+  | RG2 | the fan-out also hands `FollowActiveDocument` on as a method group | 1: the add-in's configuration case |
+
+- **Evidence** (2026-10-21, on the branch from `cdd6749`): the C# build, `--no-incremental`, at zero
+  warnings once every mutation was restored; `SwReview.Extractor.Tests` 10,086 passed, and
+  `SwReview.AddIn.Tests` 3,564, from 3,556 - T255's eight new cases, the limit's case rewritten in
+  place of its first; the restart and tool-service classes with the stub-children collection and
+  `RemodelHostTests`, 1,079 cases, five times in a row. Python, the tests that read the changed
+  records - `test_workstation_test_plan.py` and `test_remodel_client.py` - 308 passed on 3.12 (3.12.3)
+  and on 3.11 (3.11.16, `--isolated`, every extra); no Python changed. The C# cases that read 002's
+  `pane-host-messages.md` and 004's `pane-remodel-messages.md` ran in the full suite. No broken link,
+  and every changed file `i/lf`.
