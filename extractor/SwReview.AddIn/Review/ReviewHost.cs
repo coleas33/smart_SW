@@ -424,9 +424,23 @@ public sealed class ReviewHost : IDisposable
     /// Taken from the settings loaded when the host is built, which the first start is made with
     /// unless a save comes first; meaningful only while a backend is up: with none, nothing is in
     /// force. Written under the restart's own lock and read from the page pump, a whole reference
-    /// either way.
+    /// either way. A start publishes the backend's endpoint before it records these: while it is under
+    /// way, <see cref="_starting"/> holds the settings it was made with.
     /// </summary>
     private volatile UserSettings _inForce;
+
+    /// <summary>
+    /// Owner decision 153A, found on Codex's re-review (R1): the settings a start of the backend under way
+    /// was made with - the first or a restart - from just before it starts the backend until it has
+    /// recorded them in force (<see cref="_inForce"/>), or has thrown; null while none is under way. A
+    /// start publishes the backend's endpoint before it records the settings it was made with, and until
+    /// then the backend that is up runs with these, not with the ones recorded: so whatever reads the
+    /// settings in force with that backend - whether the saved settings are in force, and a session's
+    /// provider, model and effort - takes nothing of them while a start is under way, and the keys masked
+    /// include these. Written by <see cref="StartWith"/> alone, under the restart's own lock, so starts
+    /// never overlap; read from any thread, a whole reference either way.
+    /// </summary>
+    private volatile UserSettings? _starting;
 
     /// <summary>
     /// The number of the last reading of whether the saved settings are in force (owner decision 153A,
@@ -522,15 +536,28 @@ public sealed class ReviewHost : IDisposable
     /// <summary>
     /// The keys no page and no log may show (FR-015): the saved key, and the key the backend that is
     /// up was started with - the same one once a restart has put the saved settings in force, and
-    /// until then the one that backend holds, and could quote (owner decision 153A, found on review).
-    /// What this host masks, and what the add-in hands every other host to mask. Each resolved per
-    /// call, as the key changes under a live host.
+    /// until then the one that backend holds, and could quote (owner decision 153A, found on review) -
+    /// and, while a start is under way, the key it was made with, which the backend it starts holds
+    /// before it is recorded, and which a save made meanwhile leaves neither saved nor recorded (found
+    /// on Codex's re-review, R1). What this host masks, and what the add-in hands every other host to
+    /// mask. Each resolved per call, as the key changes under a live host.
     /// </summary>
-    public IReadOnlyList<string?> KeysToMask() => new[]
+    public IReadOnlyList<string?> KeysToMask()
     {
-        _settings.ResolveApiKey(_options.Environment).Key,
-        _inForce.ResolveApiKey(_options.Environment).Key,
-    };
+        // Read before the settings in force: a start that is no longer under way has recorded them.
+        UserSettings? starting = _starting;
+        var keys = new List<string?>
+        {
+            _settings.ResolveApiKey(_options.Environment).Key,
+            _inForce.ResolveApiKey(_options.Environment).Key,
+        };
+        if (starting != null)
+        {
+            keys.Add(starting.ResolveApiKey(_options.Environment).Key);
+        }
+
+        return keys;
+    }
 
     /// <summary>
     /// Whether a settings restart stands before new work: one waits to be made, or one is being
@@ -1450,14 +1477,17 @@ public sealed class ReviewHost : IDisposable
     /// force, and the add-in's word that the backend did not start or restart says how to go on
     /// (owner decision 150A) - nor while a restart waits or is being made, when 143A's and 145A's
     /// promise is the true sentence, saving again is not the way on, and nothing new runs on the old
-    /// backend before it is made; and otherwise only while the saved settings differ from the ones in
-    /// force (<see cref="SameBackendSettings"/>). Read by `init`, and by a restart that waited and
-    /// failed for its way on, under the restart's lock, which is taken before the state's
-    /// (<see cref="DeferredRestart.Ahead"/>).
+    /// backend before it is made; nor while a start is under way (<see cref="_starting"/>), which publishes
+    /// the backend's endpoint before it records the settings it was made with, so the backend up runs with
+    /// those while the ones recorded are older (found on Codex's re-review, R1); and otherwise only while
+    /// the saved settings differ from the ones in force (<see cref="SameBackendSettings"/>). The endpoint
+    /// is read before the start under way: a start whose endpoint was read is still under way, or has
+    /// recorded its settings. Read by `init`, and by a restart that waited and failed for its way on,
+    /// under the restart's lock, which is taken before the state's (<see cref="DeferredRestart.Ahead"/>).
     /// </summary>
     private string? SettingsNotInForce()
     {
-        if (_options.Backend.Endpoint == null || _restart.Ahead)
+        if (_options.Backend.Endpoint == null || _restart.Ahead || _starting != null)
         {
             return null;
         }
@@ -1690,12 +1720,25 @@ public sealed class ReviewHost : IDisposable
     /// it has been (owner decision 153A, <see cref="_inForce"/>). Not before: whatever the start throws -
     /// a turn the backend's own check found, which changed nothing, or a failure, before the old backend
     /// stopped or after - leaves the settings in force as they were, and with no backend up nothing is in
-    /// force whatever they say. Called under the restart's own lock.
+    /// force whatever they say. Called under the restart's own lock. From just before the start until the
+    /// settings are recorded, or the start has thrown, they are the start under way's
+    /// (<see cref="_starting"/>), since the start publishes the backend's endpoint before it returns
+    /// (found on Codex's re-review, R1).
     /// </summary>
     private void StartWith(UserSettings settings, ResolvedApiKey key, Action<UserSettings, ResolvedApiKey> start)
     {
-        start(settings, key);
-        _inForce = settings;
+        // The mark comes off only once the settings are recorded, or the start has thrown, never before:
+        // a reader that finds no start under way finds the settings of the backend up recorded.
+        _starting = settings;
+        try
+        {
+            start(settings, key);
+            _inForce = settings;
+        }
+        finally
+        {
+            _starting = null;
+        }
     }
 
     /// <summary>
@@ -2544,13 +2587,20 @@ public sealed class ReviewHost : IDisposable
         + "was extracted and no run folder was made. Make the part or assembly you want reviewed the "
         + "active document, then press Review again.";
 
+    /// <summary>
+    /// What a review asked for before the backend is up is refused with, retryable - and one whose
+    /// session would be made while a start of it is under way (owner decision 153A, found on Codex's
+    /// re-review, R1).
+    /// </summary>
+    private const string BackendNotRunningYet =
+        "the review backend is not running yet, so there is nowhere to send the review. "
+        + "Check the log, then press Review again.";
+
     private bool BackendReady(string? id)
     {
         if (!RestartedForNewReview(id)) return false;
         if (_options.Backend.Endpoint != null) return true;
-        SendError(id, "BackendUnavailable",
-            "the review backend is not running yet, so there is nowhere to send the review. "
-            + "Check the log, then press Review again.", retryable: true);
+        SendError(id, "BackendUnavailable", BackendNotRunningYet, retryable: true);
         return false;
     }
 
@@ -2585,6 +2635,16 @@ public sealed class ReviewHost : IDisposable
             // chat id as retry_of. Rechecks never ask the backend for a fresh retry.
             PostStatus("checking", "Checking the saved evidence again...");
         }
+        // Found on Codex's re-review (R1): not while a start is under way, which publishes the backend's
+        // endpoint before it records the settings it was made with, so the settings in force are not yet
+        // those of the backend up. Refused as a review asked for before the backend is up is; read before
+        // the settings in force, so a start no longer under way has recorded them.
+        if (_starting != null)
+        {
+            SendError(id, "BackendUnavailable", BackendNotRunningYet, retryable: true);
+            return false;
+        }
+
         // Owner decision 153A: the provider, model and effort the backend was started with, which are
         // the saved ones once a restart has put them in force. Until then the backend runs with the
         // environment it was started with - the key, the base URL, Gemini Enterprise - and a session
