@@ -653,6 +653,9 @@ public sealed class CheckPaneHost : IDisposable
             if (_startHold != null)
             {
                 _holds.Remove(_startHold);
+
+                // So the field means what it says - the hold of a start that runs - though no reading of it comes
+                // before the next gate's step sets it again (the reviews of 157A, RV7).
                 _startHold = null;
             }
         }
@@ -1032,11 +1035,15 @@ public sealed class CheckPaneHost : IDisposable
         public bool TakenOver;
     }
 
-    /// <summary>The proxy's hold of one evaluation: let go once, and only its own check's hold.</summary>
+    /// <summary>
+    /// The proxy's hold of one evaluation: lets go of its own check's hold and no other. Letting go twice lets go
+    /// once - the hold is gone after the first, and no evaluation takes a hold that has gone back - so no guard is
+    /// kept for it (the reviews of 157A, RV10).
+    /// </summary>
     private sealed class EvaluationHold : IDisposable
     {
+        private readonly CheckPaneHost _pane;
         private readonly CheckHold _hold;
-        private CheckPaneHost? _pane;
 
         public EvaluationHold(CheckPaneHost pane, CheckHold hold)
         {
@@ -1044,7 +1051,7 @@ public sealed class CheckPaneHost : IDisposable
             _hold = hold;
         }
 
-        public void Dispose() => System.Threading.Interlocked.Exchange(ref _pane, null)?.LetGo(_hold);
+        public void Dispose() => _pane.LetGo(_hold);
     }
 
     private void Dispatch(string type, string? id, JsonElement payload)

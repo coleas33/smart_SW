@@ -772,6 +772,84 @@ public sealed class CheckHoldTests
         Assert.False(world.CheckInProgress);
     }
 
+    /// <summary>
+    /// A page loaded again presses again while the run its predecessor was handed waits for its evaluation: the tab's
+    /// next press lets go of nothing but its own hold - refused by the gate, or failing once past it - and the hand-over
+    /// before it still holds the restart and is held when its evaluation comes (the reviews of 157A: the mutation
+    /// review's P3).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void AHandOverWaitingForItsPageOutlivesTheTabsNextPress(string tab)
+    {
+        using var world = new HoldWorld(tab);
+        world.Open();
+        world.Press("c1");
+        string first = world.Extracted("c1");
+
+        world.GateRefusal = new BackendRequestException("CheckRunning", "FICT a check holds the restart back", retryable: true);
+        world.Press("c2");
+        world.Reply("error", "c2");
+        Assert.True(world.CheckInProgress, "a press the gate refused let go of the hand-over before it");
+
+        world.GateRefusal = null;
+        world.Dump.Failure = new InvalidOperationException("FICT the dump stopped");
+        world.Press("c3");
+        world.Reply("error", "c3");
+        Assert.True(world.CheckInProgress, "a press that failed past its gate let go of the hand-over before it");
+
+        IDisposable? evaluation = world.HoldEvaluation(first);
+        Assert.NotNull(evaluation);
+        evaluation!.Dispose();
+        Assert.False(world.CheckInProgress);
+    }
+
+    /// <summary>
+    /// The run is handed over before the page is told: an evaluation the page sends the instant it reads the reply finds
+    /// its hold (the reviews of 157A: the mutation review's P4).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void AnEvaluationSentTheInstantThePageIsToldFindsItsHold(string tab)
+    {
+        using var world = new HoldWorld(tab);
+        IDisposable? held = null;
+        world.OnPosted = json =>
+        {
+            JsonElement root = JsonDocument.Parse(json).RootElement;
+            if (root.GetProperty("type").GetString() == world.ExtractedType)
+            {
+                held = world.HoldEvaluation(root.GetProperty("payload").GetProperty("run_dir").GetString()!);
+            }
+        };
+        world.Open();
+
+        world.Press("c1");
+
+        Assert.NotNull(held);
+        Assert.True(world.CheckInProgress);
+        held!.Dispose();
+        Assert.False(world.CheckInProgress);
+    }
+
+    /// <summary>
+    /// A reading of whether a restart stands before the press that throws is read as none: only the page's words hang on
+    /// it, and the gate, which decides, is asked as ever (the reviews of 157A: the mutation review's RV6).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void ARestartAheadThatCannotBeReadTellsThePageNothing(string tab)
+    {
+        using var world = new HoldWorld(tab) { RestartAheadFails = true };
+        world.Open();
+
+        world.Press("c1");
+
+        world.Extracted("c1");
+        Assert.Equal(1, world.GateAsked);
+        Assert.DoesNotContain(world.AllPosted("status"), status => status.GetProperty("stage").GetString() == "backend_starting");
+    }
+
     // ---- the world -------------------------------------------------------------------------------
 
     /// <summary>
@@ -829,6 +907,12 @@ public sealed class CheckHoldTests
 
         /// <summary>Whether a settings restart stands before the press, as the review host would answer it.</summary>
         public bool RestartAhead { get; set; }
+
+        /// <summary>Whether reading if a settings restart stands before the press throws.</summary>
+        public bool RestartAheadFails { get; set; }
+
+        /// <summary>Runs as each message is posted to the page, after it is posted: what the page does the instant it reads it.</summary>
+        public Action<string>? OnPosted { get; set; }
 
         /// <summary>How many times the gate was asked.</summary>
         public int GateAsked { get; private set; }
@@ -902,7 +986,7 @@ public sealed class CheckHoldTests
             Func<string> runRoot = () => RunRootSpelling ?? RunRoot;
             if (Tab == "Model check")
             {
-                var options = new ModelCheckHostOptions(new CollectingChannel(_posted), runRoot)
+                var options = new ModelCheckHostOptions(new CollectingChannel(_posted, json => OnPosted?.Invoke(json)), runRoot)
                 {
                     CurrentDocument = () => Document,
                     Dump = UseDump ? Dump : null,
@@ -914,7 +998,7 @@ public sealed class CheckHoldTests
                     Hold =
                     {
                         BeginCheck = Gate,
-                        RestartAhead = () => RestartAhead,
+                        RestartAhead = ReadRestartAhead,
                         HandOverLimit = HandOverLimit,
                         Clock = () => _clock,
                         AfterPosts = AfterPosts,
@@ -930,7 +1014,7 @@ public sealed class CheckHoldTests
             }
             else
             {
-                var options = new StandardsHostOptions(new CollectingChannel(_posted), runRoot)
+                var options = new StandardsHostOptions(new CollectingChannel(_posted, json => OnPosted?.Invoke(json)), runRoot)
                 {
                     CurrentDocument = () => Document,
                     ProfilePath = () => ProfilePath,
@@ -943,7 +1027,7 @@ public sealed class CheckHoldTests
                     Hold =
                     {
                         BeginCheck = Gate,
-                        RestartAhead = () => RestartAhead,
+                        RestartAhead = ReadRestartAhead,
                         HandOverLimit = HandOverLimit,
                         Clock = () => _clock,
                         AfterPosts = AfterPosts,
@@ -1024,6 +1108,9 @@ public sealed class CheckHoldTests
             }
         }
 
+        private bool ReadRestartAhead() =>
+            RestartAheadFails ? throw new InvalidOperationException("FICT the review host cannot be read") : RestartAhead;
+
         private void AfterPosts(Action delivered)
         {
             if (AfterPostsFails)
@@ -1088,10 +1175,19 @@ public sealed class CheckHoldTests
     private sealed class CollectingChannel : IPageChannel
     {
         private readonly List<string> _posted;
+        private readonly Action<string>? _posting;
 
-        public CollectingChannel(List<string> posted) => _posted = posted;
+        public CollectingChannel(List<string> posted, Action<string>? posting = null)
+        {
+            _posted = posted;
+            _posting = posting;
+        }
 
-        public void PostMessage(string json) => _posted.Add(json);
+        public void PostMessage(string json)
+        {
+            _posted.Add(json);
+            _posting?.Invoke(json);
+        }
     }
 
     /// <summary>A dump that writes nothing but its package, with a hook while it reads the model and a failure a case can set.</summary>
