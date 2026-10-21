@@ -295,6 +295,11 @@ public class SwReviewAddIn : ISwAddin
         _terminalHost?.Dispose();
         _terminalHost = null;
 
+        // The race review of owner decision 157A: the settings restart stops before the hosts whose
+        // work holds it back - a check, a remodel run - let their holds go with them, so none is
+        // made in the moment before the review host goes, on a backend about to be stopped.
+        _reviewHost?.StopRestarting();
+
         // Before the review host, because a check's record is registered on it: the Model
         // check host holds nothing SOLIDWORKS owns, so this is only about the order the two
         // stop answering in.

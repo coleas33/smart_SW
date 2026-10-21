@@ -632,10 +632,12 @@ public sealed class ModelCheckHostTests
     /// there, `RunRootChanged`, where the check was handed on. Changed deliberately for owner decision 157A: the
     /// run root is read once more, once the check's gate is passed - a restart the gate makes can move it, and a moved
     /// one is judged again (`CheckHoldTests`) - so the move this case makes between the folder and the end of the
-    /// extraction comes at the third reading.
+    /// extraction comes at the third reading. Renamed deliberately on the reviews of 157A, from
+    /// `ACheckJudgesAndMakesItsFolderUnderOneReadingOfTheRunRoot`: it reads the run root three times now, and what it
+    /// pins is that the folder is made under the run root judged.
     /// </summary>
     [Fact]
-    public void ACheckJudgesAndMakesItsFolderUnderOneReadingOfTheRunRoot()
+    public void ACheckMakesItsFolderUnderTheRunRootItJudged()
     {
         using (var world = new CheckWorld())
         {

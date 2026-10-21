@@ -7216,6 +7216,59 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>A check asked for once the host is disposed - the add-in unloading, its backend with it - never begins (owner decision 157A).</summary>
+    /// <summary>
+    /// The race review of 157A: as the add-in unloads, the settings restart stops before the hosts whose work holds it
+    /// back are disposed, so their holds going with them makes no restart in the moment before the review host goes,
+    /// on a backend about to be stopped. Stopped, a restart that waits for a check is not made once the check is over,
+    /// and nothing begins through the gate; stopping again, or disposing the host, does nothing more.
+    /// </summary>
+    [Fact]
+    public void ARestartStoppedForTheUnloadIsNotMadeWhenTheWorkThatHeldItEnds()
+    {
+        int checking = 1;
+        using var world = new RestartWorld();
+        world.Checking("Model check", () => Volatile.Read(ref checking) == 1);
+        world.Open();
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        world.Reply("settings.saved", "save");
+
+        world.Host.StopRestarting();
+        Volatile.Write(ref checking, 0);
+
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+        int begun = 0;
+        BackendRequestException? refusal = world.Host.BeginCheck(() => begun++);
+        Assert.Equal("the review backend is stopping with the add-in.", refusal?.Message);
+        Assert.Equal(0, begun);
+        world.Host.StopRestarting();
+        world.Host.Dispose();
+        Assert.Equal(0, world.Backend.RestartsAsked);
+    }
+
+    /// <summary>
+    /// ...and the add-in stops it so: in <c>DisconnectFromSW</c>, the review host's restart stops before the Model check,
+    /// Remodel and Standards hosts are disposed - each lets the hold of its work go with it - and the review host is
+    /// disposed after them, as before.
+    /// </summary>
+    [Fact]
+    public void TheAddInStopsTheRestartBeforeTheHostsThatHoldItBackGo()
+    {
+        string unload = OtherTabsBackendRestartTests.Between(
+            OtherTabsBackendRestartTests.AddInSource(), "public bool DisconnectFromSW() {", "_backend?.Dispose();");
+        int stop = unload.IndexOf("_reviewHost?.StopRestarting();", StringComparison.Ordinal);
+        Assert.True(stop >= 0, "the add-in does not stop the restart as it unloads");
+        foreach (string host in new[] { "_modelCheckHost?.Dispose();", "_remodelHost?.Dispose();", "_standardsHost?.Dispose();" })
+        {
+            Assert.True(stop < unload.IndexOf(host, StringComparison.Ordinal), host + " is disposed before the restart stops");
+        }
+
+        Assert.True(
+            unload.IndexOf("_standardsHost?.Dispose();", StringComparison.Ordinal)
+                < unload.IndexOf("_reviewHost?.Dispose();", StringComparison.Ordinal),
+            "the review host is disposed before the hosts that register their folders on it");
+    }
+
     [Fact]
     public void ACheckOnceTheHostIsDisposedIsRefusedAndNeverBegins()
     {

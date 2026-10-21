@@ -2026,8 +2026,9 @@ public sealed class ReviewHost : IDisposable
     /// knowing that none does. Work in progress - a remodel run, a check - is the restart's own reading
     /// (<see cref="WorkInProgress"/>), which it reads before this look, since the add-in knows it without
     /// asking the backend (owner decision 145A read the run here, and 157A moved it there, with the checks), and
-    /// again under its own lock, after it, so work still in progress holds the restart back even with no
-    /// backend: it cannot last, since every call it makes then fails.
+    /// again under its own lock, after it. A remodel run still in progress holds the restart back even with no
+    /// backend: it cannot last, since every call it makes then fails. A check does not: with no backend up it
+    /// holds nothing, since the restart is what brings back the backend its evaluation needs (157A, T236).
     /// </summary>
     private DeferredRestart.Hold RestartHeldBack()
     {
@@ -2346,6 +2347,15 @@ public sealed class ReviewHost : IDisposable
     /// restart was made meanwhile.
     /// </summary>
     public bool WhileNoRestartRuns(Func<bool> step) => _restart.WhileNoneRuns(step);
+
+    /// <summary>
+    /// The race review of owner decision 157A: stops every settings restart that has not begun, and its watcher, as
+    /// disposing the host does first - for the add-in's unload, before the hosts whose work holds a restart back, a
+    /// remodel run or a check, let their holds go with them, so none is made in the moment before this host goes, on a
+    /// backend about to be stopped. Nothing begins through the gate after it. Doing it again, or disposing the host
+    /// after it, does nothing more.
+    /// </summary>
+    public void StopRestarting() => _restart.Dispose();
 
     /// <summary>
     /// The one gate work the restart would end begins through (owner decisions 145A and 157A): the

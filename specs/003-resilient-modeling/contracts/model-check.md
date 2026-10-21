@@ -221,8 +221,9 @@ or the one being made is waited for, and the check is marked in progress under t
 or the press is refused, retryable, saying what holds the restart back - a turn (`TurnRunning`, "the
 backend restarts with the saved settings when the running review turn ends, and no check starts before
 then. Wait for the turn to end, or press Stop on the Review tab, then try again."), a backend that does
-not answer (`BackendUnavailable`), a remodel run (`RemodelRunning`) or a check on the Standards tab
-(`CheckRunning`) - or with the failure of the restart it made or waited for, masked, and nothing is made.
+not answer (`BackendUnavailable`), a remodel run (`RemodelRunning`) or a check (`CheckRunning`) - one on the
+Standards tab, or this tab's own earlier one whose run still waits for its evaluation, as when a page loaded
+again presses again - or with the failure of the restart it made or waited for, masked, and nothing is made.
 While a restart stands before the press the page is told first, `status {stage: "backend_starting",
 message: "Waiting for the review backend to restart with the saved settings, then reading the feature
 tree..."}`, which it writes in its check line. Once the gate is passed the run root is read again, and one
@@ -232,8 +233,11 @@ configuration changed after Model check was pressed, so nothing was checked. Mak
 checked the active document and press Model check again." The hold lasts through the extraction and the
 reply, and while the page's `POST /checks/rms` for that run folder is out - the pane's proxy holds it
 (feature 002 `pane-host-messages.md`, the backend prefix) - and ends once it has been answered; for a
-page that never makes that call, reloaded or closed, a minute after the reply; and at once when the start
-ends any other way. A save made meanwhile is kept, and the Review tab says "the settings are saved; the
+page that never makes that call, reloaded or closed, a minute after the reply has reached the page; and at
+once when the start ends any other way. The reply waits on SOLIDWORKS' application thread, which another
+tab's extraction can hold for minutes, so the minute is counted from its delivery, and an evaluation that
+comes after the minute all the same is held again while the backend the check began on is still the one
+up (the reviews of 157A). A save made meanwhile is kept, and the Review tab says "the settings are saved; the
 backend restarts when the running check ends." A check holds the restart back only while a backend is
 up: with none, the restart is what brings back the backend its evaluation needs, and a save made then
 starts it at once. The page's re-read of a check and its Accept are not held: each is one short call

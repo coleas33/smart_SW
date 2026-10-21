@@ -258,8 +258,10 @@ before the press, `status {stage: "backend_starting", message: "Waiting for the 
 restart with the saved settings, then reading the document..."}`; a document that changed while the gate
 waited is refused `DocumentChanged`, retryable, "The active document or its configuration changed after
 Standards check was pressed, so nothing was checked. Make the document you want graded the active document
-and press Standards check again."; and a check on the Model check tab that holds a waiting restart back
-refuses this one `CheckRunning`. Re-reads and Accepts are not held, as there.
+and press Standards check again."; and a check that holds a waiting restart back - on the Model check tab, or
+this tab's own earlier one whose run still waits for its evaluation, as after a reload - refuses this one
+`CheckRunning`. The minute is counted from the reply's delivery, and a late evaluation held again, as there.
+Re-reads and Accepts are not held, as there.
 
 `kind` is what the page decides with. **[D]** The Model check page uses it to say whether a
 check can run at all, because only a part can be model-checked; here **all three kinds can be
