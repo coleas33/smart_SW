@@ -554,15 +554,50 @@ public sealed class PaneActions
     }
 
     /// <summary>
+    /// The reviews of decision 154A, N8, written once for every start that passes a gate (owner decision 157A): the
+    /// run root a start goes on under once its gate is passed - the gate can make a waiting settings restart, which
+    /// can bring another run root into force - from <paramref name="runRootNow"/>, the run root for a new run read
+    /// again then. None, while a start of the backend under way would bring another in, is answered as a start then is
+    /// (<see cref="SendRunRootMoving"/>); the one <paramref name="judged"/> before the gate, as written, is gone on
+    /// under; another is judged again (<see cref="RefusedRunRoot"/>). Null once the press is answered with a refusal.
+    /// </summary>
+    public string? RunRootToUse(
+        string? id, string judged, string? runRootNow, IRunRootProbe probe, string notDone, string where, string wayOn)
+    {
+        if (runRootNow == null)
+        {
+            SendRunRootMoving(id, notDone, wayOn);
+            return null;
+        }
+
+        if (string.Equals(runRootNow, judged, StringComparison.Ordinal))
+        {
+            return runRootNow;
+        }
+
+        return RefusedRunRoot(id, runRootNow, probe, notDone, where, wayOn) ? null : runRootNow;
+    }
+
+    /// <summary>
+    /// How a page's word on a settings restart before a press begins (owner decisions 145A and 157A), posted as
+    /// `status {stage: "backend_starting"}` before the gate when a restart stands before the press, the press's own
+    /// words after it: true whether the gate makes the restart, waits for one being made, or finds a turn or a backend
+    /// that does not answer holding it back and refuses the press (145A's third review). The Remodel tab's and the
+    /// check tabs' alike.
+    /// </summary>
+    public const string WaitingForTheRestart =
+        "Waiting for the review backend to restart with the saved settings, then ";
+
+    /// <summary>
     /// The reviews of 154A's merge, N6: whether a Model check or a Standards run, whose folder was made before its
-    /// extraction, is answered here because the run root moved meanwhile - a settings save's restart on the Review tab,
-    /// which no check holds back, can bring another in during the minutes an extraction takes, and the backend would
-    /// refuse the folder at the page's first call. <paramref name="runRootNow"/> is the run root for a new run read
-    /// again once the extraction is over: none, while a start of the backend under way would bring another in, is
-    /// answered as a start then is (<see cref="SendRunRootMoving"/>); one that no longer holds the folder,
+    /// extraction, is answered here because the run root moved meanwhile. Since owner decision 157A a check holds every
+    /// settings restart back from its gate until its evaluation has been answered, so no save's restart moves the run
+    /// root during the extraction; the add-in's first start of the backend, which no gate holds back, still can, and
+    /// the backend would refuse the folder at the page's first call. <paramref name="runRootNow"/> is the run root for a
+    /// new run read again once the extraction is over: none, while a start of the backend under way would bring another
+    /// in, is answered as a start then is (<see cref="SendRunRootMoving"/>); one that no longer holds the folder,
     /// <c>RunRootChanged</c>, not retryable, in the rule's words (<see cref="RunRootRule.ChangedRefusal"/>). The
-    /// folder is left as the evidence. A restart that lands after this reading, before the backend reads the folder,
-    /// is not seen: one round trip, the page's first call.
+    /// folder is left as the evidence.
     /// </summary>
     public bool AnsweredForAMovedRunRoot(
         string? id, string runDirectory, string? runRootNow, string during, string notDone, string wayOn)

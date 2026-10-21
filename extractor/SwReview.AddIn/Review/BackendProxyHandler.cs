@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 
 namespace SwReview.AddIn.Review;
 
@@ -75,6 +76,11 @@ public sealed class ProxiedResponse
 /// And a call that would start a turn holds the tool service's attachment while it is out (owner
 /// decision 152A, on the Codex review: X2), so no follow of the active document takes the bridge
 /// down under the turn it starts.
+///
+/// And a check page's evaluation of a check - `POST /checks/rms` or `/checks/standards` - holds that
+/// check's hold on a settings restart while it is out, asked of the host by the run folder its body
+/// names (owner decision 157A): a check holds the restart back from its press until the page's
+/// evaluation of it has been answered, so the evaluation never meets a backend that restarted under it.
 /// </summary>
 public sealed class BackendProxyHandler
 {
@@ -87,6 +93,7 @@ public sealed class BackendProxyHandler
     private readonly Func<ProxiedRequest, ProxiedResponse> _send;
     private readonly Func<BackendRequestException?> _turnRefusal;
     private readonly Func<IDisposable?> _holdTheBridge;
+    private readonly Func<string, IDisposable?> _holdTheCheck;
 
     public BackendProxyHandler(Func<BackendEndpoint?> endpoint, Func<ProxiedRequest, ProxiedResponse> send)
         : this(endpoint, send, () => null)
@@ -118,11 +125,31 @@ public sealed class BackendProxyHandler
         Func<ProxiedRequest, ProxiedResponse> send,
         Func<BackendRequestException?> turnRefusal,
         Func<IDisposable?> holdTheBridge)
+        : this(endpoint, send, turnRefusal, holdTheBridge, _ => null)
+    {
+    }
+
+    /// <param name="endpoint">Where the backend is, asked per call.</param>
+    /// <param name="send">The transport.</param>
+    /// <param name="turnRefusal">As above.</param>
+    /// <param name="holdTheBridge">As above.</param>
+    /// <param name="holdTheCheck">Owner decision 157A: asked, per evaluation of a check - `POST /checks/rms` or
+    /// `/checks/standards` - with the run folder its body names, for the hold that check keeps on a settings
+    /// restart, which is let go once the evaluation is answered, however it is. Null - no check waits for that
+    /// evaluation - sends it on unheld, as before; and so does a host that throws, since an evaluation refused
+    /// would waste the very extraction the hold exists to keep.</param>
+    public BackendProxyHandler(
+        Func<BackendEndpoint?> endpoint,
+        Func<ProxiedRequest, ProxiedResponse> send,
+        Func<BackendRequestException?> turnRefusal,
+        Func<IDisposable?> holdTheBridge,
+        Func<string, IDisposable?> holdTheCheck)
     {
         _endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
         _send = send ?? throw new ArgumentNullException(nameof(send));
         _turnRefusal = turnRefusal ?? throw new ArgumentNullException(nameof(turnRefusal));
         _holdTheBridge = holdTheBridge ?? throw new ArgumentNullException(nameof(holdTheBridge));
+        _holdTheCheck = holdTheCheck ?? throw new ArgumentNullException(nameof(holdTheCheck));
     }
 
     /// <summary>
@@ -135,9 +162,17 @@ public sealed class BackendProxyHandler
         IEnumerable<KeyValuePair<string, string>>? headers,
         Stream? content)
     {
+        // Read once: every call forwards it, and a check's evaluation is held by the folder it names.
+        byte[]? body = Read(content);
+
+        if (EvaluatesACheck(requestUri, method))
+        {
+            return ForwardHoldingTheCheck(requestUri, method, headers, body);
+        }
+
         if (!StartsATurn(requestUri, method))
         {
-            return Forward(requestUri, method, headers, content);
+            return Forward(requestUri, method, headers, body);
         }
 
         // Before the backend is looked for: while the backend is being restarted there is
@@ -166,12 +201,121 @@ public sealed class BackendProxyHandler
 
         try
         {
-            return Forward(requestUri, method, headers, content);
+            return Forward(requestUri, method, headers, body);
         }
         finally
         {
             hold?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Owner decision 157A: sends a check page's evaluation of a check on holding that check's hold on a settings
+    /// restart for as long as it is out - asked of the host by the run folder the body names - and lets it go once
+    /// the evaluation is answered, however it is: answered, refused by the backend, unreachable, refused by this side,
+    /// or with no backend. With no hold to be had the evaluation goes on unheld, as before.
+    /// </summary>
+    private ProxiedResponse? ForwardHoldingTheCheck(
+        string requestUri,
+        string method,
+        IEnumerable<KeyValuePair<string, string>>? headers,
+        byte[]? body)
+    {
+        IDisposable? hold = HoldTheCheck(RunDirectoryOf(body));
+        try
+        {
+            return Forward(requestUri, method, headers, body);
+        }
+        finally
+        {
+            hold?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The host's hold of the check whose run is in <paramref name="runDirectory"/>, or null: no folder named, no check
+    /// waiting for its evaluation, or a host that throws - which leaves the evaluation as it was before 157A, since an
+    /// evaluation refused would waste the very extraction the hold exists to keep.
+    /// </summary>
+    private IDisposable? HoldTheCheck(string? runDirectory)
+    {
+        if (runDirectory == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return _holdTheCheck(runDirectory);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The run folder an evaluation's body names - its `run_dir`, as the page relays it from the host's own reply - or
+    /// null when the body is not a JSON object naming one as text.
+    /// </summary>
+    private static string? RunDirectoryOf(byte[]? body)
+    {
+        if (body == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using (JsonDocument document = JsonDocument.Parse(body))
+            {
+                return document.RootElement.ValueKind == JsonValueKind.Object
+                    && document.RootElement.TryGetProperty("run_dir", out JsonElement runDirectory)
+                    && runDirectory.ValueKind == JsonValueKind.String
+                    ? runDirectory.GetString()
+                    : null;
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Whether a page call evaluates a check (owner decision 157A): a `POST` to `/checks/rms` or `/checks/standards`,
+    /// the backend's two routes that grade a run (chat-api.md). Read from the path the backend would route, as
+    /// <see cref="StartsATurn"/> reads it.
+    /// </summary>
+    private static bool EvaluatesACheck(string requestUri, string method)
+    {
+        string[]? segments = PostedSegments(requestUri, method);
+        return segments != null
+            && segments.Length == 2
+            && segments[0] == "checks"
+            && (segments[1] == "rms" || segments[1] == "standards");
+    }
+
+    /// <summary>
+    /// The path a `POST` under the backend prefix would be routed by, unescaped, segment by segment - so a trailing
+    /// slash or an escaped letter is the same call - or null for any other call.
+    /// </summary>
+    private static string[]? PostedSegments(string requestUri, string method)
+    {
+        // Port 0 only answers "is this the prefix", as for a call with no backend yet.
+        if (!string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase)
+            || !BackendProxy.TryMapToBackend(requestUri, new BackendEndpoint(0, "none"), out Uri? target))
+        {
+            return null;
+        }
+
+        string[] segments = target!.AbsolutePath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        for (int index = 0; index < segments.Length; index++)
+        {
+            segments[index] = Uri.UnescapeDataString(segments[index]);
+        }
+
+        return segments;
     }
 
     /// <summary>
@@ -182,7 +326,7 @@ public sealed class BackendProxyHandler
         string requestUri,
         string method,
         IEnumerable<KeyValuePair<string, string>>? headers,
-        Stream? content)
+        byte[]? body)
     {
         BackendEndpoint? endpoint = _endpoint();
         if (endpoint == null)
@@ -211,7 +355,7 @@ public sealed class BackendProxyHandler
                 retryable: false);
         }
 
-        var request = new ProxiedRequest(target, method, Forwardable(headers), Read(content));
+        var request = new ProxiedRequest(target, method, Forwardable(headers), body);
 
         try
         {
@@ -261,20 +405,8 @@ public sealed class BackendProxyHandler
     /// </summary>
     private static bool StartsATurn(string requestUri, string method)
     {
-        // Port 0 only answers "is this the prefix", as for a call with no backend yet.
-        if (!string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase)
-            || !BackendProxy.TryMapToBackend(requestUri, new BackendEndpoint(0, "none"), out Uri? target))
-        {
-            return false;
-        }
-
-        string[] segments = target!.AbsolutePath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-        for (int index = 0; index < segments.Length; index++)
-        {
-            segments[index] = Uri.UnescapeDataString(segments[index]);
-        }
-
-        if (segments.Length < 3 || segments[0] != "sessions")
+        string[]? segments = PostedSegments(requestUri, method);
+        if (segments == null || segments.Length < 3 || segments[0] != "sessions")
         {
             return false;
         }
@@ -297,7 +429,8 @@ public sealed class BackendProxyHandler
     /// The host's answer to a call that would start a turn, as a response, or null to send the
     /// call on. Each refusal goes out with the status the backend gives its class - `TurnRunning`
     /// 409 and `UnknownChat` 404, as chat/server.py answers them, a remodel run's
-    /// `RemodelRunning` 409 as a turn's, and `BackendUnavailable` 503 as this proxy answers a
+    /// `RemodelRunning` 409 and a check's `CheckRunning` 409 (owner decision 157A) as a turn's, and
+    /// `BackendUnavailable` 503 as this proxy answers a
     /// backend that is not there - and the host's `retryable` flag, which is the backend's for
     /// the backend's classes. The words are the host's own, and say why. A host that throws is
     /// answered as any call this side could not make is: never with no answer.
@@ -323,6 +456,7 @@ public sealed class BackendProxyHandler
         {
             case "TurnRunning":
             case "RemodelRunning":
+            case "CheckRunning":
                 return Error(409, "Conflict", refusal.ErrorClass, refusal.Message, refusal.Retryable);
 
             case "UnknownChat":

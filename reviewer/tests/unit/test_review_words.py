@@ -667,6 +667,9 @@ def test_the_five_send_errors_are_exact_contract_sentences() -> None:
 RESTART_HOLDS = {
     "TurnRunning": "A review turn is still running. Wait for it to finish, or press Stop.",
     "RemodelRunning": "A remodel run is in progress. Wait for it to finish, then try again.",
+    "CheckRunning": (
+        "A Model check or Standards check is in progress. Wait for it to finish, then try again."
+    ),
     "BackendUnavailable": (
         "The review backend is not running or not answering. Save Settings to start it again, "
         "then retry."
@@ -674,9 +677,9 @@ RESTART_HOLDS = {
 }
 """The classes the add-in refuses a new review or a turn call with while the backend waits to be
 restarted with settings saved during a turn (owner decision 143A): one for each thing that can
-hold that restart back - a turn, a remodel run, a backend that does not answer - so the sentence
-the page shows is true of what holds it. `RemodelRunning` is the add-in's own class; the backend
-never sends it."""
+hold that restart back - a turn, a remodel run, a check (owner decision 157A), a backend that does
+not answer - so the sentence the page shows is true of what holds it. `RemodelRunning` and
+`CheckRunning` are the add-in's own classes; the backend never sends them."""
 
 
 def test_each_thing_that_holds_a_restart_back_has_a_true_sentence() -> None:

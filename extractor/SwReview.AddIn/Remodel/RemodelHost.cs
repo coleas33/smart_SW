@@ -298,23 +298,15 @@ public sealed class RemodelHost : IDisposable
         + "and press Remodel a copy again.";
 
     /// <summary>
-    /// How the run status line's word on a settings restart before a press begins: true whether the
-    /// gate makes the restart, waits for one being made, or finds a turn or a backend that does not
-    /// answer holding it back and refuses the press - a look that can take a round trip's timeout
-    /// per chat (owner decision 145A, third review: the words said the backend was restarting).
-    /// </summary>
-    private const string WaitingForTheRestart =
-        "Waiting for the review backend to restart with the saved settings, then ";
-
-    /// <summary>
     /// What the page's run status line is told before a plan whose gate meets a settings restart
     /// that waits or is being made (owner decision 145A, found on review). Posted as
-    /// `status {stage: "backend_starting"}`.
+    /// `status {stage: "backend_starting"}`. Its beginning, <see cref="PaneActions.WaitingForTheRestart"/>, is
+    /// the check tabs' too since owner decision 157A, and written once there.
     /// </summary>
-    public const string PlanAfterRestartMessage = WaitingForTheRestart + "reading the part...";
+    public const string PlanAfterRestartMessage = PaneActions.WaitingForTheRestart + "reading the part...";
 
     /// <summary>...before a Start's run.</summary>
-    public const string StartAfterRestartMessage = WaitingForTheRestart + "starting the run...";
+    public const string StartAfterRestartMessage = PaneActions.WaitingForTheRestart + "starting the run...";
 
     /// <summary>
     /// The full no-change reassurance for refusals before any copy change. Loss and cleanup
@@ -2901,23 +2893,18 @@ public sealed class RemodelHost : IDisposable
     /// once the press is answered with the refusal. Read once, with 153A's record of the settings in force: the gate
     /// holds back every settings restart, but not the add-in's first start of the backend, and while one that would
     /// bring another run root into force is under way there is none to go on under, and the press is refused.
+    /// Written once for every start that passes a gate since owner decision 157A, the check tabs' too
+    /// (<see cref="PaneActions.RunRootToUse"/>).
     /// </summary>
-    private string? RunRootToUse(string? id, string judged, string notDone)
-    {
-        string? inForce = _options.RunRootForANewRun();
-        if (inForce == null)
-        {
-            _actions.SendRunRootMoving(id, notDone, PressAgain);
-            return null;
-        }
-
-        if (string.Equals(inForce, judged, StringComparison.Ordinal))
-        {
-            return inForce;
-        }
-
-        return RunRootRefused(id, inForce, notDone) ? null : inForce;
-    }
+    private string? RunRootToUse(string? id, string judged, string notDone) =>
+        _actions.RunRootToUse(
+            id,
+            judged,
+            _options.RunRootForANewRun(),
+            _options.RunRootProbe,
+            notDone,
+            RunRootRule.InSettingsOnTheReviewTab,
+            PressAgain);
 
     /// <summary>
     /// What a Start answers, <c>RunRootChanged</c>, when its plan's run folder is under a run root a settings save

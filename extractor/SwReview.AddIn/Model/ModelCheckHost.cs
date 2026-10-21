@@ -96,6 +96,32 @@ public sealed class ModelCheckHostOptions
     /// a link. Windows itself by default; injected so a test fakes each without making one.
     /// </summary>
     public IRunRootProbe RunRootProbe { get; set; } = Native.WindowsRunRootProbe.Instance;
+
+    /// <summary>
+    /// Owner decision 157A: the gate a check begins through, after every refusal that needs no call
+    /// (<see cref="CheckPaneHostOptions.BeginCheck"/>). The add-in answers it through the review host. By default
+    /// there is no restart to wait for, and the step runs at once.
+    /// </summary>
+    public Func<Action, BackendRequestException?> BeginCheck { get; set; } = begin =>
+    {
+        begin();
+        return null;
+    };
+
+    /// <summary>
+    /// Owner decision 157A: whether a settings restart stands before a check, read only to tell the page so
+    /// (<see cref="CheckPaneHostOptions.RestartAhead"/>). By default none does.
+    /// </summary>
+    public Func<bool> RestartAhead { get; set; } = () => false;
+
+    /// <summary>
+    /// Owner decision 157A: how long a check handed to the page holds the restart back waiting for the page's
+    /// evaluation call (<see cref="CheckPaneHostOptions.HandOverLimit"/>), taken when the host is built.
+    /// </summary>
+    public TimeSpan HandOverLimit { get; set; } = CheckPaneHostOptions.DefaultHandOverLimit;
+
+    /// <summary>The clock the <see cref="HandOverLimit"/> is measured by (<see cref="CheckPaneHostOptions.Clock"/>).</summary>
+    public Func<TimeSpan> Clock { get; set; } = CheckPaneHostOptions.MonotonicClock;
 }
 
 /// <summary>
@@ -131,7 +157,10 @@ public sealed class ModelCheckHostOptions
 /// come first because a dump is SOLIDWORKS time. The run folder is created before the dump
 /// because the dump writes into it. The folder is registered before the reply, so a
 /// `POST /checks/rms` the page sends the instant it sees `check.extracted` resolves ids
-/// through the right folder.
+/// through the right folder. Since owner decision 157A the check begins through the review
+/// host's gate once every refusal that needs no call is behind it, reads the run root and the
+/// document again once the gate is passed, and holds a settings restart back until the page's
+/// evaluation of it has been answered (<see cref="CheckPaneHost.BeginCheck"/>).
 ///
 /// Threading: <see cref="Receive"/> is not re-entrant, and must not run on the SOLIDWORKS UI
 /// thread - a dump occupies the application thread for as long as it takes. The caller
@@ -150,6 +179,20 @@ public sealed class ModelCheckHost : IDisposable
 
     /// <summary>What a refused `check.start` says to do once the cause is gone (owner decision 154A).</summary>
     private const string PressAgain = "press Model check again";
+
+    /// <summary>
+    /// What the page is told before the gate when a settings restart stands before the press (owner decision 157A),
+    /// posted as `status {stage: "backend_starting"}`.
+    /// </summary>
+    public const string CheckAfterRestartMessage = PaneActions.WaitingForTheRestart + "reading the feature tree...";
+
+    /// <summary>
+    /// What a `check.start` whose document changed while its gate waited through a settings restart is refused with,
+    /// `DocumentChanged` (owner decision 157A): no path, and the way on.
+    /// </summary>
+    public const string DocumentChangedMessage =
+        "The active document or its configuration changed after Model check was pressed, so nothing was checked. "
+        + "Make the part you want checked the active document and press Model check again.";
 
     private readonly ModelCheckHostOptions _options;
     private readonly CheckPaneHost _pane;
@@ -188,6 +231,12 @@ public sealed class ModelCheckHost : IDisposable
             LogFolder = () => options.LogFolder(),
             Now = () => options.Now(),
             Secrets = () => options.Secrets(),
+
+            // Owner decision 157A: a check holds a settings restart back, beginning through the review host's gate.
+            BeginCheck = begin => options.BeginCheck(begin),
+            RestartAhead = () => options.RestartAhead(),
+            HandOverLimit = options.HandOverLimit,
+            Clock = () => options.Clock(),
         });
     }
 
@@ -221,6 +270,18 @@ public sealed class ModelCheckHost : IDisposable
     /// <summary>Tells the page the backend was restarted with saved settings (owner decision 145A).</summary>
     public void BackendRestarted() => _pane.BackendRestarted();
 
+    /// <summary>
+    /// Whether a Model check holds a settings restart back (owner decision 157A,
+    /// <see cref="CheckPaneHost.CheckInProgress"/>): what the review host's restart reads, under its own lock.
+    /// </summary>
+    public bool CheckInProgress => _pane.CheckInProgress;
+
+    /// <summary>
+    /// The pane's proxy takes over the hold of the check whose run it evaluates, while the evaluation is out (owner
+    /// decision 157A, <see cref="CheckPaneHost.HoldEvaluation"/>); null when no check of this tab waits for it.
+    /// </summary>
+    public IDisposable? HoldEvaluation(string runDirectory) => _pane.HoldEvaluation(runDirectory);
+
     public void Dispose() => _pane.Dispose();
 
     // ---- check.start --------------------------------------------------------------------
@@ -235,18 +296,18 @@ public sealed class ModelCheckHost : IDisposable
         PaneActions actions = _pane.Actions;
 
         // Owner decision 154A: first - the check's folder is made under the run root and handed to the backend,
-        // which refuses one on a share - in this tab's words, which its page shows whole. Read once, with 153A's
-        // record: the root judged is the one the folder is made under, and none while a start of the backend
-        // under way would bring another into force.
-        string? runRoot = _options.RunRootForANewRun();
-        if (runRoot == null)
+        // which refuses one on a share - in this tab's words, which its page shows whole. Read with 153A's record:
+        // none while a start of the backend under way would bring another into force. Read again once the gate is
+        // passed, below, since the gate can make a restart that moves it (owner decision 157A).
+        string? judged = _options.RunRootForANewRun();
+        if (judged == null)
         {
             actions.SendRunRootMoving(id, NothingChecked, PressAgain);
             return;
         }
 
         if (actions.RefusedRunRoot(
-                id, runRoot, _options.RunRootProbe, NothingChecked, RunRootRule.InSettingsOnTheReviewTab, PressAgain))
+                id, judged, _options.RunRootProbe, NothingChecked, RunRootRule.InSettingsOnTheReviewTab, PressAgain))
         {
             return;
         }
@@ -288,81 +349,130 @@ public sealed class ModelCheckHost : IDisposable
             return;
         }
 
-        string runDirectory;
+        // Owner decision 157A: a check holds a settings restart back, as a remodel run does. After every refusal that
+        // needs no call, a restart that waits is made first - or the one being made waited for - and the check takes
+        // its hold under that restart's own lock, so no restart can begin under it; or the press is refused, saying
+        // why. From here every way out but the hand-over of the run to the page lets the hold go.
+        if (!_pane.BeginCheck(id, CheckAfterRestartMessage))
+        {
+            return;
+        }
+
+        bool handedOver = false;
         try
         {
-            runDirectory = RunFolders.CreateForCheck(
-                runRoot, document.Path, _options.Now());
-        }
-        catch (Exception failure)
-        {
-            PostStatus("error", failure.Message);
-            actions.SendError(
+            // The gate can have made a restart that brought another run root into force: judged again before
+            // anything is made under it (the reviews of decision 154A, N8).
+            string? runRoot = actions.RunRootToUse(
                 id,
-                "RunFolderFailed",
-                $"the check folder could not be created under '{runRoot}': "
-                + failure.Message,
-                retryable: false);
-            return;
-        }
-
-        DumpSummary summary;
-        PostStatus(
-            "extracting",
-            $"Reading the feature tree of {RunFolders.DocumentName(document.Path)}...");
-        try
-        {
-            summary = _options.Dump.Run(
-                runDirectory,
-                message => PostStatus("extracting", message),
-
-                // The hole, fastener, face and mesh phases are most of a dump's cost and no RMS
-                // rule reads any of them. The package records that this profile ran, so a thin
-                // package is never mistaken for a model with no holes in it (FR-022, RK-19).
-                DumpProfile.ModelCheck);
-        }
-        catch (Exception failure)
-        {
-            // The folder is left behind on purpose: whatever the dump did write is the evidence
-            // for why it stopped (constitution Principle I). It is not registered, because a
-            // half-written package must not become the folder Show and the Ask tab read from.
-            PostStatus("error", failure.Message);
-            actions.SendError(id, "ExtractionFailed", failure.Message, retryable: true);
-            return;
-        }
-
-        // The reviews of 154A's merge, N6: the extraction took minutes, in which a settings save's restart on the
-        // Review tab - which no check holds back - can have brought another run root into force. Read again: the
-        // check goes on only while its folder is under the run root in force, and is answered here otherwise.
-        if (actions.AnsweredForAMovedRunRoot(
-                id, runDirectory, _options.RunRootForANewRun(), "the feature tree was read", NothingChecked, PressAgain))
-        {
-            return;
-        }
-
-        TrackCheck(runDirectory);
-
-        PostStatus(
-            "ready",
-            (summary.Gaps == 0 ? "Extracted" : $"Extracted with {summary.Gaps} gaps")
-                + DumpSummary.UnexaminedClause(summary.Unexamined)
-                + ". Checking the model...");
-
-        actions.Send("check.extracted", id, new Dictionary<string, object?>
-        {
-            { "run_dir", runDirectory },
-            { "document", document.Path },
-            { "configuration", document.Configuration },
+                judged,
+                _options.RunRootForANewRun(),
+                _options.RunRootProbe,
+                NothingChecked,
+                RunRootRule.InSettingsOnTheReviewTab,
+                PressAgain);
+            if (runRoot == null)
             {
-                "counts",
-                new Dictionary<string, object?>
+                return;
+            }
+
+            // ...and it can have waited through a restart for seconds, in which the engineer can make another
+            // document active, which the dump would read: read again, and a check of another document than the one
+            // pressed for is refused, before anything is made.
+            if (!document.IsSameDocument(_options.CurrentDocument()))
+            {
+                actions.SendError(id, "DocumentChanged", DocumentChangedMessage, retryable: true);
+                return;
+            }
+
+            string runDirectory;
+            try
+            {
+                runDirectory = RunFolders.CreateForCheck(
+                    runRoot, document.Path, _options.Now());
+            }
+            catch (Exception failure)
+            {
+                PostStatus("error", failure.Message);
+                actions.SendError(
+                    id,
+                    "RunFolderFailed",
+                    $"the check folder could not be created under '{runRoot}': "
+                    + failure.Message,
+                    retryable: false);
+                return;
+            }
+
+            DumpSummary summary;
+            PostStatus(
+                "extracting",
+                $"Reading the feature tree of {RunFolders.DocumentName(document.Path)}...");
+            try
+            {
+                summary = _options.Dump.Run(
+                    runDirectory,
+                    message => PostStatus("extracting", message),
+
+                    // The hole, fastener, face and mesh phases are most of a dump's cost and no RMS
+                    // rule reads any of them. The package records that this profile ran, so a thin
+                    // package is never mistaken for a model with no holes in it (FR-022, RK-19).
+                    DumpProfile.ModelCheck);
+            }
+            catch (Exception failure)
+            {
+                // The folder is left behind on purpose: whatever the dump did write is the evidence
+                // for why it stopped (constitution Principle I). It is not registered, because a
+                // half-written package must not become the folder Show and the Ask tab read from.
+                PostStatus("error", failure.Message);
+                actions.SendError(id, "ExtractionFailed", failure.Message, retryable: true);
+                return;
+            }
+
+            // The reviews of 154A's merge, N6: the extraction took minutes. Since owner decision 157A no settings
+            // save's restart can move the run root meanwhile - the check holds it back - but the add-in's first start
+            // of the backend, which no gate holds back, can have brought another run root into force. Read again: the
+            // check goes on only while its folder is under the run root in force, and is answered here otherwise.
+            if (actions.AnsweredForAMovedRunRoot(
+                    id, runDirectory, _options.RunRootForANewRun(), "the feature tree was read", NothingChecked, PressAgain))
+            {
+                return;
+            }
+
+            TrackCheck(runDirectory);
+
+            PostStatus(
+                "ready",
+                (summary.Gaps == 0 ? "Extracted" : $"Extracted with {summary.Gaps} gaps")
+                    + DumpSummary.UnexaminedClause(summary.Unexamined)
+                    + ". Checking the model...");
+
+            // Owner decision 157A: the hold now waits for the page's evaluation of this run, handed over before the
+            // page is told, so an evaluation sent the instant it reads this finds it.
+            _pane.HandOver(runDirectory);
+            handedOver = true;
+            actions.Send("check.extracted", id, new Dictionary<string, object?>
+            {
+                { "run_dir", runDirectory },
+                { "document", document.Path },
+                { "configuration", document.Configuration },
                 {
-                    { "documents", summary.Documents },
-                    { "features", summary.Features },
-                    { "equations", summary.Equations },
-                }
-            },
-            { "gaps", summary.Gaps },
-        });
+                    "counts",
+                    new Dictionary<string, object?>
+                    {
+                        { "documents", summary.Documents },
+                        { "features", summary.Features },
+                        { "equations", summary.Equations },
+                    }
+                },
+                { "gaps", summary.Gaps },
+            });
+        }
+        finally
+        {
+            if (!handedOver)
+            {
+                _pane.EndCheck();
+            }
+        }
     }
 }

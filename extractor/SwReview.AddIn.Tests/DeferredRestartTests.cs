@@ -8,8 +8,10 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using SwReview.AddIn.EngineeringContext;
+using SwReview.AddIn.Model;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
+using SwReview.AddIn.Standards;
 using SwReview.AddIn.ToolService;
 using SwReview.Extractor.Dump;
 using Xunit;
@@ -101,13 +103,14 @@ public sealed class DeferredRestartTests
 
     /// <summary>
     /// The status the host posts when its watcher stops looking at a backend that does not answer:
-    /// the restart still waits, for the next review, follow-up or remodel run. Since owner decision
+    /// the restart still waits, for the next review, follow-up, remodel run or check. Since owner decision
     /// 145A it says "the saved settings", since a save during a remodel run is not one made during
-    /// the turn, and names the remodel run among what makes the restart first.
+    /// the turn, and names the remodel run among what makes the restart first; since owner decision 157A,
+    /// which makes a check make the restart first too, it names the check (changed deliberately).
     /// </summary>
     private const string NotAnsweringYet =
         "the review backend is not answering, so it has not been restarted with the saved settings yet. "
-        + "It will be before the next review, follow-up or remodel run, once it answers; to restart it "
+        + "It will be before the next review, follow-up, remodel run or check, once it answers; to restart it "
         + "now, save the settings again.";
 
     /// <summary>The Review tab's sentence for a save made while a remodel run is in progress (owner decision 145A).</summary>
@@ -120,11 +123,25 @@ public sealed class DeferredRestartTests
 
     /// <summary>
     /// Every sentence the Review tab may have been shown about a restart that waits, as
-    /// `backend.restarted` carries them: the three promises and the watcher's word that the
-    /// backend is not answering.
+    /// `backend.restarted` carries them: the promises and the watcher's word that the backend is not
+    /// answering. 145A's three promises first, then since owner decision 157A (changed deliberately) the
+    /// eight that name a check - one, or one on each check tab - alone or with a turn, a remodel run or both.
     /// </summary>
     private static readonly string[] RestartSentences =
-        { Promise, RemodelRunPromise, TurnAndRemodelRunPromise, NotAnsweringYet };
+    {
+        Promise,
+        RemodelRunPromise,
+        TurnAndRemodelRunPromise,
+        "the settings are saved; the backend restarts when the running check ends.",
+        "the settings are saved; the backend restarts when the running turn and the running check end.",
+        "the settings are saved; the backend restarts when the remodel run and the running check end.",
+        "the settings are saved; the backend restarts when the running turn, the remodel run and the running check end.",
+        "the settings are saved; the backend restarts when the running checks end.",
+        "the settings are saved; the backend restarts when the running turn and the running checks end.",
+        "the settings are saved; the backend restarts when the remodel run and the running checks end.",
+        "the settings are saved; the backend restarts when the running turn, the remodel run and the running checks end.",
+        NotAnsweringYet,
+    };
 
     /// <summary>
     /// A remodel run - a plan or a Start - refused while a turn holds the restart back (owner
@@ -6122,6 +6139,919 @@ public sealed class DeferredRestartTests
             _world.Reply(_kind == "recheck" ? "review.rechecked" : "review.started", id);
     }
 
+    // ---- 16. a check holds the restart back (owner decision 157A) --------------------------------
+
+    /// <summary>The Review tab's sentence for a save made while a check is in progress (owner decision 157A).</summary>
+    private const string CheckPromise = "the settings are saved; the backend restarts when the running check ends.";
+
+    /// <summary>
+    /// A new review, a turn call or a remodel run refused while a check holds the restart back (owner decision 157A):
+    /// 145A's words for a remodel run, naming the check, pinned word for word.
+    /// </summary>
+    private const string CheckHoldsIt =
+        "the backend restarts with the saved settings when the running check ends, and nothing new starts "
+        + "before then. Wait for the check to end, then try again.";
+
+    /// <summary>...while a check on each check tab holds it back.</summary>
+    private const string ChecksHoldIt =
+        "the backend restarts with the saved settings when the running checks end, and nothing new starts "
+        + "before then. Wait for the checks to end, then try again.";
+
+    /// <summary>...while a remodel run and a check hold it back together.</summary>
+    private const string RemodelRunAndCheckHoldIt =
+        "the backend restarts with the saved settings when the remodel run and the running check end, and nothing "
+        + "new starts before then. Wait for them to end, then try again.";
+
+    /// <summary>
+    /// A check refused while a turn holds the restart back, on a check tab, which has no Stop of the turn's: 145A's
+    /// words for a remodel run, naming a check.
+    /// </summary>
+    private const string TurnHoldsTheCheck =
+        "the backend restarts with the saved settings when the running review turn ends, and no check starts "
+        + "before then. Wait for the turn to end, or press Stop on the Review tab, then try again.";
+
+    /// <summary>...while the backend does not answer whether a turn runs; the settings are saved on the Review tab.</summary>
+    private const string NoAnswerHoldsTheCheck =
+        "the review backend did not answer whether a turn is running, so it has not been restarted with the "
+        + "saved settings, and no check starts before then. Save the settings again on the Review tab "
+        + "to restart it, then try again.";
+
+    /// <summary>
+    /// Owner decision 157A: a save made while a check is in progress - on the Model check or the Standards tab, from
+    /// its press until the page's evaluation of it has been answered - is kept: written, saved in the host and
+    /// answered `settings.saved`. Its restart waits for the check, as one made during a remodel run waits for the
+    /// run, and the pane says so; before 157A it restarted the backend at once, under the check. Nothing is asked of
+    /// the backend while the check lasts - the check is known without it - and once it ends the backend restarts
+    /// once, with the saved settings, and every tab is told.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check")]
+    [InlineData("Standards")]
+    public void ASaveDuringACheckIsKeptAndItsRestartWaitsForTheCheck(string tab)
+    {
+        int checking = 1;
+        using var world = new RestartWorld();
+        world.Checking(tab, () => Volatile.Read(ref checking) == 1);
+        world.Open();
+        world.Track("chat-1");
+
+        world.Receive("settings.save", "save", Save(model: "gpt-5.6-mini", effort: "low"));
+
+        Assert.Equal("low", world.Reply("settings.saved", "save").GetProperty("settings").GetProperty("effort").GetString());
+        Assert.Equal("low", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.Effort);
+        JsonElement status = world.Last("status");
+        Assert.Equal("error", status.GetProperty("stage").GetString());
+        Assert.Equal(CheckPromise, status.GetProperty("message").GetString());
+
+        // The check goes on with the backend it began on: no restart is asked for, and nothing is asked of the
+        // backend, while it lasts.
+        int asked = world.Backend.Questions;
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+        Assert.Equal(0, world.OtherTabsTold);
+        Assert.Equal(asked, world.Backend.Questions);
+
+        Volatile.Write(ref checking, 0);
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted after the check");
+        (UserSettings settings, _) = Assert.Single(world.Backend.Restarts);
+        Assert.Equal("gpt-5.6-mini", settings.Model);
+        Assert.Equal("low", settings.Effort);
+        Eventually(() => world.OtherTabsTold == 1, "the other tabs told");
+    }
+
+    /// <summary>
+    /// The save's sentence names everything its restart waits for (owner decisions 145A and 157A): a turn that
+    /// started during the save, a remodel run, and the checks in progress - one, or one on each check tab - in that
+    /// order, with "and" before the last and the verb agreeing. 145A's three sentences are the rows with no check,
+    /// word for word.
+    /// </summary>
+    [Theory]
+    [InlineData(false, false, "Model check", "the settings are saved; the backend restarts when the running check ends.")]
+    [InlineData(false, false, "Standards", "the settings are saved; the backend restarts when the running check ends.")]
+    [InlineData(false, false, "both", "the settings are saved; the backend restarts when the running checks end.")]
+    [InlineData(true, false, "Model check", "the settings are saved; the backend restarts when the running turn and the running check end.")]
+    [InlineData(true, false, "both", "the settings are saved; the backend restarts when the running turn and the running checks end.")]
+    [InlineData(false, true, "Standards", "the settings are saved; the backend restarts when the remodel run and the running check end.")]
+    [InlineData(false, true, "both", "the settings are saved; the backend restarts when the remodel run and the running checks end.")]
+    [InlineData(true, true, "Model check", "the settings are saved; the backend restarts when the running turn, the remodel run and the running check end.")]
+    [InlineData(true, true, "both", "the settings are saved; the backend restarts when the running turn, the remodel run and the running checks end.")]
+    [InlineData(false, true, "none", "the settings are saved; the backend restarts when the remodel run ends.")]
+    [InlineData(true, true, "none", "the settings are saved; the backend restarts when the running turn and the remodel run end.")]
+    [InlineData(true, false, "none", "the settings are saved; the backend restarts when the running turn ends.")]
+    public void ASavesSentenceNamesEverythingItsRestartWaitsFor(bool turn, bool remodelRun, string checks, string sentence)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10), BackendBusy = () => remodelRun };
+        world.Checking(checks, () => true);
+        world.Open();
+        world.Track("chat-1");
+
+        if (turn)
+        {
+            SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        }
+        else
+        {
+            world.Receive("settings.save", "save", Save(effort: "low"));
+        }
+
+        world.Reply("settings.saved", "save");
+        Assert.Equal(sentence, world.Last("status").GetProperty("message").GetString());
+        Assert.Equal(0, world.Backend.Attempts);
+    }
+
+    /// <summary>
+    /// A check that holds the restart back holds a new review and a turn call back too, as a remodel run does (owner
+    /// decision 157A): neither may run on the old backend, and the restart cannot be made under the check. The
+    /// refusal names the check - one, or one on each check tab - under its own class, `CheckRunning`, whose sentence
+    /// is true of it; a new review is refused retryable, as every refusal of a review is, and a turn call with the
+    /// flag a turn's refusal carries. Nothing is extracted, created or restarted.
+    /// </summary>
+    [Theory]
+    [InlineData("a new review", "Model check")]
+    [InlineData("a new review", "both")]
+    [InlineData("a turn call", "Standards")]
+    [InlineData("a turn call", "both")]
+    public void WhileACheckHoldsTheRestartANewReviewOrATurnCallIsRefusedSayingSo(string caller, string checks)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Checking(checks, () => true);
+        world.Open();
+        world.Track("chat-1");
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        world.Reply("settings.saved", "save");
+
+        string? errorClass;
+        string? message;
+        bool retryable;
+        if (caller == "a new review")
+        {
+            world.Receive("review.start", "start", new { });
+            JsonElement error = world.Reply("error", "start");
+            errorClass = error.GetProperty("error_class").GetString();
+            message = error.GetProperty("message").GetString();
+            retryable = error.GetProperty("retryable").GetBoolean();
+        }
+        else
+        {
+            BackendRequestException? refusal = world.Host.PageTurnRefusal();
+            Assert.NotNull(refusal);
+            errorClass = refusal!.ErrorClass;
+            message = refusal.Message;
+            retryable = refusal.Retryable;
+        }
+
+        Assert.Equal("CheckRunning", errorClass);
+        Assert.Equal(checks == "both" ? ChecksHoldIt : CheckHoldsIt, message);
+        Assert.Equal(caller == "a new review", retryable);
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.Empty(world.Backend.Sessions);
+        Assert.Equal(0, world.Backend.Attempts);
+    }
+
+    /// <summary>
+    /// A check is named before a backend that does not answer, as a remodel run is (owner decision 157A): the add-in
+    /// knows of the check without asking the backend, and while it lasts the watcher asks the backend nothing, so it
+    /// never stops waiting for want of an answer, nor tells the engineer to save again, which would restart the
+    /// backend under the check.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check")]
+    [InlineData("Standards")]
+    public void ACheckIsNamedBeforeABackendThatDoesNotAnswer(string tab)
+    {
+        int looks = 0;
+        using var world = new RestartWorld();
+        world.Checking(tab, () =>
+        {
+            Interlocked.Increment(ref looks);
+            return true;
+        });
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        world.Backend.StopsAnswering();
+        int asked = world.Backend.Questions;
+
+        int from = Volatile.Read(ref looks);
+        Eventually(() => Volatile.Read(ref looks) >= from + DeferredRestart.UnansweredLooks * 3, "the host's looks");
+
+        Assert.Equal(asked, world.Backend.Questions);
+        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("message").GetString() == NotAnsweringYet);
+        world.Receive("review.start", "start", new { });
+        Assert.Equal("CheckRunning", world.Reply("error", "start").GetProperty("error_class").GetString());
+        Assert.Equal(0, world.Dump.Runs);
+    }
+
+    /// <summary>
+    /// With no backend process at all the look answers that nothing holds the restart back - the restart is what
+    /// brings a backend back - but a check in progress is read before the look and again under the restart's own lock,
+    /// so it holds the restart back even then, and the restart is made once the check ends (owner decision 157A).
+    /// </summary>
+    [Fact]
+    public void WithNoBackendAtAllACheckInProgressStillHoldsTheRestartBack()
+    {
+        int checking = 1;
+        using var world = new RestartWorld();
+        world.Checking("Standards", () => Volatile.Read(ref checking) == 1);
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        world.Backend.Down = true;
+
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.Attempts);
+        Assert.Empty(world.Posted("backend.restarted"));
+
+        Volatile.Write(ref checking, 0);
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted after the check");
+        Assert.Equal("low", Assert.Single(world.Backend.Restarts).Settings.Effort);
+        Assert.NotNull(world.Backend.Endpoint);
+    }
+
+    /// <summary>
+    /// The pane's proxy answers a turn call a check holds back with the status a turn's refusal is answered with -
+    /// 409, as `TurnRunning` and `RemodelRunning` are - never sending it (owner decision 157A).
+    /// </summary>
+    [Fact]
+    public void TheProxyAnswersATurnCallACheckHoldsBackAsATurnsRefusal()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Checking("Model check", () => true);
+        world.Open();
+        world.Track("chat-1");
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        var handler = new BackendProxyHandler(
+            () => world.Backend.Endpoint,
+            _ => throw new InvalidOperationException("the call must not have been sent"),
+            () => world.Host.PageTurnRefusal());
+
+        ProxiedResponse? response = handler.TryServe(BackendProxy.PageOrigin + "/sessions/chat-1/messages", "POST", null, null);
+
+        Assert.Equal(409, response!.Status);
+        string body = Encoding.UTF8.GetString(response.Content);
+        Assert.Contains("\"error_class\":\"CheckRunning\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"retryable\":false", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A remodel run asked to begin while a check holds the restart back is refused, saying so, and never begins; once
+    /// the check is over the next press makes the restart first and begins on the restarted backend (owner decision
+    /// 157A).
+    /// </summary>
+    [Fact]
+    public void ARemodelRunWhileACheckHoldsTheRestartIsRefusedSayingSo()
+    {
+        int checking = 1;
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Checking("Model check", () => Volatile.Read(ref checking) == 1);
+        world.Open();
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        int begun = 0;
+
+        BackendRequestException? refusal = world.Host.BeginRemodelRun(() => begun++);
+
+        Assert.NotNull(refusal);
+        Assert.Equal("CheckRunning", refusal!.ErrorClass);
+        Assert.Equal(CheckHoldsIt, refusal.Message);
+        Assert.True(refusal.Retryable);
+        Assert.Equal(0, begun);
+        Assert.Equal(0, world.Backend.Attempts);
+
+        Volatile.Write(ref checking, 0);
+        Assert.Null(world.Host.BeginRemodelRun(() => begun++));
+        Assert.Equal(1, begun);
+        Assert.Single(world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// Work that holds the restart back together is named together (owner decision 157A): a remodel run and a check
+    /// hold a new review back under the remodel run's class - a remodel run is in progress, as its sentence on the
+    /// Review tab says - in words that name both, so a refusal never says the restart comes when the run ends while a
+    /// check holds it too.
+    /// </summary>
+    [Fact]
+    public void ARemodelRunAndACheckHoldingTheRestartTogetherAreNamedTogether()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10), BackendBusy = () => true };
+        world.Checking("Standards", () => true);
+        world.Open();
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        world.Receive("review.start", "start", new { });
+
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("RemodelRunning", error.GetProperty("error_class").GetString());
+        Assert.Equal(RemodelRunAndCheckHoldIt, error.GetProperty("message").GetString());
+        Assert.Equal(0, world.Dump.Runs);
+    }
+
+    /// <summary>
+    /// With nothing waiting, a check begins at once beside any work in progress - a check on the other tab, a remodel
+    /// run - and nothing is asked of the backend: a check holds back only a settings restart (owner decision 157A).
+    /// </summary>
+    [Theory]
+    [InlineData("nothing else")]
+    [InlineData("a remodel run")]
+    [InlineData("a check on the other tab")]
+    public void ACheckWithNoRestartWaitingBeginsAtOnceBesideOtherWork(string beside)
+    {
+        using var world = new RestartWorld { BackendBusy = () => beside == "a remodel run" };
+        world.Checking("Standards", () => beside == "a check on the other tab");
+        world.Open();
+        world.Track("chat-1");
+        int begun = 0;
+
+        Assert.Null(world.Host.BeginCheck(() => begun++));
+
+        Assert.Equal(1, begun);
+        Assert.Equal(0, world.Backend.Questions);
+        Assert.Equal(0, world.Backend.RestartsAsked);
+    }
+
+    /// <summary>
+    /// A check started the moment the turn ends makes the waiting restart first, as a new review and a remodel run do,
+    /// and begins on the restarted backend with the saved settings, every page told of the restart before it begins
+    /// (owner decision 157A).
+    /// </summary>
+    [Fact]
+    public void ACheckTheMomentTheTurnEndsRestartsTheBackendFirstAndBeginsOnIt()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(model: "gpt-5.6-mini", effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        int restartsAtTheBeginning = -1;
+        int toldAtTheBeginning = -1;
+
+        BackendRequestException? refusal = world.Host.BeginCheck(() =>
+        {
+            restartsAtTheBeginning = world.Backend.Restarts.Length;
+            toldAtTheBeginning = world.Posted("backend.restarted").Length + world.OtherTabsTold;
+        });
+
+        Assert.Null(refusal);
+        Assert.Equal(1, restartsAtTheBeginning);
+        Assert.Equal(2, toldAtTheBeginning);
+        Assert.Equal("gpt-5.6-mini", Assert.Single(world.Backend.Restarts).Settings.Model);
+    }
+
+    /// <summary>
+    /// While something holds the restart back a check is refused, saying what, and its step never runs (owner decision
+    /// 157A): a turn (`TurnRunning`), in words for a check tab, which has no Stop of the turn's; a backend that does
+    /// not answer (`BackendUnavailable`); a remodel run (`RemodelRunning`); or the check on the other tab
+    /// (`CheckRunning`). The restart still waits, and the next press makes it once nothing holds it back.
+    /// </summary>
+    [Theory]
+    [InlineData("turn", "TurnRunning")]
+    [InlineData("no answer", "BackendUnavailable")]
+    [InlineData("remodel run", "RemodelRunning")]
+    [InlineData("the other check", "CheckRunning")]
+    public void ACheckWhileSomethingHoldsTheRestartIsRefusedSayingWhat(string cause, string expectedClass)
+    {
+        int remodelling = cause == "remodel run" ? 1 : 0;
+        int otherCheck = cause == "the other check" ? 1 : 0;
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10), BackendBusy = () => Volatile.Read(ref remodelling) == 1 };
+        world.Checking("Standards", () => Volatile.Read(ref otherCheck) == 1);
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        if (cause != "turn")
+        {
+            world.Backend.EndTurn("chat-1");
+        }
+
+        if (cause == "no answer")
+        {
+            world.Backend.StopsAnswering(questions: 1);
+        }
+
+        int begun = 0;
+        BackendRequestException? refusal = world.Host.BeginCheck(() => begun++);
+
+        Assert.NotNull(refusal);
+        Assert.Equal(expectedClass, refusal!.ErrorClass);
+        Assert.Equal(
+            cause == "turn" ? TurnHoldsTheCheck
+                : cause == "no answer" ? NoAnswerHoldsTheCheck
+                : cause == "remodel run" ? RemodelRunHoldsIt
+                : CheckHoldsIt,
+            refusal.Message);
+        Assert.True(refusal.Retryable);
+        Assert.Equal(0, begun);
+        Assert.Equal(0, world.Backend.Attempts);
+
+        world.Backend.EndTurn("chat-1");
+        Volatile.Write(ref remodelling, 0);
+        Volatile.Write(ref otherCheck, 0);
+        Assert.Null(world.Host.BeginCheck(() => begun++));
+        Assert.Equal(1, begun);
+        Assert.Single(world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// A check started while a restart is being made waits for it and begins on the restarted backend - the
+    /// watcher's restart, and a save's own, made at once (owner decision 157A).
+    /// </summary>
+    [Theory]
+    [InlineData("the watcher")]
+    [InlineData("a save")]
+    public void ACheckWhileARestartIsBeingMadeWaitsForItThenBegins(string maker)
+    {
+        using var world = new RestartWorld { Poll = maker == "a save" ? TimeSpan.FromMinutes(10) : TimeSpan.FromMilliseconds(10) };
+        using var hold = new ManualResetEventSlim(false);
+        Caller<bool>? save = null;
+        try
+        {
+            world.Open();
+            world.Track("chat-1");
+            if (maker == "the watcher")
+            {
+                SaveAsATurnStarts(world, "save", Save(effort: "low"));
+                world.Backend.Hold = hold;
+                world.Backend.EndTurn("chat-1");
+            }
+            else
+            {
+                world.Backend.Hold = hold;
+                save = new Caller<bool>(() =>
+                {
+                    world.Receive("settings.save", "save", Save(effort: "low"));
+                    return true;
+                });
+            }
+
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the restart was never begun");
+            int restartsAtTheBeginning = -1;
+            var check = new Caller<BackendRequestException?>(() =>
+                world.Host.BeginCheck(() => restartsAtTheBeginning = world.Backend.Restarts.Length));
+            Assert.False(check.Finishes(TimeSpan.FromMilliseconds(300)), "the check did not wait for the restart being made");
+
+            hold.Set();
+            Assert.True(check.Finishes(TimeSpan.FromSeconds(10)), "the check never began");
+            Assert.Null(check.Result);
+            Assert.Equal(1, restartsAtTheBeginning);
+            Assert.True(save == null || save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
+            Assert.Single(world.Backend.Restarts);
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    /// <summary>
+    /// A check whose restart fails is refused with that failure, masked, and never begins - its own restart, or a
+    /// save's it waited for, which failed before it stopped anything and so left the old backend up with the old
+    /// settings (owner decision 157A).
+    /// </summary>
+    [Theory]
+    [InlineData("its own")]
+    [InlineData("a save's")]
+    public void ACheckWhoseRestartFailsIsRefusedWithThatFailureAndNeverBegins(string whose)
+    {
+        string failure = "the child would not start with " + OpenAiKey;
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        using var hold = new ManualResetEventSlim(false);
+        try
+        {
+            world.Open();
+            world.Track("chat-1");
+            int begun = 0;
+            BackendRequestException? refusal;
+            if (whose == "its own")
+            {
+                SaveAsATurnStarts(world, "save", Save(effort: "low"));
+                world.Backend.EndTurn("chat-1");
+                world.Backend.RestartFailure = new InvalidOperationException(failure);
+                refusal = world.Host.BeginCheck(() => begun++);
+            }
+            else
+            {
+                world.Backend.Hold = hold;
+                world.Backend.EarlyRestartFailure = new BackendStartException(failure);
+                var save = new Caller<bool>(() =>
+                {
+                    world.Receive("settings.save", "save", Save(effort: "low"));
+                    return true;
+                });
+                Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the save never began its restart");
+                var check = new Caller<BackendRequestException?>(() => world.Host.BeginCheck(() => begun++));
+                Assert.False(check.Finishes(TimeSpan.FromMilliseconds(300)), "the check did not wait for the save's restart");
+                hold.Set();
+                Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
+                Assert.True(check.Finishes(TimeSpan.FromSeconds(10)), "the check never got an answer");
+                refusal = check.Result;
+                Assert.NotNull(world.Backend.Endpoint);
+                Assert.Equal(0, world.Backend.Generation);
+            }
+
+            Assert.NotNull(refusal);
+            Assert.Equal("BackendUnavailable", refusal!.ErrorClass);
+            Assert.StartsWith("the child would not start with ", refusal.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain(OpenAiKey, refusal.Message, StringComparison.Ordinal);
+            Assert.True(refusal.Retryable);
+            Assert.Equal(0, begun);
+            world.AssertNothingPostedContains(OpenAiKey);
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    // ---- 16b. end to end, per tab and per ordering (owner decision 157A) ---------------------------
+
+    /// <summary>
+    /// Owner decision 157A, end to end on each check tab: a save made while the check reads the model waits for the
+    /// check, which runs to its end on the backend it began on - its extraction handed to the page, and the page's
+    /// evaluation, made through the pane's proxy, answered by that backend - and only then does the backend restart,
+    /// once, with the saved settings. Before 157A the save restarted the backend under the extraction, and the
+    /// evaluation met the restarted backend: the extraction was wasted.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check")]
+    [InlineData("Standards")]
+    public void ASaveWhileACheckReadsTheModelWaitsUntilItsEvaluationIsAnswered(string tab)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        using var check = new CheckTab(world, tab);
+        int restartsAskedDuringTheExtraction = -1;
+        world.Dump.OnRun = () =>
+        {
+            world.Receive("settings.save", "save", Save(effort: "low"));
+            Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+            restartsAskedDuringTheExtraction = world.Backend.RestartsAsked;
+        };
+
+        check.Press("c1");
+        world.Dump.OnRun = null;
+
+        Assert.Equal(0, restartsAskedDuringTheExtraction);
+        world.Reply("settings.saved", "save");
+        Assert.Equal(CheckPromise, world.Last("status").GetProperty("message").GetString());
+        string runDirectory = check.Extracted("c1");
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+        Assert.True(check.CheckInProgress);
+
+        check.WhileEvaluating = () => Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        ProxiedResponse answer = check.Evaluate(runDirectory);
+
+        Assert.Equal(201, answer.Status);
+        CheckTab.Evaluation evaluation = Assert.Single(check.Evaluations);
+        Assert.Equal(runDirectory, evaluation.RunDirectory);
+        Assert.Equal(0, evaluation.Generation);
+        Assert.Equal(0, evaluation.RestartsAskedWhenAnswered);
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "the restart once the evaluation is answered");
+        Assert.Equal("low", Assert.Single(world.Backend.Restarts).Settings.Effort);
+        Assert.False(check.CheckInProgress);
+    }
+
+    /// <summary>
+    /// ...and a save made between the extraction and the evaluation - the run handed to the page, its evaluation not
+    /// yet answered - waits for the evaluation, which is answered by the backend the check began on, however long it
+    /// is out (owner decision 157A).
+    /// </summary>
+    [Theory]
+    [InlineData("Model check")]
+    [InlineData("Standards")]
+    public void ASaveBetweenACheckExtractionAndItsEvaluationWaitsForTheEvaluation(string tab)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        using var check = new CheckTab(world, tab);
+        check.Press("c1");
+        string runDirectory = check.Extracted("c1");
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        world.Reply("settings.saved", "save");
+        Assert.Equal(CheckPromise, world.Last("status").GetProperty("message").GetString());
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+
+        check.WhileEvaluating = () => Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(201, check.Evaluate(runDirectory).Status);
+
+        CheckTab.Evaluation evaluation = Assert.Single(check.Evaluations);
+        Assert.Equal(0, evaluation.Generation);
+        Assert.Equal(0, evaluation.RestartsAskedWhenAnswered);
+        Eventually(() => world.Backend.Restarts.Length == 1, "the restart once the evaluation is answered");
+    }
+
+    /// <summary>
+    /// A check started while a restart waits makes the restart first, as a remodel run does, and so runs on the
+    /// restarted backend with the saved settings: the page is told before the gate, in this tab's words, that the
+    /// press waits for the restart; told the backend restarted before its extraction is answered; and its
+    /// evaluation is answered by the restarted backend (owner decision 157A).
+    /// </summary>
+    [Theory]
+    [InlineData("Model check", "Waiting for the review backend to restart with the saved settings, then reading the feature tree...")]
+    [InlineData("Standards", "Waiting for the review backend to restart with the saved settings, then reading the document...")]
+    public void ACheckStartedWhileARestartWaitsMakesItFirstAndIsEvaluatedOnTheRestartedBackend(string tab, string waiting)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        using var check = new CheckTab(world, tab);
+        SaveAsATurnStarts(world, "save", Save(model: "gpt-5.6-mini", effort: "low"));
+        world.Backend.EndTurn("chat-1");
+
+        check.Press("c1");
+
+        string runDirectory = check.Extracted("c1");
+        Assert.Equal("gpt-5.6-mini", Assert.Single(world.Backend.Restarts).Settings.Model);
+        JsonElement first = check.Posted("status")[0];
+        Assert.Equal("backend_starting", first.GetProperty("stage").GetString());
+        Assert.Equal(waiting, first.GetProperty("message").GetString());
+        string[] types = check.Types();
+        Assert.True(
+            Array.IndexOf(types, "backend.restarted") >= 0
+                && Array.IndexOf(types, "backend.restarted") < Array.IndexOf(types, check.ExtractedType),
+            "the tab was not told the backend restarted before its extraction was answered: " + string.Join(", ", types));
+        Assert.Equal(1, world.Dump.Runs);
+
+        Assert.Equal(201, check.Evaluate(runDirectory).Status);
+        Assert.Equal(1, Assert.Single(check.Evaluations).Generation);
+    }
+
+    /// <summary>
+    /// A check started while a turn holds the restart back is refused, in this tab's words, before anything is read,
+    /// made or extracted, and holds nothing; the restart still waits for the turn alone, and once it ends the next
+    /// press makes it first (owner decision 157A). A check refused on the spot - no document - makes no restart.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check")]
+    [InlineData("Standards")]
+    public void ACheckStartedWhileATurnHoldsTheRestartIsRefusedAndMakesNothing(string tab)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        using var check = new CheckTab(world, tab);
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+
+        check.Press("c1");
+
+        JsonElement error = check.Reply("error", "c1");
+        Assert.Equal("TurnRunning", error.GetProperty("error_class").GetString());
+        Assert.Equal(TurnHoldsTheCheck, error.GetProperty("message").GetString());
+        Assert.True(error.GetProperty("retryable").GetBoolean());
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.Empty(check.RunFolders());
+        Assert.False(check.CheckInProgress);
+        Assert.Equal(0, world.Backend.Attempts);
+
+        world.Backend.EndTurn("chat-1");
+        PageDocument? part = world.Document;
+        world.Document = null;
+        check.Press("c2");
+        Assert.Equal("NoDocument", check.Reply("error", "c2").GetProperty("error_class").GetString());
+        Assert.Equal(0, world.Backend.Attempts);
+
+        world.Document = part;
+        check.Press("c3");
+        check.Extracted("c3");
+        Assert.Single(world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// A check whose gate's restart fails is refused with the failure, masked, before anything is made, and holds
+    /// nothing: the next save restarts the backend at once (owner decision 157A). Whether the restart failed before
+    /// the old backend stopped or once it had.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check", "before the old backend stopped")]
+    [InlineData("Standards", "once the old backend stopped")]
+    public void ACheckWhoseRestartFailsIsRefusedWithTheFailureAndHoldsNothing(string tab, string when)
+    {
+        string failure = "FICT the child would not start with " + OpenAiKey;
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        using var check = new CheckTab(world, tab);
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        if (when == "before the old backend stopped")
+        {
+            world.Backend.EarlyRestartFailure = new BackendStartException(failure);
+        }
+        else
+        {
+            world.Backend.RestartFailure = new InvalidOperationException(failure);
+        }
+
+        check.Press("c1");
+
+        JsonElement error = check.Reply("error", "c1");
+        Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
+        Assert.StartsWith("FICT the child would not start with ", error.GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.True(error.GetProperty("retryable").GetBoolean());
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.Empty(check.RunFolders());
+        Assert.False(check.CheckInProgress);
+        check.AssertNothingPostedContains(OpenAiKey);
+
+        world.Backend.EarlyRestartFailure = null;
+        world.Backend.RestartFailure = null;
+        world.Receive("settings.save", "again", Save(effort: "medium"));
+        world.Reply("settings.saved", "again");
+        Assert.Equal("medium", world.Backend.Restarts.Last().Settings.Effort);
+    }
+
+    /// <summary>
+    /// A restart that waited for a check and then failed is told as any restart that waited and failed is, once the
+    /// check's evaluation has been answered by the backend it began on; the check's answer stands, and the check holds
+    /// nothing any more (owner decision 157A).
+    /// </summary>
+    [Theory]
+    [InlineData("Model check")]
+    [InlineData("Standards")]
+    public void ARestartThatWaitedForACheckAndFailedLeavesTheCheckAnswered(string tab)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        using var check = new CheckTab(world, tab);
+        check.Press("c1");
+        string runDirectory = check.Extracted("c1");
+        world.Backend.RestartFailure = new InvalidOperationException("FICT the new backend would not start");
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        Assert.Equal(CheckPromise, world.Last("status").GetProperty("message").GetString());
+
+        Assert.Equal(201, check.Evaluate(runDirectory).Status);
+
+        Assert.Equal(0, Assert.Single(check.Evaluations).Generation);
+        Eventually(
+            () => world.Posted("status").Any(status =>
+                (status.GetProperty("message").GetString() ?? string.Empty).StartsWith("FICT the new backend would not start", StringComparison.Ordinal)),
+            "the restart's failure told");
+        Assert.False(check.CheckInProgress);
+        Assert.Empty(world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// A page that never evaluates its check - reloaded, or closed, once the run was handed to it - holds the restart
+    /// back no longer than the hand-over's limit, a minute, measured from the hand-over by a clock only the test moves:
+    /// a moment short of it the restart still waits, and at it the restart is made. An evaluation that comes after
+    /// the limit is not held, and goes on as before 157A (owner decision 157A).
+    /// </summary>
+    [Theory]
+    [InlineData("Model check")]
+    [InlineData("Standards")]
+    public void ACheckWhosePageNeverEvaluatesItHoldsTheRestartNoLongerThanTheLimit(string tab)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        using var check = new CheckTab(world, tab);
+        check.Press("c1");
+        string runDirectory = check.Extracted("c1");
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        world.Reply("settings.saved", "save");
+
+        check.Advance(CheckPaneHostOptions.DefaultHandOverLimit - TimeSpan.FromMilliseconds(1));
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+        Assert.True(check.CheckInProgress);
+
+        check.Advance(TimeSpan.FromMilliseconds(1));
+        Eventually(() => world.Backend.Restarts.Length == 1, "the restart once the page has had its minute");
+        Assert.False(check.CheckInProgress);
+
+        Assert.Equal(201, check.Evaluate(runDirectory).Status);
+        Assert.Equal(1, Assert.Single(check.Evaluations).Generation);
+        Assert.False(check.CheckInProgress);
+    }
+
+    /// <summary>
+    /// The reviews of 154A's merge, N6, after owner decision 157A: no settings save's restart can move the run root
+    /// while a check holds it back, so the run root read again once the extraction is over guards the add-in's first
+    /// start alone, which no gate holds back. A save that chose another folder for runs with no backend up waits for
+    /// the check; the first start, made meanwhile, starts the backend with the settings saved and so brings that folder
+    /// into force; and the check, made under the run root loaded, is answered `RunRootChanged` once its model is read,
+    /// and not handed on.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check", "the feature tree was read", "press Model check again")]
+    [InlineData("Standards", "the document was read", "press Standards check again")]
+    public void TheFirstStartDuringACheckIsStillAnsweredForTheRunRootItBringsIn(string tab, string during, string wayOn)
+    {
+        using var world = new RestartWorld();
+        world.Backend.Down = true;
+        world.Open();
+        using var check = new CheckTab(world, tab);
+        string chosen = Path.Combine(world.Root, "FICT-chosen-runs");
+        world.Dump.OnRun = () =>
+        {
+            Dictionary<string, object?> save = Save(effort: "low");
+            save["run_root"] = chosen;
+            world.Receive("settings.save", "save", save);
+            Assert.True(FirstStart(world));
+        };
+
+        check.Press("c1");
+        world.Dump.OnRun = null;
+
+        Assert.Contains(world.Posted("status"), status => status.GetProperty("message").GetString() == CheckPromise);
+        Assert.Equal(chosen, world.Host.RunRoot);
+        JsonElement error = check.Reply("error", "c1");
+        Assert.Equal("RunRootChanged", error.GetProperty("error_class").GetString());
+        Assert.Equal(RunRootRule.ChangedRefusal(during, "nothing was checked", wayOn), error.GetProperty("message").GetString());
+        Assert.Empty(check.Posted(check.ExtractedType));
+        Assert.False(check.CheckInProgress);
+    }
+
+    /// <summary>A check asked for once the host is disposed - the add-in unloading, its backend with it - never begins (owner decision 157A).</summary>
+    [Fact]
+    public void ACheckOnceTheHostIsDisposedIsRefusedAndNeverBegins()
+    {
+        var world = new RestartWorld();
+        try
+        {
+            world.Open();
+            world.Host.Dispose();
+            int begun = 0;
+
+            BackendRequestException? refusal = world.Host.BeginCheck(() => begun++);
+
+            Assert.NotNull(refusal);
+            Assert.Equal("BackendUnavailable", refusal!.ErrorClass);
+            Assert.Equal("the review backend is stopping with the add-in.", refusal.Message);
+            Assert.False(refusal.Retryable);
+            Assert.Equal(0, begun);
+        }
+        finally
+        {
+            world.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The add-in tells the review host whether a check is in progress on either check tab, read through each host's
+    /// field per call: both are built after the review host's options are, and one that has gone holds nothing (owner
+    /// decision 157A).
+    /// </summary>
+    [Fact]
+    public void TheAddInTellsTheReviewHostWhetherACheckIsInProgress()
+    {
+        string options = OtherTabsBackendRestartTests.Between(
+            OtherTabsBackendRestartTests.AddInSource(),
+            "var reviewOptions = new ReviewHostOptions(",
+            "_reviewHost = new ReviewHost(reviewOptions);");
+
+        Assert.Contains("ModelCheckInProgress = () => _modelCheckHost?.CheckInProgress == true,", options, StringComparison.Ordinal);
+        Assert.Contains("StandardsCheckInProgress = () => _standardsHost?.CheckInProgress == true,", options, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The add-in hands each check host the review host's gate, and its word on whether a restart stands before a
+    /// check, read through the field per call - the review host keeps the restart, on another pump - and with no review
+    /// host there is no settings restart to wait for, and the check begins (owner decision 157A).
+    /// </summary>
+    [Theory]
+    [InlineData("_modelCheckHost = new ModelCheckHost(new ModelCheckHostOptions(", "StartModelCheckPump();")]
+    [InlineData("_standardsHost = new StandardsHost(new StandardsHostOptions(", "StartStandardsPump();")]
+    public void TheAddInHandsEachCheckHostTheReviewHostsGate(string start, string end)
+    {
+        string source = OtherTabsBackendRestartTests.AddInSource();
+        string options = OtherTabsBackendRestartTests.Between(source, start, end);
+        Assert.Contains("BeginCheck = BeginCheck,", options, StringComparison.Ordinal);
+        Assert.Contains("RestartAhead = () => _reviewHost?.RestartAhead == true,", options, StringComparison.Ordinal);
+
+        string gate = OtherTabsBackendRestartTests.Between(
+            source, "private BackendRequestException? BeginCheck(Action begin) {", "private ");
+        Assert.Contains("ReviewHost? host = _reviewHost;", gate, StringComparison.Ordinal);
+        Assert.Contains("return host.BeginCheck(begin);", gate, StringComparison.Ordinal);
+        Assert.Contains("begin(); return null;", gate, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The add-in hands the pane's proxy the check hosts' holds of an evaluation, each read through its field per call:
+    /// the run folder an evaluation names is one check host's at most, and the other answers none (owner decision
+    /// 157A). The pane hands the proxy its option, read per call: the check hosts are built after the pane.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsThePanesProxyTheCheckHostsHoldsOfAnEvaluation()
+    {
+        string options = OtherTabsBackendRestartTests.Between(
+            OtherTabsBackendRestartTests.AddInSource(), "_pane = new TaskPaneControl(new TaskPaneOptions(", "});");
+        Assert.Contains(
+            "HoldCheckEvaluation = runDirectory => _modelCheckHost?.HoldEvaluation(runDirectory) ?? _standardsHost?.HoldEvaluation(runDirectory),",
+            options,
+            StringComparison.Ordinal);
+
+        string pane = System.Text.RegularExpressions.Regex.Replace(
+            File.ReadAllText(Path.Combine(
+                ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn", "TaskPaneControl.cs")),
+            @"\s+",
+            " ");
+        string proxy = OtherTabsBackendRestartTests.Between(pane, "_proxy = new BackendProxyHandler(", ");");
+        Assert.Contains("runDirectory => _options.HoldCheckEvaluation(runDirectory)", proxy, StringComparison.Ordinal);
+    }
+
     // ---- the restart itself, with no host ------------------------------------------------------
 
     [Fact]
@@ -6240,7 +7170,7 @@ public sealed class DeferredRestartTests
     /// </summary>
     [Theory]
     [InlineData("Turn", "TurnRunning")]
-    [InlineData("RemodelRun", "RemodelRunning")]
+    [InlineData("Work", "WorkInProgress")]
     [InlineData("NoAnswer", "NotAnswered")]
     public void WhileSomethingHoldsTheRestartApplyAnswersAtOnceSayingWhatAndTriesNothing(string hold, string expected)
     {
@@ -6593,7 +7523,7 @@ public sealed class DeferredRestartTests
     /// that holds it back - a turn the backend's own check finds is said as before.
     /// </summary>
     [Theory]
-    [InlineData(true, "RemodelRun")]
+    [InlineData(true, "Work")]
     [InlineData(false, "Turn")]
     public void ASavesRestartWaitsForARemodelRunOrATurnAndSaysWhich(bool remodelling, string expected)
     {
@@ -6638,7 +7568,7 @@ public sealed class DeferredRestartTests
             busy: () => Volatile.Read(ref busy) == 1);
         Assert.False(restart.Now(() => throw new TurnRunningException()));
 
-        Assert.Equal(DeferredRestart.Outcome.RemodelRunning, restart.Apply(out Exception? failure));
+        Assert.Equal(DeferredRestart.Outcome.WorkInProgress, restart.Apply(out Exception? failure));
         Assert.Null(failure);
         Assert.Equal(0, tried);
         Assert.True(restart.Pending);
@@ -6735,14 +7665,14 @@ public sealed class DeferredRestartTests
             busy: () => throw new InvalidOperationException("FICT the Remodel host cannot be asked"));
 
         Assert.False(restart.Now(() => restarted++, out DeferredRestart.Hold heldBy));
-        Assert.Equal(DeferredRestart.Hold.RemodelRun, heldBy);
+        Assert.Equal(DeferredRestart.Hold.Work, heldBy);
         Assert.True(restart.Pending);
 
-        Assert.Equal(DeferredRestart.Outcome.RemodelRunning, restart.Apply(out Exception? failure));
+        Assert.Equal(DeferredRestart.Outcome.WorkInProgress, restart.Apply(out Exception? failure));
         Assert.Null(failure);
 
         int began = 0;
-        Assert.Equal(DeferredRestart.Outcome.RemodelRunning, restart.Begin(() => began++, out failure));
+        Assert.Equal(DeferredRestart.Outcome.WorkInProgress, restart.Begin(() => began++, out failure));
         Assert.Null(failure);
         Assert.Equal(0, began);
         Assert.Equal(0, restarted);
@@ -6783,7 +7713,7 @@ public sealed class DeferredRestartTests
             Assert.Equal(DeferredRestart.Outcome.NotPending, run.Result);
             Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
             Assert.False(save.Result.Item1);
-            Assert.Equal(DeferredRestart.Hold.RemodelRun, save.Result.Item2);
+            Assert.Equal(DeferredRestart.Hold.Work, save.Result.Item2);
             Assert.Equal(0, Volatile.Read(ref tried));
         }
         finally
@@ -6800,7 +7730,7 @@ public sealed class DeferredRestartTests
     [Theory]
     [InlineData("None", "Restarted")]
     [InlineData("Turn", "TurnRunning")]
-    [InlineData("RemodelRun", "RemodelRunning")]
+    [InlineData("Work", "WorkInProgress")]
     [InlineData("NoAnswer", "NotAnswered")]
     public void BeginMakesAWaitingRestartFirstOrAnswersWhatHoldsItBack(string hold, string expected)
     {
@@ -6948,10 +7878,190 @@ public sealed class DeferredRestartTests
         Assert.Equal(0, begun);
     }
 
+    // ---- the work reading says which work holds the restart back (owner decision 157A) ---------
+
+    /// <summary>
+    /// The work the restart would end, read as one reading: a remodel run, a Model check, a Standards check,
+    /// and any of them together.
+    /// </summary>
+    public static IEnumerable<object[]> WorkInProgress() => new[]
+    {
+        new object[] { "RemodelRun" },
+        new object[] { "ModelCheck" },
+        new object[] { "StandardsCheck" },
+        new object[] { "ModelCheck, StandardsCheck" },
+        new object[] { "RemodelRun, ModelCheck" },
+        new object[] { "RemodelRun, ModelCheck, StandardsCheck" },
+    };
+
+    /// <summary>The work named as the theories name it, by its flags' names.</summary>
+    private static DeferredRestart.Work WorkNamed(string names) =>
+        (DeferredRestart.Work)Enum.Parse(typeof(DeferredRestart.Work), names);
+
+    /// <summary>
+    /// Owner decision 157A: a save's restart, deferred for work in progress, says which work it found under the
+    /// restart's own lock - the reading it deferred by, whole - so the save names what the restart waits for; and
+    /// it tries nothing, asking the backend nothing.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(WorkInProgress))]
+    public void ASavesRestartSaysWhichWorkItWaitsFor(string named)
+    {
+        DeferredRestart.Work work = WorkNamed(named);
+        int tried = 0;
+        int looked = 0;
+        using var restart = NewRestart(
+            () =>
+            {
+                looked++;
+                return DeferredRestart.Hold.None;
+            },
+            () => tried++,
+            work: () => work);
+
+        bool restarted = restart.Now(() => tried++, out DeferredRestart.Hold heldBy, out DeferredRestart.Work busyWith);
+
+        Assert.False(restarted);
+        Assert.Equal(DeferredRestart.Hold.Work, heldBy);
+        Assert.Equal(work, busyWith);
+        Assert.Equal(0, tried);
+        Assert.Equal(0, looked);
+        Assert.True(restart.Pending);
+    }
+
+    /// <summary>
+    /// ...and a restart that waits, asked for by a review, a turn call or the watcher (<c>Apply</c>), or by work
+    /// that would begin (<c>Begin</c>), says which work holds it back, and does nothing: the step does not run and
+    /// the restart still waits.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(WorkInProgress))]
+    public void ARestartThatWaitsSaysWhichWorkHoldsItBack(string named)
+    {
+        DeferredRestart.Work work = WorkNamed(named);
+        DeferredRestart.Work reading = DeferredRestart.Work.None;
+        int tried = 0;
+        using var restart = NewRestart(() => DeferredRestart.Hold.None, () => tried++, work: () => reading);
+        Assert.False(restart.Now(() => throw new TurnRunningException()));
+        reading = work;
+
+        DeferredRestart.Outcome applied = restart.Apply(out Exception? failure, out DeferredRestart.Work appliedWith);
+        int begun = 0;
+        DeferredRestart.Outcome began = restart.Begin(() => begun++, out Exception? beginFailure, out DeferredRestart.Work beganWith);
+
+        Assert.Equal(DeferredRestart.Outcome.WorkInProgress, applied);
+        Assert.Equal(work, appliedWith);
+        Assert.Null(failure);
+        Assert.Equal(DeferredRestart.Outcome.WorkInProgress, began);
+        Assert.Equal(work, beganWith);
+        Assert.Null(beginFailure);
+        Assert.Equal(0, begun);
+        Assert.Equal(0, tried);
+        Assert.True(restart.Pending);
+    }
+
+    /// <summary>
+    /// Owner decision 157A: work the restart would end is known without asking the backend, so a restart that
+    /// waits reads it before its look - before any round trip to ask about the turns - as 145A's look read a remodel
+    /// run before the turns; and while work holds the restart back the look is never asked, so the watcher counts no
+    /// backend that does not answer meanwhile.
+    /// </summary>
+    [Fact]
+    public void WorkIsReadBeforeTheLookAndWhileItHoldsTheRestartNoTurnIsAskedAbout()
+    {
+        DeferredRestart.Work reading = DeferredRestart.Work.None;
+        int looked = 0;
+        using var restart = NewRestart(
+            () =>
+            {
+                looked++;
+                return DeferredRestart.Hold.NoAnswer;
+            },
+            () => { },
+            work: () => reading);
+        Assert.False(restart.Now(() => throw new TurnRunningException()));
+        reading = DeferredRestart.Work.ModelCheck;
+
+        Assert.Equal(DeferredRestart.Outcome.WorkInProgress, restart.Apply(out _, out _));
+        Assert.Equal(DeferredRestart.Outcome.WorkInProgress, restart.Begin(() => { }, out _, out _));
+
+        Assert.Equal(0, looked);
+        reading = DeferredRestart.Work.None;
+        Assert.Equal(DeferredRestart.Outcome.NotAnswered, restart.Apply(out _, out DeferredRestart.Work busyWith));
+        Assert.Equal(1, looked);
+        Assert.Equal(DeferredRestart.Work.None, busyWith);
+    }
+
+    /// <summary>
+    /// A look that names work the reading did not see, and a reading that throws, are work of a kind not known
+    /// (<see cref="DeferredRestart.Work.Unknown"/>): not knowing what work is in progress is not knowing that none
+    /// is, as 145A read a reading that throws.
+    /// </summary>
+    [Theory]
+    [InlineData("a look that names work")]
+    [InlineData("a reading that throws")]
+    public void WorkThatCannotBeReadIsUnknownWorkInProgress(string how)
+    {
+        bool throws = false;
+        using var restart = NewRestart(
+            () => how == "a look that names work" ? DeferredRestart.Hold.Work : DeferredRestart.Hold.None,
+            () => { },
+            work: () => throws ? throw new InvalidOperationException("FICT the hosts cannot be asked") : DeferredRestart.Work.None);
+        Assert.False(restart.Now(() => throw new TurnRunningException()));
+        throws = how == "a reading that throws";
+
+        Assert.Equal(DeferredRestart.Outcome.WorkInProgress, restart.Apply(out _, out DeferredRestart.Work busyWith));
+        Assert.Equal(DeferredRestart.Work.Unknown, busyWith);
+        if (throws)
+        {
+            Assert.False(restart.Now(() => { }, out DeferredRestart.Hold heldBy, out DeferredRestart.Work savedWith));
+            Assert.Equal(DeferredRestart.Hold.Work, heldBy);
+            Assert.Equal(DeferredRestart.Work.Unknown, savedWith);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 157A: with no restart waiting, work begins at once whatever else is in progress - two checks,
+    /// a check and a remodel run - and nothing is read or asked: work holds back only a restart, never other work.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(WorkInProgress))]
+    public void WithNoRestartWaitingWorkBeginsBesideWorkInProgress(string named)
+    {
+        DeferredRestart.Work work = WorkNamed(named);
+        int read = 0;
+        int looked = 0;
+        int begun = 0;
+        using var restart = NewRestart(
+            () =>
+            {
+                looked++;
+                return DeferredRestart.Hold.None;
+            },
+            () => { },
+            work: () =>
+            {
+                read++;
+                return work;
+            });
+
+        Assert.Equal(
+            DeferredRestart.Outcome.NotPending,
+            restart.Begin(() => begun++, out Exception? failure, out DeferredRestart.Work busyWith));
+
+        Assert.Equal(1, begun);
+        Assert.Null(failure);
+        Assert.Equal(DeferredRestart.Work.None, busyWith);
+        Assert.Equal(0, read);
+        Assert.Equal(0, looked);
+    }
+
     /// <summary>
     /// A restart with the callbacks a test does not care about doing nothing, no remodel run in
     /// progress unless given a reading of one (owner decision 145A), and a ten-minute poll unless
-    /// given one.
+    /// given one. A reading of a remodel run - true while one is in progress, as 145A's cases read it - is
+    /// the work reading's <see cref="DeferredRestart.Work.RemodelRun"/> since owner decision 157A, which made
+    /// the reading say which work; <paramref name="work"/> gives that reading whole.
     /// </summary>
     private static DeferredRestart NewRestart(
         Func<DeferredRestart.Hold> heldBack,
@@ -6960,10 +8070,13 @@ public sealed class DeferredRestartTests
         Action<Exception>? failed = null,
         Action? notAnswered = null,
         TimeSpan? poll = null,
-        Func<bool>? busy = null) =>
+        Func<bool>? busy = null,
+        Func<DeferredRestart.Work>? work = null) =>
         new DeferredRestart(
             heldBack,
-            busy ?? (() => false),
+            work ?? (busy == null
+                ? () => DeferredRestart.Work.None
+                : () => busy() ? DeferredRestart.Work.RemodelRun : DeferredRestart.Work.None),
             restart,
             restarted ?? (() => { }),
             failed ?? (_ => { }),
@@ -7178,6 +8291,22 @@ public sealed class DeferredRestartTests
         /// <summary>Whether a remodel run is in progress on the backend, as the add-in answers it.</summary>
         public Func<bool> BackendBusy { get; set; } = () => false;
 
+        /// <summary>Whether a Model check is in progress, as the add-in answers it (owner decision 157A).</summary>
+        public Func<bool> ModelChecking { get; set; } = () => false;
+
+        /// <summary>Whether a Standards check is in progress, as the add-in answers it (owner decision 157A).</summary>
+        public Func<bool> StandardsChecking { get; set; } = () => false;
+
+        /// <summary>
+        /// Sets the reading of the check tabs named - "Model check", "Standards", "both" or "none" - to
+        /// <paramref name="reading"/>, and the other's to none (owner decision 157A).
+        /// </summary>
+        public void Checking(string tabs, Func<bool> reading)
+        {
+            ModelChecking = tabs == "Model check" || tabs == "both" ? reading : () => false;
+            StandardsChecking = tabs == "Standards" || tabs == "both" ? reading : () => false;
+        }
+
         /// <summary>The workstation's environment as the host reads it; none of it by default.</summary>
         public Func<string, string?> WorkstationEnvironment { get; set; } = _ => null;
 
@@ -7289,6 +8418,8 @@ public sealed class DeferredRestartTests
                 RestartPoll = Poll,
                 RunRootProbe = Probe ?? FakeRunRootProbe.Local(),
                 BackendBusy = () => BackendBusy(),
+                ModelCheckInProgress = () => ModelChecking(),
+                StandardsCheckInProgress = () => StandardsChecking(),
                 BackendRestarted = () =>
                 {
                     Interlocked.Increment(ref _otherTabsTold);
@@ -7936,6 +9067,253 @@ public sealed class DeferredRestartTests
             File.WriteAllText(package, "{\"package_id\":\"FICT-package\"}");
             return new DumpSummary(package, components: 12, gaps: 0, extracted: attached);
         }
+    }
+
+    /// <summary>
+    /// A Model check or a Standards tab bound to a world's review host as the add-in binds them (owner decision 157A):
+    /// its host - on the caller's thread, standing in for the tab's own pump - reading the run root, the backend and the
+    /// restart's gate through the review host; the review host reading whether the tab holds a check; a restart the
+    /// review host makes told to the tab; and the pane's proxy, through which the page evaluates a check, holding that
+    /// check while the call is out. Its dump is the world's, its document a fictional part, and the clock its hand-over
+    /// is measured by the test's.
+    /// </summary>
+    private sealed class CheckTab : IDisposable
+    {
+        private readonly FakeChannel _channel = new FakeChannel();
+        private readonly List<Evaluation> _evaluations = new List<Evaluation>();
+        private readonly RestartWorld _world;
+        private readonly ModelCheckHost? _modelCheck;
+        private readonly StandardsHost? _standards;
+        private long _clockTicks;
+
+        public CheckTab(RestartWorld world, string tab)
+        {
+            _world = world;
+            Tab = tab;
+            world.Document = new PageDocument(@"C:\Fictional\FICT-bracket\FICT-bracket.SLDPRT", "Default");
+            Func<TimeSpan> clock = () => TimeSpan.FromTicks(Interlocked.Read(ref _clockTicks));
+            if (tab == "Model check")
+            {
+                _modelCheck = new ModelCheckHost(new ModelCheckHostOptions(_channel, () => world.Host.RunRoot)
+                {
+                    RunRootsInForce = () => world.Host.RunRootsInForce,
+                    RunRootForANewRun = () => world.Host.RunRootForANewRun(),
+                    RunRootSaved = () => world.Host.Settings.RunRoot,
+                    Backend = () => world.Backend.Endpoint,
+                    CurrentDocument = () => world.Document,
+                    Dump = world.Dump,
+                    LogFolder = () => Path.Combine(world.Root, "logs"),
+                    Now = () => Stamp,
+                    RunRootProbe = FakeRunRootProbe.Local(),
+                    BeginCheck = begin => world.Host.BeginCheck(begin),
+                    RestartAhead = () => world.Host.RestartAhead,
+                    Clock = clock,
+                });
+                world.ModelChecking = () => _modelCheck.CheckInProgress;
+            }
+            else
+            {
+                string profile = Path.Combine(world.Root, "FICT-standards.yaml");
+                File.WriteAllText(profile, "# FICT standards profile\n");
+                _standards = new StandardsHost(new StandardsHostOptions(_channel, () => world.Host.RunRoot)
+                {
+                    RunRootsInForce = () => world.Host.RunRootsInForce,
+                    RunRootForANewRun = () => world.Host.RunRootForANewRun(),
+                    RunRootSaved = () => world.Host.Settings.RunRoot,
+                    Backend = () => world.Backend.Endpoint,
+                    CurrentDocument = () => world.Document,
+                    ProfilePath = () => profile,
+                    Dump = world.Dump,
+                    LogFolder = () => Path.Combine(world.Root, "logs"),
+                    Now = () => Stamp,
+                    RunRootProbe = FakeRunRootProbe.Local(),
+                    BeginCheck = begin => world.Host.BeginCheck(begin),
+                    RestartAhead = () => world.Host.RestartAhead,
+                    Clock = clock,
+                });
+                world.StandardsChecking = () => _standards.CheckInProgress;
+            }
+
+            world.TellingTheOtherTabs = BackendRestarted;
+            Proxy = new BackendProxyHandler(
+                () => world.Backend.Endpoint,
+                Send,
+                () => world.Host.PageTurnRefusal(),
+                () => ToolServiceHold.Nothing,
+                HoldEvaluation);
+        }
+
+        /// <summary>One evaluation the proxy sent on: its folder, and the backend's generation and restarts asked once it was answered.</summary>
+        public sealed class Evaluation
+        {
+            public Evaluation(string? runDirectory, int generation, int restartsAskedWhenAnswered)
+            {
+                RunDirectory = runDirectory;
+                Generation = generation;
+                RestartsAskedWhenAnswered = restartsAskedWhenAnswered;
+            }
+
+            public string? RunDirectory { get; }
+
+            /// <summary>The backend the evaluation reached: 0 for the one the add-in started, one more for each restart.</summary>
+            public int Generation { get; }
+
+            public int RestartsAskedWhenAnswered { get; }
+        }
+
+        public string Tab { get; }
+
+        public string StartType => Tab == "Model check" ? "check.start" : "standards.start";
+
+        public string ExtractedType => Tab == "Model check" ? "check.extracted" : "standards.extracted";
+
+        /// <summary>The route the page evaluates its check with (contracts/model-check.md, standards-check.md).</summary>
+        public string Route => Tab == "Model check" ? "/checks/rms" : "/checks/standards";
+
+        public BackendProxyHandler Proxy { get; }
+
+        /// <summary>Runs while an evaluation is out, before it is answered.</summary>
+        public Action? WhileEvaluating { get; set; }
+
+        public Evaluation[] Evaluations
+        {
+            get
+            {
+                lock (_evaluations)
+                {
+                    return _evaluations.ToArray();
+                }
+            }
+        }
+
+        public bool CheckInProgress => _modelCheck?.CheckInProgress ?? _standards!.CheckInProgress;
+
+        public IDisposable? HoldEvaluation(string runDirectory) =>
+            _modelCheck != null ? _modelCheck.HoldEvaluation(runDirectory) : _standards!.HoldEvaluation(runDirectory);
+
+        public void BackendRestarted()
+        {
+            if (_modelCheck != null)
+            {
+                _modelCheck.BackendRestarted();
+            }
+            else
+            {
+                _standards!.BackendRestarted();
+            }
+        }
+
+        /// <summary>The engineer presses Model check, or Standards check: the start, on this thread.</summary>
+        public void Press(string id)
+        {
+            object payload = Tab == "Model check" ? new { scope = "part" } : (object)new { };
+            string json = JsonSerializer.Serialize(new { type = StartType, id, payload });
+            if (_modelCheck != null)
+            {
+                _modelCheck.Receive(json);
+            }
+            else
+            {
+                _standards!.Receive(json);
+            }
+        }
+
+        /// <summary>The run folder the start's extraction handed to the page.</summary>
+        public string Extracted(string id) =>
+            Reply(ExtractedType, id).GetProperty("run_dir").GetString()
+                ?? throw new XunitException("the extraction named no run folder");
+
+        /// <summary>The page evaluates the check in <paramref name="runDirectory"/> through the pane's proxy.</summary>
+        public ProxiedResponse Evaluate(string runDirectory)
+        {
+            object body = Tab == "Model check"
+                ? new { run_dir = runDirectory, scope = "part", document_id = (string?)null }
+                : (object)new { run_dir = runDirectory, profile_path = "FICT-standards.yaml" };
+            return Proxy.TryServe(
+                BackendProxy.PageOrigin + Route,
+                "POST",
+                new[]
+                {
+                    new KeyValuePair<string, string>("Content-Type", "application/json"),
+                    new KeyValuePair<string, string>("Authorization", "Bearer " + _world.Backend.Endpoint?.Token),
+                },
+                new MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(body))))
+                ?? throw new XunitException("the proxy did not take the evaluation");
+        }
+
+        /// <summary>Moves the clock the hand-over is measured by.</summary>
+        public void Advance(TimeSpan by) => Interlocked.Add(ref _clockTicks, by.Ticks);
+
+        /// <summary>This tab's run folders under the run root in force - a check's, not the tracked reviews' beside them.</summary>
+        public string[] RunFolders() =>
+            Directory.Exists(_world.Host.RunRoot)
+                ? Directory.GetDirectories(_world.Host.RunRoot)
+                    .Where(folder => folder.EndsWith(
+                        Tab == "Model check" ? SwReview.AddIn.Review.RunFolders.CheckSuffix : SwReview.AddIn.Review.RunFolders.StandardsSuffix,
+                        StringComparison.OrdinalIgnoreCase))
+                    .ToArray()
+                : new string[0];
+
+        public JsonElement Reply(string type, string id)
+        {
+            JsonElement[] matches = Messages()
+                .Where(root => root.GetProperty("type").GetString() == type
+                    && root.TryGetProperty("id", out JsonElement replyId)
+                    && replyId.ValueKind == JsonValueKind.String
+                    && replyId.GetString() == id)
+                .Select(root => root.GetProperty("payload"))
+                .ToArray();
+            Assert.True(
+                matches.Length == 1,
+                $"expected exactly one '{type}' reply to '{id}', saw {matches.Length}; posted: " + string.Join(" | ", Types()));
+            return matches[0];
+        }
+
+        public JsonElement[] Posted(string type) => Messages()
+            .Where(root => root.GetProperty("type").GetString() == type)
+            .Select(root => root.GetProperty("payload"))
+            .ToArray();
+
+        public string[] Types() => Messages().Select(root => root.GetProperty("type").GetString() ?? "?").ToArray();
+
+        public void AssertNothingPostedContains(string secret)
+        {
+            foreach (string message in _channel.Snapshot())
+            {
+                Assert.DoesNotContain(secret, message, StringComparison.Ordinal);
+            }
+        }
+
+        public void Dispose()
+        {
+            _modelCheck?.Dispose();
+            _standards?.Dispose();
+        }
+
+        private ProxiedResponse Send(ProxiedRequest request)
+        {
+            string? runDirectory = null;
+            if (request.Body != null)
+            {
+                using (JsonDocument body = JsonDocument.Parse(request.Body))
+                {
+                    runDirectory = body.RootElement.GetProperty("run_dir").GetString();
+                }
+            }
+
+            int generation = _world.Backend.Generation;
+            WhileEvaluating?.Invoke();
+            lock (_evaluations)
+            {
+                _evaluations.Add(new Evaluation(runDirectory, generation, _world.Backend.RestartsAsked));
+            }
+
+            return new ProxiedResponse(
+                201, "Created", "Content-Type: application/json", Encoding.UTF8.GetBytes("{\"check_id\":\"FICT-check\"}"));
+        }
+
+        private IEnumerable<JsonElement> Messages() =>
+            _channel.Snapshot().Select(message => JsonDocument.Parse(message).RootElement);
     }
 
     /// <summary>The current selection, read against prepared context (feature 016).</summary>

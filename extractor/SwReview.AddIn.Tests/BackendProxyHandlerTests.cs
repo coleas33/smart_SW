@@ -251,6 +251,7 @@ public sealed class BackendProxyHandlerTests
     [Theory]
     [InlineData("TurnRunning", 409)]
     [InlineData("RemodelRunning", 409)]
+    [InlineData("CheckRunning", 409)]
     [InlineData("UnknownChat", 404)]
     [InlineData("BackendUnavailable", 503)]
     public void ARefusalIsAnsweredWithTheStatusTheBackendGivesIt(string errorClass, int status)
@@ -558,6 +559,208 @@ public sealed class BackendProxyHandlerTests
         Assert.Contains("ProxyFailed", body, StringComparison.Ordinal);
         Assert.Contains("FICT the gate broke", body, StringComparison.Ordinal);
         Assert.Contains("\"retryable\":false", body, StringComparison.Ordinal);
+    }
+
+    // ---- a check's evaluation holds the check while it is out (owner decision 157A) -----------------
+
+    /// <summary>The two routes a check page evaluates its check with: the Model check's and the Standards check's.</summary>
+    public static IEnumerable<object[]> EvaluationRoutes() => new[]
+    {
+        new object[] { "/checks/rms" },
+        new object[] { "/checks/standards" },
+    };
+
+    /// <summary>
+    /// A check page's evaluation - `POST /checks/rms` or `/checks/standards`, its body naming the run folder the host
+    /// handed it - takes over the check's hold on a settings restart for as long as it is out, asked of the host by
+    /// that folder, and lets it go once it is answered: the check holds the restart back until the page's evaluation
+    /// of it has been answered (owner decision 157A). The body reaches the backend as the page sent it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EvaluationRoutes))]
+    public void ACheckEvaluationHoldsItsCheckWhileItIsOut(string route)
+    {
+        var holds = new CountedHolds();
+        var asked = new List<string>();
+        int heldWhileOut = -1;
+        byte[]? sent = null;
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            request =>
+            {
+                heldWhileOut = holds.Held;
+                sent = request.Body;
+                return Json(201, "Created", "{\"check_id\":\"FICT-check\"}");
+            },
+            () => null,
+            () => null,
+            runDirectory =>
+            {
+                asked.Add(runDirectory);
+                return holds.Take();
+            });
+        byte[] body = Encoding.UTF8.GetBytes("{\"run_dir\":\"C:\\\\FICT\\\\runs\\\\20261021-093000-bracket-check\",\"scope\":\"part\"}");
+
+        ProxiedResponse? response = handler.TryServe(Prefix + route, "POST", null, new MemoryStream(body));
+
+        Assert.Equal(201, response!.Status);
+        Assert.Equal(new[] { @"C:\FICT\runs\20261021-093000-bracket-check" }, asked.ToArray());
+        Assert.Equal(1, heldWhileOut);
+        Assert.Equal(0, holds.Held);
+        Assert.Equal(body, sent);
+    }
+
+    /// <summary>The check's hold is let go however its evaluation ends: answered, refused by the backend, unreachable, refused by this side, or with no backend.</summary>
+    [Theory]
+    [InlineData("answered", 201)]
+    [InlineData("refused by the backend", 400)]
+    [InlineData("unreachable", 502)]
+    [InlineData("proxy failed", 500)]
+    [InlineData("no backend", 503)]
+    public void TheChecksHoldIsLetGoHoweverItsEvaluationEnds(string ending, int status)
+    {
+        var holds = new CountedHolds();
+        var handler = new BackendProxyHandler(
+            () => ending == "no backend" ? null : Endpoint,
+            _ =>
+            {
+                switch (ending)
+                {
+                    case "unreachable":
+                        throw new WebException("FICT connection refused");
+                    case "proxy failed":
+                        throw new ArgumentException("FICT restricted header");
+                    case "refused by the backend":
+                        return Json(400, "Bad Request", "{\"error_class\":\"InvalidRunDir\",\"message\":\"FICT\",\"retryable\":false}");
+                    default:
+                        return Json(201, "Created", "{}");
+                }
+            },
+            () => null,
+            () => null,
+            _ => holds.Take());
+
+        ProxiedResponse? response = handler.TryServe(
+            Prefix + "/checks/standards", "POST", null, new MemoryStream(Encoding.UTF8.GetBytes("{\"run_dir\":\"FICT-run\"}")));
+
+        Assert.Equal(status, response!.Status);
+        Assert.Equal(1, holds.Taken);
+        Assert.Equal(0, holds.Held);
+    }
+
+    /// <summary>
+    /// Only a check's evaluation is held, and only by the folder it names: a re-read of a check, an Accept, a turn
+    /// call, a `GET` of an evaluation route, a body naming no folder, and a body that is not JSON hold nothing, and
+    /// each is sent on as before (owner decision 157A).
+    /// </summary>
+    [Theory]
+    [InlineData("GET", "/checks/20261021-093000-bracket-check", "")]
+    [InlineData("POST", "/checks/20261021-093000-bracket-check/exceptions/finding-1", "{\"note\":\"FICT\",\"run_dir\":\"FICT-run\"}")]
+    [InlineData("POST", "/sessions/chat-1/messages", "{\"run_dir\":\"FICT-run\"}")]
+    [InlineData("GET", "/checks/rms", "")]
+    [InlineData("POST", "/checks/rms", "{\"scope\":\"part\"}")]
+    [InlineData("POST", "/checks/standards", "{\"run_dir\":7}")]
+    [InlineData("POST", "/checks/standards", "FICT not JSON")]
+    [InlineData("POST", "/checks/rms", "[\"FICT-run\"]")]
+    public void NothingButACheckEvaluationHoldsACheck(string method, string path, string body)
+    {
+        int asked = 0;
+        int sent = 0;
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            _ =>
+            {
+                sent++;
+                return Json(200, "OK", "{}");
+            },
+            () => null,
+            () => null,
+            _ =>
+            {
+                asked++;
+                return new CountedHolds().Take();
+            });
+
+        ProxiedResponse? response = handler.TryServe(
+            Prefix + path, method, null, body.Length == 0 ? null : new MemoryStream(Encoding.UTF8.GetBytes(body)));
+
+        Assert.Equal(200, response!.Status);
+        Assert.Equal(0, asked);
+        Assert.Equal(1, sent);
+    }
+
+    /// <summary>
+    /// With no check holding the folder its evaluation names - a page whose hand-over's limit has passed, a folder no
+    /// check of this session handed it - the evaluation goes on as before 157A, unheld; and a host that cannot be asked
+    /// for a hold does not keep the evaluation from the backend either, since an evaluation that failed would waste
+    /// the very extraction the hold exists to keep.
+    /// </summary>
+    [Theory]
+    [InlineData("no hold to be had")]
+    [InlineData("a host that throws")]
+    public void AnEvaluationWithNoHoldToBeHadGoesOn(string why)
+    {
+        int sent = 0;
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            _ =>
+            {
+                sent++;
+                return Json(201, "Created", "{}");
+            },
+            () => null,
+            () => null,
+            _ => why == "no hold to be had" ? null : throw new InvalidOperationException("FICT the host broke"));
+
+        ProxiedResponse? response = handler.TryServe(
+            Prefix + "/checks/rms", "POST", null, new MemoryStream(Encoding.UTF8.GetBytes("{\"run_dir\":\"FICT-run\"}")));
+
+        Assert.Equal(201, response!.Status);
+        Assert.Equal(1, sent);
+    }
+
+    /// <summary>
+    /// The routes held for an evaluation are exactly the backend's own: those `chat/server.py` serves with the handlers
+    /// that grade a run - `run_check` and `run_standards` - read from that source, so an evaluation route the backend
+    /// gains or moves is held, or this fails (owner decision 157A).
+    /// </summary>
+    [Fact]
+    public void TheRoutesHeldAsAnEvaluationAreTheBackendsOwn()
+    {
+        IReadOnlyList<(string Method, string Path, string Handler)> routes = ChatServerSource.RoutesWithHandlers();
+        string[] evaluations = routes
+            .Where(route => route.Handler == "run_check" || route.Handler == "run_standards")
+            .Select(route => route.Method + " " + route.Path)
+            .OrderBy(route => route, StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(new[] { "POST /checks/rms", "POST /checks/standards" }, evaluations);
+
+        var wrong = new List<string>();
+        foreach ((string method, string path, string routeHandler) in routes)
+        {
+            int asked = 0;
+            var handler = new BackendProxyHandler(
+                () => Endpoint,
+                _ => Json(200, "OK", "{}"),
+                () => null,
+                () => null,
+                _ =>
+                {
+                    asked++;
+                    return null;
+                });
+            string concrete = System.Text.RegularExpressions.Regex.Replace(path, @"\{(\w+)\}", "FICT-$1");
+
+            handler.TryServe(Prefix + concrete, method, null, new MemoryStream(Encoding.UTF8.GetBytes("{\"run_dir\":\"FICT-run\"}")));
+
+            bool expected = routeHandler == "run_check" || routeHandler == "run_standards";
+            if ((asked == 1) != expected)
+            {
+                wrong.Add($"{method} {path} ({routeHandler}): asked {asked}");
+            }
+        }
+
+        Assert.True(wrong.Count == 0, "The proxy's evaluation hold does not match the backend's evaluation routes: " + string.Join("; ", wrong));
     }
 
     private static ProxiedResponse MustNotSend(ProxiedRequest request) =>
