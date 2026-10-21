@@ -529,7 +529,9 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         var world = new World(this);
         string runDirectory = world.RunFolder();
         Exception? cause = world.Seat.Fail(how, runDirectory);
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+        // Edited deliberately by owner decision 159A (004 T242): the job never got its after-dump, so it fails once it
+        // stops waiting for it; the run waits for that end (T239), and a job that finished had its dump.
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : WithoutItsDump(3);
 
         RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
             () => world.Pipeline.Run(runDirectory, world.Reporter));
@@ -596,7 +598,9 @@ public sealed class BackendRemodelPipelineTests : IDisposable
     {
         var world = new World(this);
         string runDirectory = world.RunFolder(withCopy: false);
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+        // Edited deliberately by owner decision 159A (004 T242): the job never got its after-dump, so it fails once it
+        // stops waiting for it; the run waits for that end (T239), and a job that finished had its dump.
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : WithoutItsDump(3);
 
         RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
             () => world.Pipeline.Run(runDirectory, world.Reporter));
@@ -807,8 +811,9 @@ public sealed class BackendRemodelPipelineTests : IDisposable
             retryable: false);
 
         // Terminal after the rendezvous, so a build that let the refusal through would fail
-        // this test rather than poll forever.
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+        // this test rather than poll forever. Edited deliberately by owner decision 159A (004 T242):
+        // the backend refused the dump, so its job fails once it stops waiting for one; it never finishes.
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : WithoutItsDump(3);
 
         RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
             () => world.Pipeline.Run(world.RunFolder(), world.Reporter));
@@ -828,7 +833,9 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         var world = new World(this);
         string runDirectory = world.RunFolder();
         world.Dump.DocumentPath = SourcePath;
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+        // Edited deliberately by owner decision 159A (004 T242): the job never got its after-dump, so it fails once it
+        // stops waiting for it; the run waits for that end (T239), and a job that finished had its dump.
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : WithoutItsDump(3);
 
         Exception failure = Assert.ThrowsAny<Exception>(
             () => world.Pipeline.Run(runDirectory, world.Reporter));
@@ -1098,7 +1105,8 @@ public sealed class BackendRemodelPipelineTests : IDisposable
     /// Owner decision 159A, on Codex's review, test first (004 T238; its C1): an after-dump that fails does not end the run
     /// while its job is live. The job waits for its package, then goes on to its end; the run waits for that end, and only
     /// then answers with the failure, as before. It answered at once, freeing the host for a plan while the job could still
-    /// act on the copy once its wait ran out.
+    /// act on the copy once its wait ran out. *Edited deliberately by T242:* the page is told, as the dump fails, that the
+    /// run ends when the backend has finished with the dump or stopped waiting for it.
     /// </summary>
     [Fact]
     public void AnAfterDumpThatFailsLeavesTheRunToTheEndOfItsJob()
@@ -1106,15 +1114,60 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         var world = new World(this);
         world.Backend.PackageAfterFailure = new BackendRequestException(
             "PackageAfterRefused", "the package the add-in named is not this run's package-after.json.", retryable: false);
-        world.Backend.StatusAt = poll => poll <= 2
-            ? Awaiting("verifying", 3, 3)
-            : new RemodelRunStatus(RemodelRunStatus.FailedState, "failed", 3, 3, null, null, "package-after.json never arrived");
+        world.Backend.StatusAt = poll => poll <= 2 ? Awaiting("verifying", 3, 3) : WithoutItsDump(3);
 
         RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
 
         Assert.Equal("PackageAfterRefused", refusal.ErrorClass);
         Assert.Equal(4, world.Backend.Calls.Count(call => call.Route == "status"));
         Assert.Single(world.Backend.Calls, call => call.Route == "package-after");
+        KeyValuePair<string, string> told = Assert.Single(
+            world.Reporter.Statuses, status => status.Value == BackendRemodelPipeline.AfterDumpNotConfirmedMessage);
+        Assert.Equal("verifying", told.Key);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review, test first (004 T242; its C1): an after-dump whose answer did not come back -
+    /// the backend took it, and its answer was lost - is not the run's failure once the job finishes. A job finishes only
+    /// once its after-dump has arrived, so the run ends as its job did; T239 answered it with the lost answer, telling a run
+    /// that saved its copy as one that failed.
+    /// </summary>
+    [Fact]
+    public void AnAfterDumpWhoseAnswerWasLostEndsAsItsJobDidOnceTheJobFinishes()
+    {
+        var world = new World(this);
+        world.Backend.PackageAfterFailure = new BackendRequestException(
+            "BackendUnavailable", "FICT the review backend did not answer: The operation has timed out", retryable: true);
+        world.Backend.StatusAt = poll => poll <= 1 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("saved", outcome.State);
+        Assert.Equal(3, outcome.ChangesApplied);
+        Assert.Single(world.Backend.Calls, call => call.Route == "package-after");
+        Assert.Single(world.Reporter.Statuses, status => status.Value == BackendRemodelPipeline.AfterDumpNotConfirmedMessage);
+        Assert.DoesNotContain(world.Reporter.Statuses, status => status.Key == "error");
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (004 T242 - a guard; its C1): an after-dump this side could not write - the
+    /// extractor wrote another profile's package - was never handed over, so the job fails once it stops waiting for it,
+    /// and the run is answered with the dump's own failure then: not before, while the job is live, and not lost.
+    /// </summary>
+    [Fact]
+    public void AnAfterDumpThisSideCouldNotWriteIsAnsweredOnceItsJobFails()
+    {
+        var world = new World(this);
+        world.Dump.Profile = "full";
+        world.Backend.StatusAt = poll => poll <= 1 ? Awaiting("verifying", 3, 3) : WithoutItsDump(3);
+
+        InvalidOperationException failure = Assert.Throws<InvalidOperationException>(
+            () => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+
+        Assert.Contains("'full' profile", failure.Message, StringComparison.Ordinal);
+        Assert.Equal(3, world.Backend.Calls.Count(call => call.Route == "status"));
+        Assert.DoesNotContain(world.Backend.Calls, call => call.Route == "package-after");
+        Assert.Single(world.Reporter.Statuses, status => status.Value == BackendRemodelPipeline.AfterDumpNotConfirmedMessage);
     }
 
     [Fact]
@@ -1161,8 +1214,11 @@ public sealed class BackendRemodelPipelineTests : IDisposable
             }
             else
             {
+                // Edited deliberately by owner decision 159A (004 T242): a refused after-dump's job fails once it
+                // stops waiting for the dump, as the backend's run does; it never finishes, and a job that
+                // finished had its dump and is answered as it ended.
                 world.Backend.PackageAfterFailure = answer;
-                world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+                world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : WithoutItsDump(3);
             }
 
             refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
@@ -1496,6 +1552,14 @@ public sealed class BackendRemodelPipelineTests : IDisposable
     private static RemodelRunStatus Finished(string planState, int applied) =>
         new RemodelRunStatus(
             RemodelRunStatus.FinishedState, planState, applied, applied, null, null, null);
+
+    /// <summary>
+    /// How a job ends that never got its after-dump: it fails once it stops waiting for it, as the backend's run does
+    /// (`test_a_dump_that_never_arrives_fails_the_run_with_the_log_intact`). It never finishes.
+    /// </summary>
+    private static RemodelRunStatus WithoutItsDump(int applied) =>
+        new RemodelRunStatus(
+            RemodelRunStatus.FailedState, "failed", applied, applied, null, null, "package-after.json never arrived");
 
     private static void Append(string runDirectory, params string[] lines)
     {

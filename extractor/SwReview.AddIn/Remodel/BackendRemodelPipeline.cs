@@ -82,6 +82,16 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
         + "the backend and the run with it.";
 
     /// <summary>
+    /// Owner decision 159A, on Codex's review (C1): what the page is told, once, when the after-dump could not be confirmed
+    /// handed to the backend - it could not be written, the backend refused it, or its answer was lost - in plain words,
+    /// naming no path. The job waits for that dump, so the run is not over until the backend has finished with it or
+    /// stopped waiting for it, and nothing else starts meanwhile.
+    /// </summary>
+    public const string AfterDumpNotConfirmedMessage =
+        "The copy's feature tree after the changes was not confirmed handed to the review backend. The run ends when the "
+        + "backend has finished with it or stopped waiting for it, and nothing else starts until then.";
+
+    /// <summary>
     /// `plan.json`'s `RunState` (data-model.md section 11) as one of the `status` stages the
     /// page knows (`contracts/pane-remodel-messages.md`). A state that is not here posts no
     /// stage at all: `failed` and `discarded` are terminal, and announcing "error" from inside
@@ -333,8 +343,10 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     /// asked again, waiting longer each time up to <see cref="LongestUnansweredWait"/>; a Stop asked for is tried on every
     /// poll until it lands; and the page is told where the run stands once the backend answers again. A backend that stays
     /// silent while it runs holds the run, and the host, until it answers or stops: closing SOLIDWORKS ends it. Nothing
-    /// that fails on this side ends the run either: an after-dump that failed is answered once the job, which waits for
-    /// that dump and then goes on to its end, has ended.
+    /// that fails on this side ends the run either: an after-dump that failed is told on the page, and answered once the
+    /// job, which waits for that dump and then goes on to its end, has ended - with that failure when the job failed, and
+    /// as the job ended when it finished, since a job finishes only once its dump has arrived and the failure was then
+    /// only its answer, lost.
     /// </summary>
     private RemodelRunOutcome Poll(
         string runDirectory, string jobId, IRemodelRunReporter reporter)
@@ -404,7 +416,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
             if (status.State == RemodelRunStatus.FinishedState
                 || status.State == RemodelRunStatus.FailedState)
             {
-                if (endsWith != null)
+                if (endsWith != null && status.State == RemodelRunStatus.FailedState)
                 {
                     Rethrow(endsWith);
                 }
@@ -464,6 +476,11 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
                 {
                     // Owner decision 159A, on Codex's review (C1): answered once the job has ended, as above.
                     endsWith = failure;
+                }
+
+                if (endsWith != null)
+                {
+                    reporter.Status("verifying", AfterDumpNotConfirmedMessage);
                 }
 
                 continue;
