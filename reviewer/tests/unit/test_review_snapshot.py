@@ -230,7 +230,7 @@ CHECKED = datetime(2026, 10, 9, 14, 30, 59, tzinfo=timezone(timedelta(hours=2)))
 def with_status(session: ReviewSession, state: str, **fields: Any) -> ReviewSession:
     status = ModelStatus(
         state=state,
-        document={"path": "C:\Fictional\FICT-cover.SLDASM", "configuration": "Default"},
+        document={"path": r"C:\Fictional\FICT-cover.SLDASM", "configuration": "Default"},
         checked_at=CHECKED,
         **fields,
     )

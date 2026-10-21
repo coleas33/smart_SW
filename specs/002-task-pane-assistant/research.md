@@ -2352,3 +2352,9 @@ words for the strip.
 - **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first; and the review's, T171, T173
   and T175. 153A's tasks took T166 to T177 provisionally, the numbers decision 152A's phase takes
   too; whichever lands second is renumbered.
+
+### 156A. 002's other words for the hidden Terminal tab, and an invalid escape in a test (2026-10-20)
+
+- **Question**: Other words in 002 still describe the hidden Terminal tab as shown, and a test's fictional Windows path has an invalid escape.
+- **Decision**: Add dated notes wherever the spec describes that tab, built and hidden since 2026-09-19, and fix invalid Python escapes without changing values or product behaviour.
+- **Change**: Annotated `spec.md` and settled 011's research R13.5 item 2; audited `reviewer/tests/` and `reviewer/src/` and made the affected test literal raw with the same value.

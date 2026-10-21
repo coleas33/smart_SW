@@ -3137,6 +3137,9 @@ other, and none moves a guard's answer.
      reimplements ConPTY and xterm.js, that the CLIs' session resume is not surfaced in the pane, that
      the Gemini CLI's settings-home override is unverified, that the general-chat CLI can read its own
      generated profile, and that Codex's read-only shell stays enabled.
+
+   *Settled by decision 156A (2026-10-20)*: each place above carries a dated note in 002's `spec.md`.
+
 3. **The guards' own lists can be cast back.** Each guard's static `AllowedKeys`, and the seat's
    `AllowedReads`, is its `HashSet` typed as a read-only collection, so code in the process could cast
    it back and add a name, as before the decision. The base's `Keys` and `Reads` are copies, and the
