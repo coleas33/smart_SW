@@ -117,6 +117,32 @@ internal static class AddInLog
     }
 
     /// <summary>
+    /// Owner decision 159A, on the final review: writes the lines kept for every file something held, each tried as an
+    /// append is - its holder waited out briefly - so a line kept is not lost with the process when the add-in unloads.
+    /// A file still held keeps its lines. Never throws: there is nowhere left to report to.
+    /// </summary>
+    internal static void Flush()
+    {
+        lock (Gate)
+        {
+            foreach (string path in new List<string>(Unwritten.Keys))
+            {
+                try
+                {
+                    if (TryAppend(path, string.Concat(Unwritten[path]), HeldWaits))
+                    {
+                        Unwritten.Remove(path);
+                    }
+                }
+                catch (Exception)
+                {
+                    // The lines stay kept; nothing else can be done with them.
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Appends <paramref name="text"/> to <paramref name="path"/>, writing alone - the file shared with readers only - and
     /// tries again after each of <paramref name="waits"/> while something holds it. Answers false when it is still held
     /// after the last.

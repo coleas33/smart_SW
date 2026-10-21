@@ -164,6 +164,50 @@ public sealed class AddInLogTests : IDisposable
         Assert.Contains("FICT written once the holder let go", File.ReadAllText(Log), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T253 - a guard; its E1): the file is shared with readers while it is
+    /// written, so a line appended while the engineer has the log open to read is in the file when the append returns.
+    /// Shared with nobody, the append is refused while a reader holds it, and the line waits for the next.
+    /// </summary>
+    [Fact]
+    public void ALineIsWrittenAtOnceWhileAReaderHoldsTheFile()
+    {
+        File.WriteAllText(Log, string.Empty);
+        using (var reader = new FileStream(Log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            AddInLog.Append(Log, "FICT written while the engineer reads the log");
+
+            using (var text = new StreamReader(reader))
+            {
+                Assert.Contains("FICT written while the engineer reads the log", text.ReadToEnd(), StringComparison.Ordinal);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T253; its nit): a line kept because something held the file is
+    /// written when the log is flushed - at the add-in's unload - where it was lost with the process.
+    /// </summary>
+    [Fact]
+    public void ALineKeptWhileTheFileWasHeldIsWrittenWhenTheLogIsFlushed()
+    {
+        File.WriteAllText(Log, string.Empty);
+        using (new FileStream(Log, FileMode.Append, FileAccess.Write, FileShare.None))
+        {
+            AppendAsWriteDoes("FICT kept while the file was held");
+        }
+
+        Assert.Equal(string.Empty, File.ReadAllText(Log));
+
+        AddInLog.Flush();
+
+        string[] written = File.ReadAllLines(Log);
+        Assert.Single(written, line => Whole(line, "FICT kept while the file was held"));
+
+        AddInLog.Flush();
+        Assert.Single(File.ReadAllLines(Log));
+    }
+
     /// <summary>One append, whatever it throws swallowed, as <see cref="AddInLog.Write"/> swallows it.</summary>
     private void AppendAsWriteDoes(string line)
     {

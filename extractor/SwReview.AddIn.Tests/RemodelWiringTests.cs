@@ -280,6 +280,22 @@ public sealed class RemodelWiringTests
         Regex.Replace(File.ReadAllText(Path.Combine(AddIn(), relativePath)), @"\s+", " ");
 
     /// <summary>
+    /// Owner decision 159A, on the final review (004 T253; its nit): the add-in flushes its log as it unloads, last, so a
+    /// line kept while something held the file is written rather than lost with the process.
+    /// </summary>
+    [Fact]
+    public void TheAddInFlushesItsLogAsItUnloads()
+    {
+        string source = Regex.Replace(
+            AdapterShape.CodeOutsideComments(File.ReadAllText(Path.Combine(AddIn(), "SwReviewAddIn.cs"))), @"\s+", " ");
+        int start = source.IndexOf("public bool DisconnectFromSW()", StringComparison.Ordinal);
+        int end = start < 0 ? -1 : source.IndexOf("return true;", start, StringComparison.Ordinal);
+        Assert.True(end > start, "SwReviewAddIn.DisconnectFromSW was not found.");
+
+        Assert.Contains("AddInLog.Flush(); return true;", source.Substring(start, end - start + "return true;".Length), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// <c>SwReviewAddIn.StartRemodelHost</c>, up to where it starts the remodel pump: its code, every run of white space as
     /// one space, with no comment line in it, so no pin is met by a line commented out (owner decision 159A, on review:
     /// <see cref="TheAddInHandsTheRemodelHostItsLog"/> passed with its line commented out).

@@ -349,6 +349,10 @@ public class SwReviewAddIn : ISwAddin
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
+
+        // Owner decision 159A, on the final review: last, so a line kept while something held addin.log - another
+        // SOLIDWORKS session's append, a reader that locks it - is written rather than lost with the process.
+        AddInLog.Flush();
         return true;
     }
 
