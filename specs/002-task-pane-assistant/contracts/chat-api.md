@@ -102,6 +102,13 @@ Errors: JSON `{error_class, message, retryable}` with the message redacted of an
 configured key. 5xx only for server faults; provider failures surface as 502 with the
 provider's error class name.
 
+The pane's add-in sends `POST /sessions` a `bridge` only while the tool service behind it is
+attached to the review's document and configuration, and refuses the start itself otherwise, with
+`BridgeOnAnotherDocument`, retryable - a class the backend never sends, whose sentence is in the
+words file `GET /labels` serves (amended 2026-10-20, owner decision 152A;
+`pane-host-messages.md`, the Review page's table). The backend's own rules for `bridge` are
+unchanged.
+
 Concurrency: one running turn per chat; the server serializes messages and evidence
 answers per chat and refuses with 409 rather than queueing silently.
 

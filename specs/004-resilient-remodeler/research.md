@@ -1087,7 +1087,17 @@ Two operational rules, and a third added by the owner's decision 22A (2026-09-25
   R13.1, R13.4):* T167 is decided - a re-attach or an unload ends the session on the application
   thread before the pipe closes, the copy closed unsaved and the settings restored - and planning
   again while a plan waits closes the earlier plan's session first and marks that plan lost
-  (004 T173).
+  (004 T173). *Amended 2026-10-20 (owner decision 152A; 002 `research.md`, 152A):* a switch the
+  tool service skipped while a turn or a plan or a run held the bridge is no longer left until the
+  next switch: the gate looks again every second while one is owed and, once nothing holds the
+  bridge, follows the document active then - a re-attach, which loses a plan made on the old
+  attachment as any re-attach does, told as 24A tells it. The planned copy's own attachment (T180)
+  is kept by that look exactly as by a switch: the plan holds the bridge while it opens and
+  activates its copy, so that switch is owed, and the look once the plan ends finds the held copy
+  active and keeps the plan's attachment. A configuration switch still re-attaches nothing at the
+  switch; a review that finds the bridge on another configuration asks the gate to follow the
+  active document, which re-attaches it, and a plan on the old attachment is then lost like any
+  other.
 
 ---
 

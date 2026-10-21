@@ -1720,6 +1720,12 @@ second question.
      the bridge is attached to the package's document - its `ping` names the document - and run no
      live check otherwise, recording why; or have the add-in make the tool service follow the
      review's document before the session is created, and wait for it; or leave it?
+     *Settled 2026-10-20 (owner decision 152A, "1A"):* every review session's start asks which
+     document and configuration the bridge it would hand over serves - the tool service's record
+     of its attach, which its `ping` answers - and refuses one that is not the review's,
+     `BridgeOnAnotherDocument`, retryable, in plain words, making nothing; and the tool service,
+     which skipped a switch made while a turn or a remodel run held it, follows the active
+     document once that hold ends (152A, below).
 - **Review**: an independent adversarial review of the branch at `1f87be6` confirmed the second
   reading itself - on the right thread, nothing left half made, no false refusal, the fixtures and
   the pin right - and found one must-fix, two should-fixes and three nits, settled test first by
@@ -2046,3 +2052,208 @@ words for the strip.
   T160, T162 and T163. 150A's tasks landed as T143 to T155, the numbers the commits that made
   them name, and were renumbered T153 to T165 when 150A was merged after 149A, whose Phase 14
   holds T143 to T152.
+
+### 152A. A review never runs on a bridge left on another document (2026-10-20)
+
+- **Question**: 149A's owner question 5. A review's session is given whatever bridge the tool
+  service is attached to when the session is made (`ReviewHost.CreateReviewSession`,
+  `_options.Bridge`, which `SwReviewAddIn` publishes from the gate), and nothing compared it with
+  the review's document - not the add-in, and not the backend, whose bridge answers `ping` with its
+  document and is not asked for it. The tool service follows a document switch on a thread of its
+  own, so for a moment after a switch it is still attached to the document left; and it skips a
+  switch made while a review turn or a remodel run holds it (`ToolServiceGate.FollowCore` asked
+  `busy`, logged "not re-attaching to ... a turn is running against ..." and returned), and nothing
+  caught up until the next switch. So: switch documents during a turn, then press Review once it
+  ends, and the new review's live interference check - the first of its pre-run checks - ran over
+  the other document and wrote that document's rows into this review's package, with no restart
+  at all. 149A closed only the restart's window.
+- **Decision** (owner decision 152A, "1A", 2026-10-20): "A review never runs on a bridge left on
+  another document (002 `research.md`, 149A's owner question), test first, with an adversarial
+  review: the tool service, which skips a document switch made while a turn or a remodel run holds
+  it, follows the active document once that hold ends; and every review session's start asks the
+  bridge which document it serves and refuses in plain words, retryable, when it is not the
+  review's."
+
+**1. The tool service follows the active document once the hold ends.**
+
+- **How**: a follow skipped while work holds the bridge is owed (`ToolServiceGate._owed`), and the
+  gate looks again a poll later (`FollowPoll`, a second, as the settings restart's watcher polls,
+  143A) through `later` - by default a delay on the thread pool, injected in the cases - one look
+  waiting at a time (`_asking`). A look claims `_starting` as a switch's follow does, asks the busy
+  question again, and while work still holds the bridge is owed again; once nothing holds it, it
+  reads the active document at that moment and follows it (`FollowNow`): another part or assembly
+  is attached to; the document already attached to, a drawing, or none, re-attaches nothing; the
+  exact held copy of a waiting plan keeps its attachment (004 T180). Either way nothing more is
+  owed, and no look is asked for again.
+- **The trigger, weighed**:
+  - *an explicit call from the hosts when a hold ends*: the Remodel host knows when a plan or a
+    run ends (`FreeTheHost`, `Execute`'s `finally`), but the review host does not know when a turn
+    ends. A turn begins at `POST /sessions` or at a page call the proxy passes on - a follow-up, an
+    answer, a Send - and ends on the backend; the add-in learns that it has ended only by asking
+    (`IBackendClient.IsTurnRunning`, `GET /sessions/{chat_id}`), which is why the settings
+    restart's watcher polls (143A, `DeferredRestart`). The event stream the host reads for the page
+    is not parsed, and is read only for the chat on screen. An explicit call would cover remodel
+    holds alone, and a poll would still be needed for turns: two mechanisms for one rule.
+  - *a deferred follow, asked again until nothing holds the bridge* - **chosen**: one mechanism
+    for both holds, inside the gate that already asks the busy question. It is as testable as an
+    explicit call: the cases hand the gate a `later` that keeps each look until the case runs it,
+    so every case decides by order, not by time; one case pins the gate's own `later`, a poll late
+    and on the pool. Its cost is the restart watcher's: the busy question - one `GET` per open chat
+    - once a second, off the application thread, and only while a follow is owed. A remodel's end
+    is followed within a poll.
+- **No race with a switch** (the decision's own words): a follow reads the active document only
+  once it has its busy answer, and a start reads it again as it attaches, so a switch made while
+  either asks is followed by it. A switch that lands while a start or a follow is in flight - after
+  the start read the active document and before it is listening - was dropped until the next switch
+  (`docs/review-backlog.md`'s finding against `FollowDocument`'s early return while a start is in
+  flight); it is owed now, and looked at as soon as that work is over (`Settle`, and `StartCore`
+  once the new service is published). A reading clears what is owed (`FollowNow`, `StartCore`), so
+  a switch after it is owed afresh.
+- **No second service**: a look never runs beside a start or a follow - it returns when
+  `_starting` is held, and the work in flight looks again itself when it ends - and every entry
+  claims `_starting` under the lock before anything that can start a service is scheduled, as
+  `FollowDocument` and `EnsureStarted` always have.
+- **The preserved attachment**, exactly as before: `_preserveAttachment` is asked with the document
+  active when the follow is made, as `FollowCore` asked it since T180, and only when nothing holds
+  the bridge. A plan holds the bridge while it opens and activates its copy, so that switch is
+  skipped and owed; the look once the plan ends finds the exact held copy active, keeps the plan's
+  attachment, writes the T180 line, and asks no more. A switch to any other document is followed
+  and loses the plan, as an ordinary switch does (22A).
+- **What is said**: the tool-service log's line for a skipped switch is written once, at the switch,
+  as before; a look writes nothing, since a line a second for the length of a turn would bury the
+  one the engineer is sent to read. A busy question that throws is reported and counts as busy, as
+  before, and is not owed: nothing says the next answer would come, and the next switch, or a
+  review's request (below), asks again.
+- **The configuration** - a follow made at a hold's end or at a review's request attaches to the
+  document as it is, its configuration included (`Serves`: the path canonically and ignoring case,
+  as the gate has always compared paths, and the configuration exactly). A configuration switch is
+  still the same document at the switch - the add-in fans it out as a follow of the same path -
+  and re-attaches nothing there, as 004 decision 22A records. Why it must be compared once a follow
+  is made: the scope is walked in the configuration the attach found active (`SwScope.Open`,
+  `ComponentTreeDumper.Traverse` over `session.ConfigurationName()`), and its component table is
+  what the live interference check maps its rows through; ids are allocated by that traversal, so
+  another configuration's rows can name other components.
+
+**2. Every review session's start asks the bridge which document it serves.**
+
+- **What answers**: `ToolServiceGate.DocumentServedBy(bridge)` - the document and configuration
+  of the service listening on that bridge's pipe, or none when no service listening now has it
+  (before the first start, another attachment's, one a re-attach is taking down, any after the
+  add-in unloads). It is the service's record of its attach, `IToolService.DocumentPath` and
+  `Configuration`, which `ToolServiceHost` takes from the one attach that also sets
+  `BridgeServices.DocumentPath` and `Configuration` (`ToolServiceHost.Attach`), and those are what
+  the bridge's `ping` answers (`SwBridgeDispatcher.Ping`). A case asks the bridge's `ping` over its
+  own pipe with the review secret and pins that the two answers agree.
+- **Why the record, not a `ping` over the pipe**: the add-in has no bridge client of its own - the
+  backend's is the bridge's only client - and a request over the pipe is served one at a time on
+  the application thread (`InProcPipeServer.Answer` queues it), so a review start would wait behind
+  every command ahead of it - minutes behind a turn's interference check or a remodel command - or,
+  with a timeout, refuse a review because the bridge was busy, which is the false refusal the
+  decision's adversarial review was asked to look for. A pipe name is minted for every start, so it
+  names one attachment for its whole life: a session handed a bridge that served the review's
+  document when it was asked reaches that document or nothing.
+- **What is compared**: `PageDocument.IsSameDocument`, the pane's one rule (the path ignoring case,
+  the configuration exactly), since `ping` gives both. Both paths are `GetPathName` of one open
+  document (the attach's and `SwReviewAddIn.CurrentDocument`), and both configurations
+  `IConfiguration.Name` of its active configuration. The configuration matters for the reason above.
+- **Where**: a new review - and a Retry of one, which is a new review - is asked before its run
+  folder is made (`StartReview`, after 149A's second reading), so a bridge left on another document
+  costs no extraction and leaves no folder. Every start is asked again at its session
+  (`CreateReviewSession`, before `POST /sessions`), with the bridge read there once, and the session
+  is given that very bridge: one published between the question and the session is closing, and is
+  not handed over unasked. The extraction takes minutes, in which the tool service can follow
+  another document.
+- **The refusal**: `error {error_class: "BridgeOnAnotherDocument", retryable: true}`, in words that
+  name no path; nothing is made by the start, no status is posted - a Recheck says it checks only
+  once its bridge is asked - and the tool service is asked to follow the active document
+  (`ReviewHostOptions.FollowActiveDocument`, the gate's `FollowActiveDocument`), which every start
+  has checked is the review's. Two messages, each true where it is raised:
+  - before anything is made: "the SOLIDWORKS bridge this review would be given is not attached to
+    the review's document and configuration, so nothing was extracted and no run folder was made.
+    It follows the active document once no review turn or remodel holds it: wait a moment, then
+    press Review again.";
+  - at the session: "... so no review session was started and no check ran. It follows the active
+    document once no review turn or remodel holds it: wait a moment, then try again.". What is made
+    by then: nothing, but for a new review whose bridge the tool service moved to another document
+    while it extracted, whose run folder keeps the package just extracted - of the review's own
+    document, by the second reading and the dump's attach - as one whose extraction fails keeps its
+    folder; the next press makes a new one. Deleting it would be a delete in the run root the add-in
+    makes nowhere else.
+- **Asking the tool service to follow** - an extension of the decision's words, by the
+  implementer's choice, not the owner's decision, and put to the owner: without it a refusal after a
+  configuration switch would never clear, since a configuration switch re-attaches nothing at the
+  switch (22A), and neither would one met while a plan's copy keeps the original's attachment after
+  the plan has ended, or after a busy question that threw. Asked, the gate follows the active
+  document - at once, or once the hold ends - keeping the planned copy's attachment as any follow
+  does. So "retryable" is true: pressed again once the bridge is on the review's document, every
+  start goes ahead with it (pinned for each).
+- **The class and its label**: the Review page shows a class's label first and the message in a
+  fold, and every class the host sends has one (`ErrorLabelsCoverTheHostTests`). Weighed:
+  - `NotAttached` ("The add-in is not attached to SOLIDWORKS yet. Wait a moment, then try
+    again."): the way on fits, but the add-in is attached, and the engineer would look for an
+    add-in that failed to load;
+  - `DocumentChanged`: the active document did not change - the bridge is elsewhere - and its label
+    says nothing was extracted, untrue at the session after an extraction;
+  - `ReviewNotActive`: the review's document is the active one; `BridgeUnavailable` ("SOLIDWORKS
+    could not be reached ..."): it can be;
+  - a class of its own, `BridgeOnAnotherDocument` - **chosen** - with its label, true of every start
+    that carries it: "The SOLIDWORKS bridge is not attached to this review's document yet, so the
+    review did not start. It follows the active document once no review turn or remodel holds it.
+    Wait a moment, then try again." "Try again", since the button is Review, Retry, Recheck or the
+    context review's. The pane fixtures that carry the words file's labels are regenerated with
+    their generators (`generate_pane_fixture.py --write`: `review-big-assembly.json`;
+    `generate_waiting_fixtures.py --write`: `review-waiting.json`,
+    `review-waiting-big-assembly.json` and `review-waiting-restored.json`, each differing in the one
+    added line, `review-not-sent-session.json` back byte for byte), and
+    `review-send-failure-events.json`'s pin of `review-waiting.json` moves to its sha256 as written
+    on Windows (CRLF). `review-waiting-apply-failure.json`, a capture with no generator, keeps the
+    labels it was captured with, as 146A to 150A left it.
+- **The starts**, each pinned: a new review, one through a preparation (the add-in's path), a Retry
+  of one (`review.start` with `retry_of`), a context review (`context.review`), its Retry, and a
+  Recheck (`review.recheck`). A Recheck's own checks ask the seat nothing (149A): it carries the
+  first run's live detection over. But its session holds the bridge for the model's turns after
+  Send - a waiting run closes the live transport and keeps its client for a later request
+  (`ReviewRun.release_bridge`; `send_review` then runs the model on the same run) - and those turns
+  can call the live tools over it, so its start is asked as every other is. Excluded, each making no
+  review session: `context.prepare` (a dump into a folder, attached to the active document, which
+  `context.review` then checks); the Extract, Model check and Standards tabs, which hand the backend
+  no bridge; the Remodel tab, whose remodel bridge's open is bound to the path its own probe was
+  minted for (`RemodelScopeProbe.Require`); and the Terminal tab, hidden, whose CLI holds the
+  general-chat bridge and makes no review session.
+- **No bridge at all** - no tool service listening yet, or one being replaced - is no refusal: the
+  session is given none and the backend runs no live check and says so in the review's coverage, as
+  before 152A. Nothing of another document can reach such a session.
+- **A host that cannot be told**: `ReviewHostOptions.BridgeDocument` answers none by default, so a
+  host given a bridge and nothing to ask about it refuses every start rather than hand over a bridge
+  it cannot vouch for; an answer that throws is none too.
+- **Contracts**: 002 [`contracts/pane-host-messages.md`](contracts/pane-host-messages.md) (a dated
+  152A paragraph after the Review page's table, for `review.start`, `context.review` and
+  `review.recheck`) and [`contracts/chat-api.md`](contracts/chat-api.md) (the `bridge` of
+  `POST /sessions`, and the class); 004
+  [`contracts/pane-remodel-messages.md`](../004-resilient-remodeler/contracts/pane-remodel-messages.md)
+  and [`contracts/bridge-remodel.md`](../004-resilient-remodeler/contracts/bridge-remodel.md) (how the
+  tool service follows) and 004 [`research.md`](../004-resilient-remodeler/research.md) (22A's
+  paragraph), each with a dated 152A note.
+- **What is left** (recorded, not changed):
+  - A turn that starts between a follow's busy answer and its teardown meets a pipe that is closing:
+    its live calls fail and are recorded as failed coverage. Older than 152A - every follow since the
+    tool service follows switches has had it - and it reaches no other document. The follow now runs
+    at a hold's end too, so it can meet a follow-up typed at once.
+  - A session made while the tool service is between two attachments is given no bridge, and its
+    live checks are recorded as not run: a review pressed in the seconds a follow takes, now also at
+    a hold's end. Older than 152A; no evidence of another document.
+  - A configuration switch is followed only once a follow is made for another reason - a hold's
+    end, a review's request, or a document switch - so the general-chat tools and Show in SOLIDWORKS
+    (`entity.show`, through the tool service's scope) keep the configuration attached to until then.
+    Older than 152A (004, decision 22A).
+  - The same document closed and opened again leaves the attachment on the closed one, by path;
+    its commands answer "document no longer open". Older than 152A; no other document's evidence.
+- **Owner questions** (recorded 2026-10-20, behaviour unchanged):
+  1. Follow a configuration switch at the switch, as a document switch is followed - the general
+     tools and Show then follow it too, and a plan made on the attachment is lost on a configuration
+     switch of its original part, which 22A keeps - or keep it followed only when a review asks, as
+     now?
+  2. A review pressed while the tool service is between two attachments runs with no live checks,
+     which its coverage says. Refuse it as `BridgeOnAnotherDocument` while a follow is in flight -
+     the gate knows - or leave it?
+- **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first.

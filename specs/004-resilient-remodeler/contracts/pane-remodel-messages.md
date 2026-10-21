@@ -119,6 +119,17 @@ and Start refuses the plan by name.**
 - The attachment decides, never the document: a re-attach back to the same document is a new
   attachment and is refused; the same document spelt differently and a configuration switch
   re-attach nothing (`FollowDocument` compares the document canonically) and are not refused.
+  *Amended 2026-10-20 (owner decision 152A; 002 `research.md`, 152A):* a switch made while a turn,
+  a plan or a run holds the bridge is no longer skipped for good. `ToolServiceGate` owes it and
+  looks again every second (`FollowPoll`) until nothing holds the bridge, then follows the document
+  active at that moment - a re-attach, so a plan made on the old attachment is lost and told as any
+  re-attach is (24A), and a run's end is followed within a second. The planned copy's attachment
+  (T180) is kept by that look exactly as by a switch: a plan holds the bridge while it opens and
+  activates its copy, and the look once it ends finds the exact held copy active and keeps the
+  plan's attachment. A configuration switch still re-attaches nothing at the switch; a review that
+  then finds the bridge on another configuration asks the gate to follow the active document
+  (`ToolServiceGate.FollowActiveDocument`), which re-attaches it with its configuration, and a plan
+  on the old attachment is then lost like any other.
 - Start pressed twice after a re-attach is refused twice, identically, and leaves the host free to
   plan; the new plan is made on the attachment listening now and starts. A refused plan tracks no
   run, so a Start naming its folder is `RunNotFound`, and it neither rescues nor invalidates an
