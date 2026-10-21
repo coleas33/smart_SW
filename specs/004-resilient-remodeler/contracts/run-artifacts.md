@@ -85,6 +85,12 @@ T185, research R16.1):*
 Each marker and line is one `File.AppendAllText`, in the operating system's hands before the call
 it names starts; none carries a value, a path or a request field.
 
+*Added 2026-10-21 (owner decision 159A; `research.md` R19.3):* `addin.log` also takes one `Remodel tab,
+<what was asked>: ...` line for each failure the Remodel tab told in its own words in place of the failure's
+own sentence: a refusal's class and sentence, or the whole of an exception, masked. Unlike the markers above,
+it carries the failure's sentence, a path included - that is what it is kept for, and why the tab does not
+print it; the tab's words send whoever needs it there by View log's label.
+
 *Added 2026-10-19 (owner decision 144A; feature 011's research R11.1):* the pane seat's gate log.
 `remodel.open_copy` and the activation of the copy before each dump call SOLIDWORKS through the
 pane seat's own gate (`guard-allowlist.md`, "The re-modeler's pane seat"), and each writes two

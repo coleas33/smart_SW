@@ -2258,8 +2258,14 @@ before T196 (the ten cases of T195) and under M20, which takes the lock out.
 1. **The other messages the tab can print with a path** (R18.1's list): give them plain words too, in the
    backend's mapping or the host's, or leave them - most are failures of the add-in, the backend or the
    disk, whose path is the evidence for whoever reads the message?
+   *Settled 2026-10-21 by owner decision 159A ("3A"; R19.3; T208, T209):* every one reaches the tab in plain
+   words with no path - the tab's own for each class the review backend answers, and for each failure of the
+   host's own - and its own sentence, the evidence, goes to the add-in's log, which View log opens. The
+   backend's bodies keep their sentences.
 2. **One class, two flags**: `DocumentDirty` is retryable from the host's own check and not from the
    backend's mapping. The page reads no flag; align them, or leave them?
+   *Settled 2026-10-21 by owner decision 159A (R19.4; T210, T211):* retryable on every route, the backend's
+   mapping made the host's: saving the part makes the same press succeed.
 3. **Decision 152A beside this one** (corrected on the decision's review, R18.8, where this item said
    152A's follow at a run's end touched `RemodelHost.Execute`'s `finally`): it does not touch
    `RemodelHost.cs`. 152A's branch (`bridgedoc-152a`) follows the document a hold leaves active through
@@ -2275,6 +2281,10 @@ before T196 (the ten cases of T195) and under M20, which takes the lock out.
    it. Read `_active` and store the id under `_endingLock`, and take the id as the host is freed, so a
    Stop either reaches the run or is refused as having nothing to stop; or leave it - on Stop's side the
    window is a few instructions wide, and only a run opens it?
+   *Settled 2026-10-21 by owner decision 159A (R19.1; T204, T205):* a Stop reads the run, stores its id and
+   posts its word under `_endingLock`, and the ids are taken as the host is freed, so a Stop reaches its run
+   or finds the host free and is answered at once; every Stop that reached the run is answered at its end,
+   and the stop when the copy is gone is decided under the same lock.
 5. **The run line after a Stop** (the review's; older than this decision). The host answers
    `remodel.stop` with `remodel.stopped` once the executor has finalized, after the run's terminal
    `status`, and the page writes its answer into the run line last ("Stopping. N change(s) applied; the
@@ -2284,6 +2294,9 @@ before T196 (the ten cases of T195) and under M20, which takes the lock out.
    before any terminal status, an order the host never produces; what it pins - Stop pressable and its
    answer ending the run on the page - holds in either order. Word the answer as the end of the run, or
    leave the line as it is?
+   *Settled 2026-10-21 by owner decision 159A (R19.2; T206, T207):* the page lets the run's terminal status
+   win - the answer to Stop writes the run line only while no terminal status has ended the run, and an
+   `error` that ends a run clears the line - and the page cases' stub answers Stop in the host's order.
 
 **Evidence** (2026-10-20; before at `bd07f29`, after on the branch): the C# build, `--no-incremental`,
 at zero warnings both times; `SwReview.Extractor.Tests` 10,059 passed before and after, and
@@ -2358,3 +2371,396 @@ it touched - `test_remodel_report.py` (with T198's 4 new cases and T200's 1),
 `test_remodel_apply_log.py`, `test_chat_remodel_routes.py`, `test_workstation_test_plan.py`,
 `test_workstation_handover.py`, `test_committable_paths.py` and `test_remodel_flow.py`: 526 passed on
 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`) alike. `ruff check` clean, and no broken link.
+
+## R19. Decision 159A: the Remodel tab's remaining defects before Start is switched on (owner, 2026-10-21)
+
+**Source.** Owner decision 159A ("3A", the register's row 159A), on R18.7 and feature 002 research 152A's owner
+question 3: "The Remodel tab's remaining defects before Start is switched on (004 `research.md` R18.7; 002
+`research.md` 152A's question 3), test first, with adversarial reviews: the Stop id race, the run line after
+Stop, the other messages that can carry a path, `DocumentDirty`'s retry flag differing by route, and the look
+after a plan following into the copy its close left open - so switching Start on (004 T172) waits on no known
+defect." The tasks are T204 to T214 (Phase 11). Everything here is fake-tested on the development machine;
+SOLIDWORKS was not started. R18.7 item 3, decision 152A beside 155A, asked for nothing.
+
+### R19.1 A Stop and the run's end, decided under one lock (T204, T205)
+
+**What was wrong** (R18.7 item 4). `Stop` read `_active` and only then stored its id in `_pendingStopId`,
+while `Execute` freed the host and then took that id to answer it. A Stop that read the run in flight just
+before the host was freed, and stored its id just after `Execute` had taken it, was not answered at that run's
+end: its "Stopping: ..." was posted after the run's last word, and its id lingered for the next run's end to
+answer with `remodel.stopped` and that run's count. Two more were found writing T204: a second Stop during one
+run replaced the first's id, so the first was never answered and the page kept waiting on it; and the stop when
+the copy goes away (RK-14) was decided and told outside any lock, so it too could be told after the run's last
+word.
+
+**Decision: a Stop is decided under the lock that frees the host** - the first of the two fixes the instruction
+named. `Stop` reads `_active`, adds its id to `_pendingStops` and posts its word under `_endingLock` (R18.4);
+`FreeTheHostFromTheRun` takes the ids in the step that frees the host; and `Execute` answers each at the run's
+end, after its last word, as before. So a Stop either reaches the run - its word told before the run's end, its
+id answered at that end - or finds the host free and is answered at once, `RunNotFound` ("no remodel run is in
+flight, so there is nothing to stop."), storing nothing. The copy-gone stop is decided and told under the same
+lock, the copy looked for there too.
+
+- *Keyed to the run instead*, the other fix named: a Stop that stored its id on a run that had just ended would
+  never be answered unless it then asked whether the run had ended - a second reading of the fact the lock
+  decides once, and the lock is the one the freeing already takes.
+- *Every Stop answered.* Stop stays pressable until the run ends (`remodel.js`, `renderControls`), and each
+  `remodel.stop` the page sends waits for its own answer. A run stopped only because its copy went away is
+  answered unasked, `remodel.stopped` with no id, as before.
+- *The ids taken as the host is freed*, where they were taken after the run's last word: once a Stop is decided
+  under the lock the two are the same - a Stop after the freeing finds the host free - so this is one step for
+  the reader, not a fix, and has no mutation of its own.
+- *What waits under the lock.* A post queues the message and returns (R18.8, N5); the masking reads the keys and
+  the remodel secret (`KeysToMask`, a DPAPI decryption, and the gate's record under its own lock, which is never
+  held while anything is waited for); and `File.Exists` reads the copy in the run folder, under a local run root
+  (owner decision 154A). Nothing waits on SOLIDWORKS' application thread, which takes the lock to tell a
+  session's ending (R18.4) and now to decide the copy-gone stop.
+
+**Tests** (T204). The run on a thread of its own, and the stop's word held in its post - on the page's thread,
+or SOLIDWORKS' for the copy-gone stop - while the run reaches its end: before T205 the run's end was told first
+and the stop's word after it; with the lock the end waits for the word. A double Stop, both answered at the
+run's end and neither at the next run's. And a guard: a Stop pressed the moment the run's last word reaches the
+page is answered at once and stores nothing, before and after. The old `Stop`'s gap between its read and its
+store has no seam a test can hold open; T204 holds the stop's post instead, which the same lock orders against
+the freeing, and the mutation that takes the lock out is red under it (R19.7, S1).
+
+### R19.2 The run line after a Stop (T206, T207)
+
+**What was wrong** (R18.7 item 5). The host answers `remodel.stop` with `remodel.stopped` once the executor has
+finalized, after the run's terminal `status` (R18.4), and the page wrote that answer into the run line last:
+"Stopping. N change(s) applied; the change in flight is finished and the artifacts are finalized first." over
+the run's last word, "The run ended 'truncated'. ...". A stopped run that ended in `error` kept a "Stopping"
+line either way: the page's `error` branch shows the banner and leaves the run line alone, so the line kept the
+answer's words, or the host's own "Stopping: ..." posted as the Stop reached the run.
+
+**Decision: the page lets the terminal status win** - the second of the two options - rather than the host
+posting the answer ahead of the run's last word.
+
+- The host's order is the contract's: the answer once the executor has finalized, the terminal `status` once
+  the host is free (R18.4), and every host test of a run's end pins it (R18.6, M21). The page ends its running
+  state on `ready` and `error`; an answer ordered first would end it instead.
+- Ordering the host alone would not have done: a run that ends in `error` would still have left the Stop's
+  "Stopping: ..." in the line, since the page's `error` branch did not touch it. The page had to change either
+  way, so the change is made there alone, and the protocol is as it was.
+- So the answer to Stop writes the run line, and ends the run, only while no terminal status has ended it -
+  which this host never leaves to it, and on which the page does not depend - and an `error` that ends a run
+  clears the run line, the banner saying how it ended, as a refused plan or Start leaves it. A `ready` that ends
+  a run writes its words, as before; an `error` while no run is running - a plan's, a teardown's, the add-in's
+  word on the backend - leaves the line as it was.
+
+**Tests** (T206). The real page over the real transport, the stub posting in the order the host uses - the
+Stop's word, the run's last word, then the answer - for a run that ends `ready` and one that ends `error`: before
+T207 the line ended "Stopping. 2 change(s) applied ...". The stub answered Stop at once before 159A, an order the
+host never produces (R18.7 item 5); it now answers in the host's order for every page case (R19.6).
+
+### R19.3 The other messages that can carry a path (T208, T209)
+
+**Where each came from** (R18.1's list, R18.7 item 1), checked again by route:
+
+- *The review backend's refusals*, which the pipeline hands on with their class and sentence
+  (`BackendRemodelPipeline.Refusal`) and the host printed as they came: the bridge's `not_a_part` (`NotAPart`)
+  and `source_not_open` (no row, so `RunFolderFailed`), naming the part's full path; the copy's own refusals
+  inside `remodel.open` (`copy_exists`, `copy_failed`, `tag_failed`, `open_failed` and the save target's, all
+  `RunFolderFailed`), naming the copy's; `RunFolderFailed` and `PackageMissing` naming the run folder (the open
+  record, the dump, the waivers' carry-forward, `copy_path_for`); `POST /remodel/runs`' `RunNotPlanned`,
+  `ResumeRefused` and `RunInProgress`, naming the run folder; `PackageAfterRefused` and `InvalidRunDir`, naming
+  both of their paths; and `BridgeUnavailable`, whose detail is the reviewer's bridge client's, naming the
+  bridge's pipe (`the bridge on \\.\pipe\... could not be reached`).
+- *The run's failure in the run line*: the pipeline's `status {stage: "error"}` with a poll's failure or a failed
+  job's error (`RemodelJob.fail`, the text of whatever the run raised).
+- *The host's own*: `RunFolderFailed` naming the run root and carrying the disk's refusal; `HostError` with any
+  exception's message - the pipeline's refusal of a dump that read another document names the package's path,
+  and `SwSession` refuses to attach to a drawing naming it; `OpenFailed` with the seat's sentence, naming the
+  copy; `DiscardFailed` with the disk's refusal, naming the copy's file or `plan.json`'s full path; and the
+  unanswered closes of an earlier plan and of a run, each ending with the failure's message.
+- *The restart gate's* `BackendUnavailable` with a restart's failure, which can end in the backend's log's path
+  (decision 150A), and the add-in's word that the backend did not start, `status {stage: "error", lifecycle:
+  true}`, with the same failure.
+- *The shared rows*: Show change's `entity.shown {ok: false, message}` with whatever showing threw
+  (`PaneActions.ShowPersistRef`), `SwSession`'s refusal of a drawing among it; and the `OpenFailed` of View log,
+  Open report and Open run folder with the failure's message - the log folder's own path when it cannot be made.
+
+**Decision: the host words every one; the backend is unchanged.** The host is the page's words source (R18.1):
+every failure the page can print passes through it, so one rule there covers every route, the add-in's own
+failures and the backend's alike, and a sentence written anywhere upstream later cannot reach the page unworded.
+
+- *A refusal the review backend answered* - the pipeline keeps the backend's answer as the refusal's cause,
+  which T208 pins - is told in the tab's words for its class (`PageWords`): `NotAPart`, `BridgeUnavailable` and
+  `BackendUnavailable` have their own, since their ways on differ (save the part as a part; wait a moment; wait
+  for the backend); `ScopeRefused` keeps the backend's own, which name no path (owner decision 149A); 155A's two
+  keep theirs; and every other class - the rest of `contracts/backend-remodel.md`'s error table, `InvalidRunDir`,
+  `InvalidRequest`, and the client's `HttpError` and `BadResponse` - shares one sentence, true of every step it
+  can stop, before any change to a copy or during a run, whose last word follows. A refusal the add-in raised
+  itself keeps its own words, which name no path; any other failure is told in `UnexpectedFailureMessage`, its
+  class `HostError` as before.
+- *The host's own sites* each have a sentence of their own: the run folder not made, the unanswered closes of an
+  earlier plan and of a run, Open copy, the two Discard failures, the gate's restart, the backend that did not
+  start, the run's failure in the run line, Show, and Windows not opening a file or the log folder.
+- *What a failure said goes to a log, never the tab*: `RemodelHostOptions.Log`, which the add-in wires to
+  `AddInLog.Write` (`addin.log`, in the folder View log opens), each line masked as the page's messages are
+  (FR-015) and naming what was asked and the refusal's class and sentence, or the whole of an exception. R18.1
+  found the host had no log a test would not write into the engineer's; the option is nowhere by default, so no
+  test does. The tab's words send whoever needs the sentence there by the button's label: "Press View log to
+  see why."
+- *Plain words in the backend's mapping*, 149A's way, were weighed. The backend sees the bridge's code and could
+  word each, but its remodel routes raise some twenty sentences that can name a path, the add-in's own failures
+  would still need the host's words, and the tab's words would live in two places and two languages. The class
+  is enough for the engineer's way on; the code reaches the log with the sentence. The backend's bodies keep
+  their sentences, for the log.
+- *The gate's* `BackendUnavailable`: the review host answers the gate's refusals in words for this tab, and the
+  one that can name a path, a restart's failure, is a retryable `BackendUnavailable`, as is the one for a backend
+  that does not answer whether a turn runs. Both leave the backend not restarted with the saved settings, so the
+  host words every retryable `BackendUnavailable` from the gate as that (`BackendNotRestartedMessage`) and keeps
+  the gate's other refusals - a turn, a remodel run in flight, the add-in unloading - as the review host words
+  them. Telling the restart's failure apart would have meant changing the review host's gate, which decision 157A
+  changes in parallel, or carrying the raw failure across as the refusal's cause, an unmasked text that can
+  quote the key.
+- *The shared rows*: `PaneActionsOptions.FailureWords`, given the row and the failure; its message by default,
+  so every other tab is as it was (`PaneActionsTests`), and the Remodel host's words, which log the failure.
+- *Not changed, by design*: the run's data the page shows as recorded - the active document and the run folder
+  in its header, the attestation's source path, a change record's `target_path` and `error` - and `init`,
+  `document.changed` and `remodel.planned` naming them. They are not a failure's sentence, and the page names them
+  on purpose (R18.1's `AssertNoPathWasPosted` leaves them out too).
+
+**The words** (`RemodelHost`), each naming no path, no command and none of the build's plumbing, saying what was
+not done, that the engineer's part was not changed where a plan, a run or a copy action was asked for, and the
+way on, by the button's label where there is one:
+
+- `UnexpectedFailureMessage`: "The add-in met a failure it did not expect, so what was asked was not done. Your
+  part was not changed. Press View log to see why."
+- `NotAPartOnDiskMessage`: "The active document is not a part file the re-modeler can find where SOLIDWORKS
+  opened it from - it may have been moved, renamed or deleted since - so nothing was copied and no new plan was
+  made. Your part was not changed. Save it as a part, then press Remodel a copy again." The bridge refuses
+  `not_a_part` at the probe and as it reads the part again before the copy, so "nothing was copied" holds; this
+  host's own `NotAPart`, for an assembly or a drawing, keeps its words.
+- `BridgeNotAnsweringMessage`: "SOLIDWORKS did not answer the re-modeler, so it stopped. Your part was not
+  changed. Wait a moment, then press Remodel a copy again."
+- `BackendNotAnsweringMessage`: "The review backend did not answer, so the re-modeler stopped. Your part was not
+  changed. Wait for the backend to be ready, then press Remodel a copy again."
+- `BackendFailedMessage`: "The review backend could not do a step of this remodel, so it stopped. Your part was
+  not changed. Press View log to see why, then press Remodel a copy to plan again." Also the run line's word for
+  the run's own failure, which the run's last word follows.
+- `RunFolderNotMadeMessage`: "The run folder could not be made under the run root, so nothing was copied and no
+  new plan was made. Your part was not changed. Press View log to see why; if the run root cannot be written to,
+  choose a local folder for runs in Settings on the Review tab, then press Remodel a copy again."
+- `EarlierPlanNotClosedMessage`: "SOLIDWORKS did not answer the close of the earlier plan, so that plan is left as
+  it was and no new plan was made. Your part was not changed. Wait a moment, then press Remodel a copy again."
+- `RunCloseNotAnsweredMessage`: "The run ended, but SOLIDWORKS did not answer its close, so the copy may still be
+  open; the report and the saved artifacts are kept. Your part was not changed. Press View log to see why."
+- `OpenCopyFailedMessage`: "SOLIDWORKS did not open the copy, so nothing was opened. Your part was not changed.
+  Press View log to see why, then press Open copy again."
+- `DiscardCopyFailedMessage`: "The copy could not be deleted, so it is still in the run folder; SOLIDWORKS may
+  still have it open. Your part was not changed. Close the copy in SOLIDWORKS without saving, then press Discard
+  copy again. Press View log to see why."
+- `DiscardStateNotWrittenMessage`: "The copy was deleted, but 'discarded' could not be written to plan.json, so
+  this tab would go on reporting the state the run ended in. Your part was not changed. Press View log to see
+  why."
+- `BackendNotRestartedMessage`: "The review backend has not restarted with the saved settings, so nothing was
+  done. Your part was not changed. Save the settings again on the Review tab to restart it, then try again. Press
+  View log to see why." "Try again", since a plan and a Start both meet it.
+- `BackendDidNotStartMessage`: "The review backend did not start, so this tab cannot plan or run. The Review tab
+  says why. Save Settings on the Review tab to start it again." - the way on is 150A's
+  (`ReviewHost.StartItAgainOnTheReviewTab`), and the Review tab shows the failure whole.
+- `ShowFailedMessage`: "SOLIDWORKS could not show this, so nothing was selected. Press View log to see why."
+- `NotOpenedMessage`: "Windows could not open it, so nothing was opened. Press View log to see why."
+- `LogFolderNotOpenedMessage`: "Windows could not open the log folder, so nothing was opened." No View log: it is
+  the log's own folder that could not be made, and nothing could be written there either.
+
+**Tests** (T208). The theory `AFailureThatCanNameAPathReachesTheTabInItsOwnWordsAndItsSentenceGoesToTheLog`
+drives 23 routes, each failure's sentence carrying a fictional drive-letter path, run folder, pipe or log, and
+asserts the tab's words where the page shows them, that no sentence the page can print names a path - a drive
+letter's root, or the two separators a share or a pipe begins with - and that the sentence is in the host's
+log. `EveryClassTheBackendAnswersReachesTheTabInWordsThatNameNoPath` sweeps every class of
+`contracts/backend-remodel.md`'s error table, read from the contract, and the five more the routes and the
+client raise. The 22 routes first written were red before T209, and every class of the sweep but `ScopeRefused`,
+whose words were the backend's own and plain. The sentences are pinned word for word and plain, and name their
+buttons by the labels read from the page; the pipeline's keeping the backend's answer as the cause is pinned on
+its three routes (a guard); and the add-in hands the host its log. Three tests were written while planning the
+mutations (R19.7), each where what it pins had no test: the log is masked (red under W22); the 23rd route, View
+log when Windows does not open the log folder, whose refusal can name it (red under W18, W24, W26 and W30); and
+the guard `AGateRefusalThatIsNotTheRestartsKeepsTheReviewHostsWords`, the restart gate's refusals but its
+retryable `BackendUnavailable` - a remodel run in flight, the add-in unloading - in the review host's words, a
+turn's being pinned already (red under W28 and W29). On net48, `Directory.Delete`'s refusal names the file and not
+its folder, so the Discard route's sentence names the copy's file.
+
+### R19.4 One class, one flag (T210, T211)
+
+R18.7 item 2: `DocumentDirty` was retryable from the host's own check of the probe's signals and not from the
+backend's mapping of the bridge's `source_dirty`. **Retryable is the true value**: saving the part, or closing it
+unsaved and opening it again, makes the same press succeed. The backend's `DocumentDirty` is now retryable
+(`chat/remodel.py`); the host's own already was. `test_chat_remodel_routes.py` pins it on the probe and the open,
+red before T211, and keeps `ExternalReferences` not retryable on both - pressing again changes nothing - as a
+guard; on the add-in's side a guard pins its own route and the backend's flag passed on as it is given. The page
+reads no flag today.
+
+### R19.5 The look after a plan that follows into the copy its close left open (T212, T213)
+
+**What was asked** (002 research 152A's owner question 3, from its review's R5). With Start switched off, the
+shipped build, a plan closes its session before it answers (T176), so no held copy keeps the tool service's
+attachment (T180), and the look once the plan ends (152A) follows whatever the plan's close left active: the
+engineer's part, normally, which is the document attached to; or the copy, when the close left it open and
+active - the close's words then say so (T167: "The copy may still be open in SOLIDWORKS ... close it without
+saving") - which the tool service follows, a re-attach, and the re-attach told the plan lost, in words that say
+SOLIDWORKS switched documents. Should the look follow into the copy, and should such a plan be told lost?
+
+**Weighed**:
+
+- *The plan's close restores the source as active.* The re-modeler would take a handle to the engineer's part to
+  activate it, where the source leaves the host once, as the source of a filesystem copy, and is unreachable
+  rather than untargeted - the property the constitution's re-modeler exception rests on - and the guard would
+  need a call on the source that no allowlist has. And the copy would stay open behind it. Not safe.
+- *The follow skips the copy.* The tool service would stay on the engineer's part while the copy is active: the
+  bridge left on another document, the state 152A exists to end. A review of the copy would be refused
+  `BridgeOnAnotherDocument` for as long as the copy is active, in words that say to wait a moment (152A's N6,
+  reachable in the shipped build for the first time); and T180 and 152A's V12 pin that a plan closed at the plan
+  keeps no attachment, since preserving one is for a session a Start can use. Skipping every re-modeler copy
+  (`IsRemodelCopy`) would be wider still: Show change resolves through the tool service's session, so after Open
+  copy it would resolve a run's changes against the engineer's part.
+- *The follow kept, and the plan not told lost* - **chosen**. The tool service follows the document SOLIDWORKS has
+  active, the copy included, by 152A's one rule; nothing of the source is reached; a review of the copy is the
+  engineer's to make, and Remodel a copy refuses the copy as a source (`SourceIsRemodelCopy`). And a re-attach
+  loses a plan by taking the session it holds: a plan the host closed at the plan holds none, so neither a
+  re-attach nor a teardown takes anything from it, and no Start can use it in this build either way - Start
+  answers `StartNotValidated` before `SessionLost`. The notice's words, that the plan was made before SOLIDWORKS
+  switched documents and so can no longer be started, gave a cause that is not one. `RemodelRun`'s own record
+  already said a plan closed at the plan "is not lost, since nothing it needs went away"; `IsLostPlan` now agrees
+  for a re-attach too.
+
+**What changes**: `IsLostPlan` - the notice's and `init.latest_run.plan_lost`'s one rule - no longer counts a
+re-attach or a teardown against a plan closed at the plan. Planning again, which sets a plan aside, still tells it
+(T173), and so does a re-attach for a plan whose close the bridge could not answer, which keeps its session
+(T176). With Start switched on no plan is closed at the plan, so nothing changes there. After a plan whose close
+left the copy active, the page shows the close's words in its banner and the plan as planned; the tool service
+follows the copy, and follows the engineer's part again once the copy is closed, telling nothing either time.
+
+**Tests** (T212): through the real gate, the look into the copy the close left active, and an ordinary switch to
+another part, both telling nothing and `init` saying nothing is lost - red before T213 - and a guard of a plan
+whose close was not answered, still told lost. 152A's R5 theory now pins the follow as well (R19.6).
+
+### R19.6 Tests changed on purpose
+
+Each still pins what it pinned; where it pinned a failure's own sentence, it pins the tab's words and that the
+sentence is in the host's log.
+
+- `RemodelPageContractTests.HostStub` answers `remodel.stop` in the host's order - the Stop's word, the run's last
+  word (`StopEndsWith`), then the answer - where it answered at once, an order the host never produces (R18.7
+  item 5); `APageLoadedAgainWhileItsRunRunsShowsItRunningAndCanStopIt`'s summary says so, and it is green in both.
+- `RemodelHostTests.EveryStatusThatEndsTheRunOnThePageIsPostedOnceTheHostIsFree`: its "failed" and "pipeline"
+  endings look for `UnexpectedFailureMessage` and `BackendFailedMessage` where they looked for the failure's own
+  sentence; the order and the moment it pins are unchanged.
+- `RemodelHostTests.APlanWhoseStepFailsAfterTheCopyExistsClosesItsSessionOnceAndAnswersItsOwnRefusal`: its
+  `HostError` case, a dump that names no document, looks for `UnexpectedFailureMessage`.
+- `RemodelHostTests.ACloseThatFailedWithoutANamedRefusalCountsAsUnanswered`: `EarlierPlanNotClosedMessage`, where
+  it looked for the close's own message in the refusal.
+- `RemodelHostTests.AStartThatFailsAfterTheGateLeavesTheHostFree`: its scheduler case looks for
+  `UnexpectedFailureMessage` in the run line's `error`.
+- `RemodelHostTests.AStartTheRestartGateRefusesIsAnsweredWithItsRefusalAndTheRunNeverStarts`: the gate's
+  retryable `BackendUnavailable` in `BackendNotRestartedMessage`, and its flag pinned too.
+- `OtherTabsBackendRestartTests.EachOtherTabsHostMarksTheBackendsOwnWordAndNothingElse`: for the Remodel tab the
+  message is `BackendDidNotStartMessage`; the mark, and the other tabs' words, are unchanged.
+- `RemodelHostTests.ThroughTheGateWithStartSwitchedOffTheLookFollowsWhatThePlansCloseLeftActive` (152A's R5):
+  no plan lost where the copy was left active, where it pinned one, and the document the tool service follows,
+  which it did not pin.
+- `RemodelPlanEndToEndTests.AToolServiceThatStopsWhileAPlanWaitsFindsNoSessionAndThePageHearsOnlyThatThePlanIsLost`
+  is renamed `...AndThePageHearsNothingOfIt`: no plan lost, where it pinned one; the teardown's finding no
+  session, no SOLIDWORKS call and no failure told are unchanged.
+
+No test was loosened. The harness gained what the new cases use: `RemodelWorld.Logged` (the host's log),
+`RemodelWorld.Root`, a settable `LogFolder`, `FakeResolver.Failure`, `RecordingOpener.Failure`, and
+`HostStub.StopEndsWith`.
+
+### R19.7 The mutations
+
+Each fix taken out once, by one exact replacement in one file, in this worktree: the solution built (for P1,
+nothing to build), the named classes run - `RemodelHostTests`, `RemodelPlanEndToEndTests`, `RemodelWiringTests`,
+`BackendRemodelPipelineTests`, `OtherTabsBackendRestartTests` and `PaneActionsTests`; `RemodelPageContractTests`
+(52 cases) for L1 and L2; `test_chat_remodel_routes.py` (100) for P1 - and the file restored byte for byte, checked
+by its sha256. Every mutation is red. S1 to S3, L1, L2, W1 to W23, F1 and P1 ran twice, the same each time, with
+578 cases in the host's classes, `WhatTheLogKeepsIsMasked` among them. Reading every changed line against them
+then found fixes no mutation had taken out, and two properties no test pinned (R19.3): S4 and W24 to W30 ran once
+the three cases pinning those were in, with 581, and so did W18 and W21 again, whose red the new route adds to (4
+and 44 cases before it).
+
+| Id | Taken out | Red |
+|---|---|---|
+| S1 | `Stop` deciding and telling outside `_endingLock` | 1 case of 1 test: `AStopTheRunsEndMeetsIsToldBeforeThatEndAndAnsweredAtIt` |
+| S2 | a second Stop replacing the first's id (`_pendingStops` cleared before the add) | 1 case of 1 test: `EveryStopThatReachesARunIsAnsweredOnceAtItsEndAndNotAtTheNextRunsEnd` |
+| S3 | the copy-gone stop decided and told outside the lock | 1 case of 1 test: `TheStopWhenTheCopyIsGoneThatTheRunsEndMeetsIsToldBeforeThatEnd` |
+| S4 | a run stopped by a press answered unasked as well | 2 cases of 2 tests: S1's and S2's |
+| L1 | the answer to Stop writing the run line whether or not the run has ended | 2 cases of 1 test: `AStoppedRunsLineEndsOnTheRunsEndAndNotOnTheAnswerToStop`, ending `ready` and `error` |
+| L2 | an `error` that ends a run leaving the run line as it was | 1 case of 1 test: the same, ending `error` |
+| W1 | `TheBackendAnswered` always false: a refusal the backend answered keeping its own sentence | 23 cases of 3 tests: the seven routes of a refusal the backend answered (`AFailureThatCanNameAPathReachesTheTabInItsOwnWordsAndItsSentenceGoesToTheLog`), the fifteen classes with no words of 155A's or 149A's (`EveryClassTheBackendAnswersReachesTheTabInWordsThatNameNoPath`) and `WhatTheLogKeepsIsMasked` |
+| W2 | `NotAPart` dropped from `BackendWords` | 2 cases of 2 tests: the bridge's `not_a_part` route and the class |
+| W3 | `BridgeUnavailable` dropped from `BackendWords` | 2 cases of 2 tests: SOLIDWORKS not answering the probe, and the class |
+| W4 | `BackendUnavailable` dropped from `BackendWords` | 2 cases of 2 tests: the backend not answering the open, and the class |
+| W5 | `ScopeRefused` dropped from `ClassesTheBackendWordsPlainly` | 1 case of 1 test: the class |
+| W6 | `PageWords`: a failure that is no refusal keeping its own message | 2 cases of 2 tests: the plan's failure of the add-in's own, and the scheduler's case of `AStartThatFailsAfterTheGateLeavesTheHostFree` |
+| W7 | `Receive`'s `HostError` back to the failure's message | 2 cases of 2 tests: the plan's failure of the add-in's own, and T175's `HostError` case |
+| W8 | the run folder's failure back to the run root and the disk's refusal | 1 case of 1 test: its route |
+| W9 | the earlier plan's unanswered close ending with the close's message again | 2 cases of 2 tests: its route, and `ACloseThatFailedWithoutANamedRefusalCountsAsUnanswered` |
+| W10 | the run's failure with no named refusal back to its message | 2 cases of 2 tests: its route, and the "failed" ending of `EveryStatusThatEndsTheRunOnThePageIsPostedOnceTheHostIsFree` |
+| W11 | the run's unanswered close ending with the close's message again | 1 case of 1 test: its route |
+| W12 | Open copy's `OpenFailed` back to the seat's sentence | 1 case of 1 test: its route |
+| W13 | Discard copy's `DiscardFailed` back to the disk's refusal | 1 case of 1 test: its route |
+| W14 | the unwritten "discarded" ending with the disk's refusal again | 1 case of 1 test: its route |
+| W15 | the gate's retryable `BackendUnavailable` kept as the gate gave it | 2 cases of 2 tests: its route, and `AStartTheRestartGateRefusesIsAnsweredWithItsRefusalAndTheRunNeverStarts` |
+| W16 | the add-in's word that the backend did not start kept as it gave it | 2 cases of 2 tests: its route, and the Remodel case of `OtherTabsBackendRestartTests.EachOtherTabsHostMarksTheBackendsOwnWordAndNothingElse` |
+| W17 | the pipeline's `error` in the run line kept as it gave it | 2 cases of 2 tests: its route, and the "pipeline" ending |
+| W18 | the Remodel host's words not handed to `PaneActions` (`FailureWords`) | 5 cases of 1 test: Open report, Open run folder, Show change and View log's two routes |
+| W19 | `PaneActions`' Show not asking for the words | 1 case of 1 test: Show change's route |
+| W20 | a refusal told in the tab's words not logged (`SendRefusal`) | 25 cases of 3 tests: W1's seven routes, the seventeen classes but `ScopeRefused`, and `WhatTheLogKeepsIsMasked` |
+| W21 | nothing written to the log | 45 cases of 7 tests: the 23 routes, the seventeen classes, `WhatTheLogKeepsIsMasked`, and the four tests changed on purpose that look in the log (R19.6) |
+| W22 | the log not masked | 1 case of 1 test: `WhatTheLogKeepsIsMasked` |
+| W23 | the add-in not handing the host its log | 1 case of 1 test: `RemodelWiringTests.TheAddInHandsTheRemodelHostItsLog` |
+| W24 | `PaneActions`' Open not asking for the words | 3 cases of 1 test: Open report, Open run folder, and View log's folder not opened |
+| W25 | `PaneActions`' log folder not made, not asking for the words | 1 case of 1 test: its route |
+| W26 | every shared row told in one sentence, a file not opened (`SharedRowWords`) | 3 cases of 1 test: Show change and View log's two routes |
+| W27 | Start's failure once started back to its message | 1 case of 1 test: the scheduler's case of `AStartThatFailsAfterTheGateLeavesTheHostFree` |
+| W28 | every refusal of the gate that can be pressed again told as a backend not restarted | 2 cases of 2 tests: a turn's (`APlanTheRestartGateRefusesIsAnsweredWithItsRefusalAndNothingHappens`) and a remodel run's (`AGateRefusalThatIsNotTheRestartsKeepsTheReviewHostsWords`) |
+| W29 | the add-in unloading told as a backend not restarted | 1 case of 1 test: the guard's `BackendUnavailable` that cannot be pressed again |
+| W30 | View log's failure to open asking for Open report's words | 1 case of 1 test: View log's folder not opened |
+| F1 | `IsLostPlan` as it was: a re-attach losing a plan closed at the plan | 4 cases of 4 tests: the two of T212 that tell nothing, 152A's R5 case where the copy is left active, and the end-to-end teardown (R19.6) |
+| P1 | the backend's `DocumentDirty` not retryable | 2 cases of 1 test: `test_an_unsaved_part_is_retryable_on_every_route`, the probe and the open |
+
+38 mutations, 153 red results. Two parts of the fixes have no mutation of their own: the Stops taken in the step
+that frees the host, which is one step for the reader once a Stop is decided under the lock (R19.1); and each
+site's call to the log, which W21 takes out together - every route asserts its own sentence in the log, so each
+site's call is pinned by its route. The race S1 brings back is the old `Stop`'s, held open by T204's post rather
+than by its gap between the read and the store, which has no seam (R19.1).
+
+### R19.8 Left for the owner
+
+1. **The answer to Stop's own line.** The page still writes "Stopping. N change(s) applied ..." and ends the
+   run on the answer to Stop when no terminal status has ended the run - which this host never leaves it to do
+   (R19.2). Its words would then say the run is stopping when it has ended. Word that line as the run's end, or
+   drop the second way out of the running state?
+2. **A backend that does not answer whether a turn runs**, at a plan or a Start, is told on this tab as a
+   backend not restarted with the saved settings (`BackendNotRestartedMessage`) - true, but less than the
+   review host's own sentence, which goes to the log. Telling it apart from a restart's failure needs the gate
+   to say which it is, in the review host's `BeginRemodelRun`, which decision 157A changes. Leave it, or ask for
+   the distinction once 157A has landed?
+3. **The other tabs.** The Model check and Standards tabs still print a restart's failure ending in the
+   backend's log's path, and the shared rows' failures as they come; the Review tab prints a failure whole by
+   design (decision 150A). 159A was the Remodel tab's. The same words for the Model check and Standards tabs?
+4. **The run's own records.** A change record's `error`, the executor's text for a change that failed, is shown
+   in the change list as the run recorded it, and can name a path, as the attestation's source path and the
+   header's run folder do on purpose. They are the run's data, not a failure's sentence (R19.3). Leave them as
+   recorded?
+
+Recorded, not changed:
+
+- View log's own failure: the log folder could not be made, so its reason can be logged nowhere. The tab says
+  Windows could not open the log folder, and the Review tab's View log prints the failure whole.
+- The host's own `ResumeRefused` quotes the state `plan.json` records - a token the run writes - as the page's
+  run header shows a state it does not know as it was recorded (`remodel.js`, `RUN_STATES`).
+- The backend's bodies keep their sentences, paths included; the add-in is their only reader, and logs them.
+- Show change's log line names `entity.show` as what was asked: the shared row's hook is given the row.
+
+**Evidence** (2026-10-21; before at `5a58988`, after on the branch): the C# build, `--no-incremental`, at zero
+warnings once every mutation was restored; `SwReview.Extractor.Tests` 10,086 passed before and after, and
+`SwReview.AddIn.Tests` 3,540 before and 3,603 after - the 63 new cases of T204 (4), T206 (2), T208 (51), T210 (3)
+and T212 (3) - with the remodel host, page, end-to-end, pipeline and wiring classes, the shared rows, and the
+restart and tool-service classes, 2,798 cases, green five times in a row. Python, not live, with
+`SWREVIEW_REQUIRE_TOKENIZER=1`: 18,111 passed and 5 skipped before, on 3.12, and 18,115 passed and 5 skipped
+after - the four new cases of T210 - on 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`) alike. `ruff check`
+clean, and no broken link.
