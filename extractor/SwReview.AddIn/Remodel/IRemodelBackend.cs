@@ -101,15 +101,22 @@ public sealed class RemodelOpenReply
 /// <summary>`POST /remodel/runs`: phases B to D, on a worker thread in the backend.</summary>
 public sealed class RemodelRunRequest
 {
-    public RemodelRunRequest(string runDirectory, BridgeConfig bridge)
+    public RemodelRunRequest(string runDirectory, BridgeConfig bridge, string jobId)
     {
         RunDirectory = runDirectory ?? throw new ArgumentNullException(nameof(runDirectory));
         Bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
+        JobId = jobId ?? throw new ArgumentNullException(nameof(jobId));
     }
 
     public string RunDirectory { get; }
 
     public BridgeConfig Bridge { get; }
+
+    /// <summary>
+    /// The job this Start makes (owner decision 159A, on the final review: S3): 32 lowercase hexadecimal characters,
+    /// chosen by the pipeline, so a Start whose answer was lost can be asked again and be answered with the job it made.
+    /// </summary>
+    public string JobId { get; }
 }
 
 /// <summary>The change the executor is inside, as `remodel.progress` reports it.</summary>

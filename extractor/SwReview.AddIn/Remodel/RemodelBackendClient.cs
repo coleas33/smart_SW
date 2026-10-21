@@ -124,6 +124,7 @@ public sealed class RemodelBackendClient : IRemodelBackend
             {
                 { "run_dir", request.RunDirectory },
                 { "bridge", Bridge(request.Bridge) },
+                { "job_id", request.JobId },
             }));
 
         string? jobId = Text(body, "job_id");

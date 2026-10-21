@@ -89,7 +89,13 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     /// </summary>
     public const string AfterDumpNotConfirmedMessage =
         "The copy's feature tree after the changes was not confirmed handed to the review backend. The run ends when the "
-        + "backend has finished with it or stopped waiting for it, and nothing else starts until then.";
+        + "backend has finished with it or stops waiting for it, and nothing else starts until then; Stop ends the wait.";
+
+    /// <summary>
+    /// What the page is told as the after-dump is made, and what its line holds while the job waits for that dump unless
+    /// it could not be confirmed handed over (owner decision 159A, on the final review: S1).
+    /// </summary>
+    private const string AfterDumpReadingMessage = "Reading the copy's feature tree after the changes...";
 
     /// <summary>
     /// `plan.json`'s `RunState` (data-model.md section 11) as one of the `status` stages the
@@ -132,6 +138,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     private readonly IRemodelSeat _seat;
     private readonly IRemodelBackend _backend;
     private readonly TimeSpan _pollDelay;
+    private readonly Action<TimeSpan> _pause;
 
     /// <summary>
     /// The probe the bridge last minted, quoted back by <see cref="OpenCopy"/>. The bridge
@@ -157,6 +164,9 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     /// <param name="backend">The loopback routes.</param>
     /// <param name="pollDelay">How long between two `GET`s of the run. Injected so the tests
     /// are not slow; defaults to half a second.</param>
+    /// <param name="pause">Makes each wait of the poll loop: the clock's sleep by default. Injected so the tests can read
+    /// the waits - the backoff after a poll not answered included - without making them (owner decision 159A, on the
+    /// final review: A8, A9).</param>
     public BackendRemodelPipeline(
         Func<BackendEndpoint?> endpoint,
         Func<BridgeConfig?> remodelBridge,
@@ -165,7 +175,8 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
         IReviewDump dump,
         IRemodelSeat seat,
         IRemodelBackend backend,
-        TimeSpan? pollDelay = null)
+        TimeSpan? pollDelay = null,
+        Action<TimeSpan>? pause = null)
     {
         _endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
         _remodelBridge = remodelBridge ?? throw new ArgumentNullException(nameof(remodelBridge));
@@ -175,6 +186,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
         _seat = seat ?? throw new ArgumentNullException(nameof(seat));
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         _pollDelay = pollDelay ?? DefaultPollDelay;
+        _pause = pause ?? Pause;
     }
 
     public RemodelScopeReading ProbeScope()
@@ -311,20 +323,63 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
 
         RequireBackend();
         BridgeConfig bridge = RequireBridge();
+        BackendEndpoint? runningOn = _endpoint();
+        string jobId = Start(
+            new RemodelRunRequest(runDirectory, bridge, Guid.NewGuid().ToString("N")), runningOn, reporter);
+        return Poll(runDirectory, jobId, runningOn, reporter);
+    }
 
-        string jobId;
-        try
+    /// <summary>
+    /// The run's Start, answered. Owner decision 159A, on the final review (S3; older than 159A): a Start whose answer did
+    /// not come back - the client's 30 seconds ran out, or the answer failed as it was read - may have made its job, and
+    /// was read as a refusal: the host closed the run's session and was free while that job could run on the bridge, and
+    /// a Start pressed again was refused, the run folder already that job's. The Start names the job it makes, so one not
+    /// answered is asked again - the backend answers the same Start with the job it made, or makes it then - waiting
+    /// longer each time, as a poll not answered does, the page told once. Only a refusal the backend answered, or a
+    /// backend gone - and the job, if it made one, with it - ends it unstarted. An answer of success the client could not
+    /// read is the Start taken, and the run waits for the job it named.
+    /// </summary>
+    private string Start(RemodelRunRequest request, BackendEndpoint? runningOn, IRemodelRunReporter reporter)
+    {
+        bool told = false;
+        TimeSpan wait = _pollDelay;
+        while (true)
         {
-            jobId = _backend.StartRun(new RemodelRunRequest(runDirectory, bridge));
-        }
-        catch (BackendRequestException failure)
-        {
-            // `RunNotPlanned`, `ResumeRefused` and `RunInProgress` are refusals the page has a
-            // name for, not a failed run: nothing was started, so nothing ended.
-            throw Refusal(failure);
-        }
+            try
+            {
+                return _backend.StartRun(request);
+            }
+            catch (BackendRequestException failure)
+                when (string.Equals(failure.ErrorClass, "BadResponse", StringComparison.Ordinal))
+            {
+                // Owner decision 159A, on the final review (found while recording S3): an answer of success the client
+                // could not read - the backend answers a Start it refuses with an error class of its own - so the backend
+                // took the Start, and its job is the one named here. Its polls say how it stands; a backend gone with it
+                // ends the run as any poll's does.
+                return request.JobId;
+            }
+            catch (BackendRequestException failure) when (Answered(failure) || TheBackendIsGone(runningOn))
+            {
+                // `RunNotPlanned`, `ResumeRefused` and `RunInProgress` are refusals the page has a
+                // name for, not a failed run: nothing was started, so nothing ended.
+                throw Refusal(failure);
+            }
+            catch (Exception failure) when (!(failure is BackendRequestException) && TheBackendIsGone(runningOn))
+            {
+                throw new RemodelRefusal("BackendUnavailable", failure.Message, retryable: true, failure);
+            }
+            catch (Exception)
+            {
+                if (!told)
+                {
+                    told = true;
+                    reporter.Status("judging", BackendNotAnsweringMidRunMessage);
+                }
 
-        return Poll(runDirectory, jobId, reporter);
+                _pause(wait);
+                wait = Longer(wait);
+            }
+        }
     }
 
     public void ActivateCopy(string runDirectory)
@@ -343,15 +398,15 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     /// asked again, waiting longer each time up to <see cref="LongestUnansweredWait"/>; a Stop asked for is tried on every
     /// poll until it lands; and the page is told where the run stands once the backend answers again. A backend that stays
     /// silent while it runs holds the run, and the host, until it answers or stops: closing SOLIDWORKS ends it. Nothing
-    /// that fails on this side ends the run either: an after-dump that failed is told on the page, and answered once the
-    /// job, which waits for that dump and then goes on to its end, has ended - with that failure when the job failed, and
-    /// as the job ended when it finished, since a job finishes only once its dump has arrived and the failure was then
-    /// only its answer, lost.
+    /// that fails on this side ends the run either: an after-dump that failed is told on the page, the line kept while the
+    /// job waits for the dump, and answered once the job, which waits for that dump and then goes on to its end, has ended:
+    /// with that failure when the job failed without a dump this side knows never reached it, and otherwise as the job
+    /// ended - a dump whose answer was lost may have reached its job, and the job's own words say how it ended (owner
+    /// decision 159A, on the final review: S1, S4).
     /// </summary>
     private RemodelRunOutcome Poll(
-        string runDirectory, string jobId, IRemodelRunReporter reporter)
+        string runDirectory, string jobId, BackendEndpoint? runningOn, IRemodelRunReporter reporter)
     {
-        BackendEndpoint? runningOn = _endpoint();
         int relayed = 0;
         int applied = 0;
         int postedApplied = -1;
@@ -361,7 +416,9 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
         bool dumped = false;
         bool unanswered = false;
         TimeSpan wait = _pollDelay;
-        Exception? endsWith = null;
+        Exception? dumpFailure = null;
+        bool dumpMayHaveArrived = false;
+        string dumpWords = AfterDumpReadingMessage;
 
         while (true)
         {
@@ -374,9 +431,9 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
             {
                 if (TheJobIsOver(failure, runningOn))
                 {
-                    if (endsWith != null)
+                    if (dumpFailure != null)
                     {
-                        Rethrow(endsWith);
+                        Rethrow(dumpFailure);
                     }
 
                     // The backend is the only thing that knows how the run ended. With the job gone the run is over
@@ -396,7 +453,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
                     stopped = TryStop(jobId);
                 }
 
-                Pause(wait);
+                _pause(wait);
                 wait = Longer(wait);
                 continue;
             }
@@ -416,19 +473,37 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
             if (status.State == RemodelRunStatus.FinishedState
                 || status.State == RemodelRunStatus.FailedState)
             {
-                if (endsWith != null && status.State == RemodelRunStatus.FailedState)
+                // Owner decision 159A, on the final review (S4): the job's own end decides. But for a job that failed
+                // without the dump this side knows never reached it - not written, or refused by the backend - that
+                // failure is why; a dump whose answer was lost may have reached it, and the job's words say how it ended.
+                if (dumpFailure != null && !dumpMayHaveArrived && status.State == RemodelRunStatus.FailedState)
                 {
-                    Rethrow(endsWith);
+                    Rethrow(dumpFailure);
                 }
 
                 return Ended(status, applied, reporter);
             }
 
-            string? next = Stage(status.PlanState);
-            if (next != null && next != stage)
+            // Owner decision 159A, on the final review (S1): while the job waits for the dump this run made, or could not,
+            // the backend's plan still reads `applying` - it records `verifying` once the dump has arrived - so the line
+            // keeps what it said of that dump rather than going back to the plan being applied, and says it again once the
+            // backend answers after it did not.
+            if (dumped && status.Awaiting == RemodelRunStatus.PackageAfterAwaiting)
             {
-                stage = next;
-                reporter.Status(next, StageMessages[next]);
+                if (stage != "verifying")
+                {
+                    stage = "verifying";
+                    reporter.Status(stage, dumpWords);
+                }
+            }
+            else
+            {
+                string? next = Stage(status.PlanState);
+                if (next != null && next != stage)
+                {
+                    stage = next;
+                    reporter.Status(next, StageMessages[next]);
+                }
             }
 
             if (status.Current != null
@@ -458,35 +533,57 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
                 // Once, whatever it answers.
                 dumped = true;
                 stage = "verifying";
-                reporter.Status("verifying", "Reading the copy's feature tree after the changes...");
+                reporter.Status("verifying", AfterDumpReadingMessage);
+                string? package = null;
                 try
                 {
-                    string package = DumpInto(runDirectory, PackageAfterName, "verifying", reporter);
-                    _backend.PackageAfter(jobId, package);
-                }
-                catch (BackendRequestException failure)
-                {
-                    // `PackageAfterRefused` is a class of its own in the route's error table.
-                    // Unwrapped it would leave this loop as a raw request failure, reach the
-                    // host's generic catch and be shown as `HostError` - the one thing
-                    // `RemodelRefusal` exists to prevent.
-                    endsWith = Refusal(failure);
+                    package = DumpInto(runDirectory, PackageAfterName, "verifying", reporter);
                 }
                 catch (Exception failure)
                 {
-                    // Owner decision 159A, on Codex's review (C1): answered once the job has ended, as above.
-                    endsWith = failure;
+                    // Owner decision 159A, on Codex's review (C1): answered once the job has ended, as above. This side
+                    // could not write the dump, so it never reached the job.
+                    dumpFailure = failure;
                 }
 
-                if (endsWith != null)
+                if (package != null)
                 {
-                    reporter.Status("verifying", AfterDumpNotConfirmedMessage);
+                    try
+                    {
+                        _backend.PackageAfter(jobId, package);
+                    }
+                    catch (BackendRequestException failure)
+                    {
+                        // `PackageAfterRefused` is a class of its own in the route's error table.
+                        // Unwrapped it would leave this loop as a raw request failure, reach the
+                        // host's generic catch and be shown as `HostError` - the one thing
+                        // `RemodelRefusal` exists to prevent. A refusal the backend answered says the
+                        // dump did not reach the job; an answer that did not come back, or could not be
+                        // read, says nothing of it (owner decision 159A, on the final review: S4).
+                        dumpFailure = Refusal(failure);
+                        dumpMayHaveArrived = !Answered(failure) || UnreadAnswerClasses.Contains(failure.ErrorClass);
+                    }
+                    catch (Exception failure)
+                    {
+                        dumpFailure = failure;
+                        dumpMayHaveArrived = true;
+                    }
+                }
+
+                if (dumpFailure != null)
+                {
+                    dumpWords = AfterDumpNotConfirmedMessage;
+                    reporter.Status("verifying", dumpWords);
+
+                    // Owner decision 159A, on the final review (S1): the job's wait for its dump ends on a Stop asked for
+                    // while it waits, and a Stop the engineer asked for before has landed already - so it is asked again.
+                    stopped = false;
                 }
 
                 continue;
             }
 
-            Pause(_pollDelay);
+            _pause(_pollDelay);
         }
     }
 
@@ -497,20 +594,42 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     /// A backend is stopped only by the add-in, which stops one before it starts the next and holds a settings restart back
     /// while a run is in flight, or by its own exit; either way its worker is not acting.
     /// </summary>
-    private bool TheJobIsOver(Exception failure, BackendEndpoint? runningOn)
-    {
-        if (failure is BackendRequestException refused
+    private bool TheJobIsOver(Exception failure, BackendEndpoint? runningOn) =>
+        (failure is BackendRequestException refused
             && string.Equals(refused.ErrorClass, "UnknownJob", StringComparison.Ordinal))
-        {
-            return true;
-        }
+        || TheBackendIsGone(runningOn);
 
+    /// <summary>
+    /// Whether the backend asked at <paramref name="runningOn"/> is gone: none is running, or another runs in its place,
+    /// told by its port or its token. A backend is stopped only by the add-in, which stops one before it starts the next
+    /// and holds a settings restart back while a run is in flight, or by its own exit; either way its worker is not acting.
+    /// </summary>
+    private bool TheBackendIsGone(BackendEndpoint? runningOn)
+    {
         BackendEndpoint? now = _endpoint();
         return runningOn == null
             || now == null
             || now.Port != runningOn.Port
             || !string.Equals(now.Token, runningOn.Token, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Whether <paramref name="failure"/> is an answer the backend gave (owner decision 159A, on the final review: S3, S4):
+    /// any but the client's <c>BackendUnavailable</c>, which says none came - the backend not running, the connection
+    /// refused, or the client's 30 seconds spent.
+    /// </summary>
+    private static bool Answered(BackendRequestException failure) =>
+        !string.Equals(failure.ErrorClass, "BackendUnavailable", StringComparison.Ordinal);
+
+    /// <summary>
+    /// The client's classes for an answer that came and could not be read: what the backend did is not in it (owner
+    /// decision 159A, on the final review: S4).
+    /// </summary>
+    private static readonly HashSet<string> UnreadAnswerClasses = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "HttpError",
+        "BadResponse",
+    };
 
     /// <summary>
     /// Posts the stop the engineer asked for, and answers whether it landed. A stop that could not be posted has not
