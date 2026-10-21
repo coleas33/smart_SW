@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 
 namespace SwReview.AddIn.Review;
 
@@ -24,6 +23,14 @@ public enum RunRootVerdict
 
     /// <summary>Written as a Windows device path (<c>\\?\C:\...</c>, <c>\\.\...</c>), which the backend refuses with a UNC path.</summary>
     DevicePath,
+
+    /// <summary>
+    /// Could not be checked (the reviews of decision 154A, finding F2): a part of its path that is there
+    /// cannot be read as itself, or its nearest existing folder's final path or long name cannot be read - so
+    /// whether it is reached through a link cannot be told, and a link to a share can lie below a folder whose
+    /// attributes are denied while Windows still lets every user pass through it.
+    /// </summary>
+    Unverified,
 }
 
 /// <summary>What kind of drive a drive root is, as the run root rule reads it.</summary>
@@ -51,15 +58,22 @@ public enum RunRootEntry
     /// <summary>A link: a junction, a symbolic link or a volume's mount point - a name-surrogate reparse point.</summary>
     Link,
 
-    /// <summary>A file, or a part that cannot be read: nothing below it is looked at.</summary>
+    /// <summary>A file, or anything else there that is not a folder: nothing below it is looked at.</summary>
     Other,
+
+    /// <summary>
+    /// Something there that cannot be read as itself - its attributes denied, or its open failing for any
+    /// reason but its absence - so what it is, a folder or a link, cannot be told.
+    /// </summary>
+    Unreadable,
 }
 
 /// <summary>
 /// What the run root rule reads of Windows (owner decision 154A): one question each, so a test can fake a
-/// share, a mapped drive, a substituted drive or a link without making one. The add-in's own is
-/// <c>Native.WindowsRunRootProbe</c>. Every path it is handed is a full, local drive path, so none of the
-/// questions goes over the network.
+/// share, a mapped drive, a substituted drive, a link or a part that cannot be read without making one. The
+/// add-in's own is <c>Native.WindowsRunRootProbe</c>. The rule asks for a full path only of a root not written
+/// as a share, and that question reads nothing; every other path it hands the probe is a full, local drive
+/// path, so none of the questions goes over the network.
 /// </summary>
 public interface IRunRootProbe
 {
@@ -77,6 +91,19 @@ public interface IRunRootProbe
     /// <c>\\?\</c> prefix, a share's as <c>\\server\share\...</c> - or null when it cannot be read.
     /// </summary>
     string? FinalPathOf(string folder);
+
+    /// <summary>
+    /// The root's full path, made from its text alone (<c>GetFullPathNameW</c>): rooted, with no <c>.</c> or
+    /// <c>..</c> segment and a backslash between segments, an 8.3 short name left as written - nothing on the
+    /// disk or the network is read - or null when it has none.
+    /// </summary>
+    string? FullPathOf(string root);
+
+    /// <summary>
+    /// The folder's long-name form - each 8.3 short name in it expanded (<c>GetLongPathNameW</c>), which reads
+    /// each folder above it - with no <c>\\?\</c> prefix, or null when it cannot be read.
+    /// </summary>
+    string? LongPathOf(string folder);
 }
 
 /// <summary>
@@ -93,19 +120,25 @@ public interface IRunRootProbe
 /// link the re-modeler's open refuses its copy at the comparison of run folders. The backend's rule stays; the
 /// add-in names such a root before it begins.
 ///
-/// <b>What is read, and in what order</b> - so that nothing is opened over the network or through a link:
-/// the root in its full form, the one every run folder is made under (<see cref="RunFolders.FullFormOf"/>),
-/// which expands an 8.3 short name and spells forward slashes and <c>..</c> away; a full form written as a UNC
-/// or device path is refused on sight, as the backend refuses it, before anything is asked. Then the drive:
-/// a mapped network drive is refused, and so is a substituted drive, by what Windows says of the letter alone.
-/// Then each part from the top, by what it is and never by opening through it: a junction or a symbolic link
-/// (any name-surrogate reparse point, a volume's mount point among them) is refused, and the walk stops at the
-/// first part that is not there - a root the settings name before the run folder is made is judged by its
-/// nearest existing folder. Last, that folder's final path (<c>GetFinalPathNameByHandle</c>), which is what the
-/// backend's own resolution reads: one that differs from the full path other than by letter case is reached
-/// through a link of some other kind, and refused. A root the rule cannot read at all - blank, with no full
-/// form, on a drive letter that names no drive, with a part or a final path that cannot be read - is not
-/// refused for it: the run folder is made under it, or reports why not, as before.
+/// <b>What is read, and in what order</b> - so that nothing is opened over the network or through a link
+/// before the rule has refused what it can (the reviews of decision 154A, finding F1): the root as it is
+/// written, a UNC or device path refused on sight, as the backend refuses it, before anything is read or made
+/// of it. Then its full path, made from the text alone (<see cref="IRunRootProbe.FullPathOf"/>), which spells
+/// forward slashes and <c>..</c> away and reads nothing - unlike <c>Path.GetFullPath</c>, which expands an 8.3
+/// short name by reading each folder of the path, over the network for a share - and which names a share
+/// when a relative root lies under a current folder on one. Then the drive: a mapped network drive is refused,
+/// and so is a substituted drive, by what Windows says of the letter alone. Then each part from the top, by
+/// what it is and never by opening through it: a junction or a symbolic link (any name-surrogate reparse
+/// point, a volume's mount point among them) is refused; a part that is there but cannot be read as itself
+/// could be one, and leaves the root unverified, refused (finding F2); and the walk stops at the first part
+/// that is not there - a root the settings name before the run folder is made is judged by its nearest
+/// existing folder. Last, that folder's final path (<c>GetFinalPathNameByHandle</c>), which is what the
+/// backend's own resolution reads, compared with its spelling and, when it is not that, with its long-name
+/// form, read only now that no part is a link: one that differs from both other than by letter case is
+/// reached through a link of some other kind, and refused; one that is an 8.3 short name's long name is not
+/// (finding F3); and one that cannot be read leaves the root unverified. A root no folder can be made under -
+/// blank, written with a character no folder can have, on a drive letter that names no drive - is not refused:
+/// the run folder reports it, as before.
 /// </summary>
 public static class RunRootRule
 {
@@ -122,16 +155,33 @@ public static class RunRootRule
             return RunRootVerdict.Accepted;
         }
 
-        // The form every run folder is made under. A root with none - a device path under the legacy path
-        // handling a host process may run with, a UNC path with no share - is read as it is written.
-        string? full = FullFormOrNull(runRoot!);
-        RunRootVerdict? named = NamedAsAShareOrADevice(full ?? runRoot!.TrimStart());
+        // The root as it is written: a share or a device path is refused before anything is read or made of it.
+        string written = runRoot!.Trim();
+        RunRootVerdict? named = NamedAsAShareOrADevice(written);
         if (named.HasValue)
         {
             return named.Value;
         }
 
-        if (full == null || !IsDrivePath(full))
+        if (HasCharactersNoFolderCanHave(written))
+        {
+            return RunRootVerdict.Accepted;
+        }
+
+        // Its full path, made from the text alone: a relative root under a current folder on a share is on it.
+        string? full = probe.FullPathOf(written);
+        if (full == null)
+        {
+            return RunRootVerdict.Accepted;
+        }
+
+        named = NamedAsAShareOrADevice(full);
+        if (named.HasValue)
+        {
+            return named.Value;
+        }
+
+        if (!IsDrivePath(full))
         {
             return RunRootVerdict.Accepted;
         }
@@ -152,7 +202,7 @@ public static class RunRootRule
         }
 
         // From the top down to the nearest existing folder: a link is refused for what it is, before anything
-        // is opened through it.
+        // is opened through it, and a part that cannot be read could be one.
         string reached = full.Substring(0, 3);
         foreach (string part in full.Substring(3).Split(new[] { '\\' }, StringSplitOptions.RemoveEmptyEntries))
         {
@@ -163,6 +213,11 @@ public static class RunRootRule
                 return RunRootVerdict.Link;
             }
 
+            if (entry == RunRootEntry.Unreadable)
+            {
+                return RunRootVerdict.Unverified;
+            }
+
             if (entry != RunRootEntry.Folder)
             {
                 break;
@@ -171,14 +226,31 @@ public static class RunRootRule
             reached = next;
         }
 
+        // That folder's final path, which the backend's own resolution reads: its spelling, or - an 8.3 short
+        // name in it - its long-name form, read only now that no part is a link.
         string? final = probe.FinalPathOf(reached);
-        if (final == null
-            || string.Equals(final.TrimEnd('\\'), reached.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+        if (final == null)
+        {
+            return RunRootVerdict.Unverified;
+        }
+
+        if (SameFolder(final, reached))
         {
             return RunRootVerdict.Accepted;
         }
 
-        return IsUnc(final) ? RunRootVerdict.Share : RunRootVerdict.Link;
+        if (IsUnc(final))
+        {
+            return RunRootVerdict.Share;
+        }
+
+        string? longForm = probe.LongPathOf(reached);
+        if (longForm == null)
+        {
+            return RunRootVerdict.Unverified;
+        }
+
+        return SameFolder(final, longForm) ? RunRootVerdict.Accepted : RunRootVerdict.Link;
     }
 
     /// <summary>
@@ -190,9 +262,50 @@ public static class RunRootRule
     /// The way on is the run-root field of the Review tab's Settings (the owner's follow-up to decision 154A),
     /// which a save checks by this rule and brings into force with the backend's restart.
     /// </summary>
-    public static string Refusal(RunRootVerdict verdict, string notDone, string wayOn) =>
-        "The run root " + Kind(verdict) + Rule + ", so " + notDone + ". Choose a local folder for runs in Settings, then "
+    public static string Refusal(RunRootVerdict verdict, string notDone, string where, string wayOn) =>
+        "The run root " + Kind(verdict) + Rule + ", so " + notDone + ". Choose a local folder for runs " + where + ", then "
         + wayOn + ".";
+
+    /// <summary>Where the Review tab's own refusals send the engineer: the Settings on that tab.</summary>
+    public const string InSettings = "in Settings";
+
+    /// <summary>
+    /// Where the Model check, Standards and Remodel tabs' refusals send the engineer: their pages print the
+    /// message whole and have no Settings of their own (as decision 150A's way on for a backend that did not
+    /// start, <c>ReviewHost.StartItAgainOnTheReviewTab</c>).
+    /// </summary>
+    public const string InSettingsOnTheReviewTab = "in Settings on the Review tab";
+
+    /// <summary>
+    /// Whether a folder chosen for runs is written as a full path (the reviews of decision 154A, finding F7): its
+    /// drive letter and a separator, or two separators - a share or a device path, which the rule itself refuses.
+    /// A relative path, one rooted on the current drive and one on a drive with no separator after its letter -
+    /// relative to that drive's current folder - are not: each is resolved against a current folder, which the
+    /// add-in and the backend can each read as another, and SOLIDWORKS can move its own.
+    /// </summary>
+    public static bool IsFullPath(string root)
+    {
+        if (root == null)
+        {
+            throw new ArgumentNullException(nameof(root));
+        }
+
+        string text = root.Trim();
+        if (text.Length >= 2 && IsSeparator(text[0]) && IsSeparator(text[1]))
+        {
+            return true;
+        }
+
+        return text.Length >= 3 && IsLetter(text[0]) && text[1] == ':' && IsSeparator(text[2]);
+    }
+
+    /// <summary>
+    /// A save's words for a folder chosen for runs that is not written as a full path (finding F7): the one field
+    /// not saved, with the way on. No path: the engineer typed it.
+    /// </summary>
+    public const string NotFullPathRefusal =
+        "The folder chosen for runs is not written as a full path, starting with its drive letter, so the run root "
+        + "was not changed; the other settings were saved. Type the folder's full path, then save again.";
 
     /// <summary>
     /// A save's words for a folder chosen for runs in Settings that the rule refuses (the owner's follow-up to
@@ -227,24 +340,39 @@ public static class RunRootRule
                 return "is reached through a link, such as a junction, a symbolic link or a substituted drive";
             case RunRootVerdict.DevicePath:
                 return "is written as a Windows device path";
+            case RunRootVerdict.Unverified:
+                return "could not be checked, since a part of its path cannot be read";
             default:
                 throw new ArgumentOutOfRangeException(nameof(verdict), verdict, "an accepted run root is not refused");
         }
     }
 
-    private static string? FullFormOrNull(string runRoot)
+    /// <summary>
+    /// Whether <paramref name="written"/> holds a character no folder's path can: one Windows refuses in a name,
+    /// a wildcard, a control character, or a colon anywhere but after a drive letter. No folder can be made under
+    /// such a root, and its run folder says so; the rule reads nothing of it.
+    /// </summary>
+    private static bool HasCharactersNoFolderCanHave(string written)
     {
-        try
+        for (int index = 0; index < written.Length; index++)
         {
-            return RunFolders.FullFormOf(runRoot);
+            char character = written[index];
+            if (character < ' ' || character == '"' || character == '<' || character == '>' || character == '|'
+                || character == '*' || character == '?' || (character == ':' && index != 1))
+            {
+                return true;
+            }
         }
-        catch (Exception failure)
-            when (failure is ArgumentException || failure is NotSupportedException
-                || failure is PathTooLongException || failure is System.Security.SecurityException)
-        {
-            return null;
-        }
+
+        return false;
     }
+
+    /// <summary>Whether two paths name one folder as Windows spells it: the same but for letter case and a final separator.</summary>
+    private static bool SameFolder(string path, string other) =>
+        string.Equals(path.TrimEnd('\\'), other.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLetter(char character) =>
+        (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z');
 
     /// <summary>
     /// A root written as a UNC path - <c>\\server\share</c> or <c>\\?\UNC\server\share</c> - is on a share, and
@@ -274,10 +402,7 @@ public static class RunRootRule
 
     private static bool IsUnc(string path) => path.StartsWith(@"\\", StringComparison.Ordinal);
 
-    /// <summary>"X:\" and what follows: the only shape of full form whose drive the rule can ask about.</summary>
+    /// <summary>"X:\" and what follows: the only shape of full path whose drive the rule can ask about.</summary>
     private static bool IsDrivePath(string full) =>
-        full.Length >= 3
-        && ((full[0] >= 'A' && full[0] <= 'Z') || (full[0] >= 'a' && full[0] <= 'z'))
-        && full[1] == ':'
-        && full[2] == '\\';
+        full.Length >= 3 && IsLetter(full[0]) && full[1] == ':' && full[2] == '\\';
 }

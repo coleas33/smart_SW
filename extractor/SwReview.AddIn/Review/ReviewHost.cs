@@ -424,6 +424,15 @@ public sealed class ReviewHost : IDisposable
     /// the thread a restart is made on, read on every tab's.
     /// </summary>
     private volatile string _runRootInForce;
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, each once, in the order it came into
+    /// force (owner decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open,
+    /// and a re-modeler's copy under any of them is a copy, after a save has moved the run root. Replaced whole,
+    /// never changed in place, by the one restart made at a time (<see cref="RestartBackend"/>), so a reader on
+    /// another tab's thread holds a list that stays as it read it.
+    /// </summary>
+    private volatile string[] _runRootsInForce;
     private string? _settingsError;
     private PreparedContext? _preparedContext;
     private long _contextGeneration;
@@ -448,6 +457,7 @@ public sealed class ReviewHost : IDisposable
         _settings = loaded.Settings;
         _settingsError = loaded.Error;
         _runRootInForce = _settings.RunRoot;
+        _runRootsInForce = new[] { _settings.RunRoot };
 
         _runs = new PaneRunLookup(
             "chat_id",
@@ -458,6 +468,7 @@ public sealed class ReviewHost : IDisposable
 
         _actions = new PaneActions(new PaneActionsOptions(options.Channel, () => RunRoot, _runs)
         {
+            RunRootsInForce = () => RunRootsInForce,
             LogFolder = () => _options.LogFolder,
             EntityResolver = () => _options.EntityResolver,
             Opener = () => _options.Opener,
@@ -509,6 +520,12 @@ public sealed class ReviewHost : IDisposable
     /// names the run root saved, which the next restart brings into force.
     /// </summary>
     public string RunRoot => _runRootInForce;
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, each once, in the order it came into
+    /// force (owner decision 154A, the reviews' finding F6), <see cref="RunRoot"/> among them.
+    /// </summary>
+    public IReadOnlyList<string> RunRootsInForce => _runRootsInForce;
 
     /// <summary>
     /// Whether a settings restart stands before new work: one waits to be made, or one is being
@@ -939,7 +956,7 @@ public sealed class ReviewHost : IDisposable
                 return;
 
             case "settings.get":
-                SendSettings("settings", id, runRootRefusal: null);
+                SendSettings("settings", id, runRootNote: null);
                 return;
 
             case "send_when_checked.save":
@@ -1096,7 +1113,7 @@ public sealed class ReviewHost : IDisposable
 
     // ---- settings -----------------------------------------------------------------------
 
-    private void SendSettings(string type, string? id, string? runRootRefusal)
+    private void SendSettings(string type, string? id, Dictionary<string, object?>? runRootNote)
     {
         ResolvedApiKey key = _settings.ResolveApiKey(_options.Environment);
         var answer = new Dictionary<string, object?>
@@ -1104,7 +1121,7 @@ public sealed class ReviewHost : IDisposable
             { "settings", View(_settings) },
             { "key_source", key.Source },
         };
-        AddRunRootRefusal(answer, runRootRefusal);
+        AddRunRootNote(answer, runRootNote);
         Send(type, id, answer);
         ReportSettingsProblems(key);
     }
@@ -1226,7 +1243,7 @@ public sealed class ReviewHost : IDisposable
         // Owner decision 154A, the owner's follow-up ("A Field + don't block"): a save never fails for the run
         // root. The folder chosen for runs is written only when the run root rule accepts it, and the answer
         // says when it, or the run root left in force, is refused.
-        string? runRootRefusal = ChooseRunRoot(payload, next);
+        Dictionary<string, object?>? runRootNote = ChooseRunRoot(payload, next);
 
         if (!PersistSettings(next, id))
         {
@@ -1264,12 +1281,12 @@ public sealed class ReviewHost : IDisposable
             TellTheOtherTabsTheRestartFailed(failure);
             Dictionary<string, object?> notRestarted = _actions.ErrorPayload(
                 "BackendNotRestarted", SavedNotRestarted + failure.Message, retryable: true);
-            AddRunRootRefusal(notRestarted, runRootRefusal);
+            AddRunRootNote(notRestarted, runRootNote);
             Send("error", id, notRestarted);
             return;
         }
 
-        SendSettings("settings.saved", id, runRootRefusal);
+        SendSettings("settings.saved", id, runRootNote);
 
         if (promise != null)
         {
@@ -1296,20 +1313,27 @@ public sealed class ReviewHost : IDisposable
     /// <summary>
     /// The run root a save writes, and what its answer says of it (owner decision 154A, the owner's follow-up,
     /// "A Field + don't block"): a save never fails for the run root. A folder chosen for runs that differs
-    /// from the run root the settings name is judged by the run root rule: accepted, it is written into
-    /// <paramref name="next"/>; refused, it is the one field not saved, and the words say so. Otherwise the
-    /// run root the settings name is kept, and when the rule refuses it the words say every run is refused
-    /// until it is changed. Null when there is nothing to say.
+    /// from the run root the settings name must be written as a full path (the reviews' finding F7) and is
+    /// judged by the run root rule: written in full and accepted, it is written into <paramref name="next"/>;
+    /// otherwise it is the one field not saved, and the note says so. Otherwise the run root the settings name
+    /// is kept - a relative one in the file too, which keeps working - and when the rule refuses it the note
+    /// says every run is refused until it is changed. The note is shaped as an `error`, not retryable; null when
+    /// there is nothing to say.
     /// </summary>
-    private string? ChooseRunRoot(JsonElement payload, UserSettings next)
+    private Dictionary<string, object?>? ChooseRunRoot(JsonElement payload, UserSettings next)
     {
         string? chosen = ChosenRunRoot(payload);
         if (chosen != null && !string.Equals(chosen, _settings.RunRoot, StringComparison.Ordinal))
         {
+            if (!RunRootRule.IsFullPath(chosen))
+            {
+                return _actions.ErrorPayload("RunRootNotFullPath", RunRootRule.NotFullPathRefusal, retryable: false);
+            }
+
             RunRootVerdict verdict = RunRootRule.Judge(chosen, _options.RunRootProbe);
             if (verdict != RunRootVerdict.Accepted)
             {
-                return RunRootRule.ChosenRefusal(verdict);
+                return _actions.ErrorPayload("RunRootRefused", RunRootRule.ChosenRefusal(verdict), retryable: false);
             }
 
             next.RunRoot = chosen;
@@ -1317,7 +1341,9 @@ public sealed class ReviewHost : IDisposable
         }
 
         RunRootVerdict kept = RunRootRule.Judge(next.RunRoot, _options.RunRootProbe);
-        return kept == RunRootVerdict.Accepted ? null : RunRootRule.KeptRefusal(kept);
+        return kept == RunRootVerdict.Accepted
+            ? null
+            : _actions.ErrorPayload("RunRootRefused", RunRootRule.KeptRefusal(kept), retryable: false);
     }
 
     /// <summary>
@@ -1339,14 +1365,14 @@ public sealed class ReviewHost : IDisposable
 
     /// <summary>
     /// What a save says of the run root (owner decision 154A, the owner's follow-up), when there is anything to
-    /// say: `run_root_refusal`, shaped as an `error` - class `RunRootRefused`, the rule's words, not retryable -
-    /// on the save's answer, `settings.saved` or the `error` of a save whose restart failed.
+    /// say: `run_root_refusal`, the note <see cref="ChooseRunRoot"/> made, on the save's answer -
+    /// `settings.saved`, or the `error` of a save whose restart failed.
     /// </summary>
-    private void AddRunRootRefusal(Dictionary<string, object?> answer, string? runRootRefusal)
+    private static void AddRunRootNote(Dictionary<string, object?> answer, Dictionary<string, object?>? runRootNote)
     {
-        if (runRootRefusal != null)
+        if (runRootNote != null)
         {
-            answer["run_root_refusal"] = _actions.ErrorPayload("RunRootRefused", runRootRefusal, retryable: false);
+            answer["run_root_refusal"] = runRootNote;
         }
     }
 
@@ -1598,6 +1624,14 @@ public sealed class ReviewHost : IDisposable
     {
         _options.Backend.Restart(settings, key);
         _runRootInForce = settings.RunRoot;
+
+        // The reviews' finding F6: the run root a restart brings in joins those in force this session. One restart
+        // is made at a time (DeferredRestart), so there is one writer.
+        string[] inForce = _runRootsInForce;
+        if (!inForce.Contains(settings.RunRoot, StringComparer.OrdinalIgnoreCase))
+        {
+            _runRootsInForce = inForce.Concat(new[] { settings.RunRoot }).ToArray();
+        }
     }
 
     /// <summary>
@@ -2072,7 +2106,8 @@ public sealed class ReviewHost : IDisposable
         long generation = ExpirePreparedContext();
         _preparationId = null;
         _preparedDocument = null;
-        if (RunRootRefused(id)) return;
+        string judged = RunRoot;
+        if (RunRootRefused(id, judged)) return;
         if (!ContextReady(id)) return;
         PageDocument? document = _options.CurrentDocument();
         if (document == null || !document.IsAttachable)
@@ -2085,9 +2120,11 @@ public sealed class ReviewHost : IDisposable
             SendError(id, "NotAttached", "Evidence extraction is not available in this host.", true);
             return;
         }
+        string? runRoot = RunRootToUse(id, judged);
+        if (runRoot == null) return;
         try
         {
-            string directory = RunFolders.CreateForDocument(RunRoot, document.Path, _options.Now());
+            string directory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now());
             PostStatus("extracting", "Extracting saved evidence for engineering context; no review tokens used.");
             DumpSummary summary = _options.Dump.Run(directory, message => PostStatus("extracting", message));
             if (!SameDocument(_options.CurrentDocument(), document)
@@ -2177,7 +2214,8 @@ public sealed class ReviewHost : IDisposable
 
     private void ReviewContext(string? id, JsonElement payload)
     {
-        if (RunRootRefused(id)) return;
+        string judged = RunRoot;
+        if (RunRootRefused(id, judged)) return;
         PreparedContext? prepared = CurrentContext(id, payload);
         if (prepared == null) return;
         string? contextId = Text(payload, "context_id");
@@ -2191,6 +2229,7 @@ public sealed class ReviewHost : IDisposable
         // Wait here as it does for review.start, and the record, status and reply say which.
         bool started = CreateReviewSession(prepared.Document, prepared.Directory, null,
             _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, prepared.Summary,
+            judged, ContextReviewRunRootChanged,
             attachment: new EngineeringContextAttachment(contextId!, head!, prepared.Sha256));
         if (started) _preparedContext = null;
     }
@@ -2200,7 +2239,7 @@ public sealed class ReviewHost : IDisposable
         ExpirePreparedContext();
         _preparationId = null;
         _preparedDocument = null;
-        if (RunRootRefused(id))
+        if (RunRootRefused(id, RunRoot))
         {
             return;
         }
@@ -2261,7 +2300,8 @@ public sealed class ReviewHost : IDisposable
 
         // Owner decision 154A: first, before the document is read or the backend readied - which can make a
         // waiting settings restart - and so before a review, a Retry or a context review's Retry makes anything.
-        if (RunRootRefused(id))
+        string judged = RunRoot;
+        if (RunRootRefused(id, judged))
         {
             return;
         }
@@ -2305,7 +2345,7 @@ public sealed class ReviewHost : IDisposable
         SessionRecord? retried = retryOf == null ? null : FindSession(retryOf);
         if (retried?.EngineeringContext != null)
         {
-            RetryContextReview(id, document, retried);
+            RetryContextReview(id, document, retried, judged);
             return;
         }
 
@@ -2337,7 +2377,14 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
-        string runRoot = RunRoot;
+        // The reviews of decision 154A, N8: getting the backend ready can make a waiting settings restart, which
+        // can bring another run root into force; it is judged before the run folder is made under it.
+        string? runRoot = RunRootToUse(id, judged);
+        if (runRoot == null)
+        {
+            return;
+        }
+
         string runDirectory;
         try
         {
@@ -2374,7 +2421,8 @@ public sealed class ReviewHost : IDisposable
         }
 
         CreateReviewSession(document, runDirectory, Blank(Text(payload, "retry_of")),
-            _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, summary);
+            _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, summary,
+            runRoot, NewReviewRunRootChanged);
     }
 
     /// <summary>
@@ -2384,7 +2432,7 @@ public sealed class ReviewHost : IDisposable
     /// `retry_of`, through the one gated session path, Send or Wait from the box. The backend
     /// validates the head again and refuses a changed context with its conflict.
     /// </summary>
-    private void RetryContextReview(string? id, PageDocument document, SessionRecord retried)
+    private void RetryContextReview(string? id, PageDocument document, SessionRecord retried, string judged)
     {
         if (!document.IsSameDocument(retried.Document))
         {
@@ -2411,6 +2459,7 @@ public sealed class ReviewHost : IDisposable
         CreateReviewSession(retried.Document, retried.RunDirectory, retried.ChatId,
             _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id,
             retried.ContextExtraction ?? new DumpSummary(retried.RunDirectory, 0, 0),
+            judged, ContextRetryRunRootChanged,
             attachment: retried.EngineeringContext);
     }
 
@@ -2430,8 +2479,50 @@ public sealed class ReviewHost : IDisposable
     /// the backend refuses on a share and spells otherwise through a link. Written once for every start on the
     /// tab.
     /// </summary>
-    private bool RunRootRefused(string? id) =>
-        _actions.RefusedRunRoot(id, RunRoot, _options.RunRootProbe, "nothing was started", "try again");
+    private bool RunRootRefused(string? id, string runRoot) =>
+        _actions.RefusedRunRoot(id, runRoot, _options.RunRootProbe, "nothing was started", RunRootRule.InSettings, "try again");
+
+    /// <summary>
+    /// The run root a start goes on under once the backend is ready (the reviews of decision 154A, N8): the run
+    /// root in force, judged again when a restart made since moved it from <paramref name="judged"/> - one the
+    /// readiness check made, waiting since a save during a turn, or a save's own while the evidence was
+    /// extracted; null once the start is answered with the refusal.
+    /// </summary>
+    private string? RunRootToUse(string? id, string judged)
+    {
+        string inForce = RunRoot;
+        if (string.Equals(inForce, judged, StringComparison.Ordinal))
+        {
+            return inForce;
+        }
+
+        return RunRootRefused(id, inForce) ? null : inForce;
+    }
+
+    /// <summary>
+    /// What a run answers, <c>RunRootChanged</c>, when the folder it would go on in is under a run root a settings
+    /// save has since moved (the reviews of decision 154A, finding F6): the backend makes runs only under the run
+    /// root it was started with, and would refuse the folder deep in the run. One sentence for each start, each
+    /// with its way on; no path.
+    /// </summary>
+    private const string RecheckRunRootChanged =
+        "this review's run folder is under a run root that is no longer in force, and the backend makes runs only "
+        + "under the one in force, so its checks were not run again. Press Review to review the model again.";
+
+    /// <inheritdoc cref="RecheckRunRootChanged"/>
+    private const string ContextReviewRunRootChanged =
+        "the saved context evidence is in a run folder under a run root that is no longer in force, and the backend "
+        + "makes runs only under the one in force, so its review was not started. Extract the context evidence again.";
+
+    /// <inheritdoc cref="RecheckRunRootChanged"/>
+    private const string ContextRetryRunRootChanged =
+        "this review's run folder is under a run root that is no longer in force, and the backend makes runs only "
+        + "under the one in force, so it was not retried. Press Review to review the model again.";
+
+    /// <inheritdoc cref="RecheckRunRootChanged"/>
+    private const string NewReviewRunRootChanged =
+        "the run root changed while the evidence was extracted, and the backend makes runs only under the one in "
+        + "force, so the review was not started. Press Review again.";
 
     private bool CanReviewDocument(PageDocument document, string? id)
     {
@@ -2442,7 +2533,8 @@ public sealed class ReviewHost : IDisposable
 
     private void RecheckReview(string? id, JsonElement payload)
     {
-        if (RunRootRefused(id))
+        string judged = RunRoot;
+        if (RunRootRefused(id, judged))
         {
             return;
         }
@@ -2462,7 +2554,7 @@ public sealed class ReviewHost : IDisposable
         }
 
         CreateReviewSession(record.Document, record.RunDirectory, chatId, ReviewMode.Recheck, id,
-            new DumpSummary(record.RunDirectory, 0, 0), replacing: record);
+            new DumpSummary(record.RunDirectory, 0, 0), judged, RecheckRunRootChanged, replacing: record);
     }
 
     /// <summary>
@@ -2487,6 +2579,10 @@ public sealed class ReviewHost : IDisposable
         return false;
     }
 
+    /// <param name="judgedRunRoot">The run root the start judged, or made its folder under: judged again if a
+    /// restart has moved the run root in force since (the reviews of decision 154A, N8).</param>
+    /// <param name="runRootChangedWords">What the start answers when <paramref name="runDirectory"/> is not under
+    /// the run root in force, which the backend would refuse (the reviews' finding F6).</param>
     /// <param name="replacing">The record a re-run replaces (`ReviewMode.Recheck` only): its
     /// place in the list and its own model status are kept, even if it was forgotten meanwhile.</param>
     /// <param name="attachment">Feature 016's saved context for this review, or null (owner decision
@@ -2494,8 +2590,8 @@ public sealed class ReviewHost : IDisposable
     /// <returns>Whether the session was created; false after a refusal already answered.</returns>
     private bool CreateReviewSession(
         PageDocument? document, string runDirectory, string? previousChatId, ReviewMode mode,
-        string? id, DumpSummary summary, SessionRecord? replacing = null,
-        EngineeringContextAttachment? attachment = null)
+        string? id, DumpSummary summary, string judgedRunRoot, string runRootChangedWords,
+        SessionRecord? replacing = null, EngineeringContextAttachment? attachment = null)
     {
         PageDocument? active = mode == ReviewMode.Recheck ? _options.CurrentDocument() : document;
         if (active != null && !CanReviewDocument(active, id))
@@ -2518,6 +2614,23 @@ public sealed class ReviewHost : IDisposable
             // chat id as retry_of. Rechecks never ask the backend for a fresh retry.
             PostStatus("checking", "Checking the saved evidence again...");
         }
+
+        // The reviews of decision 154A, N8 and finding F6: every restart this start could meet is made by now - the
+        // backend is ready - and the backend makes runs only under the run root it was started with. So a run root
+        // that moved since the start judged it is judged again, and the run's folder - made before, by this start
+        // or an earlier one - must lie under it, or the start is answered here rather than by the backend's rule.
+        string? runRoot = RunRootToUse(id, judgedRunRoot);
+        if (runRoot == null)
+        {
+            return false;
+        }
+
+        if (!RunFolders.IsUnder(runDirectory, runRoot))
+        {
+            SendError(id, "RunRootChanged", runRootChangedWords, retryable: false);
+            return false;
+        }
+
         ChatSessionHandle handle;
         try
         {

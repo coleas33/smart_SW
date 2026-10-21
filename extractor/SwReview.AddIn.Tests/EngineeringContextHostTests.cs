@@ -307,7 +307,7 @@ public sealed class EngineeringContextHostTests
         Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
         Assert.False(error.GetProperty("retryable").GetBoolean());
         Assert.Equal(
-            RunRootRule.Refusal(RunRootVerdict.Share, "nothing was started", "try again"),
+            RunRootRule.Refusal(RunRootVerdict.Share, "nothing was started", RunRootRule.InSettings, "try again"),
             error.GetProperty("message").GetString());
         Assert.Equal(0, world.Dump.Runs);
         Assert.False(Directory.Exists(world.RunRoot), "a refused preparation made the run root");
@@ -346,10 +346,64 @@ public sealed class EngineeringContextHostTests
         JsonElement retry = world.Reply("error");
         Assert.Equal("RunRootRefused", retry.GetProperty("error_class").GetString());
         Assert.Equal(
-            RunRootRule.Refusal(RunRootVerdict.Share, "nothing was started", "try again"),
+            RunRootRule.Refusal(RunRootVerdict.Share, "nothing was started", RunRootRule.InSettings, "try again"),
             retry.GetProperty("message").GetString());
         Assert.Single(world.Backend.Created);
         Assert.Equal(2, world.Dump.Runs);
+    }
+
+    /// <summary>
+    /// The reviews' finding F6: context evidence extracted under a run root a save has since moved is in a
+    /// folder the backend no longer makes runs under, so its review is refused before the backend is asked, in
+    /// plain words with the way on - extract it again - and no session is asked for.
+    /// </summary>
+    [Fact]
+    public void AContextReviewOfEvidenceExtractedUnderAnEarlierRunRootIsRefused()
+    {
+        using var world = new World();
+        world.Host.Receive(Message("context.prepare", new { }));
+        JsonElement prepared = world.Reply("context.prepared");
+        world.Host.Receive(Message("settings.save", world.SaveMoving()));
+        world.Reply("settings.saved");
+
+        world.Host.Receive(Message("context.review", new
+        {
+            run_id = prepared.GetProperty("run_id").GetString(), context_id = Guid.NewGuid().ToString(),
+            head_digest = new string('a', 64), package_sha256 = prepared.GetProperty("package_sha256").GetString(),
+        }));
+
+        JsonElement error = world.Reply("error");
+        Assert.Equal("RunRootChanged", error.GetProperty("error_class").GetString());
+        Assert.False(error.GetProperty("retryable").GetBoolean());
+        Assert.Equal(
+            "the saved context evidence is in a run folder under a run root that is no longer in force, and the "
+            + "backend makes runs only under the one in force, so its review was not started. Extract the "
+            + "context evidence again.",
+            error.GetProperty("message").GetString());
+        Assert.Empty(world.Backend.Created);
+    }
+
+    /// <summary>
+    /// ...and a context review's Retry, which reviews again in that review's own run folder, is refused the
+    /// same way once a save has moved the run root, with no session asked for.
+    /// </summary>
+    [Fact]
+    public void AContextReviewsRetryUnderAnEarlierRunRootIsRefused()
+    {
+        using var world = new World();
+        world.StartContextReview();
+        world.Host.Receive(Message("settings.save", world.SaveMoving()));
+        world.Reply("settings.saved");
+
+        world.Host.Receive(Message("review.start", new { retry_of = "chat-context" }));
+
+        JsonElement error = world.Reply("error");
+        Assert.Equal("RunRootChanged", error.GetProperty("error_class").GetString());
+        Assert.Equal(
+            "this review's run folder is under a run root that is no longer in force, and the backend makes runs "
+            + "only under the one in force, so it was not retried. Press Review to review the model again.",
+            error.GetProperty("message").GetString());
+        Assert.Single(world.Backend.Created);
     }
 
     private static string Message(string type, object payload) =>
@@ -377,12 +431,25 @@ public sealed class EngineeringContextHostTests
             Host = new ReviewHost(new ReviewHostOptions(new Channel(Messages), Backend, settingsPath)
             {
                 CurrentDocument = ReadDocument, Dump = Dump, EngineeringSelection = Selection, Engineer = "fictional-engineer", Environment = _ => null,
-                RunRootProbe = runRootProbe ?? SwReview.AddIn.Native.WindowsRunRootProbe.Instance,
+                // A probe that answers every folder as local unless a test fakes one (the reviews' N11).
+                RunRootProbe = runRootProbe ?? FakeRunRootProbe.Local(),
             });
         }
 
         /// <summary>The run root in the settings the host loads.</summary>
         public string RunRoot => Path.Combine(_root, "runs");
+
+        /// <summary>A settings save that moves the run root beside <see cref="RunRoot"/> and changes nothing else.</summary>
+        public Dictionary<string, object?> SaveMoving() => new Dictionary<string, object?>
+        {
+            { "provider", "openai" },
+            { "model", "gpt-5.6" },
+            { "effort", "high" },
+            { "api_key", null },
+            { "base_url", null },
+            { "gemini_enterprise", null },
+            { "run_root", Path.Combine(_root, "moved", "runs") },
+        };
 
         private PageDocument? ReadDocument()
         {

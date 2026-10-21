@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 using SwReview.AddIn.Native;
@@ -22,12 +24,15 @@ namespace SwReview.AddIn.Tests;
 /// open (feature 011 research R12.9, items 1 and 2). The rule names such a root before any run is begun.
 ///
 /// What it refuses, and in what order, so that nothing is ever opened over the network or through a link:
-/// a root written as a UNC or device path, on sight; a mapped network drive and a substituted drive, by what
+/// a root written as a UNC or device path, on its text, before even its full path is made; then its full path,
+/// made from the text alone, which reads nothing; a mapped network drive and a substituted drive, by what
 /// Windows says of the drive letter; a junction or symbolic link among the folders that exist, by what each is,
-/// never by opening through it; and any root whose final path - the nearest existing folder's, which is what
-/// the backend's own resolution reads - differs from its full path other than by letter case. A root that does
-/// not exist yet is judged by its nearest existing folder. A root the rule cannot read at all - blank, with no
-/// full form, on a drive that is not there - is left to the run folder, which reports it as before.
+/// never by opening through it; a part there that cannot be read as itself, which could hide a link, as
+/// unverified; and any root whose final path - the nearest existing folder's, which is what the backend's own
+/// resolution reads - differs from its spelling other than by letter case and from its long-name form too,
+/// read only then (the reviews of decision 154A, findings F1 to F3). A root that does not exist yet is judged
+/// by its nearest existing folder. A root no folder can be made under - blank, written with characters no
+/// folder can have, on a drive that is not there - is left to the run folder, which reports it as before.
 ///
 /// Most cases run over <see cref="FakeRunRootProbe"/>, which fakes what this machine cannot make without
 /// rights or side effects (a share, a mapped drive, a substituted drive); the cases a test can make for real
@@ -44,6 +49,8 @@ public sealed class RunRootRuleTests : IDisposable
 
     private readonly List<(string Folder, uint Tag)> _tagged = new List<(string Folder, uint Tag)>();
 
+    private readonly List<(string Folder, FileSystemAccessRule Rule)> _denied = new List<(string Folder, FileSystemAccessRule Rule)>();
+
     public RunRootRuleTests()
     {
         _root = Path.Combine(Path.GetTempPath(), "SwReview.RunRootRule.Tests", Guid.NewGuid().ToString("N"));
@@ -52,7 +59,15 @@ public sealed class RunRootRuleTests : IDisposable
 
     public void Dispose()
     {
-        // A tagged folder's reparse point first, which no filter answers, so the folder can be removed.
+        // The denials first, so every folder can be read and removed again.
+        foreach ((string folder, FileSystemAccessRule rule) in _denied)
+        {
+            DirectorySecurity security = Directory.GetAccessControl(folder);
+            security.RemoveAccessRule(rule);
+            Directory.SetAccessControl(folder, security);
+        }
+
+        // A tagged folder's reparse point next, which no filter answers, so the folder can be removed.
         foreach ((string folder, uint tag) in _tagged)
         {
             SetReparsePoint(folder, tag, FsctlDeleteReparsePoint, data: null);
@@ -136,6 +151,95 @@ public sealed class RunRootRuleTests : IDisposable
 
         Assert.Equal(RunRootVerdict.DevicePath, RunRootRule.Judge(runRoot, probe));
         Assert.Empty(probe.Asked);
+    }
+
+    // ---- nothing is read before the rule's checks (the reviews' finding F1) ------------------------------
+
+    /// <summary>
+    /// A root written as a share with an 8.3 short name in it is refused on its text, before anything is read
+    /// or made of it: <c>Path.GetFullPath</c> expands a short name by reading each folder of the path - over the
+    /// network for a share, where a server that does not answer stalls every run start and every save - so the
+    /// rule asks no full path of such a root at all.
+    /// </summary>
+    [Theory]
+    [InlineData(@"\\fictional-server.invalid\share\RUNS~1")]
+    [InlineData("//fictional-server.invalid/share/RUNS~1/runs")]
+    [InlineData(@"\\?\UNC\fictional-server.invalid\share\RUNS~1")]
+    public void AShareWithAShortNameIsRefusedBeforeAnythingIsReadOrMadeOfIt(string runRoot)
+    {
+        FakeRunRootProbe probe = FakeRunRootProbe.Local();
+
+        Assert.Equal(RunRootVerdict.Share, RunRootRule.Judge(runRoot, probe));
+        Assert.Empty(probe.Asked);
+        Assert.Empty(probe.Normalized);
+    }
+
+    /// <summary>
+    /// A link above a short name is found by what it is before anything below it is read: expanding the short
+    /// name would read through the link, so the long-name form is asked for only once the walk has found no
+    /// link - and here it never is.
+    /// </summary>
+    [Fact]
+    public void ALinkAboveAShortNameIsRefusedBeforeTheShortNameIsReadThroughIt()
+    {
+        var probe = new FakeRunRootProbe();
+        probe.Links.Add(Fictional + @"\link");
+
+        Assert.Equal(RunRootVerdict.Link, RunRootRule.Judge(Fictional + @"\link\RUNS~1\runs", probe));
+        Assert.Equal(
+            new[] { @"DriveOf C:\", "SubstituteOf C:", @"EntryOf C:\Fictional", @"EntryOf C:\Fictional\link" },
+            probe.Asked);
+    }
+
+    /// <summary>A mapped network drive is refused by its letter, short name or not, before any of its folders is read.</summary>
+    [Fact]
+    public void AMappedNetworkDriveWithAShortNameIsRefusedByItsLetterAlone()
+    {
+        var probe = new FakeRunRootProbe();
+        probe.Drives[@"Z:\"] = RunRootDrive.Network;
+
+        Assert.Equal(RunRootVerdict.Share, RunRootRule.Judge(@"Z:\RUNS~1\runs", probe));
+        Assert.Equal(new[] { @"DriveOf Z:\" }, probe.Asked);
+    }
+
+    /// <summary>
+    /// A relative root is made full against the current folder, from its text alone: under a current folder on
+    /// a share it is on the share, and refused before anything is read.
+    /// </summary>
+    [Fact]
+    public void ARelativeRootUnderACurrentFolderOnAShareIsOnTheShare()
+    {
+        var probe = new FakeRunRootProbe();
+        probe.FullPaths["runs"] = @"\\fictional-server.invalid\share\work\runs";
+
+        Assert.Equal(RunRootVerdict.Share, RunRootRule.Judge("runs", probe));
+        Assert.Equal(new[] { "runs" }, probe.Normalized);
+        Assert.Empty(probe.Asked);
+    }
+
+    /// <summary>
+    /// The rule reads the disk and the network only through its probe, whose questions each read one thing,
+    /// asked in the rule's order: it makes no full path through <c>Path.GetFullPath</c> or
+    /// <see cref="RunFolders"/>, expands no short name itself and calls Windows for nothing. Its source is read,
+    /// since what a call reads below the probe's questions cannot be seen in the probe's own record.
+    /// </summary>
+    [Fact]
+    public void TheRuleReadsTheDiskAndTheNetworkOnlyThroughItsProbe()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn", "Review", "RunRootRule.cs"));
+        string code = string.Join(
+            "\n",
+            source.Split('\n').Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+
+        foreach (string reading in new[]
+                 {
+                     "System.IO", "Path.Get", "Directory.", "File.", "RunFolders.", "GetLongPathName",
+                     "GetFullPathName", "DllImport", "CreateFile",
+                 })
+        {
+            Assert.DoesNotContain(reading, code, StringComparison.Ordinal);
+        }
     }
 
     // ---- a mapped network drive and a substituted drive: refused by the letter, nothing touched ---------
@@ -226,14 +330,90 @@ public sealed class RunRootRuleTests : IDisposable
         Assert.Equal(RunRootVerdict.Accepted, RunRootRule.Judge(runRoot, probe));
     }
 
-    /// <summary>A final path that cannot be read is no reason to refuse: the rule refuses what it can name.</summary>
+    /// <summary>
+    /// A final path that cannot be read leaves the root unverified: whether it is reached through a link cannot
+    /// be told. Changed deliberately (the reviews' finding F2) from the first answer, which read it as no reason
+    /// to refuse.
+    /// </summary>
     [Fact]
-    public void AFinalPathThatCannotBeReadIsNoReasonToRefuse()
+    public void AFinalPathThatCannotBeReadLeavesTheRootUnverified()
     {
         var probe = new FakeRunRootProbe();
         probe.FinalPaths[Fictional + @"\work\runs"] = null;
 
-        Assert.Equal(RunRootVerdict.Accepted, RunRootRule.Judge(Fictional + @"\work\runs", probe));
+        Assert.Equal(RunRootVerdict.Unverified, RunRootRule.Judge(Fictional + @"\work\runs", probe));
+    }
+
+    // ---- a part that cannot be read (the reviews' finding F2) ---------------------------------------------
+
+    /// <summary>
+    /// A part that is there but cannot be read as itself - its attributes denied - cannot be told from a link,
+    /// and Windows lets every user pass through such a folder to what lies below it, a link to a share among
+    /// them: the root could not be checked, and is refused as unverified with nothing below it read. The first
+    /// answer read such a part as the end of the walk, and accepted the folder above it.
+    /// </summary>
+    [Fact]
+    public void APartThatCannotBeReadLeavesTheRootUnverified()
+    {
+        var probe = new FakeRunRootProbe();
+        probe.Unreadable.Add(Fictional + @"\restricted");
+
+        Assert.Equal(RunRootVerdict.Unverified, RunRootRule.Judge(Fictional + @"\restricted\link\runs", probe));
+        Assert.Equal(@"EntryOf C:\Fictional\restricted", probe.Asked.Last());
+    }
+
+    // ---- 8.3 short names (the reviews' finding F3) ------------------------------------------------------
+
+    /// <summary>
+    /// A root spelled with an 8.3 short name has a final path in long names: the final path is compared with
+    /// the folder's long-name form, read only once the walk has found no link and only when the final path is
+    /// not the spelling - so a short name is not a link.
+    /// </summary>
+    [Fact]
+    public void AFinalPathInLongNamesIsComparedWithTheLongNameOfAShortName()
+    {
+        var probe = new FakeRunRootProbe { Existing = Set(Fictional, Fictional + @"\LONGFO~1") };
+        probe.FinalPaths[Fictional + @"\LONGFO~1"] = Fictional + @"\Long Folder Name";
+        probe.LongPaths[Fictional + @"\LONGFO~1"] = Fictional + @"\Long Folder Name";
+
+        Assert.Equal(RunRootVerdict.Accepted, RunRootRule.Judge(Fictional + @"\LONGFO~1\new", probe));
+        Assert.Equal(
+            new[]
+            {
+                @"DriveOf C:\",
+                "SubstituteOf C:",
+                @"EntryOf C:\Fictional",
+                @"EntryOf C:\Fictional\LONGFO~1",
+                @"EntryOf C:\Fictional\LONGFO~1\new",
+                @"FinalPathOf C:\Fictional\LONGFO~1",
+                @"LongPathOf C:\Fictional\LONGFO~1",
+            },
+            probe.Asked);
+    }
+
+    /// <summary>A final path that is not the long-name form either is reached through a link.</summary>
+    [Fact]
+    public void AFinalPathThatIsNotTheLongNameEitherIsReachedThroughALink()
+    {
+        var probe = new FakeRunRootProbe();
+        probe.FinalPaths[Fictional + @"\LONGFO~1"] = @"D:\Elsewhere";
+        probe.LongPaths[Fictional + @"\LONGFO~1"] = Fictional + @"\Long Folder Name";
+
+        Assert.Equal(RunRootVerdict.Link, RunRootRule.Judge(Fictional + @"\LONGFO~1", probe));
+    }
+
+    /// <summary>
+    /// A long-name form that cannot be read - a folder above denies its listing, which reading it needs -
+    /// leaves the root unverified, when the final path is not its spelling.
+    /// </summary>
+    [Fact]
+    public void ALongNameThatCannotBeReadLeavesTheRootUnverified()
+    {
+        var probe = new FakeRunRootProbe();
+        probe.FinalPaths[Fictional + @"\LONGFO~1"] = Fictional + @"\Long Folder Name";
+        probe.LongPaths[Fictional + @"\LONGFO~1"] = null;
+
+        Assert.Equal(RunRootVerdict.Unverified, RunRootRule.Judge(Fictional + @"\LONGFO~1", probe));
     }
 
     // ---- a root that does not exist yet ------------------------------------------------------------------
@@ -367,27 +547,48 @@ public sealed class RunRootRuleTests : IDisposable
     /// <summary>
     /// A run start's words: what the root is, the rule, what was not done, and the way on - since the owner's
     /// follow-up to decision 154A, a local folder chosen in the Settings panel's field, where the first
-    /// words named the settings file and a restart of SOLIDWORKS. Changed deliberately for that.
+    /// words named the settings file and a restart of SOLIDWORKS. Changed deliberately for that, and again for
+    /// the reviews' findings: the Model check, Standards and Remodel pages have no Settings of their own, so
+    /// their words say the Settings are on the Review tab (F5), and a root that could not be checked says so
+    /// (F2).
     /// </summary>
     [Theory]
     [InlineData(
         RunRootVerdict.Share,
         "The run root is on a network share or a mapped network drive, and runs are made only in a local folder "
-        + "reached by its own path, so nothing was checked. Choose a local folder for runs in Settings, then "
-        + "press Model check again.")]
+        + "reached by its own path, so nothing was checked. Choose a local folder for runs in Settings on the "
+        + "Review tab, then press Model check again.")]
     [InlineData(
         RunRootVerdict.Link,
         "The run root is reached through a link, such as a junction, a symbolic link or a substituted drive, and "
         + "runs are made only in a local folder reached by its own path, so nothing was checked. Choose a local "
-        + "folder for runs in Settings, then press Model check again.")]
+        + "folder for runs in Settings on the Review tab, then press Model check again.")]
     [InlineData(
         RunRootVerdict.DevicePath,
         "The run root is written as a Windows device path, and runs are made only in a local folder reached by "
-        + "its own path, so nothing was checked. Choose a local folder for runs in Settings, then press Model "
-        + "check again.")]
+        + "its own path, so nothing was checked. Choose a local folder for runs in Settings on the Review tab, "
+        + "then press Model check again.")]
+    [InlineData(
+        RunRootVerdict.Unverified,
+        "The run root could not be checked, since a part of its path cannot be read, and runs are made only in a "
+        + "local folder reached by its own path, so nothing was checked. Choose a local folder for runs in "
+        + "Settings on the Review tab, then press Model check again.")]
     public void TheRefusalSaysWhatIsTrueOfTheRootTheRuleAndTheWayOn(RunRootVerdict verdict, string words)
     {
-        Assert.Equal(words, RunRootRule.Refusal(verdict, "nothing was checked", "press Model check again"));
+        Assert.Equal(
+            words,
+            RunRootRule.Refusal(verdict, "nothing was checked", RunRootRule.InSettingsOnTheReviewTab, "press Model check again"));
+    }
+
+    /// <summary>The Review tab's own refusals send the engineer to the Settings on that tab.</summary>
+    [Fact]
+    public void TheReviewTabsRefusalSendsTheEngineerToItsOwnSettings()
+    {
+        Assert.Equal(
+            "The run root is on a network share or a mapped network drive, and runs are made only in a local folder "
+            + "reached by its own path, so nothing was started. Choose a local folder for runs in Settings, then "
+            + "try again.",
+            RunRootRule.Refusal(RunRootVerdict.Share, "nothing was started", RunRootRule.InSettings, "try again"));
     }
 
     /// <summary>
@@ -411,6 +612,11 @@ public sealed class RunRootRuleTests : IDisposable
         "The folder chosen for runs is written as a Windows device path, and runs are made only in a local folder "
         + "reached by its own path, so the run root was not changed; the other settings were saved. Choose a "
         + "local folder for runs, then save again.")]
+    [InlineData(
+        RunRootVerdict.Unverified,
+        "The folder chosen for runs could not be checked, since a part of its path cannot be read, and runs are "
+        + "made only in a local folder reached by its own path, so the run root was not changed; the other "
+        + "settings were saved. Choose a local folder for runs, then save again.")]
     public void ASaveSaysAFolderChosenForRunsWasRefusedAndTheOtherSettingsWereSaved(RunRootVerdict verdict, string words)
     {
         Assert.Equal(words, RunRootRule.ChosenRefusal(verdict));
@@ -437,16 +643,62 @@ public sealed class RunRootRuleTests : IDisposable
         "The run root is written as a Windows device path, and runs are made only in a local folder reached by "
         + "its own path, so every run is refused until it is changed; the settings were saved. Choose a local "
         + "folder for runs, then save again.")]
+    [InlineData(
+        RunRootVerdict.Unverified,
+        "The run root could not be checked, since a part of its path cannot be read, and runs are made only in a "
+        + "local folder reached by its own path, so every run is refused until it is changed; the settings were "
+        + "saved. Choose a local folder for runs, then save again.")]
     public void ASaveSaysTheRunRootItLeavesInForceIsRefused(RunRootVerdict verdict, string words)
     {
         Assert.Equal(words, RunRootRule.KeptRefusal(verdict));
+    }
+
+    /// <summary>
+    /// The reviews' finding F7: a folder chosen for runs that is not written as a full path is the one field a
+    /// save does not write - resolved against the current folder, it names one place to the add-in and maybe
+    /// another to the backend, and SOLIDWORKS can move its current folder - and the words say so, and the way
+    /// on, with no path.
+    /// </summary>
+    [Fact]
+    public void ASaveSaysAFolderChosenForRunsThatIsNotAFullPathWasNotSaved()
+    {
+        Assert.Equal(
+            "The folder chosen for runs is not written as a full path, starting with its drive letter, so the run "
+            + "root was not changed; the other settings were saved. Type the folder's full path, then save again.",
+            RunRootRule.NotFullPathRefusal);
+    }
+
+    /// <summary>
+    /// A full path starts with its drive letter and a separator, or with two separators - a share or a device
+    /// path, which the rule itself refuses. A relative path, one rooted on the current drive, and one on a drive
+    /// with no separator after its letter, which is relative to that drive's current folder, are not.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\runs", true)]
+    [InlineData("c:/runs", true)]
+    [InlineData(@"C:\", true)]
+    [InlineData(@"\\fictional-server\share\runs", true)]
+    [InlineData("//fictional-server/share/runs", true)]
+    [InlineData(@"\\?\C:\runs", true)]
+    [InlineData("runs", false)]
+    [InlineData(@".\runs", false)]
+    [InlineData(@"..\runs", false)]
+    [InlineData(@"\runs", false)]
+    [InlineData("/runs", false)]
+    [InlineData("C:runs", false)]
+    [InlineData("C:", false)]
+    [InlineData(@"~\runs", false)]
+    public void AFullPathStartsWithItsDriveLetterOrTwoSeparators(string root, bool full)
+    {
+        Assert.Equal(full, RunRootRule.IsFullPath(root));
     }
 
     [Fact]
     public void ThereAreNoWordsForARootTheRuleAccepts()
     {
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => RunRootRule.Refusal(RunRootVerdict.Accepted, "nothing was checked", "press Model check again"));
+            () => RunRootRule.Refusal(
+                RunRootVerdict.Accepted, "nothing was checked", RunRootRule.InSettings, "press Model check again"));
         Assert.Throws<ArgumentOutOfRangeException>(() => RunRootRule.ChosenRefusal(RunRootVerdict.Accepted));
         Assert.Throws<ArgumentOutOfRangeException>(() => RunRootRule.KeptRefusal(RunRootVerdict.Accepted));
     }
@@ -483,8 +735,8 @@ public sealed class RunRootRuleTests : IDisposable
     }
 
     /// <summary>
-    /// Another letter case is the same folder, and so is an 8.3 short name, which the full form expands: neither
-    /// is a link. The short name is the one Windows gave the folder, so the case is not vacuous.
+    /// Another letter case is the same folder, and so is an 8.3 short name, whose long-name form is the final
+    /// path: neither is a link. The short name is the one Windows gave the folder, so the case is not vacuous.
     /// </summary>
     [Fact]
     public void ARealRootSpeltInOtherLetterCaseOrWithAnEightDotThreeShortNameIsAccepted()
@@ -501,6 +753,57 @@ public sealed class RunRootRuleTests : IDisposable
         Assert.Equal(
             RunRootVerdict.Accepted,
             RunRootRule.Judge(Path.Combine(shortName, "new"), WindowsRunRootProbe.Instance));
+    }
+
+    /// <summary>
+    /// The reviews' finding F3, its exact shape: an 8.3 short name of an existing folder followed by one folder
+    /// not made yet - <c>C:\PROGRA~1\new</c> - was refused as a link, since <c>Path.GetFullPath</c> under the
+    /// newer path handling leaves such a short name as written, and not the same way each time. The rule now
+    /// makes no full path through it: each part is read as written and the final path is compared with the
+    /// long-name form, so the verdict does not depend on the path handling SOLIDWORKS runs the add-in with.
+    /// </summary>
+    [Fact]
+    public void AShortNameFollowedByOneFolderNotMadeYetIsAccepted()
+    {
+        string folder = Path.Combine(_root, "Long Folder Name For The Rule");
+        Directory.CreateDirectory(folder);
+        string shortName = ShortPathOf(folder);
+        Assert.Contains("~", Path.GetFileName(shortName));
+
+        for (int reading = 0; reading < 3; reading++)
+        {
+            Assert.Equal(
+                RunRootVerdict.Accepted,
+                RunRootRule.Judge(Path.Combine(shortName, "new"), WindowsRunRootProbe.Instance));
+        }
+
+        Assert.Equal(
+            RunRootVerdict.Accepted,
+            RunRootRule.Judge(Path.Combine(shortName, "new", "deeper"), WindowsRunRootProbe.Instance));
+    }
+
+    /// <summary>
+    /// The reviews' finding F2, for real: a folder whose attributes are denied - and whose own folder denies its
+    /// listing, so nothing grants them back - which every user may still pass through, with a junction below
+    /// it. A user with no rights beyond their own temp folder makes it, and the rule cannot see the junction
+    /// past the folder it cannot read: the root is unverified, where the first answer accepted it. The denials
+    /// are taken off again before anything is removed.
+    /// </summary>
+    [Fact]
+    public void ARootBelowAFolderThatCannotBeReadIsUnverifiedThoughALinkLiesBelowIt()
+    {
+        string outer = Path.Combine(_root, "outer");
+        string restricted = Path.Combine(outer, "restricted");
+        string target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(restricted);
+        Directory.CreateDirectory(target);
+        string link = MakeJunction(Path.Combine(restricted, "link"), target);
+        Deny(outer, FileSystemRights.ListDirectory);
+        Deny(restricted, FileSystemRights.ReadAttributes | FileSystemRights.ListDirectory);
+
+        Assert.Equal(RunRootEntry.Unreadable, WindowsRunRootProbe.Instance.EntryOf(restricted));
+        Assert.Equal(RunRootEntry.Link, WindowsRunRootProbe.Instance.EntryOf(link));
+        Assert.Equal(RunRootVerdict.Unverified, RunRootRule.Judge(Path.Combine(link, "runs"), WindowsRunRootProbe.Instance));
     }
 
     /// <summary>
@@ -526,10 +829,12 @@ public sealed class RunRootRuleTests : IDisposable
     /// <summary>
     /// A reparse point is a link only when it names another path - a name surrogate: a junction, a symbolic
     /// link, a mount point. A cloud file's folder - a OneDrive folder, which Known Folder Move makes of
-    /// Documents and with it of the default run root - carries one that names no other path, and is not
-    /// refused for it. Made for real with a third-party tag, which needs no rights: one without the surrogate
-    /// bit, as a cloud file's, and the same tag with it. No filter answers either tag, so nothing below them
-    /// opens: the first is judged by itself, the folder whose final path cannot be read, and accepted.
+    /// Documents and with it of the default run root - carries one that names no other path, and is read as a
+    /// folder, not a link. Made for real with a third-party tag, which needs no rights: one without the
+    /// surrogate bit, as a cloud file's, and the same tag with it. No filter answers either tag, so nothing
+    /// below or through them opens: a root under the first could not be checked, and is unverified - changed
+    /// deliberately from the first answer, which accepted it (the reviews' finding F2) - while a OneDrive
+    /// folder, whose filter answers, has its own final path and is accepted.
     /// </summary>
     [Fact]
     public void AReparsePointIsALinkOnlyWhenItNamesAnotherPath()
@@ -539,7 +844,7 @@ public sealed class RunRootRuleTests : IDisposable
 
         Assert.Equal(RunRootEntry.Folder, WindowsRunRootProbe.Instance.EntryOf(plain));
         Assert.Equal(RunRootEntry.Link, WindowsRunRootProbe.Instance.EntryOf(surrogate));
-        Assert.Equal(RunRootVerdict.Accepted, RunRootRule.Judge(Path.Combine(plain, "runs"), WindowsRunRootProbe.Instance));
+        Assert.Equal(RunRootVerdict.Unverified, RunRootRule.Judge(Path.Combine(plain, "runs"), WindowsRunRootProbe.Instance));
         Assert.Equal(RunRootVerdict.Link, RunRootRule.Judge(Path.Combine(surrogate, "runs"), WindowsRunRootProbe.Instance));
     }
 
@@ -575,6 +880,84 @@ public sealed class RunRootRuleTests : IDisposable
         Assert.Equal(target, WindowsRunRootProbe.Instance.FinalPathOf(link), StringComparer.OrdinalIgnoreCase);
         Assert.Equal(target, WindowsRunRootProbe.Instance.FinalPathOf(target), StringComparer.OrdinalIgnoreCase);
         Assert.Null(WindowsRunRootProbe.Instance.FinalPathOf(Path.Combine(_root, "absent")));
+    }
+
+    /// <summary>
+    /// The probe's full path is made from the text alone (the reviews' finding F1): an existing folder's 8.3
+    /// short name stays as written - <c>Path.GetFullPath</c> reads the folder to expand it, which over a share
+    /// goes over the network - while the separators and the dot segments are made canonical.
+    /// </summary>
+    [Fact]
+    public void TheWindowsProbesFullPathReadsNothing()
+    {
+        string folder = Path.Combine(_root, "Long Folder Name For The Probe");
+        Directory.CreateDirectory(Path.Combine(folder, "runs"));
+        string shortName = ShortPathOf(folder);
+        Assert.Contains("~", Path.GetFileName(shortName));
+
+        Assert.Equal(shortName + @"\runs", WindowsRunRootProbe.Instance.FullPathOf(shortName + @"\runs"));
+        Assert.Equal(@"C:\Fictional\work\runs", WindowsRunRootProbe.Instance.FullPathOf(@"C:/Fictional/other/../work/./runs"));
+    }
+
+    /// <summary>The probe's long-name form expands each short name of a folder's path, and is null for a folder not there.</summary>
+    [Fact]
+    public void TheWindowsProbeReadsAFoldersLongName()
+    {
+        string folder = Path.Combine(_root, "Long Folder Name For The Probe");
+        Directory.CreateDirectory(folder);
+
+        Assert.Equal(
+            WindowsRunRootProbe.Instance.FinalPathOf(folder),
+            WindowsRunRootProbe.Instance.LongPathOf(ShortPathOf(folder)),
+            StringComparer.OrdinalIgnoreCase);
+        Assert.Null(WindowsRunRootProbe.Instance.LongPathOf(Path.Combine(folder, "absent")));
+    }
+
+    /// <summary>
+    /// What each <c>GetDriveType</c> answer is to the rule (the reviews' finding F4): only a remote drive is a
+    /// mapped network drive, and only a root that is not there is no drive. This reading alone refuses the most
+    /// common share, a mapped home drive, which no test here can make, so it is pinned answer by answer.
+    /// </summary>
+    [Theory]
+    [InlineData(0u, RunRootDrive.Local)]
+    [InlineData(1u, RunRootDrive.Missing)]
+    [InlineData(2u, RunRootDrive.Local)]
+    [InlineData(3u, RunRootDrive.Local)]
+    [InlineData(4u, RunRootDrive.Network)]
+    [InlineData(5u, RunRootDrive.Local)]
+    [InlineData(6u, RunRootDrive.Local)]
+    public void TheDriveKindIsReadFromWhatGetDriveTypeAnswers(uint driveType, RunRootDrive kind)
+    {
+        Assert.Equal(kind, WindowsRunRootProbe.DriveKindOf(driveType));
+    }
+
+    /// <summary>
+    /// What a part is to the rule, from what its open and its attributes answer (the reviews' findings F2 and
+    /// F4): not there is missing; an open that fails for any other reason - its attributes denied, a drive not
+    /// ready, a reparse point no filter answers - or attributes that cannot be read leave it unreadable; a name
+    /// surrogate is a link, a cloud file's folder is not; a folder is a folder, and anything else there is not
+    /// one. Pinned answer by answer: the attributes failing to read on a handle opened to read them is one no
+    /// test can make happen.
+    /// </summary>
+    [Theory]
+    [InlineData(2, false, 0u, 0u, RunRootEntry.Missing)]
+    [InlineData(3, false, 0u, 0u, RunRootEntry.Missing)]
+    [InlineData(5, false, 0u, 0u, RunRootEntry.Unreadable)]
+    [InlineData(21, false, 0u, 0u, RunRootEntry.Unreadable)]
+    [InlineData(1920, false, 0u, 0u, RunRootEntry.Unreadable)]
+    [InlineData(0, false, 0u, 0u, RunRootEntry.Unreadable)]
+    [InlineData(0, true, 0x10u, 0u, RunRootEntry.Folder)]
+    [InlineData(0, true, 0x410u, 0xA0000003u, RunRootEntry.Link)]
+    [InlineData(0, true, 0x410u, 0xA000000Cu, RunRootEntry.Link)]
+    [InlineData(0, true, 0x410u, 0x9000001Au, RunRootEntry.Folder)]
+    [InlineData(0, true, 0x20u, 0u, RunRootEntry.Other)]
+    [InlineData(0, true, 0x420u, 0xA000000Cu, RunRootEntry.Link)]
+    public void ThePartIsReadFromWhatItsOpenAndItsAttributesAnswer(
+        int openError, bool attributesRead, uint attributes, uint reparseTag, RunRootEntry entry)
+    {
+        Assert.Equal(
+            entry,
+            WindowsRunRootProbe.EntryKindOf(openError, attributesRead ? (attributes, reparseTag) : ((uint, uint)?)null));
     }
 
     /// <summary>
@@ -625,6 +1008,20 @@ public sealed class RunRootRuleTests : IDisposable
             (File.GetAttributes(Device(link)) & FileAttributes.ReparsePoint) != 0,
             "mklink /J did not make a junction at " + link);
         return link;
+    }
+
+    /// <summary>
+    /// Denies the user running the tests <paramref name="rights"/> on <paramref name="folder"/>, on the folder
+    /// alone; taken off again first thing on dispose, which an owner may always do.
+    /// </summary>
+    private void Deny(string folder, FileSystemRights rights)
+    {
+        var rule = new FileSystemAccessRule(
+            WindowsIdentity.GetCurrent().User!, rights, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Deny);
+        DirectorySecurity security = Directory.GetAccessControl(folder);
+        security.AddAccessRule(rule);
+        Directory.SetAccessControl(folder, security);
+        _denied.Insert(0, (folder, rule));
     }
 
     private const uint FsctlSetReparsePoint = 0x000900A4;

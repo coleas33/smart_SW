@@ -536,7 +536,7 @@ Created by the existing `RunFolders` helper (`extractor/SwReview.AddIn/Review/Ru
 the naming convention stays in one place: `<run_root>/<yyyyMMdd-HHmmss>-<doc>-remodel/`. *Amended
 2026-10-20 (feature 011, owner decision 148A):* made in its full form, under `Path.GetFullPath` of the
 run root (`contracts/run-artifacts.md`). *Amended 2026-10-20 (feature 002, owner decision 154A):* never
-under a run root on a network share, reached through a link or written as a device path, which a plan
+under a run root on a network share, reached through a link or written as a device path, or could not be checked, which a plan
 and a Start refuse first (`contracts/run-artifacts.md`).
 
 | Path | Written by | Contains |

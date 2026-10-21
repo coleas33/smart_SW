@@ -31,10 +31,13 @@ The host, in this order (a refusal changes nothing):
 | 4 | the backend is running | `BackendUnavailable` |
 
 *Amended 2026-10-20 (feature 002, owner decision 154A):* before check 1, the run root: one on a
-network share, reached through a link or written as a device path is `RunRootRefused`, not
+network share, reached through a link or written as a device path, or could not be checked is `RunRootRefused`, not
 retryable, and the record is kept - a re-run hands the backend its folder under the run root, which
 the backend refuses on a share and spells otherwise through a link (002 `pane-host-messages.md`,
-"The run root rule").
+"The run root rule"). *Amended on 154A's reviews (findings F6 and N8):* the run root is judged again
+once the backend is ready if a restart moved it, and a record whose run folder is not under the run
+root in force - a settings save moved it since the review - is refused before the backend is asked,
+`RunRootChanged`, not retryable, its record kept; the way on is a new review.
 
 Check 1 is `review.recheck`'s own: it finds the record whose document and folder the rest uses.
 Checks 2 to 4 run inside `CreateReviewSession(document, runDirectory, retryOf, ReviewMode.Recheck)` -

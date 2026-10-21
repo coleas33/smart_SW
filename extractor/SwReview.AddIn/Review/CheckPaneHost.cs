@@ -49,11 +49,19 @@ public sealed class CheckPaneHostOptions
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
         StartType = startType ?? throw new ArgumentNullException(nameof(startType));
         Start = start ?? throw new ArgumentNullException(nameof(start));
+        RunRootsInForce = () => new[] { RunRoot() };
     }
 
     public IPageChannel Channel { get; }
 
     public Func<string> RunRoot { get; }
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, the one in force among them (owner
+    /// decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open - its report
+    /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
+    /// </summary>
+    public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
 
     /// <summary>`check.start` for the Model check tab, `standards.start` for the Standards tab.</summary>
     public string StartType { get; }
@@ -176,6 +184,7 @@ public sealed class CheckPaneHost : IDisposable
                     + "know which folder to open.",
                 runId => FindCheck(runId)?.RunDirectory))
         {
+            RunRootsInForce = () => options.RunRootsInForce(),
             LogFolder = () => options.LogFolder(),
             EntityResolver = () => options.EntityResolver(),
             Opener = () => options.Opener(),

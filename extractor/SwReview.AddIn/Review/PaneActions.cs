@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using SwReview.AddIn.Settings;
 
@@ -87,11 +88,19 @@ public sealed class PaneActionsOptions
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
         Runs = runs ?? throw new ArgumentNullException(nameof(runs));
+        RunRootsInForce = () => new[] { RunRoot() };
     }
 
     public IPageChannel Channel { get; }
 
     public Func<string> RunRoot { get; }
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, the one in force among them (owner
+    /// decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open - its report
+    /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
+    /// </summary>
+    public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
 
     public PaneRunLookup Runs { get; }
 
@@ -332,7 +341,7 @@ public sealed class PaneActions
 
         // Containment before existence: a path outside the run root is refused as such, and
         // is not probed for what happens to be on disk there.
-        if (!TrySafePath(id, report, _options.RunRoot(), out string full))
+        if (!TrySafePath(id, report, _options.RunRootsInForce(), out string full))
         {
             return;
         }
@@ -358,7 +367,7 @@ public sealed class PaneActions
             return;
         }
 
-        Shell(id, runDirectory, _options.RunRoot());
+        Shell(id, runDirectory, _options.RunRootsInForce());
     }
 
     private void OpenLogFolder(string? id)
@@ -376,7 +385,7 @@ public sealed class PaneActions
             return;
         }
 
-        Shell(id, folder, folder);
+        Shell(id, folder, new[] { folder });
     }
 
     /// <summary>
@@ -413,29 +422,28 @@ public sealed class PaneActions
     }
 
     /// <summary>
-    /// Canonicalizes <paramref name="path"/>, refuses anything that is not inside
-    /// <paramref name="root"/>, and opens what is left (pane-host-messages.md: "Every resolved
+    /// Canonicalizes <paramref name="path"/>, refuses anything that is not inside one of
+    /// <paramref name="roots"/>, and opens what is left (pane-host-messages.md: "Every resolved
     /// path is canonicalized and must be a descendant of `run_root` (or the log folder) before
-    /// it reaches `ShellExecute`").
+    /// it reaches `ShellExecute`") - every run root in force this session, so a run made under one
+    /// a settings save has since moved still opens (owner decision 154A, the reviews' finding F6).
     /// </summary>
-    private void Shell(string? id, string path, string root)
+    private void Shell(string? id, string path, IReadOnlyList<string> roots)
     {
-        if (TrySafePath(id, path, root, out string full))
+        if (TrySafePath(id, path, roots, out string full))
         {
             Open(id, full);
         }
     }
 
-    /// <summary>Canonicalizes and refuses anything that is not inside <paramref name="root"/>.</summary>
-    private bool TrySafePath(string? id, string path, string root, out string full)
+    /// <summary>Canonicalizes and refuses anything that is not inside one of <paramref name="roots"/>.</summary>
+    private bool TrySafePath(string? id, string path, IReadOnlyList<string> roots, out string full)
     {
         full = string.Empty;
 
-        string fullRoot;
         try
         {
             full = System.IO.Path.GetFullPath(path);
-            fullRoot = System.IO.Path.GetFullPath(root);
         }
         catch (Exception)
         {
@@ -445,7 +453,8 @@ public sealed class PaneActions
 
         // UNC and Win32 device paths are refused by name as well as by containment: a run root
         // that is itself a share would otherwise make `\\server\share\...` a descendant.
-        if (full.StartsWith(@"\\", StringComparison.Ordinal) || !Contains(fullRoot, full))
+        string canonical = full;
+        if (full.StartsWith(@"\\", StringComparison.Ordinal) || !roots.Any(root => RunFolders.IsUnder(canonical, root)))
         {
             SendError(
                 id,
@@ -473,20 +482,6 @@ public sealed class PaneActions
         Send("ok", id, new Dictionary<string, object?>());
     }
 
-    /// <summary>Whether <paramref name="candidate"/> is <paramref name="root"/> or below it.</summary>
-    private static bool Contains(string root, string candidate)
-    {
-        string trimmed = root.TrimEnd(System.IO.Path.DirectorySeparatorChar);
-        if (string.Equals(trimmed, candidate.TrimEnd(System.IO.Path.DirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return candidate.StartsWith(
-            trimmed + System.IO.Path.DirectorySeparatorChar,
-            StringComparison.OrdinalIgnoreCase);
-    }
 
     // ---- the envelope -------------------------------------------------------------------
 
@@ -522,8 +517,10 @@ public sealed class PaneActions
     /// <param name="runRoot">The run root in force, the one the start would make its folder under.</param>
     /// <param name="probe">What the rule reads of Windows.</param>
     /// <param name="notDone">What was not done, true of this host: "nothing was checked".</param>
+    /// <param name="where">Where the Settings are, seen from this tab: <see cref="RunRootRule.InSettings"/>, or
+    /// <see cref="RunRootRule.InSettingsOnTheReviewTab"/>.</param>
     /// <param name="wayOn">What to do once the root is a local folder: "press Model check again".</param>
-    public bool RefusedRunRoot(string? id, string runRoot, IRunRootProbe probe, string notDone, string wayOn)
+    public bool RefusedRunRoot(string? id, string runRoot, IRunRootProbe probe, string notDone, string where, string wayOn)
     {
         RunRootVerdict verdict = RunRootRule.Judge(runRoot, probe);
         if (verdict == RunRootVerdict.Accepted)
@@ -531,7 +528,7 @@ public sealed class PaneActions
             return false;
         }
 
-        SendError(id, "RunRootRefused", RunRootRule.Refusal(verdict, notDone, wayOn), retryable: false);
+        SendError(id, "RunRootRefused", RunRootRule.Refusal(verdict, notDone, where, wayOn), retryable: false);
         return true;
     }
 

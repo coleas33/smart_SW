@@ -14,11 +14,19 @@ public sealed class ModelCheckHostOptions
     {
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
+        RunRootsInForce = () => new[] { RunRoot() };
     }
 
     public IPageChannel Channel { get; }
 
     public Func<string> RunRoot { get; }
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, the one in force among them (owner
+    /// decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open - its report
+    /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
+    /// </summary>
+    public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
 
     /// <summary>
     /// The backend's endpoint, or null before it is listening. The page calls the check routes
@@ -133,6 +141,7 @@ public sealed class ModelCheckHost : IDisposable
         _pane = new CheckPaneHost(new CheckPaneHostOptions(
             options.Channel, () => options.RunRoot(), StartType, StartCheck)
         {
+            RunRootsInForce = () => options.RunRootsInForce(),
             Backend = () => options.Backend(),
             CurrentDocument = () => options.CurrentDocument(),
 
@@ -204,7 +213,8 @@ public sealed class ModelCheckHost : IDisposable
         // Owner decision 154A: first - the check's folder is made under the run root and handed to the backend,
         // which refuses one on a share - in this tab's words, which its page shows whole.
         if (actions.RefusedRunRoot(
-                id, _options.RunRoot(), _options.RunRootProbe, "nothing was checked", "press Model check again"))
+                id, _options.RunRoot(), _options.RunRootProbe, "nothing was checked", RunRootRule.InSettingsOnTheReviewTab,
+                "press Model check again"))
         {
             return;
         }

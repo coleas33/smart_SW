@@ -43,7 +43,7 @@ internal static class LabelsSample
 
     /// <summary>A run root the run root rule refuses (owner decision 154A): the words file's sentence for it.</summary>
     public const string RunRootRefused =
-        "Runs are made only in a local folder reached by its own path, not on a network share or through a link. Choose a local folder for runs in Settings.";
+        "Runs are made only in a local folder reached by its own path, not on a network share or through a link, and the add-in must be able to check that it is one. Choose a local folder for runs in Settings.";
 
     public static string Json() => JsonSerializer.Serialize(Value());
 

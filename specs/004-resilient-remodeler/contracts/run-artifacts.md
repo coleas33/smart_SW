@@ -28,7 +28,9 @@ link, any root whose final path differs from its full path other than by letter 
 as a device path: the backend refuses a run folder on a share on every route and spells one
 reached through a link by its final path, and `remodel.open` compares the copy's run folder with
 the one this host binds, so such a root ended every plan ([`pane-remodel-messages.md`](pane-remodel-messages.md);
-011 research R12.9, items 1 and 2).
+011 research R12.9, items 1 and 2). *Amended on 154A's reviews (finding F6):* a Start whose plan's run
+folder is not under the run root in force - a settings save moved it after the plan - is refused,
+`RunRootChanged`, once its gate is passed and before the run begins.
 
 ## Files
 

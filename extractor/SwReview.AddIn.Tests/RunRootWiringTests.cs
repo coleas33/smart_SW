@@ -29,6 +29,23 @@ public sealed class RunRootWiringTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The reviews' finding F6: each of the three is handed every run root in force this session, the review
+    /// host's, so a run made under one a save has since moved still opens there, and the Remodel tab still
+    /// knows its copies.
+    /// </summary>
+    [Fact]
+    public void EveryOtherTabIsHandedEveryRunRootInForce()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+
+        Assert.Equal(3, source.Split(new[] { "RunRootsInForce = RunRootsInForce," }, StringSplitOptions.None).Length - 1);
+        Assert.Contains(
+            "private IReadOnlyList<string> RunRootsInForce() => _reviewHost?.RunRootsInForce ?? new[] { RunRootInForce() };",
+            source,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheRunRootInForceIsTheReviewHosts()
     {

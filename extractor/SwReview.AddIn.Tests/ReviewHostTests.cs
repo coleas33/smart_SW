@@ -1011,6 +1011,8 @@ public sealed class ReviewHostTests
                 {
                     create.Invoke(world.Host, new object?[] { world.Document, run, null, ReviewMode.Wait,
                         "race-" + i, new DumpSummary(Path.Combine(run, "package.json"), 12, 0, null),
+                        world.Settings.RunRoot /* the run root judged, the one in force (154A, N8) */,
+                        "FICT the run root changed" /* not reached: the run is under it (154A, F6) */,
                         null /* replacing: none for a fresh start */,
                         null /* attachment: no saved engineering context (feature 016) */ });
                 }
@@ -2567,8 +2569,9 @@ public sealed class ReviewHostTests
     {
         using (var world = new ReviewWorld())
         {
-            // A run_root that changed under a live session, or a record built from a path that
-            // walks back out of it: the check is at the shell, not at the record.
+            // A record built from a path that walks back out of the run root, which no run root in
+            // force this session holds (the reviews' F6: one that was in force still opens): the check
+            // is at the shell, not at the record.
             string outside = Path.Combine(world.Settings.RunRoot, "..", "elsewhere");
             Directory.CreateDirectory(Path.GetFullPath(outside));
             world.Open();
@@ -2735,7 +2738,7 @@ public sealed class ReviewHostTests
     /// Owner decision 154A (feature 002 T168): a Review-tab start - the preparation the add-in starts every
     /// review with, a review, and a Retry, which reviews into a new run folder - refuses a run root the run
     /// root rule refuses, up front, in the Review tab's words: what the root is, that nothing was started,
-    /// and the way on, a local folder in the settings file and a restart. Nothing is read of the model, no
+    /// and the way on, a local folder chosen for runs in this tab's Settings. Nothing is read of the model, no
     /// run folder is made, nothing is extracted, no session is asked for, no status is posted, and no path
     /// reaches the page.
     /// </summary>
@@ -2764,7 +2767,7 @@ public sealed class ReviewHostTests
                 Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
                 Assert.False(error.GetProperty("retryable").GetBoolean());
                 Assert.Equal(
-                    RunRootRule.Refusal(refusing.Verdict, "nothing was started", "try again"),
+                    RunRootRule.Refusal(refusing.Verdict, "nothing was started", RunRootRule.InSettings, "try again"),
                     error.GetProperty("message").GetString());
             }
 
@@ -2835,7 +2838,7 @@ public sealed class ReviewHostTests
             JsonElement error = world.Reply("error", "recheck");
             Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
             Assert.Equal(
-                RunRootRule.Refusal(refusing.Verdict, "nothing was started", "try again"),
+                RunRootRule.Refusal(refusing.Verdict, "nothing was started", RunRootRule.InSettings, "try again"),
                 error.GetProperty("message").GetString());
             Assert.Empty(world.Backend.Created);
             Assert.Same(original, Assert.Single(world.Host.Sessions));
@@ -2950,7 +2953,7 @@ public sealed class ReviewHostTests
             JsonElement refused = world.Reply("error", "start");
             Assert.Equal("RunRootRefused", refused.GetProperty("error_class").GetString());
             Assert.Equal(
-                RunRootRule.Refusal(RunRootVerdict.Share, "nothing was started", "try again"),
+                RunRootRule.Refusal(RunRootVerdict.Share, "nothing was started", RunRootRule.InSettings, "try again"),
                 refused.GetProperty("message").GetString());
             Assert.Empty(world.Backend.Created);
 
@@ -2961,6 +2964,118 @@ public sealed class ReviewHostTests
             Assert.Equal(chosen, init.GetProperty("settings").GetProperty("run_root").GetString());
         }
     }
+
+    // ---- the reviews of decision 154A: a run root moved inside a session (F6) -----------------------------
+
+    /// <summary>
+    /// The reviews' finding F6: a run root a save brings into force does not cut off the runs made under the one
+    /// before it in this SOLIDWORKS session - their report and their folder still open, since every run root
+    /// that has been in force is the pane's - while a folder under no run root in force is still refused
+    /// (<see cref="OpenIsRefusedWhenTheSessionRecordPointsOutsideTheRunRoot"/>).
+    /// </summary>
+    [Fact]
+    public void ARunMadeUnderAnEarlierRunRootStillOpensOnceASaveMovesTheRunRoot()
+    {
+        using (var world = new ReviewWorld())
+        {
+            string earlier = world.TrackedRun("chat-1");
+            File.WriteAllText(Path.Combine(earlier, "report.md"), "# report");
+            world.Open();
+            world.Host.TrackSession("chat-1", earlier);
+            string moved = MovedRoot(world);
+
+            world.Receive("settings.save", "save", SaveMoving(moved));
+            world.Reply("settings.saved", "save");
+            Assert.Equal(moved, world.Host.RunRoot);
+            Assert.Equal(new[] { world.Settings.RunRoot, moved }, world.Host.RunRootsInForce);
+
+            world.Receive("report.open", "o1", new { chat_id = "chat-1" });
+            world.Receive("folder.open", "o2", new { chat_id = "chat-1" });
+
+            world.Reply("ok", "o1");
+            world.Reply("ok", "o2");
+            Assert.Equal(new[] { Path.Combine(earlier, "report.md"), earlier }, world.Opener.Opened.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// The reviews' finding F6: a Recheck hands the backend the review's own run folder, and the backend makes
+    /// runs only under the run root it was started with - so once a save has moved the run root, a review made
+    /// under the one before it is refused before the backend is asked, in plain words with the way on, rather
+    /// than by the backend's rule deep in the run; its record stands.
+    /// </summary>
+    [Fact]
+    public void ARecheckOfAReviewMadeUnderAnEarlierRunRootIsRefusedBeforeTheBackendIsAsked()
+    {
+        using (var world = new ReviewWorld())
+        {
+            string run = world.TrackedRun("FICT-earlier");
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Open();
+            world.Host.TrackSession("FICT-earlier", run, world.Document, new DateTimeOffset(Stamp), "not_sent");
+            world.Receive("settings.save", "save", SaveMoving(MovedRoot(world)));
+            world.Reply("settings.saved", "save");
+
+            world.Receive("review.recheck", "recheck", new { chat_id = "FICT-earlier" });
+
+            JsonElement error = world.Reply("error", "recheck");
+            Assert.Equal("RunRootChanged", error.GetProperty("error_class").GetString());
+            Assert.False(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal(
+                "this review's run folder is under a run root that is no longer in force, and the backend makes "
+                + "runs only under the one in force, so its checks were not run again. Press Review to review the "
+                + "model again.",
+                error.GetProperty("message").GetString());
+            Assert.Empty(world.Backend.Created);
+            Assert.Equal("not_sent", Assert.Single(world.Host.Sessions).ModelStatus);
+        }
+    }
+
+    /// <summary>
+    /// The reviews' finding F6, and N8: a save can move the run root while a review's evidence is extracted -
+    /// minutes, in which no turn runs to hold its restart back - so the folder the review made is under a run
+    /// root no longer in force. The review is not started, in plain words with the way on, and no session is
+    /// asked for; the backend would have refused the folder.
+    /// </summary>
+    [Fact]
+    public void AReviewWhoseRunRootMovesWhileItsEvidenceIsExtractedIsNotStarted()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Open();
+            string moved = MovedRoot(world);
+            world.Dump.OnRun = () => world.Receive("settings.save", "save", SaveMoving(moved));
+
+            world.Receive("review.start", "start", new { });
+
+            world.Reply("settings.saved", "save");
+            JsonElement error = world.Reply("error", "start");
+            Assert.Equal("RunRootChanged", error.GetProperty("error_class").GetString());
+            Assert.Equal(
+                "the run root changed while the evidence was extracted, and the backend makes runs only under the "
+                + "one in force, so the review was not started. Press Review again.",
+                error.GetProperty("message").GetString());
+            Assert.Empty(world.Backend.Created);
+            Assert.Equal(moved, world.Host.RunRoot);
+        }
+    }
+
+    /// <summary>A run root beside the world's own, under its temporary folder: where a save moves it to.</summary>
+    private static string MovedRoot(ReviewWorld world) =>
+        Path.Combine(Path.GetDirectoryName(world.Settings.RunRoot)!, "moved", "runs");
+
+    /// <summary>A settings save that moves the run root to <paramref name="runRoot"/> and changes nothing else.</summary>
+    private static Dictionary<string, object?> SaveMoving(string runRoot) => new Dictionary<string, object?>
+    {
+        { "provider", "openai" },
+        { "model", "gpt-5.6" },
+        { "effort", "high" },
+        { "api_key", null },
+        { "base_url", null },
+        { "gemini_enterprise", null },
+        { "run_root", runRoot },
+    };
 
     // ---- the world ----------------------------------------------------------------------
 
@@ -3021,7 +3136,11 @@ public sealed class ReviewHostTests
         /// <summary>A resolver used instead of <see cref="Resolver"/>, for a test that needs a real lookup.</summary>
         public IEntityResolver? ResolverOverride { get; set; }
 
-        /// <summary>What the run root rule reads (owner decision 154A); Windows itself when null.</summary>
+        /// <summary>
+        /// What the run root rule reads (owner decision 154A); when null, a probe that answers every folder as a
+        /// local one reached by its own path - not Windows, so a temp folder below a junction on a developer's
+        /// machine fails no test that is not about the rule (the reviews' N11).
+        /// </summary>
         public IRunRootProbe? Probe { get; set; }
 
         public List<string> Posted { get; } = new List<string>();
@@ -3051,10 +3170,7 @@ public sealed class ReviewHostTests
                 Engineer = Engineer,
                 Now = () => Now,
             };
-            if (Probe != null)
-            {
-                options.RunRootProbe = Probe;
-            }
+            options.RunRootProbe = Probe ?? FakeRunRootProbe.Local();
 
             _host = new ReviewHost(options);
         }

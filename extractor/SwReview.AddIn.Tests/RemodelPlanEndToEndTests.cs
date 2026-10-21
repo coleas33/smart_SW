@@ -382,6 +382,9 @@ public sealed class RemodelPlanEndToEndTests
 
             _host = new RemodelHost(new RemodelHostOptions(new ListChannel(_posted), () => runRootAsSet)
             {
+                // Every folder local and reached by its own path, not Windows' answer for the temp folder (the
+                // reviews' N11): this suite is about the plan, not the run root rule.
+                RunRootProbe = FakeRunRootProbe.Local(),
                 Backend = () => endpoint,
                 CurrentDocument = Document,
                 RemodelAvailability = () => Gate.RemodelCapability,

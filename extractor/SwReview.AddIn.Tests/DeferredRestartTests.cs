@@ -254,6 +254,43 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
+    /// The reviews' N8: a start judges the run root in force before it does anything, and the restart it then
+    /// makes - one a save during a turn left waiting - can bring another into force; the start judges that one
+    /// again before it makes its run folder there. Here the folder chosen was local when it was saved and is on
+    /// a network drive by the time the restart brings it in, as a drive mapped in between would leave it.
+    /// </summary>
+    [Theory]
+    [InlineData("review.start")]
+    [InlineData("context.prepare")]
+    [InlineData("review.recheck")]
+    public void AStartJudgesAgainTheRunRootTheRestartItMakesBringsIn(string start)
+    {
+        FakeRunRootProbe probe = FakeRunRootProbe.Local();
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10), Probe = probe };
+        world.Open();
+        world.Track("chat-1");
+        world.Track("waiting");
+        const string chosen = @"Y:\Fictional\runs";
+        Dictionary<string, object?> payload = Save(effort: "low");
+        payload["run_root"] = chosen;
+        SaveAsATurnStarts(world, "save", payload);
+        world.Backend.EndTurn("chat-1");
+        probe.Drives[@"Y:\"] = RunRootDrive.Network;
+
+        world.Receive(start, "start", new { chat_id = "waiting" });
+
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
+        Assert.Equal(
+            RunRootRule.Refusal(RunRootVerdict.Share, "nothing was started", RunRootRule.InSettings, "try again"),
+            error.GetProperty("message").GetString());
+        Assert.Equal(chosen, world.Host.RunRoot);
+        Assert.Single(world.Backend.Restarts);
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.Empty(world.Backend.Sessions);
+    }
+
+    /// <summary>
     /// However the turn ends, the chat leaves `running`, and that is all the host reads
     /// (`GET /sessions/{chat_id}`, through the real <see cref="BackendClient"/>): a turn that
     /// ended normally or was stopped (`ended`), one that ended in an error (`failed`), one that
@@ -3832,6 +3869,13 @@ public sealed class DeferredRestartTests
         /// <summary>How often the host asks whether the turn has ended; short, so the tests are.</summary>
         public TimeSpan Poll { get; set; } = TimeSpan.FromMilliseconds(10);
 
+        /// <summary>
+        /// What the run root rule reads (owner decision 154A); when null, a probe that answers every folder as a
+        /// local one reached by its own path - not Windows, so a temp folder below a junction on a developer's
+        /// machine fails no test that is not about the rule (the reviews' N11).
+        /// </summary>
+        public IRunRootProbe? Probe { get; set; }
+
         /// <summary>Whether a remodel run is in progress on the backend, as the add-in answers it.</summary>
         public Func<bool> BackendBusy { get; set; } = () => false;
 
@@ -3896,6 +3940,7 @@ public sealed class DeferredRestartTests
                 Engineer = "FICT-engineer",
                 Now = () => Stamp,
                 RestartPoll = Poll,
+                RunRootProbe = Probe ?? FakeRunRootProbe.Local(),
                 BackendBusy = () => BackendBusy(),
                 BackendRestarted = () =>
                 {

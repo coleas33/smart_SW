@@ -546,9 +546,10 @@ public sealed class ModelCheckHostTests
     /// <summary>
     /// Owner decision 154A (feature 002 T168): `check.start` refuses a run root the run root rule refuses,
     /// first - before the document is asked about - in the Model check tab's words, which its page shows
-    /// whole: what the root is, that nothing was checked, and the way on, a local folder in the settings file,
-    /// a restart, and Model check pressed again. No check folder is made, nothing is extracted or registered,
-    /// no status is posted and no path reaches the page.
+    /// whole: what the root is, that nothing was checked, and the way on, a local folder chosen for runs in
+    /// Settings on the Review tab, since this page has none (the reviews' F5), and Model check pressed again.
+    /// No check folder is made, nothing is extracted or registered, no status is posted and no path reaches
+    /// the page.
     /// </summary>
     [Theory]
     [MemberData(nameof(FakeRunRootProbe.RefusedKinds), MemberType = typeof(FakeRunRootProbe))]
@@ -572,7 +573,8 @@ public sealed class ModelCheckHostTests
                 Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
                 Assert.False(error.GetProperty("retryable").GetBoolean());
                 Assert.Equal(
-                    RunRootRule.Refusal(refusing.Verdict, "nothing was checked", "press Model check again"),
+                    RunRootRule.Refusal(
+                        refusing.Verdict, "nothing was checked", RunRootRule.InSettingsOnTheReviewTab, "press Model check again"),
                     error.GetProperty("message").GetString());
             }
 
@@ -611,7 +613,11 @@ public sealed class ModelCheckHostTests
         /// <summary>The run root as the setting spells it, when not <see cref="RunRoot"/> (owner decision 154A).</summary>
         public string? RunRootSpelling { get; set; }
 
-        /// <summary>What the run root rule reads (owner decision 154A); Windows itself when null.</summary>
+        /// <summary>
+        /// What the run root rule reads (owner decision 154A); when null, a probe that answers every folder as a
+        /// local one reached by its own path - not Windows, so a temp folder below a junction on a developer's
+        /// machine fails no test that is not about the rule (the reviews' N11).
+        /// </summary>
         public IRunRootProbe? Probe { get; set; }
 
         public PageDocument? Document { get; set; }
@@ -644,10 +650,7 @@ public sealed class ModelCheckHostTests
                 LogFolder = () => LogFolder,
                 Now = () => Stamp,
             };
-            if (Probe != null)
-            {
-                options.RunRootProbe = Probe;
-            }
+            options.RunRootProbe = Probe ?? FakeRunRootProbe.Local();
 
             _host = new ModelCheckHost(options);
         }

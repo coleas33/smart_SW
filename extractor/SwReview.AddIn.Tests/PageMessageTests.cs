@@ -1037,6 +1037,69 @@ public sealed class PageMessageTests
         }
     }
 
+    /// <summary>
+    /// The reviews' finding F7: a folder chosen for runs that is not written as a full path is the one field not
+    /// saved - resolved against the current folder, the add-in and the backend can each read it as another
+    /// folder, and SOLIDWORKS can move its own - and the answer says so, with the way on and no path. The rule
+    /// is not asked about it; every other setting is saved and the run root stands.
+    /// </summary>
+    [Theory]
+    [InlineData("FICT-runs")]
+    [InlineData(@"..\FICT-runs")]
+    [InlineData(@"\FICT-runs")]
+    [InlineData("C:FICT-runs")]
+    public void AFolderChosenForRunsThatIsNotAFullPathIsNotSaved(string chosen)
+    {
+        using (var world = new HostWorld())
+        {
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            world.Probe = probe;
+            world.Open();
+            string inForce = world.Settings.RunRoot;
+            Dictionary<string, object?> payload = Save(effort: "low");
+            payload["run_root"] = chosen;
+
+            world.Receive("settings.save", "save", payload);
+
+            JsonElement saved = world.Reply("settings.saved", "save");
+            JsonElement refusal = saved.GetProperty("run_root_refusal");
+            Assert.Equal("RunRootNotFullPath", refusal.GetProperty("error_class").GetString());
+            Assert.False(refusal.GetProperty("retryable").GetBoolean());
+            Assert.Equal(RunRootRule.NotFullPathRefusal, refusal.GetProperty("message").GetString());
+            Assert.DoesNotContain("FICT-runs", refusal.GetProperty("message").GetString()!);
+            Assert.Empty(probe.Normalized);
+            Assert.Empty(probe.Asked);
+            Assert.Equal(inForce, saved.GetProperty("settings").GetProperty("run_root").GetString());
+            SettingsLoadResult file = UserSettings.Load(world.SettingsPath, BuildMode.Development);
+            Assert.Equal("low", file.Settings.Effort);
+            Assert.Equal(inForce, file.Settings.RunRoot);
+            Assert.Equal(inForce, world.Host.RunRoot);
+        }
+    }
+
+    /// <summary>
+    /// ...while a relative run root the settings file already names keeps working as before: a save that sends
+    /// it back unchanged writes it again and says nothing of it.
+    /// </summary>
+    [Fact]
+    public void ARelativeRunRootTheSettingsFileNamesKeepsWorking()
+    {
+        using (var world = new HostWorld())
+        {
+            world.Settings.RunRoot = "FICT-runs";
+            world.Probe = FakeRunRootProbe.Local();
+            world.Open();
+            Dictionary<string, object?> payload = Save(effort: "low");
+            payload["run_root"] = "FICT-runs";
+
+            world.Receive("settings.save", "save", payload);
+
+            Assert.False(world.Reply("settings.saved", "save").TryGetProperty("run_root_refusal", out _));
+            Assert.Equal("FICT-runs", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.RunRoot);
+            Assert.Equal("low", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.Effort);
+        }
+    }
+
     private static JsonElement[] Posted(HostWorld world, string type) => world.Posted
         .Select(message => JsonDocument.Parse(message).RootElement)
         .Where(root => root.GetProperty("type").GetString() == type)
@@ -1099,7 +1162,11 @@ public sealed class PageMessageTests
 
         public PageDocument? Document { get; set; }
 
-        /// <summary>What the run root rule reads (owner decision 154A); Windows itself when null.</summary>
+        /// <summary>
+        /// What the run root rule reads (owner decision 154A); when null, a probe that answers every folder as a
+        /// local one reached by its own path - not Windows, so a temp folder below a junction on a developer's
+        /// machine fails no test that is not about the rule (the reviews' N11).
+        /// </summary>
         public IRunRootProbe? Probe { get; set; }
 
         public List<string> Posted { get; } = new List<string>();
@@ -1121,10 +1188,7 @@ public sealed class PageMessageTests
                 CurrentDocument = () => Document,
                 Environment = name => Environment.TryGetValue(name, out string? value) ? value : null,
             };
-            if (Probe != null)
-            {
-                options.RunRootProbe = Probe;
-            }
+            options.RunRootProbe = Probe ?? FakeRunRootProbe.Local();
 
             _host = new ReviewHost(options);
         }

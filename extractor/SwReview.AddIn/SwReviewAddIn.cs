@@ -556,6 +556,14 @@ public class SwReviewAddIn : ISwAddin
     private string RunRootInForce() => _reviewHost?.RunRoot ?? UserSettings.DefaultRunRoot();
 
     /// <summary>
+    /// Every run root in force this SOLIDWORKS session, the review host's (owner decision 154A, the reviews'
+    /// finding F6): the Model check, Standards and Remodel tabs open the runs made under any of them, and the
+    /// Remodel tab knows its copies under any of them, after a save has moved the run root. The run root in
+    /// force alone when there is no review host, as the add-in unloads.
+    /// </summary>
+    private IReadOnlyList<string> RunRootsInForce() => _reviewHost?.RunRootsInForce ?? new[] { RunRootInForce() };
+
+    /// <summary>
     /// The Model check tab's host (T083, contracts/model-check.md).
     ///
     /// It shares three things with the Review tab rather than owning copies of them: the same
@@ -579,6 +587,7 @@ public class SwReviewAddIn : ISwAddin
             _pane.ModelCheckChannel,
             RunRootInForce)
         {
+            RunRootsInForce = RunRootsInForce,
             Backend = () => _backend?.Endpoint,
             CurrentDocument = CurrentDocument,
 
@@ -693,6 +702,7 @@ public class SwReviewAddIn : ISwAddin
             _pane.StandardsChannel,
             RunRootInForce)
         {
+            RunRootsInForce = RunRootsInForce,
             Backend = () => _backend?.Endpoint,
             CurrentDocument = CurrentDocument,
             Dump = reviewOptions.Dump,
@@ -814,6 +824,7 @@ public class SwReviewAddIn : ISwAddin
             _pane.RemodelChannel,
             RunRootInForce)
         {
+            RunRootsInForce = RunRootsInForce,
             Backend = endpoint,
             CurrentDocument = CurrentDocument,
             RemodelAvailability = () => _toolService?.RemodelCapability
