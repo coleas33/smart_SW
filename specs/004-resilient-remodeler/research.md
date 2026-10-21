@@ -2999,3 +2999,240 @@ Asked with the merge:
 one - with the remodel host, page, end-to-end, pipeline, client and wiring classes, the shared rows, `AddInLogTests`,
 and the restart and tool-service classes, 2,875 cases, green five times in a row. The record readers
 (`test_workstation_test_plan.py`): 240 passed on 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`). No broken link.
+
+### R19.14 Codex's review of the merge: a run is not over until its job is (T238, T239, T242, T243)
+
+**Source.** The owner's coordinator relayed Codex's adversarial review of `cc308ae` (base `4f40dae`): "needs
+attention", T172 not to be switched on yet. Two findings, both fixed here test first. C1, high and older than 159A: a
+status poll the backend did not answer ended the run while the backend's worker may still have been acting. C2,
+medium: `addin.log`'s appends were serialized within one process only (R19.16).
+
+**The defect.** `BackendRemodelPipeline.Poll` caught a failed `GET /remodel/runs/{job_id}` and ended the run `failed`
+at once: a transient failure, or a backend busy past the client's 30 seconds. `RemodelHost.Execute` then closed the
+run's session (`POST /remodel/close`, `remodel.close` over the bridge) and freed the host. The backend's worker thread
+was not told and went on applying the plan; a plan made then opened its copy on the same bridge - one dispatcher per
+tool-service attachment - and the run's next change, whose command named no run, was carried out on the session the
+bridge held: the new plan's copy, which passes every check `VerifyTarget` makes because it is that plan's own. Pinned
+by `ARunWhoseStatusPollIsNotAnsweredWaitsForItsJobToEnd`, red with the old ending put back (J1, R19.18); what the
+late change then does on the bridge is reproduced through the real Python client and executor in R19.15.
+
+**The fix.** The run ends only when its job is over: the backend says it `finished` or `failed`; or it answers
+`UnknownJob`, since its jobs live in its memory and one it no longer knows has no worker; or the backend that runs it
+is gone - none running, or another in its place, read from the endpoint the run began on (its port and its token). A
+poll not answered while that backend still runs is not the run's end:
+
+- the page is told once, in the stage the run had reached (`judging` before any),
+  `BackendNotAnsweringMidRunMessage`: "The review backend is not answering, so this run cannot be confirmed over yet,
+  and nothing else starts until it is. Stop is passed on as soon as the backend answers. If it does not come back,
+  close SOLIDWORKS: that ends the backend and the run with it.";
+- the poll is asked again, the wait doubling from the poll delay (500 ms) up to eight seconds (`Longer`), and back to
+  the poll delay once it answers; any failure of the call counts, not only the client's refusal;
+- a Stop asked for meanwhile is posted at every poll until it lands (`TryStop`), so Stop still works;
+- once the backend answers, the page is told where the run stands again, as at its start;
+- an after-dump that failed - the dump not written, or `PackageAfterRefused`, or its answer lost - no longer ends the
+  run at once: the job waits for that dump until its own bound (ten minutes), then ends. The page is told once, in
+  `verifying`, `AfterDumpNotConfirmedMessage`: "The copy's feature tree after the changes was not confirmed handed to
+  the review backend. The run ends when the backend has finished with it or stopped waiting for it, and nothing else
+  starts until then." When the job fails, the failure is the run's answer, its class kept; when it finishes, the run
+  ends as it did, since a job finishes only once its dump has arrived and the failure was then only its answer, lost
+  (T242, T243, found while recording T239, which answered the failure whatever the job did).
+
+**Why it is safe.** The host is freed only once the job is over or its backend is gone, and a gone backend has no
+worker. A backend is stopped only by the add-in - which stops the old one before it starts another, and holds a
+settings restart back while a run is in flight (157A, 158A) - or by its own exit; the add-in starts it in a job object
+that kills the process tree when it closes, so a worker never outlives its process. While the backend that runs the
+job still answers to its endpoint, its worker may still be acting, so the run, its session and the host stay held
+however long it is silent. One window remains, recorded and not changed: `BackendProcess.Dispose` reads the backend as
+gone from the moment it begins, before its grace period for a graceful stop ends; it runs only at an unload, when
+nothing else starts, or at a settings restart, which a run in flight holds back.
+
+**A backend that stays silent while it runs.** It holds the run, its session and the host until it answers or stops.
+The page says so and says how to end it: closing SOLIDWORKS ends the backend, and with it the run. Ending it from the
+add-in after a bound would free the host sooner, but the backend is the Review tab's too, and stopping it ends any
+review turn running there; that trade is the owner's (R19.19, question 1).
+
+Considered and not taken: ending the run after a bound while the backend still runs (the defect, later); freeing the
+host while still polling (a plan could open its copy on the bridge the worker still uses); asking the backend to stop
+the job first (it does not answer).
+
+### R19.15 The run's identity on the bridge (T240, T241)
+
+Defence in depth for C1, so that a run's worker that outlives its session can never act on another run's copy, however
+the host comes to let go of it.
+
+**The identity.** The run folder's own name, `run_id`: what `remodel.open` is already given, tags the copy with
+(`VerifyTarget`'s check 2) and the session keeps (`RemodelScope.RunId`), and what every route that acts on a session
+already holds (`run_dir`). Weighed against a token minted at `remodel.open`: a token would have to come back in the
+open's answer, be written to the run folder and read back by `POST /remodel/runs` and `POST /remodel/close` - a new
+artifact and a new way to fail - for no more than the folder name gives, since the host makes each run's folder fresh,
+time-stamped, and never reuses one. It is not a secret and need not be: every line already carries the per-launch
+remodel secret, and this tells one run of the trusted backend from another, not a caller from an intruder.
+
+**The bridge.** Every command after `remodel.open` names its run, first in its parameters (`RemodelCommandTable`'s
+rows, `RunParameter`). `SwBridgeDispatcher.Session(request)` - which every one of them calls before anything else, its
+own parameters aside - answers, in order: no session, `target_mismatch`, as before, whatever run the command names; no
+run, or one that is not a non-empty string, `bad_request`; another run than the session's, compared exactly as
+`VerifyTarget` compares the tag (after trimming, as the open's id is), `session_mismatch`, a new token, in plain words
+naming both runs and saying nothing was read or written. All before a document is read or written, so the session the
+command reached is left as it was. It tightens: nothing refused before is answered now, and the write guard, the
+allowlist and `VerifyTarget` are untouched.
+
+**The Python end.** `RemodelClient(run_id=...)` acts for one run: it opens that run and no other, adds `run_id` to every
+command after the open (`_session_call`), and sends nothing after the open when it was given no run, each refused
+before a line is written, as an out-of-set value is. The run is the client's and not a method's argument, so a plan's
+change `params` and an inverse's stay exactly the method's arguments. `session_mismatch` is a `RemodelTargetError`, so
+the executor stops as it does on a copy not provably its own (`target_mismatch`), its change log intact - `apply.py` is
+unchanged. `chat/remodel.py`'s routes build their clients for the run in their `run_dir`, set on a client a factory
+built too; the probe acts for none.
+
+**Protocol 1.5.** On both ends (`SwBridgeDispatcher.ProtocolVersion`, `PROTOCOL_VERSION`, `REMODEL_PROTOCOL_VERSION`),
+in both protocol files and `bridge-remodel.md`. Not additive for the family: a remodel client written before it is
+refused after its open, loudly, as `bad_request`. The add-in starts the backend from its own install, so the two ends
+ship together; the six other commands are unchanged.
+
+**Reproduced first.** In the stub world, `RemodelRunIdentityTests.ARunsWorkerThatOutlivedItsSessionCannotChangeTheNextRunsCopy`:
+run A's session closed, run B opened on the same bridge, A's late rename carried out on B's copy before the fix. And
+through the real Python apply path, `test_remodel_run_identity.py`: the real `RemodelClient` and the real executor over
+an in-memory bridge that keeps one session at a time as the dispatcher does; between two of run A's commands the
+add-in closes A's session and B's plan opens its copy, and before the fix A's second change landed on B's copy. That
+bridge carries out a command naming no run, as a host before 1.5 did, so that the defect shows rather than a refusal,
+and the test asserts no command arrived without one.
+
+### R19.16 `addin.log` across processes (T236, T237)
+
+**The defect (C2).** T218 serialized the appends with a lock, which reaches one process, and shared the file with any
+other writer. Two SOLIDWORKS sessions run two add-ins, and an append handle on .NET Framework writes at the position it
+opened at - the file's end as it then stood - so two handles opened at the same end each wrote there, the later line
+over the earlier. A PowerShell run on .NET Framework showed it: the second handle's line written from the offset the
+first had written at.
+
+**The fix.** The file is shared with readers only (`FileShare.Read`): one writer holds it at a time, whatever process it
+is in. A writer of another process is then a holder like any other - waited out for up to 300 ms while no line waits,
+its line kept, at most 1,000 a file, and written ahead of the next - and the engineer can still read the file while it
+is written. Weighed against a named mutex: that would need a name every add-in agrees on, a session namespace, and an
+abandoned mutex's handling, and would still ask every writer to take it; sharing for reading only asks nothing of the
+other writer but that it write as this one does, and every writer of `addin.log` is this code.
+
+**The test.** `ALineSurvivesAnotherProcesssWriterAppendingThroughItsOwnHandle`: a competing writer holds its own append
+handle, shared as T218 shared it; this process appends while it is open; the competing writer then writes its own line
+through its handle and closes; a later append follows. All three lines are whole afterwards, each read as a whole
+timestamped line: an assertion on the lines' ends passed before the fix, since the later line overwrote only the
+earlier one's timestamp.
+
+### R19.17 Tests changed on purpose, on Codex's review
+
+Each still pins what it pinned, or more.
+
+- `AddInLogTests.ALineIsWrittenAtOnceBesideAnotherWriterThatSharesTheFile`, replaced by
+  `ALineSurvivesAnotherProcesssWriterAppendingThroughItsOwnHandle` (T236): it pinned writing beside another writer that
+  shares the file - T218's choice, which R19.11's R2b turned red - and never wrote through the other handle, so it
+  pinned the defect. `AppendAsWriteDoes`, its helper, catches whatever an append throws, as `Write` does.
+- `BackendRemodelPipelineTests.ABackendThatVanishesMidRunEndsTheRunFailedAfterAnErrorStatus`, now a theory over none
+  running and another in its place (T238): a failed poll alone no longer ends the run, so the backend is gone as well.
+- `BackendRemodelPipelineTests`' four older cases whose after-dump never reached the backend - the copy not made the
+  active document, no copy in the run folder, the backend refusing the dump, the dump reading another document - and
+  the after-dump route of `ARefusalTheBackendAnsweredKeepsTheAnswerAsItsCause` (T242): their scripted job finished
+  after the dump failed, which the backend's job cannot do without its dump; it fails now (`WithoutItsDump`), as the
+  backend's run does once it stops waiting. What each asserts is unchanged. `AnAfterDumpThatFailsLeavesTheRunToTheEndOfItsJob`
+  also asks that the page be told.
+- `BridgeDispatcherTests.Ping_SaysWhichDocumentTheWorkerIsOn` and `BridgeProtocolTests`'s ping answer, renamed
+  `WriteResponse_APingAnswerIsProtocol15AndCarriesTheDrawingCapability`: 1.5 (T240).
+- `BridgeDispatcherTests.RemodelRename_TakesAPersistRefAndANewName_AndHasNoDimensionForm`: the run, then the rename's
+  own two (T240).
+- `RemodelOpenHandlerTests.Snapshot_TakesNoParametersAndIgnoresOneThatNamesADocument`, renamed
+  `Snapshot_TakesOnlyItsRunAndIgnoresAParameterThatNamesADocument`: it names its run and still ignores the document.
+- Requests that now name their run, their shape alone: `RemodelHarness.Dispatch` (every command on the scope, the run
+  it opened; `DispatchFor` for another run or none); the four snapshot cases of `RemodelOpenHandlerTests` on an opened
+  session; `RemodelSeatBridgeTests` (snapshot, rename, geometry, rebuild and three closes);
+  `RemodelPlanEndToEndTests.BackendRelay` (its geometry and close name the run as the backend does) and the rebuild in
+  `APlanWhoseClosingLeavesSettingsChangedTellsThePageBeforeItIsAnswered`; and `ToolServiceWiringTests.SeatedHostWorld`
+  (a geometry, a rebuild, two closes).
+- `test_remodel_client.py`: `CALLS` carries the run on every command after the open, and the helper's client acts for
+  it; the error table's twenty-seven rows, renamed `test_the_error_table_is_the_contracts_twenty_seven_rows`; and the
+  full parameter sets of `save` and of `folder` and `equation` with the run.
+- `RemodelHostTests`' two T168 cases say that `remodel.close` named no run until 159A; what they assert is unchanged.
+
+No test was loosened.
+
+### R19.18 The mutations, on Codex's review
+
+Each fix taken out once by one exact replacement in one file, in this worktree, as R19.7's and R19.11's were: the
+solution built and the named classes run - for T237, T239 and T243 the add-in's log and the host's classes (447
+cases) or the pipeline's, the host's and the end-to-end classes (532, 534 once T242 was in); for T241's bridge
+`RemodelRunIdentityTests`,
+`RemodelOpenHandlerTests`, `BridgeDispatcherTests`, `RemodelChangeHandlerTests` and `RemodelFinishHandlerTests` (375);
+for its Python end `test_remodel_client.py`, `test_remodel_run_identity.py` and `test_chat_remodel_routes.py` - and the
+file restored byte for byte, checked by its sha256. Every one is red.
+
+| Id | Taken out | Red |
+|---|---|---|
+| C2 | the log shared for writing again | 1 case: `ALineSurvivesAnotherProcesssWriterAppendingThroughItsOwnHandle` |
+| J1 | the first poll not answered ending the run `failed`, as before | 2 cases: `ARunWhoseStatusPollIsNotAnsweredWaitsForItsJobToEnd` and `AStopAskedForWhileTheBackendDoesNotAnswerReachesTheJobOnceItAnswers` |
+| J2 | a backend gone, or another in its place, not taken for the job's end | 2 cases of 1 test: `ABackendThatVanishesMidRunEndsTheRunFailedAfterAnErrorStatus`, none running and another in its place |
+| J3 | a job the backend no longer knows waited for | 1 case: `ARunTheBackendNoLongerKnowsEndsFailed` |
+| J4 | a refused after-dump ending the run at once, its job still waiting | 1 case: `AnAfterDumpThatFailsLeavesTheRunToTheEndOfItsJob`; run again once T243 was in, 2, with `AnAfterDumpWhoseAnswerWasLostEndsAsItsJobDidOnceTheJobFinishes` |
+| J5 | no Stop tried while the backend does not answer | 1 case: `AStopAskedForWhileTheBackendDoesNotAnswerReachesTheJobOnceItAnswers` |
+| J6 | the page not told the backend is not answering | 1 case: `ARunWhoseStatusPollIsNotAnsweredWaitsForItsJobToEnd` |
+| J7 | the page not told where the run stands once the backend answers again | 1 case: as J6 |
+| J8 | no backing off between unanswered polls | 1 case: `TheWaitAfterAnUnansweredPollDoublesUpToItsBound` |
+| J9 | the page not told the after-dump was not confirmed handed over | 3 cases: `AnAfterDumpThatFailsLeavesTheRunToTheEndOfItsJob`, `AnAfterDumpWhoseAnswerWasLostEndsAsItsJobDidOnceTheJobFinishes` and `AnAfterDumpThisSideCouldNotWriteIsAnsweredOnceItsJobFails` |
+| J10 | a job that finished answered with its after-dump's failure, as T239 had it | 1 case: `AnAfterDumpWhoseAnswerWasLostEndsAsItsJobDidOnceTheJobFinishes` |
+| J11 | an after-dump this side could not write ending the run at once, its job still waiting | 1 case: `AnAfterDumpThisSideCouldNotWriteIsAnsweredOnceItsJobFails` |
+| K1 | another run's command carried out on the session | 15 cases of 3 tests: the ten rows of `ACommandOfAnotherRunIsRefusedBeforeAnythingIsReadOrWritten`, the four of `ARunIdIsComparedExactly`, and `ARunsWorkerThatOutlivedItsSessionCannotChangeTheNextRunsCopy` |
+| K2 | a command naming no run taken for the session's | 16 cases of 3 tests: the ten rows of `ACommandNamingNoRunIsRefusedBeforeAnythingIsReadOrWritten`, the five of `ARunIdThatIsNotANonEmptyStringNamesNoRun`, and `ARunIdIsReadAsTheOpenReadsIt` |
+| K3 | the run compared ignoring case | 1 case: `ARunIdIsComparedExactly`, the run in another case |
+| K4 | the run read before the session, so no session and no run answered `bad_request` | 2 cases of 2 tests: `WithNoSessionTheAnswerIsTargetMismatchWhateverRunTheCommandNames` and `Snapshot_BeforeOpen_IsRefusedBecauseThereIsNoDocumentToReach` |
+| K5 | `remodel.snapshot` not checked for its run | 11 cases: its rows of the two theories, the two cases with no session, and seven of `RemodelFinishHandlerTests`' close cases, which ask for a snapshot once the session is over |
+| K6 | `remodel.rename` not checked for its run | 13 cases: its rows of the two theories, the four of `ARunIdIsComparedExactly`, the five of `ARunIdThatIsNotANonEmptyStringNamesNoRun`, the race and the case with no session |
+| K7 | `remodel.close` not checked for its run | 3 cases: its rows of the two theories and `Close_BeforeOpen_IsRefused` |
+| K8 | the table's geometry row naming no run | 1 case: `EveryCommandOnTheScopeNamesItsRunFirst` |
+| K9 | `session_mismatch` not in the table of tokens | 1 case: `TheRefusalIsAStableTokenOfItsOwnBesideTargetMismatch` |
+| P1 | the client naming no run after the open | 14 cases: the ten rows of `CALLS` after the open, `test_every_command_after_open_names_its_run_first`, the two full parameter sets, and the race through the real executor |
+| P2 | a client given no run sending after the open | 10 cases of 1 test: `test_a_client_given_no_run_sends_nothing_after_open` |
+| P3 | the client opening another run than its own | 3 cases of 1 test: `test_a_client_opens_only_the_run_it_acts_for` |
+| P4 | `session_mismatch` not a target error | 5 cases: its class, its row, the contract's table, the twenty-seven rows, and the race |
+| P5 | a route's client not bound to its run | 6 cases of 6 tests: `TestEachRouteNamesItsRun` |
+| P6 | the run's client bound to no run | 1 case: `test_every_command_a_run_sends_names_its_run` |
+| P7 | the close's client bound to no run | 1 case: `test_the_close_names_the_run_it_closes` |
+| P8 | the open's client bound to no run | 3 cases: the open and its baseline, the close after a failed open, and the whole run |
+| P9 | the run named last, not first | 1 case: `test_every_command_after_open_names_its_run_first` |
+
+30 mutations, 124 red results. C2 and J1 to J8 were run again once T243 was in, each as red as before but J4, red in one case more.
+
+### R19.19 What Start waits on now, and what is left
+
+**T172's switch waits on no known defect.** C1 is closed both ways: the host lets a run go only once its job is over
+or its backend is gone (R19.14), and the bridge carries a command out only on its own run's session (R19.15). C2 is
+fixed (R19.16). The switch still waits, as it always has, on what only the seat can give and no fake can: step 5.6's
+verdicts on the blocking probes, PROBE-1, 2, 3, 4 and 12, and a Plan on one real part's copy with the source's hash
+unchanged (T172's amendment of 2026-09-27), set in a commit of its own that cites the ledger's verdicts.
+
+Open, and the owner's; none of it blocks the switch:
+
+1. **A backend that stays silent while it runs** (R19.14). It holds the run, its session and the host until it
+   answers or stops; the page says so, and that closing SOLIDWORKS ends it. The add-in could end that backend itself
+   after a bound, which would free the host sooner, but the backend is the Review tab's too and a review turn running
+   there would end with it. As built, nothing is ended that the engineer did not end.
+2. **R19.12's three items** stand as they were: the answer to Stop's own line, a backend that does not answer whether
+   a turn runs, and the other tabs.
+
+Recorded, not changed:
+
+- `BackendProcess.Dispose` reads the backend as gone from its first step, before its grace period ends; it runs only
+  at an unload or a settings restart, which a run in flight holds back (R19.14).
+- Protocol 1.5 is not additive for the `remodel.*` family; the add-in starts the backend from its own install, so the
+  two ends ship together, and a client older than it is refused loudly after its open (R19.15).
+- `replay_run` is not wired into any route; a caller hands it a client acting for the run it replays.
+- A close refused `session_mismatch` - reachable only when the host sends a close for a run whose session is gone,
+  which T168's check keeps it from - reaches the add-in as `RunFolderFailed` with the bridge's sentence, which names
+  the two runs and no path, and leaves the other run's session as it was.
+
+**Evidence** (2026-10-21, on the branch after `9accc17`, with T240 to T244): the C# build, `--no-incremental`, at
+zero warnings once every mutation was restored; `SwReview.Extractor.Tests` 10,130 passed, from 10,086 - T240's 44 -
+and `SwReview.AddIn.Tests` 3,684, from 3,676 - T238's five and the vanishing theory's second row, and T242's two;
+T236's case replaced the one it was written against. The two full runs before that one each missed one bound,
+`ReviewPageScaleTests`' three seconds for a thousand findings (3,156 and 4,066 ms), while other worktrees ran their
+gates on this machine; it passed alone and in the full run above. The remodel, bridge, in-process pipe, log, restart
+and tool-service classes, 3,178 cases, green five times in a row. The Python suite: 18,140 passed and 5 skipped, from
+18,115 - T240's 25 - on 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`); ruff clean; the record readers
+(`test_workstation_test_plan.py`) again once this record was written. No broken link.

@@ -95,7 +95,10 @@ print it; the tab's words send whoever needs it there by View log's label.
 appends are made one at a time; the file is shared with any other reader or writer; a holder that shares it
 with neither is waited out for up to 300 ms, while no line waits already; and a line that still cannot be
 written is kept, at most 1,000, and written ahead of the next. The Remodel tab's lines leave out the add-in's
-word that the backend did not start, which the add-in's own start report logs.
+word that the backend did not start, which the add-in's own start report logs. *Amended 2026-10-21 on Codex's review
+of the merge (owner decision 159A; `research.md` R19.16):* the file is shared with readers only, so one writer holds
+it at a time whatever process it is in - two SOLIDWORKS sessions' append handles each wrote at the end they opened
+at, the later line over the earlier - and a writer of another process is waited out, a line kept, as any holder's is.
 
 *Added 2026-10-19 (owner decision 144A; feature 011's research R11.1):* the pane seat's gate log.
 `remodel.open_copy` and the activation of the copy before each dump call SOLIDWORKS through the
