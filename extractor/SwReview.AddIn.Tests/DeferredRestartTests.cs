@@ -7269,6 +7269,52 @@ public sealed class DeferredRestartTests
             "the review host is disposed before the hosts that register their folders on it");
     }
 
+    /// <summary>
+    /// The review host runs a check's late step while no settings restart can begin or be made (the reviews of 157A):
+    /// it waits for a save's restart being made, so it reads the backend that restart leaves, and makes none; once the
+    /// host is disposed it runs no step and answers false.
+    /// </summary>
+    [Fact]
+    public void TheReviewHostsStepWhileNoRestartRunsWaitsForASavesRestartAndRunsNoneOnceDisposed()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        using var hold = new ManualResetEventSlim(false);
+        try
+        {
+            world.Open();
+            world.Backend.Hold = hold;
+            var save = new Caller<bool>(() =>
+            {
+                world.Receive("settings.save", "save", Save(effort: "low"));
+                return true;
+            });
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the save never began its restart");
+            int seen = -1;
+            var step = new Caller<bool>(() => world.Host.WhileNoRestartRuns(() =>
+            {
+                seen = world.Backend.Generation;
+                return true;
+            }));
+            Assert.False(step.Finishes(TimeSpan.FromMilliseconds(300)), "the step ran while the save's restart was being made");
+
+            hold.Set();
+
+            Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
+            Assert.True(step.Finishes(TimeSpan.FromSeconds(10)), "the step never ran");
+            Assert.Equal(1, seen);
+            Assert.Single(world.Backend.Restarts);
+
+            world.Host.Dispose();
+            bool ran = false;
+            Assert.False(world.Host.WhileNoRestartRuns(() => ran = true));
+            Assert.False(ran);
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
     [Fact]
     public void ACheckOnceTheHostIsDisposedIsRefusedAndNeverBegins()
     {
@@ -7384,6 +7430,52 @@ public sealed class DeferredRestartTests
     }
 
     // ---- the restart itself, with no host ------------------------------------------------------
+
+    /// <summary>
+    /// The reviews of 157A: a step run while no restart runs - what a check's evaluation held up past its minute takes
+    /// its hold back in - waits for a restart being made, so it reads the backend that restart leaves; makes none, a
+    /// waiting one included; answers the step's answer; and, once the restart has stopped with the add-in, runs no
+    /// step and answers false.
+    /// </summary>
+    [Fact]
+    public void AStepWhileNoRestartRunsWaitsForTheOneBeingMadeAndMakesNone()
+    {
+        using var restartEntered = new ManualResetEventSlim(false);
+        using var restartGoesOn = new ManualResetEventSlim(false);
+        int restarts = 0;
+        int generation = 0;
+        using DeferredRestart restart = NewRestart(() => DeferredRestart.Hold.None, () => Interlocked.Increment(ref restarts));
+        var making = new Caller<bool>(() => restart.Now(() =>
+        {
+            restartEntered.Set();
+            Assert.True(restartGoesOn.Wait(TimeSpan.FromSeconds(10)), "the restart was never let go on");
+            Interlocked.Increment(ref restarts);
+            Interlocked.Increment(ref generation);
+        }));
+        Assert.True(restartEntered.Wait(TimeSpan.FromSeconds(10)), "the restart never began");
+
+        int seen = -1;
+        var step = new Caller<bool>(() => restart.WhileNoneRuns(() =>
+        {
+            seen = Volatile.Read(ref generation);
+            return true;
+        }));
+        Assert.False(step.Finishes(TimeSpan.FromMilliseconds(300)), "the step ran while a restart was being made");
+
+        restartGoesOn.Set();
+
+        Assert.True(making.Finishes(TimeSpan.FromSeconds(10)), "the restart never finished");
+        Assert.True(step.Finishes(TimeSpan.FromSeconds(10)), "the step never ran");
+        Assert.Equal(1, seen);
+        Assert.Equal(1, Volatile.Read(ref restarts));
+
+        Assert.False(restart.WhileNoneRuns(() => false));
+        restart.Dispose();
+        bool ran = false;
+        Assert.False(restart.WhileNoneRuns(() => ran = true));
+        Assert.False(ran);
+        Assert.Equal(1, Volatile.Read(ref restarts));
+    }
 
     [Fact]
     public void TwoCallersOfOneWaitingRestartRestartTheBackendOnce()

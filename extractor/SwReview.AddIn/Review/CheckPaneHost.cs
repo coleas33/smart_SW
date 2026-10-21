@@ -966,15 +966,15 @@ public sealed class CheckPaneHost : IDisposable
     }
 
     /// <summary>
-    /// Whether <paramref name="hold"/> holds the restart back at <paramref name="now"/>: while its start runs, while the
-    /// proxy holds its evaluation, and once handed over, until its reply has reached the page and the page's minute
-    /// has passed (the reviews of 157A). Called under <see cref="_holdLock"/>.
+    /// Whether <paramref name="hold"/> holds the restart back at <paramref name="now"/>: while the proxy holds its
+    /// evaluation, and until its reply has reached the page and the page's minute has passed (the reviews of 157A) -
+    /// so while its start runs, with no reply yet, it holds with no limit, whatever the clock reads. Called under
+    /// <see cref="_holdLock"/>.
     /// </summary>
     private bool Holds(CheckHold hold, TimeSpan now) =>
-        hold.HandedOver == null
-        || hold.TakenOver
+        hold.TakenOver
         || hold.DeliveredAt == null
-        || now - hold.DeliveredAt.Value < _options.Hold.HandOverLimit;
+        || now - hold.DeliveredAt < _options.Hold.HandOverLimit;
 
     /// <summary>The same backend process: both up, on the same port with the same token, which each start makes anew.</summary>
     private static bool SameBackend(BackendEndpoint? atTheGate, BackendEndpoint? now) =>
