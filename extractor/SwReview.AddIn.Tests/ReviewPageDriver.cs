@@ -623,6 +623,14 @@ var h = {
         await OffscreenReviewPage.Settled(Page);
     }
 
+    /// <summary>Answers the oldest held `ready` with the `init` the host would give now, and goes on holding the rest.</summary>
+    public async Task ReleaseOneReady()
+    {
+        Assert.NotEmpty(_heldReady);
+        Reply("init", _heldReady.Dequeue(), Init());
+        await OffscreenReviewPage.Settled(Page);
+    }
+
     private void Answer(string type, string id, JsonElement payload)
     {
         switch (type)

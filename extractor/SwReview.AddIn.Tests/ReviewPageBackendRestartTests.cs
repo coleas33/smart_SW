@@ -360,9 +360,10 @@ return JSON.stringify({
         + "return JSON.stringify({ text: strip.textContent, className: strip.className });";
 
     /// <summary>
-    /// Owner decision 160A: the add-in's word that the first start failed - an `error` status while the page holds
-    /// no backend - leaves the strip saying the backend is not running, as the other tabs' strips say it (150A),
-    /// where it said "Error", until an `init` names a backend; one that names none leaves it so.
+    /// Owner decision 160A: the add-in's word that the first start failed - an `error` status marked as the
+    /// backend's own word (`lifecycle`), as every other page's is since the decision's review - leaves the strip
+    /// saying the backend is not running, as the other tabs' strips say it (150A), where it said "Error", until an
+    /// `init` names a backend; one that names none leaves it so.
     /// </summary>
     [Fact]
     public void AFailedFirstStartLeavesTheStripNotRunningUntilAnInitNamesABackend()
@@ -370,7 +371,7 @@ return JSON.stringify({
         ReviewPageDriver.Run(driver => driver.NoBackend = true, async driver =>
         {
             const string Failure = "FICT the backend did not start. Save Settings to start it again.";
-            await driver.Post("status", new { stage = "error", message = Failure });
+            await driver.Post("status", new { stage = "error", message = Failure, lifecycle = true });
             Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
 
             int readies = driver.Posted("ready").Length;
@@ -396,13 +397,15 @@ return JSON.stringify({
     {
         ReviewPageDriver.Run(driver => driver.NoBackend = true, async driver =>
         {
-            await driver.Post("status", new { stage = "error", message = "FICT the backend did not start." });
+            await driver.Post("status", new { stage = "error", message = "FICT the backend did not start.", lifecycle = true });
             driver.HoldReady = true;
             int readies = driver.Posted("ready").Length;
 
             await driver.Post("status", new { stage = "ready", message = "Backend ready." });
             await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for the backend named by ready");
-            Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
+            JsonElement strip = await driver.Read(Strip);
+            Assert.Equal("Backend not running", strip.GetProperty("text").GetString());
+            Assert.Equal("badge bad", strip.GetProperty("className").GetString());
 
             await driver.ReleaseReady(backendUp: false);
             Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
@@ -450,6 +453,121 @@ return JSON.stringify({
             await driver.Settle();
             Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
             Assert.True((await driver.Read(Banner)).GetProperty("hidden").GetBoolean());
+        });
+    }
+
+    /// <summary>
+    /// The review of owner decision 160A (S3): only the backend's own word that it did not start or restart, marked
+    /// `lifecycle`, marks it not running, and a save's `BackendNotRestarted`. Another `error` status while the page
+    /// holds no backend - the host's word on the settings after every `init`, a stored key that cannot be read, say,
+    /// while the first start still runs - says "Error", as before 160A, and a `ready` after it says the backend is
+    /// ready.
+    /// </summary>
+    [Fact]
+    public void ASettingsProblemWhileTheFirstStartRunsIsNoFailedStart()
+    {
+        ReviewPageDriver.Run(driver => driver.NoBackend = true, async driver =>
+        {
+            Assert.Equal("Backend starting", (await driver.Read(Strip)).GetProperty("text").GetString());
+
+            await driver.Post("status", new { stage = "error", message = "FICT the stored key could not be decrypted on this account." });
+            await driver.Settle();
+            Assert.Equal("Error", (await driver.Read(Strip)).GetProperty("text").GetString());
+
+            driver.NoBackend = false;
+            int readies = driver.Posted("ready").Length;
+            await driver.Post("status", new { stage = "ready", message = "Backend ready." });
+            await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for the backend named by ready");
+            await driver.Settle();
+            Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// An error while a backend is up still says "Error", the add-in's own word on the backend or any other (the
+    /// review of owner decision 160A, S8): research 160A said so, and nothing held it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnErrorWhileABackendIsUpStillSaysError(bool backendsOwnWord)
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+
+            const string Failure = "FICT the review stopped part way through.";
+            await driver.Post("status", backendsOwnWord
+                ? (object)new { stage = "error", message = Failure, lifecycle = true }
+                : new { stage = "error", message = Failure });
+            await driver.Settle();
+
+            JsonElement strip = await driver.Read(Strip);
+            Assert.Equal("Error", strip.GetProperty("text").GetString());
+            Assert.Equal("badge bad", strip.GetProperty("className").GetString());
+        });
+    }
+
+    /// <summary>
+    /// The way on takes the banner only when it says nothing else (the review of owner decision 160A): a word
+    /// already there - another error the page was told - stays, and the strip says the backend is not running.
+    /// </summary>
+    [Fact]
+    public void AFailedStartsWayOnLeavesAnotherWordOnTheBanner()
+    {
+        const string Other = "FICT another word the page was told.";
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await driver.Post("error", new { error_class = "HostError", message = Other, retryable = false });
+            await driver.Settle();
+            Assert.Equal(Other, (await driver.Read(Banner)).GetProperty("text").GetString());
+
+            driver.NoBackend = true;
+            driver.BackendStartFailed = true;
+            int readies = driver.Posted("ready").Length;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for the failed backend");
+            await driver.Settle();
+
+            Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
+            JsonElement banner = await driver.Read(Banner);
+            Assert.False(banner.GetProperty("hidden").GetBoolean());
+            Assert.Equal(Other, banner.GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// The review of owner decision 160A (D2): a `ready` status while an `init` is on its way is asked about once
+    /// more after that `init`, as `backend.restarted` is, and that ask loads the models, as the `ready` status's
+    /// own does. The `init` on its way can have been read before the backend was up - naming none, and with the
+    /// last start's failure - and delivered after the `ready`: dropped, the ask would leave the page saying the
+    /// backend is not running while it is up.
+    /// </summary>
+    [Fact]
+    public void AReadyStatusWhileAnInitIsOnItsWayIsAskedAboutOnceMoreAfterIt()
+    {
+        ReviewPageDriver.Run(driver => driver.NoBackend = true, async driver =>
+        {
+            driver.HoldReady = true;
+            await driver.Post("status", new { stage = "ready", message = "Backend ready." });
+            await driver.Until(() => driver.HeldReady == 1, "asked for the backend the status named");
+            await driver.Post("status", new { stage = "ready", message = "Backend ready." });
+            await driver.Settle();
+            Assert.Equal(1, driver.HeldReady);
+
+            driver.BackendStartFailed = true;
+            await driver.ReleaseOneReady();
+            await driver.Until(() => driver.HeldReady == 1, "asked once more after the init on its way");
+            Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
+            int models = driver.Posted("models.list").Length;
+
+            driver.NoBackend = false;
+            driver.BackendStartFailed = false;
+            await driver.ReleaseReady();
+
+            Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+            Assert.True((await driver.Read(Banner)).GetProperty("hidden").GetBoolean());
+            Assert.True(driver.Posted("models.list").Length > models, "the ask once more loaded no models");
         });
     }
 

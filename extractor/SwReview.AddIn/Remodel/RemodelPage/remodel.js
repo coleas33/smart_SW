@@ -1017,8 +1017,13 @@
       // The backend finished starting after this page was given its `init`, so the endpoint it
       // holds is null. Ask again, as the other pages do. Guarded on `state.backend` so the
       // host's own end-of-phase `status {stage: "ready"}` does not re-initialise the page in
-      // the middle of a run.
-      requestInit(true);
+      // the middle of a run. One more ask after an `init` already on its way, which may have been
+      // read before the backend was up (the review of owner decision 160A, D2).
+      if (state.initPending) {
+        state.initAgain = true;
+      } else {
+        requestInit(true);
+      }
     }
 
     setRunStatus((payload && payload.message) || '');

@@ -197,8 +197,12 @@
     reconnectTimer: null,
     reconnectDelay: RECONNECT_MIN,
     initPending: false,
-    // A `backend.restarted` arrived while an `init` was on its way: ask once more after it.
+    // A `backend.restarted`, or a `ready` status, arrived while an `init` was on its way: ask once
+    // more after it.
     initAgain: false,
+    // ...and that ask loads the models, as the `ready` status's own would have (the review of owner
+    // decision 160A, D2).
+    initAgainLoadsModels: false,
     // A `backend.restarted` arrived and no `init` has named the new backend yet.
     backendReplaced: false,
     // The token the page held when `backend.restarted` arrived: an `init` that names it was read
@@ -2866,7 +2870,11 @@
     }
     if (stage === 'error') {
       showBanner(message);
-      if (!state.backend) {
+      // Only the backend's own word that it did not start or restart, marked `lifecycle`, says it
+      // is not running - with a save's `BackendNotRestarted` - not any `error` while the page holds
+      // no backend: the host's word on the settings after every `init` comes while the first start
+      // runs, too (the review of owner decision 160A, S3).
+      if (!state.backend && payload.lifecycle === true) {
         state.notRunning = true;
       }
       renderBackendState(state.notRunning ? NOT_RUNNING : 'Error', true);
@@ -2876,8 +2884,15 @@
       showBanner('');
       if (!state.backend) {
         // The backend finished starting after this page loaded, so the `init` it was given
-        // carried no endpoint. Ask again rather than leaving Review unusable until a reload.
-        requestInit(true);
+        // carried no endpoint. Ask again rather than leaving Review unusable until a reload -
+        // once more after an `init` already on its way, which may have been read before the
+        // backend was up (the review of owner decision 160A, D2).
+        if (state.initPending) {
+          state.initAgain = true;
+          state.initAgainLoadsModels = true;
+        } else {
+          requestInit(true);
+        }
       }
     }
     renderBackendState(state.notRunning && !state.backend ? NOT_RUNNING : (message || stage || ''),
@@ -3208,8 +3223,10 @@
     }).then(function () {
       state.initPending = false;
       if (state.initAgain) {
+        var loadModelsAgain = state.initAgainLoadsModels;
         state.initAgain = false;
-        requestInit(false);
+        state.initAgainLoadsModels = false;
+        requestInit(loadModelsAgain);
       }
     });
   }

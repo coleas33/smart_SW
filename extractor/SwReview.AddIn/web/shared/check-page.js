@@ -103,9 +103,9 @@
    *   - `describeCounts(result)`: the one-line sentence about the counts, printed after a check
    *     and after an accept. The buckets it reads are the family's, so the family writes it.
    *   - `acceptNoticeId`, optional: the element an Accept whose check is not shown again says so
-   *     in, kept apart from the banner a failed check uses (owner decision 160A). The Standards
-   *     page has one, since its failed check clears the rows; without one the notice takes the
-   *     banner, as on the Model check page.
+   *     in, kept apart from the banner a failed check uses (owner decision 160A). Both check pages
+   *     have one: the Standards page since the decision, its failed check clearing the rows, and
+   *     the Model check page since its review; without one the notice takes the banner.
    *
    * And two hooks, both optional, for the facts one family's `init` carries and the other's
    * does not. A page that defines neither behaves exactly as it did before they existed:
@@ -496,8 +496,8 @@
     function acceptedWithoutReRead(exceptionId, why) {
       var notice = 'Accepted as ' + (exceptionId || 'a new exception') + why
         + ' Press the check again to see where it stands.';
-      // The Standards tab clears every result row when a check fails. Its own place survives that
-      // clear and leaves the failure banner visible too (owner decision 160A).
+      // Its own place survives a failed check - which on the Standards tab clears every result
+      // row - and leaves the failure banner visible too (owner decision 160A, and its review).
       if (ui.acceptNotice) {
         dom.clear(ui.acceptNotice);
         dom.write(ui.acceptNotice, notice);
@@ -1359,8 +1359,14 @@
         // holds is null and every check call would be refused for the life of the page. Ask
         // again, as `app.js` already does for the Review page. Guarded on `state.backend` so the
         // host's own end-of-extraction `status {stage: "ready"}` does not re-initialise the page
-        // in the middle of a check.
-        requestInit(false);
+        // in the middle of a check. An `init` already on its way may have been read before the
+        // backend was up: ask once more after it, as `backend.restarted` does (the review of owner
+        // decision 160A, D2).
+        if (state.initPending) {
+          state.initAgain = true;
+        } else {
+          requestInit(false);
+        }
       }
 
       setCheckState((payload && payload.message) || '');

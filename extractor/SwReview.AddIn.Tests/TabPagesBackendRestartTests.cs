@@ -514,18 +514,20 @@ public sealed class TabPagesBackendRestartTests
     }
 
     /// <summary>
-    /// Owner decision 160A: on the Standards page a check that fails and an Accept's notice no longer share
-    /// one banner. A failed check clears the result's rows there, so the notice - the one word that the
-    /// exception is saved - has its own place outside them, and the failure keeps the banner, whichever
-    /// lands first.
+    /// Owner decision 160A: a check that fails and an Accept's notice no longer share one banner. The notice -
+    /// the one word that the exception is saved - has its own place beside the check's status, and the failure
+    /// keeps the banner, whichever lands first. On the Standards page, whose failed check clears the result,
+    /// both orders make a notice. The Model check page keeps its result when a check fails (decided on the
+    /// decision's review, for the owner): a failure first leaves the result the Accept's re-read is shown on,
+    /// so the rule is marked accepted on its row and in the check's line beside the failure, and no notice is
+    /// made; a notice first is kept through the press and the failure, as on the Standards page.
     /// </summary>
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void AStandardsCheckFailureAndAnAcceptNoticeBothStayVisible(bool failureFirst)
+    [MemberData(nameof(CheckTabsAndOrders))]
+    public void ACheckFailureAndAnAcceptNoticeBothStayVisible(string tab, bool failureFirst)
     {
         const string Failure = "FICT the extraction failed before anything was graded.";
-        TabPageDriver.Run(TabPageDriver.Standards, driver => driver.WithLatestResult = true, async driver =>
+        TabPageDriver.Run(tab, driver => driver.WithLatestResult = true, async driver =>
         {
             await driver.UntilTheLatestResultIsRead();
             await driver.Settle();
@@ -551,9 +553,51 @@ public sealed class TabPagesBackendRestartTests
             }
 
             Assert.Equal(Failure, await driver.Banner());
+            if (failureFirst && tab == TabPageDriver.ModelCheck)
+            {
+                Assert.Null(await driver.AcceptNotice());
+                Assert.Equal(1, await driver.JustAccepted());
+                Assert.StartsWith("Accepted as " + TabPageDriver.ExceptionId, await driver.TextOf("check-state"), StringComparison.Ordinal);
+                return;
+            }
+
             string notice = Assert.IsType<string>(await driver.AcceptNotice());
             Assert.StartsWith("Accepted as " + TabPageDriver.ExceptionId, notice, StringComparison.Ordinal);
             Assert.Contains("Press the check again to see where it stands.", notice, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>Each check tab, with a failed check landing first and last.</summary>
+    public static IEnumerable<object[]> CheckTabsAndOrders =>
+        from row in CheckTabs
+        from failureFirst in new[] { false, true }
+        select new object[] { row[0], failureFirst };
+
+    /// <summary>
+    /// A second Accept's notice takes the place of the first, as the banner it replaced did: the one notice says
+    /// where the newest Accept stands (the review of owner decision 160A).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void ASecondAcceptsNoticeTakesThePlaceOfTheFirst(string tab)
+    {
+        TabPageDriver.Run(tab, driver => driver.WithLatestResult = true, async driver =>
+        {
+            await driver.UntilTheLatestResultIsRead();
+            await driver.Settle();
+            await driver.RefuseGets();
+            await driver.AcceptTheFirstRule();
+            await driver.UntilAcceptNotice("said the first Accept's re-read failed");
+            int reads = await driver.LatestResultReads();
+
+            await driver.AcceptTheFirstRule();
+            await driver.UntilReads(reads + 1, "asked to re-read the second Accept's check");
+            await driver.Settle();
+
+            Assert.Equal(
+                "Accepted as " + TabPageDriver.ExceptionId + ", but the check could not be re-read: "
+                    + TabPageDriver.RefusedGet + " Press the check again to see where it stands.",
+                await driver.AcceptNotice());
         });
     }
 
@@ -565,11 +609,10 @@ public sealed class TabPagesBackendRestartTests
     /// a notice left up over a result that shows the rule accepted would be a false line.
     /// </summary>
     [Theory]
-    [InlineData("a check pressed again")]
-    [InlineData("another Accept")]
-    public void AStandardsAcceptsNoticeComesDownOnceAResultIsShownAgain(string shown)
+    [MemberData(nameof(CheckTabsAndWaysShown))]
+    public void AnAcceptsNoticeComesDownOnceAResultIsShownAgain(string tab, string shown)
     {
-        TabPageDriver.Run(TabPageDriver.Standards, driver => driver.WithLatestResult = true, async driver =>
+        TabPageDriver.Run(tab, driver => driver.WithLatestResult = true, async driver =>
         {
             await driver.UntilTheLatestResultIsRead();
             await driver.Settle();
@@ -594,6 +637,12 @@ public sealed class TabPagesBackendRestartTests
             Assert.Null(await driver.AcceptNotice());
         });
     }
+
+    /// <summary>Each check tab, with a check pressed again and with another Accept.</summary>
+    public static IEnumerable<object[]> CheckTabsAndWaysShown =>
+        from row in CheckTabs
+        from shown in new[] { "a check pressed again", "another Accept" }
+        select new object[] { row[0], shown };
 
     /// <summary>
     /// An Accept and a check, both waiting for the `init` a restart asked for, let go together: the
@@ -726,6 +775,65 @@ public sealed class TabPagesBackendRestartTests
             await driver.Post("backend.restarted", Restarted);
             await driver.Until(() => driver.Readies == readies + 1, "asked for the running backend");
             await driver.Settle();
+            Assert.Equal(("Backend ready", false), await driver.Strip());
+            Assert.Null(await driver.Banner());
+        });
+    }
+
+    /// <summary>
+    /// ...but the way on takes the banner only when it says nothing else (the review of owner decision 160A): a
+    /// word already there - another error the page was told - stays, and the strip says the backend is not running.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void AFailedStartsWayOnLeavesAnotherWordOnTheBanner(string tab)
+    {
+        const string Other = "FICT another word the page was told.";
+        TabPageDriver.Run(tab, null, async driver =>
+        {
+            await driver.Post("error", new { error_class = "HostError", message = Other, retryable = false });
+            await driver.Settle();
+            Assert.Equal(Other, await driver.Banner());
+
+            driver.NoBackend = true;
+            driver.BackendStartFailed = true;
+            int readies = driver.Readies;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for the failed backend");
+            await driver.Settle();
+
+            Assert.Equal((NotRunning, true), await driver.Strip());
+            Assert.Equal(Other, await driver.Banner());
+        });
+    }
+
+    /// <summary>
+    /// The review of owner decision 160A (D2): a `ready` status while an `init` is on its way is asked about once
+    /// more after that `init`, as `backend.restarted` is. The `init` on its way can have been read before the
+    /// backend was up - naming none, and with the last start's failure - and delivered after the `ready`: dropped,
+    /// the ask would leave the page saying the backend is not running while it is up.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void AReadyStatusWhileAnInitIsOnItsWayIsAskedAboutOnceMoreAfterIt(string tab)
+    {
+        TabPageDriver.Run(tab, driver => driver.NoBackend = true, async driver =>
+        {
+            driver.HoldReady = true;
+            await driver.Post("status", new { stage = "ready", message = "Backend ready." });
+            await driver.Until(() => driver.HeldReady == 1, "asked for the backend the status named");
+            await driver.Post("status", new { stage = "ready", message = "Backend ready." });
+            await driver.Settle();
+            Assert.Equal(1, driver.HeldReady);
+
+            driver.BackendStartFailed = true;
+            await driver.ReleaseOneReady();
+            await driver.Settle();
+            Assert.Equal(1, driver.HeldReady);
+
+            driver.NoBackend = false;
+            driver.BackendStartFailed = false;
+            await driver.ReleaseReady();
             Assert.Equal(("Backend ready", false), await driver.Strip());
             Assert.Null(await driver.Banner());
         });
@@ -1133,16 +1241,11 @@ public sealed class TabPagesBackendRestartTests
         }
 
         /// <summary>
-        /// The Accept's notice, or null while it is hidden: on the Standards page its own place, `accept-notice`
-        /// (owner decision 160A); on the Model check page the banner, where it has been since 150A.
+        /// The Accept's notice in its own place, `accept-notice`, or null while it is hidden or the page has none:
+        /// the Standards page's since owner decision 160A, and the Model check page's since its review.
         /// </summary>
         public async Task<string?> AcceptNotice()
         {
-            if (_kind != Standards)
-            {
-                return await Banner();
-            }
-
             string raw = await Page.ExecuteScriptAsync(
                 "(function () { var note = document.getElementById('accept-notice'); "
                 + "return !note || note.hidden ? null : note.textContent; }())");
