@@ -3201,6 +3201,11 @@ file restored byte for byte, checked by its sha256. Every one is red.
 
 ### R19.19 What Start waits on now, and what is left
 
+*Corrected 2026-10-21, on the decision's final review (research R19.26; its S5):* the switch waits on T180 as
+well, which this section dropped - it is still open and marked as blocking it. And the last item recorded below is
+reached another way: T175's clean-up close after a failed open named its own run while a finished run's session was
+still on the bridge (R19.21).
+
 **T172's switch waits on no known defect.** C1 is closed both ways: the host lets a run go only once its job is over
 or its backend is gone (R19.14), and the bridge carries a command out only on its own run's session (R19.15). C2 is
 fixed (R19.16). The switch still waits, as it always has, on what only the seat can give and no fake can: step 5.6's
@@ -3236,3 +3241,265 @@ gates on this machine; it passed alone and in the full run above. The remodel, b
 and tool-service classes, 3,178 cases, green five times in a row. The Python suite: 18,140 passed and 5 skipped, from
 18,115 - T240's 25 - on 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`); ruff clean; the record readers
 (`test_workstation_test_plan.py`) again once this record was written. No broken link.
+
+### R19.20 The decision's final review: a run's start and its after-dump (T245 to T248)
+
+**Source.** The owner's coordinator relayed the decision's final review of `fa0c3bc` (Opus, both lenses): no must-fix,
+and the safety R19.14 and R19.15 built holds; but the decision's bar is that Start waits on no known defect, and the
+review found four defects on Start's path (S1 to S4), one error in these records (S5, R19.26) and gaps in the tests
+(S6, R19.25), with a harness, probes and mutations of its own. Each was fixed here test first, and two more, found while
+recording these, the same way.
+
+**S1: the after-dump's words, and Stop.** T243 told the page once that the after-dump was not confirmed handed over,
+and the page never showed it: while the job waits for its dump the backend's plan still reads `applying` - it records
+`verifying` only once the dump has arrived - so the next poll mapped the stage back and wrote "Applying the plan to the
+copy..." over it, for as long as the job waited (the review's probe PR1). Nor could Stop shorten that wait:
+`wait_for_package_after` waited on the dump's arrival alone, so a Stop asked for meanwhile changed nothing before the
+wait's bound, ten minutes (its probe P-A).
+
+- The line keeps what was said of the dump while the job waits for it (`BackendRemodelPipeline.Poll`). Weighed against
+  a stage of its own for the wait: the words already say what is true - the dump not confirmed handed over, the run
+  ending when the backend has finished with it or stops waiting, and Stop ending the wait - and a new stage is one more
+  word the page and its contract would have to know.
+- A Stop asked for while the job waits for its dump ends the wait: the run fails as stopped (`PackageAfterStopped`),
+  never verified or saved, its change log intact, as a run whose wait ran out does (`PackageAfterTimeout`). The job
+  counts the Stops asked for (`RemodelJob.stops`, through `request_stop`, which the route now calls), and the wait,
+  looking every 100 ms (`STOP_LOOK_S`), ends on one asked for after it began. A Stop asked for before the wait began was
+  the apply loop's to honour between changes: that run stopped early and is verified and saved as truncated, so its
+  wait goes on and takes its dump. That is why the wait counts Stops rather than reading the flag, which would end the
+  wait of every run stopped early. The dump's arrival outranks a Stop.
+- So the add-in asks again, once the dump has failed, for a Stop the engineer asked for before - it landed already, and
+  was the apply loop's - and the wait for a dump that will not come ends on it rather than at its bound.
+  `AfterDumpNotConfirmedMessage` now ends "Stop ends the wait".
+- Found while recording: a poll not answered during that wait told the page so, and once the backend answered again
+  the line kept that, since while the job waits the line keeps what was said last - so it said the backend was not
+  answering for as long as the job waited, and no longer that Stop ends the wait. It says again what it said of the dump
+  (`OnceTheBackendAnswersAgainWhileTheJobWaitsForItsDumpTheLineSaysAgainWhatItSaidOfTheDump`, red before the fix).
+
+**S3: a Start whose answer was lost (older than 159A).** `Start` read every failure of `POST /remodel/runs` as a
+refusal, so a Start whose answer did not come back - the client's 30 seconds spent, or the connection lost as the
+answer was read - freed the host, which closed the run's session while the job the Start had made could still run: the
+defect R19.14 closed for a poll. A Start pressed again was then refused, the run folder already that job's.
+
+- The add-in names the job it starts: an id it mints, 32 lowercase hexadecimal characters, sent as `job_id`
+  (`RemodelRunRequest.JobId`). The backend makes the job under that id and answers the same Start asked again with the
+  job it made, whatever that job has done since, starting no second run. A job id another run folder's job holds, or one
+  that is not 32 lowercase hexadecimal characters, is `InvalidRequest`. One Start is decided at a time, under one lock,
+  so a Start and the same Start asked again, both in the backend at once, cannot both make one. A Start that names no
+  job gets a minted id, as before.
+- A Start not answered - `BackendUnavailable`, or a failure that is not the client's refusal at all - is asked again
+  while the backend it was asked of still runs, waiting longer each time as a poll not answered does, the page told
+  once, in `judging`, in the not-answering words; and the run then waits for its job. A refusal the backend answered
+  ends it unstarted, as a backend gone does - the job, if the Start made one, gone with it.
+- Found while recording: a Start answered so the client could not read it, `BadResponse`, was still read as a refusal.
+  That class is only ever an answer of success - the backend answers a Start it refuses with an error class of its own
+  - so the backend took the Start, and the run now waits for the job it named
+  (`AStartAnsweredSoTheClientCouldNotReadItRunsTheJobItNamed`, red before the fix). `HttpError` - an error status
+  without the backend's error class, which is how its server answers an exception that is not a `ChatError` - stays a
+  refusal: the route raises one only before its job's worker is started, since `_start` makes the job and submits it
+  last, so no worker runs.
+
+Weighed against asking the backend whether the job exists before asking the Start again: the same Start asked again is
+that question and its answer at once - the job if it was made, made now if not, or the refusal it would have had - with
+one route, idempotent by its id, and no second way to fail.
+
+**S4: a lost after-dump answer, then a job that failed elsewhere.** T243 answered a job that failed with the
+after-dump's failure, whatever that failure was. A dump whose answer was lost may have reached its job, and a job that
+then failed elsewhere - its copy saved, its report not written (the review's probe PR2) - was answered as a backend not
+answering, with the host's words that the run ended without saving the copy, while the job's own error reached neither
+the page nor the log. The job's own end decides now: a job that finished is the run's answer; one that failed, with an
+after-dump this side knows never reached it - not written, or a refusal the backend answered - is answered with that
+failure; and otherwise, a dump whose answer was lost or could not be read, the run ends as the job did, the job's own
+words on the page and in the log.
+
+**The change log read while it is written (the review's probe P-B).** `_changes` read `changes.jsonl` whole with strict
+UTF-8, so a poll that came while a line holding a character of more than one byte was half written answered 500, which
+the add-in reads as a backend not answering. Each line is decoded on its own now, and one that will not decode is
+skipped as one that will not validate is: a torn last line is the next poll's.
+
+### R19.21 A finished run's session left on the bridge (T249, T250)
+
+**The defect (S2).** Run A's backend stops mid-run. The run ends, as R19.14 has it, and `Execute`'s close of A's
+session is not sent - there is no backend to send it - so the bridge keeps A's session: the copy open, the settings
+changed. Plan B's open is then refused `run_in_progress`, and T175's clean-up close names run B; since protocol 1.5 the
+bridge refuses a close naming another run than its session's, `session_mismatch`, which the backend answers as
+`RunFolderFailed`, and the host read that as the bridge having run its end-of-session routine
+(`CloseAnswer.AnsweredWithWhatItLeft`), which it had not. Every later press did the same, so no plan could be made until
+SOLIDWORKS closed. R19.19 recorded such a close as reachable only for a run whose session is gone; this is how it is
+reached.
+
+**The fix.** Before the next plan asks for anything, the session a finished run may still hold is closed, naming the
+run that holds it - when that run's close was not answered and nothing else ended its session (`HoldsItsSession`: not
+closed at the plan or by planning again, not marked ended, made on the attachment listening now). A close the bridge
+answers - with what it left, or with none of that run's to end - marks the run's session ended, and the plan goes on.
+One not answered refuses the new plan, retryable, in `EarlierRunNotClosedMessage`, the close's class kept and its
+failure in the log; pressing again asks the close again.
+
+**Why it is safe.** The close names the run whose session it ends, which is the bridge's own rule; nothing in the
+bridge is loosened. Only the host's latest run can hold a session: a plan's open succeeds only when the bridge holds
+none, and before each plan `EndTheWaitingPlan` ends the latest run's session, or refuses to go past it; a re-attach
+tears the session down (T167), and SOLIDWORKS closing ends the bridge. So no other session is there to be closed under
+the engineer.
+
+**The reading of a refused close, made true.** `AnsweredWithWhatItLeft` now says what every reader of it acts on: after
+it the bridge holds no session of this run - its end-of-session routine ran, or there was none of this run's to end, no
+session at all (`target_mismatch`) or another run's (`session_mismatch`, as `RunFolderFailed`), which it left as it
+was. T175's clean-up acts on that alone: the run whose open failed holds nothing.
+
+### R19.22 A page that loads again mid-run (T251, T252)
+
+The review's nit: a page that loaded again while its run waited for a backend that did not answer lost the
+not-answering sentence and showed "Running...", where the page that never loaded again said why the run was not over.
+`init.latest_run.status` now carries the stage and the words of the last status posted for the run while it is in
+flight - the host's own first word (`RunningThePlanMessage`), then the pipeline's, the backend not answering among them
+- and is null otherwise; the page writes the words in its run line where it wrote `Running...`. The run keeps them
+(`RemodelRun.LastStatus`), written by its reporter on the run's thread and read as `init` is answered, under the lock
+that frees the host.
+
+### R19.23 The add-in log on the application thread, and at unload (T253, T254)
+
+**The waits stay on every thread.** `AddInLog` holds its lock across up to 300 ms of retries on whatever thread logs,
+SOLIDWORKS' application thread included. Weighed against keeping the line at once there: a wait happens only while
+something else holds the file at that instant and no line is waiting; every writer of `addin.log` is this code, holding
+it for one append, so such a wait ends at the first retry, 10 ms later. The whole 300 ms is spent only on an outside
+holder that locks writes, once for each time it holds the file, since the lines after it are kept at once while one
+waits. Keeping the line at once would put off the very line the tab sends the engineer to read - its own failure - to
+the next append, which may not come. So the waits stay.
+
+**The lines kept, at unload.** A line kept while something held the file was lost with the process if no append came
+after it. The add-in flushes the lines kept as it unloads, last in `DisconnectFromSW` (`AddInLog.Flush`), each file
+tried as an append is; a file still held keeps them, and nothing is reported, since there is nowhere left to report to.
+
+**A reader while it writes (the review's E1).** `ALineIsWrittenAtOnceWhileAReaderHoldsTheFile` pins that the file is
+shared with readers while it is written, which no case did: shared with nobody, the append is refused while the engineer
+has the log open, and the line waits for the next.
+
+### R19.24 Tests changed on purpose, on the final review
+
+Each still pins what it pinned, or more.
+
+- `BackendRemodelPipelineTests`: fourteen scripts whose job waits for its after-dump read its plan `applying` while it
+  waits, as the backend's does; they read `verifying`, which the backend records only once the dump has arrived, and
+  which hid S1. What each asserts is unchanged.
+- `BackendRemodelPipelineTests.ABackendThatVanishesMidRunEndsTheRunFailedAfterAnErrorStatus`: two rows more, another
+  port with the same token and the same port with another token (A2, A3).
+- `BackendRemodelPipelineTests.World`: the product's poll delay, half a second, its waits handed to a recorder
+  (`Pauses`) through the pipeline's new seam rather than to the clock (A8, A9). It was zero, under which no backoff
+  could be seen. Its fake backend's Stop that fails throws what a case gives it (`StopFailure`), the client's refusal
+  by default (A13), and its Start can fail first (`StartFailuresFirst`, S3).
+- `RemodelBackendClientTests.StartRunPostsTheRunFolderAndTheBridgeAndReturnsTheJobId`, renamed
+  `StartRunPostsTheRunFolderTheBridgeAndTheJobItMakesAndReturnsTheJobId`: the body names the job too (S3).
+- `RemodelHostTests.FakePipeline`: its bridge keeps protocol 1.5's rule - a close names its run, and one naming another
+  run than its session's, compared exactly, is refused `RunFolderFailed`, as the backend answers `session_mismatch`,
+  the session left as it was (`SessionRun`); pinned by `TheFakeBridgeRefusesAnotherRunsCloseAndLeavesItsSession`. And a
+  close the backend could not send, `BackendUnavailable`, leaves the session as it was, as `CloseNotAnsweredClasses`
+  reads it; the fake closed it, which no backend that is not running can do.
+- `RemodelHostTests.AnInitSaysTheLatestRunIsNotRunningWhenNoRunIsInFlight` asks that `status` is null as well.
+- `RemodelPageContractTests.LatestRun` takes the run's status, none by default.
+- `test_remodel_client.py::test_a_client_given_no_run_sends_nothing_after_open`: an empty run as well as none (B1).
+- `test_bridge_client.py::test_the_client_and_the_host_agree_on_the_protocol_version` reads the Python side's
+  `PROTOCOL.md` as well (B11).
+
+No test was loosened.
+
+### R19.25 The mutations, on the final review
+
+Each fix of this round taken out once, and each mutation the review left alive put back, by one exact replacement in
+one file, in this worktree: the solution built and the class that pins it run - `BackendRemodelPipelineTests` (102
+cases), `RemodelHostTests` (448), `RemodelPageContractTests` (59), `AddInLogTests` (6) or `RemodelWiringTests` (7) - or,
+for the Python end, `test_chat_remodel_routes.py` (120), `test_remodel_client.py` (97) or `test_bridge_client.py` (77);
+and the file restored byte for byte, checked by its sha256. Every one is red. The pipeline's were run again on its
+final code, once the two fixes found while recording were in, and the host's once its fake compared runs exactly.
+
+| Id | Taken out | Red |
+|---|---|---|
+| R1 | the line's stage mapped back from the plan while the job waits for its dump (S1) | 2 cases: `OnceTheBackendAnswersAgainWhileTheJobWaitsForItsDumpTheLineSaysAgainWhatItSaidOfTheDump` and `TheAfterDumpsWordsAreWhatTheLineHoldsWhileTheJobWaitsForTheDump` |
+| R10 | what was said of the dump not said again once the backend answers again (found while recording S1) | 1 case: `OnceTheBackendAnswersAgainWhileTheJobWaitsForItsDumpTheLineSaysAgainWhatItSaidOfTheDump` |
+| R2 | a Stop asked for before the dump failed not asked again (S1) | 1 case: `AStopAskedForBeforeTheAfterDumpFailedIsAskedAgainSoTheJobsWaitEnds` |
+| Q1 | the wait for the after-dump not ending on a Stop (S1) | 2 cases: `test_a_stop_while_the_run_waits_for_its_after_dump_ends_the_run` and `test_a_stop_asked_for_while_the_job_waits_for_its_after_dump_ends_the_wait` |
+| Q2 | a Stop the apply loop honoured ending that wait too (S1) | 1 case: `test_a_stop_the_apply_loop_already_honoured_does_not_end_the_wait` |
+| Q3 | the stop route setting the flag alone (S1) | 2 cases: `test_a_stop_while_the_run_waits_for_its_after_dump_ends_the_run` and `test_the_stop_route_asks_through_the_job` |
+| R3 | a job that failed answered with the dump's failure whether or not the dump may have reached it (S4) | 1 case: `ALostAfterDumpAnswerThenAJobThatFailedElsewhereEndsWithTheJobsOwnWords` |
+| R4 | no failure of the dump's answer read as one that may have arrived (S4) | 1 case: `ALostAfterDumpAnswerThenAJobThatFailedElsewhereEndsWithTheJobsOwnWords` |
+| R5 | a Start not answered not asked again (S3) | 2 cases: `AStartWhoseAnswerDidNotComeBackIsAskedAgainAndTheRunWaitsForItsJob` and `AStartWhoseAnswerFailedAsItWasReadIsAskedAgain` |
+| R6 | a Start not answered asked again of a backend that is gone (S3) | 1 case: `AStartNotAnsweredByABackendThatIsThenGoneIsRefused` |
+| R7 | a Start whose answer failed as it was read asked again of a backend that is gone (S3) | 1 case: `AStartWhoseAnswerFailedAsItWasReadByABackendThenGoneIsRefused` |
+| R9 | each Start asked again naming another job (S3) | 2 cases: `AStartAnsweredSoTheClientCouldNotReadItRunsTheJobItNamed` and `AStartWhoseAnswerDidNotComeBackIsAskedAgainAndTheRunWaitsForItsJob` |
+| R11 | a Start answered so the client could not read it read as a refusal (found while recording S3) | 1 case: `AStartAnsweredSoTheClientCouldNotReadItRunsTheJobItNamed` |
+| Q4 | the same Start asked again not answered with its job (S3) | 4 cases: `test_a_job_id_another_folder_holds_is_refused`, `test_the_same_start_asked_again_after_its_job_ended_is_still_that_job`, `test_the_same_start_asked_again_is_the_same_job_and_no_second_run` and `test_two_starts_of_one_job_at_once_start_one_run` |
+| Q5 | the job id a Start names ignored (S3) | 5 cases: `test_a_job_id_another_folder_holds_is_refused`, `test_a_start_that_names_its_job_is_that_job`, `test_the_same_start_asked_again_after_its_job_ended_is_still_that_job`, `test_the_same_start_asked_again_is_the_same_job_and_no_second_run` and `test_two_starts_of_one_job_at_once_start_one_run` |
+| Q6 | two Starts decided at once (S3) | 1 case: `test_two_starts_of_one_job_at_once_start_one_run` |
+| Q7 | a job id that is not 32 lowercase hexadecimal characters taken (S3) | 3 cases of 1 test: `test_a_job_id_that_is_not_one_is_refused_and_nothing_starts`, all but the number |
+| Q8 | another folder's job answered to a Start (S3) | 1 case: `test_a_job_id_another_folder_holds_is_refused` |
+| Q9 | a torn line of the change log failing the poll (P-B) | 1 case: `test_a_status_poll_that_meets_a_torn_last_line_answers` |
+| H1 | a finished run's session not closed before the next plan (S2) | 2 cases: `ARunWhoseCloseIsStillNotAnsweredRefusesTheNextPlanRetryableAndCopiesNothing` and `ARunWhoseCloseWasNotAnsweredIsClosedBeforeTheNextPlanCopiesAnything` |
+| H2 | a close of it still not answered letting the next plan go on (S2) | 1 case: `ARunWhoseCloseIsStillNotAnsweredRefusesTheNextPlanRetryableAndCopiesNothing` |
+| H3 | the run whose session was closed not marked ended (S2) | 1 case: `ARunWhoseCloseWasNotAnsweredIsClosedBeforeTheNextPlanCopiesAnything` |
+| F1 | the fake bridge's protocol 1.5 rule: another run's close ending the session (the test's own) | 1 case: `TheFakeBridgeRefusesAnotherRunsCloseAndLeavesItsSession` |
+| I1 | `init` carrying no word of the run in flight | 1 case: `AnInitAnsweredWhileTheRunIsInFlightCarriesTheRunsLastWord` |
+| I2 | the run's statuses not kept | 1 case: `AnInitAnsweredWhileTheRunIsInFlightCarriesTheRunsLastWord` |
+| I3 | the page writing `Running...` over the run's last word | 1 case: `APageLoadedAgainWhileItsRunRunsShowsTheRunsLastWord` |
+| E1 | the log shared with no reader while it is written | 1 case: `ALineIsWrittenAtOnceWhileAReaderHoldsTheFile` |
+| L1 | the flush writing nothing | 1 case: `ALineKeptWhileTheFileWasHeldIsWrittenWhenTheLogIsFlushed` |
+| L2 | no flush as the add-in unloads | 1 case: `TheAddInFlushesItsLogAsItUnloads` |
+| A1 | a poll that fails other than as the client's refusal leaving `Poll` | 1 case: `APollThatFailsOtherThanAsTheClientsRefusalIsAskedAgain` |
+| A2 | the endpoint's port not compared | 1 case: `ABackendThatVanishesMidRunEndsTheRunFailedAfterAnErrorStatus`, another port with the same token |
+| A3 | the endpoint's token not compared | 1 case: `ABackendThatVanishesMidRunEndsTheRunFailedAfterAnErrorStatus`, the same port with another token |
+| A6 | the dump's failure dropped when the backend is then gone | 1 case: `AnAfterDumpFailureIsTheRunsAnswerWhenItsBackendIsThenGone` |
+| A8 | no backing off between unanswered polls | 1 case: `TheWaitsAfterUnansweredPollsDoubleAndComeBackToThePollDelayOnceAnswered` |
+| A9 | the backoff not reset once the backend answers | 1 case: `TheWaitsAfterUnansweredPollsDoubleAndComeBackToThePollDelayOnceAnswered` |
+| A10 | `unanswered` never cleared | 2 cases: `EachTimeTheBackendStopsAnsweringIsToldOnce` and `OnceTheBackendAnswersAgainWhileTheJobWaitsForItsDumpTheLineSaysAgainWhatItSaidOfTheDump` |
+| A12 | a change log this side may not read ending the run | 1 case: `AChangeLogThisSideMayNotReadDoesNotEndTheRun` |
+| A13 | a Stop that fails other than as the client's refusal leaving `Poll` | 1 case: `AStopThatFailsOtherThanAsTheClientsRefusalIsAskedAgain` |
+| A15 | the first poll not answered told in `ready` | 1 case: `AFirstPollNotAnsweredIsToldInJudging` |
+| B1 | a client given an empty run sending its commands naming it | 10 cases of 1 test: `test_a_client_given_no_run_sends_nothing_after_open`, its empty run for each command after the open |
+| B11 | the Python side's `PROTOCOL.md` back to 1.4 | 1 case: `test_the_client_and_the_host_agree_on_the_protocol_version` |
+| B12 | `bridge-remodel.md`'s command table dropping a command's run | 1 case: `test_the_contracts_command_table_is_what_the_client_sends` |
+
+42 mutations, 67 red results.
+
+### R19.26 What Start waits on now, and what is left
+
+**A correction (the review's S5).** T172's amendment of Codex's review and R19.19 said the switch waits only on what it
+waited on from the seat. They dropped T180, which is still open and marked as blocking it: the held session once Start
+is on, to be decided before the switch is set (T172's amendment of 2026-09-27). T172 is corrected, and R19.19 has a
+dated note.
+
+**T172's switch waits on no known defect of the tab.** It waits on T180, and on what only the seat can give and no fake
+can: step 5.6's verdicts on the blocking probes, PROBE-1, 2, 3, 4 and 12, and a Plan on one real part's copy with the
+source's hash unchanged; set in a commit of its own that cites the ledger's verdicts. This round adds no prerequisite:
+what it found needed only small fixes, made here.
+
+Open, and the owner's; none of it blocks the switch:
+
+1. **A backend that stays silent while it runs** (R19.14) holds the run, its session and the host until it answers or
+   stops; a Start it does not answer now does the same, asked again until it is answered. The page says so, and that
+   closing SOLIDWORKS ends it. The add-in could end that backend itself after a bound, which would free the host
+   sooner, but the backend is the Review tab's too and a review turn running there would end with it. As built,
+   nothing is ended that the engineer did not end.
+2. **R19.12's three items** stand as they were: the answer to Stop's own line, a backend that does not answer whether a
+   turn runs, and the other tabs.
+
+Recorded, not changed (the review named the first three):
+
+- A command the bridge refuses as another run's still writes its request line in the `remodel.log` of the run whose
+  session holds the bridge, since `RemodelRunLog` reads its folder from the session; that run's log then records that
+  another run's command reached its bridge and was refused, which is what happened there.
+- `DocumentPresenceDispatcher` reads whether the attached document is open after any error a command is answered with,
+  `session_mismatch` included, and answers "document no longer open" in its place when it is not. Another run's command
+  refused while the engineer had closed the attached document is then told as that: either way nothing was read or
+  written, and the host shows its own words for every class (R19.3).
+- `BackendClient.Endpoint` reads a backend as gone when the process the add-in started has exited: `uv`, whose
+  grandchild the backend's server is, and which exits when it does. Both are in the backend's kill-on-close job, which
+  the add-in closes as it disposes the backend, before it starts another. A launcher that died while its server ran - no
+  known way for either to end - would read as gone while the run's worker could still act.
+- A Start answered `HttpError` is a refusal (R19.20): the route answers one only before its job's worker starts.
+
+**Evidence** (2026-10-21, on the branch after `fa0c3bc`, with T245 to T255): the C# build, `--no-incremental`, at
+zero warnings once every mutation was restored; `SwReview.Extractor.Tests` 10,130 passed, as before - a comment
+changed there - and `SwReview.AddIn.Tests` 3,711, from 3,684: T247's eighteen, sixteen cases and two rows of the
+vanishing theory; T249's four; T251's two; and T253's three. The remodel, bridge, in-process pipe, log, restart and
+tool-service classes, 3,205 cases, green five times in a row. The Python suite: 18,165 passed and 5 skipped, from
+18,140 - T245's 25 - on 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`); ruff clean; the record readers
+(`test_workstation_test_plan.py`) again once this record was written. No broken link, and every file changed is
+`i/lf`.
