@@ -287,10 +287,9 @@ A running turn owns process state that is not on disk, so:
   `pane-host-messages.md`, `ready` and `settings.save`). The add-in's first start is made the
   same way, under the host's restart lock with the settings saved then, and is not made at all
   once a save has restarted the backend (amended on the second 153A review, the same day). While a
-  start of the backend - the first or a restart - is under way, between publishing the backend's
-  endpoint and recording the settings it was made with, the host makes no session: one asked for
-  then is refused as one asked for before the backend is up (amended on the third 153A review, the
-  same day).
+  start of the backend - the first or a restart - is under way, the host makes no session: one asked
+  for then is refused as one asked for before the backend is up (amended on the third 153A review,
+  the same day, and worded on the fourth, 2026-10-21).
 - On any shutdown signal the server finalizes every live chat before exiting: it writes
   `turn.ended {reason: "error"}` when a turn was mid-flight, then `session.ended` with an
   `ended_at`, and saves `session.json`. A session is never left without an ended time

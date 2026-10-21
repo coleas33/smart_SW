@@ -436,11 +436,27 @@ public sealed class ReviewHost : IDisposable
     /// start publishes the backend's endpoint before it records the settings it was made with, and until
     /// then the backend that is up runs with these, not with the ones recorded: so whatever reads the
     /// settings in force with that backend - whether the saved settings are in force, and a session's
-    /// provider, model and effort - takes nothing of them while a start is under way, and the keys masked
-    /// include these. Written by <see cref="StartWith"/> alone, under the restart's own lock, so starts
-    /// never overlap; read from any thread, a whole reference either way.
+    /// provider, model and effort - takes nothing of them while a start is under way. The keys masked are
+    /// not read from here but from <see cref="_keysStarted"/>, which outlasts the start (the fourth review,
+    /// S1). Written by <see cref="StartWith"/> alone, under the restart's own lock, so starts never
+    /// overlap; read from any thread, a whole reference either way.
     /// </summary>
     private volatile UserSettings? _starting;
+
+    /// <summary>
+    /// Owner decision 153A, found on the fourth review (S1): every key a start of the backend has been made
+    /// with since the host was built - the first start's and every restart's, made or failed - each once,
+    /// in the order made. A start's failure is told once the start is no longer under way: a restart that
+    /// waited tells it in its `status` and its word to every other tab, and the add-in tells the first
+    /// start's in its `status` and its log line. By then a save made meanwhile can have replaced the saved
+    /// key, and nothing records the key the failed start was made with, which its failure can name; nor
+    /// can one place for the last start's key hold it, since that save's own restart can be made before
+    /// the add-in tells the first start's failure. So every key a start was made with is masked
+    /// (<see cref="KeysToMask"/>). Appended by <see cref="StartWith"/> alone, under the restart's own
+    /// lock, before the start is made; replaced whole and never changed, so a reader on any thread takes
+    /// a whole array.
+    /// </summary>
+    private volatile string[] _keysStarted = new string[0];
 
     /// <summary>
     /// The number of the last reading of whether the saved settings are in force (owner decision 153A,
@@ -537,26 +553,22 @@ public sealed class ReviewHost : IDisposable
     /// The keys no page and no log may show (FR-015): the saved key, and the key the backend that is
     /// up was started with - the same one once a restart has put the saved settings in force, and
     /// until then the one that backend holds, and could quote (owner decision 153A, found on review) -
-    /// and, while a start is under way, the key it was made with, which the backend it starts holds
-    /// before it is recorded, and which a save made meanwhile leaves neither saved nor recorded (found
-    /// on Codex's re-review, R1). What this host masks, and what the add-in hands every other host to
-    /// mask. Each resolved per call, as the key changes under a live host.
+    /// and every key a start has been made with (<see cref="_keysStarted"/>): the backend a start under
+    /// way starts holds its key before it is recorded, and a start that failed is told after it, when a
+    /// save made meanwhile can have left its key neither saved nor recorded (found on Codex's re-review,
+    /// R1, and on the fourth review, S1). Each once. What this host masks, and what the add-in hands
+    /// every other host to mask. The saved and recorded keys are resolved per call, as the key changes
+    /// under a live host; a start's is the key it was made with.
     /// </summary>
     public IReadOnlyList<string?> KeysToMask()
     {
-        // Read before the settings in force: a start that is no longer under way has recorded them.
-        UserSettings? starting = _starting;
         var keys = new List<string?>
         {
             _settings.ResolveApiKey(_options.Environment).Key,
             _inForce.ResolveApiKey(_options.Environment).Key,
         };
-        if (starting != null)
-        {
-            keys.Add(starting.ResolveApiKey(_options.Environment).Key);
-        }
-
-        return keys;
+        keys.AddRange(_keysStarted);
+        return keys.Distinct(StringComparer.Ordinal).ToList();
     }
 
     /// <summary>
@@ -1723,10 +1735,19 @@ public sealed class ReviewHost : IDisposable
     /// force whatever they say. Called under the restart's own lock. From just before the start until the
     /// settings are recorded, or the start has thrown, they are the start under way's
     /// (<see cref="_starting"/>), since the start publishes the backend's endpoint before it returns
-    /// (found on Codex's re-review, R1).
+    /// (found on Codex's re-review, R1); and from just before the start its key is among the keys masked,
+    /// and stays there (<see cref="_keysStarted"/>, the fourth review, S1).
     /// </summary>
     private void StartWith(UserSettings settings, ResolvedApiKey key, Action<UserSettings, ResolvedApiKey> start)
     {
+        // Before the start, and kept: the backend it starts holds the key from then on, and its failure,
+        // which can name the key, is told once it is no longer under way (the fourth review, S1).
+        string? startedWith = key.Key;
+        if (!string.IsNullOrEmpty(startedWith) && Array.IndexOf(_keysStarted, startedWith) < 0)
+        {
+            _keysStarted = _keysStarted.Concat(new[] { startedWith! }).ToArray();
+        }
+
         // The mark comes off only once the settings are recorded, or the start has thrown, never before:
         // a reader that finds no start under way finds the settings of the backend up recorded.
         _starting = settings;
@@ -2630,19 +2651,23 @@ public sealed class ReviewHost : IDisposable
             {
                 return false;
             }
-
-            // A recheck replaces this tracked chat; a fresh start instead sends the earlier
-            // chat id as retry_of. Rechecks never ask the backend for a fresh retry.
-            PostStatus("checking", "Checking the saved evidence again...");
         }
         // Found on Codex's re-review (R1): not while a start is under way, which publishes the backend's
         // endpoint before it records the settings it was made with, so the settings in force are not yet
         // those of the backend up. Refused as a review asked for before the backend is up is; read before
-        // the settings in force, so a start no longer under way has recorded them.
+        // the settings in force, so a start no longer under way has recorded them, and before a recheck's
+        // `checking` status, which nothing would take off after this refusal (the fourth review, N5).
         if (_starting != null)
         {
             SendError(id, "BackendUnavailable", BackendNotRunningYet, retryable: true);
             return false;
+        }
+
+        if (mode == ReviewMode.Recheck)
+        {
+            // A recheck replaces this tracked chat; a fresh start instead sends the earlier
+            // chat id as retry_of. Rechecks never ask the backend for a fresh retry.
+            PostStatus("checking", "Checking the saved evidence again...");
         }
 
         // Owner decision 153A: the provider, model and effort the backend was started with, which are

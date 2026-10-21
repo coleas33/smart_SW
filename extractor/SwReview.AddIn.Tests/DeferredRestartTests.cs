@@ -3831,6 +3831,274 @@ public sealed class DeferredRestartTests
         }
     }
 
+    /// <summary>
+    /// The fourth 153A review (S1): a start's failure is told once the start is no longer under way - a
+    /// restart that waited tells it in its `status` and in its word to every other tab - and a save made
+    /// while the start was under way has by then replaced the saved key, while nothing records the key
+    /// the start was made with, which its failure can name. Here a restart that waited, made with key A,
+    /// fails naming A while a save of key B waits for it; a remodel run, begun meanwhile, keeps that
+    /// save's restart waiting, so A's failure is all that is told. Neither the Review page nor any other
+    /// tab is told A: every key a start has been made with is masked.
+    /// </summary>
+    [Fact]
+    public void TheFailureOfARestartThatWaitedIsToldWithItsKeyMaskedThoughASaveReplacedTheKey()
+    {
+        string keyA = string.Concat("FICT", "-saved-", "openai-", "153a-0006");
+        string keyB = string.Concat("FICT", "-saved-", "openai-", "153a-0007");
+        int remodelRun = 0;
+        using var world = new RestartWorld();
+        using var hold = new ManualResetEventSlim(false);
+        try
+        {
+            world.BackendBusy = () => Volatile.Read(ref remodelRun) == 1;
+            world.Open();
+            world.Track("chat-1");
+            SaveAsATurnStarts(world, "save-a", Save(effort: "low", apiKey: keyA));
+            world.Reply("settings.saved", "save-a");
+            world.Backend.Hold = hold;
+            world.Backend.RestartFailure = new InvalidOperationException(
+                "FICT the job object refused the child started with " + keyA);
+            world.Backend.EndTurn("chat-1");
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the restart that waited never began");
+
+            Volatile.Write(ref remodelRun, 1);
+            var saveB = new Caller<bool>(() =>
+            {
+                world.Receive("settings.save", "save-b", Save(effort: "medium", apiKey: keyB));
+                return true;
+            });
+            Eventually(() => world.Host.Settings.Effort == "medium", "the second save's settings");
+
+            hold.Set();
+            Assert.True(saveB.Finishes(TimeSpan.FromSeconds(10)), "the second save never finished");
+            Assert.True(saveB.Result);
+            Eventually(() => world.FailuresToldToTheOtherTabs.Length > 0, "the failure told to the other tabs");
+
+            Assert.True(
+                world.Posted("status").Any(status =>
+                    status.GetProperty("message").GetString()!.StartsWith("FICT the job object refused", StringComparison.Ordinal)),
+                "the failure was not told to the Review page");
+            Assert.False(world.AnythingPostedContains(keyA), "the Review page is told the key the restart was made with");
+            Assert.False(
+                world.FailuresToldToTheOtherTabs.Any(told => told.Contains(keyA)),
+                "the other tabs are told the key the restart was made with");
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    /// <summary>
+    /// ...and the add-in's first start (S1): made with the saved Gemini key after a save that switched the
+    /// provider failed with no backend up, it fails naming that key while a save of another key waits for
+    /// it, and that save's restart has begun before the add-in, on the first start's thread, tells the
+    /// Review page and writes its log line. A single place for the key of the last start made would hold
+    /// the second save's key by then; every key a start has been made with is masked, so neither the page
+    /// nor the log line is told the first start's.
+    /// </summary>
+    [Fact]
+    public void TheFailureOfAFirstStartIsToldWithItsKeyMaskedThoughASaveReplacedTheKeyAndRestarted()
+    {
+        string keyB = string.Concat("FICT", "-saved-", "openai-", "153a-0008");
+        using var world = new RestartWorld();
+        using var hold = new ManualResetEventSlim(false);
+        using var entered = new ManualResetEventSlim(false);
+        try
+        {
+            ASaveThatSwitchedTheProviderFailedWithNoBackendUp(world);
+            int attempts = world.Backend.Attempts;
+            world.Backend.Hold = hold;
+            world.Backend.RestartFailure = new InvalidOperationException(
+                "FICT the job object refused the child started with " + GeminiKey);
+            world.Backend.DuringRestart = () =>
+            {
+                // The second save's restart, after the first start's, succeeds.
+                if (world.Backend.Attempts == attempts + 2)
+                {
+                    world.Backend.RestartFailure = null;
+                }
+
+                entered.Set();
+            };
+
+            string? logged = null;
+            var first = new Caller<bool>(() =>
+            {
+                try
+                {
+                    return FirstStart(world);
+                }
+                catch (Exception failure)
+                {
+                    // As SwReviewAddIn.StartBackend tells it, once the second save's restart has begun: the
+                    // Review page, then the log (Report, which masks through the review host).
+                    Eventually(() => world.Backend.Attempts == attempts + 2, "the second save's restart");
+                    world.Host.PostStatus("error", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain));
+                    logged = world.Host.Redact(failure.ToString());
+                    return false;
+                }
+            });
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the first start never began");
+
+            var saveB = new Caller<bool>(() =>
+            {
+                world.Receive("settings.save", "save-b", Save(effort: "medium", apiKey: keyB));
+                return true;
+            });
+            Eventually(() => world.Host.Settings.Effort == "medium", "the second save's settings");
+
+            hold.Set();
+            Assert.True(first.Finishes(TimeSpan.FromSeconds(10)), "the first start never finished");
+            Assert.True(saveB.Finishes(TimeSpan.FromSeconds(10)), "the second save never finished");
+            Assert.False(first.Result);
+            Assert.True(saveB.Result);
+            world.Reply("settings.saved", "save-b");
+
+            Assert.True(
+                world.Posted("status").Any(status =>
+                    status.GetProperty("message").GetString()!.StartsWith("FICT the job object refused", StringComparison.Ordinal)),
+                "the failure was not told to the Review page");
+            Assert.False(world.AnythingPostedContains(GeminiKey), "the Review page is told the key the first start was made with");
+            Assert.True(logged!.Contains("FICT the job object refused"), "the log line does not say the failure");
+            Assert.False(logged.Contains(GeminiKey), "the log line names the key the first start was made with");
+            AssertTheBackendAndTheSettingsInForceAgree(world, "openai", "gpt-5.6", "medium", keyB);
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    /// <summary>
+    /// ...and while the restart that waited is still under way (S2): its key is among the keys masked,
+    /// though a save made meanwhile has replaced the saved key and nothing has recorded the restart's. A
+    /// guard, which held before the fourth review: it pins that a restart's start puts its key there, as
+    /// the first start's does, where nothing else did.
+    /// </summary>
+    [Fact]
+    public void TheKeyOfARestartThatWaitedIsMaskedWhileItIsUnderWayThoughASaveReplacedTheKey()
+    {
+        string keyA = string.Concat("FICT", "-saved-", "openai-", "153a-0009");
+        string keyB = string.Concat("FICT", "-saved-", "openai-", "153a-0010");
+        int remodelRun = 0;
+        using var world = new RestartWorld();
+        using var hold = new ManualResetEventSlim(false);
+        try
+        {
+            world.BackendBusy = () => Volatile.Read(ref remodelRun) == 1;
+            world.Open();
+            world.Track("chat-1");
+            SaveAsATurnStarts(world, "save-a", Save(effort: "low", apiKey: keyA));
+            world.Reply("settings.saved", "save-a");
+            world.Backend.Hold = hold;
+            world.Backend.EndTurn("chat-1");
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the restart that waited never began");
+
+            Volatile.Write(ref remodelRun, 1);
+            var saveB = new Caller<bool>(() =>
+            {
+                world.Receive("settings.save", "save-b", Save(effort: "medium", apiKey: keyB));
+                return true;
+            });
+            Eventually(() => world.Host.Settings.Effort == "medium", "the second save's settings");
+
+            bool masked = world.Host.KeysToMask().Contains(keyA);
+            hold.Set();
+            Assert.True(saveB.Finishes(TimeSpan.FromSeconds(10)), "the second save never finished");
+            Assert.True(saveB.Result);
+            Assert.True(masked, "the key of the restart under way is not among the keys masked");
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    /// <summary>
+    /// The fourth review (N5): a recheck refused while a start is under way was the one refusal posted after
+    /// the `checking` status with no `error` status after it, so the page's badge went on saying "Checking
+    /// the saved evidence again..." of a recheck that never ran. A start under way is read before that
+    /// status, so the refused recheck posts none.
+    /// </summary>
+    [Fact]
+    public void ARecheckRefusedWhileAStartIsUnderWayPostsNoCheckingWord()
+    {
+        using var world = new RestartWorld();
+        using var published = new ManualResetEventSlim(false);
+        using var letGo = new ManualResetEventSlim(false);
+        try
+        {
+            ASaveThatSwitchedTheProviderFailedWithNoBackendUp(world);
+            Caller<bool> first = FirstStartHeldOncePublished(world, published, letGo);
+
+            JsonElement refused = world.Reply("error", AskForASession(world, "recheck"));
+            letGo.Set();
+            Assert.True(first.Finishes(TimeSpan.FromSeconds(10)), "the first start never finished");
+            Assert.True(first.Result);
+
+            Assert.Equal("BackendUnavailable", refused.GetProperty("error_class").GetString());
+            Assert.False(
+                world.Posted("status").Any(status => status.GetProperty("stage").GetString() == "checking"),
+                "a checking status was posted for the refused recheck");
+        }
+        finally
+        {
+            letGo.Set();
+        }
+    }
+
+    /// <summary>
+    /// The fourth review (N3, the reading order its MR3 named): whether the saved settings are in force is
+    /// read with the backend first and the start under way after it, so a start whose endpoint the reading
+    /// found is seen still under way, or has recorded its settings. Here the first start begins, and
+    /// publishes the backend's endpoint, while an `init` reads that endpoint for whether the saved settings
+    /// are in force - after it read the backend, none, for its `backend` - and the `init` says nothing of
+    /// the settings in force. Read the other way round, the reading found no start under way, then the
+    /// backend up with the settings loaded still recorded, and said the saved settings were not in force.
+    /// </summary>
+    [Fact]
+    public void WhetherTheSavedSettingsAreInForceIsReadWithTheBackendBeforeTheStartUnderWay()
+    {
+        using var world = new RestartWorld();
+        using var published = new ManualResetEventSlim(false);
+        using var letGo = new ManualResetEventSlim(false);
+        try
+        {
+            ASaveThatSwitchedTheProviderFailedWithNoBackendUp(world);
+            HoldTheStartOncePublished(world, published, letGo);
+            int reader = Thread.CurrentThread.ManagedThreadId;
+            int reads = 0;
+            Caller<bool>? first = null;
+            bool publishedInTime = false;
+            world.Backend.EndpointRead = () =>
+            {
+                // `init` reads the backend twice: for its `backend`, then for whether the saved settings
+                // are in force. The first start begins, and publishes the endpoint, inside the second.
+                if (Thread.CurrentThread.ManagedThreadId == reader && ++reads == 2)
+                {
+                    first = new Caller<bool>(() => FirstStart(world));
+                    publishedInTime = published.Wait(TimeSpan.FromSeconds(10));
+                }
+            };
+
+            JsonElement init = Init(world, "init");
+            world.Backend.EndpointRead = null;
+            letGo.Set();
+            Assert.True(publishedInTime, "the first start never started the backend inside the init's reading");
+            Assert.True(first!.Finishes(TimeSpan.FromSeconds(10)), "the first start never finished");
+            Assert.True(first.Result);
+
+            Assert.Equal(JsonValueKind.Null, init.GetProperty("backend").ValueKind);
+            Assert.Equal(JsonValueKind.Null, init.GetProperty("settings_not_in_force").ValueKind);
+            AssertTheBackendAndTheSettingsInForceAgree(world, "gemini", "gemini-3.5-flash", "low", GeminiKey);
+        }
+        finally
+        {
+            letGo.Set();
+        }
+    }
+
     /// <summary>The first start the add-in makes, through the host, of the world's backend.</summary>
     private static bool FirstStart(RestartWorld world) =>
         world.Host.FirstStart((settings, key) => world.Backend.Restart(settings, key));
@@ -3891,7 +4159,8 @@ public sealed class DeferredRestartTests
     /// <summary>
     /// The backend that is up was started with the settings recorded in force, which are the saved
     /// ones: `init` says nothing of the settings in force, a review takes that provider, model and
-    /// effort, and the keys masked are that key.
+    /// effort, and the keys masked are that key and every key a start was made with - since the fourth
+    /// review (S1), when they were that key alone.
     /// </summary>
     private static void AssertTheBackendAndTheSettingsInForceAgree(
         RestartWorld world, string provider, string model, string effort, string key)
@@ -3900,7 +4169,13 @@ public sealed class DeferredRestartTests
         UserSettings started = world.Backend.Restarts.Last().Settings;
         Assert.Equal(provider, started.Provider);
         Assert.Equal(JsonValueKind.Null, Init(world, "agree").GetProperty("settings_not_in_force").ValueKind);
-        Assert.Equal(new string?[] { key }, world.Host.KeysToMask().Distinct());
+        string?[] expected = new string?[] { key }.Concat(world.Backend.KeysAsked)
+            .Distinct().OrderBy(entry => entry, StringComparer.Ordinal).ToArray();
+        string?[] masked = world.Host.KeysToMask().Distinct().OrderBy(entry => entry, StringComparer.Ordinal).ToArray();
+        Assert.True(
+            expected.SequenceEqual(masked),
+            $"the keys masked are not the backend's key and every key a start was made with: {masked.Length} masked, "
+                + $"{expected.Length} expected (the keys themselves are not printed)");
 
         NewSessionRequest request = MakeASession(world, "review");
         Assert.Equal(provider, request.Provider);
@@ -5190,6 +5465,13 @@ public sealed class DeferredRestartTests
 
         public string[] Types() => Messages().Select(root => root.GetProperty("type").GetString() ?? "?").ToArray();
 
+        /// <summary>
+        /// Whether anything posted to the page names <paramref name="secret"/>: answered, so that a case
+        /// asserting it never prints a key, even a fictional one.
+        /// </summary>
+        public bool AnythingPostedContains(string secret) =>
+            _channel.Snapshot().Any(message => message.Contains(secret));
+
         public void AssertNothingPostedContains(string secret)
         {
             foreach (string message in _channel.Snapshot())
@@ -5251,6 +5533,7 @@ public sealed class DeferredRestartTests
         private readonly object _gate = new object();
         private readonly HashSet<string> _running = new HashSet<string>(StringComparer.Ordinal);
         private readonly List<(UserSettings, ResolvedApiKey)> _restarts = new List<(UserSettings, ResolvedApiKey)>();
+        private readonly List<string> _keysAsked = new List<string>();
         private readonly List<(NewSessionRequest, int)> _sessions = new List<(NewSessionRequest, int)>();
         private readonly List<BackendStartOptions> _started = new List<BackendStartOptions>();
         private readonly ThreadLocal<bool> _unansweredHere = new ThreadLocal<bool>();
@@ -5371,10 +5654,17 @@ public sealed class DeferredRestartTests
         /// <summary>Thrown by each `POST /sessions`, which creates nothing; null creates sessions.</summary>
         public Exception? SessionFailure { get; set; }
 
+        /// <summary>
+        /// Runs as the endpoint is read, before it is, on the reading thread: where a case can make a start
+        /// begin between two of a reader's readings (owner decision 153A, the fourth review, N3).
+        /// </summary>
+        public Action? EndpointRead { get; set; }
+
         public BackendEndpoint? Endpoint
         {
             get
             {
+                EndpointRead?.Invoke();
                 lock (_gate)
                 {
                     return _down ? null : new BackendEndpoint(52000 + _generation, "FICT-token-" + _generation);
@@ -5409,6 +5699,15 @@ public sealed class DeferredRestartTests
         public (UserSettings Settings, ResolvedApiKey Key)[] Restarts
         {
             get { lock (_gate) { return _restarts.ToArray(); } }
+        }
+
+        /// <summary>
+        /// The key of every restart the host asked for, in the order asked - the ones the backend's own
+        /// check refused and the ones that failed as well - and none for a start with no key.
+        /// </summary>
+        public string[] KeysAsked
+        {
+            get { lock (_gate) { return _keysAsked.ToArray(); } }
         }
 
         public (NewSessionRequest Request, int Generation)[] Sessions
@@ -5503,6 +5802,10 @@ public sealed class DeferredRestartTests
             lock (_gate)
             {
                 _restartsAsked++;
+                if (key.Key != null)
+                {
+                    _keysAsked.Add(key.Key);
+                }
 
                 // The backend's own check, made before anything is stopped - blind to the turns
                 // while the question goes unanswered, when it asks the same question.
