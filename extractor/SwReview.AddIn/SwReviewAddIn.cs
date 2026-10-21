@@ -259,6 +259,12 @@ public class SwReviewAddIn : ISwAddin
     /// </summary>
     public bool DisconnectFromSW()
     {
+        // The race review of owner decision 157A, and its final reviews: the settings restart stops first - before
+        // the pumps, each joined for seconds while the message it handles can still save the settings, and before
+        // the hosts whose work holds the restart back let their holds go with them - so none is made as the add-in
+        // unloads, on a backend about to be stopped.
+        _reviewHost?.StopRestarting();
+
         // Order matters: stop listening to the page, stop draining it, then stop the child.
         // The job object goes last, so a backend that ignored its shutdown still dies with the
         // handle (T050).
@@ -294,11 +300,6 @@ public class SwReviewAddIn : ISwAddin
         // console and the generated profile, and it is stopped rather than left to the job.
         _terminalHost?.Dispose();
         _terminalHost = null;
-
-        // The race review of owner decision 157A: the settings restart stops before the hosts whose
-        // work holds it back - a check, a remodel run - let their holds go with them, so none is
-        // made in the moment before the review host goes, on a backend about to be stopped.
-        _reviewHost?.StopRestarting();
 
         // Before the review host, because a check's record is registered on it: the Model
         // check host holds nothing SOLIDWORKS owns, so this is only about the order the two

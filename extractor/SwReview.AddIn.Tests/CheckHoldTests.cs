@@ -1294,6 +1294,56 @@ public sealed class CheckHoldTests
         Assert.True(reply >= 0 && mark > reply, string.Join(", ", world.Events));
     }
 
+    /// <summary>
+    /// Each tab's own words in its start, pinned word for word: what its status says while the model is read, and what
+    /// comes next once it has been (the final reviews of 157A, the mutation review's Z26, Z27, Z52 and Z53).
+    /// </summary>
+    [Theory]
+    [InlineData("Model check", "Reading the feature tree of FICT-bracket...", "Extracted. Checking the model...")]
+    [InlineData("Standards", "Reading FICT-bracket...", "Extracted. Grading against the profile...")]
+    public void EachTabsStartSaysWhatItReadsAndWhatComesNextInItsOwnWords(string tab, string reading, string ready)
+    {
+        using var world = new HoldWorld(tab);
+        world.Open();
+
+        world.Press("c1");
+
+        world.Extracted("c1");
+        JsonElement[] statuses = world.AllPosted("status");
+        Assert.Equal(
+            reading,
+            Assert.Single(statuses, status => status.GetProperty("stage").GetString() == "extracting")
+                .GetProperty("message").GetString());
+        Assert.Equal(
+            ready,
+            Assert.Single(statuses, status => status.GetProperty("stage").GetString() == "ready")
+                .GetProperty("message").GetString());
+    }
+
+    /// <summary>
+    /// ...and the folder it could not make, named in the tab's own words: here a file stands where the run's folder
+    /// would be made, named as the run's folder is, from the tab's clock and the document (the final reviews of 157A,
+    /// the mutation review's Z28 and Z54). Nothing is extracted, and nothing holds the restart back.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check", "the check folder could not be created under '", RunFolders.CheckSuffix)]
+    [InlineData("Standards", "the standards run folder could not be created under '", RunFolders.StandardsSuffix)]
+    public void EachTabNamesTheFolderItCouldNotMakeInItsOwnWords(string tab, string words, string suffix)
+    {
+        using var world = new HoldWorld(tab);
+        File.WriteAllText(
+            Path.Combine(world.RunRoot, "20261021-093000-FICT-bracket" + suffix), "where the run's folder would be");
+        world.Open();
+
+        world.Press("c1");
+
+        JsonElement error = world.Reply("error", "c1");
+        Assert.Equal("RunFolderFailed", error.GetProperty("error_class").GetString());
+        Assert.StartsWith(words, error.GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.False(world.CheckInProgress);
+    }
+
     // ---- the world -------------------------------------------------------------------------------
 
     /// <summary>

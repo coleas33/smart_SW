@@ -7321,7 +7321,6 @@ public sealed class DeferredRestartTests
         Assert.False(check.CheckInProgress);
     }
 
-    /// <summary>A check asked for once the host is disposed - the add-in unloading, its backend with it - never begins (owner decision 157A).</summary>
     /// <summary>
     /// The race review of 157A: as the add-in unloads, the settings restart stops before the hosts whose work holds it
     /// back are disposed, so their holds going with them makes no restart in the moment before the review host goes,
@@ -7353,9 +7352,10 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// ...and the add-in stops it so: in <c>DisconnectFromSW</c>, the review host's restart stops before the Model check,
-    /// Remodel and Standards hosts are disposed - each lets the hold of its work go with it - and the review host is
-    /// disposed after them, as before.
+    /// ...and the add-in stops it so: first in <c>DisconnectFromSW</c> - before the pumps are stopped, each joined for
+    /// seconds while the message it handles can still save the settings, and before the tool service and the terminal
+    /// go (the final reviews of 157A) - so before the Model check, Remodel and Standards hosts are disposed, each
+    /// letting the hold of its work go with it; and the review host is disposed after them, as before.
     /// </summary>
     [Fact]
     public void TheAddInStopsTheRestartBeforeTheHostsThatHoldItBackGo()
@@ -7364,15 +7364,48 @@ public sealed class DeferredRestartTests
             OtherTabsBackendRestartTests.AddInSource(), "public bool DisconnectFromSW() {", "_backend?.Dispose();");
         int stop = unload.IndexOf("_reviewHost?.StopRestarting();", StringComparison.Ordinal);
         Assert.True(stop >= 0, "the add-in does not stop the restart as it unloads");
-        foreach (string host in new[] { "_modelCheckHost?.Dispose();", "_remodelHost?.Dispose();", "_standardsHost?.Dispose();" })
+        foreach (string step in new[]
         {
-            Assert.True(stop < unload.IndexOf(host, StringComparison.Ordinal), host + " is disposed before the restart stops");
+            "_pane.PageMessageReceived -= OnPageMessage;", "_events.ActiveDocChangeNotify -= OnActiveDocumentChanged;",
+            "_configurationWatch?.Dispose();", "StopPageMessagePump();", "StopModelCheckPump();", "StopRemodelPump();",
+            "StopStandardsPump();", "_toolService?.Dispose();", "_terminalHost?.Dispose();",
+            "_modelCheckHost?.Dispose();", "_remodelHost?.Dispose();", "_standardsHost?.Dispose();",
+        })
+        {
+            int at = unload.IndexOf(step, StringComparison.Ordinal);
+            Assert.True(at >= 0, "DisconnectFromSW no longer does " + step);
+            Assert.True(stop < at, step + " comes before the restart stops");
         }
 
         Assert.True(
             unload.IndexOf("_standardsHost?.Dispose();", StringComparison.Ordinal)
                 < unload.IndexOf("_reviewHost?.Dispose();", StringComparison.Ordinal),
             "the review host is disposed before the hosts that register their folders on it");
+    }
+
+    /// <summary>
+    /// A save once the restart has been stopped with the add-in - a page's message handled as it unloads - restarts
+    /// nothing, as a first start once stopped starts nothing: the save is answered as one whose restart was not made,
+    /// saying why (the final reviews of 157A: `DeferredRestart.Now` read nothing of the stopping, and would have
+    /// restarted the backend the unload is about to stop).
+    /// </summary>
+    [Fact]
+    public void ASaveOnceTheRestartIsStoppedRestartsNothing()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Host.StopRestarting();
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        JsonElement error = world.Reply("error", "save");
+        Assert.Equal("BackendNotRestarted", error.GetProperty("error_class").GetString());
+        Assert.EndsWith(
+            " The restart failed: the add-in is unloading, so the backend was not restarted.",
+            error.GetProperty("message").GetString(),
+            StringComparison.Ordinal);
+        Assert.Equal(0, world.Backend.RestartsAsked);
+        Assert.Empty(world.Posted("settings.saved"));
     }
 
     /// <summary>
@@ -7421,6 +7454,7 @@ public sealed class DeferredRestartTests
         }
     }
 
+    /// <summary>A check asked for once the host is disposed - the add-in unloading, its backend with it - never begins (owner decision 157A).</summary>
     [Fact]
     public void ACheckOnceTheHostIsDisposedIsRefusedAndNeverBegins()
     {
@@ -8721,12 +8755,6 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// One call made on a thread of its own, for the tests that time how long a call waits. A
-    /// thread-pool item can wait behind a loaded test run before it starts, which these tests
-    /// would read as the call waiting - or, for "it did not finish in time", as the call holding
-    /// back when it had not begun - so the call starts at once, and is timed only once it has.
-    /// </summary>
-    /// <summary>
     /// SOLIDWORKS' application thread, as far as a page's deliveries go: what is queued behind the pages' posts runs at
     /// once, or - while a case holds the thread, as another tab's extraction does - once the case lets it go, in order.
     /// </summary>
@@ -8778,6 +8806,12 @@ public sealed class DeferredRestartTests
         }
     }
 
+    /// <summary>
+    /// One call made on a thread of its own, for the tests that time how long a call waits. A
+    /// thread-pool item can wait behind a loaded test run before it starts, which these tests
+    /// would read as the call waiting - or, for "it did not finish in time", as the call holding
+    /// back when it had not begun - so the call starts at once, and is timed only once it has.
+    /// </summary>
     private sealed class Caller<T>
     {
         private readonly ManualResetEventSlim _started = new ManualResetEventSlim(false);

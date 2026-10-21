@@ -330,6 +330,10 @@ internal sealed class DeferredRestart : IDisposable
     /// <see cref="Hold.None"/> when the backend was restarted now.</param>
     /// <param name="busyWith">The work the reading under the restart's lock found when it is
     /// <see cref="Hold.Work"/>; <see cref="Work.None"/> otherwise.</param>
+    /// <exception cref="ObjectDisposedException">Disposed - the add-in unloading: nothing is restarted, as no first
+    /// start is (<see cref="First"/>), on a backend about to be stopped; the save answers it as a save kept whose
+    /// restart was not made (the final reviews of 157A). Its message is the words alone, since the save's answer shows
+    /// them.</exception>
     public bool Now(Action restart, out Hold heldBy, out Work busyWith)
     {
         if (restart == null)
@@ -340,6 +344,14 @@ internal sealed class DeferredRestart : IDisposable
         busyWith = Work.None;
         lock (_restarting)
         {
+            lock (_state)
+            {
+                if (_disposed)
+                {
+                    throw new ObjectDisposedException(null, "the add-in is unloading, so the backend was not restarted.");
+                }
+            }
+
             Work work = Busy();
             if (work != Work.None)
             {
