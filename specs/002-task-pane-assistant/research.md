@@ -1675,6 +1675,10 @@ no broken link.
   - `POST /remodel/runs` and the routes after it (`RunInProgress`, `RunNotPlanned`,
     `ResumeRefused`) name the run folder too, and are not reached while Start is switched off in
     this build (`StartNotValidated`).
+  - *Settled in part 2026-10-20 by owner decision 155A (owner question 3, below; 004 research
+    R18.1):* `DocumentDirty` and `ExternalReferences` - the add-in's own sentences now, whoever
+    refused - the add-in's `RunNotFound` and its word on a copy gone during a run speak plain words
+    and name no path. The rest of this list stands, recorded again in 004 research R18.7.
 
 **3. Kept recorded.** Both questions stand as recorded, behaviour unchanged, each with a dated
 note where it is recorded: 146A's owner question 1, above, and 011 `research.md` R9.5 item 1's
@@ -1706,6 +1710,15 @@ second question.
      add-in's own plain sentences for the two classes are never reached. Give them plain words in the
      backend's mapping, as the scope codes now have, and the rest of the list above with them -
      the add-in's own `RunNotFound` and its word on a copy gone during a run among them?
+     *Settled 2026-10-20 by owner decision 155A ("4A"; 004 research R18.1; 004 T189, T190):* the four
+     the decision names - `DocumentDirty`, `ExternalReferences`, `RunNotFound` and the stop when the
+     copy is gone - say it in plain words with no path. For the first two the tab prints the add-in's
+     own sentences, reached at last, whoever refused - in the refusal and in the run line's status -
+     rather than plain words in the backend's mapping: one sentence per class serves every refusal
+     under it, which the host can say from the class alone, where `ScopeRefused`'s two codes need
+     the backend's two sentences. The backend's body keeps the bridge's sentence, which the
+     tool-service log records on the refused request's line. The rest of the list above stays as it
+     is, recorded again for the owner in 004 research R18.7.
   4. The scope gate's own refusals, which name signals by their tokens: reword them for the tab,
      which would change the reports' coverage lines too, or leave them? And `scope_changed` after
      the copy: the bridge's sentence named the signals that differed ("the copy's scope signals
