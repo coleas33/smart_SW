@@ -1486,8 +1486,11 @@ public sealed class RemodelPageContractTests
     /// again while its run runs starts from `init` alone, and `init.latest_run.running` says the run is in
     /// flight. The page shows the run running, as the page that pressed Start did: Stop pressable, and
     /// neither Remodel a copy, Start, Open copy nor Discard copy offered - the host refuses each while the
-    /// run holds it. Stop works: it is sent, and the host's answer, once the run has finalized, ends the
-    /// running state and offers them again. Before, the page offered all four and disabled Stop.
+    /// run holds it. Stop works: it is sent, and the run's end, which the host tells once the run has
+    /// finalized, ends the running state and offers them again. Before, the page offered all four and
+    /// disabled Stop. *Changed deliberately 2026-10-21 (owner decision 159A, 004 research R19):* the stub
+    /// answers Stop in the order the host uses - the Stop's word, the run's last word, then the answer -
+    /// where it answered at once, an order the host never produces; what this pins holds in both.
     /// </summary>
     [Fact]
     public void APageLoadedAgainWhileItsRunRunsShowsItRunningAndCanStopIt()
@@ -1562,6 +1565,56 @@ public sealed class RemodelPageContractTests
                 "ended plan-run start-run open-copy discard-copy",
             },
             states);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T206; research R18.7 item 5): a run the engineer stopped ends, on the page, on
+    /// its true end. The host tells a stopped run's end as it tells any - its last word once the executor has finalized
+    /// and the host is free - and answers Stop after it; the page wrote that answer into the run line last, so the line
+    /// ended on "Stopping. 2 change(s) applied ..." over the run's last word. The stub posts in the order the host uses:
+    /// the Stop's word, the run's last word, then the answer. A run that ends in `error` leaves the line empty, the banner
+    /// saying how it ended, as a refused plan or Start leaves it, where the line kept the Stop's "Stopping: ...".
+    /// </summary>
+    [Theory]
+    [InlineData("ready")]
+    [InlineData("error")]
+    public void AStoppedRunsLineEndsOnTheRunsEndAndNotOnTheAnswerToStop(string stage)
+    {
+        const string failed = "The run ended without saving the copy. The report says why.";
+        HostStub? stub = null;
+        string? line = null;
+        string? banner = null;
+        string? offered = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page =>
+            {
+                stub = new HostStub(page)
+                {
+                    StopEndsWith = (stage, stage == "ready" ? HostStub.StoppedRunsEnd : failed),
+                };
+            },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                await Click(page, "start-run");
+                await Click(page, "stop-run");
+
+                line = await TextOf(page, "run-status");
+                banner = await Banner(page);
+                offered = await Pressable(page);
+            });
+
+        Assert.Contains("remodel.stop", stub!.Received);
+        Assert.Equal(stage == "ready" ? HostStub.StoppedRunsEnd : string.Empty, line);
+        if (stage == "error")
+        {
+            Assert.Equal(failed, banner);
+        }
+
+        Assert.Equal("plan-run start-run open-copy discard-copy", offered);
     }
 
     /// <summary>The run buttons the page offers now, by id, in the page's order, or "-" for none (owner decision 155A).</summary>
@@ -1856,6 +1909,16 @@ public sealed class RemodelPageContractTests
         /// </summary>
         public bool ClosesTheHeldPlanOnPlanAgain { get; set; }
 
+        /// <summary>
+        /// Owner decision 159A: the last word of a run the engineer stopped, which `remodel.stop` is answered after,
+        /// as `RemodelHost.Execute` tells a run's end: `ready` with the state the run ended in, by default.
+        /// </summary>
+        public (string Stage, string Message) StopEndsWith { get; set; } = ("ready", StoppedRunsEnd);
+
+        /// <summary>What `RemodelHost.Execute` tells the page as a stopped run ends: its state, `truncated`, and where to look.</summary>
+        public const string StoppedRunsEnd =
+            "The run ended 'truncated'. Open the report for the change list, the grade and the geometry comparison.";
+
         /// <summary>The folder the <paramref name="plan"/>th accepted `remodel.plan` is answered with.</summary>
         public static string RunDirFor(int plan) => plan == 1 ? RunDir : RunDir + "-" + plan;
 
@@ -1941,7 +2004,11 @@ public sealed class RemodelPageContractTests
                     Reply("remodel.result", id, Parse(RemodelResultSample.ResultJson()));
                     return;
                 case "remodel.stop":
-                    // As `RemodelHost` answers it, once the executor has finalized the run.
+                    // As `RemodelHost` answers it (owner decision 159A): its word that the run is stopping as the
+                    // Stop reaches the run; then, once the executor has finalized and the host is free, the run's last
+                    // word; then the answer. Until 159A this stub answered at once, an order the host never produces.
+                    Post("status", new { stage = "applying", message = RemodelHost.StoppingMessage });
+                    Post("status", new { stage = StopEndsWith.Stage, message = StopEndsWith.Message });
                     Reply("remodel.stopped", id, new { changes_applied = 2 });
                     return;
                 default:

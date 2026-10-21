@@ -351,14 +351,19 @@
   function stopRun() {
     send('remodel.stop', {})
       .then(function (stopped) {
+        // The host answers this only once the executor has finalized, after the run's terminal
+        // `status`, which has already ended the run and written its end into the run line. That
+        // line stands (owner decision 159A): this answer, written over it, left a stopped run's
+        // line saying it was stopping. Only a page no terminal `status` has reached hears the end
+        // from this answer: the second of the two ways out, not a second ending.
+        if (!state.running) {
+          return;
+        }
+
         setRunStatus(
           'Stopping. ' + dom.scalar(stopped.changes_applied)
             + ' change(s) applied; the change in flight is finished and the artifacts are '
             + 'finalized first.');
-
-        // The host answers this only once the executor has finalized, so the run is over by
-        // the time it arrives. Normally the terminal `status` has already ended it; this is
-        // the second of the two ways out, not a second ending.
         endRun();
       })
       .catch(function (error) {
@@ -996,11 +1001,19 @@
     // The two terminal stages: the host posts one of them once phases B to D have finished,
     // whether they finished, were stopped or failed. They are what ends the running state, and
     // until one of them arrives the run is still running and Stop is still pressable.
+    var endsARun = (stage === 'ready' || stage === 'error') && state.running;
     if (stage === 'ready' || stage === 'error') {
       endRun();
     }
 
     if (stage === 'error') {
+      if (endsARun) {
+        // Owner decision 159A: a run that ends in an error leaves no stage of its own in the run
+        // line - "Applying ...", or the Stop's "Stopping: ..." - which would say it is still
+        // going; the banner says how it ended, as a refused plan or Start leaves the line.
+        setRunStatus('');
+      }
+
       showBanner(payload.message || 'the run stopped');
       state.lifecycleBanner = payload.lifecycle === true;
       if (state.lifecycleBanner) {
