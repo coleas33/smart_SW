@@ -1289,6 +1289,8 @@ public sealed class TaskPaneControl : UserControl
         {
             if (InvokeRequired)
             {
+                // Queued, never waited for (IPageChannel; owner decision 155A's review): a host can post
+                // under a lock SOLIDWORKS' application thread - this pane's - takes.
                 BeginInvoke(new Action<Func<WebView2?>, string>(PostOnUiThread), view, json);
                 return;
             }

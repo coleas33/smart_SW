@@ -268,18 +268,38 @@ public sealed class BackendClient : IBackendClient, IDisposable
         // provider would be an override the engineer was told was saved and that nothing ever
         // consults; `ReviewHost` refuses such a save, and this is the second half of that rule
         // for a settings file that was edited by hand.
-        if (settings.Provider == "openai" && !string.IsNullOrWhiteSpace(settings.BaseUrl))
+        string? baseUrl = BaseUrlFor(settings);
+        if (baseUrl != null)
         {
-            options.Environment["OPENAI_BASE_URL"] = settings.BaseUrl!.Trim();
+            options.Environment["OPENAI_BASE_URL"] = baseUrl;
         }
 
-        if (settings.Provider == "gemini")
+        if (ReadsGeminiEnterprise(settings))
         {
             WriteGeminiEndpoint(options, settings.GeminiEnterprise);
         }
 
         return options;
     }
+
+    /// <summary>
+    /// The `OPENAI_BASE_URL` a backend started with <paramref name="settings"/> is given, or null for
+    /// none: for the openai provider only, trimmed, and none for a blank one. One rule for the start
+    /// and for the review host's reading of whether the saved settings are the ones in force (owner
+    /// decision 153A, found on review).
+    /// </summary>
+    internal static string? BaseUrlFor(UserSettings settings) =>
+        settings.Provider == "openai" && !string.IsNullOrWhiteSpace(settings.BaseUrl)
+            ? settings.BaseUrl!.Trim()
+            : null;
+
+    /// <summary>
+    /// Whether a backend started with <paramref name="settings"/> is told of Gemini Enterprise at all,
+    /// on or off (<see cref="WriteGeminiEndpoint"/>): for the gemini provider only. One rule for the
+    /// start and for the review host's reading of whether the saved settings are the ones in force
+    /// (owner decision 153A, found on review).
+    /// </summary>
+    internal static bool ReadsGeminiEnterprise(UserSettings settings) => settings.Provider == "gemini";
 
     /// <summary>
     /// Whether this run goes at Vertex, stated either way.

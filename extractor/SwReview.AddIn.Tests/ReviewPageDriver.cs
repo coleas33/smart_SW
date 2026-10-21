@@ -173,6 +173,18 @@ internal sealed class ReviewPageDriver
 
     public string KeySource { get; set; } = "settings";
 
+    /// <summary>
+    /// What `init` carries as `settings_not_in_force`: the host's sentence while the backend that is
+    /// up runs with settings other than the saved ones (owner decision 153A), or null.
+    /// </summary>
+    public string? SettingsNotInForce { get; set; }
+
+    /// <summary>
+    /// What `init` carries as `settings_not_in_force_revision`: the number of the host's reading of
+    /// whether the saved settings are in force (owner decision 153A, found on review), or null for none.
+    /// </summary>
+    public long? SettingsNotInForceRevision { get; set; }
+
     public object? SendWhenCheckedSaveError { get; set; }
 
     public bool HoldSendWhenCheckedSave { get; set; }
@@ -765,6 +777,9 @@ var h = {
         providers = new[] { "openai", "gemini" },
         document = Document,
         review_preparation = PreparationReply != null,
+        // With no backend nothing is in force, and the host says nothing of it (owner decision 153A).
+        settings_not_in_force = backendUp ? SettingsNotInForce : null,
+        settings_not_in_force_revision = SettingsNotInForceRevision,
     };
 
     private object Settings() => new
