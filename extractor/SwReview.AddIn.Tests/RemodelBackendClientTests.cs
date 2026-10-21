@@ -478,6 +478,42 @@ public sealed class RemodelBackendClientTests
     }
 
     /// <summary>
+    /// Owner decision 159A, on review, test first (004 T232; research R19.9; found on the review's round, older than
+    /// 159A): a request with a body - a plan, a close, and with them the probe, the open, a Start and a Stop - to a backend
+    /// that is no longer listening is `BackendUnavailable`, retryable, as a request with none is (above). The body was sent
+    /// outside the call's try, so the refused connection left as the transport's own exception: the Remodel tab told it as
+    /// a failure the add-in did not expect, and the pipeline's close let it through unnamed.
+    /// </summary>
+    [Theory]
+    [InlineData("plan")]
+    [InlineData("close")]
+    public void ARequestWithABodyToABackendThatDiedIsBackendUnavailableRatherThanAnUnhandledWebException(string route)
+    {
+        BackendEndpoint endpoint;
+        using (var backend = new FakeBackend())
+        {
+            endpoint = backend.Endpoint;
+        }
+
+        var client = new RemodelBackendClient(() => endpoint);
+
+        BackendRequestException failure = Assert.Throws<BackendRequestException>(() =>
+        {
+            if (route == "plan")
+            {
+                client.Plan(RunDirectory);
+            }
+            else
+            {
+                client.Close(new RemodelCloseRequest(RunDirectory, new BridgeConfig(Pipe, Secret), false));
+            }
+        });
+
+        Assert.Equal("BackendUnavailable", failure.ErrorClass);
+        Assert.True(failure.Retryable);
+    }
+
+    /// <summary>
     /// The token is in the header and the bridge secret is in the body. A URL reaches access
     /// logs and crash dumps (chat-api.md), and the remodel secret authorizes every write the
     /// run makes to the copy.

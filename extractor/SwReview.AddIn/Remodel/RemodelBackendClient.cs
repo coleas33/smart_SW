@@ -287,19 +287,22 @@ public sealed class RemodelBackendClient : IRemodelBackend
         request.Headers["Authorization"] = "Bearer " + endpoint.Token;
         request.Accept = "application/json";
 
-        if (body != null)
-        {
-            byte[] payload = Encoding.UTF8.GetBytes(body);
-            request.ContentType = "application/json";
-            request.ContentLength = payload.Length;
-            using (Stream stream = request.GetRequestStream())
-            {
-                stream.Write(payload, 0, payload.Length);
-            }
-        }
-
         try
         {
+            // Owner decision 159A, on review: the body is sent inside the try, so a backend that no longer
+            // listens - the connection refused as the body goes - is `BackendUnavailable`, as it is for a
+            // request with no body, where it left as the transport's own exception.
+            if (body != null)
+            {
+                byte[] payload = Encoding.UTF8.GetBytes(body);
+                request.ContentType = "application/json";
+                request.ContentLength = payload.Length;
+                using (Stream stream = request.GetRequestStream())
+                {
+                    stream.Write(payload, 0, payload.Length);
+                }
+            }
+
             using (var response = (HttpWebResponse)request.GetResponse())
             {
                 return Parse(Read(response));
