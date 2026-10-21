@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Xunit;
 
@@ -101,25 +103,37 @@ public sealed class AddInLogTests : IDisposable
     }
 
     /// <summary>
-    /// Test first: a line is written at once beside another writer that shares the file - another SOLIDWORKS session's
-    /// add-in appending as this one does now. The append shared the file for reading only, so it was refused while the
-    /// other held it.
+    /// Owner decision 159A, on Codex's review of the merge (004 T236; research R19.14; its C2): a line survives a writer in
+    /// another process that appends through a handle of its own - another SOLIDWORKS session's add-in. The append shared the
+    /// file for writing (T218), so both handles opened at the same end of the file, and the other's line, written through a
+    /// handle positioned before this one's line, wrote over it: the lock this process holds reaches no other. Here the other
+    /// writer opens its handle, this line is appended, the other writes its line and closes, and a later line follows: all
+    /// three lines are whole. *Replaces* <c>ALineIsWrittenAtOnceBesideAnotherWriterThatSharesTheFile</c>, which pinned
+    /// writing beside such a writer and never wrote through the other handle (research R19.15).
     /// </summary>
     [Fact]
-    public void ALineIsWrittenAtOnceBesideAnotherWriterThatSharesTheFile()
+    public void ALineSurvivesAnotherProcesssWriterAppendingThroughItsOwnHandle()
     {
-        string written;
-        using (new FileStream(Log, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+        File.WriteAllText(Log, string.Empty);
+        using (var other = new FileStream(Log, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
         {
-            AddInLog.Append(Log, "FICT written beside another writer");
-            using (var reader = new StreamReader(new FileStream(Log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
-            {
-                written = reader.ReadToEnd();
-            }
+            AppendAsWriteDoes("FICT this process's line, appended while the other writer holds its handle");
+            byte[] theirs = Encoding.UTF8.GetBytes("FICT the other process's line" + Environment.NewLine);
+            other.Write(theirs, 0, theirs.Length);
         }
 
-        Assert.Contains("FICT written beside another writer", written, StringComparison.Ordinal);
+        AppendAsWriteDoes("FICT a later line");
+
+        string[] written = File.ReadAllLines(Log);
+        Assert.Equal(3, written.Length);
+        Assert.Single(written, line => line == "FICT the other process's line");
+        Assert.Single(written, line => Whole(line, "FICT this process's line, appended while the other writer holds its handle"));
+        Assert.Single(written, line => Whole(line, "FICT a later line"));
     }
+
+    /// <summary>Whether <paramref name="line"/> is one whole line of the log: its timestamp, then <paramref name="text"/>.</summary>
+    private static bool Whole(string line, string text) =>
+        Regex.IsMatch(line, @"^\[\d{4}-\d{2}-\d{2}T[^\]]+\] " + Regex.Escape(text) + "$");
 
     /// <summary>
     /// Test first: a file something else holds for a moment - an antivirus scan, an append of another process's - is waited

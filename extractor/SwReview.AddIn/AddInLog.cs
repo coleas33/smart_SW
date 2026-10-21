@@ -80,10 +80,16 @@ internal static class AddInLog
     /// review: the seam its tests write through, each to a file of its own, since <see cref="Folder"/> is the whole
     /// process's). Owner decision 159A, on review (the race review's finding R2): an append opened the file sharing it for
     /// reading only, under no lock, and a failure was the line's end, so two appends at once lost one. Now the appends of
-    /// this process are made one at a time; the file is shared with any other reader or writer; a holder that shares it
-    /// with neither is waited out briefly; and a line that still cannot be written is kept, with any before it, and
-    /// written ahead of the next. Throws what is not the file being held - a path that cannot be a file, a disk that is
-    /// full - the line kept all the same; <see cref="Write"/> swallows it.
+    /// this process are made one at a time; a holder of the file is waited out briefly; and a line that still cannot be
+    /// written is kept, with any before it, and written ahead of the next. Throws what is not the file being held - a path
+    /// that cannot be a file, a disk that is full - the line kept all the same; <see cref="Write"/> swallows it.
+    ///
+    /// Owner decision 159A, on Codex's review of the merge (C2): the file is shared for reading only, so one writer at a
+    /// time holds it, whatever process it is in. Shared for writing, two handles - this add-in's in two SOLIDWORKS
+    /// sessions - each opened at the file's end as it then stood, and the later write went to the earlier end, over the
+    /// other's line: the lock above reaches no other process. Writing alone, a writer of another process is a holder like
+    /// any other: waited out, and a line not yet written kept. Simpler than a named lock across processes, and it asks
+    /// nothing of the other writer but that it write as this one does.
     /// </summary>
     internal static void Append(string path, string line)
     {
@@ -111,9 +117,9 @@ internal static class AddInLog
     }
 
     /// <summary>
-    /// Appends <paramref name="text"/> to <paramref name="path"/>, sharing the file with every other reader and writer,
-    /// and tries again after each of <paramref name="waits"/> while something holds it. Answers false when it is still
-    /// held after the last.
+    /// Appends <paramref name="text"/> to <paramref name="path"/>, writing alone - the file shared with readers only - and
+    /// tries again after each of <paramref name="waits"/> while something holds it. Answers false when it is still held
+    /// after the last.
     /// </summary>
     private static bool TryAppend(string path, string text, int[] waits)
     {
@@ -122,7 +128,7 @@ internal static class AddInLog
         {
             try
             {
-                using (var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+                using (var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read))
                 {
                     stream.Write(bytes, 0, bytes.Length);
                 }
