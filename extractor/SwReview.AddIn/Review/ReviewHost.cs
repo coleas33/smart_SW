@@ -1473,12 +1473,14 @@ public sealed class ReviewHost : IDisposable
     /// <summary>
     /// Whether a backend started with <paramref name="inForce"/> runs with <paramref name="saved"/>:
     /// the same provider, model and effort, which a session takes, and the same key, base URL and
-    /// Gemini Enterprise project and location, which a save writes and the backend's start reads
-    /// (`BackendClient.StartOptions`). The key as it resolves, by its value and where it came from,
-    /// and not as it is stored, since DPAPI stores the same key anew each time it is typed. The run
-    /// root and Python, which the start reads too, are no part of a save, which keeps the ones the
-    /// add-in loaded, so they cannot differ; nor are the Send box and the Standards profile, which
-    /// the backend is not started with.
+    /// Gemini Enterprise project and location, which a save writes and the backend's start reads -
+    /// each as the start reads it for the provider, by the rules it starts the backend with
+    /// (`BackendClient.StartOptions`, `BaseUrlFor`, `ReadsGeminiEnterprise`): the base URL for openai
+    /// alone, trimmed, a blank one none, and Gemini Enterprise for gemini alone (found on review).
+    /// The key as it resolves, by its value and where it came from, and not as it is stored, since
+    /// DPAPI stores the same key anew each time it is typed. The run root and Python, which the
+    /// start reads too, are no part of a save, which keeps the ones the add-in loaded, so they cannot
+    /// differ; nor are the Send box and the Standards profile, which the backend is not started with.
     /// </summary>
     private static bool SameBackendSettings(UserSettings saved, UserSettings inForce, Func<string, string?> environment)
     {
@@ -1489,9 +1491,10 @@ public sealed class ReviewHost : IDisposable
             && string.Equals(saved.Effort, inForce.Effort, StringComparison.Ordinal)
             && string.Equals(savedKey.Key, keyInForce.Key, StringComparison.Ordinal)
             && string.Equals(savedKey.Source, keyInForce.Source, StringComparison.Ordinal)
-            && string.Equals(saved.BaseUrl, inForce.BaseUrl, StringComparison.Ordinal)
-            && string.Equals(saved.GeminiEnterprise?.Project, inForce.GeminiEnterprise?.Project, StringComparison.Ordinal)
-            && string.Equals(saved.GeminiEnterprise?.Location, inForce.GeminiEnterprise?.Location, StringComparison.Ordinal);
+            && string.Equals(BackendClient.BaseUrlFor(saved), BackendClient.BaseUrlFor(inForce), StringComparison.Ordinal)
+            && (!BackendClient.ReadsGeminiEnterprise(saved)
+                || (string.Equals(saved.GeminiEnterprise?.Project, inForce.GeminiEnterprise?.Project, StringComparison.Ordinal)
+                    && string.Equals(saved.GeminiEnterprise?.Location, inForce.GeminiEnterprise?.Location, StringComparison.Ordinal)));
     }
 
     /// <summary>

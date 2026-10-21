@@ -3269,6 +3269,61 @@ public sealed class DeferredRestartTests
         Assert.DoesNotContain("ResolveApiKey()", remodel, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Found on review (N5): a setting the backend's start does not read for the provider is no part
+    /// of what is in force. The base URL is read for openai alone - trimmed, and a blank one is none -
+    /// and Gemini Enterprise for gemini alone (`BackendClient.StartOptions`), so a settings file
+    /// edited by hand to carry one, saved again through the pane with the same settings, whose
+    /// restart fails before the old backend stops, leaves the saved settings in force: `init` says
+    /// nothing. They were compared for every provider, and said the saved settings were not in force.
+    /// </summary>
+    [Theory]
+    [InlineData("Gemini Enterprise, for openai")]
+    [InlineData("a base URL, for gemini")]
+    [InlineData("a blank base URL, for openai")]
+    [InlineData("a base URL spaced otherwise, for openai")]
+    public void ASettingTheBackendDoesNotReadForItsProviderIsNoPartOfWhatIsInForce(string setting)
+    {
+        using var world = new RestartWorld();
+        Dictionary<string, object?> payload;
+        switch (setting)
+        {
+            case "Gemini Enterprise, for openai":
+                world.Settings.GeminiEnterprise = new GeminiEnterpriseSettings
+                {
+                    Project = "fict-project",
+                    Location = "fict-location",
+                };
+                payload = Save();
+                break;
+
+            case "a base URL, for gemini":
+                world.Settings.Provider = "gemini";
+                world.Settings.Model = "gemini-3.5-flash";
+                world.Settings.SetApiKey(GeminiKey);
+                world.Settings.BaseUrl = "https://fict-gateway.invalid/v1";
+                payload = Save(provider: "gemini", model: "gemini-3.5-flash");
+                break;
+
+            case "a blank base URL, for openai":
+                world.Settings.BaseUrl = "   ";
+                payload = Save();
+                break;
+
+            default:
+                world.Settings.BaseUrl = "https://fict-gateway.invalid/v1 ";
+                payload = Save(baseUrl: "https://fict-gateway.invalid/v1");
+                break;
+        }
+
+        world.Open();
+        world.Track("chat-1");
+
+        SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "at once", payload);
+
+        Assert.Equal(JsonValueKind.Null, Init(world, "init").GetProperty("settings_not_in_force").ValueKind);
+    }
+
     /// <summary>A switch from the world's OpenAI settings to Gemini, with a Gemini key and another model and effort.</summary>
     private static Dictionary<string, object?> ASwitchToGemini() =>
         Save(provider: "gemini", model: "gemini-3.5-flash", effort: "low", apiKey: GeminiKey);
