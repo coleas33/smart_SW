@@ -72,14 +72,16 @@ __all__ = [
 
 DEFAULT_PIPE_NAME = "swreview"
 DEFAULT_TIMEOUT_S = 60.0
-PROTOCOL_VERSION = "1.4"
+PROTOCOL_VERSION = "1.5"
 """The version of the host contract this client is written against; `ping` reports the
 host's, and a mismatch is worth an engineer's attention before anything is trusted.
 
 1.1 added the `remodel.*` family (feature 004), 1.2 `tessellate` (feature 005), 1.3
 `drawing.read` (feature 011) and 1.4 the `ping` answer's `drawing_read` (feature 013); each is
 additive, so this client works against any of the five, only `drawing.read` needs a 1.3 host,
-and only a 1.4 host says what it can read. `tests/unit/test_bridge_client.py`
+and only a 1.4 host says what it can read. 1.5 (owner decision 159A) has every `remodel.*`
+command after `remodel.open` name its run, which `remodel_client.py` sends; nothing this client
+sends changed. `tests/unit/test_bridge_client.py`
 reads the host's `PROTOCOL.md` and `SwBridgeDispatcher.ProtocolVersion` and asserts all
 three agree, because the way two ends come apart is a constant bumped on one side only."""
 

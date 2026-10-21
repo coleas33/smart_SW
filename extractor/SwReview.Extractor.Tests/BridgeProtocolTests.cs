@@ -110,10 +110,12 @@ public class BridgeProtocolTests
 
     /// <summary>
     /// Feature 013 T072: protocol 1.4 adds one member to the ping answer, <c>drawing_read</c>, and
-    /// changes nothing else - the line Serve/PROTOCOL.md shows, with the capability last.
+    /// changes nothing else - the line Serve/PROTOCOL.md shows, with the capability last. Edited
+    /// deliberately by owner decision 159A (004 T240): 1.5 has every <c>remodel.*</c> command after
+    /// <c>remodel.open</c> name its run, and leaves this answer as 1.4 made it but for the number.
     /// </summary>
     [Fact]
-    public void WriteResponse_APingAnswerIsProtocol14AndCarriesTheDrawingCapability()
+    public void WriteResponse_APingAnswerIsProtocol15AndCarriesTheDrawingCapability()
     {
         string line = BridgeCodec.WriteResponse(BridgeResponse.Ok(
             "1",
@@ -127,12 +129,12 @@ public class BridgeProtocolTests
             }));
 
         Assert.Contains(
-            "\"result\":{\"pong\":true,\"protocol\":\"1.4\",\"sw_version\":\"32.5.0\","
+            "\"result\":{\"pong\":true,\"protocol\":\"1.5\",\"sw_version\":\"32.5.0\","
             + "\"document\":\"C:\\\\work\\\\bracket-assy.SLDASM\",\"configuration\":\"Default\","
             + "\"component_count\":17,\"drawing_read\":\"open_only\"}",
             line,
             StringComparison.Ordinal);
-        Assert.Equal("1.4", SwBridgeDispatcher.ProtocolVersion);
+        Assert.Equal("1.5", SwBridgeDispatcher.ProtocolVersion);
     }
 
     [Fact]

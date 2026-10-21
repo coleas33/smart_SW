@@ -3502,7 +3502,7 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
-    /// T168 (decision 22A): `remodel.close` names no run, so a close is sent only through the
+    /// T168 (decision 22A): `remodel.close` named no run until owner decision 159A, so a close is sent only through the
     /// attachment the run's plan was made on. After a re-attach the run's session went with
     /// its attachment and there is nothing of it to close; the discard still deletes the copy
     /// and still writes `discarded`, so the run reads as the engineer left it.
@@ -5563,8 +5563,8 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
-    /// T168's hazard, the other way round: `remodel.close` names no run, and the bridge closes
-    /// whatever session it holds - after planning again, that is the new plan's. A plan planning
+    /// T168's hazard, the other way round: `remodel.close` named no run until owner decision 159A,
+    /// and the bridge closed whatever session it held - after planning again, that is the new plan's. A plan planning
     /// again closed has no session left anywhere, so discarding it sends no close, on its own
     /// attachment or any other, and still deletes its copy and writes `discarded`; the new plan
     /// is untouched and starts.

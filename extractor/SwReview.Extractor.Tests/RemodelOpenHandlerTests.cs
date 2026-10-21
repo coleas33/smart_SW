@@ -68,6 +68,12 @@ public class RemodelOpenHandlerTests : IDisposable
 
     private const string RunId = "20260916-142201-bracket-remodel";
 
+    /// <summary>
+    /// The params of a command after the open that takes none of its own: the run it is for
+    /// (owner decision 159A, protocol 1.5).
+    /// </summary>
+    private const string RunOnly = "{\"run_id\":\"" + RunId + "\"}";
+
     private readonly string _root;
     private readonly string _runDirectory;
     private readonly string _sourcePath;
@@ -1446,7 +1452,7 @@ public class RemodelOpenHandlerTests : IDisposable
         SwBridgeDispatcher dispatcher = Opened(seat);
 
         var result = Ok<RemodelSnapshotResult>(
-            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, "{}")));
+            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, RunOnly)));
 
         Assert.Equal(new[] { "ref:boss", "ref:fillet" }, result.Order);
         Assert.Equal("Boss-Extrude1", result.Names["ref:boss"]);
@@ -1477,7 +1483,7 @@ public class RemodelOpenHandlerTests : IDisposable
         SwBridgeDispatcher dispatcher = Opened(seat);
         Assert.DoesNotContain("GetEquationMgr", _observer.Members);
 
-        Ok<RemodelSnapshotResult>(dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, "{}")));
+        Ok<RemodelSnapshotResult>(dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, RunOnly)));
 
         List<string> members = _observer.Members.ToList();
         Assert.Contains("GetEquationMgr", members);
@@ -1499,7 +1505,7 @@ public class RemodelOpenHandlerTests : IDisposable
         SwBridgeDispatcher dispatcher = Opened(seat);
 
         var result = Ok<RemodelSnapshotResult>(
-            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, "{}")));
+            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, RunOnly)));
 
         Ir.Equation equation = Assert.Single(result.Equations);
         Assert.Equal("\"t\" = 4", equation.Text);
@@ -1518,7 +1524,7 @@ public class RemodelOpenHandlerTests : IDisposable
         SwBridgeDispatcher dispatcher = Opened(seat);
 
         var result = Ok<RemodelSnapshotResult>(
-            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, "{}")));
+            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, RunOnly)));
 
         Assert.Empty(result.UnreadableEquationIndexes);
     }
@@ -1531,8 +1537,12 @@ public class RemodelOpenHandlerTests : IDisposable
             Refusal(Dispatcher(Seat()).Dispatch(Request("9", RemodelCommands.Snapshot, "{}"))));
     }
 
+    /// <summary>
+    /// Edited deliberately by owner decision 159A (004 T241): the snapshot takes one parameter
+    /// now, the run it is for, and still ignores a member that names a document.
+    /// </summary>
     [Fact]
-    public void Snapshot_TakesNoParametersAndIgnoresOneThatNamesADocument()
+    public void Snapshot_TakesOnlyItsRunAndIgnoresAParameterThatNamesADocument()
     {
         // The target is unreachable, not validated: a member the table does not declare is
         // simply not read, and the snapshot is of the scope's copy either way.
@@ -1542,7 +1552,7 @@ public class RemodelOpenHandlerTests : IDisposable
             Request(
                 "9",
                 RemodelCommands.Snapshot,
-                "{\"document\":\"C:\\\\work\\\\somebody-elses.SLDPRT\"}")));
+                "{\"run_id\":\"" + RunId + "\",\"document\":\"C:\\\\work\\\\somebody-elses.SLDPRT\"}")));
 
         Assert.Equal(2, result.FeatureCount);
     }

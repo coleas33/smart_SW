@@ -135,11 +135,40 @@ public sealed class RemodelHarness : IDisposable
     public static string SaveParams(string verdict) =>
         "{\"verdict\":" + JsonSerializer.Serialize(verdict) + "}";
 
+    /// <summary>
+    /// One command as this run sends it: a command on the scope names <see cref="RunId"/>, the run
+    /// <see cref="Open"/> opened (owner decision 159A, on Codex's review: the run's identity on the
+    /// bridge), and the two before it name none of their own beyond what they are given.
+    /// </summary>
     public BridgeResponse Dispatch(string command, string paramsJson) =>
+        DispatchFor(
+            RemodelCommandTable.Find(command)?.Stage == RemodelCommandStage.OnScope ? RunId : null,
+            command,
+            paramsJson);
+
+    /// <summary>
+    /// One command as the run <paramref name="runId"/> sends it - another run's, or with null one
+    /// that names no run at all. <c>run_id</c> goes first in an object's members; any other
+    /// <paramref name="paramsJson"/> is sent as it is.
+    /// </summary>
+    public BridgeResponse DispatchFor(string? runId, string command, string paramsJson) =>
         Dispatcher.Dispatch(
             JsonSerializer.Deserialize<BridgeRequest>(
-                $"{{\"id\":\"1\",\"command\":\"{command}\",\"params\":{paramsJson}}}",
+                $"{{\"id\":\"1\",\"command\":\"{command}\",\"params\":{WithRun(runId, paramsJson)}}}",
                 BridgeCodec.Options)!);
+
+    private static string WithRun(string? runId, string paramsJson)
+    {
+        string trimmed = paramsJson.Trim();
+        if (runId == null || !trimmed.StartsWith("{", StringComparison.Ordinal))
+        {
+            return paramsJson;
+        }
+
+        string rest = trimmed.Substring(1).TrimStart();
+        return "{\"run_id\":" + JsonSerializer.Serialize(runId)
+            + (rest.StartsWith("}", StringComparison.Ordinal) ? string.Empty : ",") + rest;
+    }
 
     public static T Ok<T>(BridgeResponse response)
     {

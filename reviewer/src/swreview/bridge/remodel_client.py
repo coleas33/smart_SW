@@ -18,7 +18,7 @@ and there is no second copy of any of them here. Three things are its own:
   `client.py` is untouched.
 - **`error_code`, not prose.** On `status: "error"` a `remodel.*` reply carries
   `result: {"error_code": "<token>", "detail": {}}`. `ERROR_CLASSES` maps each of the
-  contract's twenty-four tokens to one `RemodelError` subclass, all of them under
+  contract's twenty-seven tokens to one `RemodelError` subclass, all of them under
   `BridgeError`, so a caller that catches the base type cannot crash on any of them. A
   token this client has never heard of raises `RemodelError` itself carrying that token:
   an unknown code stays unknown and is never guessed into the nearest class. A failure
@@ -39,6 +39,15 @@ reads the engineer's already-open source, and `open`, which names the source to 
 and the copy to create - and both run before that scope exists. `DOCUMENT_PARAM_NAMES` is
 the set a test asserts the other ten never carry, so the property is checked over the whole
 table rather than trusted command by command.
+
+**Every command after `remodel.open` names its run** (owner decision 159A, protocol 1.5). A client
+acts for one run, `run_id`, the run folder's own name: it opens that run and no other, and adds
+`run_id` to every command after the open, first, so the bridge carries a command out only on the
+session its run opened and refuses another run's as `session_mismatch`. A run's worker that
+outlived its session - the add-in moved on while the worker still ran - can then never act on the
+next run's copy, which passes every check `VerifyTarget` makes because it is that run's own. The
+run is the client's and not a method's argument, so a plan's change `params` and an inverse's stay
+exactly the method's arguments. A client given no run sends nothing after the open.
 
 One name deviates from the command it sends: `remodel.close` is `close_document`, because
 `BridgeClient.close` already means "close the pipe" and the two are not the same act - one
@@ -83,9 +92,11 @@ __all__ = [
     "RemodelTargetError",
 ]
 
-REMODEL_PROTOCOL_VERSION = "1.1"
-"""The envelope version this family needs from the host. 1.0 plus one addition: an error
-reply carries `result.error_code`. The four commands of 1.0 are unchanged."""
+REMODEL_PROTOCOL_VERSION = "1.5"
+"""The envelope version this family needs from the host. 1.1 added the family and one thing to
+the envelope: an error reply carries `result.error_code`. 1.5 (owner decision 159A) has every
+command after `remodel.open` name its run, and the host refuse one that names another run or
+none; a host before it ignores the member and cannot refuse another run's command."""
 
 REMODEL_COMMANDS: tuple[str, ...] = (
     "ping",
@@ -221,6 +232,7 @@ ERROR_CLASSES: dict[str, type[RemodelError]] = {
     "tag_failed": RemodelTargetError,
     "preexisting_rebuild_errors": RemodelPreflightError,
     "target_mismatch": RemodelTargetError,
+    "session_mismatch": RemodelTargetError,
     "guard_refused": RemodelGuardError,
     "persist_ref_unresolved": RemodelAddressError,
     "reorder_refused": RemodelContractError,
@@ -271,6 +283,7 @@ class RemodelClient(BridgeClient):
         secret: str | None = None,
         timeout_s: float = DEFAULT_TIMEOUT_S,
         transport: Transport | None = None,
+        run_id: str | None = None,
     ) -> None:
         super().__init__(
             pipe_name=pipe_name,
@@ -279,6 +292,9 @@ class RemodelClient(BridgeClient):
             transport=transport,
         )
         self.commands = REMODEL_COMMANDS
+        self.run_id = run_id
+        """The run this client acts for: the run folder's own name, the `run_id` `remodel.open`
+        is given. Every command after the open names it; `None` sends none of them."""
 
     # --- the one call ------------------------------------------------------------
 
@@ -292,6 +308,22 @@ class RemodelClient(BridgeClient):
             return CircuitOpen(command=command, last_error=str(exc))
         except BridgeError as exc:
             raise _classify(exc) from exc
+
+    def _session_call(
+        self, command: str, params: dict[str, Any]
+    ) -> Any | CircuitOpen:
+        """One command on the session `remodel.open` made, naming the run this client acts for.
+
+        The run goes first, as the contract's table orders it, and the bridge carries the command
+        out only on its run's session. A client given no run is a bug in the caller, refused here
+        before the line goes out, as an out-of-set value is.
+        """
+        if not self.run_id:
+            raise BridgeError(
+                f"{command} acts on a run's session and this client was given no run; nothing "
+                "was sent"
+            )
+        return self._remodel_call(command, {"run_id": self.run_id, **params})
 
     @staticmethod
     def _closed(name: str, value: Any, allowed: frozenset[str]) -> None:
@@ -317,7 +349,13 @@ class RemodelClient(BridgeClient):
         self, source_path: str, copy_path: str, run_id: str, probe_id: str
     ) -> Any | CircuitOpen:
         """Copy the source and open the copy. The only command that creates a document
-        handle, and the last one that names a path."""
+        handle, and the last one that names a path. It opens the run this client acts for and
+        no other: every command after it names that run."""
+        if run_id != self.run_id:
+            acts_for = "was given no run" if not self.run_id else f"acts for run {self.run_id!r}"
+            raise BridgeError(
+                f"remodel.open names run {run_id!r} and this client {acts_for}; nothing was sent"
+            )
         return self._remodel_call(
             "remodel.open",
             {
@@ -332,11 +370,11 @@ class RemodelClient(BridgeClient):
 
     def snapshot(self) -> Any | CircuitOpen:
         """The tree as it stands: order, names, descriptions, equations, error count."""
-        return self._remodel_call("remodel.snapshot", {})
+        return self._session_call("remodel.snapshot", {})
 
     def rename(self, persist_ref: str, new_name: str) -> Any | CircuitOpen:
         """Repair a duplicate feature name, or name a folder this run just created."""
-        return self._remodel_call(
+        return self._session_call(
             "remodel.rename", {"persist_ref": persist_ref, "new_name": new_name}
         )
 
@@ -346,7 +384,7 @@ class RemodelClient(BridgeClient):
         """Move one feature to one anchor. Legality was decided from the dependency graph
         before the call, so a `false` from the host is `reorder_refused` and a stop."""
         self._closed("location", location, REORDER_LOCATIONS)
-        return self._remodel_call(
+        return self._session_call(
             "remodel.reorder",
             {
                 "feature_persist_ref": feature_persist_ref,
@@ -365,7 +403,7 @@ class RemodelClient(BridgeClient):
         """Create a folder around a contiguous run, or rename one. `dissolve` is sent and
         the host refuses it with `not_in_v1`."""
         self._closed("op", op, FOLDER_OPS)
-        return self._remodel_call(
+        return self._session_call(
             "remodel.folder",
             {
                 "op": op,
@@ -378,7 +416,7 @@ class RemodelClient(BridgeClient):
     def describe(self, persist_ref: str, text: str) -> Any | CircuitOpen:
         """Write a feature description. A previous text that reads back as `null` is
         refused by the planner, never overwritten with `""` here."""
-        return self._remodel_call(
+        return self._session_call(
             "remodel.describe", {"persist_ref": persist_ref, "text": text}
         )
 
@@ -392,7 +430,7 @@ class RemodelClient(BridgeClient):
         """Add, repair in place, or delete one equation. The number in `text` is already in
         the document's length unit: `remodel.open` returned it and the executor converted."""
         self._closed("op", op, EQUATION_OPS)
-        return self._remodel_call(
+        return self._session_call(
             "remodel.equation",
             {
                 "op": op,
@@ -405,12 +443,12 @@ class RemodelClient(BridgeClient):
     def rebuild(self, force: bool = False) -> Any | CircuitOpen:
         """`ForceRebuild3(force)` and the error reading. `feature_errors[]` is the primary
         one; `whats_wrong[]` corroborates it."""
-        return self._remodel_call("remodel.rebuild", {"force": force})
+        return self._session_call("remodel.rebuild", {"force": force})
 
     def geometry(self) -> Any | CircuitOpen:
         """One `GeometryReading` of the copy. It takes no parameters because there is
         nothing to name: the C# side stamps the subject from the run's own phase."""
-        return self._remodel_call("remodel.geometry", {})
+        return self._session_call("remodel.geometry", {})
 
     def save(self, verdict: str) -> Any | CircuitOpen:
         """Save the copy, once, at the end.
@@ -422,7 +460,7 @@ class RemodelClient(BridgeClient):
         been made.
         """
         self._closed("verdict", verdict, GATE_VERDICTS)
-        return self._remodel_call("remodel.save", {"verdict": verdict})
+        return self._session_call("remodel.save", {"verdict": verdict})
 
     def close_document(self, discard_copy: bool) -> Any | CircuitOpen:
         """`remodel.close`. Named for what it closes, because `close()` closes the pipe.
@@ -430,7 +468,7 @@ class RemodelClient(BridgeClient):
         `discard_copy` deletes `copy/` and nothing else: every other artifact of the run
         stays, so "what did it propose" is still answerable after the engineer says no.
         """
-        return self._remodel_call("remodel.close", {"discard_copy": discard_copy})
+        return self._session_call("remodel.close", {"discard_copy": discard_copy})
 
 
 def _classify(exc: BridgeError) -> BridgeError:

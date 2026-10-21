@@ -51,7 +51,12 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from swreview.agent import providers
-from swreview.bridge.remodel_client import CircuitOpen, RemodelError, RemodelPreflightError
+from swreview.bridge.remodel_client import (
+    CircuitOpen,
+    RemodelClient,
+    RemodelError,
+    RemodelPreflightError,
+)
 from swreview.chat import remodel as remodel_routes
 from swreview.chat.server import ChatError, create_app
 from swreview.exceptions import EXCEPTIONS_FILE_NAME
@@ -1749,6 +1754,135 @@ class TestClose:
         bridge.close_document = refuse  # type: ignore[method-assign]
 
         assert close(client, run_dir).json() == {"closed": True}
+
+
+BRIDGE_METHODS = (
+    "probe_scope",
+    "open",
+    "snapshot",
+    "rename",
+    "reorder",
+    "folder",
+    "describe",
+    "equation",
+    "rebuild",
+    "geometry",
+    "save",
+    "close_document",
+)
+"""Every `RemodelClient` method that sends a `remodel.*` command."""
+
+
+def runs_named(bridge: ProbingBridge, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
+    """Each command the bridge is sent, with the run its client acted for as it was sent."""
+    named: list[tuple[str, Any]] = []
+    for method in BRIDGE_METHODS:
+        sent = getattr(bridge, method)
+
+        def recorded(*args: Any, _method: str = method, _sent: Any = sent, **kwargs: Any) -> Any:
+            named.append((_method, getattr(bridge, "run_id", "no run bound")))
+            return _sent(*args, **kwargs)
+
+        monkeypatch.setattr(bridge, method, recorded)
+    return named
+
+
+class TestEachRouteNamesItsRun:
+    """Owner decision 159A, on Codex's review of the merge (C1, defence in depth; 004 T240): a
+    route that acts on a run's session builds its client for that run - the run folder's own name,
+    the `run_id` `remodel.open` is given - so every command after the open names it, and the bridge
+    refuses a command of another run. The probe runs before any session and acts for none."""
+
+    def test_the_probe_acts_for_no_run(
+        self,
+        client: TestClient,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        named = runs_named(bridge, monkeypatch)
+
+        assert probe(client, source).status_code == 200
+
+        assert named == [("probe_scope", None)]
+
+    def test_the_open_and_its_baseline_name_the_run_they_open(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        named = runs_named(bridge, monkeypatch)
+
+        assert open_copy(client, run_dir, source).status_code == 200
+
+        assert named == [("open", RUN_ID), ("geometry", RUN_ID)]
+        assert bridge.calls[0][1]["run_id"] == RUN_ID
+
+    def test_the_close_after_a_failed_open_names_the_run_it_opened(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _break_after_the_open(bridge, "attestation")
+        named = runs_named(bridge, monkeypatch)
+
+        assert open_copy(client, run_dir, source).json()["error_class"] == "RunFolderFailed"
+
+        assert named == [("open", RUN_ID), ("close_document", RUN_ID)]
+
+    def test_every_command_a_run_sends_names_its_run(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calibrated(monkeypatch)
+        named = runs_named(bridge, monkeypatch)
+
+        run_to_completion(client, run_dir, source)
+
+        assert named[0] == ("probe_scope", None)
+        sent = {method for method, _ in named[1:]}
+        assert {"open", "reorder", "folder", "rebuild", "geometry", "save"} <= sent, sent
+        assert {run for _, run in named[1:]} == {RUN_ID}
+
+    def test_the_close_names_the_run_it_closes(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        assert open_copy(client, run_dir, source).status_code == 200
+        named = runs_named(bridge, monkeypatch)
+
+        assert close(client, run_dir).json() == {"closed": True}
+
+        assert named == [("close_document", RUN_ID)]
+
+    def test_with_no_factory_the_route_builds_the_client_for_its_run(self, run_root: Path) -> None:
+        server = remodel_routes.RemodelServer(
+            run_root=run_root,
+            redact=lambda text: text,
+            settings=lambda body: pytest.fail("building a client constructs no provider"),
+        )
+
+        built = server._client({"bridge": BRIDGE}, RUN_ID)
+        unbound = server._client({"bridge": BRIDGE})
+
+        assert isinstance(built, RemodelClient)
+        assert built.run_id == RUN_ID
+        assert isinstance(unbound, RemodelClient)
+        assert unbound.run_id is None
 
 
 # --- 8. the door, and no language model ---------------------------------------------------

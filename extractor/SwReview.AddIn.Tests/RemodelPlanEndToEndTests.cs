@@ -266,7 +266,8 @@ public sealed class RemodelPlanEndToEndTests
                     return null;
                 });
                 int rebuilds = world.Solidworks.Copy.Document.Calls.Count(call => call.Member == "ForceRebuild3");
-                PipeReply command = world.Remodel(RemodelCommands.Rebuild, new { force = false });
+                PipeReply command = world.Remodel(
+                    RemodelCommands.Rebuild, new { run_id = world.Backend.OpenedRunId, force = false });
                 Assert.Equal(BridgeStatus.Error, command.Status);
                 Assert.Equal(rebuilds + 1, world.Solidworks.Copy.Document.Calls.Count(call => call.Member == "ForceRebuild3"));
                 Assert.True(world.Solidworks.CopyOpen);
@@ -617,6 +618,12 @@ public sealed class RemodelPlanEndToEndTests
 
         public Action? BeforeClose { get; set; }
 
+        /// <summary>
+        /// The run the last open was for: the run folder's own name, which every command after the
+        /// open names (owner decision 159A, protocol 1.5).
+        /// </summary>
+        public string? OpenedRunId { get; private set; }
+
         public RemodelProbeReply Probe(RemodelProbeRequest request)
         {
             _log.Add("backend:probe");
@@ -630,6 +637,7 @@ public sealed class RemodelPlanEndToEndTests
         {
             _log.Add("backend:open");
             string copyPath = RemodelCopy.CopyPathFor(request.RunDirectory, request.SourcePath);
+            OpenedRunId = Path.GetFileName(request.RunDirectory);
             Answered(
                 request.Bridge,
                 RemodelCommands.Open,
@@ -637,12 +645,12 @@ public sealed class RemodelPlanEndToEndTests
                 {
                     source_path = request.SourcePath,
                     copy_path = copyPath,
-                    run_id = Path.GetFileName(request.RunDirectory),
+                    run_id = OpenedRunId,
                     probe_id = request.ProbeId,
                 });
 
             _log.Add("backend:geometry");
-            Answered(request.Bridge, RemodelCommands.Geometry, new { });
+            Answered(request.Bridge, RemodelCommands.Geometry, new { run_id = OpenedRunId });
             return new RemodelOpenReply(copyPath, 0, copyPresent: true);
         }
 
@@ -674,7 +682,10 @@ public sealed class RemodelPlanEndToEndTests
         {
             BeforeClose?.Invoke();
             _log.Add("backend:close");
-            Answered(request.Bridge, RemodelCommands.Close, new { discard_copy = request.DiscardCopy });
+            Answered(
+                request.Bridge,
+                RemodelCommands.Close,
+                new { run_id = Path.GetFileName(request.RunDirectory), discard_copy = request.DiscardCopy });
         }
 
         private static JsonElement Answered(BridgeConfig bridge, string command, object parameters)

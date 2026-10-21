@@ -677,7 +677,7 @@ class RemodelServer:
         source_path = _text(body.get("source_path"), "source_path")
         probe_id = _text(body.get("probe_id"), "probe_id")
         configuration = body.get("configuration")
-        client = self._client(body)
+        client = self._client(body, run_dir.name)
         return JSONResponse(
             await run_in_threadpool(
                 partial(
@@ -706,7 +706,7 @@ class RemodelServer:
         body = await _json(request)
         run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
         settings = self.settings(body)
-        client = self._client(body)
+        client = self._client(body, run_dir.name)
         job = await run_in_threadpool(partial(self._start, run_dir, client, settings))
         return JSONResponse({"job_id": job.job_id, "chat_id": job.job_id}, status_code=201)
 
@@ -757,7 +757,7 @@ class RemodelServer:
         body = await _json(request)
         run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
         discard = bool(body.get("discard_copy"))
-        client = self._client(body)
+        client = self._client(body, run_dir.name)
         return JSONResponse(
             await run_in_threadpool(partial(self._close, client, discard, run_dir))
         )
@@ -1121,11 +1121,16 @@ class RemodelServer:
 
     # --- the bridge, the job and the worker ------------------------------------------
 
-    def _client(self, body: Mapping[str, Any]) -> Any:
-        """The `remodel.*` client this request's bridge config names.
+    def _client(self, body: Mapping[str, Any], run_id: str | None = None) -> Any:
+        """The `remodel.*` client this request's bridge config names, acting for `run_id`.
 
         The secret travels from the pane to the client and stops there: it is never written
         to the run folder, never echoed in a reply and never in an error body.
+
+        `run_id` is the run folder's own name, the id `remodel.open` is given (owner decision
+        159A, protocol 1.5): every command the client sends after the open names it, so the
+        bridge refuses this run's command once another run's session holds it. The probe acts for
+        no run; every other route acts for the run in its `run_dir`.
         """
         bridge = body.get("bridge")
         if not isinstance(bridge, Mapping):
@@ -1135,9 +1140,13 @@ class RemodelServer:
             )
         pipe = str(bridge.get("pipe") or DEFAULT_PIPE_NAME)
         secret = str(bridge.get("secret") or "") or None
-        if self.bridge_factory is not None:
-            return self.bridge_factory(pipe, secret)
-        return RemodelClient(pipe, secret)
+        client = (
+            self.bridge_factory(pipe, secret)
+            if self.bridge_factory is not None
+            else RemodelClient(pipe, secret)
+        )
+        client.run_id = run_id
+        return client
 
     def _job(self, request: Request) -> RemodelJob:
         job_id = str(request.path_params["job_id"])

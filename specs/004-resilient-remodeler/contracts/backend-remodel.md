@@ -18,6 +18,13 @@ mirroring `bridge_factory`. Every `bridge` body field is `{pipe, secret}`, exact
 `POST /sessions` takes it, and **no route ever echoes the secret**: it reaches the client and
 nothing else.
 
+*Amended 2026-10-21 (owner decision 159A, on Codex's review; `research.md` R19.15):* every route
+that acts on a run's session - `POST /remodel/open`, `POST /remodel/runs` and `POST /remodel/close` -
+builds its client for the run in its `run_dir`, the folder's own name, the `run_id` `remodel.open`
+is given, and sets it on a client the factory built; `POST /remodel/probe` builds one for no run.
+Every command the client sends after the open names that run, and the bridge refuses one of another
+run's (`bridge-remodel.md`, protocol 1.5).
+
 ## Routes
 
 | Route | Body | Does | Reply |

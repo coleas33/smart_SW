@@ -283,8 +283,10 @@ public class BridgeDispatcherTests : IDisposable
         // so remodel_client.py's REMODEL_PROTOCOL_VERSION is the version that family needs
         // rather than the version a host must report. Edited deliberately by feature 011 T071:
         // 1.3 adds `drawing.read`, additively. Edited deliberately by feature 013 T072: 1.4 adds
-        // `drawing_read` to this answer, additively.
-        Assert.Equal("1.4", result.Protocol);
+        // `drawing_read` to this answer, additively. Edited deliberately by owner decision 159A
+        // (004 T240): 1.5 has every remodel.* command after remodel.open name its run, so
+        // REMODEL_PROTOCOL_VERSION is 1.5 as well.
+        Assert.Equal("1.5", result.Protocol);
         Assert.Equal(SwBridgeDispatcher.ProtocolVersion, result.Protocol);
         Assert.Equal(@"C:\work\bracket-assy.SLDASM", result.Document);
         Assert.Equal("Default", result.Configuration);
@@ -805,9 +807,11 @@ public class BridgeDispatcherTests : IDisposable
     public void RemodelRename_TakesAPersistRefAndANewName_AndHasNoDimensionForm()
     {
         // FR-030: v1 addresses no dimension at all, and IDimension.set_Name is off the
-        // stage-1 allowlist, so there is nowhere for a dimension form to arrive.
+        // stage-1 allowlist, so there is nowhere for a dimension form to arrive. Edited
+        // deliberately by owner decision 159A (004 T240): every command on the scope names its
+        // run first, run_id, so the list is the run and then the rename's own two.
         Assert.Equal(
-            new[] { "persist_ref", "new_name" },
+            new[] { "run_id", "persist_ref", "new_name" },
             RemodelCommandTable.For(RemodelCommands.Rename).ParameterNames);
 
         Assert.All(

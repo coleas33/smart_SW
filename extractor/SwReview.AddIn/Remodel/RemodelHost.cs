@@ -2272,8 +2272,9 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>
     /// Whether <paramref name="run"/>'s bridge session can still be on the bridge listening now,
-    /// so that a `remodel.close` - which names no run and closes whatever session the bridge holds
-    /// - would reach its session and nobody else's: made on the attachment listening now
+    /// so that a `remodel.close` - which named no run and closed whatever session the bridge held,
+    /// until owner decision 159A had it name its run and the bridge refuse another run's - would
+    /// reach its session and nobody else's: made on the attachment listening now
     /// (<see cref="SameAttachment"/>, T168), not closed by planning again (004 T173) and not closed
     /// by the host at the plan while Start is switched off (004 T176), and not ended since then
     /// (T180). One predicate for Discard, planning again, finished-run close and copy preservation.
@@ -2542,8 +2543,9 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        // T168 (decision 22A): `remodel.close` names no run - the bridge closes whatever session
-        // its dispatcher holds - so the copy is closed only while the run still holds its session
+        // T168 (decision 22A): `remodel.close` named no run - the bridge closed whatever session
+        // its dispatcher held, until owner decision 159A had it name its run and the bridge refuse
+        // another run's - so the copy is closed only while the run still holds its session
         // on the attachment listening now (HoldsItsSession). When that attachment is gone, or
         // planning again already closed the session (004 T173), or the host closed it at the plan
         // because Start is switched off (004 T176), a close sent now would close the copy of

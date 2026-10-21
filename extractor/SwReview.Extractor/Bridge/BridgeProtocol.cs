@@ -331,7 +331,15 @@ public sealed class RemodelCommandShape
 /// </summary>
 public static class RemodelCommandTable
 {
+    /// <summary>
+    /// The run a command on the scope is for (owner decision 159A, on Codex's review): the
+    /// <c>run_id</c> <c>remodel.open</c> was given and tagged the copy with.
+    /// </summary>
+    public const string RunParameter = "run_id";
+
     private static readonly string[] None = new string[0];
+
+    private static readonly string[] RunOnly = { RunParameter };
 
     private static readonly RemodelCommandShape[] CommandArray =
     {
@@ -339,36 +347,39 @@ public static class RemodelCommandTable
         Shape(RemodelCommands.ProbeScope, RemodelCommandStage.BeforeScope, false, true,
             new[] { "source_path" }, None),
         Shape(RemodelCommands.Open, RemodelCommandStage.BeforeScope, true, true,
-            new[] { "source_path", "copy_path", "run_id", "probe_id" }, None),
+            new[] { "source_path", "copy_path", RunParameter, "probe_id" }, None),
 
-        // Everything below is on the scope's copy and names no document.
-        Shape(RemodelCommands.Snapshot, RemodelCommandStage.OnScope, false, false, None, None),
+        // Everything below is on the scope's copy and names no document. Each names its run
+        // first (owner decision 159A, on Codex's review): run_id, the id remodel.open was given,
+        // which the session keeps and the dispatcher compares before anything is read or
+        // written, so one run's command is never carried out on another run's copy.
+        Shape(RemodelCommands.Snapshot, RemodelCommandStage.OnScope, false, false, RunOnly, None),
         Shape(RemodelCommands.Rename, RemodelCommandStage.OnScope, true, false,
-            new[] { "persist_ref", "new_name" }, new[] { "persist_ref" }),
+            new[] { RunParameter, "persist_ref", "new_name" }, new[] { "persist_ref" }),
         Shape(RemodelCommands.Reorder, RemodelCommandStage.OnScope, true, false,
-            new[] { "feature_persist_ref", "anchor_persist_ref", "location" },
+            new[] { RunParameter, "feature_persist_ref", "anchor_persist_ref", "location" },
             new[] { "feature_persist_ref", "anchor_persist_ref" }),
         Shape(RemodelCommands.Folder, RemodelCommandStage.OnScope, true, false,
-            new[] { "op", "name", "member_persist_refs", "folder_persist_ref" },
+            new[] { RunParameter, "op", "name", "member_persist_refs", "folder_persist_ref" },
             new[] { "member_persist_refs", "folder_persist_ref" }),
         Shape(RemodelCommands.Describe, RemodelCommandStage.OnScope, true, false,
-            new[] { "persist_ref", "text" }, new[] { "persist_ref" }),
+            new[] { RunParameter, "persist_ref", "text" }, new[] { "persist_ref" }),
         Shape(RemodelCommands.Equation, RemodelCommandStage.OnScope, true, false,
-            new[] { "op", "index", "text", "which_configs" }, None),
+            new[] { RunParameter, "op", "index", "text", "which_configs" }, None),
         Shape(RemodelCommands.Rebuild, RemodelCommandStage.OnScope, true, false,
-            new[] { "force" }, None),
+            new[] { RunParameter, "force" }, None),
 
-        // It takes no parameters because there is nothing to name: the only document this run
-        // can reach is the scope's copy, and the C# side stamps the subject from the run's
-        // own phase.
-        Shape(RemodelCommands.Geometry, RemodelCommandStage.OnScope, false, false, None, None),
-        // One parameter, and it names no document: the geometry gate's verdict, which the
-        // host refuses to save without. The measurement is the bridge's and the verdict is
-        // Python's, so the host is told it rather than computing it.
+        // It takes no parameter but its run because there is nothing to name: the only document
+        // this run can reach is the scope's copy, and the C# side stamps the subject from the
+        // run's own phase.
+        Shape(RemodelCommands.Geometry, RemodelCommandStage.OnScope, false, false, RunOnly, None),
+        // One parameter beside its run, and it names no document: the geometry gate's verdict,
+        // which the host refuses to save without. The measurement is the bridge's and the
+        // verdict is Python's, so the host is told it rather than computing it.
         Shape(RemodelCommands.Save, RemodelCommandStage.OnScope, true, false,
-            new[] { "verdict" }, None),
+            new[] { RunParameter, "verdict" }, None),
         Shape(RemodelCommands.Close, RemodelCommandStage.OnScope, true, false,
-            new[] { "discard_copy" }, None),
+            new[] { RunParameter, "discard_copy" }, None),
     };
 
     /// <summary>One row per command, in <see cref="RemodelCommands.All"/>'s order.</summary>
@@ -469,7 +480,7 @@ public static class RemodelEquationHelperPaths
 
 /// <summary>
 /// The stable tokens contracts/bridge-remodel.md's "Error codes" table names, all
-/// twenty-six of them.
+/// twenty-seven of them.
 ///
 /// Every token here maps to one Python class in <c>bridge/remodel_client.py</c>, which
 /// subclasses the existing <c>BridgeError</c>, so a caller that catches the base type cannot
@@ -496,6 +507,14 @@ public static class RemodelErrorCodes
     public const string TagFailed = "tag_failed";
     public const string PreexistingRebuildErrors = "preexisting_rebuild_errors";
     public const string TargetMismatch = "target_mismatch";
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (C1, defence in depth): a command after
+    /// <c>remodel.open</c> that names another run than the one whose session this bridge holds.
+    /// Refused before anything is read or written; the session it reached is left as it was.
+    /// </summary>
+    public const string SessionMismatch = "session_mismatch";
+
     public const string GuardRefused = "guard_refused";
     public const string PersistRefUnresolved = "persist_ref_unresolved";
     public const string ReorderRefused = "reorder_refused";
@@ -530,7 +549,7 @@ public static class RemodelErrorCodes
     {
         NotAPart, SourceNotOpen, ScopeNotProbed, ScopeChanged, SourceDirty, ExternalRefs,
         CopyExists, CopyFailed, OpenFailed, TagFailed, PreexistingRebuildErrors, TargetMismatch,
-        GuardRefused, PersistRefUnresolved, ReorderRefused, FolderMembersNotContiguous,
+        SessionMismatch, GuardRefused, PersistRefUnresolved, ReorderRefused, FolderMembersNotContiguous,
         EquationUnverified, RebuildRegressed, RebuildTimeout, GateNotPassed, SaveFailed,
         NotInV1, StartNotValidated, CloseIncomplete, RunInProgress, BadRequest,
     };
@@ -791,7 +810,7 @@ public sealed class RemodelOpenParams
         new RemodelOpenParams(
             BridgeParams.RequiredString(request, "source_path"),
             BridgeParams.RequiredString(request, "copy_path"),
-            BridgeParams.RequiredString(request, "run_id"),
+            BridgeParams.RequiredString(request, RemodelCommandTable.RunParameter),
             BridgeParams.RequiredString(request, "probe_id"));
 }
 

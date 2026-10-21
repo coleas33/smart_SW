@@ -45,6 +45,7 @@ from swreview.bridge.remodel_client import (
     DOCUMENT_PARAM_NAMES,
     ERROR_CLASSES,
     REMODEL_COMMANDS,
+    REMODEL_PROTOCOL_VERSION,
     CircuitOpen,
     RemodelAddressError,
     RemodelChangeError,
@@ -108,15 +109,23 @@ def refused(
     }
 
 
+RUN = "20260101-000000-bracket-remodel"
+"""The run every client here acts for unless a test gives it another: the run folder's own name,
+which `remodel.open` is given as `run_id` in the table below (owner decision 159A)."""
+
+
 def client(*responses: Any, **kwargs: Any) -> tuple[RemodelClient, FakeTransport]:
     transport = FakeTransport(list(responses), fail_with=kwargs.pop("fail_with", None))
+    kwargs.setdefault("run_id", RUN)
     return RemodelClient(transport=transport, **kwargs), transport
 
 
 # --- the command table ------------------------------------------------------------
 
 # One row per command of `contracts/bridge-remodel.md`: the method, the arguments a caller
-# passes, the command that goes on the wire, and the exact `params` object it carries.
+# passes, the command that goes on the wire, and the exact `params` object it carries. Edited
+# deliberately by owner decision 159A (004 T240): every command after `remodel.open` carries the
+# run the client acts for, `run_id`, which is the client's and not a method's argument.
 CALLS: tuple[tuple[str, dict[str, Any], str, dict[str, Any]], ...] = (
     (
         "probe_scope",
@@ -129,23 +138,23 @@ CALLS: tuple[tuple[str, dict[str, Any], str, dict[str, Any]], ...] = (
         {
             "source_path": r"C:\parts\bracket.SLDPRT",
             "copy_path": r"C:\runs\20260101-000000-bracket-remodel\copy\bracket.SLDPRT",
-            "run_id": "20260101-000000-bracket-remodel",
+            "run_id": RUN,
             "probe_id": "probe-1",
         },
         "remodel.open",
         {
             "source_path": r"C:\parts\bracket.SLDPRT",
             "copy_path": r"C:\runs\20260101-000000-bracket-remodel\copy\bracket.SLDPRT",
-            "run_id": "20260101-000000-bracket-remodel",
+            "run_id": RUN,
             "probe_id": "probe-1",
         },
     ),
-    ("snapshot", {}, "remodel.snapshot", {}),
+    ("snapshot", {}, "remodel.snapshot", {"run_id": RUN}),
     (
         "rename",
         {"persist_ref": "cA==", "new_name": "Fillet1_2"},
         "remodel.rename",
-        {"persist_ref": "cA==", "new_name": "Fillet1_2"},
+        {"run_id": RUN, "persist_ref": "cA==", "new_name": "Fillet1_2"},
     ),
     (
         "reorder",
@@ -156,6 +165,7 @@ CALLS: tuple[tuple[str, dict[str, Any], str, dict[str, Any]], ...] = (
         },
         "remodel.reorder",
         {
+            "run_id": RUN,
             "feature_persist_ref": "cA==",
             "anchor_persist_ref": "cB==",
             "location": "after",
@@ -170,6 +180,7 @@ CALLS: tuple[tuple[str, dict[str, Any], str, dict[str, Any]], ...] = (
         },
         "remodel.folder",
         {
+            "run_id": RUN,
             "op": "create",
             "name": "05 Detail",
             "member_persist_refs": ["cA==", "cB=="],
@@ -180,22 +191,22 @@ CALLS: tuple[tuple[str, dict[str, Any], str, dict[str, Any]], ...] = (
         "describe",
         {"persist_ref": "cA==", "text": "locating boss"},
         "remodel.describe",
-        {"persist_ref": "cA==", "text": "locating boss"},
+        {"run_id": RUN, "persist_ref": "cA==", "text": "locating boss"},
     ),
     (
         "equation",
         {"op": "add", "index": 3, "text": '"wall" = 2.5', "which_configs": 2},
         "remodel.equation",
-        {"op": "add", "index": 3, "text": '"wall" = 2.5', "which_configs": 2},
+        {"run_id": RUN, "op": "add", "index": 3, "text": '"wall" = 2.5', "which_configs": 2},
     ),
-    ("rebuild", {"force": False}, "remodel.rebuild", {"force": False}),
-    ("geometry", {}, "remodel.geometry", {}),
-    ("save", {"verdict": "pass"}, "remodel.save", {"verdict": "pass"}),
+    ("rebuild", {"force": False}, "remodel.rebuild", {"run_id": RUN, "force": False}),
+    ("geometry", {}, "remodel.geometry", {"run_id": RUN}),
+    ("save", {"verdict": "pass"}, "remodel.save", {"run_id": RUN, "verdict": "pass"}),
     (
         "close_document",
         {"discard_copy": True},
         "remodel.close",
-        {"discard_copy": True},
+        {"run_id": RUN, "discard_copy": True},
     ),
 )
 
@@ -262,6 +273,87 @@ def test_only_probe_scope_and_open_name_a_path_at_all() -> None:
         if set(params) & DOCUMENT_PARAM_NAMES
     }
     assert naming == {"remodel.probe_scope", "remodel.open"}
+
+
+# --- the run each command is for (owner decision 159A) -------------------------------
+
+
+def test_every_command_after_open_names_its_run_first() -> None:
+    """Owner decision 159A, on Codex's review of the merge (C1, defence in depth; 004 T240): the
+    bridge carries out a command after `remodel.open` only for the run whose session it holds, so
+    every one names the run this client acts for, first, as the contract's table orders it. The
+    probe runs before any run's session and names none; the open names the run it opens."""
+    for method, kwargs, command, _ in CALLS:
+        bridge, transport = client(ok("1", {}))
+
+        getattr(bridge, method)(**kwargs)
+
+        sent = transport.requests[0]["params"]
+        if command in COMMANDS_AFTER_OPEN:
+            assert next(iter(sent)) == "run_id", command
+            assert sent["run_id"] == RUN, command
+        elif command == "remodel.probe_scope":
+            assert "run_id" not in sent
+        else:
+            assert sent["run_id"] == RUN
+
+
+@pytest.mark.parametrize(
+    ("method", "kwargs", "command", "params"),
+    [row for row in CALLS if row[2] in COMMANDS_AFTER_OPEN],
+)
+def test_a_client_given_no_run_sends_nothing_after_open(
+    method: str, kwargs: dict[str, Any], command: str, params: dict[str, Any]
+) -> None:
+    """A command after the open with no run to name is a bug in the caller, refused here before a
+    line is written, as an out-of-set value is."""
+    bridge, transport = client(run_id=None)
+
+    with pytest.raises(BridgeError, match="no run") as caught:
+        getattr(bridge, method)(**kwargs)
+
+    assert not isinstance(caught.value, RemodelError)
+    assert command in str(caught.value)
+    assert transport.requests == []
+
+
+@pytest.mark.parametrize(
+    "acts_for",
+    [None, "20260101-000001-bracket-remodel", "20260101-000000-BRACKET-remodel"],
+)
+def test_a_client_opens_only_the_run_it_acts_for(acts_for: str | None) -> None:
+    """The run the client names after the open is the one it opened: a client given no run, or
+    another, opens nothing."""
+    bridge, transport = client(run_id=acts_for)
+    _, kwargs, _, _ = CALLS[1]
+
+    with pytest.raises(BridgeError, match="nothing was sent") as caught:
+        bridge.open(**kwargs)
+
+    assert not isinstance(caught.value, RemodelError)
+    assert transport.requests == []
+
+
+def test_the_run_a_client_acts_for_is_the_one_it_was_given() -> None:
+    assert RemodelClient(transport=FakeTransport([])).run_id is None
+    assert RemodelClient(transport=FakeTransport([]), run_id=RUN).run_id == RUN
+
+
+def test_another_runs_refusal_stops_the_run_as_a_copy_not_its_own_does() -> None:
+    """`session_mismatch`: the bridge holds another run's session. The run that sent the command
+    stops as it does on a copy not provably its own, `RemodelTargetError`, its change log intact."""
+    bridge, _ = client(refused("1", "session_mismatch", "the copy open is another run's"))
+
+    with pytest.raises(RemodelTargetError) as caught:
+        bridge.rename("cA==", "Fillet1_2")
+
+    assert caught.value.error_code == "session_mismatch"
+
+
+def test_the_family_needs_protocol_1_5() -> None:
+    """1.5 has every command after `remodel.open` name its run; a host before it ignores the
+    member and cannot refuse another run's command."""
+    assert REMODEL_PROTOCOL_VERSION == "1.5"
 
 
 def test_ping_is_the_only_non_remodel_command_this_client_speaks() -> None:
@@ -366,7 +458,7 @@ def test_a_verdict_that_is_not_a_pass_is_still_sent_and_refused_by_the_host() ->
     with pytest.raises(RemodelContractError):
         bridge.save("unresolved")
 
-    assert transport.requests[0]["params"] == {"verdict": "unresolved"}
+    assert transport.requests[0]["params"] == {"run_id": RUN, "verdict": "unresolved"}
 
 
 def test_folder_and_equation_send_a_full_param_set_with_absent_values_null() -> None:
@@ -376,12 +468,14 @@ def test_folder_and_equation_send_a_full_param_set_with_absent_values_null() -> 
     bridge.equation("delete", index=2)
 
     assert transport.requests[0]["params"] == {
+        "run_id": RUN,
         "op": "rename",
         "name": "05 Detail",
         "member_persist_refs": [],
         "folder_persist_ref": "cA==",
     }
     assert transport.requests[1]["params"] == {
+        "run_id": RUN,
         "op": "delete",
         "index": 2,
         "text": None,
@@ -404,6 +498,7 @@ ERROR_TABLE: tuple[tuple[str, type[RemodelError]], ...] = (
     ("tag_failed", RemodelTargetError),
     ("preexisting_rebuild_errors", RemodelPreflightError),
     ("target_mismatch", RemodelTargetError),
+    ("session_mismatch", RemodelTargetError),
     ("guard_refused", RemodelGuardError),
     ("persist_ref_unresolved", RemodelAddressError),
     ("reorder_refused", RemodelContractError),
@@ -421,10 +516,12 @@ ERROR_TABLE: tuple[tuple[str, type[RemodelError]], ...] = (
 )
 
 
-def test_the_error_table_is_the_contracts_twenty_six_rows() -> None:
+def test_the_error_table_is_the_contracts_twenty_seven_rows() -> None:
+    """Edited deliberately by owner decision 159A (004 T240): `session_mismatch` is the
+    twenty-seventh row, after `target_mismatch`."""
     assert dict(ERROR_TABLE) == ERROR_CLASSES
     assert list(ERROR_CLASSES) == [token for token, _ in ERROR_TABLE]
-    assert len(ERROR_TABLE) == len(ERROR_CLASSES) == 26
+    assert len(ERROR_TABLE) == len(ERROR_CLASSES) == 27
 
 
 def test_the_error_table_is_the_contracts_table_token_for_token_and_class_for_class() -> None:
