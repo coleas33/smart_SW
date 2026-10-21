@@ -4929,7 +4929,9 @@ waited for.
   page held up more than a minute once its reply had reached it, by something that holds no restart - SOLIDWORKS' own
   work, a review's extraction - while a save's restart waits for its check alone, is restarted under: its evaluation,
   carrying a token that has gone, is refused, as before 157A. Closing that would need the page to say it is gone, which
-  no page says.
+  no page says. And a mark of delivery queued on the pane's thread is lost if the pane's window is destroyed before it
+  runs - WinForms drops what is queued on a window that goes - which happens only as the add-in unloads, when every
+  hold is let go with its host.
 - **Existing cases changed deliberately**: `TheHandOverWaitsAsLongAsItsLimit` gains P1's assertion;
   `AHandOverNotTakenWithinItsLimitHoldsNothingMore` - its late evaluation, refused before, is refused now once a restart
   has been made, since one held up past its minute is held again while its backend is up;
