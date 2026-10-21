@@ -495,10 +495,7 @@ public sealed class ReviewHost : IDisposable
             },
             failure =>
             {
-                // As a failed start is reported, with the way on after it (150A review): when the
-                // old backend is still up with other settings than the saved ones, the sentence that
-                // says so, which ends with that way on (owner decision 153A).
-                PostStatus("error", WithTheWayOn(failure.Message, SettingsNotInForce() ?? RetryTheRestart));
+                PostRestartFailed(failure);
                 TellTheOtherTabsTheRestartFailed(failure);
             },
             () => PostStatus("error", RestartNotAnswered),
@@ -1440,6 +1437,24 @@ public sealed class ReviewHost : IDisposable
         }
 
         return SameBackendSettings(_settings, _inForce, _options.Environment) ? null : NotInForce;
+    }
+
+    /// <summary>
+    /// The Review tab's word that a restart which waited has failed: `status {stage: "error"}` with
+    /// the failure, masked, as a failed start is reported, and the way on after it (owner decision
+    /// 150A, review) - when the old backend is still up with other settings than the saved ones, the
+    /// sentence that says so, which ends with that way on. Found on review of 153A: this is the one
+    /// word after which the settings in force can differ from the saved ones with no `init` to say
+    /// so, so it carries `settings_not_in_force` as `init` does - the sentence, or null - and the
+    /// page holds it from here. Called under the restart's lock.
+    /// </summary>
+    private void PostRestartFailed(Exception failure)
+    {
+        string? notInForce = SettingsNotInForce();
+        Dictionary<string, object?> payload =
+            _actions.StatusPayload("error", WithTheWayOn(failure.Message, notInForce ?? RetryTheRestart));
+        payload["settings_not_in_force"] = notInForce;
+        Send("status", null, payload);
     }
 
     /// <summary>

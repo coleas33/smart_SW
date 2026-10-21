@@ -668,6 +668,55 @@ return JSON.stringify({
     }
 
     /// <summary>
+    /// Found on review (S1): a restart that waited and failed before it stopped the old backend is
+    /// told to the page by its `status` alone - no `init` follows it - so that `status` carries
+    /// whether the saved settings are in force, and the page holds the sentence from it as from
+    /// `init`. Once the failure goes from the banner - cleared by the next review's statuses - the
+    /// sentence is there; it was gone, while the review ran with the settings in force (the review's
+    /// probe D: the failure, then two ready statuses).
+    /// </summary>
+    [Fact]
+    public void ARestartsFailureSayingTheSavedSettingsAreNotInForceIsHeldAsInitsWordIs()
+    {
+        const string Failed = "FICT the launcher could not be resolved. " + NotInForce;
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await driver.Post("status", new { stage = "error", message = Failed, settings_not_in_force = NotInForce });
+            Assert.Equal(Failed, (await driver.Read(Banner)).GetProperty("text").GetString());
+
+            await driver.Post("status", new { stage = "ready", message = "Component availability checked; no review tokens used." });
+            Assert.Equal(NotInForce, (await driver.Read(Banner)).GetProperty("text").GetString());
+
+            await driver.Post("status", new { stage = "ready", message = "Reviewing 12 components." });
+            JsonElement banner = await driver.Read(Banner);
+            Assert.False(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+            Assert.Equal(NotInForce, banner.GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// ...and one carrying null - the saved settings are the ones in force, or no backend is up -
+    /// takes a sentence the page held off: once the failure goes from the banner, nothing is there.
+    /// </summary>
+    [Fact]
+    public void ARestartsFailureSayingNothingOfTheSettingsTakesTheSentenceOff()
+    {
+        const string Failed = "FICT the launcher could not be resolved. Save the settings again to retry the restart.";
+        ReviewPageDriver.Run(driver => driver.SettingsNotInForce = NotInForce, async driver =>
+        {
+            Assert.Equal(NotInForce, (await driver.Read(Banner)).GetProperty("text").GetString());
+
+            await driver.Post("status", new { stage = "error", message = Failed, settings_not_in_force = (string?)null });
+            Assert.Equal(Failed, (await driver.Read(Banner)).GetProperty("text").GetString());
+
+            await driver.Post("status", new { stage = "ready", message = "Reviewing 12 components." });
+            JsonElement banner = await driver.Read(Banner);
+            Assert.True(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+            Assert.Equal(string.Empty, banner.GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
     /// A backend that stopped holds no settings: `backend.stopped` takes the sentence off the banner
     /// with the backend.
     /// </summary>

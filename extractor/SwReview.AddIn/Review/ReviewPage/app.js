@@ -2840,6 +2840,12 @@
   function showStatus(payload) {
     var message = (payload && payload.message) || '';
     var stage = payload && payload.stage;
+    // Owner decision 153A, found on review: the host's word that a restart which waited has failed
+    // says whether the saved settings are in force, as `init` does, and no `init` follows it - so
+    // the sentence is held from here too. A status that does not carry it leaves it as it is.
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'settings_not_in_force')) {
+      holdNotInForce(payload.settings_not_in_force);
+    }
     if (stage === 'error') {
       showBanner(message);
       renderBackendState('Error', true);

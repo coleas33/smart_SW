@@ -3118,6 +3118,63 @@ public sealed class DeferredRestartTests
         }
     }
 
+    /// <summary>
+    /// Found on review (S1, N4): the word that a restart which waited has failed is the one message
+    /// after which the settings in force can differ from the saved ones with no `init` to say so -
+    /// the page is not asked to read its `init` again - so it carries `settings_not_in_force`, as
+    /// `init` does, and the Review page holds it from there. The sentence while the old backend is
+    /// still up with other settings than the saved ones; null, and 150A's way on alone, when the
+    /// saved settings are the ones in force or when no backend is up.
+    /// </summary>
+    [Theory]
+    [InlineData("other settings, the old backend still up")]
+    [InlineData("the same settings, the old backend still up")]
+    [InlineData("the old backend stopped")]
+    public void TheWordThatARestartWhichWaitedFailedSaysWhetherTheSavedSettingsAreInForce(string state)
+    {
+        const string Stopped = "FICT the backend did not answer /health within 30 seconds.";
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        string said;
+        switch (state)
+        {
+            case "other settings, the old backend still up":
+                SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "after waiting", ASwitchToGemini());
+                said = LauncherGone + ". " + NotInForce;
+                break;
+
+            case "the same settings, the old backend still up":
+                SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "after waiting", Save());
+                said = LauncherGone + ". " + RetryTheRestart;
+                break;
+
+            default:
+                world.Backend.RestartFailure = new BackendStartException(Stopped);
+                SaveAsATurnStarts(world, "save", ASwitchToGemini());
+                world.Backend.EndTurn("chat-1");
+                Eventually(
+                    () => world.Posted("status").Any(status =>
+                        status.GetProperty("message").GetString()!.StartsWith(Stopped, StringComparison.Ordinal)),
+                    "the failure's status");
+                said = Stopped + " " + RetryTheRestart;
+                break;
+        }
+
+        JsonElement failure = world.Last("status");
+        Assert.Equal("error", failure.GetProperty("stage").GetString());
+        Assert.Equal(said, failure.GetProperty("message").GetString());
+        JsonElement inForce = failure.GetProperty("settings_not_in_force");
+        if (state == "other settings, the old backend still up")
+        {
+            Assert.Equal(NotInForce, inForce.GetString());
+        }
+        else
+        {
+            Assert.Equal(JsonValueKind.Null, inForce.ValueKind);
+        }
+    }
+
     /// <summary>A switch from the world's OpenAI settings to Gemini, with a Gemini key and another model and effort.</summary>
     private static Dictionary<string, object?> ASwitchToGemini() =>
         Save(provider: "gemini", model: "gemini-3.5-flash", effort: "low", apiKey: GeminiKey);
