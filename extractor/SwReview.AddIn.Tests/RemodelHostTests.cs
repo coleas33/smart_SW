@@ -212,7 +212,42 @@ public sealed class RemodelHostTests
 
             world.Receive("ready", "r2", new { });
 
-            Assert.False(world.Reply("init", "r2").GetProperty("latest_run").GetProperty("running").GetBoolean());
+            JsonElement latest = world.Reply("init", "r2").GetProperty("latest_run");
+            Assert.False(latest.GetProperty("running").GetBoolean());
+
+            // Edited deliberately by owner decision 159A, on the final review (004 T251): nor does it carry a word.
+            Assert.Equal(JsonValueKind.Null, latest.GetProperty("status").ValueKind);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T251; research R19.22; its nit): a page that loads again
+    /// while its run runs showed "Running..." where the page that never loaded again shows the run's last word - the
+    /// backend not answering above all, which is told once. <c>init.latest_run.status</c> carries that word while the run
+    /// is in flight: the host's own first one, then the last the pipeline posted.
+    /// </summary>
+    [Fact]
+    public void AnInitAnsweredWhileTheRunIsInFlightCarriesTheRunsLastWord()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+            {
+                world.Receive("ready", "r2", new { });
+                reporter.Status("applying", BackendRemodelPipeline.BackendNotAnsweringMidRunMessage);
+                world.Receive("ready", "r3", new { });
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement first = world.Reply("init", "r2").GetProperty("latest_run").GetProperty("status");
+            Assert.Equal("judging", first.GetProperty("stage").GetString());
+            Assert.Equal(RemodelHost.RunningThePlanMessage, first.GetProperty("message").GetString());
+            JsonElement last = world.Reply("init", "r3").GetProperty("latest_run").GetProperty("status");
+            Assert.Equal("applying", last.GetProperty("stage").GetString());
+            Assert.Equal(BackendRemodelPipeline.BackendNotAnsweringMidRunMessage, last.GetProperty("message").GetString());
         }
     }
 
@@ -6034,6 +6069,133 @@ public sealed class RemodelHostTests
         }
     }
 
+    // ---- owner decision 159A, on the final review: a session a run's unanswered close left on the bridge ------------
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T249; research R19.21; its S2): a run whose close was not
+    /// answered - its backend gone mid-run, so the close was never sent - leaves its session on the bridge, and since
+    /// protocol 1.5 a close names its run, so no other run's close ends it. The next plan's open was refused
+    /// <c>run_in_progress</c>, the failed plan's clean-up close named the new run and was refused as another run's, and every
+    /// later press did the same, the page saying neither what held the bridge nor the way out. The host closes the session
+    /// its finished run may still hold before the next plan copies anything, naming that run.
+    /// </summary>
+    [Fact]
+    public void ARunWhoseCloseWasNotAnsweredIsClosedBeforeTheNextPlanCopiesAnything()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.DuringRun = _ => world.WriteRunArtifacts();
+            world.Pipeline.RunState = "failed";
+            world.Pipeline.CloseFailure = new RemodelRefusal(
+                "BackendUnavailable", "FICT the review backend is not running, so the close was not sent.", retryable: true);
+            world.Receive("remodel.start", "s1", new { run_dir = first });
+            Assert.True(world.Pipeline.SessionOpen, "the run's close was not answered, so its session is still on the bridge");
+            world.Pipeline.CloseFailure = null;
+            int copies = world.Pipeline.Count("copy");
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.Equal(copies + 1, world.Pipeline.Count("copy"));
+            Assert.True(world.Pipeline.Calls.LastIndexOf("close") < world.Pipeline.Calls.LastIndexOf("copy"));
+            Assert.True(world.Host.LatestRun!.RunDirectory != first);
+
+            // Its session ended, the earlier run sends no close again: discarding its copy deletes the copy alone.
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = first });
+            world.Reply("ok", "d1");
+            Assert.Equal(2, world.Pipeline.Closed.Count(folder => folder == first));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T249; its S2): a close of that session that is still not answered
+    /// refuses the next plan before anything is copied - retryable, in plain words, the close's class kept and its
+    /// failure in the log - and pressing again asks the close again, as planning again does for an earlier plan's.
+    /// </summary>
+    [Fact]
+    public void ARunWhoseCloseIsStillNotAnsweredRefusesTheNextPlanRetryableAndCopiesNothing()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.DuringRun = _ => world.WriteRunArtifacts();
+            world.Pipeline.RunState = "failed";
+            world.Pipeline.CloseFailure = new RemodelRefusal(
+                "BackendUnavailable", "FICT the review backend is not running, so the close was not sent.", retryable: true);
+            world.Receive("remodel.start", "s1", new { run_dir = first });
+            int copies = world.Pipeline.Count("copy");
+            int probes = world.Pipeline.Count("probe");
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement refused = world.Reply("error", "p2");
+            Assert.Equal("BackendUnavailable", refused.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.EarlierRunNotClosedMessage, refused.GetProperty("message").GetString());
+            Assert.True(refused.GetProperty("retryable").GetBoolean());
+            Assert.Equal(copies, world.Pipeline.Count("copy"));
+            Assert.Equal(probes, world.Pipeline.Count("probe"));
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.True(world.Pipeline.SessionOpen);
+
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.plan", "p3", new { });
+
+            world.Reply("remodel.planned", "p3");
+            Assert.Equal(new[] { first, first, first }, world.Pipeline.Closed);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T249 - a guard; its S2): a finished run whose close was answered holds
+    /// no session, and the next plan sends no close for it.
+    /// </summary>
+    [Fact]
+    public void ARunWhoseCloseWasAnsweredIsNotClosedAgainByTheNextPlan()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.DuringRun = _ => world.WriteRunArtifacts();
+            world.Receive("remodel.start", "s1", new { run_dir = first });
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(new[] { first }, world.Pipeline.Closed);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T249; its S2): the fake bridge keeps protocol 1.5's rule, so the cases
+    /// above are the product's: a close names its run, and one naming another run than the session's is refused, the
+    /// session left as it was - as the backend answers the bridge's <c>session_mismatch</c>, <c>RunFolderFailed</c>.
+    /// </summary>
+    [Fact]
+    public void TheFakeBridgeRefusesAnotherRunsCloseAndLeavesItsSession()
+    {
+        var pipeline = new FakePipeline { HoldsTheBridgeSession = true };
+        var reporter = new NullReporter();
+        pipeline.OpenCopy(new RemodelCopyRequest(Path.Combine(Path.GetTempPath(), "FICT-run-a"), @"C:\FICT\a.SLDPRT", null), reporter);
+
+        RemodelRefusal refused = Assert.Throws<RemodelRefusal>(() => pipeline.CloseCopy(Path.Combine(Path.GetTempPath(), "FICT-run-b")));
+
+        Assert.Equal("RunFolderFailed", refused.ErrorClass);
+        Assert.True(pipeline.SessionOpen);
+        pipeline.CloseCopy(Path.Combine(Path.GetTempPath(), "FICT-run-a"));
+        Assert.False(pipeline.SessionOpen);
+    }
+
     // ---- owner decision 155A: a run's ending reaches the page once the host is free ------------
 
     /// <summary>Whether a message is a `status` that ends the page's running state: `ready` and `error` do (`remodel.js`, `showStatus`).</summary>
@@ -9218,6 +9380,13 @@ public sealed class RemodelHostTests
         public bool SessionOpen { get; private set; }
 
         /// <summary>
+        /// The run folder whose open opened the session (owner decision 159A, protocol 1.5): a close names its run, and the
+        /// bridge refuses one naming another - <c>session_mismatch</c>, which the backend answers as <c>RunFolderFailed</c> -
+        /// leaving the session as it was.
+        /// </summary>
+        public string? SessionRun { get; private set; }
+
+        /// <summary>
         /// 004 T175: whether <see cref="CopyFailure"/> is thrown after the bridge's open answered -
         /// the backend's own steps after it failed, or its reply was lost - so the session is open
         /// although the open failed.
@@ -9239,11 +9408,13 @@ public sealed class RemodelHostTests
             if (CopyFailure != null)
             {
                 SessionOpen = HoldsTheBridgeSession && CopyFailureLeavesTheSessionOpen;
+                SessionRun = SessionOpen ? request.RunDirectory : null;
                 throw CopyFailure;
             }
 
             // The bridge closed the document itself on `preexisting_rebuild_errors`.
             SessionOpen = HoldsTheBridgeSession && CopyPresent;
+            SessionRun = SessionOpen ? request.RunDirectory : null;
 
             string folder = Path.Combine(request.RunDirectory, "copy");
             CopyPath = Path.Combine(
@@ -9284,12 +9455,27 @@ public sealed class RemodelHostTests
 
             // A close the bridge answered ends the session whatever it left - `close_incomplete`
             // included - and one it could not answer (`BridgeUnavailable`, or no named refusal)
-            // leaves it as it was.
+            // leaves it as it was; so does one the backend could not send (`BackendUnavailable`;
+            // owner decision 159A, on the final review). Since protocol 1.5 the bridge compares the
+            // run a close names with its session's exactly, and refuses another run's.
             bool answered = CloseFailure == null
-                || (CloseFailure is RemodelRefusal refusal && refusal.ErrorClass != "BridgeUnavailable");
+                || (CloseFailure is RemodelRefusal refusal
+                    && refusal.ErrorClass != "BridgeUnavailable"
+                    && refusal.ErrorClass != "BackendUnavailable");
+            if (answered
+                && SessionOpen
+                && !string.Equals(SessionRun, runDirectory, StringComparison.Ordinal))
+            {
+                throw new RemodelRefusal(
+                    "RunFolderFailed",
+                    "FICT 'remodel.close' was sent for another run than the one whose copy is open on this bridge.",
+                    retryable: false);
+            }
+
             if (answered)
             {
                 SessionOpen = false;
+                SessionRun = null;
             }
 
             if (CloseFailure != null)
@@ -9339,6 +9525,24 @@ public sealed class RemodelHostTests
             {
                 Opened.Add(CopyPath);
             }
+        }
+    }
+
+    /// <summary>A reporter that keeps nothing, for a fake asked directly.</summary>
+    private sealed class NullReporter : IRemodelRunReporter
+    {
+        public bool StopRequested => false;
+
+        public void Status(string stage, string message)
+        {
+        }
+
+        public void Progress(int applied, int total, int seq, string kind, string? subjectName)
+        {
+        }
+
+        public void Change(string changeRecordJson)
+        {
         }
     }
 

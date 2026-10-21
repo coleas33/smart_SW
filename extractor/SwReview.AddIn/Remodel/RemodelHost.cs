@@ -489,6 +489,18 @@ public sealed class RemodelHost : IDisposable
         "Closing the earlier plan's copy was not confirmed, so that plan is left as it was and no new plan was made. "
         + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
 
+    /// <summary>The run's first word, as Start hands the run to the pipeline.</summary>
+    public const string RunningThePlanMessage = "Running the plan against the copy...";
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (S2): a plan refused because the close of the copy the earlier run left
+    /// open - its own close not answered, its backend gone - is still not answered: one bridge holds one session, so no
+    /// copy can be opened until that one is closed. Plain words, no path; the close's failure goes to the log.
+    /// </summary>
+    public const string EarlierRunNotClosedMessage =
+        "Closing the copy the earlier run left open was not confirmed, so no new plan was made. "
+        + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
+
     /// <summary>
     /// Owner decision 159A: the run's last word when the close of its session was not answered (004 T180), where it
     /// ended with the failure's own message. On review (the mutation review's M6): a close that never reached the bridge
@@ -1333,7 +1345,15 @@ public sealed class RemodelHost : IDisposable
                 // flight - started and not yet ended - which `state`, the plan's, does not say. A page
                 // that loads again starts from `init` alone, and shows the run running, Stop
                 // pressable, rather than offering what the host refuses.
-                latestRun["running"] = ReferenceEquals(_active, latest);
+                bool running = ReferenceEquals(_active, latest);
+                latestRun["running"] = running;
+
+                // Owner decision 159A, on the final review: and the run's last word while it runs, which a page that
+                // loads again writes where it wrote "Running..." - the backend not answering, told once, among them.
+                Tuple<string, string>? said = running ? latest!.LastStatus : null;
+                latestRun["status"] = said == null
+                    ? null
+                    : new Dictionary<string, object?> { { "stage", said.Item1 }, { "message", said.Item2 } };
             }
 
             _actions.Send("init", id, init);
@@ -1687,6 +1707,11 @@ public sealed class RemodelHost : IDisposable
     private bool EndTheWaitingPlan(string? id, IRemodelPipeline pipeline, string? attachment)
     {
         RemodelRun? waiting = LatestRun;
+        if (waiting != null && waiting.Phase == RemodelRunPhase.Finished && !waiting.CopyDiscarded)
+        {
+            return EndTheSessionARunLeft(id, pipeline, waiting, attachment);
+        }
+
         if (waiting == null || waiting.Phase != RemodelRunPhase.Planned || waiting.CopyDiscarded)
         {
             return true;
@@ -1712,6 +1737,37 @@ public sealed class RemodelHost : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Owner decision 159A, on the final review (S2): a finished run whose close was not answered - its backend gone
+    /// mid-run, so the close was never sent - may still hold its session on the bridge: the copy open, the settings
+    /// changed. One bridge holds one session, and since protocol 1.5 a close names its run, so no other run's close ends
+    /// it: the next plan's open was refused <c>run_in_progress</c>, its clean-up close was refused as another run's, and
+    /// every later press did the same. So before the next plan asks for anything, that session is closed, naming the run
+    /// that holds it, when its attachment is the one listening now (<see cref="HoldsItsSession"/>). A close the bridge
+    /// answered, with what it left or none of the run's left to end, marks the run's session ended; one not answered
+    /// refuses the new plan, retryable, in <see cref="EarlierRunNotClosedMessage"/>, the close's class kept and its
+    /// failure in the log, and pressing again asks the close again.
+    /// </summary>
+    /// <returns>False when the new plan was refused and has been answered.</returns>
+    private bool EndTheSessionARunLeft(string? id, IRemodelPipeline pipeline, RemodelRun run, string? attachment)
+    {
+        if (!HoldsItsSession(run, attachment))
+        {
+            return true;
+        }
+
+        if (CloseSession(pipeline, run.RunDirectory, out Exception? notAnswered) == CloseAnswer.NotAnswered)
+        {
+            Log("remodel.plan, the earlier run's close", notAnswered!);
+            string errorClass = notAnswered is RemodelRefusal refusal ? refusal.ErrorClass : BridgeUnavailableClass;
+            _actions.SendError(id, errorClass, EarlierRunNotClosedMessage, retryable: true);
+            return false;
+        }
+
+        run.MarkSessionEnded();
+        return true;
+    }
+
     /// <summary>What the bridge made of one close of a plan's session (004 T173's reading, shared).</summary>
     private enum CloseAnswer
     {
@@ -1719,9 +1775,13 @@ public sealed class RemodelHost : IDisposable
         Closed,
 
         /// <summary>
-        /// A named refusal other than <c>BridgeUnavailable</c>: the bridge ran its end-of-session
-        /// routine, which clears the session whatever it left, and what it left reaches the page as
-        /// T167's one status error through <c>ToolServiceOptions.RemodelSessionEnded</c>.
+        /// A named refusal other than those of <see cref="CloseNotAnsweredClasses"/>: after it the bridge holds no session
+        /// of this run. Either its end-of-session routine ran, which clears the session whatever it left - what it left
+        /// reaching the page as T167's one status error through <c>ToolServiceOptions.RemodelSessionEnded</c> - or there
+        /// was none of this run's to end: no session at all (<c>target_mismatch</c>), or, since protocol 1.5, another
+        /// run's (<c>session_mismatch</c>, which the backend answers as <c>RunFolderFailed</c>), left as it was and told
+        /// nothing (owner decision 159A, on the final review: S2). Every reader acts on that alone: this run holds no
+        /// session.
         /// </summary>
         AnsweredWithWhatItLeft,
 
@@ -2149,8 +2209,9 @@ public sealed class RemodelHost : IDisposable
         List<string?> stops;
         try
         {
-            PostStatus("judging", "Running the plan against the copy...");
-            outcome = pipeline.Run(run.RunDirectory, new RunReporter(this, run));
+            var reporter = new RunReporter(this, run);
+            reporter.Status("judging", RunningThePlanMessage);
+            outcome = pipeline.Run(run.RunDirectory, reporter);
         }
         catch (RemodelRefusal refusal)
         {
@@ -3399,6 +3460,7 @@ public sealed class RemodelHost : IDisposable
                 return;
             }
 
+            _run?.RememberStatus(stage, message);
             _host.PostStatus(stage, message);
         }
 

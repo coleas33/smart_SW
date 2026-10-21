@@ -1891,15 +1891,44 @@ public sealed class RemodelPageContractTests
         return pressable.Count == 0 ? "-" : string.Join(" ", pressable);
     }
 
-    /// <summary>`init.latest_run` for the first plan's folder in <paramref name="state"/>, as `RemodelHost.SendInit` writes it with a run in flight or not (owner decision 155A).</summary>
-    private static object LatestRun(string state, bool running) => new
+    /// <summary>`init.latest_run` for the first plan's folder in <paramref name="state"/>, as `RemodelHost.SendInit` writes it with a run in flight or not (owner decision 155A), and the run's last word while it runs (owner decision 159A, on the final review).</summary>
+    private static object LatestRun(string state, bool running, string? stage = null, string? message = null) => new
     {
         run_dir = HostStub.RunDir,
         at = "2026-09-16T14:22:01.0000000",
         state,
         plan_lost = (string?)null,
         running,
+        status = message == null ? null : new { stage, message },
     };
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T251; its nit): a page that loads again while its run runs
+    /// writes the run's last word, which <c>init.latest_run.status</c> carries - the backend not answering, told once, above
+    /// all - where it wrote "Running..." over it.
+    /// </summary>
+    [Fact]
+    public void APageLoadedAgainWhileItsRunRunsShowsTheRunsLastWord()
+    {
+        HostStub? stub = null;
+        string? runStatus = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                await Click(page, "start-run");
+
+                stub!.LatestRun = LatestRun("applying", running: true, "applying", "FICT the review backend is not answering.");
+                await Reload(page);
+                runStatus = await TextOf(page, "run-status");
+            });
+
+        Assert.Equal("FICT the review backend is not answering.", runStatus);
+    }
 
     /// <summary>
     /// The notice's line reaches the DOM as text, like every other string on this page: markup

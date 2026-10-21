@@ -68,6 +68,7 @@ public sealed class RemodelRun
     private bool _closedByPlanAgain;
     private bool _sessionClosedAtPlan;
     private bool _sessionEnded;
+    private Tuple<string, string>? _lastStatus;
 
     internal RemodelRun(
         string runDirectory, string copyPath, DateTime at, string? toolServiceAttachment)
@@ -136,6 +137,17 @@ public sealed class RemodelRun
     public bool SessionEnded => Volatile.Read(ref _sessionEnded);
 
     internal void MarkSessionEnded() => Volatile.Write(ref _sessionEnded, true);
+
+    /// <summary>
+    /// Owner decision 159A, on the final review: the stage and the words of the last status posted for this run while it
+    /// ran - what a page that never loaded again shows, the backend not answering, told once, among them - so a page that
+    /// loads again mid-run is told them too (<c>init.latest_run.status</c>). Null until the run posts one. Volatile, since
+    /// the run's thread writes it and the message thread reads it.
+    /// </summary>
+    public Tuple<string, string>? LastStatus => Volatile.Read(ref _lastStatus);
+
+    internal void RememberStatus(string stage, string message) =>
+        Volatile.Write(ref _lastStatus, Tuple.Create(stage, message));
 
 
     /// <summary>

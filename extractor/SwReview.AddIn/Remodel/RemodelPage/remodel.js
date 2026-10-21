@@ -1260,7 +1260,9 @@
       // only those two do.
       if (latest.running === true) {
         state.running = true;
-        setRunStatus('Running...');
+        // Owner decision 159A, on the final review: the run's last word, which the page that never loaded again shows -
+        // the backend not answering, told once, among them - or "Running..." from a host that sends none.
+        setRunStatus(latest.status && latest.status.message ? String(latest.status.message) : 'Running...');
       }
 
       renderRun(latest.run_dir);
