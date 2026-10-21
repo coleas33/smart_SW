@@ -503,7 +503,8 @@ public static class RunFolders
     /// The run root in its full form - <c>Path.GetFullPath</c>: canonical, rooted, with no <c>.</c> or
     /// <c>..</c> segment and a backslash between segments - the one form every folder this class makes or
     /// finds is named under (owner decision 148A). A root that names no folder throws here as it would
-    /// below; the searches answer it with nothing.
+    /// below; the searches answer it with nothing. The run root rule judges this form too (owner decision
+    /// 154A, <see cref="RunRootRule"/>), so the root it accepts is the one the folders are made under.
     /// </summary>
-    private static string FullFormOf(string runRoot) => Path.GetFullPath(runRoot);
+    internal static string FullFormOf(string runRoot) => Path.GetFullPath(runRoot);
 }
