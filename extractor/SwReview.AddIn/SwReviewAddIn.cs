@@ -478,8 +478,9 @@ public class SwReviewAddIn : ISwAddin
             // after these options, and one that has gone runs nothing.
             BackendBusy = () => _remodelHost?.RunInProgress == true,
 
-            // Owner decision 157A: ...and for a Model check or a Standards check, from its press until
-            // the page's evaluation of it has been answered. Read through the fields, for the same reason.
+            // Owner decision 157A: ...and, while a backend is up, for a Model check or a Standards check,
+            // from its gate until the page's evaluation of it has been answered. Read through the fields,
+            // for the same reason.
             ModelCheckInProgress = () => _modelCheckHost?.CheckInProgress == true,
             StandardsCheckInProgress = () => _standardsHost?.CheckInProgress == true,
 

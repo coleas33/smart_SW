@@ -428,11 +428,11 @@ public sealed class ModelCheckHost : IDisposable
                 return;
             }
 
-            // The reviews of 154A's merge, N6: the extraction took minutes. Since owner decision 157A no restart can move
-            // the run root meanwhile while a backend is up - the check holds it back - but a start that brings a backend
-            // up where there was none, which nothing holds back (a save's with no backend up, or the add-in's first), can
-            // have brought another run root into force. Read again: the
-            // check goes on only while its folder is under the run root in force, and is answered here otherwise.
+            // The reviews of 154A's merge, N6: the extraction took minutes. Since owner decision 157A no restart can
+            // move the run root meanwhile while a backend is up - the check holds it back - but a start that brings a
+            // backend up where there was none, which nothing holds back (a save's with no backend up, or the add-in's
+            // first), can have brought another run root into force. Read again: the check goes on only while its
+            // folder is under the run root in force, and is answered here otherwise.
             if (actions.AnsweredForAMovedRunRoot(
                     id, runDirectory, _options.RunRootForANewRun(), "the feature tree was read", NothingChecked, PressAgain))
             {

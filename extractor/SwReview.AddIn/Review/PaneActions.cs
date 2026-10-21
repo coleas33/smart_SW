@@ -594,9 +594,9 @@ public sealed class PaneActions
     /// settings restart back from its gate until its evaluation has been answered while a backend is up, so no restart
     /// moves the run root during the extraction then; a start that brings a backend up where there was none - a save's
     /// made with no backend up, or the add-in's first start - still can, since nothing holds it back, and the backend
-    /// would refuse the folder at the page's first call. <paramref name="runRootNow"/> is the run root for a
-    /// new run read again once the extraction is over: none, while a start of the backend under way would bring another
-    /// in, is answered as a start then is (<see cref="SendRunRootMoving"/>); one that no longer holds the folder,
+    /// would refuse the folder at the page's first call. <paramref name="runRootNow"/> is the run root for a new run
+    /// read again once the extraction is over: none, while a start of the backend under way would bring another in, is
+    /// answered as a start then is (<see cref="SendRunRootMoving"/>); one that no longer holds the folder,
     /// <c>RunRootChanged</c>, not retryable, in the rule's words (<see cref="RunRootRule.ChangedRefusal"/>). The
     /// folder is left as the evidence.
     /// </summary>

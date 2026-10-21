@@ -40,7 +40,7 @@ namespace SwReview.AddIn.Review;
 /// through <see cref="Begin"/>, which makes a waiting restart first, or waits for the one being
 /// made, and marks the run under that same lock, so a run begins only once no restart waits or is
 /// being made: a restart and a run never overlap. Owner decision 157A makes a check work too - a
-/// Model check or a Standards check, from its press until the page's evaluation of it has been
+/// Model check or a Standards check, from its gate until the page's evaluation of it has been
 /// answered - and the reading says which work is in progress (<see cref="Work"/>), which every answer
 /// that names the work carries out; a restart that waits reads it before its look, too, since it is
 /// known without a round trip.
@@ -99,10 +99,10 @@ internal sealed class DeferredRestart : IDisposable
         /// <summary>A remodel run - a plan or a Start's run - which the restart would end with its copy half changed.</summary>
         RemodelRun = 1,
 
-        /// <summary>A Model check, from its press until the page's evaluation of it has been answered.</summary>
+        /// <summary>A Model check, from its gate until the page's evaluation of it has been answered.</summary>
         ModelCheck = 2,
 
-        /// <summary>A Standards check, from its press until the page's evaluation of it has been answered.</summary>
+        /// <summary>A Standards check, from its gate until the page's evaluation of it has been answered.</summary>
         StandardsCheck = 4,
 
         /// <summary>

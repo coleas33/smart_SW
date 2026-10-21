@@ -379,8 +379,8 @@ public sealed class ReviewHostOptions
 /// <see cref="DeferredRestart"/>). A remodel run is treated as a turn (owner decision 145A): a
 /// save made during one is kept and its restart waits for the run, and a run begins only once no
 /// restart waits (<see cref="BeginRemodelRun"/>). So is a check, a Model check or a Standards check,
-/// from its press until the page's evaluation of it has been answered (owner decision 157A,
-/// <see cref="BeginCheck"/>). The saved settings are in force once the backend
+/// from its gate until the page's evaluation of it has been answered, while a backend is up (owner
+/// decision 157A, <see cref="BeginCheck"/>). The saved settings are in force once the backend
 /// has restarted with them, and not before (owner decision 153A): a restart that fails before it
 /// stops the old backend leaves that backend's settings in force, which every session takes, and
 /// `init` says so.

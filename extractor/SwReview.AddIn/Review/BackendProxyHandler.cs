@@ -79,7 +79,7 @@ public sealed class ProxiedResponse
 ///
 /// And a check page's evaluation of a check - `POST /checks/rms` or `/checks/standards` - holds that
 /// check's hold on a settings restart while it is out, asked of the host by the run folder its body
-/// names (owner decision 157A): a check holds the restart back from its press until the page's
+/// names (owner decision 157A): a check holds the restart back from its gate until the page's
 /// evaluation of it has been answered, so the evaluation never meets a backend that restarted under it.
 /// </summary>
 public sealed class BackendProxyHandler
