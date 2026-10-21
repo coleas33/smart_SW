@@ -933,8 +933,18 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         Assert.Contains(world.Reporter.Statuses, status => status.Key == "error");
     }
 
-    [Fact]
-    public void ABackendThatVanishesMidRunEndsTheRunFailedAfterAnErrorStatus()
+    /// <summary>
+    /// A backend that vanishes mid-run ends the run `failed`, after an error status. *Changed deliberately 2026-10-21 (owner
+    /// decision 159A, on Codex's review; 004 T238, research R19.14):* vanished means the backend process that ran the job
+    /// is gone - none is running, or another runs in its place - and its worker with it; a poll that merely went
+    /// unanswered is no longer the run's end (<see cref="ARunWhoseStatusPollIsNotAnsweredWaitsForItsJobToEnd"/>). The poll
+    /// answers a finished run if it is asked again, so a build that waited on a gone backend fails this case rather than
+    /// hanging.
+    /// </summary>
+    [Theory]
+    [InlineData("none running")]
+    [InlineData("another in its place")]
+    public void ABackendThatVanishesMidRunEndsTheRunFailedAfterAnErrorStatus(string how)
     {
         var world = new World(this);
         world.Backend.StatusAt = poll =>
@@ -944,6 +954,12 @@ public sealed class BackendRemodelPipelineTests : IDisposable
                 return Running("applying", 4, 2);
             }
 
+            if (poll >= 3)
+            {
+                return Finished("saved", 4);
+            }
+
+            world.Endpoint = how == "none running" ? null : new BackendEndpoint(8124, "another-token");
             throw new BackendRequestException(
                 "BackendUnavailable", "the review backend did not answer.", retryable: true);
         };
@@ -953,6 +969,152 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         Assert.Equal("failed", outcome.State);
         Assert.Equal(2, outcome.ChangesApplied);
         Assert.Equal("error", world.Reporter.Statuses.Last().Key);
+    }
+
+    // ---- owner decision 159A, on Codex's review: a run is not over until its job is ------------------
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review of the merge, test first (004 T238; research R19.14; its C1, older than
+    /// 159A): a status poll the backend did not answer is not the run's end. The run ended `failed` at the first poll
+    /// that failed - a transient one, a backend busy past the client's 30 seconds - while the backend's worker went on
+    /// applying changes; the host then closed the run's session and was free, a plan made then opened its copy on the
+    /// same bridge, and the earlier run's next rename or equation, whose bridge command names no run, landed on that
+    /// copy. The run now waits for its job: the page is told once that the backend is not answering, the poll is asked
+    /// again, backing off, the page is told where the run stands once it answers, and the run ends as its job ends.
+    /// </summary>
+    [Fact]
+    public void ARunWhoseStatusPollIsNotAnsweredWaitsForItsJobToEnd()
+    {
+        var world = new World(this);
+        world.Backend.StatusAt = poll =>
+        {
+            switch (poll)
+            {
+                case 0:
+                    return Running("applying", 4, 1);
+                case 1:
+                case 2:
+                    throw new BackendRequestException(
+                        "BackendUnavailable", "the review backend did not answer: The operation has timed out", retryable: true);
+                case 3:
+                    return Running("applying", 4, 3);
+                default:
+                    return Finished("saved", 4);
+            }
+        };
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("saved", outcome.State);
+        Assert.Equal(4, outcome.ChangesApplied);
+        Assert.Equal(5, world.Backend.Calls.Count(call => call.Route == "status"));
+        Assert.DoesNotContain(world.Reporter.Statuses, status => status.Key == "error");
+        int waiting = Assert.Single(
+            world.Reporter.Statuses.Select((status, index) => (status, index)),
+            pair => pair.status.Value == BackendRemodelPipeline.BackendNotAnsweringMidRunMessage).index;
+        Assert.Equal("applying", world.Reporter.Statuses[waiting].Key);
+        Assert.Contains(world.Reporter.Statuses.Skip(waiting + 1), status => status.Key == "applying");
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (004 T238; its C1): the wait after a poll the backend did not answer doubles,
+    /// from the poll delay, up to eight seconds, so a backend busy for a moment is asked again soon and one that stays
+    /// silent is not asked twice a second for as long as it does; a poll delay of none, as these tests run with, stays none.
+    /// </summary>
+    [Fact]
+    public void TheWaitAfterAnUnansweredPollDoublesUpToItsBound()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(1), BackendRemodelPipeline.Longer(TimeSpan.FromMilliseconds(500)));
+        Assert.Equal(TimeSpan.FromSeconds(8), BackendRemodelPipeline.Longer(TimeSpan.FromSeconds(4)));
+        Assert.Equal(TimeSpan.FromSeconds(8), BackendRemodelPipeline.Longer(TimeSpan.FromSeconds(8)));
+        Assert.Equal(TimeSpan.Zero, BackendRemodelPipeline.Longer(TimeSpan.Zero));
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (004 T238; its C1): Stop works while the backend does not answer. The stop the
+    /// engineer asked for is tried on every poll until it lands - each fails while the backend does not answer - and the run
+    /// ends as its job, stopped, ends. Before T239 the first poll that failed ended the run `failed`, with the job never told
+    /// to stop.
+    /// </summary>
+    [Fact]
+    public void AStopAskedForWhileTheBackendDoesNotAnswerReachesTheJobOnceItAnswers()
+    {
+        var world = new World(this);
+        world.Reporter.StopRequested = true;
+        world.Backend.StopFailures = 2;
+        world.Backend.StatusAt = poll =>
+        {
+            switch (poll)
+            {
+                case 0:
+                case 1:
+                    throw new BackendRequestException(
+                        "BackendUnavailable", "the review backend did not answer.", retryable: true);
+                case 2:
+                    return Running("applying", 4, 2);
+                default:
+                    return Finished("truncated", 2);
+            }
+        };
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("truncated", outcome.State);
+        Assert.Equal(3, world.Backend.Calls.Count(call => call.Route == "stop"));
+        Assert.Equal(0, world.Backend.StopFailures);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (004 T238 - a guard; its C1): a run the backend no longer knows has no worker
+    /// on it - the backend's runs live in its memory - so it is over: `failed`, after an error status. Asked again, the poll
+    /// would answer a finished run, so a build that waited on such a run fails this case rather than hanging.
+    /// </summary>
+    [Fact]
+    public void ARunTheBackendNoLongerKnowsEndsFailed()
+    {
+        var world = new World(this);
+        world.Backend.StatusAt = poll =>
+        {
+            if (poll == 0)
+            {
+                return Running("applying", 4, 2);
+            }
+
+            if (poll >= 3)
+            {
+                return Finished("saved", 4);
+            }
+
+            throw new BackendRequestException("UnknownJob", "no run 'job-42' on this backend", retryable: false);
+        };
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("failed", outcome.State);
+        Assert.Equal("error", world.Reporter.Statuses.Last().Key);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review, test first (004 T238; its C1): an after-dump that fails does not end the run
+    /// while its job is live. The job waits for its package, then goes on to its end; the run waits for that end, and only
+    /// then answers with the failure, as before. It answered at once, freeing the host for a plan while the job could still
+    /// act on the copy once its wait ran out.
+    /// </summary>
+    [Fact]
+    public void AnAfterDumpThatFailsLeavesTheRunToTheEndOfItsJob()
+    {
+        var world = new World(this);
+        world.Backend.PackageAfterFailure = new BackendRequestException(
+            "PackageAfterRefused", "the package the add-in named is not this run's package-after.json.", retryable: false);
+        world.Backend.StatusAt = poll => poll <= 2
+            ? Awaiting("verifying", 3, 3)
+            : new RemodelRunStatus(RemodelRunStatus.FailedState, "failed", 3, 3, null, null, "package-after.json never arrived");
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+
+        Assert.Equal("PackageAfterRefused", refusal.ErrorClass);
+        Assert.Equal(4, world.Backend.Calls.Count(call => call.Route == "status"));
+        Assert.Single(world.Backend.Calls, call => call.Route == "package-after");
     }
 
     [Fact]

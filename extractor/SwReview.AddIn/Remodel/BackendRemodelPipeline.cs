@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -61,6 +62,24 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     /// looking at the button.
     /// </summary>
     private static readonly TimeSpan DefaultPollDelay = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (C1): the longest wait between two polls the backend did not answer. The
+    /// waits start at the poll delay and double up to this, so a backend busy for a moment is asked again at once and
+    /// one that stays silent is not asked twice a second for as long as it does.
+    /// </summary>
+    private static readonly TimeSpan LongestUnansweredWait = TimeSpan.FromSeconds(8);
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (C1): what the page is told, once, when a run's status poll goes unanswered
+    /// while the backend that runs it is still running - in plain words, naming no path. The run is not over until its
+    /// job is, so nothing else starts meanwhile; Stop still reaches the job once the backend answers; and closing
+    /// SOLIDWORKS ends the backend, which the add-in started, and the run's worker with it.
+    /// </summary>
+    public const string BackendNotAnsweringMidRunMessage =
+        "The review backend is not answering, so this run cannot be confirmed over yet, and nothing else starts until "
+        + "it is. Stop is passed on as soon as the backend answers. If it does not come back, close SOLIDWORKS: that ends "
+        + "the backend and the run with it.";
 
     /// <summary>
     /// `plan.json`'s `RunState` (data-model.md section 11) as one of the `status` stages the
@@ -305,9 +324,22 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
 
     // ---- the poll loop -----------------------------------------------------------------------
 
+    /// <summary>
+    /// The run, polled to its end. Owner decision 159A, on Codex's review (C1, older than 159A): the run is over only when
+    /// its job is - the backend says the job finished or failed, or no longer knows it, or the backend that runs it is
+    /// gone, its worker with it. A poll the backend did not answer while it still runs is not the run's end: the run's
+    /// worker may still be applying changes, and a host freed then lets a plan open its copy on the same bridge, where
+    /// the next change of this run would land. So the page is told once that the backend is not answering; the poll is
+    /// asked again, waiting longer each time up to <see cref="LongestUnansweredWait"/>; a Stop asked for is tried on every
+    /// poll until it lands; and the page is told where the run stands once the backend answers again. A backend that stays
+    /// silent while it runs holds the run, and the host, until it answers or stops: closing SOLIDWORKS ends it. Nothing
+    /// that fails on this side ends the run either: an after-dump that failed is answered once the job, which waits for
+    /// that dump and then goes on to its end, has ended.
+    /// </summary>
     private RemodelRunOutcome Poll(
         string runDirectory, string jobId, IRemodelRunReporter reporter)
     {
+        BackendEndpoint? runningOn = _endpoint();
         int relayed = 0;
         int applied = 0;
         int postedApplied = -1;
@@ -315,6 +347,9 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
         string? stage = null;
         bool stopped = false;
         bool dumped = false;
+        bool unanswered = false;
+        TimeSpan wait = _pollDelay;
+        Exception? endsWith = null;
 
         while (true)
         {
@@ -323,13 +358,44 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
             {
                 status = _backend.Status(jobId);
             }
-            catch (BackendRequestException failure)
+            catch (Exception failure)
             {
-                // The backend is the only thing that knows how the run ended. With it gone the
-                // run is over and unattributable, which is `failed`; the change log on disk is
-                // what is left, and it is intact.
-                reporter.Status("error", failure.Message);
-                return new RemodelRunOutcome("failed", applied);
+                if (TheJobIsOver(failure, runningOn))
+                {
+                    if (endsWith != null)
+                    {
+                        Rethrow(endsWith);
+                    }
+
+                    // The backend is the only thing that knows how the run ended. With the job gone the run is over
+                    // and unattributable, which is `failed`; the change log on disk is what is left, and it is intact.
+                    reporter.Status("error", failure.Message);
+                    return new RemodelRunOutcome("failed", applied);
+                }
+
+                if (!unanswered)
+                {
+                    unanswered = true;
+                    reporter.Status(stage ?? "judging", BackendNotAnsweringMidRunMessage);
+                }
+
+                if (!stopped && reporter.StopRequested)
+                {
+                    stopped = TryStop(jobId);
+                }
+
+                Pause(wait);
+                wait = Longer(wait);
+                continue;
+            }
+
+            if (unanswered)
+            {
+                // The backend answers again: the page is told where the run stands, below, and the polls go back to
+                // their pace.
+                unanswered = false;
+                stage = null;
+                wait = _pollDelay;
             }
 
             applied = status.ChangesApplied;
@@ -338,6 +404,11 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
             if (status.State == RemodelRunStatus.FinishedState
                 || status.State == RemodelRunStatus.FailedState)
             {
+                if (endsWith != null)
+                {
+                    Rethrow(endsWith);
+                }
+
                 return Ended(status, applied, reporter);
             }
 
@@ -365,32 +436,20 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
             // a request per half second for as long as the change in flight takes to finalize.
             if (!stopped && reporter.StopRequested)
             {
-                try
-                {
-                    _backend.Stop(jobId);
-                    stopped = true;
-                }
-                catch (BackendRequestException)
-                {
-                    // A stop that could not be posted has not happened, and the run it belongs
-                    // to is still healthy: the executor is applying changes to the copy either
-                    // way. Ending the run here would report "failed, 0 changes" while the
-                    // backend is still applying them, and leave the folder blocked as
-                    // `RunInProgress` when the engineer pressed Start again. So `stopped` stays
-                    // false and the next poll posts it again, which the route's idempotence
-                    // makes free.
-                }
+                stopped = TryStop(jobId);
             }
 
             if (!dumped && status.Awaiting == RemodelRunStatus.PackageAfterAwaiting)
             {
                 // The rendezvous: the backend is blocked until this dump lands, so it is made
                 // now and the run is asked again immediately rather than after a poll delay.
+                // Once, whatever it answers.
+                dumped = true;
                 stage = "verifying";
                 reporter.Status("verifying", "Reading the copy's feature tree after the changes...");
-                string package = DumpInto(runDirectory, PackageAfterName, "verifying", reporter);
                 try
                 {
+                    string package = DumpInto(runDirectory, PackageAfterName, "verifying", reporter);
                     _backend.PackageAfter(jobId, package);
                 }
                 catch (BackendRequestException failure)
@@ -399,19 +458,79 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
                     // Unwrapped it would leave this loop as a raw request failure, reach the
                     // host's generic catch and be shown as `HostError` - the one thing
                     // `RemodelRefusal` exists to prevent.
-                    throw Refusal(failure);
+                    endsWith = Refusal(failure);
+                }
+                catch (Exception failure)
+                {
+                    // Owner decision 159A, on Codex's review (C1): answered once the job has ended, as above.
+                    endsWith = failure;
                 }
 
-                dumped = true;
                 continue;
             }
 
-            if (_pollDelay > TimeSpan.Zero)
-            {
-                Thread.Sleep(_pollDelay);
-            }
+            Pause(_pollDelay);
         }
     }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (C1): whether a poll that failed with <paramref name="failure"/> says the
+    /// job is over - the backend no longer knows it, and its runs live in its memory - or the backend that ran it, the one
+    /// listening at <paramref name="runningOn"/> when the run began, is gone: none is running, or another runs in its place.
+    /// A backend is stopped only by the add-in, which stops one before it starts the next and holds a settings restart back
+    /// while a run is in flight, or by its own exit; either way its worker is not acting.
+    /// </summary>
+    private bool TheJobIsOver(Exception failure, BackendEndpoint? runningOn)
+    {
+        if (failure is BackendRequestException refused
+            && string.Equals(refused.ErrorClass, "UnknownJob", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        BackendEndpoint? now = _endpoint();
+        return runningOn == null
+            || now == null
+            || now.Port != runningOn.Port
+            || !string.Equals(now.Token, runningOn.Token, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Posts the stop the engineer asked for, and answers whether it landed. A stop that could not be posted has not
+    /// happened, and the run it belongs to may still be healthy: the executor is applying changes to the copy either way.
+    /// Ending the run here would report "failed, 0 changes" while the backend is still applying them, and leave the folder
+    /// blocked as `RunInProgress` when the engineer pressed Start again. So it is posted again at the next poll, which the
+    /// route's idempotence makes free.
+    /// </summary>
+    private bool TryStop(string jobId)
+    {
+        try
+        {
+            _backend.Stop(jobId);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The next wait after a poll the backend did not answer: twice this one, up to <see cref="LongestUnansweredWait"/>.</summary>
+    internal static TimeSpan Longer(TimeSpan wait) =>
+        wait <= TimeSpan.Zero
+            ? wait
+            : TimeSpan.FromTicks(Math.Min(wait.Ticks * 2, LongestUnansweredWait.Ticks));
+
+    private static void Pause(TimeSpan wait)
+    {
+        if (wait > TimeSpan.Zero)
+        {
+            Thread.Sleep(wait);
+        }
+    }
+
+    /// <summary>Throws <paramref name="failure"/> again, as it was first thrown.</summary>
+    private static void Rethrow(Exception failure) => ExceptionDispatchInfo.Capture(failure).Throw();
 
     /// <summary>
     /// What the host is told the run ended as.
@@ -479,6 +598,12 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
         catch (IOException)
         {
             // The writer has it for a moment. The lines are still there on the next poll.
+            return 0;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Owner decision 159A, on Codex's review (C1): nor does a log this side cannot read end the run, which is
+            // over only when its job is. The lines are still there on the next poll.
             return 0;
         }
 
