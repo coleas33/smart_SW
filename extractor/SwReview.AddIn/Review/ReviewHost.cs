@@ -601,18 +601,36 @@ public sealed class ReviewHost : IDisposable
             RestartHeldBack,
             RemodelRunInProgress,
             RestartWithSavedSettings,
-            () =>
+            () => ReportUnlessStopping(() =>
             {
                 _actions.PostBackendRestarted(RestartSentences);
                 TellTheOtherTabs();
-            },
-            failure =>
+            }),
+            failure => ReportUnlessStopping(() =>
             {
                 PostRestartFailed(failure);
                 TellTheOtherTabsTheRestartFailed(failure);
-            },
-            () => PostStatus("error", RestartNotAnswered),
+            }),
+            () => ReportUnlessStopping(() => PostStatus("error", RestartNotAnswered)),
             options.RestartPoll);
+    }
+
+    /// <summary>
+    /// The review of owner decision 160A (D1): what a restart that waited says once it has been made, has failed,
+    /// or has met a backend that does not answer - said only while the add-in is not unloading. One that ends as
+    /// SOLIDWORKS unloads the add-in - the backend client's disposal ends the start, or the start returns first -
+    /// is told to nobody, neither the Review page nor the other tabs: no page waits on an answer, since the save was
+    /// answered when it was made; the pages go with the add-in; and the saved settings are on disk, which the
+    /// add-in's next start starts the backend with, so neither "save the settings again" nor "the backend
+    /// restarted" is true of what comes next. A save that meets the unload is answered `AddInStopping` (owner
+    /// decision 160A, item 8), since its page waits on it.
+    /// </summary>
+    private void ReportUnlessStopping(Action report)
+    {
+        if (!_stopping)
+        {
+            report();
+        }
     }
 
     /// <summary>
@@ -1811,7 +1829,11 @@ public sealed class ReviewHost : IDisposable
     /// sentence that says so, which ends with that way on. Found on review of 153A: this is the one
     /// word after which the settings in force can differ from the saved ones with no `init` to say
     /// so, so it carries `settings_not_in_force` as `init` does - the sentence, or null - and the
-    /// page holds it from here. Called under the restart's lock.
+    /// page holds it from here. Called under the restart's lock. Marked as the backend's own word
+    /// (`lifecycle`) when no backend is up - exactly when the other tabs are told
+    /// (<see cref="TellTheOtherTabsTheRestartFailed"/>) - since that mark, and a save's
+    /// `BackendNotRestarted`, are what tell the page's strip the backend is not running (the review of
+    /// owner decision 160A, S3).
     /// </summary>
     private void PostRestartFailed(Exception failure)
     {
@@ -1820,6 +1842,11 @@ public sealed class ReviewHost : IDisposable
             _actions.StatusPayload("error", WithTheWayOn(failure.Message, notInForce ?? RetryTheRestart));
         payload["settings_not_in_force"] = notInForce;
         payload["settings_not_in_force_revision"] = revision;
+        if (_options.Backend.Endpoint == null)
+        {
+            payload["lifecycle"] = true;
+        }
+
         Send("status", null, payload);
     }
 
@@ -2037,6 +2064,7 @@ public sealed class ReviewHost : IDisposable
         // The mark comes off only once the settings are recorded, or the start has thrown, never before:
         // a reader that finds no start under way finds the settings of the backend up recorded.
         _starting = settings;
+        bool lastStartFailed = _lastStartFailed;
         _lastStartFailed = false;
         try
         {
@@ -2051,8 +2079,17 @@ public sealed class ReviewHost : IDisposable
 
             _inForce = settings;
         }
+        catch (TurnRunningException)
+        {
+            // Refused, not failed (the review of owner decision 160A, D3): the backend's own check found a turn
+            // and changed nothing, so the backend up is the one that was, and the last start made is the one that
+            // was - failed or not, as it was marked.
+            _lastStartFailed = lastStartFailed;
+            throw;
+        }
         catch
         {
+            // Made, and failed, whatever it threw: a BackendStartException, or anything outside that wrapper.
             _lastStartFailed = true;
             throw;
         }
@@ -3344,6 +3381,14 @@ public sealed class ReviewHost : IDisposable
     /// call site has to remember (FR-015).
     /// </summary>
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
+
+    /// <summary>
+    /// <see cref="PostStatus(string, string)"/>, marked `lifecycle: true` when <paramref name="lifecycle"/>: the
+    /// add-in's own word that the backend did not start, as every other tab's host marks it. That word, and a save's
+    /// `BackendNotRestarted`, are what tell the Review page's strip the backend is not running; no other `error` does
+    /// (the review of owner decision 160A, S3).
+    /// </summary>
+    public void PostStatus(string stage, string message, bool lifecycle) => _actions.PostStatus(stage, message, lifecycle);
 
     /// <summary>
     /// The ready status a review posts once the dump and the chat session both exist: the

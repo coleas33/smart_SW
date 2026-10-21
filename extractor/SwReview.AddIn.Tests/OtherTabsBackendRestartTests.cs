@@ -118,6 +118,9 @@ public sealed class OtherTabsBackendRestartTests
     /// A first start that failed is told to every page with the way on (150A review, O2: until then
     /// each banner carried the bare failure): the Review page is sent to its own Save, and every
     /// other tab, through the call a restart that failed is told to them with, to the Review tab's.
+    /// <i>Changed deliberately on the review of owner decision 160A (S3):</i> the Review page's word is
+    /// marked as the backend's own (`lifecycle`), as every other page's is, since only that word, and a
+    /// save's `BackendNotRestarted`, now tells its strip the backend is not running.
     /// </summary>
     [Fact]
     public void AFailedFirstStartTellsEveryPageTheWayOn()
@@ -134,7 +137,7 @@ public sealed class OtherTabsBackendRestartTests
         string failed = start.Substring(caught);
 
         Assert.Contains(
-            "_reviewHost?.PostStatus(\"error\", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain));",
+            "_reviewHost?.PostStatus(\"error\", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain), lifecycle: true);",
             failed,
             StringComparison.Ordinal);
         Assert.Contains("TellTheOtherTabsTheBackendDidNotStart(failure.Message);", failed, StringComparison.Ordinal);

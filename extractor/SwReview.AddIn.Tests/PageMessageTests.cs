@@ -41,12 +41,16 @@ public sealed class PageMessageTests
     /// loads, or loads again, after the failure's `status` says the backend is not running rather than "Backend
     /// starting": false before any start, true after a first start or a save's restart that failed, and false again
     /// while the next start is under way and once it has succeeded - also when that backend is gone later, since the
-    /// mark is taken off as each start begins (the mark's reset, found on review by mutation).
+    /// mark is taken off as each start begins (the mark's reset, found on review by mutation). <i>Rows added on the
+    /// review of owner decision 160A (S6):</i> whatever the start throws - a <see cref="BackendStartException"/>, or a
+    /// failure outside that wrapper, such as the new backend's log not opened.
     /// </summary>
     [Theory]
-    [InlineData("first")]
-    [InlineData("save")]
-    public void InitRemembersAFailedStartWithNoBackendAcrossPageReloads(string start)
+    [InlineData("first", false)]
+    [InlineData("save", false)]
+    [InlineData("first", true)]
+    [InlineData("save", true)]
+    public void InitRemembersAFailedStartWithNoBackendAcrossPageReloads(string start, bool outsideTheWrapper)
     {
         using var world = new HostWorld();
         world.Backend.Endpoint = null;
@@ -54,10 +58,12 @@ public sealed class PageMessageTests
         world.Receive("ready", "before", new { });
         Assert.False(world.Reply("init", "before").GetProperty("backend_start_failed").GetBoolean());
 
-        var failure = new BackendStartException("FICT the backend did not start.");
+        Exception failure = outsideTheWrapper
+            ? new IOException("FICT the new backend's log could not be opened.")
+            : new BackendStartException("FICT the backend did not start.");
         if (start == "first")
         {
-            Assert.Throws<BackendStartException>(() => world.Host.FirstStart((_, __) => throw failure));
+            Assert.Same(failure, Assert.ThrowsAny<Exception>(() => world.Host.FirstStart((_, __) => throw failure)));
         }
         else
         {
@@ -85,6 +91,27 @@ public sealed class PageMessageTests
         world.Backend.Endpoint = null;
         world.Receive("ready", "gone", new { });
         Assert.False(world.Reply("init", "gone").GetProperty("backend_start_failed").GetBoolean());
+    }
+
+    /// <summary>
+    /// The review of owner decision 160A (S3): the review host marks the add-in's own word on the backend as such,
+    /// `lifecycle: true`, when the add-in says so, as the other tabs' hosts do, and nothing else it posts: the
+    /// Review page's strip says the backend is not running from that word alone, and from a save's
+    /// `BackendNotRestarted`.
+    /// </summary>
+    [Fact]
+    public void TheReviewHostMarksTheBackendsOwnWordAndNothingElse()
+    {
+        using var world = new HostWorld();
+        world.Open();
+
+        world.Host.PostStatus("error", "FICT the review backend did not start.", lifecycle: true);
+        world.Host.PostStatus("error", "FICT the stored key could not be read.");
+
+        JsonElement[] statuses = Posted(world, "status");
+        Assert.Equal(2, statuses.Length);
+        Assert.True(statuses[0].GetProperty("lifecycle").GetBoolean());
+        Assert.False(statuses[1].TryGetProperty("lifecycle", out _), "only the backend's own word is marked: " + statuses[1].GetRawText());
     }
 
     /// <summary>

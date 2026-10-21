@@ -1133,8 +1133,10 @@ public class SwReviewAddIn : ISwAddin
             // before that wrapper - and the page must never be the first place a key appears.
             // Reported to the page and to the log, never thrown from a thread pool thread,
             // where it would end the process. Each page is told the way on with it (150A review):
-            // the Review tab saves the settings itself, and every other tab is sent there.
-            _reviewHost?.PostStatus("error", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain));
+            // the Review tab saves the settings itself, and every other tab is sent there. Marked
+            // as the backend's own word on every page, the Review page's too (the review of owner
+            // decision 160A, S3): it is what tells the Review page's strip the backend is not running.
+            _reviewHost?.PostStatus("error", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain), lifecycle: true);
             TellTheOtherTabsTheBackendDidNotStart(failure.Message);
             Report("The SwReview backend did not start.", failure);
         }
