@@ -21,6 +21,10 @@ namespace SwReview.AddIn.Tests;
 /// restart failed says the settings are saved and the backend did not restart, asks for its
 /// `init` again and says the backend is not running while none is named; and `backend.stopped`
 /// names saving the settings as the way to start it again.
+///
+/// Owner decision 153A adds what a restart that failed before it stopped the old backend leaves:
+/// that backend runs on with the settings it was started with, and while `init` says the saved
+/// settings are not in force the banner says so whenever it says nothing else.
 /// </summary>
 public sealed class ReviewPageBackendRestartTests
 {
@@ -534,6 +538,151 @@ return JSON.stringify({
             JsonElement strip = await driver.Read(Strip);
             Assert.Equal("The backend stopped. Save Settings to start it again.", strip.GetProperty("text").GetString());
             Assert.Contains("bad", strip.GetProperty("className").GetString()!, StringComparison.Ordinal);
+        });
+    }
+
+    // ---- owner decision 153A: the saved settings are not in force yet ------------------------------
+
+    /// <summary>The host's sentence while the saved settings are not in force (ReviewHost, `init`).</summary>
+    private const string NotInForce =
+        "The saved settings are not in force yet: the review backend did not restart with them, so reviews "
+        + "run with the settings it was started with. Save the settings again to retry the restart.";
+
+    /// <summary>Another word for the banner: a failure the engineer has not read yet.</summary>
+    private const string Failure = "FICT the dump stopped: the model did not rebuild.";
+
+    /// <summary>
+    /// A page that loads, or loads again, while the backend that is up runs with settings other than
+    /// the saved ones - a restart failed before it stopped the old backend - is told so by its `init`,
+    /// and says it on its banner: the saved settings are not in force yet, and saving again retries.
+    /// </summary>
+    [Fact]
+    public void APageThatLoadsWhileTheSavedSettingsAreNotInForceSaysSoOnItsBanner()
+    {
+        ReviewPageDriver.Run(driver => driver.SettingsNotInForce = NotInForce, async driver =>
+        {
+            JsonElement banner = await driver.Read(Banner);
+            Assert.False(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+            Assert.Equal(NotInForce, banner.GetProperty("text").GetString());
+
+            await driver.Reload();
+
+            banner = await driver.Read(Banner);
+            Assert.False(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+            Assert.Equal(NotInForce, banner.GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// The sentence is said for as long as it is true: it is what the banner says whenever it says
+    /// nothing else. A status that clears the banner - a review's, which runs with the settings in
+    /// force - leaves the sentence on it; another word takes the banner, and once that is cleared the
+    /// sentence is back.
+    /// </summary>
+    [Fact]
+    public void WhileTheSavedSettingsAreNotInForceTheBannerSaysSoWheneverItSaysNothingElse()
+    {
+        ReviewPageDriver.Run(driver => driver.SettingsNotInForce = NotInForce, async driver =>
+        {
+            await driver.Post("status", new { stage = "ready", message = "Reviewing 12 components." });
+            Assert.Equal(NotInForce, (await driver.Read(Banner)).GetProperty("text").GetString());
+
+            await driver.Post("status", new { stage = "error", message = Failure });
+            Assert.Equal(Failure, (await driver.Read(Banner)).GetProperty("text").GetString());
+
+            await driver.Post("status", new { stage = "ready", message = "Reviewing 12 components." });
+            JsonElement banner = await driver.Read(Banner);
+            Assert.False(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+            Assert.Equal(NotInForce, banner.GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// A save whose restart failed before the old backend stopped: its line says the settings are
+    /// saved and the backend did not restart (150A), and the `init` the page asks for after it names
+    /// the old backend - the strip says it is ready - and says the saved settings are not in force
+    /// yet, which the banner says.
+    /// </summary>
+    [Fact]
+    public void ASaveWhoseRestartFailedBeforeTheOldBackendStoppedSaysTheSavedSettingsAreNotInForce()
+    {
+        ReviewPageDriver.Run(
+            driver => driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json())),
+            async driver =>
+            {
+                int readies = driver.Posted("ready").Length;
+                driver.SettingsSaveError = NotRestarted;
+                driver.SettingsNotInForce = NotInForce;
+
+                await driver.Click("save-settings");
+                await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init after the save");
+                await driver.Settle();
+
+                string line = (await driver.Read(SaveLine)).GetProperty("visible").GetString()!.Trim();
+                Assert.StartsWith(LabelsSample.BackendNotRestarted, line, StringComparison.Ordinal);
+                JsonElement banner = await driver.Read(Banner);
+                Assert.False(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+                Assert.Equal(NotInForce, banner.GetProperty("text").GetString());
+                Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+            });
+    }
+
+    /// <summary>
+    /// Once an `init` no longer says so - a save restarted the backend with the saved settings - the
+    /// sentence comes off the banner and is not said again; a word the banner took meanwhile, which
+    /// the engineer has not read yet, stays.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnInitThatNoLongerSaysSoTakesTheSentenceOffAndNothingElse(bool anotherWordMeanwhile)
+    {
+        ReviewPageDriver.Run(driver => driver.SettingsNotInForce = NotInForce, async driver =>
+        {
+            Assert.Equal(NotInForce, (await driver.Read(Banner)).GetProperty("text").GetString());
+            int readies = driver.Posted("ready").Length;
+            driver.SettingsNotInForce = null;
+            driver.BackendToken = RestartedToken;
+            driver.HoldReady = true;
+
+            await driver.Click("save-settings");
+            await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for init after the save");
+            if (anotherWordMeanwhile)
+            {
+                await driver.Post("status", new { stage = "error", message = Failure });
+            }
+
+            await driver.ReleaseReady();
+
+            JsonElement banner = await driver.Read(Banner);
+            if (anotherWordMeanwhile)
+            {
+                Assert.Equal(Failure, banner.GetProperty("text").GetString());
+                await driver.Post("status", new { stage = "ready", message = "Reviewing 12 components." });
+                banner = await driver.Read(Banner);
+            }
+
+            Assert.True(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+            Assert.Equal(string.Empty, banner.GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// A backend that stopped holds no settings: `backend.stopped` takes the sentence off the banner
+    /// with the backend.
+    /// </summary>
+    [Fact]
+    public void ABackendStoppedTakesTheSentenceOffTheBanner()
+    {
+        ReviewPageDriver.Run(driver => driver.SettingsNotInForce = NotInForce, async driver =>
+        {
+            Assert.Equal(NotInForce, (await driver.Read(Banner)).GetProperty("text").GetString());
+
+            await driver.Post("backend.stopped", new { exit_code = 1, log_path = @"C:\Fictional\FICT-logs\backend.log" });
+
+            JsonElement banner = await driver.Read(Banner);
+            Assert.True(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+            Assert.Equal(string.Empty, banner.GetProperty("text").GetString());
         });
     }
 }

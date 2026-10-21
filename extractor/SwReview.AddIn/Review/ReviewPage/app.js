@@ -205,7 +205,11 @@
     replacedToken: null,
     // A save's restart failed and no `init` has named a backend since (owner decision 150A): the
     // strip says the backend is not running, not that it is starting.
-    notRunning: false
+    notRunning: false,
+    // The host's sentence while the backend that is up runs with settings other than the saved
+    // ones - a restart failed before it stopped the old backend - as the last `init` carried it,
+    // or null (owner decision 153A): what the banner says whenever it says nothing else.
+    notInForce: null
   };
 
   var ui = {};
@@ -290,6 +294,8 @@
         state.token = null;
         closeStream();
         setTurnRunning(false);
+        // No backend holds any settings: none are in force (owner decision 153A).
+        holdNotInForce(null);
         renderBackendState('The backend stopped. Save Settings to start it again.', true);
         return;
       case 'backend.restarted':
@@ -2789,8 +2795,24 @@
   }
 
   function showBanner(text) {
-    ui.banner.textContent = text || '';
-    ui.banner.hidden = !text;
+    // While the saved settings are not in force, the host's sentence saying so is what the banner
+    // says when it is given nothing else to say (owner decision 153A).
+    var shown = text || state.notInForce || '';
+    ui.banner.textContent = shown;
+    ui.banner.hidden = !shown;
+  }
+
+  /**
+   * Owner decision 153A: holds the host's sentence that the saved settings are not in force, or
+   * none. A banner saying nothing, or saying the sentence held until now, takes the new one, or
+   * nothing; any other word stays where it is, and the sentence comes back once that word goes.
+   */
+  function holdNotInForce(sentence) {
+    var resting = ui.banner.hidden || ui.banner.textContent === state.notInForce;
+    state.notInForce = (typeof sentence === 'string' && sentence) ? sentence : null;
+    if (resting) {
+      showBanner('');
+    }
   }
 
   function showStreamState(text) {
@@ -3095,6 +3117,9 @@
       renderBackendState(
         state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),
         state.notRunning);
+      // Owner decision 153A: every `init` says whether the saved settings are in force, so a page
+      // that loads again is told too.
+      holdNotInForce(payload.settings_not_in_force);
       if (loadModels && state.backend) {
         refreshModels();
       }

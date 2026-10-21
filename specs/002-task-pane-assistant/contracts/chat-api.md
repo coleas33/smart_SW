@@ -278,6 +278,13 @@ A running turn owns process state that is not on disk, so:
   2026-10-19, owner decision 145A). A save whose own restart fails is kept as well - the settings
   are written before the backend is restarted - and is answered `BackendNotRestarted`, retryable,
   saying so (amended 2026-10-20, owner decision 150A; `pane-host-messages.md`, `settings.save`).
+  The saved settings are in force once the backend has restarted with them, and not before: a
+  restart that fails before it stops the old backend leaves it up with the environment it was
+  started with, and until a restart succeeds the host creates every session with the provider,
+  model and effort that backend was started with, not the saved ones, so no `POST /sessions` pairs
+  one provider's settings with another's credentials; the pane says the saved settings are not in
+  force yet, and that saving again retries (amended 2026-10-20, owner decision 153A;
+  `pane-host-messages.md`, `ready` and `settings.save`).
 - On any shutdown signal the server finalizes every live chat before exiting: it writes
   `turn.ended {reason: "error"}` when a turn was mid-flight, then `session.ended` with an
   `ended_at`, and saves `session.json`. A session is never left without an ended time
