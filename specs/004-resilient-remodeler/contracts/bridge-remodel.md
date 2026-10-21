@@ -74,8 +74,9 @@ shape and not an abbreviation of one.
 **Every command after `remodel.open` names its run.** *Added 2026-10-21 (owner decision 159A, on
 Codex's review of the merge, defence in depth; protocol 1.5; `research.md` R19.15):* `run_id`, first
 in its `Params`, is the id `remodel.open` was given - the run folder's own name, which the open tags
-the copy with and the session keeps. The bridge compares it, exactly, with its session's before
-anything is read or written: no session is `target_mismatch`, as before, whatever run the command
+the copy with and the session keeps. The bridge reads it as it reads the open's, trimmed of any
+space around it, then compares it exactly - case and all - with its session's before anything is
+read or written: no session is `target_mismatch`, as before, whatever run the command
 names; a command naming no run, or one that is not a non-empty string, is `bad_request`; and one
 naming another run is `session_mismatch`, the session it reached left as it was. Until then a
 command after the open named no run, and the bridge carried it out on whatever session it held: a

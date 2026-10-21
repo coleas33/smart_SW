@@ -397,7 +397,8 @@ and it is three things:
    is `ping` plus these twelve — `COMMANDS` in `client.py` is unchanged.
 4. **Every command after `remodel.open` names its run** (1.5, owner decision 159A). `params.run_id`
    is the id the open was given - the run folder's own name, which it tags the copy with - and the
-   host compares it, exactly, with its session's before anything is read or written: none is
+   host reads it as it reads the open's, trimmed of any space around it, then compares it exactly
+   with its session's before anything is read or written: none is
    `bad_request`, another run's is `session_mismatch`, and with no session the answer is
    `target_mismatch` as before. A run's command can then never be carried out on another run's
    copy, which passes every check the scope makes because it is that run's own.

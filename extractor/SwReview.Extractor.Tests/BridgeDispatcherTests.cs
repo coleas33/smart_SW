@@ -910,7 +910,7 @@ public class BridgeDispatcherTests : IDisposable
         // One row of contracts/bridge-remodel.md's command table per assertion, read off the
         // wire rather than off the property names, because the wire is what the Python client
         // sees. remodel.geometry's GeometryReading is the one row not here: it is the geometry
-        // phase's record, and the command's shape - no parameters at all, because there is
+        // phase's record, and the command's shape - no parameter but its run, because there is
         // nothing to name - is asserted in the table cases above.
         Assert.Equal(
             new[] { "probe_id", "source_path", "scope_signals" },

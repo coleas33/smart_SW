@@ -3,7 +3,7 @@
 One JSON request per line over a Windows named pipe to
 `SwReview.Extractor.Console.exe serve`, which owns the single STA thread that holds the
 `SldWorks.Application` reference. **The wire format is
-`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.4); the
+`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.5); the
 `PROTOCOL.md` beside this file records only what is true of the Python end. What this
 module adds around the wire format is the three guarantees the tool layer depends on:
 

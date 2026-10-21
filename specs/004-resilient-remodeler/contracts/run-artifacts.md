@@ -99,6 +99,8 @@ word that the backend did not start, which the add-in's own start report logs. *
 of the merge (owner decision 159A; `research.md` R19.16):* the file is shared with readers only, so one writer holds
 it at a time whatever process it is in - two SOLIDWORKS sessions' append handles each wrote at the end they opened
 at, the later line over the earlier - and a writer of another process is waited out, a line kept, as any holder's is.
+*Amended 2026-10-21 on the final review (owner decision 159A; `research.md` R19.23):* the lines kept are written as
+the add-in unloads, last, where they were lost with the process.
 
 *Added 2026-10-19 (owner decision 144A; feature 011's research R11.1):* the pane seat's gate log.
 `remodel.open_copy` and the activation of the copy before each dump call SOLIDWORKS through the
