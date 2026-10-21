@@ -2804,7 +2804,11 @@ Each is beyond what decision 148A names, so nothing here was changed.
    accepted the backend's spelling of a run
    folder and the host's differ at most in letter case, which step 4 compares ignoring; the copy
    path, the bind and step 4's comparison are unchanged (002
-   [research.md](../002-task-pane-assistant/research.md), 154A).
+   [research.md](../002-task-pane-assistant/research.md), 154A). *Corrected on 154A's reviews
+   (2026-10-20, finding F3):* not for a run root spelled with an 8.3 short name, which is accepted -
+   it is no link - while `RunFolders` names its run folders through `Path.GetFullPath`, which under
+   the newer path handling can keep the short name, and the backend spells them in long names; step
+   4 can then refuse such a copy. Recorded for the owner, not changed.
 3. **`RemodelProbeGuard` matches ignoring case.** Its run-scoped members, `ISldWorks.OpenDoc7` now
    among them as the toggles' keys were, are matched ignoring case, where `RemodelGuard` and
    `RemodelSeatGuard` match their keys ordinally so that a mis-spelling fails closed. Its one host
