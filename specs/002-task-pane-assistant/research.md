@@ -2071,6 +2071,11 @@ words for the strip.
 
 ### 152A. A review never runs on a bridge left on another document (2026-10-20)
 
+*Renumbered 2026-10-21:* this decision's tasks were numbered T166 to T183 provisionally, as
+153A's and 154A's were, and are T207 to T224 since 153A's, T166 to T188, and 154A's, T189 to
+T206, landed on `main` first; the commits that made them carry their first numbers (`cafd8d0` to
+`88e8f7e`, T166 to T183).
+
 - **Question**: 149A's owner question 5. A review's session is given whatever bridge the tool
   service is attached to when the session is made (`ReviewHost.CreateReviewSession`,
   `_options.Bridge`, which `SwReviewAddIn` publishes from the gate), and nothing compared it with
@@ -2350,7 +2355,7 @@ words for the strip.
      tool service re-attaches?
 - **Review**: an independent adversarial review of the branch at `cf67b69` found no must-fix - a
   session is handed only a bridge that served its document when asked, and that pipe then serves
-  that document or nothing - and five should-fixes and nine nits, settled test first by T171 to T173:
+  that document or nothing - and five should-fixes and nine nits, settled test first by T212 to T214:
   - R1 (should-fix): a look's busy question read a chat the backend did not answer about as no turn,
     and took the bridge down under a running turn - one timed-out request in a turn's polls was
     enough (the reviewer's probe). Fixed: the gate asks `ReviewHost.TurnMayBeRunning`, the remodel
@@ -2387,7 +2392,7 @@ words for the strip.
     others.
   - Existing cases changed deliberately: `TheAddInsGateRefreshesTheRemodelHostOnEveryPublishAndARunHoldsIt`
     also pins the busy question's new reading (tightened). The reviewer's own probes stood in a
-    scratch copy and were not committed; T171's cases are their counterparts.
+    scratch copy and were not committed; T212's cases are their counterparts.
 - **Mutations**: each fix taken out once, by one exact replacement, the tree rebuilt, the named
   classes run - `ToolServiceWiringTests`, `RemodelHostTests`, `DeferredRestartTests`,
   `ErrorLabelsCoverTheHostTests` and `ReviewHostTests`, 728 cases; `ReviewPageSendGateTests` for
@@ -2444,21 +2449,21 @@ words for the strip.
   | V12 | `KeepCopyAttachment`: a plan closed at the plan keeps its copy's attachment | 5: four of T180's - a plan closed at the plan, another attachment or none, and the cleanup's - and the Start-off look that follows the copy |
 - **Evidence** (2026-10-20; before at `bd07f29`, after on the branch with the review's fixes): the C#
   build, `--no-incremental`, at zero warnings both times; `SwReview.Extractor.Tests` 10,059 passed
-  before and after, and `SwReview.AddIn.Tests` 3,003 before and 3,071 after - the 68 cases of T166,
-  T168 and T171 - with the restart and tool-service classes and the stub-children collection, 853
+  before and after, and `SwReview.AddIn.Tests` 3,003 before and 3,071 after - the 68 cases of T207,
+  T209 and T212 - with the restart and tool-service classes and the stub-children collection, 853
   cases, green five times in a row. One full run made while both Python suites ran beside it failed
   `ReviewPageNarrowLayoutTests`' two cases, a page's layout timed under load, which 152A does not
   touch; they passed alone and in the full run after. Python, not live, with
   `SWREVIEW_REQUIRE_TOKENIZER=1`: 18,089 passed and 5 skipped before, and 18,090 passed and 5
   skipped after - the label's pin - on 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`) alike.
   `ruff check` clean, and no broken link.
-- **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first; and the review's, T171.
+- **Tests**: T207 and T209 in [tasks.md](tasks.md), each written first; and the review's, T212.
 
 **3. The Codex review (a second opinion, 2026-10-20).**
 
 - **What it was**: an adversarial review of the branch at `22bdd6b` by Codex, a second opinion
   beside the review above. It answered "needs attention" with two high findings, settled test first
-  by T174 to T178.
+  by T215 to T219.
 - **X1 (high): a configuration switched before the session passed the bridge's check.** Extract A in
   Default and switch A to Machined during the extraction or just after it - the extraction runs in
   one call on the application thread (`SwReviewDump.Run`), so a switch made during it lands as it
@@ -2641,8 +2646,8 @@ words for the strip.
   | YW2 | the add-in: the review host's sessions hold nothing | 1: as YT1 |
   | YW3 | the add-in: the Remodel host's plans and runs hold nothing | 1: as YT1 |
 - **Evidence** (2026-10-21, at `a6ab107`): the C# build, `--no-incremental`, at zero warnings;
-  `SwReview.Extractor.Tests` 10,085 passed, from 10,059 - T174's 26 dispatcher cases - and
-  `SwReview.AddIn.Tests` 3,126, from 3,071 - T174's 9 cases and T176's 46; the restart and
+  `SwReview.Extractor.Tests` 10,085 passed, from 10,059 - T215's 26 dispatcher cases - and
+  `SwReview.AddIn.Tests` 3,126, from 3,071 - T215's 9 cases and T217's 46; the restart and
   tool-service classes with the stub-children collection, 890 cases, from 853, green five times in a
   row, the plan race on a thread of its own among them. Python, not live, with
   `SWREVIEW_REQUIRE_TOKENIZER=1`: 18,090 passed and 5 skipped on 3.12 (3.12.3), as before - the
@@ -2652,7 +2657,7 @@ words for the strip.
   whose benchmark run records the commit it began at and refuses its resume at another: the code was
   committed while it ran. It passed alone, and in the run after. `ruff check` clean, and no broken
   link.
-- **Tests**: T174 and T176 in [tasks.md](tasks.md), each written first.
+- **Tests**: T215 and T217 in [tasks.md](tasks.md), each written first.
 
 **4. The review of the Codex fixes (2026-10-21).**
 
@@ -2660,7 +2665,7 @@ words for the strip.
   no must-fix, and confirmed that the bridge check's two reads go through the gate under names the
   guard allows, that every hold is let go on every path with nothing waited for under the lock, that
   the preserved attachment survives, and that the cases changed deliberately still pin what they
-  pinned. It found two should-fixes and four nits, settled test first by T179 to T183, and the
+  pinned. It found two should-fixes and four nits, settled test first by T220 to T224, and the
   coordinator decided owner question 5 on it, for the owner, who may revert.
 - **S1 (should-fix): the read behind the bridge check had no test.**
   `SwSessionConfiguration.ActiveConfigurationName` was pinned only by the host's source case: the
@@ -2747,10 +2752,10 @@ words for the strip.
   | ZQ5c | the client: the marker matched anywhere in the text | 2: the two sentences that merely mention a change |
 - **Evidence** (2026-10-21, before main was merged): the C# build, `--no-incremental`, at zero
   warnings; `SwReview.Extractor.Tests` 10,086 passed, from 10,085 - S1's case - and
-  `SwReview.AddIn.Tests` 3,133, from 3,126 - T179's seven. The reviewer's client and tool tests,
+  `SwReview.AddIn.Tests` 3,133, from 3,126 - T220's seven. The reviewer's client and tool tests,
   the records' readers and the words, fixture and pin tests, 1,090 cases, passed on 3.12 and on
   3.11 (`--isolated`). `ruff check` clean, and no broken link.
-- **Tests**: T179 and T181 in [tasks.md](tasks.md), each written first.
+- **Tests**: T220 and T222 in [tasks.md](tasks.md), each written first.
 
 ### 153A. Until a restart succeeds, the settings the backend was started with are in force (2026-10-20)
 

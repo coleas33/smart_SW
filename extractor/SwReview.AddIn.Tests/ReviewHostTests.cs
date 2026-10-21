@@ -1132,7 +1132,7 @@ public sealed class ReviewHostTests
     ///
     /// Edited deliberately for owner decision 152A, on the Codex review (X1), 2026-10-20: the switch
     /// was made during the dump, and a review whose document changed during its extraction is now
-    /// refused at its session (DeferredRestartTests section 13), since its live checks would run over
+    /// refused at its session (DeferredRestartTests section 15), since its live checks would run over
     /// the document active then. The switch is made where one can still land unrefused - while
     /// `POST /sessions` is out - and what the test pins is unchanged; it was named
     /// `ReviewStartedNamesTheExtractedDocumentEvenIfTheActiveOneChangedDuringTheDump`.
