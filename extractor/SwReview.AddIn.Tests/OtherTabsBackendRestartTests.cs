@@ -123,9 +123,11 @@ public sealed class OtherTabsBackendRestartTests
     public void AFailedFirstStartTellsEveryPageTheWayOn()
     {
         string source = AddInSource();
+        // The first start takes nothing since owner decision 153A's review (C1): the review host reads
+        // the settings when the start is made.
         string start = Between(
             source,
-            "private void StartBackend(UserSettings settings, ResolvedApiKey key) {",
+            "private void StartBackend() {",
             "Report(\"The SwReview backend did not start.\", failure);");
         int caught = start.IndexOf("catch (Exception failure)", StringComparison.Ordinal);
         Assert.True(caught >= 0, "StartBackend no longer catches the start's failure where this test reads it.");

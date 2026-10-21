@@ -266,8 +266,8 @@ A running turn owns process state that is not on disk, so:
   A turn that starts after the host's check and before the restart - the page posts a
   follow-up, the answers or a Send to the backend directly - is the one case in which the
   restart is refused with the new settings already written: the host keeps the save, restarts
-  the backend once no turn is running and no remodel run is in progress, with the settings in
-  force then, and starts no turn on the old backend in between; a backend that gives no usable
+  the backend once no turn is running and no remodel run is in progress, with the settings
+  saved by then, and starts no turn on the old backend in between; a backend that gives no usable
   answer is watched for three looks in a row, after which the engineer is told, and the restart
   is made before the next review or follow-up once the backend answers, or by saving the
   settings again (amended 2026-10-19, owner decision 143A; `pane-host-messages.md`,
@@ -278,6 +278,18 @@ A running turn owns process state that is not on disk, so:
   2026-10-19, owner decision 145A). A save whose own restart fails is kept as well - the settings
   are written before the backend is restarted - and is answered `BackendNotRestarted`, retryable,
   saying so (amended 2026-10-20, owner decision 150A; `pane-host-messages.md`, `settings.save`).
+  The saved settings are in force once the backend has restarted with them, and not before: a
+  restart that fails before it stops the old backend leaves it up with the environment it was
+  started with, and until a restart succeeds the host creates every session with the provider,
+  model and effort that backend was started with, not the saved ones, so no `POST /sessions` pairs
+  one provider's settings with another's credentials; the pane says the saved settings are not in
+  force yet, and that saving again retries (amended 2026-10-20, owner decision 153A;
+  `pane-host-messages.md`, `ready` and `settings.save`). The add-in's first start is made the
+  same way, under the host's restart lock with the settings saved then, and is not made at all
+  once a save has restarted the backend (amended on the second 153A review, the same day). While a
+  start of the backend - the first or a restart - is under way, the host makes no session: one asked
+  for then is refused as one asked for before the backend is up (amended on the third 153A review,
+  the same day, and worded on the fourth, 2026-10-21).
 - On any shutdown signal the server finalizes every live chat before exiting: it writes
   `turn.ended {reason: "error"}` when a turn was mid-flight, then `session.ended` with an
   `ended_at`, and saves `session.json`. A session is never left without an ended time
