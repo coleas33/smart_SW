@@ -8,6 +8,8 @@
 
 **Input**: User description: "Task Pane assistant: a SOLIDWORKS Task Pane with a review chat driving the curated design reviewer on OpenAI or Gemini, plus an embedded Codex or Gemini CLI terminal for read-only general chat." Design approved in conversation on 2026-09-13 (reviewer first, general chat read-only, chat panel plus terminal tab, OpenAI default with Gemini, no Claude in the product).
 
+*Owner decision 156A amendment, 2026-10-20:* the Input records the request as it was made. The pane has not shown the Terminal tab, captioned Ask, since 2026-09-19 (`TaskPaneControl.AskTabShown` is false; User Story 3's 151A note), so its embedded terminal and general chat describe a tab that is built and hidden.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Review the Open Assembly from the Task Pane (Priority: P1)
@@ -70,6 +72,8 @@ The engineer switches to the Terminal tab, picks Codex or Gemini, and gets that 
 
 Captures, measurements, interference runs, and Show in SOLIDWORKS requested by the review chat or by the terminal CLI execute inside the running SOLIDWORKS session that hosts the pane. No separate console process, no second SOLIDWORKS attach, and no possibility of the pane driving a different session than the one on screen.
 
+*Owner decision 156A amendment, 2026-10-20:* the pane has not shown the Terminal tab since 2026-09-19; it is built and hidden (User Story 3's 151A note). This story's title ("from Both Modes"), its terminal-CLI path, its Independent Test and its first scenario ("either mode") include that hidden tab. Were the tab shown again, those terminal-CLI paths would hold as written; the review-chat path applies now.
+
 **Why this priority**: It removes the biggest test-day failure mode in feature 001 (a bridge attached to the wrong session) and makes captures appear inline, but the first three stories can be demonstrated with the existing console bridge.
 
 **Independent Test**: With the pane open, request a capture from the review chat and a measurement from the terminal CLI; confirm both files land in the run folder, both were served by the add-in's own dispatcher (its log shows them), and closing the pane stops the service.
@@ -92,15 +96,15 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 - API key present in environment variables and in settings: settings win, and the pane says which source it used.
 - Model id no longer offered by the provider: the pane shows the provider's error and the model list is refreshed from the provider.
 - The CLI is installed but its version is older than the minimum: the pane shows the installed and required versions.
-- The CLI's generated profile is edited by the engineer: the pane regenerates it on every launch and shows a warning if a restriction key was missing or changed.
+- The CLI's generated profile is edited by the engineer: the pane regenerates it on every launch and shows a warning if a restriction key was missing or changed. *Owner decision 156A amendment, 2026-10-20:* this edge case and the preceding CLI-older-than-the-minimum edge case describe the Terminal tab, built and hidden; the pane has not shown it since 2026-09-19. Its host is not attached, so nothing probes for a CLI or writes a generated profile. Were the tab shown again, both edge cases would hold as written.
 - WebView2 runtime missing: the pane shows the download link and a plain-text fallback with the run folder path; nothing else breaks.
-- Gemini's tool naming limits: tool names are kept under the length limit and the server name has no underscores so every tool is reachable.
+- Gemini's tool naming limits: tool names are kept under the length limit and the server name has no underscores so every tool is reachable. *Owner decision 156A amendment, 2026-10-20:* this edge case concerns the general-chat CLI's tool server and describes the Terminal tab, built and hidden; the pane has not shown it since 2026-09-19. Were the tab shown again, the naming limits would still apply to that CLI's tools.
 - A finding references a component whose persistent reference no longer resolves after a rebuild: Show in SOLIDWORKS reports the resolution state code and offers the component's full path instead.
 - Very long sessions: the transcript view keeps the last 500 events in memory and the full stream on disk.
-- Model- or document-authored text containing markup (a finding title with `<img src=x onerror=...>`, a drawing note read as `</script>`): both pages insert every untrusted string as text, never as markup, and the strict Content-Security-Policy and navigation blocking in `contracts/pane-host-messages.md` make an injected element inert. The pane holds the backend token and can invoke `settings.save` and the shell openers, so this is a first-class boundary, not a cosmetic concern.
+- Model- or document-authored text containing markup (a finding title with `<img src=x onerror=...>`, a drawing note read as `</script>`): both pages insert every untrusted string as text, never as markup, and the strict Content-Security-Policy and navigation blocking in `contracts/pane-host-messages.md` make an injected element inert. The pane holds the backend token and can invoke `settings.save` and the shell openers, so this is a first-class boundary, not a cosmetic concern. *Owner decision 156A amendment, 2026-10-20:* "both pages" includes the Terminal tab's page; the pane has not shown that tab since 2026-09-19, so that part describes a tab that is built and hidden, whose page is not loaded. The Review page's boundary applies now, and the same boundary would apply to the terminal page were the tab shown again.
 - A turn that ends on the provider's output ceiling (reasoning plus text exceeding `max_output_tokens`): the turn ends with reason `truncated`, the partial answer stays visible, and the unfinished work is recorded as unresolved coverage rather than reported as a completed check.
 - The engineer saves Settings while a turn is running: the save is refused with a clear message rather than restarting the backend and killing the live session; it is offered again when the turn ends.
-- The Terminal tab is opened before any review: the host creates a terminal run folder under the run root so the CLI, its generated profile, and `chat-log.jsonl` have a home.
+- The Terminal tab is opened before any review: the host creates a terminal run folder under the run root so the CLI, its generated profile, and `chat-log.jsonl` have a home. *Owner decision 156A amendment, 2026-10-20:* the pane has not shown the Terminal tab since 2026-09-19, so this describes a tab that is built and hidden. It cannot be opened in the pane now; were it shown again, this run-folder rule would hold as written.
 
 ## Requirements *(mandatory)*
 
@@ -139,7 +143,7 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 **General chat**
 
 - **FR-020**: The Terminal tab MUST run the chosen CLI (Codex or Gemini) inside the pane with the run folder as its working directory and MUST reflow on resize. *Owner decision 151A amendment, 2026-10-20:* the pane does not show the Terminal tab - captioned Ask in the pane - and has not since 2026-09-19 (`TaskPaneControl.AskTabShown` is false; User Story 3's note): the tab and its terminal are built and hidden, so no CLI runs in the pane. Were the tab shown again, this requirement holds as written.
-- **FR-021**: The pane MUST generate the CLI's profile on every launch such that our tool server is registered, file writes are refused, the CLI's shell and file-editing tools are disabled, and SOLIDWORKS and the run folder are reachable only through our tools; the profile MUST be regenerated even if the engineer edited it.
+- **FR-021**: The pane MUST generate the CLI's profile on every launch such that our tool server is registered, file writes are refused, the CLI's shell and file-editing tools are disabled, and SOLIDWORKS and the run folder are reachable only through our tools; the profile MUST be regenerated even if the engineer edited it. *Owner decision 156A amendment, 2026-10-20:* FR-021, FR-022 and FR-023 describe the Terminal tab, built and hidden; the pane has not shown it since 2026-09-19 (User Story 3's 151A note). Its host is not attached, so nothing probes for a CLI or writes a generated profile, and no general-chat CLI runs in the pane. Were the tab shown again, these requirements would hold as written.
 - **FR-022**: The tool server exposed to the CLI MUST offer exactly the read-only subset of the feature 001 contract (package query tools, measurement tools, `request_capture`, and the bridge capture and measure tools) and MUST record every call in a chat log in the run folder.
 - **FR-023**: The pane MUST detect a missing or too-old CLI before launch and MUST show the install steps and versions.
 
@@ -147,23 +151,23 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 
 **Boundaries**
 
-- **FR-024**: Neither mode MAY modify, rebuild, or save any SOLIDWORKS document.
+- **FR-024**: Neither mode MAY modify, rebuild, or save any SOLIDWORKS document. *Owner decision 156A amendment, 2026-10-20:* FR-024's "Neither mode" and FR-025's "The general chat" include the Terminal tab, built and hidden; the pane has not shown it since 2026-09-19. The review boundary applies now; were the tab shown again, its read-only and findings/dispositions boundaries would hold as written.
 - **FR-025**: The general chat MUST NOT be able to create findings or dispositions; those come only from the review session's tools and the engineer's actions.
 - **FR-026**: No Claude or Anthropic path MAY exist in product code, configuration, or documentation for this feature. In particular no module-level default model id naming a Claude model MAY remain in the Python package; defaults come from the provider settings module.
 - **FR-027**: The scripted `fake` provider MUST be selectable and persistable as a provider in a development build so the pane is demonstrable without keys, and a release build MUST refuse to load a settings file that names it, falling back to the default provider with a visible error, so a shipped configuration can never produce fabricated findings.
 - **FR-028**: When a session fails, the pane MUST offer Retry, and the session Retry starts MUST record the failed session's id so the two are linked in the run artifacts.
-- **FR-029**: Both WebView2 pages MUST insert model- and document-authored text as text rather than markup, MUST run under a restrictive Content-Security-Policy, and MUST refuse navigation outside the add-in's virtual host.
+- **FR-029**: Both WebView2 pages MUST insert model- and document-authored text as text rather than markup, MUST run under a restrictive Content-Security-Policy, and MUST refuse navigation outside the add-in's virtual host. *Owner decision 156A amendment, 2026-10-20:* "Both WebView2 pages" means the Review page and the terminal page. The pane has not shown the Terminal tab since 2026-09-19, so the terminal-page part describes a tab that is built and hidden, whose page is not loaded. The Review page's boundary applies now, and the same boundary would apply to the terminal page were the tab shown again.
 
 ### Key Entities
 
 - **Chat Session**: One conversation in the Review tab bound to one run folder and one feature 001 review session; holds the ordered event stream, the provider and model used, and the run folder path.
 - **Chat Event**: A typed, timestamped item in the stream: text delta, tool call started, tool call finished, finding, evidence request, evidence answered, disposition, coverage, error, ended.
 - **Provider Settings**: Provider name, model id, effort, key reference, and the source the key came from; stored per Windows user.
-- **Tool Service**: The in-process dispatcher endpoint (pipe name, secret, log path) that both modes use for live SOLIDWORKS actions.
+- **Tool Service**: The in-process dispatcher endpoint (pipe name, secret, log path) that both modes use for live SOLIDWORKS actions. *Owner decision 156A amendment, 2026-10-20:* "both modes" includes the Terminal tab, built and hidden; the pane has not shown it since 2026-09-19. Review uses the service now; were the tab shown again, its CLI would use the same service as described.
 - **Backend Process**: The Python process the pane starts; its port, token, log path, and health.
 - **Terminal Session**: The embedded CLI process: which CLI, version, profile path, working directory, pseudo-console size.
 - **Tool Server Profile**: The generated CLI configuration that registers our tool server and applies the read-only restrictions; regenerated per launch.
-- **Chat Log**: The run folder record of every tool call the general chat made, with arguments, result summary, and status.
+- **Chat Log**: The run folder record of every tool call the general chat made, with arguments, result summary, and status. *Owner decision 156A amendment, 2026-10-20:* Terminal Session, Tool Server Profile and Chat Log describe the Terminal tab, built and hidden; the pane has not shown it since 2026-09-19. No embedded CLI runs in the pane and no generated profile is written now; were the tab shown again, these entities would hold as written.
 
 ## Success Criteria *(mandatory)*
 
@@ -172,11 +176,11 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 - **SC-001**: From pressing Review on a 200-component assembly to the first finding card is under 3 minutes on the pilot workstation, with extraction itself under 1 minute.
 - **SC-002**: Streamed text appears in the pane within 2 seconds of the provider producing it, measured with the fake provider.
 - **SC-003**: 100% of tool calls made in either mode are recorded in the run folder (session steps for review, chat log for general chat); an audit finds none missing.
-- **SC-004**: Zero mutating SOLIDWORKS calls occur across a full review session and a 30-minute general chat session, verified against artifacts that exist: no `MutatingCallError` refusal appears in the tool-service request log under `%LOCALAPPDATA%\SwReview\logs`, every interop member that log records for those requests is in the reader set, and every tool call appears in `session.json` steps or `chat-log.jsonl`.
+- **SC-004**: Zero mutating SOLIDWORKS calls occur across a full review session and a 30-minute general chat session, verified against artifacts that exist: no `MutatingCallError` refusal appears in the tool-service request log under `%LOCALAPPDATA%\SwReview\logs`, every interop member that log records for those requests is in the reader set, and every tool call appears in `session.json` steps or `chat-log.jsonl`. *Owner decision 156A amendment, 2026-10-20:* SC-003's "either mode" and SC-004's "30-minute general chat session" include the Terminal tab, built and hidden; the pane has not shown it since 2026-09-19. Their review portions apply now; were the tab shown again, their general-chat portions would be measured as written.
 - **SC-005**: Switching provider between OpenAI and Gemini produces session files that validate against the same contract and differ only in provider, model, and effort mapping fields.
 - **SC-006**: API keys never appear in any file under the run folder or the log folder across the test suite and the manual scenarios; an automated scan confirms it.
 - **SC-007**: Show in SOLIDWORKS selects the correct entity for 100% of findings on the bracket fixture whose persistent references resolve, and reports the resolution state for those that do not.
-- **SC-008**: An engineer can start general chat, ask one question, and receive an answer that used one of our tools in under 2 minutes from opening the tab.
+- **SC-008**: An engineer can start general chat, ask one question, and receive an answer that used one of our tools in under 2 minutes from opening the tab. *Owner decision 156A amendment, 2026-10-20:* the pane has not shown the Terminal tab since 2026-09-19, so SC-008 and its timing in the measurement paragraph below describe a tab that is built and hidden. Were the tab shown again, this criterion and its requirement for a recorded number would hold as written.
 - **SC-009**: The existing feature 001 test suite passes unchanged in behavior after the provider port, with the Anthropic dependency removed.
 
 SC-001, SC-002, SC-007 and SC-008 are wall-clock or per-finding measurements: each is timed
@@ -187,15 +191,15 @@ recorded number is not met.
 ## Assumptions
 
 - The workstation runs Windows 11 with the WebView2 runtime installed (it is present on the development machine) and SOLIDWORKS 2024 SP5.
-- The operator supplies OpenAI and Gemini API keys for review mode, and Codex CLI (and later Gemini CLI) signed in with their own accounts for general chat; the pane never performs a sign-in flow itself.
+- The operator supplies OpenAI and Gemini API keys for review mode, and Codex CLI (and later Gemini CLI) signed in with their own accounts for general chat; the pane never performs a sign-in flow itself. *Owner decision 156A amendment, 2026-10-20:* the signed-in CLIs for general chat describe the Terminal tab, built and hidden; the pane has not shown it since 2026-09-19. Were the tab shown again, that sign-in assumption would hold as written; review's API-key assumption applies now.
 - Model lists are read from each provider at settings time; the defaults ship with the current OpenAI general model and Gemini's current flash model, and are overridable.
 - Codex's `apply_patch` cannot be disabled by configuration; its writes are blocked by the read-only sandbox, which is accepted for v1.
 - Gemini's core-tool allowlist semantics are uncertain; the policy engine's deny-all rule with an allow for our server is the enforced restriction, and the allowlist is belt and braces.
 - The terminal embedding reimplements the public ConPTY and xterm.js mechanism; no code is copied from SwpilotCLI, whose license forbids redistribution.
-- Session resume for the CLIs (Codex `resume`, Gemini `--resume`) is available to the engineer inside the terminal but not surfaced in the pane in v1.
+- Session resume for the CLIs (Codex `resume`, Gemini `--resume`) is available to the engineer inside the terminal but not surfaced in the pane in v1. *Owner decision 156A amendment, 2026-10-20:* this session-resume assumption and the preceding assumptions on Codex's `apply_patch`, Gemini's core-tool allowlist and the ConPTY/xterm.js embedding describe the Terminal tab, built and hidden; the pane has not shown it since 2026-09-19. No CLI runs in the pane now; were the tab shown again, those assumptions would hold as written.
 - Gemini via the enterprise platform (Vertex) is supported through the same SDK flag but is not tested in v1.
-- The chat transport is loopback HTTP with server-sent events; a WebSocket is not needed for a single-user pane. The pages read the event stream with `fetch` plus a stream reader, because `EventSource` cannot send the `Authorization` header and the token may never appear in a URL.
+- The chat transport is loopback HTTP with server-sent events; a WebSocket is not needed for a single-user pane. The pages read the event stream with `fetch` plus a stream reader, because `EventSource` cannot send the `Authorization` header and the token may never appear in a URL. *Owner decision 156A amendment, 2026-10-20:* any reference here to the terminal page describes the Terminal tab, built and hidden; the pane has not shown it since 2026-09-19 and does not load its page. The transport assumption for the Review page applies now.
 - The bracket fixture (`benchmarks/native/bracket-assy/`) is prepared on the workstation by feature 001 task T061 and is not committed to the repository; the workstation scenarios depend on that task being done first.
 - The Gemini CLI settings-home override is not yet verified on the workstation; `contracts/cli-profiles.md` marks the Gemini launch mechanism as unverified until the spike task confirms it, and the terminal fails closed rather than starting an unrestricted CLI.
 - The general-chat CLI can read its own generated profile, so it can read the bridge secret in that profile's environment block. This is accepted because that secret is scoped to `ping`, `capture` and `measure` at the dispatcher, all of which the CLI already reaches through the MCP toolset; a leak grants nothing beyond the published read-only subset.
-- Codex's read-only shell remains enabled for reading the run folder; the exception to the constitution's curated-toolset rule is recorded in the plan's Complexity Tracking table.
+- Codex's read-only shell remains enabled for reading the run folder; the exception to the constitution's curated-toolset rule is recorded in the plan's Complexity Tracking table. *Owner decision 156A amendment, 2026-10-20:* this read-only-shell assumption and the preceding assumptions on the Gemini CLI's settings-home override and the general-chat CLI reading its generated profile describe the Terminal tab, built and hidden; the pane has not shown it since 2026-09-19. Its host is not attached and no CLI runs in the pane now; were the tab shown again, those assumptions, including the unverified Gemini override, would hold as written.
