@@ -5393,7 +5393,7 @@ public sealed class DeferredRestartTests
         var looks = new List<Action>();
         Action? onTheWayBack = null;
         world.BridgeServes = bridge => gate!.DocumentServedBy(bridge);
-        world.Hold = () => gate!.HoldAttachment();
+        world.Hold = () => gate!.HoldAttachment(ToolServiceHolder.ReviewSession);
         world.Open();
         gate = new ToolServiceGate(
             () => world.Document,
@@ -5582,7 +5582,7 @@ public sealed class DeferredRestartTests
         world.BridgeServes = bridge => gate!.DocumentServedBy(bridge);
         world.Hold = () =>
         {
-            IDisposable? hold = gate!.HoldAttachment();
+            IDisposable? hold = gate!.HoldAttachment(ToolServiceHolder.ReviewSession);
             if (hold == null && !letGoOnce)
             {
                 // The order the review found: the hold refused mid re-attach, then the new bridge published.
@@ -5690,7 +5690,7 @@ public sealed class DeferredRestartTests
                 Assert.True(secondPublished.Wait(TimeSpan.FromSeconds(10)), "the second service was never published");
             }
 
-            return gate!.HoldAttachment();
+            return gate!.HoldAttachment(ToolServiceHolder.ReviewSession);
         };
         world.Open();
         world.Track("waiting");

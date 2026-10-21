@@ -415,8 +415,9 @@ public class SwReviewAddIn : ISwAddin
 
             // Owner decision 152A, on the Codex review (X2): a page call that would start a turn holds
             // the tool service through the gate while it is out. Read through the field: the gate is
-            // built after this pane.
-            HoldToolService = () => _toolService?.HoldAttachment(),
+            // built after this pane. Owner decision 158A: named, for the gate's line about a hold it
+            // ignores past its limit.
+            HoldToolService = () => _toolService?.HoldAttachment(ToolServiceHolder.TurnCall),
 
             // Owner decision 157A: a check page's evaluation holds its check's hold on a settings restart
             // while it is out. The folder it names is one check host's at most, and the other answers none.
@@ -499,8 +500,8 @@ public class SwReviewAddIn : ISwAddin
             FollowActiveDocument = () => _toolService?.FollowActiveDocument(),
 
             // ...and on the Codex review (X2), a review session being made holds the tool service
-            // through the gate from before its bridge is read until it is tracked.
-            HoldToolService = () => _toolService?.HoldAttachment(),
+            // through the gate from before its bridge is read until it is tracked (named, 158A).
+            HoldToolService = () => _toolService?.HoldAttachment(ToolServiceHolder.ReviewSession),
 
             DrawingModels = DrawingModels,
             Dump = reviewDump,
@@ -906,8 +907,9 @@ public class SwReviewAddIn : ISwAddin
             // Owner decision 152A, on the Codex review (X2): a plan or a run holds the tool service
             // through the gate, read through the field per call, so no follow of the active document
             // takes the bridge down under it; with no gate there is no bridge to hold, and it is
-            // refused as while the tool service attaches.
-            HoldToolService = () => _toolService?.HoldAttachment(),
+            // refused as while the tool service attaches. One kind for both (owner decision 158A):
+            // the host takes its one hold for a plan or a run alike.
+            HoldToolService = () => _toolService?.HoldAttachment(ToolServiceHolder.Remodel),
             Pipeline = new BackendRemodelPipeline(
                 endpoint,
                 () => _toolService?.RemodelBridge,
