@@ -191,7 +191,12 @@ network share, reached through a link or written as a device path before any req
 folder under it (`pane-host-messages.md`, "The run root rule"), so the pane no longer meets
 `InvalidRunDir` for one; the command line and any other caller still do. The rule reads a run
 folder's text alone for a UNC path, so a folder on a mapped network drive passes it and is written
-over the network; the add-in refuses that root.
+over the network; the add-in refuses that root. *Amended the same day (the owner's follow-up to
+154A):* `--run-root` holds for the life of the process. The pane passes the run root its settings
+name each time it starts or restarts the backend, so a run root chosen in the Settings panel comes
+into force with the restart the save makes (`pane-host-messages.md`, `settings.save`); until then the
+pane makes its run folders, and asks for reviews and checks by name, under the run root the backend
+was started with, and after it a review or a check made under the old run root is not found by name.
 
 `check_id` is the check run folder's *name*, so a check is addressable after a restart
 without any server-side registry. It is caller-supplied too and goes through the same

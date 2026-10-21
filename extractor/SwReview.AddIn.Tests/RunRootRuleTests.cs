@@ -364,25 +364,82 @@ public sealed class RunRootRuleTests : IDisposable
 
     // ---- the words ---------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// A run start's words: what the root is, the rule, what was not done, and the way on - since the owner's
+    /// follow-up to decision 154A, a local folder chosen in the Settings panel's field, where the first
+    /// words named the settings file and a restart of SOLIDWORKS. Changed deliberately for that.
+    /// </summary>
     [Theory]
     [InlineData(
         RunRootVerdict.Share,
         "The run root is on a network share or a mapped network drive, and runs are made only in a local folder "
-        + "reached by its own path, so nothing was checked. Set the run root in the add-in's settings file to a "
-        + "local folder, then restart SOLIDWORKS and press Model check again.")]
+        + "reached by its own path, so nothing was checked. Choose a local folder for runs in Settings, then "
+        + "press Model check again.")]
     [InlineData(
         RunRootVerdict.Link,
         "The run root is reached through a link, such as a junction, a symbolic link or a substituted drive, and "
-        + "runs are made only in a local folder reached by its own path, so nothing was checked. Set the run root "
-        + "in the add-in's settings file to a local folder, then restart SOLIDWORKS and press Model check again.")]
+        + "runs are made only in a local folder reached by its own path, so nothing was checked. Choose a local "
+        + "folder for runs in Settings, then press Model check again.")]
     [InlineData(
         RunRootVerdict.DevicePath,
         "The run root is written as a Windows device path, and runs are made only in a local folder reached by "
-        + "its own path, so nothing was checked. Set the run root in the add-in's settings file to a local "
-        + "folder, then restart SOLIDWORKS and press Model check again.")]
+        + "its own path, so nothing was checked. Choose a local folder for runs in Settings, then press Model "
+        + "check again.")]
     public void TheRefusalSaysWhatIsTrueOfTheRootTheRuleAndTheWayOn(RunRootVerdict verdict, string words)
     {
         Assert.Equal(words, RunRootRule.Refusal(verdict, "nothing was checked", "press Model check again"));
+    }
+
+    /// <summary>
+    /// The owner's follow-up: a save never fails for the run root. A folder chosen in the Settings field that
+    /// the rule refuses is the one field not saved, and the save's answer says so - of the folder chosen, not
+    /// of the run root in force, which is unchanged - and that the other settings were saved.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        RunRootVerdict.Share,
+        "The folder chosen for runs is on a network share or a mapped network drive, and runs are made only in a "
+        + "local folder reached by its own path, so the run root was not changed; the other settings were saved. "
+        + "Choose a local folder for runs, then save again.")]
+    [InlineData(
+        RunRootVerdict.Link,
+        "The folder chosen for runs is reached through a link, such as a junction, a symbolic link or a "
+        + "substituted drive, and runs are made only in a local folder reached by its own path, so the run root "
+        + "was not changed; the other settings were saved. Choose a local folder for runs, then save again.")]
+    [InlineData(
+        RunRootVerdict.DevicePath,
+        "The folder chosen for runs is written as a Windows device path, and runs are made only in a local folder "
+        + "reached by its own path, so the run root was not changed; the other settings were saved. Choose a "
+        + "local folder for runs, then save again.")]
+    public void ASaveSaysAFolderChosenForRunsWasRefusedAndTheOtherSettingsWereSaved(RunRootVerdict verdict, string words)
+    {
+        Assert.Equal(words, RunRootRule.ChosenRefusal(verdict));
+    }
+
+    /// <summary>
+    /// ...and a save that leaves a refused run root in force - the one the settings file names, or the
+    /// default under a Documents on a share - goes through, and its answer says the run root is refused, that
+    /// every run is refused until it is changed, and the way on.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        RunRootVerdict.Share,
+        "The run root is on a network share or a mapped network drive, and runs are made only in a local folder "
+        + "reached by its own path, so every run is refused until it is changed; the settings were saved. Choose "
+        + "a local folder for runs, then save again.")]
+    [InlineData(
+        RunRootVerdict.Link,
+        "The run root is reached through a link, such as a junction, a symbolic link or a substituted drive, and "
+        + "runs are made only in a local folder reached by its own path, so every run is refused until it is "
+        + "changed; the settings were saved. Choose a local folder for runs, then save again.")]
+    [InlineData(
+        RunRootVerdict.DevicePath,
+        "The run root is written as a Windows device path, and runs are made only in a local folder reached by "
+        + "its own path, so every run is refused until it is changed; the settings were saved. Choose a local "
+        + "folder for runs, then save again.")]
+    public void ASaveSaysTheRunRootItLeavesInForceIsRefused(RunRootVerdict verdict, string words)
+    {
+        Assert.Equal(words, RunRootRule.KeptRefusal(verdict));
     }
 
     [Fact]
@@ -390,6 +447,8 @@ public sealed class RunRootRuleTests : IDisposable
     {
         Assert.Throws<ArgumentOutOfRangeException>(
             () => RunRootRule.Refusal(RunRootVerdict.Accepted, "nothing was checked", "press Model check again"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => RunRootRule.ChosenRefusal(RunRootVerdict.Accepted));
+        Assert.Throws<ArgumentOutOfRangeException>(() => RunRootRule.KeptRefusal(RunRootVerdict.Accepted));
     }
 
     // ---- the real thing, under the temp folder -----------------------------------------------------------

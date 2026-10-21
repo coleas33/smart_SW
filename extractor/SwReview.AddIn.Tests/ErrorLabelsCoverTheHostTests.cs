@@ -13,7 +13,9 @@ namespace SwReview.AddIn.Tests;
 ///
 /// The Python side asserts every `ChatError` subclass has a label (the py lane's T007). The
 /// classes this side makes are the other half: every `SendError(id, "&lt;class&gt;"` literal in
-/// the Review host and in the shared `PaneActions`, every refusal the Review host builds as a
+/// the Review host and in the shared `PaneActions`, and every `ErrorPayload("&lt;class&gt;"` one - an
+/// error built to be sent with more in it, as a save's `BackendNotRestarted` carries what the save says
+/// of the run root (owner decision 154A, the owner's follow-up) - every refusal the Review host builds as a
 /// `BackendRequestException` (owner decision 143A: the proxy answers the page's own calls with
 /// them), every `PaneRunLookup`'s unknown-run class, and the three the Review page makes itself
 /// (`BackendUnavailable`, `HttpError`, `HostError`). A class
@@ -67,7 +69,8 @@ public sealed class ErrorLabelsCoverTheHostTests
 
     // ---- reading the sources ---------------------------------------------------------------------
 
-    private static readonly Regex SendErrorLiteral = new Regex(@"SendError\(\s*id\s*,\s*""([A-Za-z]+)""", RegexOptions.Compiled);
+    private static readonly Regex SendErrorLiteral = new Regex(
+        @"(?:SendError\(\s*id\s*,|ErrorPayload\()\s*""([A-Za-z]+)""", RegexOptions.Compiled);
 
     /// <summary>
     /// A refusal the Review host builds as an exception: sent on by `Receive`, or answered to the

@@ -77,6 +77,15 @@ internal sealed class ReviewPageDriver
     /// <summary>What `settings.save` answers: null for `settings.saved`, or an `error` payload.</summary>
     public object? SettingsSaveError { get; set; }
 
+    /// <summary>The run root the settings name, as the Settings field shows it (owner decision 154A, follow-up).</summary>
+    public string RunRoot { get; set; } = @"C:\SwReviewRuns";
+
+    /// <summary>
+    /// What a `settings.saved` says of the run root (owner decision 154A, follow-up): null for nothing, or the
+    /// `run_root_refusal` it carries - `{error_class, message, retryable}`.
+    /// </summary>
+    public object? RunRootRefusal { get; set; }
+
     /// <summary>What `review.start` answers instead of `review.started`, when set: an `error` payload.</summary>
     public object? ReviewStartError { get; set; }
 
@@ -695,6 +704,12 @@ var h = {
                     return;
                 }
 
+                if (RunRootRefusal != null)
+                {
+                    Reply("settings.saved", id, new { settings = Settings(), key_source = "settings", run_root_refusal = RunRootRefusal });
+                    return;
+                }
+
                 Reply("settings.saved", id, new { settings = Settings(), key_source = "settings" });
                 return;
 
@@ -761,7 +776,7 @@ var h = {
         key_source = KeySource,
         engineering_context = ContextPrepared != null,
         engineering_selection = ContextSelected != null,
-        run_root = @"C:\SwReviewRuns",
+        run_root = RunRoot,
         providers = new[] { "openai", "gemini" },
         document = Document,
         review_preparation = PreparationReply != null,
@@ -778,7 +793,7 @@ var h = {
         gemini_enterprise = (object?)null,
         terminal_cli = "codex",
         python = "uv",
-        run_root = @"C:\SwReviewRuns",
+        run_root = RunRoot,
     };
 
     /// <summary>

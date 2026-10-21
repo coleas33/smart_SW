@@ -511,15 +511,15 @@ public sealed class PaneActions
     }
 
     /// <summary>
-    /// Owner decision 154A: refuses a run start - or a settings save - whose run root the run root rule refuses
+    /// Owner decision 154A: refuses a run start whose run root the run root rule refuses
     /// (<see cref="RunRootRule"/>: on a network share, reached through a link, or written as a device path), and
     /// says whether it did. The one refusal every host makes, written once: <c>error {error_class:
-    /// "RunRootRefused"}</c>, not retryable - pressing again cannot help until the settings name a local folder
-    /// and SOLIDWORKS is restarted - in the rule's words for what the root is, with the host's own
-    /// <paramref name="notDone"/> and <paramref name="wayOn"/>, and no path. Each caller asks before it does
-    /// anything else, so a refused start reads, makes and restarts nothing.
+    /// "RunRootRefused"}</c>, not retryable - pressing again cannot help until a local folder for runs is
+    /// chosen in the Review tab's Settings (the owner's follow-up) - in the rule's words for what the root is,
+    /// with the host's own <paramref name="notDone"/> and <paramref name="wayOn"/>, and no path. Each caller
+    /// asks before it does anything else, so a refused start reads, makes and restarts nothing.
     /// </summary>
-    /// <param name="runRoot">The run root the start would make its folder under, or the save would write.</param>
+    /// <param name="runRoot">The run root in force, the one the start would make its folder under.</param>
     /// <param name="probe">What the rule reads of Windows.</param>
     /// <param name="notDone">What was not done, true of this host: "nothing was checked".</param>
     /// <param name="wayOn">What to do once the root is a local folder: "press Model check again".</param>
@@ -536,15 +536,20 @@ public sealed class PaneActions
     }
 
     /// <summary>Sends one `error`, with the message masked (FR-015).</summary>
-    public void SendError(string? id, string errorClass, string message, bool retryable)
-    {
-        Send("error", id, new Dictionary<string, object?>
+    public void SendError(string? id, string errorClass, string message, bool retryable) =>
+        Send("error", id, ErrorPayload(errorClass, message, retryable));
+
+    /// <summary>
+    /// One `error`'s payload, with the message masked (FR-015): what <see cref="SendError"/> sends, and what an
+    /// answer that carries an error's shape inside it - a save's `run_root_refusal` - carries.
+    /// </summary>
+    public Dictionary<string, object?> ErrorPayload(string errorClass, string message, bool retryable) =>
+        new Dictionary<string, object?>
         {
             { "error_class", errorClass },
             { "message", Redact(message) },
             { "retryable", retryable },
-        });
-    }
+        };
 
     /// <summary>
     /// Posts one `status` message with every secret masked out of it.

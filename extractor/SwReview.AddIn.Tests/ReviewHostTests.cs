@@ -2876,6 +2876,92 @@ public sealed class ReviewHostTests
         }
     }
 
+    /// <summary>
+    /// The owner's follow-up to decision 154A (feature 002 T171): a run's folder is made under the run root in
+    /// force - the one the backend was last started with - and not under a folder chosen in a save whose
+    /// restart failed: no backend was started with it, and a backend refuses a run folder outside the run root
+    /// it was started with.
+    /// </summary>
+    [Fact]
+    public void AReviewIsMadeUnderTheRunRootInForceNotUnderOneChosenWhoseRestartFailed()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Open();
+            string inForce = world.Settings.RunRoot;
+            string chosen = Path.Combine(Path.GetDirectoryName(inForce)!, "chosen", "runs");
+            world.Backend.RestartFailure = new InvalidOperationException("FICT the backend did not restart");
+
+            world.Receive("settings.save", "save", new Dictionary<string, object?>
+            {
+                { "provider", "openai" },
+                { "model", "gpt-5.6" },
+                { "effort", "high" },
+                { "api_key", null },
+                { "base_url", null },
+                { "gemini_enterprise", null },
+                { "run_root", chosen },
+            });
+            Assert.Equal("BackendNotRestarted", world.Reply("error", "save").GetProperty("error_class").GetString());
+
+            world.Receive("review.start", "start", new { });
+
+            Assert.Equal(inForce, Path.GetDirectoryName(Assert.Single(world.Backend.Created).RunDirectory));
+            Assert.False(Directory.Exists(chosen), "a run's folder was made under the folder whose restart failed");
+        }
+    }
+
+    /// <summary>
+    /// The owner's follow-up to decision 154A (feature 002 T171, added when mutations H16 and H17 survived):
+    /// while a folder chosen for runs waits for the restart that brings it in - here, after one that failed -
+    /// a review start judges the run root in force, the one its folder would be made under, and not the folder
+    /// chosen; and `init` names the run root in force as `run_root`, beside the settings' own.
+    /// </summary>
+    [Fact]
+    public void WhileAFolderChosenWaitsAReviewStartJudgesTheRunRootInForceAndInitNamesIt()
+    {
+        using (var world = new ReviewWorld())
+        {
+            string chosen = world.Settings.RunRoot;
+            const string inForce = @"Z:\Fictional\runs";
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            probe.Drives[@"Z:\"] = RunRootDrive.Network;
+            world.Settings.RunRoot = inForce;
+            world.Probe = probe;
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Open();
+            world.Backend.RestartFailure = new InvalidOperationException("FICT the backend did not restart");
+
+            world.Receive("settings.save", "save", new Dictionary<string, object?>
+            {
+                { "provider", "openai" },
+                { "model", "gpt-5.6" },
+                { "effort", "high" },
+                { "api_key", null },
+                { "base_url", null },
+                { "gemini_enterprise", null },
+                { "run_root", chosen },
+            });
+            Assert.Equal("BackendNotRestarted", world.Reply("error", "save").GetProperty("error_class").GetString());
+
+            world.Receive("review.start", "start", new { });
+
+            JsonElement refused = world.Reply("error", "start");
+            Assert.Equal("RunRootRefused", refused.GetProperty("error_class").GetString());
+            Assert.Equal(
+                RunRootRule.Refusal(RunRootVerdict.Share, "nothing was started", "try again"),
+                refused.GetProperty("message").GetString());
+            Assert.Empty(world.Backend.Created);
+
+            world.Receive("ready", "ready", new { });
+
+            JsonElement init = world.Reply("init", "ready");
+            Assert.Equal(inForce, init.GetProperty("run_root").GetString());
+            Assert.Equal(chosen, init.GetProperty("settings").GetProperty("run_root").GetString());
+        }
+    }
+
     // ---- the world ----------------------------------------------------------------------
 
     /// <summary>
@@ -3248,8 +3334,15 @@ public sealed class ReviewHostTests
             return Running.Contains(chatId);
         }
 
+        /// <summary>What a restart throws, when set: a backend that did not restart (owner decision 154A, follow-up).</summary>
+        public Exception? RestartFailure { get; set; }
+
         public void Restart(UserSettings settings, ResolvedApiKey key)
         {
+            if (RestartFailure != null)
+            {
+                throw RestartFailure;
+            }
         }
 
         public ChatSessionHandle CreateSession(NewSessionRequest request)

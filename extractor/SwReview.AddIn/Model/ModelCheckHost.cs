@@ -9,7 +9,7 @@ namespace SwReview.AddIn.Model;
 public sealed class ModelCheckHostOptions
 {
     /// <param name="channel">Where replies and unsolicited messages go.</param>
-    /// <param name="runRoot">The run root in force, read fresh: a settings save moves it.</param>
+    /// <param name="runRoot">The run root in force, read fresh: the restart a settings save makes moves it.</param>
     public ModelCheckHostOptions(IPageChannel channel, Func<string> runRoot)
     {
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));

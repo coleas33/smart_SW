@@ -768,19 +768,20 @@ public sealed class PageMessageTests
         }
     }
 
-    // ---- owner decision 154A: a run root the rule refuses is not saved -------------------
+    // ---- owner decision 154A and its follow-up: the run root in Settings -------------------
 
     /// <summary>
-    /// Owner decision 154A (feature 002 T168): a save writes the run root in force - the page names none, and
-    /// the clone carries it - so a save whose run root the run root rule refuses is refused whole, in plain
-    /// words that say the settings were not saved and name the way on: a local folder in the settings file,
-    /// and a restart. Both writers are refused, the Settings Save and the send box, since they share the one
-    /// persist step: the file keeps every byte, the backend is not restarted, the settings in force stand, and
-    /// no path reaches the page.
+    /// The owner's follow-up to decision 154A (feature 002 T171, "A Field + don't block"): a save never
+    /// refuses other settings because of the run root. With a refused run root in force and none chosen - the
+    /// page sent no folder, or the one in force - the save goes through as any save does: every setting is
+    /// written, the backend is restarted, the run root in force stays, and the answer also says the run root
+    /// is refused, in the rule's words for the root left in force, with the way on and no path. The send box
+    /// saves as it always did. Changed deliberately from decision 154A's first answer (T168), which refused
+    /// the whole save and the box, so that no key or model could be saved until the file was edited by hand.
     /// </summary>
     [Theory]
     [MemberData(nameof(FakeRunRootProbe.RefusedKinds), MemberType = typeof(FakeRunRootProbe))]
-    public void ASaveOfSettingsWhoseRunRootTheRuleRefusesIsNotSaved(string kind)
+    public void ASaveUnderARefusedRunRootSavesEverySettingAndSaysTheRunRootIsRefused(string kind)
     {
         using (var world = new HostWorld())
         {
@@ -789,40 +790,44 @@ public sealed class PageMessageTests
             world.Settings.RunRoot = refusing.RunRoot;
             world.Probe = refusing.Probe;
             world.Open();
-            byte[] before = File.ReadAllBytes(world.SettingsPath);
 
             world.Receive("settings.save", "save", Save(effort: "low", apiKey: Key));
+            Dictionary<string, object?> same = Save(effort: "medium");
+            same["run_root"] = refusing.RunRoot;
+            world.Receive("settings.save", "same", same);
             world.Receive("send_when_checked.save", "box", new { send_when_checked = false });
 
-            foreach (string id in new[] { "save", "box" })
+            foreach (string id in new[] { "save", "same" })
             {
-                JsonElement error = world.Reply("error", id);
-                Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
-                Assert.False(error.GetProperty("retryable").GetBoolean());
-                Assert.Equal(
-                    RunRootRule.Refusal(refusing.Verdict, "the settings were not saved", "try again"),
-                    error.GetProperty("message").GetString());
+                JsonElement refusal = world.Reply("settings.saved", id).GetProperty("run_root_refusal");
+                Assert.Equal("RunRootRefused", refusal.GetProperty("error_class").GetString());
+                Assert.False(refusal.GetProperty("retryable").GetBoolean());
+                Assert.Equal(RunRootRule.KeptRefusal(refusing.Verdict), refusal.GetProperty("message").GetString());
+                Assert.DoesNotContain(
+                    Path.GetFileName(Path.GetDirectoryName(local)!), refusal.GetProperty("message").GetString()!);
             }
 
-            Assert.Equal(before, File.ReadAllBytes(world.SettingsPath));
-            Assert.Equal(0, world.Backend.Restarts);
-            Assert.Equal("high", world.Host.Settings.Effort);
-            Assert.True(world.Host.Settings.SendsWhenChecked);
-            Assert.Null(world.Host.Settings.ApiKeyProtected);
-            Assert.Empty(Posted(world, "settings.saved"));
-            Assert.Empty(Posted(world, "send_when_checked.saved"));
-            world.AssertNothingPostedContains(Path.GetFileName(Path.GetDirectoryName(local)!));
+            world.Reply("send_when_checked.saved", "box");
+            SettingsLoadResult saved = UserSettings.Load(world.SettingsPath, BuildMode.Development);
+            Assert.Equal("medium", saved.Settings.Effort);
+            Assert.False(saved.Settings.SendsWhenChecked);
+            Assert.Equal(Key, saved.Settings.ResolveApiKey(name => null).Key);
+            Assert.Equal(refusing.RunRoot, saved.Settings.RunRoot);
+            Assert.Equal(refusing.RunRoot, world.Host.RunRoot);
+            Assert.Equal(2, world.Backend.Restarts);
+            Assert.Empty(Posted(world, "error"));
             world.AssertNothingPostedContains(Key);
         }
     }
 
     /// <summary>
-    /// A settings file that names no run root holds the default, Documents\SwReview\runs, which a save would
-    /// write into it for the first time: under a Documents on a mapped drive it is on a share, so it is not
-    /// written - the file keeps naming none.
+    /// A settings file that names no run root holds the default, Documents\SwReview\runs: under a Documents
+    /// on a mapped drive it is refused, and a save goes through all the same - the default written into the
+    /// file, as every save writes the run root in force - and its answer says the run root is refused.
+    /// Changed deliberately from decision 154A's first answer (T168), which refused the save and wrote nothing.
     /// </summary>
     [Fact]
-    public void ADefaultRunRootTheRuleRefusesIsNotWrittenIntoAFileThatNamesNone()
+    public void ASaveUnderARefusedDefaultRunRootGoesThroughAndSaysSo()
     {
         using (var world = new HostWorld())
         {
@@ -831,14 +836,144 @@ public sealed class PageMessageTests
                 "{\"version\": 1, \"provider\": \"openai\", \"model\": \"gpt-5.6\", \"effort\": \"high\", \"terminal_cli\": \"codex\"}");
             world.Probe = FakeRunRootProbe.OnANetworkDrive();
             world.Open();
-            byte[] before = File.ReadAllBytes(world.SettingsPath);
 
             world.Receive("settings.save", "save", Save(effort: "low"));
 
-            Assert.Equal("RunRootRefused", world.Reply("error", "save").GetProperty("error_class").GetString());
-            Assert.Equal(before, File.ReadAllBytes(world.SettingsPath));
-            Assert.DoesNotContain("run_root", File.ReadAllText(world.SettingsPath));
-            Assert.Equal(0, world.Backend.Restarts);
+            JsonElement saved = world.Reply("settings.saved", "save");
+            Assert.Equal(
+                RunRootRule.KeptRefusal(RunRootVerdict.Share),
+                saved.GetProperty("run_root_refusal").GetProperty("message").GetString());
+            SettingsLoadResult file = UserSettings.Load(world.SettingsPath, BuildMode.Development);
+            Assert.Equal("low", file.Settings.Effort);
+            Assert.Equal(UserSettings.DefaultRunRoot(), file.Settings.RunRoot);
+            Assert.Equal(1, world.Backend.Restarts);
+        }
+    }
+
+    /// <summary>
+    /// A folder chosen for runs that the rule accepts is saved - trimmed, as every text field is - and the
+    /// backend is restarted with it: the backend refuses a run folder outside the run root it was started
+    /// with, so the run root comes into force with that restart. The answer says nothing of the run root.
+    /// </summary>
+    [Fact]
+    public void AFolderChosenForRunsThatTheRuleAcceptsIsSavedAndTheBackendRestartsWithIt()
+    {
+        using (var world = new HostWorld())
+        {
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            world.Probe = probe;
+            world.Open();
+            string chosen = Path.Combine(Path.GetDirectoryName(world.Settings.RunRoot)!, "chosen", "runs");
+            Dictionary<string, object?> payload = Save(effort: "low");
+            payload["run_root"] = "  " + chosen + "  ";
+
+            world.Receive("settings.save", "save", payload);
+
+            JsonElement saved = world.Reply("settings.saved", "save");
+            Assert.False(saved.TryGetProperty("run_root_refusal", out _));
+            Assert.Equal(chosen, saved.GetProperty("settings").GetProperty("run_root").GetString());
+            Assert.Equal(chosen, UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.RunRoot);
+            Assert.Equal(chosen, world.Host.Settings.RunRoot);
+            Assert.Equal(chosen, world.Host.RunRoot);
+            Assert.Equal(1, world.Backend.Restarts);
+            Assert.Equal(chosen, world.Backend.RestartedWith!.RunRoot);
+            Assert.Contains("FinalPathOf " + chosen, probe.Asked);
+        }
+    }
+
+    /// <summary>
+    /// A folder chosen for runs that the rule refuses is the one field not saved: every other setting in the
+    /// save is written and the backend restarted with them, the run root in force stays, and the answer says,
+    /// of the folder chosen, that the run root was not changed and the other settings were saved, with the way
+    /// on and no path.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FakeRunRootProbe.RefusedKinds), MemberType = typeof(FakeRunRootProbe))]
+    public void AFolderChosenForRunsThatTheRuleRefusesIsNotSavedButEveryOtherSettingIs(string kind)
+    {
+        using (var world = new HostWorld())
+        {
+            string inForce = world.Settings.RunRoot;
+            var refusing = FakeRunRootProbe.Refusing(kind, @"C:\Fictional\elsewhere\runs");
+            world.Probe = refusing.Probe;
+            world.Open();
+            Dictionary<string, object?> payload = Save(effort: "low", apiKey: Key);
+            payload["run_root"] = refusing.RunRoot;
+
+            world.Receive("settings.save", "save", payload);
+
+            JsonElement saved = world.Reply("settings.saved", "save");
+            JsonElement refusal = saved.GetProperty("run_root_refusal");
+            Assert.Equal("RunRootRefused", refusal.GetProperty("error_class").GetString());
+            Assert.False(refusal.GetProperty("retryable").GetBoolean());
+            Assert.Equal(RunRootRule.ChosenRefusal(refusing.Verdict), refusal.GetProperty("message").GetString());
+            Assert.DoesNotContain("elsewhere", refusal.GetProperty("message").GetString()!);
+            Assert.Equal(inForce, saved.GetProperty("settings").GetProperty("run_root").GetString());
+            SettingsLoadResult file = UserSettings.Load(world.SettingsPath, BuildMode.Development);
+            Assert.Equal("low", file.Settings.Effort);
+            Assert.Equal(Key, file.Settings.ResolveApiKey(name => null).Key);
+            Assert.Equal(inForce, file.Settings.RunRoot);
+            Assert.Equal(inForce, world.Host.RunRoot);
+            Assert.Equal(1, world.Backend.Restarts);
+            Assert.Equal(inForce, world.Backend.RestartedWith!.RunRoot);
+            Assert.Empty(Posted(world, "error"));
+        }
+    }
+
+    /// <summary>An empty field chooses the default run root, Documents\SwReview\runs, judged as any folder is.</summary>
+    [Fact]
+    public void AnEmptyFolderForRunsChoosesTheDefault()
+    {
+        using (var world = new HostWorld())
+        {
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            world.Probe = probe;
+            world.Open();
+            Dictionary<string, object?> payload = Save();
+            payload["run_root"] = "   ";
+
+            world.Receive("settings.save", "save", payload);
+
+            Assert.Equal(
+                UserSettings.DefaultRunRoot(),
+                world.Reply("settings.saved", "save").GetProperty("settings").GetProperty("run_root").GetString());
+            Assert.Equal(UserSettings.DefaultRunRoot(), world.Host.RunRoot);
+            Assert.Contains("FinalPathOf " + UserSettings.DefaultRunRoot(), probe.Asked);
+        }
+    }
+
+    /// <summary>
+    /// The run root in force is the one the backend was last started with. A folder chosen for runs is saved
+    /// at once, and comes into force only with a restart that succeeds: a save whose restart fails leaves the
+    /// run root in force as it was - no backend was started with the folder chosen - and says nothing of the
+    /// run root, which the rule accepted; the next save that restarts the backend brings the chosen folder in.
+    /// </summary>
+    [Fact]
+    public void AFolderChosenForRunsComesIntoForceOnlyWithARestartThatSucceeds()
+    {
+        using (var world = new HostWorld())
+        {
+            world.Probe = FakeRunRootProbe.Local();
+            world.Open();
+            string inForce = world.Settings.RunRoot;
+            string chosen = Path.Combine(Path.GetDirectoryName(inForce)!, "chosen", "runs");
+            Dictionary<string, object?> payload = Save();
+            payload["run_root"] = chosen;
+            world.Backend.RestartFailure = new InvalidOperationException("FICT the backend did not start");
+
+            world.Receive("settings.save", "fails", payload);
+
+            JsonElement failed = world.Reply("error", "fails");
+            Assert.Equal("BackendNotRestarted", failed.GetProperty("error_class").GetString());
+            Assert.False(failed.TryGetProperty("run_root_refusal", out _));
+            Assert.Equal(chosen, world.Host.Settings.RunRoot);
+            Assert.Equal(inForce, world.Host.RunRoot);
+
+            world.Backend.RestartFailure = null;
+            world.Receive("settings.save", "restarts", payload);
+
+            world.Reply("settings.saved", "restarts");
+            Assert.Equal(chosen, world.Host.RunRoot);
         }
     }
 
@@ -853,9 +988,52 @@ public sealed class PageMessageTests
 
             world.Receive("settings.save", "save", Save(effort: "low"));
 
-            world.Reply("settings.saved", "save");
+            Assert.False(world.Reply("settings.saved", "save").TryGetProperty("run_root_refusal", out _));
             Assert.Equal("low", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.Effort);
             Assert.Equal(1, world.Backend.Restarts);
+        }
+    }
+
+    /// <summary>
+    /// A save whose restart fails is still a save (owner decision 150A), answered `BackendNotRestarted`: with
+    /// the run root refused - the folder chosen, or the run root left in force - that answer carries the same
+    /// `run_root_refusal` a save's `settings.saved` does, so what the save says of the run root is not lost
+    /// with the restart.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ASaveWhoseRestartFailsStillSaysTheRunRootIsRefused(bool chosen)
+    {
+        using (var world = new HostWorld())
+        {
+            var refusing = FakeRunRootProbe.Refusing("on a share", @"C:\Fictional\elsewhere\runs");
+            world.Probe = refusing.Probe;
+            if (!chosen)
+            {
+                world.Settings.RunRoot = refusing.RunRoot;
+            }
+
+            world.Open();
+            world.Backend.RestartFailure = new InvalidOperationException("FICT the backend did not start");
+            Dictionary<string, object?> payload = Save(effort: "low");
+            if (chosen)
+            {
+                payload["run_root"] = refusing.RunRoot;
+            }
+
+            world.Receive("settings.save", "save", payload);
+
+            JsonElement failed = world.Reply("error", "save");
+            Assert.Equal("BackendNotRestarted", failed.GetProperty("error_class").GetString());
+            Assert.True(failed.GetProperty("retryable").GetBoolean());
+            JsonElement refusal = failed.GetProperty("run_root_refusal");
+            Assert.Equal("RunRootRefused", refusal.GetProperty("error_class").GetString());
+            Assert.False(refusal.GetProperty("retryable").GetBoolean());
+            Assert.Equal(
+                chosen ? RunRootRule.ChosenRefusal(refusing.Verdict) : RunRootRule.KeptRefusal(refusing.Verdict),
+                refusal.GetProperty("message").GetString());
+            Assert.Equal("low", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.Effort);
         }
     }
 
@@ -1067,8 +1245,16 @@ public sealed class PageMessageTests
         public ChatSessionHandle CreateSession(NewSessionRequest request) =>
             throw new NotSupportedException("the Settings tests never start a review");
 
+        /// <summary>What a restart throws, when set: a backend that did not start (owner decision 154A, follow-up).</summary>
+        public Exception? RestartFailure { get; set; }
+
         public void Restart(UserSettings settings, ResolvedApiKey key)
         {
+            if (RestartFailure != null)
+            {
+                throw RestartFailure;
+            }
+
             Restarts++;
             RestartedWith = settings;
             RestartedKey = key;

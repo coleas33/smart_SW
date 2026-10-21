@@ -223,6 +223,37 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
+    /// Owner decision 154A, the owner's follow-up (feature 002 T171): a folder chosen for runs in a save whose
+    /// restart a turn holds back comes into force with that restart, not before. Until it is made, the run root
+    /// in force is the one the running backend was started with, under which it still accepts a run's folder;
+    /// the restart is made with the folder chosen, and brings it in.
+    /// </summary>
+    [Fact]
+    public void AFolderChosenForRunsAsATurnStartsComesIntoForceWithTheRestart()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        string inForce = world.Host.RunRoot;
+        string chosen = Path.Combine(world.Root, "chosen", "runs");
+        Dictionary<string, object?> payload = Save(effort: "low");
+        payload["run_root"] = chosen;
+
+        SaveAsATurnStarts(world, "save", payload);
+
+        Assert.Equal(chosen, world.Reply("settings.saved", "save").GetProperty("settings").GetProperty("run_root").GetString());
+        Assert.Equal(chosen, world.Host.Settings.RunRoot);
+        Assert.Equal(inForce, world.Host.RunRoot);
+
+        world.Backend.EndTurn("chat-1");
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted");
+
+        (UserSettings settings, _) = Assert.Single(world.Backend.Restarts);
+        Assert.Equal(chosen, settings.RunRoot);
+        Assert.Equal(chosen, world.Host.RunRoot);
+    }
+
+    /// <summary>
     /// However the turn ends, the chat leaves `running`, and that is all the host reads
     /// (`GET /sessions/{chat_id}`, through the real <see cref="BackendClient"/>): a turn that
     /// ended normally or was stopped (`ended`), one that ended in an error (`failed`), one that

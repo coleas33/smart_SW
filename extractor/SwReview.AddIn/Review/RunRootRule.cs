@@ -81,9 +81,9 @@ public interface IRunRootProbe
 
 /// <summary>
 /// The run root rule (owner decision 154A; feature 011 research R12.9, items 1 and 2): a run root is
-/// acceptable only when it is a local folder reached by its own path. The one rule the settings save and every
-/// run start read, so that such a root is refused in plain words before anything is made, rather than deep in
-/// a run.
+/// acceptable only when it is a local folder reached by its own path. The one rule every run start reads, so
+/// that such a root is refused in plain words before anything is made, rather than deep in a run - and that a
+/// settings save reads of the folder chosen for runs and of the run root it keeps (the owner's follow-up).
 ///
 /// <b>Why.</b> The backend writes only into a local folder: its rule for a run folder
 /// (<c>resolve_run_dir</c>, <c>reviewer/src/swreview/chat/server.py</c>) refuses a UNC or device path on every
@@ -182,36 +182,54 @@ public static class RunRootRule
     }
 
     /// <summary>
-    /// The refusal's words, true of the root and of the place it is refused: what the root is, the rule, what
-    /// was not done (<paramref name="notDone"/>, "nothing was checked") and the way on, a local folder, ending
-    /// with what to do once it is set (<paramref name="wayOn"/>, "press Model check again"). No path: the root
-    /// can name a server, a share or a user, and the engineer knows where it is.
+    /// A run start's words, true of the root and of the place it is refused: what the root is, the rule, what
+    /// was not done (<paramref name="notDone"/>, "nothing was checked") and the way on, a local folder chosen in
+    /// Settings, ending with what to do once it is chosen (<paramref name="wayOn"/>, "press Model check
+    /// again"). No path: the root can name a server, a share or a user, and the engineer knows where it is.
     ///
-    /// The run root is read from the settings file when the add-in loads, and a settings save writes back the
-    /// one in force, so the way on is the file and a restart of SOLIDWORKS: the Settings panel has no field for
-    /// it.
+    /// The way on is the run-root field of the Review tab's Settings (the owner's follow-up to decision 154A),
+    /// which a save checks by this rule and brings into force with the backend's restart.
     /// </summary>
-    public static string Refusal(RunRootVerdict verdict, string notDone, string wayOn)
+    public static string Refusal(RunRootVerdict verdict, string notDone, string wayOn) =>
+        "The run root " + Kind(verdict) + Rule + ", so " + notDone + ". Choose a local folder for runs in Settings, then "
+        + wayOn + ".";
+
+    /// <summary>
+    /// A save's words for a folder chosen for runs in Settings that the rule refuses (the owner's follow-up to
+    /// decision 154A): the save goes through, and this one field is not saved - the run root in force is
+    /// unchanged and every other setting was saved - so the words speak of the folder chosen, not of the run
+    /// root.
+    /// </summary>
+    public static string ChosenRefusal(RunRootVerdict verdict) =>
+        "The folder chosen for runs " + Kind(verdict) + Rule
+        + ", so the run root was not changed; the other settings were saved. Choose a local folder for runs, then save again.";
+
+    /// <summary>
+    /// A save's words for the run root it leaves in force when the rule refuses it - the one the settings file
+    /// names, or the default under a Documents on a share (the owner's follow-up to decision 154A): the save
+    /// goes through, and its answer says every run is refused until the run root is changed.
+    /// </summary>
+    public static string KeptRefusal(RunRootVerdict verdict) =>
+        "The run root " + Kind(verdict) + Rule
+        + ", so every run is refused until it is changed; the settings were saved. Choose a local folder for runs, then save again.";
+
+    /// <summary>The rule, as every refusal states it.</summary>
+    private const string Rule = ", and runs are made only in a local folder reached by its own path";
+
+    /// <summary>What a refused root is, after its subject: "is on a network share ...".</summary>
+    private static string Kind(RunRootVerdict verdict)
     {
-        string what;
         switch (verdict)
         {
             case RunRootVerdict.Share:
-                what = "The run root is on a network share or a mapped network drive";
-                break;
+                return "is on a network share or a mapped network drive";
             case RunRootVerdict.Link:
-                what = "The run root is reached through a link, such as a junction, a symbolic link or a substituted drive";
-                break;
+                return "is reached through a link, such as a junction, a symbolic link or a substituted drive";
             case RunRootVerdict.DevicePath:
-                what = "The run root is written as a Windows device path";
-                break;
+                return "is written as a Windows device path";
             default:
                 throw new ArgumentOutOfRangeException(nameof(verdict), verdict, "an accepted run root is not refused");
         }
-
-        return what + ", and runs are made only in a local folder reached by its own path, so " + notDone
-            + ". Set the run root in the add-in's settings file to a local folder, then restart SOLIDWORKS and "
-            + wayOn + ".";
     }
 
     private static string? FullFormOrNull(string runRoot)

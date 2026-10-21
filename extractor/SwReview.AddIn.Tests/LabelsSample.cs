@@ -41,6 +41,10 @@ internal static class LabelsSample
     public const string BackendNotRestarted =
         "The settings are saved, but the review backend did not restart with them. Save Settings again to retry the restart.";
 
+    /// <summary>A run root the run root rule refuses (owner decision 154A): the words file's sentence for it.</summary>
+    public const string RunRootRefused =
+        "Runs are made only in a local folder reached by its own path, not on a network share or through a link. Choose a local folder for runs in Settings.";
+
     public static string Json() => JsonSerializer.Serialize(Value());
 
     public static object Value() => new Dictionary<string, object>
@@ -106,6 +110,7 @@ internal static class LabelsSample
                 { "AlreadyAnswered", AlreadyAnswered },
                 { "InvalidSettings", InvalidSettings },
                 { "BackendNotRestarted", BackendNotRestarted },
+                { "RunRootRefused", RunRootRefused },
             }
         },
     };

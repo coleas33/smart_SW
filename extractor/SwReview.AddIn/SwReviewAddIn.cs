@@ -547,6 +547,15 @@ public class SwReviewAddIn : ISwAddin
     }
 
     /// <summary>
+    /// The run root in force, the review host's (owner decision 154A, the owner's follow-up): the one the
+    /// backend was last started with, under which the Model check, Standards and Remodel tabs make their run
+    /// folders and look for their latest run - not the run root saved, a folder outside which the backend
+    /// refuses until a restart brings it in. The default run root when there is no review host, as the
+    /// add-in unloads.
+    /// </summary>
+    private string RunRootInForce() => _reviewHost?.RunRoot ?? UserSettings.DefaultRunRoot();
+
+    /// <summary>
     /// The Model check tab's host (T083, contracts/model-check.md).
     ///
     /// It shares three things with the Review tab rather than owning copies of them: the same
@@ -568,7 +577,7 @@ public class SwReviewAddIn : ISwAddin
 
         _modelCheckHost = new ModelCheckHost(new ModelCheckHostOptions(
             _pane.ModelCheckChannel,
-            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+            RunRootInForce)
         {
             Backend = () => _backend?.Endpoint,
             CurrentDocument = CurrentDocument,
@@ -682,7 +691,7 @@ public class SwReviewAddIn : ISwAddin
 
         _standardsHost = new StandardsHost(new StandardsHostOptions(
             _pane.StandardsChannel,
-            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+            RunRootInForce)
         {
             Backend = () => _backend?.Endpoint,
             CurrentDocument = CurrentDocument,
@@ -803,7 +812,7 @@ public class SwReviewAddIn : ISwAddin
 
         _remodelHost = new RemodelHost(new RemodelHostOptions(
             _pane.RemodelChannel,
-            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+            RunRootInForce)
         {
             Backend = endpoint,
             CurrentDocument = CurrentDocument,

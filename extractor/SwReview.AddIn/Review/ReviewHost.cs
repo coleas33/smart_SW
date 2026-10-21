@@ -414,6 +414,16 @@ public sealed class ReviewHost : IDisposable
     private readonly DeferredRestart _restart;
 
     private UserSettings _settings;
+
+    /// <summary>
+    /// The run root in force (owner decision 154A, the owner's follow-up): the one the backend was last started
+    /// with - at the add-in's load, the one the settings name, which it is started with. The backend makes and
+    /// finds runs under it alone: it refuses a run folder outside it (<c>resolve_run_dir</c>) and looks for the
+    /// newest review and check under it. A folder chosen for runs in a save is written at once, and comes into
+    /// force only with the restart that starts the backend with it (<see cref="RestartBackend"/>). Written on
+    /// the thread a restart is made on, read on every tab's.
+    /// </summary>
+    private volatile string _runRootInForce;
     private string? _settingsError;
     private PreparedContext? _preparedContext;
     private long _contextGeneration;
@@ -437,6 +447,7 @@ public sealed class ReviewHost : IDisposable
         SettingsLoadResult loaded = UserSettings.Load(options.SettingsPath, options.BuildMode);
         _settings = loaded.Settings;
         _settingsError = loaded.Error;
+        _runRootInForce = _settings.RunRoot;
 
         _runs = new PaneRunLookup(
             "chat_id",
@@ -445,7 +456,7 @@ public sealed class ReviewHost : IDisposable
                 + "know which folder to open.",
             chatId => FindSession(chatId)?.RunDirectory);
 
-        _actions = new PaneActions(new PaneActionsOptions(options.Channel, () => _settings.RunRoot, _runs)
+        _actions = new PaneActions(new PaneActionsOptions(options.Channel, () => RunRoot, _runs)
         {
             LogFolder = () => _options.LogFolder,
             EntityResolver = () => _options.EntityResolver,
@@ -491,6 +502,13 @@ public sealed class ReviewHost : IDisposable
 
     /// <summary>The settings in force. Replaced by a successful `settings.save`.</summary>
     public UserSettings Settings => _settings;
+
+    /// <summary>
+    /// The run root in force (owner decision 154A, the owner's follow-up): the one the backend was last started
+    /// with, under which every tab makes its run folders and looks for its latest run. <see cref="Settings"/>
+    /// names the run root saved, which the next restart brings into force.
+    /// </summary>
+    public string RunRoot => _runRootInForce;
 
     /// <summary>
     /// Whether a settings restart stands before new work: one waits to be made, or one is being
@@ -921,7 +939,7 @@ public sealed class ReviewHost : IDisposable
                 return;
 
             case "settings.get":
-                SendSettings("settings", id);
+                SendSettings("settings", id, runRootRefusal: null);
                 return;
 
             case "send_when_checked.save":
@@ -1008,7 +1026,7 @@ public sealed class ReviewHost : IDisposable
             { "token", endpoint?.Token },
             { "settings", View(_settings) },
             { "key_source", key.Source },
-            { "run_root", _settings.RunRoot },
+            { "run_root", RunRoot },
             { "providers", Providers() },
             { "document", DocumentPayload(document) },
             { "review_preparation", _options.PrepareReview != null },
@@ -1078,14 +1096,16 @@ public sealed class ReviewHost : IDisposable
 
     // ---- settings -----------------------------------------------------------------------
 
-    private void SendSettings(string type, string? id)
+    private void SendSettings(string type, string? id, string? runRootRefusal)
     {
         ResolvedApiKey key = _settings.ResolveApiKey(_options.Environment);
-        Send(type, id, new Dictionary<string, object?>
+        var answer = new Dictionary<string, object?>
         {
             { "settings", View(_settings) },
             { "key_source", key.Source },
-        });
+        };
+        AddRunRootRefusal(answer, runRootRefusal);
+        Send(type, id, answer);
         ReportSettingsProblems(key);
     }
 
@@ -1203,6 +1223,11 @@ public sealed class ReviewHost : IDisposable
             next.SetApiKey(null);
         }
 
+        // Owner decision 154A, the owner's follow-up ("A Field + don't block"): a save never fails for the run
+        // root. The folder chosen for runs is written only when the run root rule accepts it, and the answer
+        // says when it, or the run root left in force, is refused.
+        string? runRootRefusal = ChooseRunRoot(payload, next);
+
         if (!PersistSettings(next, id))
         {
             return;
@@ -1212,7 +1237,7 @@ public sealed class ReviewHost : IDisposable
         string? promise = null;
         try
         {
-            if (!_restart.Now(() => _options.Backend.Restart(next, key), out DeferredRestart.Hold waitsFor))
+            if (!_restart.Now(() => RestartBackend(next, key), out DeferredRestart.Hold waitsFor))
             {
                 // A turn started between the gate above and here, or a remodel run is in progress,
                 // which the restart would end. The settings are already written, so the honest
@@ -1235,12 +1260,16 @@ public sealed class ReviewHost : IDisposable
             // and retryable, since saving again retries the restart (owner decision 150A). The
             // other tabs are told as for any failure, which only a backend no longer up does
             // (owner decision 145A).
+            // The save was written all the same, so its answer still says what it says of the run root.
             TellTheOtherTabsTheRestartFailed(failure);
-            SendError(id, "BackendNotRestarted", SavedNotRestarted + failure.Message, retryable: true);
+            Dictionary<string, object?> notRestarted = _actions.ErrorPayload(
+                "BackendNotRestarted", SavedNotRestarted + failure.Message, retryable: true);
+            AddRunRootRefusal(notRestarted, runRootRefusal);
+            Send("error", id, notRestarted);
             return;
         }
 
-        SendSettings("settings.saved", id);
+        SendSettings("settings.saved", id, runRootRefusal);
 
         if (promise != null)
         {
@@ -1264,17 +1293,65 @@ public sealed class ReviewHost : IDisposable
         }
     }
 
-    private bool PersistSettings(UserSettings next, string? id)
+    /// <summary>
+    /// The run root a save writes, and what its answer says of it (owner decision 154A, the owner's follow-up,
+    /// "A Field + don't block"): a save never fails for the run root. A folder chosen for runs that differs
+    /// from the run root the settings name is judged by the run root rule: accepted, it is written into
+    /// <paramref name="next"/>; refused, it is the one field not saved, and the words say so. Otherwise the
+    /// run root the settings name is kept, and when the rule refuses it the words say every run is refused
+    /// until it is changed. Null when there is nothing to say.
+    /// </summary>
+    private string? ChooseRunRoot(JsonElement payload, UserSettings next)
     {
-        // Owner decision 154A: a run root the run root rule refuses is never written. The page names no run
-        // root - the one in force is carried in the clone - so a save under such a root, the Settings Save's
-        // and the send box's alike, is refused whole: nothing is written and the backend is not restarted.
-        // The root is set in the settings file, which the add-in reads when it loads.
-        if (_actions.RefusedRunRoot(id, next.RunRoot, _options.RunRootProbe, "the settings were not saved", "try again"))
+        string? chosen = ChosenRunRoot(payload);
+        if (chosen != null && !string.Equals(chosen, _settings.RunRoot, StringComparison.Ordinal))
         {
-            return false;
+            RunRootVerdict verdict = RunRootRule.Judge(chosen, _options.RunRootProbe);
+            if (verdict != RunRootVerdict.Accepted)
+            {
+                return RunRootRule.ChosenRefusal(verdict);
+            }
+
+            next.RunRoot = chosen;
+            return null;
         }
 
+        RunRootVerdict kept = RunRootRule.Judge(next.RunRoot, _options.RunRootProbe);
+        return kept == RunRootVerdict.Accepted ? null : RunRootRule.KeptRefusal(kept);
+    }
+
+    /// <summary>
+    /// The folder a save chooses for runs: `run_root`, trimmed as every text field is, and an empty one the
+    /// default run root, as a blank run root in the settings file is. Null when the save names none - absent,
+    /// null or not text - which leaves the run root as it is.
+    /// </summary>
+    private static string? ChosenRunRoot(JsonElement payload)
+    {
+        string? text = Text(payload, "run_root");
+        if (text == null)
+        {
+            return null;
+        }
+
+        string trimmed = text.Trim();
+        return trimmed.Length == 0 ? UserSettings.DefaultRunRoot() : trimmed;
+    }
+
+    /// <summary>
+    /// What a save says of the run root (owner decision 154A, the owner's follow-up), when there is anything to
+    /// say: `run_root_refusal`, shaped as an `error` - class `RunRootRefused`, the rule's words, not retryable -
+    /// on the save's answer, `settings.saved` or the `error` of a save whose restart failed.
+    /// </summary>
+    private void AddRunRootRefusal(Dictionary<string, object?> answer, string? runRootRefusal)
+    {
+        if (runRootRefusal != null)
+        {
+            answer["run_root_refusal"] = _actions.ErrorPayload("RunRootRefused", runRootRefusal, retryable: false);
+        }
+    }
+
+    private bool PersistSettings(UserSettings next, string? id)
+    {
         try
         {
             next.Save(_options.SettingsPath);
@@ -1508,7 +1585,19 @@ public sealed class ReviewHost : IDisposable
     private void RestartWithSettingsInForce()
     {
         UserSettings settings = _settings;
-        _options.Backend.Restart(settings, settings.ResolveApiKey(_options.Environment));
+        RestartBackend(settings, settings.ResolveApiKey(_options.Environment));
+    }
+
+    /// <summary>
+    /// Every restart this host makes, at once or once nothing holds it back: the backend started with
+    /// <paramref name="settings"/>, and, once it is, their run root in force (owner decision 154A, the owner's
+    /// follow-up) - not before, so a restart that fails leaves in force the run root the backend was last
+    /// started with.
+    /// </summary>
+    private void RestartBackend(UserSettings settings, ResolvedApiKey key)
+    {
+        _options.Backend.Restart(settings, key);
+        _runRootInForce = settings.RunRoot;
     }
 
     /// <summary>
@@ -1793,7 +1882,7 @@ public sealed class ReviewHost : IDisposable
         if (document == null || !document.IsAttachable) return;
         if (Reviews().Any(record => document.IsSameDocument(record.Document))) return;
 
-        SessionRecord? found = RunFolders.FindNotSentReview(_settings.RunRoot, document, _options.OpenSessionHead);
+        SessionRecord? found = RunFolders.FindNotSentReview(RunRoot, document, _options.OpenSessionHead);
         if (found == null) return;
         lock (_sessionsLock)
         {
@@ -1998,7 +2087,7 @@ public sealed class ReviewHost : IDisposable
         }
         try
         {
-            string directory = RunFolders.CreateForDocument(_settings.RunRoot, document.Path, _options.Now());
+            string directory = RunFolders.CreateForDocument(RunRoot, document.Path, _options.Now());
             PostStatus("extracting", "Extracting saved evidence for engineering context; no review tokens used.");
             DumpSummary summary = _options.Dump.Run(directory, message => PostStatus("extracting", message));
             if (!SameDocument(_options.CurrentDocument(), document)
@@ -2248,10 +2337,11 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
+        string runRoot = RunRoot;
         string runDirectory;
         try
         {
-            runDirectory = RunFolders.CreateForDocument(_settings.RunRoot, document.Path, _options.Now());
+            runDirectory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now());
         }
         catch (Exception failure)
         {
@@ -2259,7 +2349,7 @@ public sealed class ReviewHost : IDisposable
             SendError(
                 id,
                 "RunFolderFailed",
-                $"the run folder could not be created under '{_settings.RunRoot}': {failure.Message}",
+                $"the run folder could not be created under '{runRoot}': {failure.Message}",
                 retryable: false);
             return;
         }
@@ -2335,12 +2425,13 @@ public sealed class ReviewHost : IDisposable
 
     /// <summary>
     /// Owner decision 154A: a Review-tab start - a preparation, a review, a Retry, a Recheck, context evidence
-    /// and a review with it - refuses a run root the run root rule refuses, in this tab's words, before it does
-    /// anything else: each hands the backend a run folder under the run root, which the backend refuses on a
-    /// share and spells otherwise through a link. Written once for every start on the tab.
+    /// and a review with it - refuses a run root in force the run root rule refuses, in this tab's words,
+    /// before it does anything else: each hands the backend a run folder under the run root in force, which
+    /// the backend refuses on a share and spells otherwise through a link. Written once for every start on the
+    /// tab.
     /// </summary>
     private bool RunRootRefused(string? id) =>
-        _actions.RefusedRunRoot(id, _settings.RunRoot, _options.RunRootProbe, "nothing was started", "try again");
+        _actions.RefusedRunRoot(id, RunRoot, _options.RunRootProbe, "nothing was started", "try again");
 
     private bool CanReviewDocument(PageDocument document, string? id)
     {
