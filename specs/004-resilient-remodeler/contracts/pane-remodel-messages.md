@@ -153,8 +153,9 @@ and Start refuses the plan by name.**
   judge again the run root their gate may have brought in - and a Start checks its plan's folder
   under it - before they take the hold, so a press refused for its run root (`RunRootRefused`,
   `RunRootChosenNotInForce`, `RunRootChanged`, or `BackendUnavailable` while a start of the backend
-  would bring another in) takes none, whether or not one was to be had: the hold's way on, pressing
-  again in a moment, would only meet the run root.
+  would bring another in) takes none, whether or not one was to be had: 154A judges the run root
+  before anything is asked or made under it, and the hold asks the tool service (corrected on 152A's
+  final reviews, N1).
 - Start pressed twice after a re-attach is refused twice, identically, and leaves the host free to
   plan; the new plan is made on the attachment listening now and starts. A refused plan tracks no
   run, so a Start naming its folder is `RunNotFound`, and it neither rescues nor invalidates an

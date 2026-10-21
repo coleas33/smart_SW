@@ -2553,6 +2553,9 @@ T206, landed on `main` first; the commits that made them carry their first numbe
     session is closed (`Execute`'s `finally`). A plan given no hold is refused `RemodelUnavailable`,
     in the words while the tool service attaches; a Start `SessionLost`, since its plan's session
     goes with the attachment; neither waits for the next service.
+    *Noted 2026-10-21 (the merge of `main` and the final reviews, N5):* since the merge with 154A a
+    plan and a Start hold from just after the run root is judged again, which follows the gate, so a
+    press refused for its run root holds nothing.
   - every start that makes a review session, from before it reads the bridge it hands over until the
     session is tracked (`CreateReviewSession`): from then the busy question sees the session's turn.
     With no hold to be had the session is given what is published, as before - none, or a bridge no
@@ -2771,24 +2774,27 @@ T206, landed on `main` first; the commits that made them carry their first numbe
   heading), the commits keeping their first numbers. 152A's section of `DeferredRestartTests.cs`,
   numbered 13 beside 153A's, became 15, since 154A's is 14, and moved after 153A's, so the file
   reads 13, 14, 15 once merged; T209, T215 and `ReviewHostTests.cs` name it.
-- **Decision** (the coordinator, for the owner, 2026-10-21): where two refusals meet, the one whose
-  way on the other cannot mend is answered first. At a review session (`CreateReviewSession`): a
-  start of the backend under way (153A); the run root judged again, then the run folder under the
-  run root in force (154A); then the hold and the bridge (152A); then a Recheck's `checking` status
-  and the settings in force. Before a new review's extraction: the run root judged again, then the
-  bridge. In a plan and a Start: the run root judged again, and a Start's folder under it, then the
-  hold. After a new review's extraction, its document read again (152A, on the Codex review) still
-  comes before the session.
-- **Why**: each refusal says what is true, and so must its way on once it is the one answered. The
-  bridge's - wait a moment, then try again - and the hold's - press again in a moment - are no way
-  past a start of the backend under way or a run root that moved, which pressing again would only
-  meet; their ways on - press again once the backend is up, a run made again under the run root in
-  force, a local folder for runs - do not hang on the bridge. A start under way comes first because
-  153A reads it before anything of the settings in force, the run root among them, as 154A kept. The
-  document read after the extraction stays first because its way on, the review's document active
-  again and Review pressed, makes a new run under the run root in force, which mends a moved run
-  root too. A start refused before its bridge is asked about takes no hold and asks the tool service
-  to follow nothing.
+- **Decision** (the coordinator, for the owner, 2026-10-21): the order the two decisions leave
+  (*corrected on the final reviews, N1:* first given as the one whose way on the other cannot mend
+  answered first - Why, below). At a review session (`CreateReviewSession`): a start of the backend
+  under way (153A); the run root judged again, then the run folder under the run root in force
+  (154A); then the hold and the bridge (152A); then a Recheck's `checking` status and the settings
+  in force. Before a new review's extraction: the run root judged again, then the bridge. In a plan
+  and a Start: the run root judged again, and a Start's folder under it, then the hold. After a new
+  review's extraction, its document read again (152A, on the Codex review) still comes before the
+  session.
+- **Why** (*corrected on the final reviews, N1*): the order is forced by the decisions it merges.
+  153A reads a start under way before anything of the settings in force, the run root among them, as
+  154A kept; and 154A judges the run root, and the run folder under it, before anything is asked or
+  made under it - and the hold and the bridge question ask the tool service, and a bridge refused
+  asks it to follow. Each refusal is true whichever comes first, and so is its way on: a start under
+  way ends in seconds - 153A refuses it retryable for that reason - and a new review whose run root
+  moved while it extracted is answered by pressing Review again, which makes a new run under the run
+  root in force, as `DocumentChanged` is; that same reason keeps the document read after the
+  extraction first. First given here as the bridge's and the hold's ways on being no way past a
+  start under way or a moved run root, which pressing again would only meet - untrue of both those
+  combinations. A start refused before its bridge is asked about takes no hold and asks the tool
+  service to follow nothing.
 - **Changed with it**: a new review refused at its session after its extraction - for a start under
   way or a run root that moved, as for its bridge - now ends the extraction's statuses with a
   `ready` status (T215's rule). On `main` those two left the status line saying that it was
@@ -2814,6 +2820,9 @@ T206, landed on `main` first; the commits that made them carry their first numbe
   the bridge between the two readings; only the add-in's first start, begun after the start under
   way was read, could move the record there, which 153A's fourth review found practically
   unreachable (N4 there).
+- **What remains** (*added on the final reviews, N1*): a refusal ahead of the bridge asks the tool
+  service to follow nothing, so a bridge on another document or configuration takes one press more
+  to clear - the press that meets the bridge's refusal asks for the follow.
 - **Tests**: T225 in [tasks.md](tasks.md), written on the merge and run against each order it could
   have taken - git's own at the session, and 152A's side of each conflict first - in which each case
   of its kind is red (Mutations, below): at the session, a folder under a run root a save has since
@@ -2849,6 +2858,80 @@ T206, landed on `main` first; the commits that made them carry their first numbe
   among them, the client and tool tests, and the rest the merge touched, 2,250 cases - passed on
   3.12 and on 3.11 (`--isolated`). `ruff check` clean, no broken link, and every changed file
   `i/lf`.
+
+#### The final reviews of the merged state (2026-10-21)
+
+- **What they were**: Opus's review of `41f2a88`, which found nothing to fix - the merge lost no
+  behaviour or test, the renumbering is clean, the holds behave as recorded, and ZM6 and ZM11
+  matched when run again - and five nits; Codex's, with one medium finding; and the coordinator's
+  own gate, which passed.
+- **C1 (Codex, medium): a session's start could hand over a bridge published after its hold was
+  refused.** During a re-attach the gate answers no hold, since no service is listening, and the
+  re-attach could then publish the new service's bridge before the start read the bridge: the start
+  handed that bridge to `POST /sessions` with nothing held and its session not yet tracked, so a
+  switch while the call was out let a follow take it down under the review's first checks -
+  avoidable failed coverage, not wrong evidence. 152A's case with no hold to be had covered only a
+  publication that held still. Fixed by asking for the hold again (`ReviewHost.HoldForTheBridge`):
+  with no hold to be had and a bridge published, the hold is asked for once more and the bridge read
+  again under it; with still none, the start is refused `BridgeOnAnotherDocument`, retryable, rather
+  than given a bridge nothing holds; with nothing published, the session is given none, as before.
+- **Why this fix, of the two the coordinator offered**: it is the explicit one here. A bridge read
+  under a hold is already vouched for by the bridge check, which asks the gate whether the service
+  listening now - the one held - has its pipe; the one gap was a hold the gate could not give, and
+  the fix closes it where it opens, in a few lines that say so, with the gate's contract and every
+  host's wiring left as they were. The other - the gate handing out the bridge it published with the
+  hold, under its lock - would have changed the gate's contract, the review host's options and the
+  add-in's wiring, and still needed a rule for a hold it cannot give with a bridge published.
+- **N1 (Opus, for the owner): the stated reason for the order was untrue of two combinations.**
+  Corrected in the merge's entry (above), `ReviewHost.cs`, `RemodelHost.cs`, two test comments and
+  both contracts: the order is the one 153A's reading order and 154A's rule leave, and each refusal
+  is true whichever comes first. A refusal ahead of the bridge asks no follow: What remains, in the
+  merge's entry.
+- **N2: 153A's MR1 is pinnable since the merge.** Its "Not changed" says nothing is called between
+  the start under way and the settings in force; since the merge the run root, the hold, the bridge
+  question and the follow request are. A dated note there, and a case: a start that ends while the
+  bridge is asked about meets a session already refused for the start under way (red under ZF4).
+- **N3: the start under way before the run root was unpinned** - the reviewer's P1 moved it after
+  them and 498 cases stayed green. A case: a Recheck under a run root not in force, asked for while
+  a start of the backend is under way, is refused for the start, not its run root (red under ZF5).
+- **N4: the full suite.** T226's Python evidence was a subset; this round's is the full suite,
+  `pytest -m "not live"`, on 3.12 and on 3.11 (Evidence, below).
+- **N5**: the Codex review's "a plan holds from just after the host is marked busy", in this entry
+  and in 004's research, has a dated note: since the merge the hold comes after the run root is
+  judged again, so a press refused for its run root holds nothing.
+- **N6**: the class doc of `DeferredRestartTests` names 154A's section 14.
+- **What remains** (recorded, not changed): a hold had in the instant between the gate's making a
+  new service its own and its publishing it reads no bridge, and the session is given none, as
+  before - no bridge goes out unheld; closing that would take the other fix.
+- **Tests**: T227 in [tasks.md](tasks.md). Written first, against the code at `41f2a88`: C1's
+  regression, in the review's order - the hold refused, the new bridge published, the session asked
+  for, a follow while `POST /sessions` is out - failed with the follow taking the session's bridge
+  down while the call was out, and the bridge no hold can be had on was handed over; the two order
+  pins passed, as guards, and are red under ZF4 and ZF5. The case of a bridge read as its service is
+  taken down, read again under the second hold, was written with the fix, and is red without its
+  reading again (ZF3) and without the fix (ZF0). The fake backend runs a hook while `POST /sessions`
+  is out (`DuringCreate`).
+- **Mutations**: as before - each taken out once, by one exact replacement or the move named, the
+  tree rebuilt, `DeferredRestartTests`, `ReviewHostTests`, `RemodelHostTests`,
+  `EngineeringContextHostTests` and `ToolServiceWiringTests` run (985 cases), and the file restored
+  byte for byte (checked by its sha256): 6 mutations, 14 red results, every one red.
+
+  | Id | Where | Taken out | Red |
+  |---|---|---|---|
+  | ZF0 | `CreateReviewSession` | C1's fix whole: the hold and the bridge as at `41f2a88` | 3: C1's three cases |
+  | ZF1 | `HoldForTheBridge` | the hold not asked for again when a bridge is published | 3: the session refused rather than held, the bridge read as its service went down refused, and the hold asked for once |
+  | ZF2 | `CreateReviewSession` | a bridge published with still no hold handed over | 1: the bridge no hold can be had on |
+  | ZF3 | `HoldForTheBridge` | the bridge not read again under the second hold | 1: the bridge read as its service is taken down |
+  | ZF4 | `CreateReviewSession` | MR1: the settings in force read where the start under way is, and it where they are | 5: the MR1 pin, N3's, T225's two of a start under way, and 153A's Recheck posting no `checking` |
+  | ZF5 | `CreateReviewSession` | P1: the start under way read after the run root and the folder under it | 1: N3's |
+- **Evidence** (2026-10-21, at `fdfa378`): the C# build, `--no-incremental`, at zero warnings once
+  every mutation was restored; `SwReview.Extractor.Tests` 10,086 passed and `SwReview.AddIn.Tests`
+  3,540, from 3,535 - T227's five; the restart and tool-service classes, 1,060 cases, five times in
+  a row. One full run met `ConPtyTests.ACmdChildsOutputReachesThePage` with only the console's
+  opening codes read before the child's output - a Terminal-tab case nothing here touches, a timing
+  of the pseudo-console - which passed when run five times again and in a full run after. The full
+  `pytest -m "not live"` suite: 18,111 passed and 5 skipped on 3.12, and 18,111 passed and 5 skipped
+  on 3.11 (`--isolated`, every extra). No broken link, and every changed file `i/lf`.
 
 ### 153A. Until a restart succeeds, the settings the backend was started with are in force (2026-10-20)
 
@@ -3200,6 +3283,10 @@ T206, landed on `main` first; the commits that made them carry their first numbe
     no case can hold a start there; and `KeysToMask` read the mark after the record (MR2), which S1
     made moot, since the keys masked now read the keys kept, which only grow. MR3 is pinned (Fourth
     review, above).
+    *Noted 2026-10-21 (152A, the merge of `main`, Not changed, and its final reviews, N2):* since
+    the merge with 154A and 152A, the run root, the hold, the bridge question and the follow request
+    are asked between the start under way and the settings in force, so a start can end there; MR1
+    is pinned (152A's T227).
   - A start that begins after a session's check (the fourth review, N4): `CreateSession` reads the
     endpoint after `CreateReviewSession` has read the start under way and the settings in force, so a
     start that began between them would pair the settings recorded before it with the backend it
