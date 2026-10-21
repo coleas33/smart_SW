@@ -6757,6 +6757,35 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 159A (004 T208): the host's log keeps what a failure said masked, as everything this host sends is
+    /// (FR-015): a failure's sentence that quotes the backend's token reaches neither the page nor the log unmasked, and the
+    /// rest of the sentence is kept.
+    /// </summary>
+    [Fact]
+    public void WhatTheLogKeepsIsMasked()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.ProbeFailure = TheBackends("RunFolderFailed", "FICT the backend refused it, quoting 0FAKEtoken.");
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            List<string> logged;
+            lock (world.Logged)
+            {
+                logged = world.Logged.ToList();
+            }
+
+            Assert.Contains(logged, line => line.Contains("FICT the backend refused it, quoting"));
+            Assert.All(logged, line => Assert.DoesNotContain("0FAKEtoken", line, StringComparison.Ordinal));
+            Assert.All(
+                world.Posted.Where(json => !json.Contains("\"type\":\"init\"")),
+                json => Assert.DoesNotContain("0FAKEtoken", json, StringComparison.Ordinal));
+        }
+    }
+
     /// <summary>A plan refused with <paramref name="errorClass"/> in <paramref name="words"/>, in the refusal and in the run line's `error` beside it.</summary>
     private static void APlanIsRefusedInTheTabsWords(RemodelWorld world, string errorClass, string words)
     {
