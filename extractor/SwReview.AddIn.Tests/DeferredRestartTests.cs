@@ -6801,6 +6801,71 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
+    /// A check whose gate waited for a save's restart made at once is told of that restart before its extraction is
+    /// answered, as a check whose gate made the restart is (the case above), so its page evaluates with the token of
+    /// the restarted backend (owner decision 157A, the reviews: the race review and Codex). The page's evaluation waits
+    /// for an `init` only once it has been told (`check-page.js`, `call`, `initSettled`); told after the reply, it
+    /// evaluates with the token of the backend the restart replaced and is refused, the extraction wasted. A save used
+    /// to tell the other tabs after its restart had let the restart's lock go, so nothing ordered the telling before a
+    /// gate that waited on that lock. The save's thread is held here as it tells them - as a Review pump that was
+    /// descheduled would be - until the check has replied, or two seconds at most, so telling them under the lock
+    /// passes.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check")]
+    [InlineData("Standards")]
+    public void ACheckThatWaitedForASavesRestartIsToldOfItBeforeItsExtractionIsAnswered(string tab)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        using var hold = new ManualResetEventSlim(false);
+        try
+        {
+            world.Open();
+            using var check = new CheckTab(world, tab);
+            world.TellingTheOtherTabs = () =>
+            {
+                SpinWait.SpinUntil(() => check.Posted(check.ExtractedType).Length > 0, TimeSpan.FromSeconds(2));
+                check.BackendRestarted();
+            };
+            world.Backend.Hold = hold;
+            var save = new Caller<bool>(() =>
+            {
+                world.Receive("settings.save", "save", Save(effort: "low"));
+                return true;
+            });
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the save never began its restart");
+            var press = new Caller<bool>(() =>
+            {
+                check.Press("c1");
+                return true;
+            });
+            Assert.False(press.Finishes(TimeSpan.FromMilliseconds(300)), "the check did not wait for the save's restart");
+
+            hold.Set();
+
+            Assert.True(press.Finishes(TimeSpan.FromSeconds(10)), "the check never finished");
+            Assert.True(save.Finishes(TimeSpan.FromSeconds(10)), "the save never finished");
+            world.Reply("settings.saved", "save");
+            string runDirectory = check.Extracted("c1");
+            Assert.Equal(1, world.Backend.Generation);
+            string[] types = check.Types();
+            Assert.True(
+                Array.IndexOf(types, "backend.restarted") >= 0
+                    && Array.IndexOf(types, "backend.restarted") < Array.IndexOf(types, check.ExtractedType),
+                "the tab was not told the backend restarted before its extraction was answered: " + string.Join(", ", types));
+
+            Assert.Equal(201, check.Evaluate(runDirectory).Status);
+            CheckTab.Evaluation evaluation = Assert.Single(check.Evaluations);
+            Assert.True(evaluation.Authorized, "the page evaluated with the token of the backend the restart replaced");
+            Assert.Equal(1, evaluation.Generation);
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    /// <summary>
     /// A check started while a turn holds the restart back is refused, in this tab's words, before anything is read,
     /// made or extracted, and holds nothing; the restart still waits for the turn alone, and once it ends the next
     /// press makes it first (owner decision 157A). A check refused on the spot - no document - makes no restart.
@@ -6918,7 +6983,10 @@ public sealed class DeferredRestartTests
     /// A page that never evaluates its check - reloaded, or closed, once the run was handed to it - holds the restart
     /// back no longer than the hand-over's limit, a minute, measured from the hand-over by a clock only the test moves:
     /// a moment short of it the restart still waits, and at it the restart is made. An evaluation that comes after
-    /// the limit is not held, and goes on as before 157A (owner decision 157A).
+    /// the limit is not held, and goes on as before 157A (owner decision 157A): its page, told of the restart only
+    /// after the reply that handed it the run, calls with the token of the backend the restart replaced, which the
+    /// restarted one refuses. (Changed deliberately on the reviews of 157A: the page's token is the page's own now, from
+    /// its `init`, where it was the backend's of the moment, which hid the refusal.)
     /// </summary>
     [Theory]
     [InlineData("Model check")]
@@ -6942,8 +7010,10 @@ public sealed class DeferredRestartTests
         Eventually(() => world.Backend.Restarts.Length == 1, "the restart once the page has had its minute");
         Assert.False(check.CheckInProgress);
 
-        Assert.Equal(201, check.Evaluate(runDirectory).Status);
-        Assert.Equal(1, Assert.Single(check.Evaluations).Generation);
+        Assert.Equal(401, check.Evaluate(runDirectory).Status);
+        CheckTab.Evaluation late = Assert.Single(check.Evaluations);
+        Assert.Equal(1, late.Generation);
+        Assert.False(late.Authorized);
         Assert.False(check.CheckInProgress);
     }
 
@@ -9152,6 +9222,7 @@ public sealed class DeferredRestartTests
         private readonly ModelCheckHost? _modelCheck;
         private readonly StandardsHost? _standards;
         private long _clockTicks;
+        private int _readies;
 
         public CheckTab(RestartWorld world, string tab)
         {
@@ -9214,16 +9285,23 @@ public sealed class DeferredRestartTests
                 () => world.Host.PageTurnRefusal(),
                 () => ToolServiceHold.Nothing,
                 HoldEvaluation);
+
+            // The page loads: `ready`, answered with the `init` whose token it calls the backend with.
+            Ready();
         }
 
-        /// <summary>One evaluation the proxy sent on: its folder, and the backend's generation and restarts asked once it was answered.</summary>
+        /// <summary>
+        /// One evaluation the proxy sent on: its folder, the backend's generation and restarts asked once it was answered,
+        /// and whether it carried the token of the backend it reached, which refuses any other.
+        /// </summary>
         public sealed class Evaluation
         {
-            public Evaluation(string? runDirectory, int generation, int restartsAskedWhenAnswered)
+            public Evaluation(string? runDirectory, int generation, int restartsAskedWhenAnswered, bool authorized)
             {
                 RunDirectory = runDirectory;
                 Generation = generation;
                 RestartsAskedWhenAnswered = restartsAskedWhenAnswered;
+                Authorized = authorized;
             }
 
             public string? RunDirectory { get; }
@@ -9232,6 +9310,9 @@ public sealed class DeferredRestartTests
             public int Generation { get; }
 
             public int RestartsAskedWhenAnswered { get; }
+
+            /// <summary>Whether the evaluation carried the token of the backend it reached; one that did not was refused.</summary>
+            public bool Authorized { get; }
         }
 
         public string Tab { get; }
@@ -9296,7 +9377,10 @@ public sealed class DeferredRestartTests
             Reply(ExtractedType, id).GetProperty("run_dir").GetString()
                 ?? throw new XunitException("the extraction named no run folder");
 
-        /// <summary>The page evaluates the check in <paramref name="runDirectory"/> through the pane's proxy.</summary>
+        /// <summary>
+        /// The page evaluates the check in <paramref name="runDirectory"/> through the pane's proxy, with the token it
+        /// holds (<see cref="PageToken"/>), as the page does.
+        /// </summary>
         public ProxiedResponse Evaluate(string runDirectory)
         {
             object body = Tab == "Model check"
@@ -9308,7 +9392,7 @@ public sealed class DeferredRestartTests
                 new[]
                 {
                     new KeyValuePair<string, string>("Content-Type", "application/json"),
-                    new KeyValuePair<string, string>("Authorization", "Bearer " + _world.Backend.Endpoint?.Token),
+                    new KeyValuePair<string, string>("Authorization", "Bearer " + PageToken(runDirectory)),
                 },
                 new MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(body))))
                 ?? throw new XunitException("the proxy did not take the evaluation");
@@ -9375,14 +9459,77 @@ public sealed class DeferredRestartTests
             }
 
             int generation = _world.Backend.Generation;
+            bool authorized = request.Headers.Any(header =>
+                header.Key == "Authorization" && header.Value == "Bearer " + _world.Backend.Endpoint?.Token);
             WhileEvaluating?.Invoke();
             lock (_evaluations)
             {
-                _evaluations.Add(new Evaluation(runDirectory, generation, _world.Backend.RestartsAsked));
+                _evaluations.Add(new Evaluation(runDirectory, generation, _world.Backend.RestartsAsked, authorized));
             }
 
-            return new ProxiedResponse(
-                201, "Created", "Content-Type: application/json", Encoding.UTF8.GetBytes("{\"check_id\":\"FICT-check\"}"));
+            // The backend refuses a token other than its own: the token of a backend a restart replaced.
+            return authorized
+                ? new ProxiedResponse(
+                    201, "Created", "Content-Type: application/json", Encoding.UTF8.GetBytes("{\"check_id\":\"FICT-check\"}"))
+                : new ProxiedResponse(
+                    401, "Unauthorized", "Content-Type: application/json", Encoding.UTF8.GetBytes("{\"error_class\":\"Unauthorized\"}"));
+        }
+
+        /// <summary>
+        /// The page asks for its `init` - as it loads, and again once told the backend restarted - and answers the
+        /// token it carries.
+        /// </summary>
+        private string? Ready()
+        {
+            string id = "ready-" + Interlocked.Increment(ref _readies);
+            string json = JsonSerializer.Serialize(new { type = "ready", id, payload = new { } });
+            if (_modelCheck != null)
+            {
+                _modelCheck.Receive(json);
+            }
+            else
+            {
+                _standards!.Receive(json);
+            }
+
+            JsonElement token = Reply("init", id).GetProperty("token");
+            return token.ValueKind == JsonValueKind.String ? token.GetString() : null;
+        }
+
+        /// <summary>
+        /// The token the page evaluates the run in <paramref name="runDirectory"/> with: the one its last `init` carried
+        /// when it read the reply that handed it the run - or, told before that reply that the backend restarted, the one
+        /// the `init` it then asked for carries, which its evaluation waits for (`check-page.js`, `call`,
+        /// `initSettled`). Told only after the reply, it has already called with the token it had: the backend the
+        /// restart replaced.
+        /// </summary>
+        private string? PageToken(string runDirectory)
+        {
+            string? token = null;
+            bool told = false;
+            foreach (JsonElement message in Messages())
+            {
+                string? type = message.GetProperty("type").GetString();
+                JsonElement payload = message.GetProperty("payload");
+                if (type == "init")
+                {
+                    JsonElement carried = payload.GetProperty("token");
+                    token = carried.ValueKind == JsonValueKind.String ? carried.GetString() : null;
+                    told = false;
+                }
+                else if (type == "backend.restarted")
+                {
+                    told = true;
+                }
+                else if (type == ExtractedType
+                    && payload.TryGetProperty("run_dir", out JsonElement handed)
+                    && handed.GetString() == runDirectory)
+                {
+                    break;
+                }
+            }
+
+            return told ? Ready() : token;
         }
 
         private IEnumerable<JsonElement> Messages() =>

@@ -1415,7 +1415,20 @@ public sealed class ReviewHost : IDisposable
         string? promise = null;
         try
         {
-            if (!_restart.Now(() => RestartWith(next, key), out DeferredRestart.Hold waitsFor, out DeferredRestart.Work busyWith))
+            if (!_restart.Now(
+                    () =>
+                    {
+                        RestartWith(next, key);
+
+                        // The Review page learns of a restart made now from the reply; the other tabs from this,
+                        // told under the restart's own lock as every other restart tells them (owner decision 157A,
+                        // the reviews): a check whose gate waited on that lock for this restart is told of it before
+                        // it begins, so before its page is handed a run to evaluate with the token of the backend
+                        // the restart replaced.
+                        TellTheOtherTabs();
+                    },
+                    out DeferredRestart.Hold waitsFor,
+                    out DeferredRestart.Work busyWith))
             {
                 // A turn started between the gate above and here, or a remodel run or a check is in
                 // progress, which the restart would end. The settings are already written, so the honest
@@ -1423,11 +1436,6 @@ public sealed class ReviewHost : IDisposable
                 // back rather than being dropped, and the sentence names it (owner decisions 143A,
                 // 145A and 157A).
                 promise = Promise(waitsFor, busyWith);
-            }
-            else
-            {
-                // The Review page learns of it from the reply; the other tabs from this.
-                TellTheOtherTabs();
             }
         }
         catch (Exception failure)
