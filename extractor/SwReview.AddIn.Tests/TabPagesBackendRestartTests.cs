@@ -558,6 +558,44 @@ public sealed class TabPagesBackendRestartTests
     }
 
     /// <summary>
+    /// ...and the notice comes down once a result is shown again (decided on the review of decision 160A):
+    /// it says the exception is saved and to press the check again to see where it stands, which a result
+    /// shown - a check pressed again, or another Accept whose re-read is shown - then says. Until 160A the
+    /// banner that carried it came down at the next press; its own place has no press to take it down, and
+    /// a notice left up over a result that shows the rule accepted would be a false line.
+    /// </summary>
+    [Theory]
+    [InlineData("a check pressed again")]
+    [InlineData("another Accept")]
+    public void AStandardsAcceptsNoticeComesDownOnceAResultIsShownAgain(string shown)
+    {
+        TabPageDriver.Run(TabPageDriver.Standards, driver => driver.WithLatestResult = true, async driver =>
+        {
+            await driver.UntilTheLatestResultIsRead();
+            await driver.Settle();
+            await driver.RefuseGets();
+            await driver.AcceptTheFirstRule();
+            await driver.UntilAcceptNotice("said the Accept's re-read failed");
+            await driver.AnswerGets();
+
+            if (shown == "a check pressed again")
+            {
+                await driver.Click("run-check");
+                await driver.UntilText(
+                    "check-state", text => text.StartsWith("Checked", StringComparison.Ordinal), "showed the check pressed again");
+            }
+            else
+            {
+                await driver.AcceptTheFirstRule();
+                await driver.UntilText(
+                    "check-state", text => text.StartsWith("Accepted as", StringComparison.Ordinal), "showed the Accept's re-read");
+            }
+
+            Assert.Null(await driver.AcceptNotice());
+        });
+    }
+
+    /// <summary>
     /// An Accept and a check, both waiting for the `init` a restart asked for, let go together: the
     /// newer check is shown before the Accept's re-read of the older one lands.
     /// </summary>
@@ -1182,6 +1220,9 @@ public sealed class TabPagesBackendRestartTests
 
         /// <summary>From now on the stubbed backend refuses every `GET`, 404 `UnknownCheck`, saying <see cref="RefusedGet"/>.</summary>
         public Task RefuseGets() => Page.ExecuteScriptAsync("window.__refuseGets = true;0");
+
+        /// <summary>From now on the stubbed backend answers every `GET` again, after <see cref="RefuseGets"/>.</summary>
+        public Task AnswerGets() => Page.ExecuteScriptAsync("window.__refuseGets = false;0");
 
         /// <summary>Waits, bounded, until the banner shows.</summary>
         public async Task UntilBanner(string what)

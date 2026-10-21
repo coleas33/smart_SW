@@ -36,6 +36,13 @@ public sealed class PageMessageTests
 
     // ---- ready / init -------------------------------------------------------------------
 
+    /// <summary>
+    /// Owner decision 160A: `init` says whether the last start or restart failed with no backend up, so a page that
+    /// loads, or loads again, after the failure's `status` says the backend is not running rather than "Backend
+    /// starting": false before any start, true after a first start or a save's restart that failed, and false again
+    /// while the next start is under way and once it has succeeded - also when that backend is gone later, since the
+    /// mark is taken off as each start begins (the mark's reset, found on review by mutation).
+    /// </summary>
     [Theory]
     [InlineData("first")]
     [InlineData("save")]
@@ -74,8 +81,16 @@ public sealed class PageMessageTests
         });
         world.Receive("ready", "started", new { });
         Assert.False(world.Reply("init", "started").GetProperty("backend_start_failed").GetBoolean());
+
+        world.Backend.Endpoint = null;
+        world.Receive("ready", "gone", new { });
+        Assert.False(world.Reply("init", "gone").GetProperty("backend_start_failed").GetBoolean());
     }
 
+    /// <summary>
+    /// ...and a restart that failed before it stopped the old backend leaves that backend up, which is no failed start:
+    /// neither `init` nor the host's word the add-in hands the other tabs (`BackendStartFailed`) calls it one.
+    /// </summary>
     [Fact]
     public void InitDoesNotCallARestartFailedWhileTheOldBackendIsUpANonRunningBackend()
     {
@@ -87,9 +102,18 @@ public sealed class PageMessageTests
         JsonElement init = world.Reply("init", "ready");
         Assert.Equal(JsonValueKind.Object, init.GetProperty("backend").ValueKind);
         Assert.False(init.GetProperty("backend_start_failed").GetBoolean());
+        Assert.False(world.Host.BackendStartFailed);
     }
 
+    /// <summary>
+    /// Owner decision 160A: a save written while the add-in unloads is answered `AddInStopping`, not retryable - the
+    /// settings are saved, and nothing else needs doing - not `BackendNotRestarted`, whose sentence says to save again
+    /// (150A, Not changed). Whenever the unload is seen: before the restart, which is then not made (the first row, found
+    /// on review by mutation), during a restart that fails, and during one that returns; the other tabs are not told of
+    /// a restart made as the add-in goes.
+    /// </summary>
     [Theory]
+    [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
     [InlineData(true, false)]
@@ -125,6 +149,38 @@ public sealed class PageMessageTests
         Assert.Equal(startInFlight && !restartFails ? 1 : 0, world.Backend.Restarts);
     }
 
+    /// <summary>
+    /// ...and it still says what it says of the run root, as every save that was written does (154A): a folder chosen
+    /// that the rule refuses is the one field not saved, said in `run_root_refusal` beside the class (found on review
+    /// by mutation).
+    /// </summary>
+    [Fact]
+    public void ASaveDuringUnloadStillSaysWhatItSaysOfTheRunRoot()
+    {
+        using var world = new HostWorld();
+        world.Probe = FakeRunRootProbe.Local();
+        world.Open();
+        string previous = world.Host.Settings.RunRoot;
+        world.Host.Dispose();
+        Dictionary<string, object?> payload = Save(effort: "low");
+        payload["run_root"] = "C:\\Fictional\\runs\"";
+
+        world.Receive("settings.save", "save", payload);
+
+        JsonElement answer = world.Reply("error", "save");
+        Assert.Equal("AddInStopping", answer.GetProperty("error_class").GetString());
+        JsonElement refusal = answer.GetProperty("run_root_refusal");
+        Assert.Equal("RunRootRefused", refusal.GetProperty("error_class").GetString());
+        Assert.Contains("the run root was not changed", refusal.GetProperty("message").GetString()!, StringComparison.Ordinal);
+        Assert.Equal(previous, UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.RunRoot);
+        Assert.Equal(0, world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// Owner decision 160A: a folder chosen that no folder can be made under - a character no folder can have, a lone
+    /// trailing quote among them, or a name longer than 255 characters - is the one field not saved, in plain words with
+    /// no path, and the other settings are saved and restarted with, as for 154A's other refusals.
+    /// </summary>
     [Theory]
     [InlineData("quote")]
     [InlineData("long")]

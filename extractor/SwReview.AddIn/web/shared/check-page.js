@@ -507,6 +507,18 @@
       }
     }
 
+    /**
+     * Takes the Accept's notice down from its own place: a result shown says where the check stands,
+     * which the notice sent the engineer to see (decided on the review of owner decision 160A). Not
+     * for a check that failed, which shows no result, so the notice outlasts the failure.
+     */
+    function hideAcceptNotice() {
+      if (ui.acceptNotice) {
+        dom.clear(ui.acceptNotice);
+        ui.acceptNotice.hidden = true;
+      }
+    }
+
     /** Points at the row that was just accepted, and names the exception that covers it. */
     function markAccepted(findingId, exceptionId) {
       var row = renderedRule(findingId);
@@ -611,6 +623,9 @@
     function renderResult(result) {
       state.result = result || null;
       state.subjects = Object.create(null);
+      if (state.result) {
+        hideAcceptNotice();
+      }
 
       dom.clear(ui.header);
       page.renderHeader(state.result, ui.header, api);
