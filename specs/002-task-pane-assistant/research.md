@@ -5088,7 +5088,7 @@ that read the changed records - `test_workstation_test_plan.py`, which reads eve
     folders alike; the Terminal tab's, which judges no run root and holds no probe, is the one left.
     `EveryHostHandsTheRunFoldersItsRunRootProbe` reads every call, and both options, from the source.
     `PaneActions.RefusedRunRoot` still takes the same probe as an argument from each host; folding it into the options
-    is left, a repetition flagged. *Pinned*: R7 (a row of `ARunStartUnderARefusedRunRootWhileAnotherIsChosenSaysToRetryTheRestart`),
+    is left, a repetition flagged. *Done after the merge of `main`, 2026-10-21 (T291, below).* *Pinned*: R7 (a row of `ARunStartUnderARefusedRunRootWhileAnotherIsChosenSaysToRetryTheRestart`),
     R11 to R13 (`AFailedStartsWayOnLeavesAnotherWordOnTheBanner`, each page), R14
     (`ASecondAcceptsNoticeTakesThePlaceOfTheFirst`) and R32 (the Review strip's warning colour in
     `AReadyStatusAfterAFailedFirstStartKeepsTheStripNotRunningUntilItsInitNamesABackend`). *The enum*: the three
@@ -5175,3 +5175,24 @@ that read the changed records - `test_workstation_test_plan.py`, which reads eve
     working copy. Each code commit built from scratch and run on its own, in a worktree of its own: `ffc5b76` (011 T218,
     T219), zero warnings, 10,125 and 3,609 passed; `d5497b3` (T284, T285), 10,125 and 3,626; `c007b0c` (T286, T287),
     10,125 and 3,633; `15db42b` (T288, T289) is the final code tree. SOLIDWORKS was not started.
+
+- **After the merge of `main`** (2026-10-21): `main` at `4f40dae`, with owner decision 158A (PR #33), was merged into
+  the branch (`1e5b966`), not rebased. Two records met: this research, whose 158A and 160A entries both followed 156A,
+  and the task list, whose Phase 20 and Phase 21 both followed Phase 18; each kept both sides, in order of id - 158A,
+  then 160A - and of phase (157A's are not on `main` yet). Everything else merged by itself: 158A's `HoldAttachment`
+  with its holder, its lines in `SwReviewAddIn` and `DeferredRestartTests`, and its dated notes in 002's
+  `pane-host-messages.md` and 004's records; no fixture or label was touched, so neither generator was run and the
+  pin stands.
+  - **T291, one way in for the run root rule's probe** (the coordinator's follow-up; the repetition flagged above):
+    `PaneActions.RefusedRunRoot` reads `PaneActionsOptions.RunRootProbe` and takes no probe, where each host handed it
+    its own as an argument beside the option the review added; the four hosts' calls pass none.
+    `RunFoldersLongNamesTests.ARunStartIsRefusedThroughThePaneActionsOwnProbe` pins it from the source, as the
+    pass-through is pinned - no call passes a probe, the refusal takes none and judges the root with the option - red
+    before the change, its four calls each passing one; the source walk the two scans share is one helper. Every
+    host's refusal case, a refusing probe each, now reads the option: with the refusal judging the root with Windows'
+    own probe, 38 cases went red (T291a), and with the review host's option unset, 19 (T291b).
+  - **Gates**: 2026-10-21, on the merged tree with T291 (`7836b7f`, with these records): no broken link; C# 0 warnings
+    on a `--no-incremental` build, 10,125 and 3,665 passed - 3,640 before the merge, 158A's 24 and T291's one; the
+    restart classes, 469 cases, passed five times in a row; Python, `pytest -m "not live"` with the tokenizer required,
+    18,112 passed and 5 skipped on 3.12 and the same on 3.11 (`--isolated`); `ruff check` clean; every changed file LF
+    in the index and CRLF in the working copy. SOLIDWORKS was not started.
