@@ -591,9 +591,10 @@ public sealed class PaneActions
     /// <summary>
     /// The reviews of 154A's merge, N6: whether a Model check or a Standards run, whose folder was made before its
     /// extraction, is answered here because the run root moved meanwhile. Since owner decision 157A a check holds every
-    /// settings restart back from its gate until its evaluation has been answered, so no save's restart moves the run
-    /// root during the extraction; the add-in's first start of the backend, which no gate holds back, still can, and
-    /// the backend would refuse the folder at the page's first call. <paramref name="runRootNow"/> is the run root for a
+    /// settings restart back from its gate until its evaluation has been answered while a backend is up, so no restart
+    /// moves the run root during the extraction then; a start that brings a backend up where there was none - a save's
+    /// made with no backend up, or the add-in's first start - still can, since nothing holds it back, and the backend
+    /// would refuse the folder at the page's first call. <paramref name="runRootNow"/> is the run root for a
     /// new run read again once the extraction is over: none, while a start of the backend under way would bring another
     /// in, is answered as a start then is (<see cref="SendRunRootMoving"/>); one that no longer holds the folder,
     /// <c>RunRootChanged</c>, not retryable, in the rule's words (<see cref="RunRootRule.ChangedRefusal"/>). The

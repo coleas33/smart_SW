@@ -464,6 +464,31 @@ public sealed class CheckHoldTests
     }
 
     /// <summary>
+    /// The evaluation of the run handed to the page is held however its folder is spelled as Windows names a folder -
+    /// in other letter case, or with a trailing separator of either kind - since it is the same folder.
+    /// </summary>
+    [Theory]
+    [InlineData("Model check", "upper case")]
+    [InlineData("Standards", "a trailing backslash")]
+    [InlineData("Model check", "a trailing slash")]
+    public void AnEvaluationOfTheRunHandedOverIsHeldHoweverItsFolderIsSpelled(string tab, string spelling)
+    {
+        using var world = new HoldWorld(tab);
+        world.Open();
+        world.Press("c1");
+        string runDirectory = world.Extracted("c1");
+        string spelled = spelling == "upper case" ? runDirectory.ToUpperInvariant()
+            : spelling == "a trailing backslash" ? runDirectory + "\\"
+            : runDirectory + "/";
+
+        IDisposable? evaluation = world.HoldEvaluation(spelled);
+
+        Assert.NotNull(evaluation);
+        evaluation!.Dispose();
+        Assert.False(world.CheckInProgress);
+    }
+
+    /// <summary>
     /// A page that never evaluates its check - reloaded, or closed, once its run was handed to it - holds the restart
     /// back for the hand-over's limit and no longer, measured from the hand-over: a moment short of it the check is in
     /// progress, at it not; and an evaluation that comes after the limit is not held.

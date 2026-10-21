@@ -714,7 +714,8 @@ public sealed class ModelCheckHostTests
     /// it is answered as a start is then (`BackendUnavailable`); either way the folder is left as the evidence, and
     /// it is neither registered nor handed to the page. Changed deliberately for owner decision 157A: the run root is
     /// read once more, once the check's gate is passed, so the move made while the model is read comes at the third
-    /// reading; and since a check holds every settings restart back, only the add-in's first start can make it.
+    /// reading; and since a check holds every settings restart back while a backend is up, only a start that brings a
+    /// backend up where there was none can make it.
     /// </summary>
     [Theory]
     [InlineData("another run root in force")]

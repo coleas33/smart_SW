@@ -311,8 +311,8 @@ public sealed class ReviewHostOptions
     /// Owner decision 157A: whether a Model check is in progress - from the gate it begins through
     /// (<see cref="ReviewHost.BeginCheck"/>) until the page's evaluation of it has been answered - which a
     /// restart would leave evaluated on a backend that restarted under it. Read with
-    /// <see cref="BackendBusy"/>, under the restart's own lock, so it must be quick and must not block. False
-    /// when the caller has no Model check tab.
+    /// <see cref="BackendBusy"/>, under the restart's own lock, so it must be quick and must not block, and only
+    /// while a backend is up. False when the caller has no Model check tab.
     /// </summary>
     public Func<bool> ModelCheckInProgress { get; set; } = () => false;
 
@@ -1965,9 +1965,12 @@ public sealed class ReviewHost : IDisposable
     /// (<see cref="ReviewHostOptions.BackendBusy"/>), which a restart would end with its copy half changed; a
     /// Model check and a Standards check (<see cref="ReviewHostOptions.ModelCheckInProgress"/>,
     /// <see cref="ReviewHostOptions.StandardsCheckInProgress"/>), which a restart would leave evaluated on a
-    /// backend that restarted under it. The restart's one reading, before its look and under its own lock. Not
-    /// knowing whether work is in progress is not knowing that none is: a reading that throws is that work in
-    /// progress.
+    /// backend that restarted under it - and so only while a backend is up. With none, the restart is what brings
+    /// back the backend a check's evaluation needs, as 143A's look reads no backend: holding it would waste the very
+    /// extraction the check holds it for, since an extraction asks no backend and lasts minutes. A remodel run holds
+    /// it even then (145A), since every call it makes then fails and it cannot last. The restart's one reading,
+    /// before its look and under its own lock; the endpoint is read without a lock. Not knowing whether work is in
+    /// progress is not knowing that none is: a reading that throws is that work in progress.
     /// </summary>
     private DeferredRestart.Work WorkInProgress()
     {
@@ -1975,6 +1978,11 @@ public sealed class ReviewHost : IDisposable
         if (InProgress(_options.BackendBusy))
         {
             work |= DeferredRestart.Work.RemodelRun;
+        }
+
+        if (_options.Backend.Endpoint == null)
+        {
+            return work;
         }
 
         if (InProgress(_options.ModelCheckInProgress))

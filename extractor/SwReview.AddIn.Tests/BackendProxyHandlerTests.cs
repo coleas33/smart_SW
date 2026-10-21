@@ -662,6 +662,9 @@ public sealed class BackendProxyHandlerTests
     [InlineData("POST", "/checks/standards", "{\"run_dir\":7}")]
     [InlineData("POST", "/checks/standards", "FICT not JSON")]
     [InlineData("POST", "/checks/rms", "[\"FICT-run\"]")]
+    [InlineData("POST", "/checks/rms/FICT-more", "{\"run_dir\":\"FICT-run\"}")]
+    [InlineData("POST", "/checks/FICT-family", "{\"run_dir\":\"FICT-run\"}")]
+    [InlineData("POST", "/reviews/rms", "{\"run_dir\":\"FICT-run\"}")]
     public void NothingButACheckEvaluationHoldsACheck(string method, string path, string body)
     {
         int asked = 0;

@@ -6344,30 +6344,51 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// With no backend process at all the look answers that nothing holds the restart back - the restart is what
-    /// brings a backend back - but a check in progress is read before the look and again under the restart's own lock,
-    /// so it holds the restart back even then, and the restart is made once the check ends (owner decision 157A).
+    /// With no backend process at all a check holds nothing (owner decision 157A): there is no backend to restart under
+    /// it, and the restart is what brings back the backend its evaluation needs - 143A's rule for the look. A remodel run
+    /// holds the restart back even then, since every call it makes fails and it cannot last (145A); a check's extraction
+    /// asks no backend and lasts minutes, and holding the restart would only waste it. So a save made while a check is in
+    /// progress with no backend up restarts the backend at once, with the saved settings, saying nothing of a wait.
     /// </summary>
-    [Fact]
-    public void WithNoBackendAtAllACheckInProgressStillHoldsTheRestartBack()
+    [Theory]
+    [InlineData("Model check")]
+    [InlineData("Standards")]
+    public void WithNoBackendAtAllACheckHoldsNothingAndASaveStartsTheBackend(string tab)
     {
-        int checking = 1;
-        using var world = new RestartWorld();
-        world.Checking("Standards", () => Volatile.Read(ref checking) == 1);
-        world.Open();
-        world.Track("chat-1");
-        SaveAsATurnStarts(world, "save", Save(effort: "low"));
-        world.Backend.EndTurn("chat-1");
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Checking(tab, () => true);
         world.Backend.Down = true;
+        world.Open();
 
-        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
-        Assert.Equal(0, world.Backend.Attempts);
-        Assert.Empty(world.Posted("backend.restarted"));
+        world.Receive("settings.save", "save", Save(effort: "low"));
 
-        Volatile.Write(ref checking, 0);
-        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted after the check");
+        Assert.Equal("low", world.Reply("settings.saved", "save").GetProperty("settings").GetProperty("effort").GetString());
         Assert.Equal("low", Assert.Single(world.Backend.Restarts).Settings.Effort);
         Assert.NotNull(world.Backend.Endpoint);
+        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("message").GetString() == CheckPromise);
+    }
+
+    /// <summary>
+    /// ...and a restart that waits for a check made with a backend up is made once that backend has stopped, though the
+    /// check is still in progress: no backend is left to restart under it, and its evaluation needs one (owner decision
+    /// 157A). The check's page is told the backend restarted, and its evaluation goes to the new backend.
+    /// </summary>
+    [Fact]
+    public void ARestartThatWaitsForACheckIsMadeOnceTheBackendHasStopped()
+    {
+        using var world = new RestartWorld();
+        world.Checking("Model check", () => true);
+        world.Open();
+        world.Receive("settings.save", "save", Save(effort: "low"));
+        Assert.Equal(CheckPromise, world.Last("status").GetProperty("message").GetString());
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(0, world.Backend.RestartsAsked);
+
+        world.Backend.Down = true;
+
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "the restart once the backend stopped");
+        Assert.Equal("low", Assert.Single(world.Backend.Restarts).Settings.Effort);
+        Eventually(() => world.OtherTabsTold == 1, "the other tabs told");
     }
 
     /// <summary>
@@ -6927,17 +6948,21 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// The reviews of 154A's merge, N6, after owner decision 157A: no settings save's restart can move the run root
-    /// while a check holds it back, so the run root read again once the extraction is over guards the add-in's first
-    /// start alone, which no gate holds back. A save that chose another folder for runs with no backend up waits for
-    /// the check; the first start, made meanwhile, starts the backend with the settings saved and so brings that folder
-    /// into force; and the check, made under the run root loaded, is answered `RunRootChanged` once its model is read,
-    /// and not handed on.
+    /// The reviews of 154A's merge, N6, after owner decision 157A: while a backend is up no settings save's restart can
+    /// move the run root under a check, which holds it back; the run root read again once the extraction is over guards
+    /// the starts that bring a backend up where there was none, which nothing holds back, since there is no backend to
+    /// restart under the check. A save that chose another folder for runs with no backend up starts the backend with it
+    /// at once; or the add-in's first start, after a save that chose one and whose restart failed, starts it with the
+    /// settings saved. Either way that folder comes into force during the extraction, and the check, made under the run
+    /// root loaded, is answered `RunRootChanged` once its model is read, and not handed on.
     /// </summary>
     [Theory]
-    [InlineData("Model check", "the feature tree was read", "press Model check again")]
-    [InlineData("Standards", "the document was read", "press Standards check again")]
-    public void TheFirstStartDuringACheckIsStillAnsweredForTheRunRootItBringsIn(string tab, string during, string wayOn)
+    [InlineData("Model check", "the feature tree was read", "press Model check again", "a save")]
+    [InlineData("Standards", "the document was read", "press Standards check again", "a save")]
+    [InlineData("Model check", "the feature tree was read", "press Model check again", "the first start")]
+    [InlineData("Standards", "the document was read", "press Standards check again", "the first start")]
+    public void AStartThatBringsABackendUpDuringACheckIsStillAnsweredForTheRunRootItBringsIn(
+        string tab, string during, string wayOn, string start)
     {
         using var world = new RestartWorld();
         world.Backend.Down = true;
@@ -6946,16 +6971,30 @@ public sealed class DeferredRestartTests
         string chosen = Path.Combine(world.Root, "FICT-chosen-runs");
         world.Dump.OnRun = () =>
         {
+            if (start == "the first start")
+            {
+                world.Backend.EarlyRestartFailure = new BackendStartException("FICT the launcher has gone");
+            }
+
             Dictionary<string, object?> save = Save(effort: "low");
             save["run_root"] = chosen;
             world.Receive("settings.save", "save", save);
-            Assert.True(FirstStart(world));
+            if (start == "the first start")
+            {
+                world.Reply("error", "save");
+                world.Backend.EarlyRestartFailure = null;
+                Assert.True(FirstStart(world));
+            }
+            else
+            {
+                world.Reply("settings.saved", "save");
+            }
         };
 
         check.Press("c1");
         world.Dump.OnRun = null;
 
-        Assert.Contains(world.Posted("status"), status => status.GetProperty("message").GetString() == CheckPromise);
+        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("message").GetString() == CheckPromise);
         Assert.Equal(chosen, world.Host.RunRoot);
         JsonElement error = check.Reply("error", "c1");
         Assert.Equal("RunRootChanged", error.GetProperty("error_class").GetString());
@@ -7990,6 +8029,34 @@ public sealed class DeferredRestartTests
         Assert.Equal(DeferredRestart.Outcome.NotAnswered, restart.Apply(out _, out DeferredRestart.Work busyWith));
         Assert.Equal(1, looked);
         Assert.Equal(DeferredRestart.Work.None, busyWith);
+    }
+
+    /// <summary>
+    /// Work the reading before the look did not find, and the reading under the restart's own lock did - work that
+    /// began while the look was out, which only a look like this case's can make - holds the restart back and is named
+    /// by that second reading: which work the restart waits for is always the reading that decided it (owner decision
+    /// 157A).
+    /// </summary>
+    [Fact]
+    public void WorkFoundOnlyUnderTheLockIsNamedByThatReading()
+    {
+        DeferredRestart.Work reading = DeferredRestart.Work.None;
+        int tried = 0;
+        using var restart = NewRestart(
+            () =>
+            {
+                reading = DeferredRestart.Work.StandardsCheck;
+                return DeferredRestart.Hold.None;
+            },
+            () => tried++,
+            work: () => reading);
+        Assert.False(restart.Now(() => throw new TurnRunningException()));
+
+        Assert.Equal(DeferredRestart.Outcome.WorkInProgress, restart.Apply(out _, out DeferredRestart.Work busyWith));
+
+        Assert.Equal(DeferredRestart.Work.StandardsCheck, busyWith);
+        Assert.Equal(0, tried);
+        Assert.True(restart.Pending);
     }
 
     /// <summary>
