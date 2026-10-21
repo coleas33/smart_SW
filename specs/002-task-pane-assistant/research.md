@@ -2264,14 +2264,17 @@ words for the strip.
   - A turn that starts between a follow's busy answer and its teardown meets a pipe that is closing:
     its live calls fail and are recorded as failed coverage. Older than 152A - every follow since the
     tool service follows switches has had it - and it reaches no other document. The follow now runs
-    at a hold's end too, so it can meet a follow-up typed at once.
+    at a hold's end too, so it can meet a follow-up typed at once. *Settled 2026-10-20 by the Codex
+    review's X2 (below): the turn's call holds the bridge, and the follow waits for it.*
   - A remodel Start pressed in the moment between a look's busy answer and its reading of the active
     document: the look finds the plan's copy no longer planned, so T180 does not keep its attachment,
     and the bridge is taken down under the run that is starting (the review's N1). 145A recorded the
     moment; since 152A a look comes due within a second of a plan's end, when Start is often pressed.
     The run's next bridge call meets a closing pipe, or a dispatcher with no session, answered
     `target_mismatch` before any write (004 `contracts/bridge-remodel.md`), so the copy is not
-    changed: the run fails, and is pressed again.
+    changed: the run fails, and is pressed again. *Settled 2026-10-20 by the Codex review's X2
+    (below), which found the same race with a plan still being planned: a plan and a run hold the
+    bridge, and the look waits for them.*
   - A session made while the tool service is between two attachments is given no bridge, and its
     live checks are recorded as not run: a review pressed in the seconds a follow takes, now also at
     a hold's end. Older than 152A; no evidence of another document.
@@ -2283,7 +2286,12 @@ words for the strip.
     seconds after `POST /sessions` - run in the configuration now active through the other's
     component table (the review's R2). A Send, a follow-up and an answer reach the backend from the
     page through the proxy, not through the host, so no session's start is asked again for them.
-    Older than 152A (004, decision 22A); owner question 1.
+    Older than 152A (004, decision 22A); owner question 1. *Narrowed 2026-10-20 by the Codex review's
+    X1 (below): a new review whose configuration was switched during its extraction is refused at its
+    session, and the bridge refuses every live command while its document's active configuration is
+    not the one it attached in, so none of those calls runs through the other's table. What is left:
+    those commands, the general-chat tools' included, are refused until the configuration is switched
+    back or a review re-attaches the tool service, and Show keeps the configuration attached to.*
   - A review of a waiting plan's copy, while the plan keeps its original's attachment (T180), is
     refused until the plan is started or its copy discarded, or another document is made active: a
     review's request keeps that attachment as any follow does, and the label's "wait a moment" does
@@ -2308,6 +2316,16 @@ words for the strip.
      closed, so its later live calls fail rather than run through the other configuration's table
      (the review's R2); and a plan made on the attachment would be lost on a configuration switch of
      its original part, which 22A keeps. Or keep it followed only when a review asks, as now?
+     *Changed 2026-10-20 by the Codex review's X1 (below):* a session's later live calls no longer
+     run through the other configuration's table - the bridge refuses them while the configuration
+     differs, and answers again once it is switched back - so following at the switch would no
+     longer be what protects a review. What remains for the owner: whether the tool service should
+     follow a configuration switch at the switch, so that the live commands it refuses meanwhile - a
+     waiting review's after Send, the general-chat tools' - and Show in SOLIDWORKS (`entity.show`,
+     through the tool service's scope, walked in the configuration attached to) answer about the
+     configuration now active, at the cost of a session's pipe closed under it and a plan made on its
+     original part's attachment lost on such a switch (22A); or keep the attached configuration until
+     a review asks or a document switch re-attaches, as now.
   2. A review pressed while the tool service is between two attachments runs with no live checks,
      which its coverage says. Refuse it as `BridgeOnAnotherDocument` while a follow is in flight -
      the gate knows - or leave it?
@@ -2419,3 +2437,198 @@ words for the strip.
   skipped after - the label's pin - on 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`) alike.
   `ruff check` clean, and no broken link.
 - **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first; and the review's, T171.
+
+**3. The Codex review (a second opinion, 2026-10-20).**
+
+- **What it was**: an adversarial review of the branch at `22bdd6b` by Codex, a second opinion
+  beside the review above. It answered "needs attention" with two high findings, settled test first
+  by T174 to T178.
+- **X1 (high): a configuration switched before the session passed the bridge's check.** Extract A in
+  Default and switch A to Machined during the extraction or just after it - the extraction runs in
+  one call on the application thread (`SwReviewDump.Run`), so a switch made during it lands as it
+  ends - and the follow, which a same-path switch re-attaches nothing for (22A), left the bridge's
+  record on Default, so `DocumentServedBy` answered Default and the session was made; its live
+  interference check, which `SwInterferenceSource` runs on the document's active configuration, then
+  mapped Machined's rows through Default's component table into Default's review. The same reached
+  any live command a session sends after a switch (the R2 above, What is left).
+- **The combination chosen, and why**: both of the review's suggestions, since each covers what the
+  other cannot.
+  - *At the session, the active document read again* (`ReviewHost.StartReview`, once the evidence is
+    extracted and before `CreateReviewSession`), as 149A reads it again after a restart: the one
+    reading that can refuse before anything runs, in plain words, while the evidence extracted is
+    still the review's. Refused `DocumentChanged`, retryable: "the active document or its
+    configuration changed while the evidence was extracted, so no review session was started and no
+    check ran. Make the part or assembly and the configuration you want reviewed active again, then
+    press Review again." No path. The run folder keeps what was extracted, as one whose extraction
+    fails keeps its own, and as the bridge's refusal at the session keeps it. The tool service is
+    not asked to follow: the words send the engineer back to the review's configuration, where the
+    bridge still is, and a follow would move it away. And nothing is left half made: the status
+    line, which said it was extracting, is told the extraction is over - `status {stage: "ready",
+    message: "Evidence extracted, but no review was started; no review tokens used."}` - after this
+    refusal and after `BridgeOnAnotherDocument` at a new review's session alike, where it used to be
+    left saying it was extracting.
+  - *At the bridge, a live command refused while the active configuration is not the one it attached
+    in* (`SwBridgeDispatcher`, over `BridgeServices.ActiveConfiguration`, which the in-process host
+    reads through its session's gate, `SwSessionConfiguration.ActiveConfigurationName`): `capture`,
+    `measure`, `interference` and `tessellate` each ask after the secret and the name and before
+    they run - so nothing is run or written on another configuration, a mesh or a capture file above
+    all - and answer `configuration changed: this bridge answers about configuration 'Default' of
+    <the document>, and 'Machined' is active now, so a live command would answer about another
+    configuration than the one extracted. Make 'Default' active again in SOLIDWORKS.`; `ping`,
+    `drawing.read` and the remodel family are not asked. The name is compared exactly, and a reading
+    that answers none is refused too. Each command asks, so a switch back lets the next one through.
+    It covers what no start can see: a switch after the session's start, in its own checks' seconds
+    or before a Send, a follow-up or an answer much later. The add-in's host serves each request in
+    one call on the application thread, where the engineer's switch is made too, so none lands
+    between the reading and the command's end.
+  - *Why both*: the session's reading alone leaves every later live command open; the bridge's alone
+    would make the session and run its checks with every live check refused - a review run half,
+    with the engineer told only in its coverage.
+  - *Not chosen*: following a configuration switch at the switch (owner question 1, changed above),
+    which would close a session's pipe and lose a plan made on its original part's attachment (22A);
+    and invalidating the bridge for good once its configuration changed, which would refuse it after
+    a switch back too, when its answers are the review's again.
+- **Where the reading is not added**: a Recheck runs no live check at its start (149A, pinned by
+  `ARecheckRunsOnItsSavedEvidenceWhateverIsActiveAfterTheRestart`), and its later live calls are the
+  bridge's to refuse; a context review reads its document after its restart, just before its session
+  (`CurrentContext`), and a context review's Retry after its gate (149A); a switch in the moment
+  after either is the bridge's to refuse too.
+- **The label**: `DocumentChanged`'s said "... so nothing was extracted. Make the part or assembly
+  you want reviewed the active document, then press Review again.", untrue at the session. Now "The
+  active document or its configuration changed while the review was starting, so the review did not
+  start. Make the part or assembly and the configuration you want reviewed active, then press Review
+  again.", true of both refusals; 149A's pin of it in `test_review_words.py` changed deliberately.
+  The pane fixtures are regenerated with their generators - `review-big-assembly.json`,
+  `review-waiting.json`, `review-waiting-big-assembly.json` and `review-waiting-restored.json`, one
+  line each, `review-not-sent-session.json` unchanged - and `review-send-failure-events.json`'s pin
+  of `review-waiting.json` moved to its sha256 as written on Windows (CRLF).
+- **Two existing cases changed deliberately**: `ReviewHostTests`' two cases that a review names, and
+  tracks, the document it extracted, not the one active when it answers, made their switch to
+  another document during the dump, which is now refused at the session; each switches while `POST
+  /sessions` is out instead, where a switch still lands unrefused, and what each pins is unchanged.
+  The first is renamed
+  `ReviewStartedNamesTheExtractedDocumentEvenIfTheActiveOneChangedWhileItsSessionWasMade`.
+- **X2 (high): a follow's teardown could take down work just begun.** A look's busy question reads
+  the remodel run, then whether a turn may be running - a round trip per chat - and a Remodel plan
+  could begin while the round trip was out: it marked the host busy too late for the question, made
+  its copy active, and was not yet tracked, so `KeepCopyAttachment` could not keep it (T180 keeps a
+  planned plan only); the look then took the bridge down, though `RunInProgress` was true. The same
+  race stood with Start (the N1 above), with a turn started through the proxy (What is left, first
+  item), and with a review session being made, whose checks run over the bridge while `POST
+  /sessions` is out and whose turn the busy question cannot see until it is tracked.
+- **The fix: work holds the bridge through the gate.** `ToolServiceGate.HoldAttachment` holds the
+  service listening now, under the gate's lock, or answers null when none is listening - none
+  started, a follow taking one down and the next not listening yet, or disposed. A follow notes the
+  holds taken before it asks its question - one held then makes it busy without the round trip, and
+  the switch's line is written as for any busy follow - and takes the bridge down, under the same
+  lock, only if none was taken since; otherwise it is owed and asked again a poll later, afresh. A
+  hold and a teardown cannot pass each other: work that asks once the teardown is decided finds no
+  service to hold. Another busy check alone would not do: the plan's flag was set, and read too
+  late. Nothing waits: a hold is taken and let go under the gate's lock alone, which is never held
+  while anything is waited for, and no hold is taken on the application thread (155A's lesson).
+- **Who holds, and for how long**:
+  - a Remodel plan, from just after 145A's gate marks the host busy and before it reads its
+    attachment, until it ends - planned, refused or failed (`FreeTheHost`) - and a run until its
+    session is closed (`Execute`'s `finally`). A plan given no hold is refused `RemodelUnavailable`,
+    in the words while the tool service attaches; a Start `SessionLost`, since its plan's session
+    goes with the attachment; neither waits for the next service.
+  - every start that makes a review session, from before it reads the bridge it hands over until the
+    session is tracked (`CreateReviewSession`): from then the busy question sees the session's turn.
+    With no hold to be had the session is given what is published, as before - none, or a bridge no
+    service listening has, which is refused. A start refused for its bridge lets go before it asks
+    the tool service to follow, which a hold still held would put off a poll (found reviewing this
+    fix).
+  - a page call that would start a turn (the proxy's `StartsATurn`), while it is out: the backend
+    marks the turn running before it answers. A call the host refuses (143A) holds nothing; one with
+    no hold to be had goes on, since its chat's bridge, given when the chat was made, serves the
+    attachment going away or none, and waiting would change nothing it reaches; a hold that cannot
+    be asked for is answered `ProxyFailed`, unsent, as a host that throws instead of answering is.
+- **The preserved attachment keeps working**, a plan still being planned included: while it plans,
+  its hold keeps the bridge; once planned, the next look finds its copy active and keeps the
+  attachment (T180), and Start runs on its session.
+- **What remains** (recorded, not changed): a chat whose bridge was taken down while nothing held it
+  - the engineer moved on and the turn had ended - meets a closed pipe on its next turn; older than
+  152A, failed coverage, and no other document. A turn's end is still learnt only by asking. And
+  owner question 2 stands as asked: a hold the gate cannot give is the gate saying no service is
+  listening - a follow in flight among the reasons - and the session is given what is published.
+- **Owner questions** (recorded 2026-10-20, behaviour unchanged), besides question 1 as changed
+  above:
+  4. The console host's bridge (`swreview-extract serve`) compares no configuration: it runs out of
+     process, where a switch can land between any two of its calls, so a check there would narrow
+     the window and not close it. Add it all the same, or leave the console host as it is?
+  5. The reviewer's client takes a `configuration changed` refusal as any bridge failure - failed
+     coverage carrying the sentence, counted toward its breaker, which opens after three for the
+     rest of the run. Treat it as it treats a closed document instead, a definite answer that leaves
+     the count where it was, so live checks go on once the configuration is switched back?
+- **Contracts**: 002 [`contracts/pane-host-messages.md`](contracts/pane-host-messages.md) and
+  [`contracts/chat-api.md`](contracts/chat-api.md); the bridge's
+  `extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md` (Errors that are not command failures);
+  004
+  [`contracts/pane-remodel-messages.md`](../004-resilient-remodeler/contracts/pane-remodel-messages.md),
+  [`contracts/bridge-remodel.md`](../004-resilient-remodeler/contracts/bridge-remodel.md) and
+  [`research.md`](../004-resilient-remodeler/research.md) (22A's paragraph), each with a dated note.
+- **Mutations**: each fix taken out once, by one exact replacement, the tree rebuilt, the named
+  classes run - the dispatcher's own suites (`BridgeDispatcherTests`, `BridgeTessellateTests` and
+  `BridgeSecretPolicyTests`, 191 cases) for its mutations; `ToolServiceWiringTests`,
+  `RemodelHostTests`, `DeferredRestartTests`, `ErrorLabelsCoverTheHostTests`, `ReviewHostTests`,
+  `BackendProxyHandlerTests` and `InProcPipeServerTests`, 933 cases, for the add-in's;
+  `ReviewPageSendGateTests` for the pin; and for the words file the C# scan and the Python words and
+  fixture tests - and the file restored byte for byte (checked by its sha256): 19 mutations for X1,
+  97 red results, and 22 for X2, 114 red results, every one red.
+
+  | Id | Taken out | Red |
+  |---|---|---|
+  | XA1 | `capture` asks no configuration | 6: its refused, run-as-before and throwing-reading cases, and the three refused readings of the exact name |
+  | XA2 | `measure` asks no configuration | 3: its refused, run-as-before and throwing-reading cases |
+  | XA3 | `interference` asks no configuration | 3: as XA2 |
+  | XA4 | `tessellate` asks no configuration | 3: as XA2 |
+  | XA5 | the name compared ignoring case | 1: another case of the name |
+  | XA6 | a host that reads no configuration refuses every live command | 31: its four cases, and every earlier `capture`, `measure`, `interference` and `tessellate` case of the dispatcher's suites, whose hosts read none |
+  | XA7 | no configuration read as active taken for the bound one | 1: the reading of none |
+  | XA8 | the configuration asked before the secret | 8: the three commands that are not live, the refused secret, and the four run as before, asked twice |
+  | XA9 | the in-process host reads no active configuration | 1: the host's source case |
+  | XA10 | the in-process host reads the bound configuration as the active one | 1: as XA9 |
+  | XB1 | `StartReview`: a new review not read again at its session | 7: the four changes, pressed again, the status after the change, and the hold's case of a changed document |
+  | XB2 | the refusal at the session in 149A's words | 4: the four changes |
+  | XB3 | the refusal at the session leaves the extraction's status | 5: the four changes, and the status after the change |
+  | XB4 | a refusal inside the session leaves the extraction's status | 1: the status after the bridge moved |
+  | XB5 | the refusal at the session not retryable | 4: the four changes |
+  | XB6 | the refusal at the session asks the tool service to follow | 4: the four changes |
+  | XB7 | the session's reading compares the path alone | 4: another configuration's case, pressed again, and its status and hold cases |
+  | XP1 | the pin left on the old `review-waiting.json` | 3: `ReviewPageSendGateTests`' cases that read it |
+  | XL1 | `DocumentChanged`'s old label put back | 7: its pin, and the six pane fixture tests, the committed fixtures no longer a fresh generation |
+  | YG1 | `HoldAttachment`: a hold counts nothing | 8: the gate's four hold cases, and the four races - a review session, a turn, a plan, a run |
+  | YG2 | `HoldAttachment`: a hold given with no service listening | 2: no hold while none listens, and the plan pressed during a teardown |
+  | YG3 | `FollowNow`: holds taken meanwhile ignored | 5: the hold taken while the question was out, and the four races |
+  | YG4 | `FollowCore`: a hold held when a follow begins not busy | 3: busy without the question, let go twice, and the next service held |
+  | YG5 | `LetGo`: a hold let go still held | 16: every case that follows once a hold is let go - the gate's three, the four races, T180's four (five cases), and four more through the gate |
+  | YG6 | a hold let go twice lets go twice | 1: let go twice |
+  | YG7 | `FollowCore`: the holds noted after the question | 5: as YG3 |
+  | YR1 | `Plan`: holds nothing | 8: the plan's holds (five cases), the plan given none, the plan race, and the plan pressed during a teardown |
+  | YR2 | `Start`: holds nothing | 3: the run's hold, the Start given none, and the run race |
+  | YR3 | `FreeTheHost`: lets go of nothing | 14: the plan's holds, and every case that follows once a plan has ended |
+  | YR4 | `Execute`: a run's end lets go of nothing | 3: the run's hold, the run race, and the run that holds the service across a switch |
+  | YR5 | `Plan`: a plan given no hold goes on | 2: the plan given none, and the plan pressed during a teardown |
+  | YV1 | `CreateReviewSession`: a session holds nothing | 9: the review session race, the six starts' holds, and the two ends at the session |
+  | YV2 | `CreateReviewSession`: lets go before the session is tracked | 6: the six starts' holds |
+  | YV3 | `CreateReviewSession`: a start refused for its bridge asks the follow while it holds | 1: the bridge moved |
+  | YP1 | `TryServe`: a turn call holds nothing | 12: the six turn calls, the four endings, the hold that throws, and the turn race |
+  | YP2 | `TryServe`: a turn call never lets go | 11: the six turn calls, the four endings, and the turn race |
+  | YP3 | `TryServe`: a hold that throws lets the call through | 1: the hold that throws |
+  | YT1 | `TaskPaneControl`: the proxy given no hold | 1: the add-in's source case |
+  | YW1 | the add-in: the pane's turn calls hold nothing | 1: as YT1 |
+  | YW2 | the add-in: the review host's sessions hold nothing | 1: as YT1 |
+  | YW3 | the add-in: the Remodel host's plans and runs hold nothing | 1: as YT1 |
+- **Evidence** (2026-10-21, at `a6ab107`): the C# build, `--no-incremental`, at zero warnings;
+  `SwReview.Extractor.Tests` 10,085 passed, from 10,059 - T174's 26 dispatcher cases - and
+  `SwReview.AddIn.Tests` 3,126, from 3,071 - T174's 9 cases and T176's 46; the restart and
+  tool-service classes with the stub-children collection, 890 cases, from 853, green five times in a
+  row, the plan race on a thread of its own among them. Python, not live, with
+  `SWREVIEW_REQUIRE_TOKENIZER=1`: 18,090 passed and 5 skipped on 3.12 (3.12.3), as before - the
+  label's pin changed and no case was added - and 18,089 passed and 6 skipped on 3.11 (3.11.16,
+  `--isolated`): one geometry case's optional `embreex` import (`importorskip`) was not installed in
+  the isolated environment this time. A first 3.11 run failed one case, `test_benchmark_failures`,
+  whose benchmark run records the commit it began at and refuses its resume at another: the code was
+  committed while it ran. It passed alone, and in the run after. `ruff check` clean, and no broken
+  link.
+- **Tests**: T174 and T176 in [tasks.md](tasks.md), each written first.

@@ -128,6 +128,23 @@ tool service listening - the session is given none, as before. How the tool serv
 [`pane-remodel-messages.md`](../../004-resilient-remodeler/contracts/pane-remodel-messages.md),
 decision 22A's section.
 
+*Amended 2026-10-20 (owner decision 152A, on the Codex review):* a new review's `review.start` reads
+the active document again once its evidence is extracted - the extraction runs in one call on the
+application thread, so a switch made during it lands as it ends, and a configuration switch
+re-attaches no bridge, whose record still names the review's configuration - and refuses one that is
+not the review's, by the rule above, `error {error_class: "DocumentChanged", retryable: true}`, in
+words true there that name no path: no review session was started and no check ran; make the part or
+assembly and the configuration active again, then press Review. The run folder keeps what was
+extracted, and the tool service is asked nothing. A new review refused after its extraction - so, or
+`BridgeOnAnotherDocument` at its session - then posts
+`status {stage: "ready", message: "Evidence extracted, but no review was started; no review tokens used."}`,
+which ends the extraction's statuses. The bridge a session is given refuses its live commands while
+its document's active configuration is not the one it attached in ([`chat-api.md`](chat-api.md)).
+And every start that makes a session holds the tool service's attachment from before it reads the
+bridge until its session is tracked, and every page call the proxy passes on that would start a turn
+holds it while the call is out, so the tool service does not take that bridge down under them to
+follow the active document; with no service listening to hold, both go on as before.
+
 `report.open` and `folder.open` resolve the path from the host's own session record keyed by
 `chat_id`; the page never supplies a path. `log.open` uses the host's log folder. Every
 resolved path is canonicalized and must be a descendant of `run_root` (or the log folder)

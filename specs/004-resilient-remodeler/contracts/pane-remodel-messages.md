@@ -135,7 +135,17 @@ and Start refuses the plan by name.**
   configuration switch re-attaches nothing, at the switch or in a look; a review that finds the
   bridge on another configuration asks the gate to follow the active document
   (`ToolServiceGate.FollowActiveDocument`), which re-attaches it with its configuration, and a plan
-  on the old attachment is then lost like any other.
+  on the old attachment is then lost like any other. *Amended 2026-10-20 (owner decision 152A, on
+  the Codex review; 002 `research.md`, 152A):* a plan or a run holds the tool service's attachment
+  through the gate (`RemodelHostOptions.HoldToolService`, `ToolServiceGate.HoldAttachment`) from
+  just after the host is marked busy - before a plan reads its attachment, before a run's session is
+  read again - until the host is free again: a plan's end, whatever ended it, and a run's once its
+  session is closed. A look whose busy question was answered before the plan or the run began then
+  waits for it rather than taking the bridge down under it, a plan still being planned included; once
+  planned, the next look keeps the plan's attachment for its copy as before. With no service
+  listening to hold - none started, or one a follow is taking down - a plan is refused
+  `RemodelUnavailable`, retryable, in the words while the tool service attaches, and a Start
+  `SessionLost`, before any pipeline call; nothing waits for the next service.
 - Start pressed twice after a re-attach is refused twice, identically, and leaves the host free to
   plan; the new plan is made on the attachment listening now and starts. A refused plan tracks no
   run, so a Start naming its folder is `RunNotFound`, and it neither rescues nor invalidates an

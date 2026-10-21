@@ -1099,7 +1099,14 @@ Two operational rules, and a third added by the owner's decision 22A (2026-09-25
   or the copy if the close left it open and active, which tells the plan lost; put to the owner. A
   configuration switch re-attaches nothing, at the switch or in a look; a review that finds the
   bridge on another configuration asks the gate to follow the active document, which re-attaches
-  it, and a plan on the old attachment is then lost like any other.
+  it, and a plan on the old attachment is then lost like any other. *Amended 2026-10-20 (owner
+  decision 152A, on the Codex review; 002 `research.md`, 152A):* a look's busy question is a round
+  trip, and a plan could begin while it was out - too late for the question, its copy made active,
+  not yet the planned plan whose held copy keeps the attachment - and the look took the bridge down
+  under it; so could a Start. A plan and a run now hold the attachment through the gate from just
+  after the host is marked busy until it is free again, and a follow takes the bridge down only if no
+  hold was taken while its question was out. With none listening to hold, a plan is refused as while
+  the tool service attaches and a Start as a lost session (`contracts/pane-remodel-messages.md`).
 
 ---
 

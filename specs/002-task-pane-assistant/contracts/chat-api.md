@@ -107,7 +107,12 @@ attached to the review's document and configuration, and refuses the start itsel
 `BridgeOnAnotherDocument`, retryable - a class the backend never sends, whose sentence is in the
 words file `GET /labels` serves (amended 2026-10-20, owner decision 152A;
 `pane-host-messages.md`, the Review page's table). The backend's own rules for `bridge` are
-unchanged.
+unchanged. *Amended 2026-10-20 (owner decision 152A, on the Codex review):* that bridge answers each
+of its live commands - `capture`, `measure`, `interference`, `tessellate` - only while its document's
+active configuration is the one it attached in, and refuses one otherwise, before it runs, with an
+`error` that starts `configuration changed: ` (`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`,
+Errors that are not command failures). The backend's client takes it as any bridge failure: failed
+coverage carrying the sentence, counted toward its breaker.
 
 Concurrency: one running turn per chat; the server serializes messages and evidence
 answers per chat and refuses with 409 rather than queueing silently.
