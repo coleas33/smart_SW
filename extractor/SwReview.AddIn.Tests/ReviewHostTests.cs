@@ -1126,17 +1126,24 @@ public sealed class ReviewHostTests
 
     /// <summary>
     /// The document named is the one that was extracted, not whichever document happens to be
-    /// active when the reply is sent. An engineer who switches windows while the dump runs has
-    /// asked for nothing new: the review is still of the document the press extracted, and the
+    /// active when the reply is sent. An engineer who switches windows while the session is made
+    /// has asked for nothing new: the review is still of the document the press extracted, and the
     /// page must be told that one or it would bind the results to the wrong model.
+    ///
+    /// Edited deliberately for owner decision 152A, on the Codex review (X1), 2026-10-20: the switch
+    /// was made during the dump, and a review whose document changed during its extraction is now
+    /// refused at its session (DeferredRestartTests section 13), since its live checks would run over
+    /// the document active then. The switch is made where one can still land unrefused - while
+    /// `POST /sessions` is out - and what the test pins is unchanged; it was named
+    /// `ReviewStartedNamesTheExtractedDocumentEvenIfTheActiveOneChangedDuringTheDump`.
     /// </summary>
     [Fact]
-    public void ReviewStartedNamesTheExtractedDocumentEvenIfTheActiveOneChangedDuringTheDump()
+    public void ReviewStartedNamesTheExtractedDocumentEvenIfTheActiveOneChangedWhileItsSessionWasMade()
     {
         using (var world = new ReviewWorld())
         {
             world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
-            world.Dump.OnRun = () => world.Document = new PageDocument(@"C:\parts\other.SLDPRT", "Default");
+            world.Backend.OnCreate = _ => world.Document = new PageDocument(@"C:\parts\other.SLDPRT", "Default");
             world.Open();
 
             world.Receive("review.start", "r1", new { });
@@ -1641,6 +1648,10 @@ public sealed class ReviewHostTests
     /// A review's record carries what its chip names: the document `review.started` named (the
     /// one captured before the dump), when it was tracked, and its run folder's name
     /// (contracts/sessions.md section 1).
+    ///
+    /// Edited deliberately for owner decision 152A, on the Codex review (X1), 2026-10-20, as the
+    /// test above was: the switch is made while `POST /sessions` is out rather than during the dump,
+    /// where it is now refused at the session; the record pinned is unchanged.
     /// </summary>
     [Fact]
     public void ReviewStartTracksTheReviewedDocumentWhenItStartedAndItsRunId()
@@ -1649,7 +1660,7 @@ public sealed class ReviewHostTests
         {
             world.Now = Stamp;
             world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Machined");
-            world.Dump.OnRun = () => world.Document = new PageDocument(@"C:\parts\other.SLDPRT", "Default");
+            world.Backend.OnCreate = _ => world.Document = new PageDocument(@"C:\parts\other.SLDPRT", "Default");
             world.Open();
 
             world.Receive("review.start", "r1", new { });

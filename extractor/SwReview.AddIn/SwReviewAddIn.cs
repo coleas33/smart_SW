@@ -411,6 +411,11 @@ public class SwReviewAddIn : ISwAddin
             // being replaced, and the review host answers it instead. Read through the field:
             // the host is built after this pane, and one that has gone answers nothing.
             PageTurnRefusal = () => _reviewHost?.PageTurnRefusal(),
+
+            // Owner decision 152A, on the Codex review (X2): a page call that would start a turn holds
+            // the tool service through the gate while it is out. Read through the field: the gate is
+            // built after this pane.
+            HoldToolService = () => _toolService?.HoldAttachment(),
         });
 
         _panel = _pane.Actions;
@@ -480,6 +485,10 @@ public class SwReviewAddIn : ISwAddin
             // gate is built after these options, and one that has gone serves nothing.
             BridgeDocument = bridge => _toolService?.DocumentServedBy(bridge),
             FollowActiveDocument = () => _toolService?.FollowActiveDocument(),
+
+            // ...and on the Codex review (X2), a review session being made holds the tool service
+            // through the gate from before its bridge is read until it is tracked.
+            HoldToolService = () => _toolService?.HoldAttachment(),
 
             DrawingModels = DrawingModels,
             Dump = reviewDump,
@@ -829,6 +838,12 @@ public class SwReviewAddIn : ISwAddin
             // first when a restart stands before the press, read through the field per call.
             BeginRun = BeginRemodelRun,
             RestartAhead = () => _reviewHost?.RestartAhead == true,
+
+            // Owner decision 152A, on the Codex review (X2): a plan or a run holds the tool service
+            // through the gate, read through the field per call, so no follow of the active document
+            // takes the bridge down under it; with no gate there is no bridge to hold, and it is
+            // refused as while the tool service attaches.
+            HoldToolService = () => _toolService?.HoldAttachment(),
             Pipeline = new BackendRemodelPipeline(
                 endpoint,
                 () => _toolService?.RemodelBridge,

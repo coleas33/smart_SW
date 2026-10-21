@@ -1302,6 +1302,13 @@ public sealed class ToolServiceHost : IToolService
             DocumentPath = documentPath,
             Configuration = session.Configuration.Name,
 
+            // Owner decision 152A, on the Codex review (X1): a switch of configuration re-attaches
+            // nothing (004, decision 22A), and the live commands run on the configuration active when
+            // they run, mapped through the component table walked in this one. So each asks first and
+            // is refused while another is active; every request runs on the application thread, where
+            // this reading is made too.
+            ActiveConfiguration = () => session.ActiveConfigurationName(),
+
             // Lever 10a. Review scope only, which the ScopedSecretPolicy enforces: a mesh
             // fetch writes a file and can take seconds, so it is not general chat's to call.
             TessellateSource = scope.TessellateSource(),

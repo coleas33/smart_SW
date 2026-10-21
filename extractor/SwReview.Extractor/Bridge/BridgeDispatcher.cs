@@ -282,6 +282,19 @@ public sealed class BridgeServices
     public string? Configuration { get; set; }
 
     /// <summary>
+    /// Owner decision 152A, on the Codex review (X1): the name of the configuration active in the
+    /// attached document now, read on the thread the commands run on, or null on a host that does
+    /// not compare it. The four live commands - <c>capture</c>, <c>measure</c>, <c>interference</c>
+    /// and <c>tessellate</c> - run on the document's active configuration and map what they find
+    /// through <see cref="Components"/>, walked in <see cref="Configuration"/>; a switch of
+    /// configuration re-attaches nothing (004, decision 22A). So each of them asks this first and is
+    /// refused while it is not <see cref="Configuration"/>
+    /// (<see cref="SwBridgeDispatcher.ConfigurationChangedPrefix"/>). The add-in's in-process host
+    /// sets it; the console host does not (Serve/PROTOCOL.md).
+    /// </summary>
+    public Func<string?>? ActiveConfiguration { get; set; }
+
+    /// <summary>
     /// Feature 005, lever 10a. The mesh export <c>tessellate</c> calls, or null on a bridge
     /// that answers no mesh fetch. Null is the default, so a host hands the command a source
     /// deliberately, and a host that has not answers with a sentence rather than with an
@@ -376,6 +389,12 @@ public sealed class BridgeServices
 ///     the client can stop asking instead of retrying a dead session.
 ///   * The response carries the elapsed milliseconds, because a bridge call that took eight
 ///     seconds is information the reviewer's timing report wants.
+///
+/// And one thing happens to the four live commands - <c>capture</c>, <c>measure</c>,
+/// <c>interference</c> and <c>tessellate</c> - once the secret and the name are judged: on a host
+/// that reads the attached document's active configuration
+/// (<see cref="BridgeServices.ActiveConfiguration"/>), each is refused, before it runs, while that is
+/// not the configuration the bridge attached in (owner decision 152A, on the Codex review: X1).
 /// </summary>
 public sealed class SwBridgeDispatcher : IBridgeDispatcher
 {
@@ -399,6 +418,27 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// secret, a missing one, and a valid one asking for a command outside its scope.
     /// </summary>
     public const string UnauthorizedError = "unauthorized";
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X1): the opening of what a live command answers while
+    /// the attached document's active configuration is not the one this bridge attached in
+    /// (<see cref="BridgeServices.ActiveConfiguration"/>), and the part of it a client can match on, as
+    /// <c>document no longer open</c> is; the rest of the sentence is for the engineer
+    /// (<see cref="ConfigurationChangedError"/>).
+    /// </summary>
+    public const string ConfigurationChangedPrefix = "configuration changed";
+
+    /// <summary>
+    /// The whole refusal: which configuration of which document this bridge answers about, which one
+    /// is active instead, and the way on. Named for the document, as the closed-document answer is,
+    /// because the engineer reads it against the model in front of them.
+    /// </summary>
+    public static string ConfigurationChangedError(string? documentPath, string? bound, string? active) =>
+        ConfigurationChangedPrefix + ": this bridge answers about configuration '" + bound + "' of "
+        + (documentPath ?? "the document it attached to") + ", and "
+        + (active == null ? "no configuration can be read as active" : "'" + active + "' is active")
+        + " now, so a live command would answer about another configuration than the one extracted. Make '"
+        + bound + "' active again in SOLIDWORKS.";
 
     /// <summary>
     /// Decision 140A (2026-10-19): every command this bridge answers - its own fixed set, the six
@@ -574,16 +614,16 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 return BridgeResponse.Ok(request.Id, Ping());
 
             case BridgeCommands.Capture:
-                return Capture(request);
+                return RefusedForAnotherConfiguration(request) ?? Capture(request);
 
             case BridgeCommands.Measure:
-                return Measure(request);
+                return RefusedForAnotherConfiguration(request) ?? Measure(request);
 
             case BridgeCommands.Interference:
-                return Interference(request);
+                return RefusedForAnotherConfiguration(request) ?? Interference(request);
 
             case BridgeCommands.Tessellate:
-                return Tessellate(request);
+                return RefusedForAnotherConfiguration(request) ?? Tessellate(request);
 
             case BridgeCommands.DrawingRead:
                 return DrawingRead(request);
@@ -621,6 +661,32 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             request.Id,
             $"Unknown command '{request.Command}'. This bridge answers "
             + string.Join(", ", BridgeCommands.All) + ".");
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X1): a live command's refusal while the attached
+    /// document's active configuration is not the one this bridge attached in, by its name exactly, or
+    /// null to run the command. Asked after the secret and the name (<see cref="Dispatch"/>), so a
+    /// refused caller still reaches nothing, and before the command, so nothing is run or written on
+    /// another configuration. The add-in's host serves each request in one call on the SOLIDWORKS
+    /// application thread, where the engineer's switch is made too, so none lands between this reading
+    /// and the command's end. A host that reads no active configuration compares nothing
+    /// (<see cref="BridgeServices.ActiveConfiguration"/>); a reading that throws is answered as any
+    /// failure is (<see cref="Dispatch"/>), with nothing run.
+    /// </summary>
+    private BridgeResponse? RefusedForAnotherConfiguration(BridgeRequest request)
+    {
+        Func<string?>? activeConfiguration = _services.ActiveConfiguration;
+        if (activeConfiguration == null)
+        {
+            return null;
+        }
+
+        string? active = activeConfiguration();
+        return string.Equals(active, _services.Configuration, StringComparison.Ordinal)
+            ? null
+            : BridgeResponse.Failed(
+                request.Id, ConfigurationChangedError(_services.DocumentPath, _services.Configuration, active));
+    }
 
     private PingResult Ping() => new PingResult
     {

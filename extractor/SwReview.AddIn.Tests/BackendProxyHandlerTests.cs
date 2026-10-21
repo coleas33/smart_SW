@@ -415,6 +415,151 @@ public sealed class BackendProxyHandlerTests
         Assert.True(wrong.Count == 0, "The proxy's question does not match the backend's turn routes: " + string.Join("; ", wrong));
     }
 
+    // ---- a turn call holds the bridge while it is out (owner decision 152A, the Codex review: X2) --
+
+    /// <summary>
+    /// A call that would start a turn holds the tool service's attachment for as long as it is out,
+    /// so a follow of the active document that asked whether a turn runs before this one began does
+    /// not take the bridge down under it; the backend marks the turn running before it answers, so
+    /// from then on the follow's own question sees it, and the hold is let go.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallsThatStartATurn))]
+    public void ACallThatWouldStartATurnHoldsTheBridgeWhileItIsOut(string path)
+    {
+        var holds = new CountedHolds();
+        int heldWhileOut = -1;
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            _ =>
+            {
+                heldWhileOut = holds.Held;
+                return Json(202, "Accepted", "{\"state\":\"running\"}");
+            },
+            () => null,
+            holds.Take);
+
+        ProxiedResponse? response = handler.TryServe(Prefix + path, "POST", null, null);
+
+        Assert.Equal(202, response!.Status);
+        Assert.Equal(1, heldWhileOut);
+        Assert.Equal(1, holds.Taken);
+        Assert.Equal(0, holds.Held);
+    }
+
+    /// <summary>Every other call starts no turn, and holds nothing.</summary>
+    [Theory]
+    [InlineData("GET", "/sessions/chat-1/snapshot")]
+    [InlineData("POST", "/sessions/chat-1/stop")]
+    [InlineData("POST", "/sessions/chat-1/findings/finding-1/disposition")]
+    [InlineData("POST", "/sessions")]
+    [InlineData("POST", "/remodel/plan")]
+    public void NoOtherCallHoldsTheBridge(string method, string path)
+    {
+        var holds = new CountedHolds();
+        var handler = new BackendProxyHandler(() => Endpoint, _ => Json(200, "OK", "{}"), () => null, holds.Take);
+
+        Assert.Equal(200, handler.TryServe(Prefix + path, method, null, null)!.Status);
+        Assert.Null(handler.TryServe("https://swreview.invalid/Review/ReviewPage/app.js", "POST", null, null));
+        Assert.Equal(0, holds.Taken);
+    }
+
+    /// <summary>A turn call the host refuses is never sent, and holds nothing.</summary>
+    [Fact]
+    public void ATurnCallTheHostRefusesHoldsNothing()
+    {
+        var holds = new CountedHolds();
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            MustNotSend,
+            () => new BackendRequestException("TurnRunning", "FICT a turn still runs", retryable: true),
+            holds.Take);
+
+        Assert.Equal(409, handler.TryServe(Prefix + "/sessions/chat-1/messages", "POST", null, null)!.Status);
+        Assert.Equal(0, holds.Taken);
+    }
+
+    /// <summary>The hold is let go however the call ends: answered, unreachable, refused by this side, or with no backend.</summary>
+    [Theory]
+    [InlineData("answered", 202)]
+    [InlineData("unreachable", 502)]
+    [InlineData("proxy failed", 500)]
+    [InlineData("no backend", 503)]
+    public void TheHoldIsLetGoHoweverTheCallEnds(string ending, int status)
+    {
+        var holds = new CountedHolds();
+        var handler = new BackendProxyHandler(
+            () => ending == "no backend" ? null : Endpoint,
+            _ =>
+            {
+                if (ending == "unreachable")
+                {
+                    throw new WebException("FICT connection refused");
+                }
+
+                if (ending == "proxy failed")
+                {
+                    throw new ArgumentException("FICT restricted header");
+                }
+
+                return Json(202, "Accepted", "{}");
+            },
+            () => null,
+            holds.Take);
+
+        ProxiedResponse? response = handler.TryServe(Prefix + "/sessions/chat-1/send", "POST", null, null);
+
+        Assert.Equal(status, response!.Status);
+        Assert.Equal(1, holds.Taken);
+        Assert.Equal(0, holds.Held);
+    }
+
+    /// <summary>
+    /// With no hold to be had - no tool service listening, or one being taken down - the call goes on as
+    /// before: its chat's bridge was given when the chat was made, and serves the attachment going away
+    /// or none, so waiting would change nothing it reaches.
+    /// </summary>
+    [Fact]
+    public void WithNoHoldToBeHadATurnCallGoesOn()
+    {
+        int sent = 0;
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            _ =>
+            {
+                sent++;
+                return Json(202, "Accepted", "{}");
+            },
+            () => null,
+            () => null);
+
+        Assert.Equal(202, handler.TryServe(Prefix + "/sessions/chat-1/messages", "POST", null, null)!.Status);
+        Assert.Equal(1, sent);
+    }
+
+    /// <summary>
+    /// A hold the host cannot give - its gate throws - leaves the call answered `ProxyFailed` and
+    /// unsent, as a host that throws instead of answering its refusal does: a turn is never started
+    /// with nothing holding its bridge, and the page is never left without an answer.
+    /// </summary>
+    [Fact]
+    public void AHoldThatThrowsLeavesTheCallAnsweredAndUnsent()
+    {
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            MustNotSend,
+            () => null,
+            () => throw new InvalidOperationException("FICT the gate broke"));
+
+        ProxiedResponse? response = handler.TryServe(Prefix + "/sessions/chat-1/messages", "POST", null, null);
+
+        Assert.Equal(500, response!.Status);
+        string body = Encoding.UTF8.GetString(response.Content);
+        Assert.Contains("ProxyFailed", body, StringComparison.Ordinal);
+        Assert.Contains("FICT the gate broke", body, StringComparison.Ordinal);
+        Assert.Contains("\"retryable\":false", body, StringComparison.Ordinal);
+    }
+
     private static ProxiedResponse MustNotSend(ProxiedRequest request) =>
         throw new InvalidOperationException("the handler must not have sent this request");
 

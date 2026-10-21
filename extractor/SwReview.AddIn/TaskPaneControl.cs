@@ -151,6 +151,15 @@ public sealed class TaskPaneOptions
     /// </summary>
     public Func<BackendRequestException?> PageTurnRefusal { get; set; } = () => null;
 
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds the tool service's attachment while a page
+    /// call that would start a turn is out (<see cref="BackendProxyHandler"/>), or null when no service
+    /// is listening to hold, and the call goes on as before. The add-in answers it through the gate
+    /// (`ToolServiceGate.HoldAttachment`), a callback for the reason <see cref="Backend"/> is one: the
+    /// pane is built before the gate. By default there is no gate, and nothing is held.
+    /// </summary>
+    public Func<IDisposable?> HoldToolService { get; set; } = () => ToolServiceHold.Nothing;
+
     private static string DefaultWebFolder() =>
         Path.Combine(Path.GetDirectoryName(typeof(TaskPaneOptions).Assembly.Location) ?? ".", "web");
 }
@@ -373,7 +382,10 @@ public sealed class TaskPaneControl : UserControl
         // Through the options rather than from captured values: the backend is started after
         // the pane is built, and a `settings.save` replaces it with a child on another port.
         _proxy = new BackendProxyHandler(
-            () => _options.Backend(), request => _options.ProxySend(request), () => _options.PageTurnRefusal());
+            () => _options.Backend(),
+            request => _options.ProxySend(request),
+            () => _options.PageTurnRefusal(),
+            () => _options.HoldToolService());
         _files = new PageFileServer(_options.WebFolder);
 
         _reviewTab = NewTab("Review", ReviewPurpose, Note("Starting the review page..."));

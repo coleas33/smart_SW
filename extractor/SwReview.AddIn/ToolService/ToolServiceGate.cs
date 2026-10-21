@@ -148,6 +148,13 @@ public interface IToolServiceAccess
 /// (<see cref="FollowActiveDocument"/>), which is how a configuration switch reaches the bridge
 /// before that review runs.
 ///
+/// <b>And work holds the bridge through it</b> (owner decision 152A, on the Codex review: X2). The
+/// busy question is a round trip, and work can begin while it is out: so a remodel plan or run, a
+/// review session being made and a turn being started through the pane each hold the attachment
+/// (<see cref="HoldAttachment"/>) before they read the bridge, and a follow takes the bridge down
+/// only if, under the lock the holds are taken under, none is held and none was taken since it
+/// noted them before its question.
+///
 /// Thread-safe, because it is not called from one thread: the pane's calls come from the
 /// application thread and the start itself completes on a worker.
 /// </summary>
@@ -204,6 +211,19 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// </summary>
     private bool _asking;
 
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds taken on the service listening now and not
+    /// let go - work running over its bridge (<see cref="HoldAttachment"/>). Guarded by
+    /// <see cref="_lock"/>.
+    /// </summary>
+    private int _holds;
+
+    /// <summary>
+    /// ...and every hold ever taken, counted: a follow notes it before it asks whether work holds the
+    /// bridge, and takes the bridge down only if none was taken since. Guarded by <see cref="_lock"/>.
+    /// </summary>
+    private long _holdsTaken;
+
     /// <param name="activeDocument">SOLIDWORKS' active document, or null when nothing is open.
     /// The document rather than a yes/no, because a drawing is open and is still not something a
     /// scope can be attached to. Asked on the scheduled thread, so it may marshal onto the
@@ -223,7 +243,9 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// <param name="busy">Whether work is holding the bridge - in the add-in, a review turn or
     /// a remodel run. Asked by every follow, on the scheduled thread and off the lock, because
     /// the add-in's answer costs an HTTP round trip per open chat. Defaults to "never busy",
-    /// which is right for a gate with no work to hold it.</param>
+    /// which is right for a gate with no work to hold it. Work that holds the attachment
+    /// (<see cref="HoldAttachment"/>) holds the bridge whatever this answers, and a follow that
+    /// finds a hold held asks it nothing.</param>
     /// <param name="preserveAttachment">Whether the exact active copy still belongs to a held
     /// planned session on this pipe. Optional; called off the lock on the scheduled thread.</param>
     /// <param name="afterStopped">Notification after the Dispose attempt, including a thrown or
@@ -309,6 +331,67 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         if (look)
         {
             Ask(_schedule, LookAgain);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds the service listening now for work about to
+    /// run over its bridge - a remodel plan or run, a review session being made, a turn being started -
+    /// so that no follow takes it down until the hold is let go; or null when no service is listening to
+    /// hold: none has started, a follow has begun taking one down and the next is not listening yet, or
+    /// the gate is disposed. Work that finds none starts on no bridge being taken down - it is refused,
+    /// or goes on with the bridge it was given, as each host says - and waits for nothing.
+    ///
+    /// <b>Why a hold, and not the busy question alone.</b> A follow asks whether work holds the bridge
+    /// before it takes it down, and the add-in's answer is a round trip per open chat: work can begin
+    /// while the question is out, after its answer was had, and a remodel plan making its copy active
+    /// is not yet the plan a held copy keeps the attachment for (004 T180). So the hold is taken under
+    /// the gate's lock, and the follow takes the bridge down under that lock only if no hold is held and
+    /// none was taken since it noted them, before its question: the two cannot pass each other. A hold
+    /// held when a follow begins answers its busy question without the round trip.
+    ///
+    /// Taken and let go under the gate's lock, which is never held while anything is waited for, so
+    /// this never waits either - on the SOLIDWORKS application thread least of all. Disposing the hold
+    /// lets it go; disposing it again does nothing.
+    /// </summary>
+    public IDisposable? HoldAttachment()
+    {
+        lock (_lock)
+        {
+            if (_disposed || _service == null)
+            {
+                return null;
+            }
+
+            _holds++;
+            _holdsTaken++;
+        }
+
+        return new Hold(this);
+    }
+
+    /// <summary>A hold on the gate, let go once (<see cref="HoldAttachment"/>).</summary>
+    private sealed class Hold : IDisposable
+    {
+        private ToolServiceGate? _gate;
+
+        public Hold(ToolServiceGate gate)
+        {
+            _gate = gate;
+        }
+
+        public void Dispose() => Interlocked.Exchange(ref _gate, null)?.LetGo();
+    }
+
+    /// <summary>
+    /// A hold let go. A follow it kept owed is looked at when its poll comes due, as any follow owed
+    /// while work holds the bridge is.
+    /// </summary>
+    private void LetGo()
+    {
+        lock (_lock)
+        {
+            _holds--;
         }
     }
 
@@ -552,11 +635,17 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     {
         // What this follow is for: what was owed when it asks - taken now, so that whatever is asked
         // while the question is out is owed afresh (the 152A review's N2) - and a switch's own follow
-        // at least.
+        // at least. And the holds taken so far, noted before the question is asked (the Codex review's
+        // X2): one taken while it is out keeps the bridge (FollowNow), and one held now is work holding
+        // the bridge, answered without the question's round trip.
         Owed owed;
+        long holdsTaken;
+        bool held;
         lock (_lock)
         {
             owed = Take();
+            holdsTaken = _holdsTaken;
+            held = _holds > 0;
         }
 
         if (switchedTo != null && owed < Owed.Path)
@@ -564,34 +653,46 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
             owed = Owed.Path;
         }
 
-        bool busy;
-        try
+        bool busy = held;
+        if (!held)
         {
-            busy = _busy();
-        }
-        catch (Exception failure)
-        {
-            // A question that cannot be answered counts as busy - nothing is torn down - and is
-            // said, as before 152A; this follow is not asked again every poll, since nothing says
-            // the next answer would come: the next switch, or a review's request, asks again. A
-            // switch that landed while the question was out is owed, and looked at now (Settle).
-            Settle();
-            _report("The SwReview tool service could not be asked whether it is busy.", failure);
-            return;
+            try
+            {
+                busy = _busy();
+            }
+            catch (Exception failure)
+            {
+                // A question that cannot be answered counts as busy - nothing is torn down - and is
+                // said, as before 152A; this follow is not asked again every poll, since nothing says
+                // the next answer would come: the next switch, or a review's request, asks again. A
+                // switch that landed while the question was out is owed, and looked at now (Settle).
+                Settle();
+                _report("The SwReview tool service could not be asked whether it is busy.", failure);
+                return;
+            }
         }
 
         if (busy)
         {
-            if (switchedTo != null)
-            {
-                Log(attached, "not re-attaching to " + switchedTo + ": a turn is running against " + attached.DocumentPath);
-            }
-
+            LogSkipped(attached, switchedTo);
             Defer(owed);
             return;
         }
 
-        FollowNow(attached, owed);
+        FollowNow(attached, owed, holdsTaken, switchedTo);
+    }
+
+    /// <summary>
+    /// The tool-service log's one line for a switch skipped while work holds the bridge - the one case
+    /// where the bridge really does keep answering about the other document - and nothing for a look,
+    /// <paramref name="switchedTo"/> null, which would write it every poll.
+    /// </summary>
+    private static void LogSkipped(IToolService attached, string? switchedTo)
+    {
+        if (switchedTo != null)
+        {
+            Log(attached, "not re-attaching to " + switchedTo + ": a turn is running against " + attached.DocumentPath);
+        }
     }
 
     /// <summary>
@@ -599,9 +700,11 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// event's - is followed, unless it is no part or assembly at all, the exact held copy of a
     /// waiting plan (004 T180), or the one attached to - by its path for a switch's follow, as at the
     /// switch, and by the review's own rule for a review's request, its configuration included (owner
-    /// decision 152A; <see cref="Serves"/>).
+    /// decision 152A; <see cref="Serves"/>) - and not while work holds the bridge that began holding it
+    /// while the busy question was out (the Codex review's X2; <paramref name="holdsTaken"/>, the holds
+    /// taken before the question was asked).
     /// </summary>
-    private void FollowNow(IToolService attached, Owed owed)
+    private void FollowNow(IToolService attached, Owed owed, long holdsTaken, string? switchedTo)
     {
         PageDocument? current;
         bool preserve = false;
@@ -644,6 +747,7 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
             return;
         }
 
+        bool heldMeanwhile;
         lock (_lock)
         {
             if (_disposed || !ReferenceEquals(_service, attached))
@@ -654,10 +758,29 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
                 return;
             }
 
-            // The gate answers null from here until the new service is listening, which is what
-            // makes the Remodel tab refuse a run rather than start one against a pipe that is
-            // closing. `_starting` is already ours.
-            _service = null;
+            // Owner decision 152A, on the Codex review (X2): work that took a hold since the holds were
+            // noted, before the busy question - after its answer was had - holds the bridge, held now
+            // or let go since, and its turn or its run may be under way; the bridge is not taken down
+            // under it. A hold held when they were noted made this follow busy then (FollowCore), so
+            // the count alone decides. Decided under the lock every hold is taken under, so a hold and
+            // this cannot pass each other: work that asks after this finds no service to hold.
+            heldMeanwhile = _holdsTaken != holdsTaken;
+            if (!heldMeanwhile)
+            {
+                // The gate answers null from here until the new service is listening, which is what
+                // makes the Remodel tab refuse a run rather than start one against a pipe that is
+                // closing. `_starting` is already ours.
+                _service = null;
+            }
+        }
+
+        if (heldMeanwhile)
+        {
+            // Owed, and asked again a poll later, afresh: by then the work holds the bridge still,
+            // or the busy question sees what it began.
+            LogSkipped(attached, switchedTo);
+            Defer(owed);
+            return;
         }
 
         Stop(attached);

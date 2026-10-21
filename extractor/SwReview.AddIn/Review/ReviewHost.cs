@@ -267,6 +267,17 @@ public sealed class ReviewHostOptions
     /// </summary>
     public Action FollowActiveDocument { get; set; } = () => { };
 
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds the tool service's attachment for a review
+    /// session being made - from before the bridge it is given is read until the session is tracked, so
+    /// that a follow of the active document neither takes that bridge down while `POST /sessions` runs
+    /// the review's checks over it, nor before the gate's busy question can see the session's turn - or
+    /// null when no service is listening to hold, and the session is given what is published, as
+    /// before. The add-in answers it through the gate (`ToolServiceGate.HoldAttachment`). By default
+    /// there is no gate, and nothing is held.
+    /// </summary>
+    public Func<IDisposable?> HoldToolService { get; set; } = () => ToolServiceHold.Nothing;
+
     /// <summary>Who the review and its dispositions are attributed to.</summary>
     public string Engineer { get; set; } = System.Environment.UserName;
 
@@ -2291,8 +2302,29 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
-        CreateReviewSession(document, runDirectory, Blank(Text(payload, "retry_of")),
-            _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, summary);
+        // Owner decision 152A, on the Codex review (X1): the extraction runs on the SOLIDWORKS
+        // application thread in one call, so a switch made during it - of document or of configuration -
+        // lands as it ends. A switch of configuration re-attaches nothing (004, decision 22A), so the
+        // bridge asked about at the session still serves the review's configuration by its record, while
+        // the session's live checks run on the one active then - which the bridge now refuses, one by
+        // one, so the review would run half. So the document is read again now, the last moment before
+        // the session is given the bridge, and a change is refused as before the extraction, in words
+        // true here. The run folder keeps what was extracted, as one whose extraction fails keeps its own.
+        if (!document.IsSameDocument(_options.CurrentDocument()))
+        {
+            SendError(id, "DocumentChanged", DocumentChangedAtTheSessionMessage, retryable: true);
+            PostStatus("ready", ExtractedButNotReviewedStatus);
+            return;
+        }
+
+        if (!CreateReviewSession(document, runDirectory, Blank(Text(payload, "retry_of")),
+            _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, summary))
+        {
+            // Refused at its session after all - its bridge moved to another document while it
+            // extracted (152A) - and the status line is told the extraction is over here too, rather
+            // than left saying it is extracting: nothing is left half made.
+            PostStatus("ready", ExtractedButNotReviewedStatus);
+        }
     }
 
     /// <summary>
@@ -2379,6 +2411,24 @@ public sealed class ReviewHost : IDisposable
         "the active document or its configuration changed after the review was asked for, so nothing "
         + "was extracted and no run folder was made. Make the part or assembly you want reviewed the "
         + "active document, then press Review again.";
+
+    /// <summary>
+    /// ...and what it answers when the active document, read again once the evidence is extracted, is
+    /// not the review's (owner decision 152A, on the Codex review: X1) - a switch made during the
+    /// extraction, a configuration's above all, which re-attaches no bridge. The run folder keeps what
+    /// was extracted. No path, as <see cref="DocumentChangedMessage"/> names none.
+    /// </summary>
+    private const string DocumentChangedAtTheSessionMessage =
+        "the active document or its configuration changed while the evidence was extracted, so no review "
+        + "session was started and no check ran. Make the part or assembly and the configuration you want "
+        + "reviewed active again, then press Review again.";
+
+    /// <summary>
+    /// The status a new review refused after its extraction ends the extraction's statuses with (owner
+    /// decision 152A, on the Codex review): the extraction is over, and nothing was sent.
+    /// </summary>
+    private const string ExtractedButNotReviewedStatus =
+        "Evidence extracted, but no review was started; no review tokens used.";
 
     /// <summary>
     /// What a new review is refused with when the bridge it would be given is not on its document
@@ -2492,6 +2542,14 @@ public sealed class ReviewHost : IDisposable
             }
         }
 
+        // Owner decision 152A, on the Codex review (X2): the tool service is held from before the bridge
+        // is read until the session is tracked, at the end of this method - `POST /sessions` runs the
+        // review's checks over the bridge, and the gate's busy question sees the session's turn only
+        // once it is tracked - so a follow whose question was answered before this session existed
+        // does not take the bridge down under it. With none listening to hold, the session is given
+        // what is published, as before.
+        using IDisposable? hold = _options.HoldToolService();
+
         // Owner decision 152A: every start that makes a session - a new review, a Retry, a context
         // review and its Retry, a Recheck - asks which document the bridge it hands over serves, and
         // hands over only one on the review's. The bridge is read once, here, and that one is given:
@@ -2500,6 +2558,9 @@ public sealed class ReviewHost : IDisposable
         BridgeConfig? bridge = _options.Bridge;
         if (!BridgeServes(document, bridge))
         {
+            // Nothing runs over this bridge: let it go before the tool service is asked to follow,
+            // which a hold still held would put off a poll.
+            hold?.Dispose();
             RefuseBridgeElsewhere(id, BridgeElsewhereAtTheSessionMessage);
             return false;
         }

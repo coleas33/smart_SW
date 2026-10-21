@@ -732,8 +732,8 @@ def test_each_refusal_of_a_run_folder_says_what_is_true_of_it() -> None:
 DOCUMENT_CHANGED = {
     "DocumentChanged": (
         "The active document or its configuration changed while the review was starting, so "
-        "nothing was extracted. Make the part or assembly you want reviewed the active document, "
-        "then press Review again."
+        "the review did not start. Make the part or assembly and the configuration you want "
+        "reviewed active, then press Review again."
     ),
 }
 """The class the add-in refuses a new review with when the active document, read again once the
@@ -741,7 +741,13 @@ backend is ready, is not the one read when the review was asked for (owner decis
 settings restart the start makes or waits for takes seconds, in which the engineer can make
 another document active, and the dump attaches to whatever is active when it runs. The add-in's
 own class, as on the Remodel tab, whose page prints its message and reads no words file; the
-backend never sends it. The sentence names no path and says what to do."""
+backend never sends it. The sentence names no path and says what to do.
+
+Changed deliberately for owner decision 152A, on the Codex review (X1), 2026-10-20: the add-in
+also refuses a new review with it once the evidence is extracted, when the document or its
+configuration changed during the extraction - a configuration switch re-attaches nothing, and the
+live checks would run on the configuration active then - so "nothing was extracted" is no longer
+true of every refusal it heads, and the way on names the configuration."""
 
 
 def test_a_review_whose_document_changed_as_it_started_says_so_and_what_to_do() -> None:
