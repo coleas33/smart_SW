@@ -49,11 +49,26 @@ public sealed class CheckPaneHostOptions
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
         StartType = startType ?? throw new ArgumentNullException(nameof(startType));
         Start = start ?? throw new ArgumentNullException(nameof(start));
+        RunRootsInForce = () => new[] { RunRoot() };
     }
 
     public IPageChannel Channel { get; }
 
     public Func<string> RunRoot { get; }
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, the one in force among them (owner
+    /// decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open - its report
+    /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
+    /// </summary>
+    public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
+
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
 
     /// <summary>`check.start` for the Model check tab, `standards.start` for the Standards tab.</summary>
     public string StartType { get; }
@@ -176,6 +191,8 @@ public sealed class CheckPaneHost : IDisposable
                     + "know which folder to open.",
                 runId => FindCheck(runId)?.RunDirectory))
         {
+            RunRootsInForce = () => options.RunRootsInForce(),
+            RunRootSaved = () => options.RunRootSaved(),
             LogFolder = () => options.LogFolder(),
             EntityResolver = () => options.EntityResolver(),
             Opener = () => options.Opener(),

@@ -565,6 +565,44 @@ public class SwReviewAddIn : ISwAddin
     }
 
     /// <summary>
+    /// The run root in force, the review host's (owner decision 154A, the owner's follow-up): the one the
+    /// backend was last started with, under which the Model check, Standards and Remodel tabs make their run
+    /// folders and look for their latest run - not the run root saved, a folder outside which the backend
+    /// refuses until a restart brings it in. The default run root when there is no review host, as the
+    /// add-in unloads.
+    /// </summary>
+    private string RunRootInForce() => _reviewHost?.RunRoot ?? UserSettings.DefaultRunRoot();
+
+    /// <summary>
+    /// Every run root in force this SOLIDWORKS session, the review host's (owner decision 154A, the reviews'
+    /// finding F6): the Model check, Standards and Remodel tabs open the runs made under any of them, and the
+    /// Remodel tab knows its copies under any of them, after a save has moved the run root. The run root in
+    /// force alone when there is no review host, as the add-in unloads.
+    /// </summary>
+    private IReadOnlyList<string> RunRootsInForce() => _reviewHost?.RunRootsInForce ?? new[] { RunRootInForce() };
+
+    /// <summary>
+    /// The run root saved in the review host's Settings, which the next restart brings into force (the reviews of
+    /// 154A's merge, N4): a start on the Model check, Standards or Remodel tab refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None when there is no review
+    /// host, as the add-in unloads.
+    /// </summary>
+    private string? RunRootSaved() => _reviewHost?.Settings.RunRoot;
+
+    /// <summary>
+    /// The run root a new run's folder is made under, the review host's (owner decision 154A, with 153A's record of
+    /// the settings in force): the run root in force, or none while a start of the backend under way would bring
+    /// another into force, which the Model check, Standards and Remodel tabs refuse a start on. One reading of the
+    /// host, so its none is never taken for its absence, which alone gives <see cref="RunRootInForce"/>'s default
+    /// run root, as the add-in unloads.
+    /// </summary>
+    private string? RunRootForANewRun()
+    {
+        ReviewHost? host = _reviewHost;
+        return host == null ? RunRootInForce() : host.RunRootForANewRun();
+    }
+
+    /// <summary>
     /// The Model check tab's host (T083, contracts/model-check.md).
     ///
     /// It shares three things with the Review tab rather than owning copies of them: the same
@@ -586,8 +624,11 @@ public class SwReviewAddIn : ISwAddin
 
         _modelCheckHost = new ModelCheckHost(new ModelCheckHostOptions(
             _pane.ModelCheckChannel,
-            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+            RunRootInForce)
         {
+            RunRootsInForce = RunRootsInForce,
+            RunRootForANewRun = RunRootForANewRun,
+            RunRootSaved = RunRootSaved,
             Backend = () => _backend?.Endpoint,
             CurrentDocument = CurrentDocument,
 
@@ -697,8 +738,11 @@ public class SwReviewAddIn : ISwAddin
 
         _standardsHost = new StandardsHost(new StandardsHostOptions(
             _pane.StandardsChannel,
-            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+            RunRootInForce)
         {
+            RunRootsInForce = RunRootsInForce,
+            RunRootForANewRun = RunRootForANewRun,
+            RunRootSaved = RunRootSaved,
             Backend = () => _backend?.Endpoint,
             CurrentDocument = CurrentDocument,
             Dump = reviewOptions.Dump,
@@ -815,8 +859,11 @@ public class SwReviewAddIn : ISwAddin
 
         _remodelHost = new RemodelHost(new RemodelHostOptions(
             _pane.RemodelChannel,
-            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+            RunRootInForce)
         {
+            RunRootsInForce = RunRootsInForce,
+            RunRootForANewRun = RunRootForANewRun,
+            RunRootSaved = RunRootSaved,
             Backend = endpoint,
             CurrentDocument = CurrentDocument,
             RemodelAvailability = () => _toolService?.RemodelCapability

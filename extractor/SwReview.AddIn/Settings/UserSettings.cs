@@ -398,7 +398,7 @@ public sealed class UserSettings
     /// %USERPROFILE%\Documents\SwReview\runs. MyDocuments rather than a literal Documents path
     /// so a redirected Documents folder is honoured.
     /// </summary>
-    private static string DefaultRunRoot() => Path.Combine(
+    public static string DefaultRunRoot() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SwReview", "runs");
 
     /// <summary>
