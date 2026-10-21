@@ -3540,6 +3540,117 @@ public sealed class DeferredRestartTests
             .Cast<System.Text.RegularExpressions.Match>());
     }
 
+    /// <summary>
+    /// Found on review (C2): `init` and the word that a restart which waited failed each carry, with
+    /// whether the saved settings are in force, the number of that reading - one past the last such
+    /// reading's, in the order the host took them (`settings_not_in_force_revision`) - so the page can
+    /// tell an `init` read before the failure and delivered after it from one read since. Read while
+    /// the restart waited, `init` says nothing, numbered below the failure's word, which says the
+    /// sentence; read after it, `init` says the sentence too, numbered above.
+    /// </summary>
+    [Fact]
+    public void EachWordOnTheSettingsInForceIsNumberedInTheOrderItWasRead()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        world.Backend.EarlyRestartFailure = new BackendStartException(LauncherGone);
+        SaveAsATurnStarts(world, "save", ASwitchToGemini());
+        world.Reply("settings.saved", "save");
+
+        JsonElement whileItWaited = Init(world, "waiting");
+        Assert.Equal(JsonValueKind.Null, whileItWaited.GetProperty("settings_not_in_force").ValueKind);
+        long readWhileItWaited = whileItWaited.GetProperty("settings_not_in_force_revision").GetInt64();
+
+        // The turn ends, and the next review makes the restart, which fails before the old backend stops.
+        world.Backend.EndTurn("chat-1");
+        world.Receive("review.start", "start", new { });
+        world.Reply("error", "start");
+        JsonElement failure = world.Last("status");
+        Assert.Equal(NotInForce, failure.GetProperty("settings_not_in_force").GetString());
+        long failed = failure.GetProperty("settings_not_in_force_revision").GetInt64();
+        Assert.True(failed > readWhileItWaited, $"the failure's word, {failed}, is not numbered above {readWhileItWaited}");
+
+        JsonElement since = Init(world, "since");
+        Assert.Equal(NotInForce, since.GetProperty("settings_not_in_force").GetString());
+        Assert.True(
+            since.GetProperty("settings_not_in_force_revision").GetInt64() > failed,
+            "an init read after the failure's word is not numbered above it");
+    }
+
+    /// <summary>
+    /// ...and a reading and its number are taken together, under one lock, so the numbers follow the
+    /// readings when two are taken at once (C2). An `init` held inside its reading - once it has the
+    /// settings it compares, before it has compared them - while a save puts the saved settings in
+    /// force, is numbered below an `init` read after that save, which waits for it: its reading is
+    /// the older, and the page, taking only a higher number, keeps the newer. A reading taken apart
+    /// from its number would leave the older reading with the higher number, for the page to keep.
+    /// </summary>
+    [Fact]
+    public void AReadingAndItsNumberAreTakenTogetherSoTheNumbersFollowTheReadings()
+    {
+        string workstationKey = string.Concat("FICT", "-env-", "openai-", "153a-0004");
+        using var looks = new ThreadLocal<int>();
+        using var reading = new ManualResetEventSlim(false);
+        using var letGo = new ManualResetEventSlim(false);
+        using var world = new RestartWorld();
+        try
+        {
+            // The key comes from the workstation's environment, so each reading looks it up: the first
+            // `init`'s second look is its reading's, made once it holds the settings it compares.
+            world.Settings.ApiKeyProtected = null;
+            world.WorkstationEnvironment = name =>
+            {
+                if (looks.Value > 0 && ++looks.Value == 3)
+                {
+                    reading.Set();
+                    letGo.Wait(TimeSpan.FromSeconds(15));
+                }
+
+                return name == "OPENAI_API_KEY" ? workstationKey : null;
+            };
+            world.Open();
+            world.Track("chat-1");
+            SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "at once", Save(model: "gpt-5.6-mini"));
+            world.Backend.EarlyRestartFailure = null;
+
+            var older = new Caller<bool>(() =>
+            {
+                looks.Value = 1;
+                Init(world, "older");
+                return true;
+            });
+            Assert.True(reading.Wait(TimeSpan.FromSeconds(10)), "the first init never reached its reading");
+
+            world.Receive("settings.save", "in force", Save(model: "gpt-5.6-mini"));
+            world.Reply("settings.saved", "in force");
+            var newer = new Caller<bool>(() =>
+            {
+                Init(world, "newer");
+                return true;
+            });
+            newer.Finishes(TimeSpan.FromMilliseconds(300));
+
+            letGo.Set();
+            Assert.True(older.Finishes(TimeSpan.FromSeconds(10)), "the older init never finished");
+            Assert.True(newer.Finishes(TimeSpan.FromSeconds(10)), "the newer init never finished");
+            Assert.True(older.Result);
+            Assert.True(newer.Result);
+            JsonElement olderInit = world.Reply("init", "older");
+            JsonElement newerInit = world.Reply("init", "newer");
+            Assert.Equal(NotInForce, olderInit.GetProperty("settings_not_in_force").GetString());
+            Assert.Equal(JsonValueKind.Null, newerInit.GetProperty("settings_not_in_force").ValueKind);
+            Assert.True(
+                olderInit.GetProperty("settings_not_in_force_revision").GetInt64()
+                    < newerInit.GetProperty("settings_not_in_force_revision").GetInt64(),
+                "the older reading is not numbered below the newer");
+        }
+        finally
+        {
+            letGo.Set();
+        }
+    }
+
     /// <summary>The first start the add-in makes, through the host, of the world's backend.</summary>
     private static bool FirstStart(RestartWorld world) =>
         world.Host.FirstStart((settings, key) => world.Backend.Restart(settings, key));

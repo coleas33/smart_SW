@@ -428,6 +428,15 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     private volatile UserSettings _inForce;
 
+    /// <summary>
+    /// The number of the last reading of whether the saved settings are in force (owner decision 153A,
+    /// found on review, C2); guarded by <see cref="_inForceReading"/>.
+    /// </summary>
+    private long _inForceReadings;
+
+    /// <summary>The lock a reading of whether the saved settings are in force is taken and numbered under.</summary>
+    private readonly object _inForceReading = new object();
+
     private string? _settingsError;
     private PreparedContext? _preparedContext;
     private long _contextGeneration;
@@ -1017,6 +1026,7 @@ public sealed class ReviewHost : IDisposable
         BackendEndpoint? endpoint = _options.Backend.Endpoint;
         ResolvedApiKey key = _settings.ResolveApiKey(_options.Environment);
         PageDocument? document = _options.CurrentDocument();
+        (string? notInForce, long notInForceRevision) = ReadSettingsNotInForce();
 
         Send("init", id, new Dictionary<string, object?>
         {
@@ -1046,8 +1056,10 @@ public sealed class ReviewHost : IDisposable
             { "engineering_context", _options.Dump != null },
             { "engineering_selection", _options.EngineeringSelection != null },
 
-            // Owner decision 153A: in every `init`, so a page that loads or reloads is told too.
-            { "settings_not_in_force", SettingsNotInForce() },
+            // Owner decision 153A: in every `init`, so a page that loads or reloads is told too;
+            // with the number of the reading, so an older one delivered late changes nothing (C2).
+            { "settings_not_in_force", notInForce },
+            { "settings_not_in_force_revision", notInForceRevision },
         });
 
         ReportSettingsProblems(key);
@@ -1454,6 +1466,23 @@ public sealed class ReviewHost : IDisposable
     }
 
     /// <summary>
+    /// Found on review (C2): one reading of <see cref="SettingsNotInForce"/> and its number, one past the
+    /// last reading's, both taken under one lock, so the numbers follow the order of the readings. `init`
+    /// and the word that a restart which waited failed carry both, and the Review page takes a reading
+    /// only when its number is above the last it took: an `init` read before such a failure and delivered
+    /// after its word - the posts go out from different threads - cannot take the sentence off. Posted
+    /// outside the lock, in whatever order; the numbers decide. Taken under the restart's lock by the
+    /// failure's word, which is taken before this lock, never after it.
+    /// </summary>
+    private (string? Sentence, long Revision) ReadSettingsNotInForce()
+    {
+        lock (_inForceReading)
+        {
+            return (SettingsNotInForce(), ++_inForceReadings);
+        }
+    }
+
+    /// <summary>
     /// The Review tab's word that a restart which waited has failed: `status {stage: "error"}` with
     /// the failure, masked, as a failed start is reported, and the way on after it (owner decision
     /// 150A, review) - when the old backend is still up with other settings than the saved ones, the
@@ -1464,10 +1493,11 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     private void PostRestartFailed(Exception failure)
     {
-        string? notInForce = SettingsNotInForce();
+        (string? notInForce, long revision) = ReadSettingsNotInForce();
         Dictionary<string, object?> payload =
             _actions.StatusPayload("error", WithTheWayOn(failure.Message, notInForce ?? RetryTheRestart));
         payload["settings_not_in_force"] = notInForce;
+        payload["settings_not_in_force_revision"] = revision;
         Send("status", null, payload);
     }
 

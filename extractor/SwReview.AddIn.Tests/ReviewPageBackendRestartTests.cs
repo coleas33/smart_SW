@@ -717,6 +717,50 @@ return JSON.stringify({
     }
 
     /// <summary>
+    /// Found on review (C2), Codex's ordering: a save is kept and its restart waits; the `init` the page
+    /// asks for after the save's reply is read while the restart waits, and says nothing; the restart
+    /// then fails before it stops the old backend, and its word, saying the sentence, reaches the page
+    /// before that `init`. The `init` must not take the sentence off: each carries the number of its
+    /// reading, and the page takes a word only when its number is above the last it took - so the next
+    /// review's ready status leaves the sentence on the banner. An `init` read since, numbered above,
+    /// still takes it off.
+    /// </summary>
+    [Fact]
+    public void AnInitReadBeforeARestartFailedCannotTakeTheFailuresSentenceOff()
+    {
+        const string Failed = "FICT the launcher could not be resolved. " + NotInForce;
+        ReviewPageDriver.Run(driver => driver.SettingsNotInForceRevision = 1, async driver =>
+        {
+            int readies = driver.Posted("ready").Length;
+            driver.HoldReady = true;
+            driver.SettingsNotInForceRevision = 2;
+            await driver.Click("save-settings");
+            await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for init after the save");
+
+            await driver.Post("status", new
+            {
+                stage = "error",
+                message = Failed,
+                settings_not_in_force = NotInForce,
+                settings_not_in_force_revision = 3,
+            });
+            await driver.ReleaseReady();
+            await driver.Post("status", new { stage = "ready", message = "Reviewing 12 components." });
+
+            JsonElement banner = await driver.Read(Banner);
+            Assert.False(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+            Assert.Equal(NotInForce, banner.GetProperty("text").GetString());
+
+            driver.SettingsNotInForceRevision = 4;
+            await driver.Click("save-settings");
+            await driver.Until(() => driver.Posted("ready").Length == readies + 2, "asked for init after the next save");
+            await driver.Settle();
+            banner = await driver.Read(Banner);
+            Assert.True(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+        });
+    }
+
+    /// <summary>
     /// A backend that stopped holds no settings: `backend.stopped` takes the sentence off the banner
     /// with the backend.
     /// </summary>
