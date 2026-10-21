@@ -21,6 +21,7 @@ public sealed class RemodelHostOptions
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
         RunRootsInForce = () => new[] { RunRoot() };
+        RunRootForANewRun = () => RunRoot();
     }
 
     public IPageChannel Channel { get; }
@@ -33,6 +34,14 @@ public sealed class RemodelHostOptions
     /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
     /// </summary>
     public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
+
+    /// <summary>
+    /// The run root a plan's folder is made under, and a Start's plan must lie under, read once each pass of the
+    /// gate (owner decision 154A, with 153A's record of the settings in force): the run root in force, or null while
+    /// a start of the backend under way would bring another into force, which a plan and a Start refuse. The run
+    /// root in force by default.
+    /// </summary>
+    public Func<string?> RunRootForANewRun { get; set; }
 
     /// <summary>The backend's endpoint, or null before it is listening.</summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
@@ -2786,16 +2795,27 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     private bool RunRootRefused(string? id, string runRoot, string notDone) =>
         _actions.RefusedRunRoot(
-            id, runRoot, _options.RunRootProbe, notDone, RunRootRule.InSettingsOnTheReviewTab, "press Remodel a copy again");
+            id, runRoot, _options.RunRootProbe, notDone, RunRootRule.InSettingsOnTheReviewTab, PressAgain);
+
+    /// <summary>What a plan or a Start refused for its run root says to do once the cause is gone (owner decision 154A).</summary>
+    private const string PressAgain = "press Remodel a copy again";
 
     /// <summary>
     /// The run root a plan or a Start goes on under once its gate is passed (the reviews of decision 154A, N8):
     /// the run root in force, judged again when the gate's restart moved it from <paramref name="judged"/>; null
-    /// once the press is answered with the refusal.
+    /// once the press is answered with the refusal. Read once, with 153A's record of the settings in force: the gate
+    /// holds back every settings restart, but not the add-in's first start of the backend, and while one that would
+    /// bring another run root into force is under way there is none to go on under, and the press is refused.
     /// </summary>
     private string? RunRootToUse(string? id, string judged, string notDone)
     {
-        string inForce = _options.RunRoot();
+        string? inForce = _options.RunRootForANewRun();
+        if (inForce == null)
+        {
+            _actions.SendRunRootMoving(id, notDone, PressAgain);
+            return null;
+        }
+
         if (string.Equals(inForce, judged, StringComparison.Ordinal))
         {
             return inForce;

@@ -565,6 +565,19 @@ public class SwReviewAddIn : ISwAddin
     private IReadOnlyList<string> RunRootsInForce() => _reviewHost?.RunRootsInForce ?? new[] { RunRootInForce() };
 
     /// <summary>
+    /// The run root a new run's folder is made under, the review host's (owner decision 154A, with 153A's record of
+    /// the settings in force): the run root in force, or none while a start of the backend under way would bring
+    /// another into force, which the Model check, Standards and Remodel tabs refuse a start on. One reading of the
+    /// host, so its none is never taken for its absence, which alone gives <see cref="RunRootInForce"/>'s default
+    /// run root, as the add-in unloads.
+    /// </summary>
+    private string? RunRootForANewRun()
+    {
+        ReviewHost? host = _reviewHost;
+        return host == null ? RunRootInForce() : host.RunRootForANewRun();
+    }
+
+    /// <summary>
     /// The Model check tab's host (T083, contracts/model-check.md).
     ///
     /// It shares three things with the Review tab rather than owning copies of them: the same
@@ -589,6 +602,7 @@ public class SwReviewAddIn : ISwAddin
             RunRootInForce)
         {
             RunRootsInForce = RunRootsInForce,
+            RunRootForANewRun = RunRootForANewRun,
             Backend = () => _backend?.Endpoint,
             CurrentDocument = CurrentDocument,
 
@@ -701,6 +715,7 @@ public class SwReviewAddIn : ISwAddin
             RunRootInForce)
         {
             RunRootsInForce = RunRootsInForce,
+            RunRootForANewRun = RunRootForANewRun,
             Backend = () => _backend?.Endpoint,
             CurrentDocument = CurrentDocument,
             Dump = reviewOptions.Dump,
@@ -820,6 +835,7 @@ public class SwReviewAddIn : ISwAddin
             RunRootInForce)
         {
             RunRootsInForce = RunRootsInForce,
+            RunRootForANewRun = RunRootForANewRun,
             Backend = endpoint,
             CurrentDocument = CurrentDocument,
             RemodelAvailability = () => _toolService?.RemodelCapability

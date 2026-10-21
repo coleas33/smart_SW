@@ -6451,6 +6451,77 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 154A, with 153A's record of the settings in force (feature 002 T201): a plan's gate holds
+    /// back every settings restart, but not the add-in's first start of the backend, which can be under way once the
+    /// gate is passed. While one that would bring another run root into force is, the plan is refused before
+    /// anything is asked of the pipeline or made, `BackendUnavailable`, retryable, in this tab's words - the plan's
+    /// calls would go to a backend started with another run root than the one its folder would be made under - and
+    /// the host is left free.
+    /// </summary>
+    [Fact]
+    public void APlanIsRefusedWhileAStartOfTheBackendWouldBringAnotherRunRootIn()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            int gates = 0;
+            Func<Action, BackendRequestException?> allowed = world.Options.BeginRun;
+            world.Options.BeginRun = begin =>
+            {
+                gates++;
+                return allowed(begin);
+            };
+            world.Options.RunRootForANewRun = () => null;
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal(
+                RunRootRule.MovingRefusal("nothing was copied", "press Remodel a copy again"),
+                error.GetProperty("message").GetString());
+            Assert.Equal(1, gates);
+            Assert.Empty(world.Pipeline.Calls);
+            Assert.False(world.Host.RunInProgress);
+            world.AssertNothingWasCopied();
+        }
+    }
+
+    /// <summary>
+    /// ...and so is a Start, once its gate is passed and before the run begins: the plan stays planned, and can be
+    /// started once the start has ended.
+    /// </summary>
+    [Fact]
+    public void AStartIsRefusedWhileAStartOfTheBackendWouldBringAnotherRunRootIn()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reply("remodel.planned", "p1");
+            RemodelRun planned = world.Host.LatestRun!;
+            world.Options.RunRootForANewRun = () => null;
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement error = world.Reply("error", "s1");
+            Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal(
+                RunRootRule.MovingRefusal("the plan was not applied", "press Remodel a copy again"),
+                error.GetProperty("message").GetString());
+            Assert.DoesNotContain(world.Posted, message => message.Contains("\"type\":\"remodel.started\""));
+            Assert.Equal(RemodelRunPhase.Planned, planned.Phase);
+            Assert.False(world.Host.RunInProgress);
+
+            world.Options.RunRootForANewRun = () => world.RunRoot;
+            world.Receive("remodel.start", "s2", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("remodel.started", "s2");
+        }
+    }
+
     private sealed class RemodelWorld : IDisposable
     {
         private readonly string _root;

@@ -532,6 +532,17 @@ public sealed class PaneActions
         return true;
     }
 
+    /// <summary>
+    /// Owner decision 154A, with 153A's record of the settings in force: refuses a run start on the Model check,
+    /// Standards or Remodel tab while a start of the backend under way would bring another run root into force
+    /// (<c>ReviewHost.RunRootForANewRun</c> answering none) - <c>error {error_class: "BackendUnavailable"}</c>, as a
+    /// review asked for while a start is under way is refused, and retryable, since the start ends in seconds -
+    /// in the rule's words (<see cref="RunRootRule.MovingRefusal"/>) with the host's own
+    /// <paramref name="notDone"/> and <paramref name="wayOn"/>. Written once for the three.
+    /// </summary>
+    public void SendRunRootMoving(string? id, string notDone, string wayOn) =>
+        SendError(id, "BackendUnavailable", RunRootRule.MovingRefusal(notDone, wayOn), retryable: true);
+
     /// <summary>Sends one `error`, with the message masked (FR-015).</summary>
     public void SendError(string? id, string errorClass, string message, bool retryable) =>
         Send("error", id, ErrorPayload(errorClass, message, retryable));

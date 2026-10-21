@@ -16,6 +16,7 @@ public sealed class StandardsHostOptions
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
         RunRootsInForce = () => new[] { RunRoot() };
+        RunRootForANewRun = () => RunRoot();
     }
 
     public IPageChannel Channel { get; }
@@ -28,6 +29,14 @@ public sealed class StandardsHostOptions
     /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
     /// </summary>
     public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
+
+    /// <summary>
+    /// The run root a Standards run's folder is made under, read once per run (owner decision 154A, with 153A's
+    /// record of the settings in force): the run root in force, or null while a start of the backend under way
+    /// would bring another into force - the backend coming up makes runs only under its own, and may yet fail and
+    /// leave the one it would replace - which `standards.start` refuses. The run root in force by default.
+    /// </summary>
+    public Func<string?> RunRootForANewRun { get; set; }
 
     /// <summary>
     /// The backend's endpoint, or null before it is listening. The page calls
@@ -130,6 +139,12 @@ public sealed class StandardsHost : IDisposable
     /// <summary>The one message type this host answers itself.</summary>
     private const string StartType = "standards.start";
 
+    /// <summary>What a refused `standards.start` did not do, in its words (owner decision 154A).</summary>
+    private const string NothingChecked = "nothing was checked";
+
+    /// <summary>What a refused `standards.start` says to do once the cause is gone (owner decision 154A).</summary>
+    private const string PressAgain = "press Standards check again";
+
     /// <summary>The setting a refusal names, because it is what the engineer has to change.</summary>
     private const string ProfileSetting = "StandardsProfilePath";
 
@@ -222,10 +237,18 @@ public sealed class StandardsHost : IDisposable
         PaneActions actions = _pane.Actions;
 
         // Owner decision 154A: first - the run's folder is made under the run root and handed to the backend,
-        // which refuses one on a share - in this tab's words, which its page shows whole.
+        // which refuses one on a share - in this tab's words, which its page shows whole. Read once, with 153A's
+        // record: the root judged is the one the folder is made under, and none while a start of the backend
+        // under way would bring another into force.
+        string? runRoot = _options.RunRootForANewRun();
+        if (runRoot == null)
+        {
+            actions.SendRunRootMoving(id, NothingChecked, PressAgain);
+            return;
+        }
+
         if (actions.RefusedRunRoot(
-                id, _options.RunRoot(), _options.RunRootProbe, "nothing was checked", RunRootRule.InSettingsOnTheReviewTab,
-                "press Standards check again"))
+                id, runRoot, _options.RunRootProbe, NothingChecked, RunRootRule.InSettingsOnTheReviewTab, PressAgain))
         {
             return;
         }
@@ -298,7 +321,7 @@ public sealed class StandardsHost : IDisposable
         try
         {
             runDirectory = RunFolders.CreateForStandards(
-                _options.RunRoot(), document.Path, _options.Now());
+                runRoot, document.Path, _options.Now());
         }
         catch (Exception failure)
         {
@@ -306,7 +329,7 @@ public sealed class StandardsHost : IDisposable
             actions.SendError(
                 id,
                 "RunFolderFailed",
-                $"the standards run folder could not be created under '{_options.RunRoot()}': "
+                $"the standards run folder could not be created under '{runRoot}': "
                 + failure.Message,
                 retryable: false);
             return;

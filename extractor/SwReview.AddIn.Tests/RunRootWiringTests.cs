@@ -46,6 +46,26 @@ public sealed class RunRootWiringTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Owner decision 154A, with 153A's record of the settings in force (feature 002 T201): each of the three makes
+    /// a new run's folder under the review host's run root for a new run - none while a start of the backend under
+    /// way would bring another run root into force - and under the default run root only when there is no review
+    /// host, as the add-in unloads. One reading of the host: one that answered none and was then read as the
+    /// default would make the run the start was refused for.
+    /// </summary>
+    [Fact]
+    public void EveryOtherTabTakesTheRunRootForANewRunFromTheReviewHost()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+
+        Assert.Equal(3, source.Split(new[] { "RunRootForANewRun = RunRootForANewRun," }, StringSplitOptions.None).Length - 1);
+        Assert.Contains(
+            "private string? RunRootForANewRun() { ReviewHost? host = _reviewHost; "
+            + "return host == null ? RunRootInForce() : host.RunRootForANewRun(); }",
+            source,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheRunRootInForceIsTheReviewHosts()
     {

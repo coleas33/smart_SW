@@ -152,6 +152,16 @@ public sealed class DeferredRestartTests
         "The saved settings are not in force yet: the review backend did not restart with them, so reviews "
         + "run with the settings it was started with. " + RetryTheRestart;
 
+    /// <summary>
+    /// What the Review tab is told instead while the run root saved is not the one in force (owner decision 154A,
+    /// with 153A's record): 153A's sentence, and where every tab makes its runs meanwhile - the folder for runs the
+    /// backend was started with, not the one the Settings panel's field shows - pinned word for word.
+    /// </summary>
+    private const string NotInForceWithTheRunRoot =
+        "The saved settings are not in force yet: the review backend did not restart with them, so reviews run with "
+        + "the settings it was started with, and every tab makes its runs in the folder for runs it was started with, "
+        + "not the one saved. " + RetryTheRestart;
+
     /// <summary>A restart's failure before it stops anything: the configured launcher cannot be found.</summary>
     private const string LauncherGone = "FICT the launcher could not be resolved";
 
@@ -4364,6 +4374,374 @@ public sealed class DeferredRestartTests
     /// <summary>Prepares engineering context and reviews with it, answering `review.started`.</summary>
     private static JsonElement ReviewWithContext(RestartWorld world) =>
         world.Reply("review.started", AskForASession(world, "context review"));
+
+    // ---- 14. the run root in force is the settings in force's (owner decision 154A, with 153A) --
+
+    /// <summary>
+    /// Owner decision 154A, folded into 153A's record of the settings in force (feature 002 T201): the run root in
+    /// force is the one the backend that is up was started with, so it moves whenever that record does - at the
+    /// add-in's first start too. A folder chosen for runs in a save whose restart failed with no backend up comes
+    /// into force with the first start, which starts the backend with the settings saved by then: every tab makes
+    /// its runs under it from then on, and it joins the run roots in force. While the run root in force was a
+    /// record of its own, which only a restart moved, the backend ran under the folder chosen and every tab made
+    /// its runs under the run root loaded, which that backend refuses.
+    /// </summary>
+    [Theory]
+    [InlineData("before it stopped anything")]
+    [InlineData("with nothing up to stop")]
+    public void AFolderChosenInASaveWhoseRestartFailedComesIntoForceWithTheFirstStart(string failed)
+    {
+        using var world = new RestartWorld();
+        string loaded = world.Settings.RunRoot;
+        string chosen = ChosenRoot(world);
+        world.Backend.Down = true;
+        if (failed == "before it stopped anything")
+        {
+            world.Backend.EarlyRestartFailure = new BackendStartException(LauncherGone);
+        }
+        else
+        {
+            world.Backend.RestartFailure = new BackendStartException("FICT the backend would not start");
+        }
+
+        world.Open();
+        world.Receive("settings.save", "save", Choosing(chosen, Save(effort: "low")));
+        Assert.Equal("BackendNotRestarted", world.Reply("error", "save").GetProperty("error_class").GetString());
+        world.Backend.EarlyRestartFailure = null;
+        world.Backend.RestartFailure = null;
+        Assert.Equal(loaded, world.Host.RunRoot);
+
+        Assert.True(FirstStart(world));
+
+        Assert.Equal(chosen, Assert.Single(world.Backend.Restarts).Settings.RunRoot);
+        AssertTheBackendAndTheRunRootInForceAgree(world, chosen);
+        Assert.Equal(new[] { loaded, chosen }, world.Host.RunRootsInForce);
+    }
+
+    /// <summary>
+    /// Codex's third finding against 154A, closed by 153A's first start (feature 002 T201): the add-in's first
+    /// start and a save's restart never overlap, and the first start takes the settings saved when it is made. A
+    /// first start delayed behind a save's restart that brought a folder chosen for runs in finds the backend that
+    /// restart started and starts nothing, so it cannot put the run root loaded back; one made first is followed
+    /// by the save's restart, which brings the folder chosen in. Either way the backend that is up and the run root
+    /// in force agree - the folder chosen - and every run root in force is kept. Each start is held, by the fake
+    /// backend, while the other is asked for.
+    /// </summary>
+    [Theory]
+    [InlineData("the save's restart")]
+    [InlineData("the first start")]
+    public void AFirstStartAndASaveThatChoseAFolderForRunsLeaveTheBackendAndTheRunRootInForceAgreeWhicheverComesFirst(
+        string first)
+    {
+        using var world = new RestartWorld();
+        using var hold = new ManualResetEventSlim(false);
+        try
+        {
+            string loaded = world.Settings.RunRoot;
+            string chosen = ChosenRoot(world);
+            world.Backend.Down = true;
+            world.Backend.Hold = hold;
+            world.Open();
+            Func<bool> save = () =>
+            {
+                world.Receive("settings.save", "save", Choosing(chosen, Save(effort: "low")));
+                return true;
+            };
+            Func<bool> firstStart = () => FirstStart(world);
+
+            var earlier = new Caller<bool>(first == "the save's restart" ? save : firstStart);
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the earlier start never began");
+            var later = new Caller<bool>(first == "the save's restart" ? firstStart : save);
+            Assert.False(later.Finishes(TimeSpan.FromMilliseconds(300)), "the later start did not wait for the earlier");
+
+            hold.Set();
+            Assert.True(earlier.Finishes(TimeSpan.FromSeconds(10)), "the earlier start never finished");
+            Assert.True(later.Finishes(TimeSpan.FromSeconds(10)), "the later start never finished");
+            world.Reply("settings.saved", "save");
+
+            Assert.Equal(
+                first == "the save's restart" ? new[] { chosen } : new[] { loaded, chosen },
+                world.Backend.Restarts.Select(restart => restart.Settings.RunRoot));
+            AssertTheBackendAndTheRunRootInForceAgree(world, chosen);
+            Assert.Equal(new[] { loaded, chosen }, world.Host.RunRootsInForce);
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 154A, with 153A's record (feature 002 T201): the run root is among the settings a backend
+    /// runs with - it makes runs only under the one it was started with - so a save that changes it, whose restart
+    /// fails before the old backend stops, is not in force, and the Review tab is told so by every `init` and by
+    /// the status of a restart that waited and failed. The sentence is 153A's, with where every tab makes its runs
+    /// meanwhile: the folder for runs the backend was started with, not the one saved, which the Settings panel's
+    /// field shows - whether the run root alone changed or other settings with it. `init` names the run root in
+    /// force, and its settings the one saved.
+    /// </summary>
+    [Theory]
+    [InlineData("the run root alone", "at once")]
+    [InlineData("the run root alone", "after waiting")]
+    [InlineData("the run root and the provider", "at once")]
+    [InlineData("the run root and the provider", "after waiting")]
+    public void ASaveThatChangesTheRunRootIsNotInForceUntilItRestartsAndInitSaysWhereRunsAreMade(string changed, string when)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        string loaded = world.Host.RunRoot;
+        string chosen = ChosenRoot(world);
+        Dictionary<string, object?> payload = Choosing(chosen, changed == "the run root alone" ? Save() : ASwitchToGemini());
+
+        SaveWhoseRestartFailsBeforeTheOldBackendStops(world, when, payload);
+
+        if (when == "after waiting")
+        {
+            Assert.Equal(LauncherGone + ". " + NotInForceWithTheRunRoot, world.Last("status").GetProperty("message").GetString());
+        }
+
+        JsonElement init = Init(world, "init");
+        Assert.Equal(NotInForceWithTheRunRoot, init.GetProperty("settings_not_in_force").GetString());
+        Assert.Equal(loaded, init.GetProperty("run_root").GetString());
+        Assert.Equal(chosen, init.GetProperty("settings").GetProperty("run_root").GetString());
+        Assert.Equal(loaded, world.Host.RunRoot);
+    }
+
+    /// <summary>
+    /// ...while a run root saved in another letter case names the same folder, which Windows reads either way: it
+    /// is the run root in force - `init` says nothing of the settings in force after its restart failed - and once
+    /// a restart brings it in it is not a second run root in force (owner decision 154A, one rule for whether two
+    /// run roots are the same).
+    /// </summary>
+    [Theory]
+    [InlineData("its restart failed")]
+    [InlineData("its restart was made")]
+    public void ARunRootSavedInAnotherLetterCaseIsTheRunRootInForce(string restart)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        string loaded = world.Host.RunRoot;
+        string otherCase = loaded.ToUpperInvariant();
+        Assert.NotEqual(loaded, otherCase);
+        Dictionary<string, object?> payload = Choosing(otherCase, Save());
+
+        if (restart == "its restart failed")
+        {
+            SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "at once", payload);
+            Assert.Equal(JsonValueKind.Null, Init(world, "init").GetProperty("settings_not_in_force").ValueKind);
+            Assert.Equal(loaded, world.Host.RunRoot);
+        }
+        else
+        {
+            world.Receive("settings.save", "save", payload);
+            world.Reply("settings.saved", "save");
+            Assert.Equal(otherCase, world.Host.RunRoot);
+        }
+
+        Assert.Equal(otherCase, world.Host.Settings.RunRoot);
+        Assert.Equal(new[] { loaded }, world.Host.RunRootsInForce);
+    }
+
+    /// <summary>
+    /// Owner decision 154A, with 153A's record (feature 002 T201): a start of the backend publishes its endpoint
+    /// before it records the settings it was made with, and can still fail and leave the backend it would replace -
+    /// so while one that would bring another run root into force is under way, neither run root is the one to make
+    /// a new run under: the run root for a new run is none, and the Model check, Standards and Remodel tabs refuse
+    /// a start on it. Once the start ends it is the one the start left in force: the one it brought in, or, when it
+    /// failed, the one before. A start under way that keeps the run root moves nothing, and runs go on under it.
+    /// Every start: a save's restart, one that waited for a turn, and the add-in's first.
+    /// </summary>
+    [Theory]
+    [InlineData("a save's restart that brings another run root in")]
+    [InlineData("a save's restart that fails before the old backend stops")]
+    [InlineData("a restart that waited for a turn")]
+    [InlineData("the first start, after a save whose restart failed")]
+    [InlineData("a save's restart that keeps the run root")]
+    public void WhileAStartOfTheBackendIsUnderWayANewRunTakesTheRunRootItLeavesInForce(string start)
+    {
+        using var world = new RestartWorld();
+        using var hold = new ManualResetEventSlim(false);
+        try
+        {
+            string loaded = world.Settings.RunRoot;
+            string chosen = ChosenRoot(world);
+            Dictionary<string, object?> payload = Choosing(chosen, Save(effort: "low"));
+            string after = chosen;
+            Caller<bool>? caller = null;
+            Func<bool> save = () =>
+            {
+                world.Receive("settings.save", "save", payload);
+                return true;
+            };
+
+            switch (start)
+            {
+                case "a save's restart that brings another run root in":
+                    world.Open();
+                    world.Backend.Hold = hold;
+                    caller = new Caller<bool>(save);
+                    break;
+
+                case "a save's restart that fails before the old backend stops":
+                    world.Open();
+                    world.Backend.Hold = hold;
+                    world.Backend.EarlyRestartFailure = new BackendStartException(LauncherGone);
+                    caller = new Caller<bool>(save);
+                    after = loaded;
+                    break;
+
+                case "a restart that waited for a turn":
+                    world.Open();
+                    world.Track("chat-1");
+                    SaveAsATurnStarts(world, "save", payload);
+                    world.Reply("settings.saved", "save");
+                    world.Backend.Hold = hold;
+                    world.Backend.EndTurn("chat-1");
+                    break;
+
+                case "the first start, after a save whose restart failed":
+                    world.Backend.Down = true;
+                    world.Backend.RestartFailure = new BackendStartException("FICT the backend would not start");
+                    world.Open();
+                    world.Receive("settings.save", "failed", payload);
+                    world.Reply("error", "failed");
+                    world.Backend.RestartFailure = null;
+
+                    // The failed restart got past the backend's own check, so the first start is waited for afresh.
+                    world.Backend.Entered.Reset();
+                    world.Backend.Hold = hold;
+                    caller = new Caller<bool>(() => FirstStart(world));
+                    break;
+
+                default:
+                    payload.Remove("run_root");
+                    world.Open();
+                    world.Backend.Hold = hold;
+                    caller = new Caller<bool>(save);
+                    after = loaded;
+                    break;
+            }
+
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the start never began");
+            Assert.Equal(loaded, world.Host.RunRoot);
+            Assert.Equal(start == "a save's restart that keeps the run root" ? loaded : null, world.Host.RunRootForANewRun());
+
+            hold.Set();
+            if (caller != null)
+            {
+                Assert.True(caller.Finishes(TimeSpan.FromSeconds(10)), "the start never finished");
+            }
+            else
+            {
+                Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted");
+            }
+
+            Assert.Equal(after, world.Host.RunRoot);
+            Assert.Equal(after, world.Host.RunRootForANewRun());
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    /// <summary>
+    /// ...and the Review tab needs no refusal of its own (feature 002 T201): it takes the run root for a new
+    /// review's folder once the backend is ready, when the only start that can be under way is the add-in's first,
+    /// and a review whose folder was made while that start was bringing another run root in is answered before the
+    /// backend is asked for a session - refused while the start is still under way (153A), or, once the start has
+    /// brought the other run root in, refused `RunRootChanged`, its folder under a run root no longer in force (the
+    /// reviews' F6). The backend is never asked for a session in a folder outside the run root it was started
+    /// with. While the run root in force was a record of its own, the first start did not move it, and a review
+    /// whose evidence was extracted as the start ended went on in a folder that backend refuses.
+    /// </summary>
+    [Theory]
+    [InlineData("still under way when the session is asked for")]
+    [InlineData("over while the evidence was extracted")]
+    public void AReviewWhoseFolderIsMadeWhileTheFirstStartBringsAnotherRunRootInIsNotStarted(string start)
+    {
+        using var world = new RestartWorld();
+        using var published = new ManualResetEventSlim(false);
+        using var letGo = new ManualResetEventSlim(false);
+        try
+        {
+            string loaded = world.Settings.RunRoot;
+            string chosen = ChosenRoot(world);
+            world.Backend.Down = true;
+            world.Backend.RestartFailure = new BackendStartException("FICT the backend would not start");
+            world.Open();
+            world.Receive("settings.save", "save", Choosing(chosen, Save(effort: "low")));
+            world.Reply("error", "save");
+            world.Backend.RestartFailure = null;
+            Caller<bool> first = FirstStartHeldOncePublished(world, published, letGo);
+            if (start == "over while the evidence was extracted")
+            {
+                world.Dump.OnRun = () =>
+                {
+                    letGo.Set();
+                    Assert.True(first.Finishes(TimeSpan.FromSeconds(10)), "the first start never finished");
+                };
+            }
+
+            world.Receive("review.start", "start", new { });
+
+            JsonElement error = world.Reply("error", "start");
+            if (start == "still under way when the session is asked for")
+            {
+                Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
+                Assert.True(error.GetProperty("retryable").GetBoolean());
+            }
+            else
+            {
+                Assert.Equal("RunRootChanged", error.GetProperty("error_class").GetString());
+                Assert.Equal(
+                    "the run root changed while the evidence was extracted, and the backend makes runs only under the "
+                    + "one in force, so the review was not started. Press Review again.",
+                    error.GetProperty("message").GetString());
+            }
+
+            Assert.Equal(1, world.Dump.Runs);
+            Assert.Empty(world.Backend.Sessions);
+            Assert.Single(Directory.GetDirectories(loaded));
+            letGo.Set();
+            Assert.True(first.Finishes(TimeSpan.FromSeconds(10)), "the first start never finished");
+            Assert.True(first.Result);
+            Assert.Equal(chosen, world.Host.RunRoot);
+        }
+        finally
+        {
+            letGo.Set();
+        }
+    }
+
+    /// <summary>A folder for runs beside the world's own run root, under its temporary folder: one a save chooses.</summary>
+    private static string ChosenRoot(RestartWorld world) => Path.Combine(world.Root, "chosen", "runs");
+
+    /// <summary><paramref name="payload"/>, a settings save, choosing <paramref name="runRoot"/> as the folder for runs.</summary>
+    private static Dictionary<string, object?> Choosing(string runRoot, Dictionary<string, object?> payload)
+    {
+        payload["run_root"] = runRoot;
+        return payload;
+    }
+
+    /// <summary>
+    /// The backend that is up was started with the run root in force (owner decision 154A, with 153A's record):
+    /// it is the run root for a new run and among the run roots in force, `init` names it and says nothing of the
+    /// settings in force, and a review's folder is made under it.
+    /// </summary>
+    private static void AssertTheBackendAndTheRunRootInForceAgree(RestartWorld world, string runRoot)
+    {
+        Assert.NotNull(world.Backend.Endpoint);
+        Assert.Equal(runRoot, world.Backend.Restarts.Last().Settings.RunRoot);
+        Assert.Equal(runRoot, world.Host.RunRoot);
+        Assert.Equal(runRoot, world.Host.RunRootForANewRun());
+        Assert.Contains(runRoot, world.Host.RunRootsInForce);
+        JsonElement init = Init(world, "agree-run-root");
+        Assert.Equal(runRoot, init.GetProperty("run_root").GetString());
+        Assert.Equal(JsonValueKind.Null, init.GetProperty("settings_not_in_force").ValueKind);
+        Assert.Equal(runRoot, Path.GetDirectoryName(MakeASession(world, "review").RunDirectory));
+    }
 
     // ---- the restart itself, with no host ------------------------------------------------------
 

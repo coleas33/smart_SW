@@ -198,7 +198,10 @@ into force with the restart the save makes (`pane-host-messages.md`, `settings.s
 pane makes its run folders, and asks for reviews and checks by name, under the run root the backend
 was started with, and after it a review or a check made under the old run root is not found by name;
 the pane refuses a run that would go on in a folder under the old run root before it asks
-(`RunRootChanged`; `pane-host-messages.md`, "The run root rule").
+(`RunRootChanged`; `pane-host-messages.md`, "The run root rule"). *Amended 2026-10-21 (owner
+decision 154A, with 153A's record of the settings in force):* a run root chosen in a save whose restart
+failed with no backend up comes into force with the add-in's first start of the backend, which is made
+with the settings saved by then.
 
 `check_id` is the check run folder's *name*, so a check is addressable after a restart
 without any server-side registry. It is caller-supplied too and goes through the same

@@ -669,6 +669,28 @@ public sealed class RunRootRuleTests : IDisposable
     }
 
     /// <summary>
+    /// Owner decision 154A, with 153A's record of the settings in force (feature 002 T201): what a run start on
+    /// the Model check, Standards or Remodel tab is refused with while a start of the backend under way would bring
+    /// another run root into force - why, what was not done, and the way on, the same press in a moment - with no
+    /// path. Its pages print it whole.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        "nothing was checked",
+        "press Model check again",
+        "The review backend is being started with another folder for runs, so nothing was checked. Press Model check "
+        + "again in a moment.")]
+    [InlineData(
+        "the plan was not applied",
+        "press Remodel a copy again",
+        "The review backend is being started with another folder for runs, so the plan was not applied. Press Remodel "
+        + "a copy again in a moment.")]
+    public void ARunStartWhileAnotherRunRootComesIntoForceIsRefusedInWordsThatSaySo(string notDone, string wayOn, string words)
+    {
+        Assert.Equal(words, RunRootRule.MovingRefusal(notDone, wayOn));
+    }
+
+    /// <summary>
     /// A full path starts with its drive letter and a separator, or with two separators - a share or a device
     /// path, which the rule itself refuses. A relative path, one rooted on the current drive, and one on a drive
     /// with no separator after its letter, which is relative to that drive's current folder, are not.

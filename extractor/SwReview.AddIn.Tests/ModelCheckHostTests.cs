@@ -587,6 +587,69 @@ public sealed class ModelCheckHostTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 154A, with 153A's record of the settings in force (feature 002 T201): while a start of the
+    /// backend under way would bring another run root into force - a settings save's restart, made on the Review
+    /// tab's thread, or the add-in's first start - `check.start` is refused first, before the run root is judged
+    /// or the document asked about, `BackendUnavailable`, retryable, in this tab's words: the backend is being
+    /// started with another folder for runs, nothing was checked, and Model check pressed again in a moment. A
+    /// check made then would be made under the run root in force, which the backend coming up refuses. No folder is
+    /// made, nothing is extracted, registered or posted, and the rule reads nothing.
+    /// </summary>
+    [Fact]
+    public void CheckStartIsRefusedWhileAStartOfTheBackendWouldBringAnotherRunRootIn()
+    {
+        using (var world = new CheckWorld())
+        {
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            world.Probe = probe;
+            world.RunRootForANewRun = () => null;
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDPRT", "Default");
+            world.Open();
+
+            world.Receive("check.start", "c1", new { scope = "part" });
+
+            JsonElement error = world.Reply("error", "c1");
+            Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal(
+                RunRootRule.MovingRefusal("nothing was checked", "press Model check again"),
+                error.GetProperty("message").GetString());
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.RunFolders());
+            Assert.Empty(world.Registered);
+            Assert.Empty(world.AllPosted("status"));
+            Assert.Empty(probe.Asked);
+        }
+    }
+
+    /// <summary>
+    /// ...and a check reads the run root once (feature 002 T201): the one it judges is the one its folder is made
+    /// under, even when the run root in force moves between - a restart on another tab's thread that ends
+    /// meanwhile. It read the run root to judge it and again to make the folder, and so could make a check's folder
+    /// under a run root it never judged.
+    /// </summary>
+    [Fact]
+    public void ACheckJudgesAndMakesItsFolderUnderOneReadingOfTheRunRoot()
+    {
+        using (var world = new CheckWorld())
+        {
+            string moved = Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "moved", "runs");
+            int readings = 0;
+            world.RunRootSource = () => ++readings == 1 ? world.RunRoot : moved;
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDPRT", "Default");
+            world.Open();
+
+            world.Receive("check.start", "c1", new { scope = "part" });
+
+            string runDirectory = world.Reply("check.extracted", "c1").GetProperty("run_dir").GetString()!;
+            Assert.Equal(world.RunRoot, Path.GetDirectoryName(runDirectory));
+            Assert.Equal(new[] { runDirectory }, world.RunFolders());
+            Assert.False(Directory.Exists(moved), "the check's folder was made under a run root it did not judge");
+            Assert.Equal(1, readings);
+        }
+    }
+
     // ---- the world ----------------------------------------------------------------------
 
     private sealed class CheckWorld : IDisposable
@@ -612,6 +675,15 @@ public sealed class ModelCheckHostTests
 
         /// <summary>The run root as the setting spells it, when not <see cref="RunRoot"/> (owner decision 154A).</summary>
         public string? RunRootSpelling { get; set; }
+
+        /// <summary>
+        /// What each reading of the run root in force answers, when a test makes it move between readings (owner
+        /// decision 154A, with 153A's record); null reads <see cref="RunRootSpelling"/> or <see cref="RunRoot"/>.
+        /// </summary>
+        public Func<string>? RunRootSource { get; set; }
+
+        /// <summary>The run root for a new run, when a test sets it (owner decision 154A, with 153A's record); null keeps the host's default.</summary>
+        public Func<string?>? RunRootForANewRun { get; set; }
 
         /// <summary>
         /// What the run root rule reads (owner decision 154A); when null, a probe that answers every folder as a
@@ -640,7 +712,8 @@ public sealed class ModelCheckHostTests
         public void Open()
         {
             var options = new ModelCheckHostOptions(
-                new CollectingChannel(Posted), () => BlankRunRoot ? "   " : RunRootSpelling ?? RunRoot)
+                new CollectingChannel(Posted),
+                () => RunRootSource != null ? RunRootSource() : BlankRunRoot ? "   " : RunRootSpelling ?? RunRoot)
             {
                 Backend = () => Endpoint,
                 CurrentDocument = () => Document,
@@ -651,6 +724,10 @@ public sealed class ModelCheckHostTests
                 Now = () => Stamp,
             };
             options.RunRootProbe = Probe ?? FakeRunRootProbe.Local();
+            if (RunRootForANewRun != null)
+            {
+                options.RunRootForANewRun = RunRootForANewRun;
+            }
 
             _host = new ModelCheckHost(options);
         }

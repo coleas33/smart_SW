@@ -419,21 +419,14 @@ public sealed class ReviewHost : IDisposable
     private UserSettings _settings;
 
     /// <summary>
-    /// The run root in force (owner decision 154A, the owner's follow-up): the one the backend was last started
-    /// with - at the add-in's load, the one the settings name, which it is started with. The backend makes and
-    /// finds runs under it alone: it refuses a run folder outside it (<c>resolve_run_dir</c>) and looks for the
-    /// newest review and check under it. A folder chosen for runs in a save is written at once, and comes into
-    /// force only with the restart that starts the backend with it (<see cref="RestartBackend"/>). Written on
-    /// the thread a restart is made on, read on every tab's.
-    /// </summary>
-    private volatile string _runRootInForce;
-
-    /// <summary>
-    /// Every run root that has been in force in this SOLIDWORKS session, each once, in the order it came into
-    /// force (owner decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open,
-    /// and a re-modeler's copy under any of them is a copy, after a save has moved the run root. Replaced whole,
-    /// never changed in place, by the one restart made at a time (<see cref="RestartBackend"/>), so a reader on
-    /// another tab's thread holds a list that stays as it read it.
+    /// Every run root that has been in force in this SOLIDWORKS session, each once (<see cref="SameRunRoot"/>), in
+    /// the order it came into force (owner decision 154A, the reviews' finding F6): a run made under any of them is
+    /// this pane's to open, and a re-modeler's copy under any of them is a copy, after a save has moved the run
+    /// root. The run root of the settings loaded, then each one a start of the backend brings into force - the
+    /// add-in's first and every restart that succeeds - appended by <see cref="StartWith"/> just before it records
+    /// the settings in force (<see cref="_inForce"/>), so the run root in force is always among them. Replaced
+    /// whole, never changed in place, under the restart's own lock, so a reader on another tab's thread holds a
+    /// list that stays as it read it.
     /// </summary>
     private volatile string[] _runRootsInForce;
 
@@ -450,7 +443,8 @@ public sealed class ReviewHost : IDisposable
     /// unless a save comes first; meaningful only while a backend is up: with none, nothing is in
     /// force. Written under the restart's own lock and read from the page pump, a whole reference
     /// either way. A start publishes the backend's endpoint before it records these: while it is under
-    /// way, <see cref="_starting"/> holds the settings it was made with.
+    /// way, <see cref="_starting"/> holds the settings it was made with. Their run root is the run root
+    /// in force, which every tab reads (owner decision 154A, <see cref="RunRoot"/>).
     /// </summary>
     private volatile UserSettings _inForce;
 
@@ -516,8 +510,7 @@ public sealed class ReviewHost : IDisposable
         _settings = loaded.Settings;
         _inForce = loaded.Settings;
         _settingsError = loaded.Error;
-        _runRootInForce = _settings.RunRoot;
-        _runRootsInForce = new[] { _settings.RunRoot };
+        _runRootsInForce = new[] { _inForce.RunRoot };
 
         _runs = new PaneRunLookup(
             "chat_id",
@@ -578,17 +571,51 @@ public sealed class ReviewHost : IDisposable
     public UserSettings Settings => _settings;
 
     /// <summary>
-    /// The run root in force (owner decision 154A, the owner's follow-up): the one the backend was last started
-    /// with, under which every tab makes its run folders and looks for its latest run. <see cref="Settings"/>
-    /// names the run root saved, which the next restart brings into force.
+    /// The run root in force (owner decision 154A, the owner's follow-up): the one in the record of the settings
+    /// the backend that is up was started with (owner decision 153A, <see cref="_inForce"/>), under which every
+    /// tab makes its run folders and looks for its latest run - the backend refuses a run folder outside it
+    /// (<c>resolve_run_dir</c>) and finds its newest review and check under it. So it moves exactly when that
+    /// record does: at the add-in's first start and at every restart that succeeds, and never otherwise - the
+    /// settings loaded's until the first start, which is made with them unless a save comes first. A folder
+    /// chosen for runs in a save is written at once (<see cref="Settings"/>), and comes into force with the start
+    /// that starts the backend with it. Read on every tab's thread, a whole record either way.
     /// </summary>
-    public string RunRoot => _runRootInForce;
+    public string RunRoot => _inForce.RunRoot;
 
     /// <summary>
     /// Every run root that has been in force in this SOLIDWORKS session, each once, in the order it came into
     /// force (owner decision 154A, the reviews' finding F6), <see cref="RunRoot"/> among them.
     /// </summary>
     public IReadOnlyList<string> RunRootsInForce => _runRootsInForce;
+
+    /// <summary>
+    /// The run root a new run's folder is made under (owner decision 154A, with 153A's record of the settings in
+    /// force): <see cref="RunRoot"/>, or null while a start of the backend under way would bring another run root
+    /// into force. Such a start publishes the backend's endpoint before it records the settings it was made with,
+    /// and can still fail and leave the backend it would replace, so until it ends neither run root is the one the
+    /// backend up makes runs under, and a run made under either can be refused deep in it; the Model check,
+    /// Standards and Remodel tabs refuse a start while it is null. A start under way that keeps the run root moves
+    /// nothing, and runs go on. The start under way is read before the record, as 153A reads it: one no longer
+    /// under way has recorded its settings, and only one begun after this reading is not seen - as one begun just
+    /// after the run root was read, while the run is made, is not.
+    /// </summary>
+    public string? RunRootForANewRun()
+    {
+        UserSettings? starting = _starting;
+        UserSettings inForce = _inForce;
+        return starting != null && !SameRunRoot(starting.RunRoot, inForce.RunRoot) ? null : inForce.RunRoot;
+    }
+
+    /// <summary>
+    /// Whether two run roots are the same (owner decision 154A): as written, ignoring letter case, as Windows names a
+    /// folder. The one rule for the run roots in force (<see cref="_runRootsInForce"/>), for whether the run root
+    /// saved is the one in force (<see cref="SameBackendSettings"/>), and for whether a start under way moves it
+    /// (<see cref="RunRootForANewRun"/>). Another spelling of the same folder - a trailing separator, an 8.3 short
+    /// name - counts as another run root: telling them apart would read the disk, which the restart's lock must not
+    /// wait on.
+    /// </summary>
+    private static bool SameRunRoot(string first, string second) =>
+        string.Equals(first, second, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The keys no page and no log may show (FR-015): the saved key, and the key the backend that is
@@ -1345,7 +1372,7 @@ public sealed class ReviewHost : IDisposable
         string? promise = null;
         try
         {
-            if (!_restart.Now(() => RestartBackend(next, key), out DeferredRestart.Hold waitsFor))
+            if (!_restart.Now(() => RestartWith(next, key), out DeferredRestart.Hold waitsFor))
             {
                 // A turn started between the gate above and here, or a remodel run is in progress,
                 // which the restart would end. The settings are already written, so the honest
@@ -1598,9 +1625,23 @@ public sealed class ReviewHost : IDisposable
     /// the saved ones - a restart failed before it stopped the old backend - and what reviews take
     /// meanwhile, ending with the way on: saving again retries the restart.
     /// </summary>
-    private const string NotInForce =
+    private const string NotInForce = NotInForceAsReviewsRun + ". " + RetryTheRestart;
+
+    /// <summary>
+    /// What the Review tab is told instead while the run root saved is not the one in force (owner decision 154A,
+    /// with 153A's record): 153A's sentence, and where every tab makes its runs meanwhile - the backend makes runs
+    /// only under the run root it was started with, and every tab makes them there, not in the folder the Settings
+    /// panel's field shows. Said whether the run root alone differs or other settings with it; never when it does
+    /// not, when the folder the field shows is the one runs are made in.
+    /// </summary>
+    private const string NotInForceWithTheRunRoot =
+        NotInForceAsReviewsRun + ", and every tab makes its runs in the folder for runs it was started with, not the "
+        + "one saved. " + RetryTheRestart;
+
+    /// <summary>What both sentences say first: the saved settings are not in force, and what reviews run with.</summary>
+    private const string NotInForceAsReviewsRun =
         "The saved settings are not in force yet: the review backend did not restart with them, so reviews "
-        + "run with the settings it was started with. " + RetryTheRestart;
+        + "run with the settings it was started with";
 
     /// <summary>
     /// <see cref="NotInForce"/> while it is true, or null: never with no backend up - nothing is in
@@ -1610,10 +1651,12 @@ public sealed class ReviewHost : IDisposable
     /// backend before it is made; nor while a start is under way (<see cref="_starting"/>), which publishes
     /// the backend's endpoint before it records the settings it was made with, so the backend up runs with
     /// those while the ones recorded are older (found on Codex's re-review, R1); and otherwise only while
-    /// the saved settings differ from the ones in force (<see cref="SameBackendSettings"/>). The endpoint
-    /// is read before the start under way: a start whose endpoint was read is still under way, or has
-    /// recorded its settings. Read by `init`, and by a restart that waited and failed for its way on,
-    /// under the restart's lock, which is taken before the state's (<see cref="DeferredRestart.Ahead"/>).
+    /// the saved settings differ from the ones in force (<see cref="SameBackendSettings"/>) - and then
+    /// <see cref="NotInForceWithTheRunRoot"/> when the run root saved is not the one in force (owner
+    /// decision 154A). The endpoint is read before the start under way: a start whose endpoint was read
+    /// is still under way, or has recorded its settings. Read by `init`, and by a restart that waited and
+    /// failed for its way on, under the restart's lock, which is taken before the state's
+    /// (<see cref="DeferredRestart.Ahead"/>).
     /// </summary>
     private string? SettingsNotInForce()
     {
@@ -1622,7 +1665,15 @@ public sealed class ReviewHost : IDisposable
             return null;
         }
 
-        return SameBackendSettings(_settings, _inForce, _options.Environment) ? null : NotInForce;
+        // One reading of each, so the sentence is chosen by the settings it weighed.
+        UserSettings saved = _settings;
+        UserSettings inForce = _inForce;
+        if (SameBackendSettings(saved, inForce, _options.Environment))
+        {
+            return null;
+        }
+
+        return SameRunRoot(saved.RunRoot, inForce.RunRoot) ? NotInForce : NotInForceWithTheRunRoot;
     }
 
     /// <summary>
@@ -1669,15 +1720,19 @@ public sealed class ReviewHost : IDisposable
     /// (`BackendClient.StartOptions`, `BaseUrlFor`, `ReadsGeminiEnterprise`): the base URL for openai
     /// alone, trimmed, a blank one none, and Gemini Enterprise for gemini alone (found on review).
     /// The key as it resolves, by its value and where it came from, and not as it is stored, since
-    /// DPAPI stores the same key anew each time it is typed. The run root and Python, which the
-    /// start reads too, are no part of a save, which keeps the ones the add-in loaded, so they cannot
-    /// differ; nor are the Send box and the Standards profile, which the backend is not started with.
+    /// DPAPI stores the same key anew each time it is typed. And the run root, which a save writes
+    /// since owner decision 154A's follow-up and the start hands the backend, which makes runs only
+    /// under it - by <see cref="SameRunRoot"/>, ignoring letter case, as a folder is named. Python,
+    /// which the start reads too, is no part of a save, which keeps the one the add-in loaded, so it
+    /// cannot differ; nor are the Send box and the Standards profile, which the backend is not started
+    /// with.
     /// </summary>
     private static bool SameBackendSettings(UserSettings saved, UserSettings inForce, Func<string, string?> environment)
     {
         ResolvedApiKey savedKey = saved.ResolveApiKey(environment);
         ResolvedApiKey keyInForce = inForce.ResolveApiKey(environment);
-        return string.Equals(saved.Provider, inForce.Provider, StringComparison.Ordinal)
+        return SameRunRoot(saved.RunRoot, inForce.RunRoot)
+            && string.Equals(saved.Provider, inForce.Provider, StringComparison.Ordinal)
             && string.Equals(saved.Model, inForce.Model, StringComparison.Ordinal)
             && string.Equals(saved.Effort, inForce.Effort, StringComparison.Ordinal)
             && string.Equals(savedKey.Key, keyInForce.Key, StringComparison.Ordinal)
@@ -1801,27 +1856,7 @@ public sealed class ReviewHost : IDisposable
     private void RestartWithSavedSettings()
     {
         UserSettings settings = _settings;
-        RestartBackend(settings, settings.ResolveApiKey(_options.Environment));
-    }
-
-    /// <summary>
-    /// Every restart this host makes, at once or once nothing holds it back: the backend restarted with
-    /// <paramref name="settings"/> (<see cref="RestartWith"/>), and, once it is, their run root in force
-    /// (owner decision 154A, the owner's follow-up) - not before, so a restart that fails leaves in force
-    /// the run root the backend was last started with.
-    /// </summary>
-    private void RestartBackend(UserSettings settings, ResolvedApiKey key)
-    {
-        RestartWith(settings, key);
-        _runRootInForce = settings.RunRoot;
-
-        // The reviews' finding F6: the run root a restart brings in joins those in force this session. One restart
-        // is made at a time (DeferredRestart), so there is one writer.
-        string[] inForce = _runRootsInForce;
-        if (!inForce.Contains(settings.RunRoot, StringComparer.OrdinalIgnoreCase))
-        {
-            _runRootsInForce = inForce.Concat(new[] { settings.RunRoot }).ToArray();
-        }
+        RestartWith(settings, settings.ResolveApiKey(_options.Environment));
     }
 
     /// <summary>
@@ -1874,7 +1909,9 @@ public sealed class ReviewHost : IDisposable
     /// settings are recorded, or the start has thrown, they are the start under way's
     /// (<see cref="_starting"/>), since the start publishes the backend's endpoint before it returns
     /// (found on Codex's re-review, R1); and from just before the start its key is among the keys masked,
-    /// and stays there (<see cref="_keysStarted"/>, the fourth review, S1).
+    /// and stays there (<see cref="_keysStarted"/>, the fourth review, S1). Their run root is the run root in
+    /// force from then on (owner decision 154A, <see cref="RunRoot"/>), and joins the run roots in force
+    /// (<see cref="_runRootsInForce"/>) just before.
     /// </summary>
     private void StartWith(UserSettings settings, ResolvedApiKey key, Action<UserSettings, ResolvedApiKey> start)
     {
@@ -1892,6 +1929,14 @@ public sealed class ReviewHost : IDisposable
         try
         {
             start(settings, key);
+
+            // Owner decision 154A (the reviews' F6): the run root the start brought in joins those in force this
+            // session before it is the one in force, so whoever finds it in force finds it among them.
+            if (!_runRootsInForce.Any(runRoot => SameRunRoot(runRoot, settings.RunRoot)))
+            {
+                _runRootsInForce = _runRootsInForce.Concat(new[] { settings.RunRoot }).ToArray();
+            }
+
             _inForce = settings;
         }
         finally

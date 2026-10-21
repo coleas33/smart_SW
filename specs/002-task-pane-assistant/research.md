@@ -3273,7 +3273,149 @@ engineering context's, the Model check's, the Standards', the Remodel host's and
   running backend was started with (`_inForce.RunRoot`), `RestartBackend` and this branch's own record to
   go, the run root to join 153A's `SameBackendSettings`, and the delayed first start that could replace a
   newer root (Codex's third finding) to be shown closed by 153A's `FirstStart`, with a test - and these tasks
-  renumbered after 153A's T188 - done on 2026-10-21, T189 to T200.
+  renumbered after 153A's T188. Done on 2026-10-21: the renumbering, T189 to T200, and the rest below (the merge
+  of `main`, T201 to T203).
+
+#### The merge of `main`, and the run root in force as 153A's record's (2026-10-21)
+
+- **Question**: 153A landed on `main` first (pull request #28, with 155A's #29 and 156A's #27), and its record of
+  the settings the backend that is up was started with is what this decision's run root in force had been kept
+  apart from until then (the "Later" item above). The coordinator asked, for the owner: `main` merged into this
+  branch, never rebased; the run root in force folded into 153A's record, its own record and `RestartBackend`
+  gone, the run root among 153A's `SameBackendSettings` with a sentence true of it, every reader kept on the
+  merged record; Codex's third finding shown closed by 153A's `FirstStart`, with a test; a start under way
+  checked for a run start that could mix run roots, and pinned if one could; and these tasks renumbered after
+  153A's, each in a commit of its own.
+- **Decision** (the coordinator, for the owner, 2026-10-21): as asked, the unification test first. One order
+  changed: merged first, `tasks.md` defined T166 to T177 twice - 153A's and these - which
+  `test_every_tasks_list_defines_each_task_id_once` refuses, so the merge was undone, the renumbering committed
+  (`c179f42`) and `main` merged after it (`6d7cb0a`): no commit on the branch defines an id twice.
+
+**The merge** (`6d7cb0a`): six files in conflict, each resolved keeping both sides' intent.
+
+1. `ReviewHost.cs`: the fields and properties, this branch's run root in force and run roots in force beside
+   153A's record, start under way, keys started with and readings' numbers; the save's restart, this branch's
+   `RestartBackend` made through 153A's `RestartWith`, with 153A's comment on a failed restart and this branch's
+   line on the run root's note; 153A's `FirstStart`, `RestartWith` and `StartWith` whole; and
+   `CreateReviewSession`, 153A's refusal while a start is under way first, then this branch's run root judged again
+   and the run's folder held to it - moved above a Recheck's `checking` status, as 153A moved its refusal, since
+   nothing would take that status off after the refusal - then 153A's settings in force for the session.
+2. `RemodelHostTests.cs`: 155A's channel for the test world beside this branch's run root spelling.
+3. `contracts/pane-host-messages.md`: the `ready` and `settings.save` rows, 153A's amendments first and this
+   branch's after them; `settings.save`'s payload `{..., gemini_enterprise, run_root?}`.
+4. 004 `contracts/pane-remodel-messages.md`: `ready` from 155A, `remodel.plan` and `remodel.start` from this branch.
+5. `research.md`: 153A's entry, then this one, then 156A's.
+6. `tasks.md`: 153A's Phase 17, then this decision's Phase 18.
+
+The words file merged clean: 153A changed no labels. Both pane fixture generators, run again, changed nothing, so
+`review-send-failure-events.json`'s pin of `review-waiting.json` (`2f31946...`) stands, and
+`review-waiting-apply-failure.json`, captured, is `main`'s.
+
+**The unification** (T201 to T203).
+
+- **The run root in force is 153A's record's** (`ReviewHost.RunRoot => _inForce.RunRoot`). The record of its own
+  and `RestartBackend` are gone - a save's restart and one that waited are 153A's `RestartWith` again - so the run
+  root in force moves exactly when the settings in force do, in `StartWith`: at the add-in's first start and at
+  every restart that succeeds, and at nothing else. The merge showed what that changes: the first start was the
+  one start that did not move it. A save whose restart failed with no backend up left the folder chosen saved, and
+  the first start, made then with the settings saved by then (153A), started the backend under it, while every tab
+  went on making its runs under the run root loaded, which that backend refuses.
+- **The run roots in force**: the run root loaded, then each one a start brings in, appended by `StartWith` just
+  before it records the settings in force, so the run root in force is always among them.
+- **One rule for the same run root** (`ReviewHost.SameRunRoot`): as written, ignoring letter case, as Windows names
+  a folder - for the run roots in force, for whether the run root saved is in force, and for whether a start under
+  way moves it. Another spelling of one folder (a trailing separator, an 8.3 short name) counts as another run
+  root: telling them apart would read the disk, which the restart's lock must not wait on.
+- **The run root joins `SameBackendSettings`**, whose comment said it could not differ - no longer true since the
+  follow-up's field. **The sentence: the run root's own words.** 153A's sentence speaks of reviews, while a run root
+  not in force moves every tab's runs - the backend makes them only under the one it was started with - and the
+  Settings panel's field shows the one saved; and a clause about the folder said when the folder saved is the one
+  in force would be false. So no one sentence is true of both. While the run root saved is not the one in force,
+  alone or with other settings, `init` and the status of a restart that waited and failed say 153A's sentence with
+  where runs are made: "The saved settings are not in force yet: the review backend did not restart with them, so
+  reviews run with the settings it was started with, and every tab makes its runs in the folder for runs it was
+  started with, not the one saved. Save the settings again to retry the restart." Otherwise 153A's, word for word;
+  both are built from one beginning (`NotInForceAsReviewsRun`). The page shows the host's sentence as it is.
+- **Codex's third finding against 154A** - a delayed first start for the run root loaded, released after a save
+  had restarted the backend with a folder chosen, would start a second backend under the old run root - is closed
+  by 153A's `FirstStart`: it holds the restart's lock, reads the settings saved under it, and starts nothing when a
+  restart has started the backend; and a save's restart waits for a first start under way, then brings its folder
+  in. Pinned both ways, each start held by the fake backend while the other is asked for: the backend and the run
+  root in force agree, on the folder chosen, whichever comes first.
+- **A start under way** (`_starting`) publishes the backend's endpoint before it records its settings, and can
+  still fail and leave the backend it would replace: while one that would bring another run root into force is
+  under way, neither run root is the one the backend up makes runs under. `ReviewHost.RunRootForANewRun` answers
+  none then, and the run root in force otherwise, the start under way read before the record, as 153A reads it. It
+  can happen, and it was checked tab by tab:
+  - The Review tab: no change. A review and context evidence take the run root once the backend is ready, which
+    makes or waits for any settings restart, so the one start that can be under way then is the add-in's first; and
+    a review session is refused while a start is under way (153A) and when its folder is not under the run root in
+    force (F6). Pinned: a review whose folder was made while the first start brought another run root in is
+    refused before any session - while the start is still under way, and once it has ended during the extraction,
+    `RunRootChanged`, which before the unification went on in a folder that backend refuses.
+  - The Model check and Standards tabs, which no restart waits for: the run root for a new run, read once. While it
+    is none the start is refused first, `BackendUnavailable`, retryable, in the tab's words - "The review backend
+    is being started with another folder for runs, so nothing was checked. Press Model check again in a moment."
+    (`RunRootRule.MovingRefusal`, sent by `PaneActions.SendRunRootMoving`) - and the run root judged is the one the
+    folder is made under and the one a failure names: it was read three times, so a restart ending between the
+    readings could make a check's folder under a run root it never judged.
+  - The Remodel tab: its gate holds back every settings restart but not the add-in's first start, so a plan and a
+    Start take the run root for a new run once the gate is passed, read once, and are refused while it is none -
+    "... so nothing was copied." and "... so the plan was not applied. Press Remodel a copy again in a moment." -
+    the host left free and the plan startable.
+- **Every reader on the merged record**: `init.run_root` on all four tabs and the other tabs' newest runs
+  (`RunRoot`, `SwReviewAddIn.RunRootInForce`); the Review tab's starts, its re-judging once the backend is ready and
+  its sessions' `RunRootChanged` refusals (`RunRoot` through `RunRootToUse`); the Model check, Standards and Remodel
+  tabs' starts and the Remodel tab's re-judging after its gate (`RunRootForANewRun`, through
+  `SwReviewAddIn.RunRootForANewRun`, one reading of the review host); and the containment of `report.open` and
+  `folder.open` on every tab and `IsRemodelCopy` (`RunRootsInForce`).
+- **Not changed**, put to the owner with the reviews' first item: a start begun just after a run start has read the
+  run root is not seen, as one begun while the run is made is not (a Model check or Standards run whose extraction
+  spans a save). And the run roots in force are appended before the record, an order no test can observe.
+
+- **Tests**: T201, written first against stubs on the merged code - `RunRootForANewRun` answering the run root in
+  force, `MovingRefusal` empty, the three hosts' option present and unread - 21 of the 26 new cases failed. The 5
+  that passed pin what already held, each red under a mutation: Codex's third finding both ways (U2), the run root
+  saved in another letter case twice (U3, U4), and a start under way that keeps the run root (U9). No existing case
+  was changed; the Model check and Standards test worlds gained a moving run root and the run root for a new run.
+- **Gates**: 2026-10-21: on the merge (`6d7cb0a`), no broken link, C# 0 warnings on a `--no-incremental` build,
+  10,059 and 3,317 passed, and Python, the words, fixture, pin and tasks tests, 753 passed on 3.12 and on 3.11; on
+  the unification, no broken link; C# 0 warnings on a `--no-incremental` build, 10,059 and 3,343 passed, from 10,059
+  and 3,317; the restart classes (`DeferredRestartTests`, `OtherTabsBackendRestartTests`,
+  `ReviewPageBackendRestartTests`, `TabPagesBackendRestartTests`, 335 cases) passed five times in a row; Python, the
+  words, fixture, pin and labels tests and those that read `tasks.md`, 1,036 passed on 3.12 and 1,036 on 3.11
+  (`--isolated`); `ruff check` clean; the pane fixtures regenerated by both generators unchanged, the pin standing;
+  the full Python suites the coordinator's.
+- **Mutations**: as before - each change taken out once with one exact replacement, the tree rebuilt, the named
+  cases run (154A's run root cases, 153A's settings in force and first start, and the unification's: 457) and the
+  file restored byte for byte (checked by sha256). Each of the 23 mutations turned at least one case red, 128
+  red results in all.
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | U1 | `ReviewHost.RunRoot` | the run root in force read from 153A's record, not the settings saved | 20 |
+  | U2 | `ReviewHost.StartWith` | the run root a start brings in joins those in force | 5 |
+  | U3 | `ReviewHost`'s constructor | the run root loaded among those in force | 13 |
+  | U4 | `ReviewHost.SameRunRoot` | letter case ignored | 2 |
+  | U5 | `ReviewHost.SameBackendSettings` | the run root among the settings in force | 2 |
+  | U6 | `ReviewHost.SettingsNotInForce` | the run root's sentence when the run root differs | 4 |
+  | U7 | `ReviewHost.NotInForceWithTheRunRoot` | where every tab makes its runs, not the folder saved | 4 |
+  | U8 | `ReviewHost.RunRootForANewRun` | none while a start under way would bring another run root in | 4 |
+  | U9 | `ReviewHost.RunRootForANewRun` | a start under way that keeps the run root moves nothing | 1 |
+  | U10 | `ReviewHost.RunRootForANewRun` | none, not the run root the start under way is made with | 4 |
+  | U11 | `ModelCheckHost.StartCheck` | the run root for a new run, not the run root in force | 1 |
+  | U12 | `ModelCheckHost.StartCheck` | the folder made under the run root judged, one reading | 1 |
+  | U13 | `ModelCheckHostOptions` | the run root for a new run the run root in force by default | 18 |
+  | U14 | `StandardsHost.Start` | the run root for a new run, not the run root in force | 1 |
+  | U15 | `StandardsHost.Start` | the folder made under the run root judged, one reading | 1 |
+  | U16 | `StandardsHostOptions` | the run root for a new run the run root in force by default | 27 |
+  | U17 | `RemodelHost.RunRootToUse` | the run root for a new run, not the run root in force | 2 |
+  | U18 | `RemodelHostOptions` | the run root for a new run the run root in force by default | 6 |
+  | U19 | `PaneActions.SendRunRootMoving` | the class, `BackendUnavailable` | 4 |
+  | U20 | `PaneActions.SendRunRootMoving` | retryable | 4 |
+  | U21 | `RunRootRule.MovingRefusal` | the way on, the same press in a moment | 2 |
+  | U22 | `SwReviewAddIn` | the Remodel tab handed the run root for a new run | 1 |
+  | U23 | `SwReviewAddIn.RunRootForANewRun` | one reading of the host, its none never taken for its absence | 1 |
 
 ### 156A. 002's other words for the hidden Terminal tab, and an invalid escape in a test (2026-10-20)
 

@@ -326,6 +326,18 @@ public static class RunRootRule
         "The run root " + Kind(verdict) + Rule
         + ", so every run is refused until it is changed; the settings were saved. Choose a local folder for runs, then save again.";
 
+    /// <summary>
+    /// What a run start on the Model check, Standards or Remodel tab is refused with while a start of the backend
+    /// under way would bring another run root into force (owner decision 154A, with 153A's record of the settings
+    /// in force): why, what was not done (<paramref name="notDone"/>, "nothing was checked") and the way on, the
+    /// same press in a moment (<paramref name="wayOn"/>, "press Model check again"). Nothing is made under either
+    /// run root until the start ends, and a press then goes on under the one it leaves in force. No path; the
+    /// pages print it whole.
+    /// </summary>
+    public static string MovingRefusal(string notDone, string wayOn) =>
+        "The review backend is being started with another folder for runs, so " + notDone + ". "
+        + char.ToUpperInvariant(wayOn[0]) + wayOn.Substring(1) + " in a moment.";
+
     /// <summary>The rule, as every refusal states it.</summary>
     private const string Rule = ", and runs are made only in a local folder reached by its own path";
 

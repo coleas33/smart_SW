@@ -15,6 +15,7 @@ public sealed class ModelCheckHostOptions
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
         RunRootsInForce = () => new[] { RunRoot() };
+        RunRootForANewRun = () => RunRoot();
     }
 
     public IPageChannel Channel { get; }
@@ -27,6 +28,14 @@ public sealed class ModelCheckHostOptions
     /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
     /// </summary>
     public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
+
+    /// <summary>
+    /// The run root a check's folder is made under, read once per check (owner decision 154A, with 153A's record of
+    /// the settings in force): the run root in force, or null while a start of the backend under way would bring
+    /// another into force - the backend coming up makes runs only under its own, and may yet fail and leave the
+    /// one it would replace - which `check.start` refuses. The run root in force by default.
+    /// </summary>
+    public Func<string?> RunRootForANewRun { get; set; }
 
     /// <summary>
     /// The backend's endpoint, or null before it is listening. The page calls the check routes
@@ -128,6 +137,12 @@ public sealed class ModelCheckHost : IDisposable
     /// <summary>The one message type this host answers itself.</summary>
     private const string StartType = "check.start";
 
+    /// <summary>What a refused `check.start` did not do, in its words (owner decision 154A).</summary>
+    private const string NothingChecked = "nothing was checked";
+
+    /// <summary>What a refused `check.start` says to do once the cause is gone (owner decision 154A).</summary>
+    private const string PressAgain = "press Model check again";
+
     private readonly ModelCheckHostOptions _options;
     private readonly CheckPaneHost _pane;
 
@@ -211,10 +226,18 @@ public sealed class ModelCheckHost : IDisposable
         PaneActions actions = _pane.Actions;
 
         // Owner decision 154A: first - the check's folder is made under the run root and handed to the backend,
-        // which refuses one on a share - in this tab's words, which its page shows whole.
+        // which refuses one on a share - in this tab's words, which its page shows whole. Read once, with 153A's
+        // record: the root judged is the one the folder is made under, and none while a start of the backend
+        // under way would bring another into force.
+        string? runRoot = _options.RunRootForANewRun();
+        if (runRoot == null)
+        {
+            actions.SendRunRootMoving(id, NothingChecked, PressAgain);
+            return;
+        }
+
         if (actions.RefusedRunRoot(
-                id, _options.RunRoot(), _options.RunRootProbe, "nothing was checked", RunRootRule.InSettingsOnTheReviewTab,
-                "press Model check again"))
+                id, runRoot, _options.RunRootProbe, NothingChecked, RunRootRule.InSettingsOnTheReviewTab, PressAgain))
         {
             return;
         }
@@ -260,7 +283,7 @@ public sealed class ModelCheckHost : IDisposable
         try
         {
             runDirectory = RunFolders.CreateForCheck(
-                _options.RunRoot(), document.Path, _options.Now());
+                runRoot, document.Path, _options.Now());
         }
         catch (Exception failure)
         {
@@ -268,7 +291,7 @@ public sealed class ModelCheckHost : IDisposable
             actions.SendError(
                 id,
                 "RunFolderFailed",
-                $"the check folder could not be created under '{_options.RunRoot()}': "
+                $"the check folder could not be created under '{runRoot}': "
                 + failure.Message,
                 retryable: false);
             return;
