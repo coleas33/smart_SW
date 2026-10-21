@@ -23,15 +23,15 @@ namespace SwReview.AddIn.Tests;
 /// `settings.save` asks whether a turn is running before it writes anything, and the backend
 /// asks again before it stops the old process (<see cref="BackendSupervisor.Restart"/>). A turn
 /// the page starts in between - a follow-up, an answer or a Send goes to the backend directly -
-/// leaves the settings written and in force in the host, and the restart refused. These tests
+/// leaves the settings written and saved in the host, and the restart refused. These tests
 /// start that turn where it really lands: inside the model-list round trip the save makes after
 /// its check and before its restart.
 ///
 /// What they pin:
-/// 1. <b>The save is kept and says so.</b> `settings.saved`, the settings on disk and in force,
+/// 1. <b>The save is kept and says so.</b> `settings.saved`, the settings on disk and saved,
 ///    and the sentence, word for word.
 /// 2. <b>The backend restarts once no turn runs</b>, however the turn ended, once, with the
-///    settings in force then - the last of several saves - and never under a running turn.
+///    settings saved by then - the last of several saves - and never under a running turn.
 /// 3. <b>A save when no turn runs is today's restart</b>, made at once, and it replaces a
 ///    restart still waiting rather than adding a second.
 /// 4. <b>A new review never runs on the old backend.</b> It makes the restart first, waits for
@@ -174,7 +174,7 @@ public sealed class DeferredRestartTests
         SaveAsATurnStarts(world, "save", Save(effort: "low"));
 
         // Not refused: the settings were written before the turn could be seen, so they are the
-        // settings in force (contracts/pane-host-messages.md, `settings.save`).
+        // saved settings (contracts/pane-host-messages.md, `settings.save`).
         Assert.Equal("low", world.Reply("settings.saved", "save").GetProperty("settings").GetProperty("effort").GetString());
         Assert.Equal("low", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.Effort);
         Assert.Equal("low", world.Host.Settings.Effort);
@@ -1563,7 +1563,7 @@ public sealed class DeferredRestartTests
     // ---- 7. the 138A marker follows the new settings ------------------------------------------
 
     /// <summary>
-    /// The restart is built from the settings in force when it is made - here a switch from
+    /// The restart is built from the settings saved when it is made - here a switch from
     /// OpenAI to Gemini saved during the turn - with the key resolved from them then, through the
     /// real <see cref="BackendClient.StartOptions"/>. With a Gemini key typed in, the backend is
     /// started with it under Gemini's variables and names Gemini as the saved key's provider, so
@@ -2244,7 +2244,7 @@ public sealed class DeferredRestartTests
 
     /// <summary>
     /// A save made while a remodel run is in progress - a plan or a Start's run - is kept: written,
-    /// in force in the host and answered `settings.saved`. Its restart waits for the run, as one a
+    /// saved in the host and answered `settings.saved`. Its restart waits for the run, as one a
     /// turn started during waits for the turn, and the pane says so: before 145A it restarted the
     /// backend at once and ended the run with its copy half changed. Nothing is asked of the backend
     /// meanwhile - the run is known without it - and once the run ends the backend restarts once,
@@ -2669,7 +2669,7 @@ public sealed class DeferredRestartTests
     // ---- 11. a save whose restart fails says what is true (owner decision 150A) ---------------
 
     /// <summary>
-    /// The settings are written, and in force in the host, before the save restarts the backend,
+    /// The settings are written, and saved in the host, before the save restarts the backend,
     /// so a save whose restart fails is a save that was kept and a backend that was not restarted -
     /// whatever the restart threw: a <see cref="BackendStartException"/>, or anything outside that
     /// wrapper, such as the new backend's log not opened, and with the old backend stopped or still
@@ -2709,7 +2709,7 @@ public sealed class DeferredRestartTests
         Assert.StartsWith(SavedNotRestarted + "FICT the backend's log could not be opened with ", message, StringComparison.Ordinal);
         Assert.EndsWith(Redaction.Mask, message, StringComparison.Ordinal);
 
-        // Kept: written, and in force in the host. The answer says it all, so nothing beside it -
+        // Kept: written, and saved in the host. The answer says it all, so nothing beside it -
         // no `settings.saved`, and no `status` carrying the reason a second time.
         Assert.Equal("low", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.Effort);
         Assert.Equal("gpt-5.6-mini", world.Host.Settings.Model);

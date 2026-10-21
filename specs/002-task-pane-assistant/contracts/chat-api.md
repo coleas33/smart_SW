@@ -266,8 +266,8 @@ A running turn owns process state that is not on disk, so:
   A turn that starts after the host's check and before the restart - the page posts a
   follow-up, the answers or a Send to the backend directly - is the one case in which the
   restart is refused with the new settings already written: the host keeps the save, restarts
-  the backend once no turn is running and no remodel run is in progress, with the settings in
-  force then, and starts no turn on the old backend in between; a backend that gives no usable
+  the backend once no turn is running and no remodel run is in progress, with the settings
+  saved by then, and starts no turn on the old backend in between; a backend that gives no usable
   answer is watched for three looks in a row, after which the engineer is told, and the restart
   is made before the next review or follow-up once the backend answers, or by saving the
   settings again (amended 2026-10-19, owner decision 143A; `pane-host-messages.md`,

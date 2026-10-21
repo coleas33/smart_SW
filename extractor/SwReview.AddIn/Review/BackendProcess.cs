@@ -748,6 +748,11 @@ public sealed class TurnRunningException : Exception
 /// The rule lives here rather than in <see cref="ReviewHost"/> so there is one place that can
 /// say no - the host's `settings.save` handler and any future caller (an add-in reload, a
 /// crash restart) go through the same gate.
+///
+/// It restarts nothing of its own accord: after the add-in's first start, every start is the
+/// review host's restart, which records the settings the backend then runs with (owner decision
+/// 153A, `ReviewHost.RestartWith`). A restart added here - for a crash, say - must go through it,
+/// or that record, and every session made from it, drifts from the backend that runs.
 /// </summary>
 public sealed class BackendSupervisor : IDisposable
 {

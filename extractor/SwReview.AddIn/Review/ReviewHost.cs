@@ -1339,8 +1339,8 @@ public sealed class ReviewHost : IDisposable
     // ---- a restart for settings saved during a turn or a remodel run (143A, 145A) ----------
 
     /// <summary>
-    /// The Review tab's sentence for a save a turn started during: the settings are written and in
-    /// force in the host, and the backend is restarted with them once nothing holds it back.
+    /// The Review tab's sentence for a save a turn started during: the settings are written and saved
+    /// in the host, and the backend is restarted with them once nothing holds it back.
     /// </summary>
     private const string RestartPromise =
         "the settings are saved; the backend restarts when the running turn ends.";

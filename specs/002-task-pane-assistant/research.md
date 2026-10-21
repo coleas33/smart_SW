@@ -2133,7 +2133,9 @@ words for the strip.
   started with. Save the settings again to retry the restart." while it is true, or null. It is
   true while a backend is up, no restart waits or is being made, and the saved settings differ from
   the ones in force in a provider, model, effort, key, base URL, or Gemini Enterprise project or
-  location (`ReviewHost.SettingsNotInForce`, `SameBackendSettings`). The key is compared as it
+  location (`ReviewHost.SettingsNotInForce`, `SameBackendSettings`) - each, since the review (N5),
+  as the backend's start reads it for the provider: the base URL for openai alone, trimmed, a blank
+  one none, and Gemini Enterprise for gemini alone. The key is compared as it
   resolves, by its value and by where it comes from, which 138A's marker follows - not as stored,
   since DPAPI stores the same key anew each time it is typed.
 - The Review page holds the sentence from every `init` (`state.notInForce`, `holdNotInForce`), and
@@ -2144,7 +2146,8 @@ words for the strip.
 - A restart that waited and failed before it stopped the old backend, leaving the saved settings
   not in force, says so in its `status`: the failure, then the sentence, which ends with 150A's way
   on, where it ended with the way on alone. One that failed once the old backend had stopped keeps
-  150A's words.
+  150A's words. Since the review (S1) that `status` carries `settings_not_in_force` as `init` does,
+  and the page holds the sentence from it, since no `init` follows it.
 - The save's own answer is unchanged: `BackendNotRestarted`'s sentence already says the settings
   are saved, that the backend did not restart with them, and that saving again retries, and the
   page asks for its `init` after it (150A), which now carries the sentence.
@@ -2213,6 +2216,43 @@ words for the strip.
     (`:694`, `self.settings(body)` with no provider at `:702`); `RemodelBackendClient.StartRun`
     (`RemodelBackendClient.cs:115`); the Review page's restored Send, `recheckThenSend`
     (`app.js:1390`).
+- **Review**: an independent adversarial review of the branch at `5e36305` found no must-fix - the
+  record stays true through every restart and is read after the restart gate by every session
+  path, and the consumers left alone are right, checked in the backend - and the items below,
+  settled test first by T171 to T177:
+  - After a restart that waited and failed before it stopped the old backend, the Review page never
+    held the sentence (S1). Its `status` said it, but no `init` followed, so the next ready status -
+    a review's preparation, say - took it off the banner, and the review ran with the settings in
+    force with nothing on screen (the reviewer's probe D: the failure, then two ready statuses). That
+    `status` now carries `settings_not_in_force` from the reading its way on is made from
+    (`ReviewHost.PostRestartFailed`, its payload built where every `status`'s is,
+    `PaneActions.StatusPayload`), and the page holds it as it holds `init`'s (`showStatus`). The Not
+    changed item that said a later status could take it off understated this, and is gone.
+  - The hosts masked the saved key alone (S2). After a switch whose restart failed before the old
+    backend stopped, a session's failure quoting the key that backend runs with reached the page
+    unmasked, in the `status` and in the refusal (the reviewer's probe B). The backend masks the keys
+    in its own environment, so this lost a second layer rather than opening a leak, but 153A makes
+    the state last. Every host now masks the saved key and the key the backend was started with:
+    `ReviewHost.KeysToMask`, which the review host masks and the add-in hands the Model check,
+    Standards and Remodel hosts (`SwReviewAddIn.KeysToMask`). The Not changed item that left this
+    to the owner is gone.
+  - The branch of that `status` for the settings in force was pinned by nothing (N4): the reviewer's
+    mutation, saying the sentence whenever a backend was up, left every case green. A waited restart
+    of the settings in force that fails before the old backend stops keeps 150A's way on, and a case
+    pins it.
+  - Each setting was compared for every provider (N5), while the backend's start reads the base URL
+    for openai alone and Gemini Enterprise for gemini alone, so a settings file edited by hand could
+    have the pane say the saved settings were not in force when nothing the backend reads differed.
+    The start and the comparison read one rule now (`BackendClient.BaseUrlFor`,
+    `ReadsGeminiEnterprise`), which `BackendProcessTests` pins on the start's side.
+  - Words that still called the saved settings "in force" (N6): `ReviewHost`'s promise, eight
+    comments of `DeferredRestartTests`, `chat-api.md`'s settings bullet, and the 143A and 150A words
+    of the `settings.save` row, whose 153A note now says they were changed.
+  - A second ordering of the first-start race (O2): recorded under Not changed, below, and
+    `BackendSupervisor`'s summary now says a restart added there must go through the review host's
+    restart, or the record drifts.
+  - Existing cases changed deliberately: none. The comments of eight cases change their words
+    alone, and the test world's backend can now fail `POST /sessions` (`SessionFailure`).
 - **Not changed**:
   - The first start's record is taken when the host is built, from the settings it loads, which are
     the ones the add-in starts the backend with. A save whose restart reached `BackendClient`'s gate
@@ -2221,16 +2261,19 @@ words for the strip.
     and a save made before an item queued at load has begun, and before 153A sessions of the saved
     settings ran on that backend just the same; recording in `BackendClient`, under its gate, would
     close it, at the cost in item 1. Left to the owner.
-  - The hosts mask the saved key in what they post (`PaneActionsOptions.Secrets`, and the add-in's
-    `Secrets` for the other tabs). While the saved settings are not in force - as while a restart
-    waits (143A) - the backend holds the key it was started with, which it masks itself in everything
-    it sends (`chat/server.py`, `environment_secrets`); a host-side mask for it would be a second
-    layer. Left to the owner.
-  - The Review page learns that a restart that waited failed before it stopped the old backend from
-    that restart's `status`, which now says the saved settings are not in force; it holds the
-    sentence from its next `init` - a save, a reload, or any restart's - and until then a later
-    status can take it off the banner. Telling it otherwise would change the Review page's `status`
-    handling, which 145A and 150A left as it is.
+  - A second ordering of that race, which 153A makes worse (found on review, O2): a save handled
+    after the page pump starts and before the add-in reads the settings it starts the backend with
+    (`SwReviewAddIn.cs:544`), whose restart fails; the first start, queued just after, then starts
+    the backend with the saved settings while the record holds the loaded ones, so `init` says the
+    saved settings are not in force and sessions take the loaded ones on a backend started with the
+    saved ones' environment - before 153A they took the saved ones. It needs a Save within the load
+    sequence. Routing the first start through the host, under its restart lock, would close both
+    orderings; it changes the add-in's first start, the path the pilot depends on most, so it is the
+    owner's call. `BackendSupervisor` restarts nothing of its own accord, and its summary says a
+    restart added there - for a crash, say - must go through the review host's, or the record drifts.
+  - A backend that dies while the saved settings are not in force: no host posts `backend.stopped`
+    (150A), so the Review page goes on saying reviews run with the settings it was started with until
+    its next `init`, while a review is refused for want of a backend.
   - A page that reloads while a restart waits is told nothing of the promise: `init` carries no word
     of a restart that waits (143A), and `settings_not_in_force` is null then, by decision.
   - A save of the settings in force whose restart failed is answered `BackendNotRestarted`, as any
@@ -2284,6 +2327,28 @@ words for the strip.
   | P4 | `app.js`, `holdNotInForce` | the sentence held until now left on the banner | 2 |
   | P5 | `app.js` | `backend.stopped` leaves the sentence | 1 |
 
-- **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first. 153A's tasks took T166 to
-  T170 provisionally, the numbers decision 152A's phase takes too; whichever lands second is
-  renumbered.
+  For the review: 14 mutations, the same way, the host's classes with `BackendProcessTests` as well,
+  456 cases, and the page's, 24 - 22 red results in all, and every mutation turned at least one case
+  red; `BackendProcessTests`' case that the base URL is written only for the provider that reads it
+  went red with R12 besides.
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | R1 | `ReviewHost.PostRestartFailed` | the failure's `status` carries no `settings_not_in_force` | 3 |
+  | R2 | `ReviewHost.PostRestartFailed` | its way on says the sentence whenever a backend is up (the reviewer's M1) | 1 |
+  | R3 | `app.js`, `showStatus` | the field ignored | 2 |
+  | R4 | `app.js`, `showStatus` | every `status` read for the field, carried or not | 2 |
+  | R5 | `ReviewHost.KeysToMask` | without the key the backend was started with | 2 |
+  | R6 | `ReviewHost` | the host masks the saved key alone | 1 |
+  | R7 | `SwReviewAddIn` | the Model check tab masks the saved key alone | 1 |
+  | R8 | `SwReviewAddIn` | the Standards tab masks the saved key alone | 1 |
+  | R9 | `SwReviewAddIn` | the Remodel tab masks the saved key alone | 1 |
+  | R10 | `ReviewHost.SameBackendSettings` | the base URL compared as stored, for every provider | 3 |
+  | R11 | `ReviewHost.SameBackendSettings` | Gemini Enterprise compared for every provider | 1 |
+  | R12 | `BackendClient.BaseUrlFor` | the base URL read for every provider | 2 |
+  | R13 | `BackendClient.BaseUrlFor` | the base URL not trimmed | 1 |
+  | R14 | `BackendClient.ReadsGeminiEnterprise` | Gemini Enterprise read for every provider | 1 |
+
+- **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first; and the review's, T171, T173
+  and T175. 153A's tasks took T166 to T177 provisionally, the numbers decision 152A's phase takes
+  too; whichever lands second is renumbered.
