@@ -33,9 +33,11 @@ public sealed class RemodelProbeGuard : ICallGuard
     /// The creation members the throwaway part is built with (<see cref="RemodelProbePartRecipe.Default"/>
     /// and PROBE-8's analytic solids), matched as the bare names <c>SwRemodelProbeHost</c> gates them
     /// under, so an interface-qualified spelling of any of them is still refused. Each one is refused
-    /// by <see cref="ReadOnlyGuard"/>; the comment says by what.
+    /// by <see cref="ReadOnlyGuard"/>; the comment says by what. Matched ordinally since the review of
+    /// owner decision 160A, as the run-scoped members are: a case variant of one is the read-only
+    /// guard's answer, which refuses it.
     /// </summary>
-    private static readonly HashSet<string> ThrowawayPartCreationMemberSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> ThrowawayPartCreationMemberSet = new HashSet<string>(StringComparer.Ordinal)
     {
         // The box, and PROBE-8's box and cylinder: IFeatureManager.FeatureExtrusion3 (the
         // FeatureExtrusion* prefix).

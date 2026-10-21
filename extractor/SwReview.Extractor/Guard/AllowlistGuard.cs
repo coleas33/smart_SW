@@ -47,9 +47,9 @@ public enum BareNamePolicy
 /// each guard's keys and bare-name policy through it. <see cref="RemodelProbeGuard"/> and
 /// <see cref="SuppressTestGuard"/> are not built on it: they are exemptions over the read-only guard, not
 /// allowlists - a name on their lists passes, and every other, bare or qualified, is the read-only guard's
-/// answer - so this rule would change their answers (research R13.1). Their lists are matched ignoring case,
-/// but for the probe's run-scoped members, matched ordinally since owner decision 160A, a case variant of one
-/// refused before the read-only guard is asked (research R14).
+/// answer - so this rule would change their answers (research R13.1). The probe's lists are matched
+/// ordinally since owner decision 160A and its review, a case variant of a run-scoped member refused before
+/// the read-only guard is asked, and <see cref="SuppressTestGuard"/>'s ignoring case (research R14).
 /// </summary>
 public abstract class AllowlistGuard : ICallGuard
 {
