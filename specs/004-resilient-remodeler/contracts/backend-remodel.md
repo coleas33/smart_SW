@@ -155,8 +155,8 @@ refusal is still a refusal and is never guessed into a nearer class.
 | `error_class` | Status | Raised when |
 |---|---|---|
 | `NotAPart` | 400 | `not_a_part`: the source is not an existing `.SLDPRT` |
-| `DocumentDirty` | 400 | `source_dirty`: the open source has unsaved changes. This feature never saves the source |
-| `ExternalReferences` | 400 | `external_refs`: `ListExternalFileReferencesCount2() != 0` |
+| `DocumentDirty` | 400 | `source_dirty`: the open source has unsaved changes. This feature never saves the source. *Amended 2026-10-20 (owner decision 155A):* the message is still the host's sentence, which names the source's full path; the Remodel tab prints the add-in's own sentence for the class in its place, whoever refused (`RemodelHost.DocumentDirtyMessage`, [`pane-remodel-messages.md`](pane-remodel-messages.md)), and the tool-service log keeps the host's sentence on the refused request's line |
+| `ExternalReferences` | 400 | `external_refs`: `ListExternalFileReferencesCount2() != 0`. *Amended 2026-10-20 (owner decision 155A):* as `DocumentDirty`: the tab prints `RemodelHost.ExternalReferencesMessage` in place of this message |
 | `ScopeRefused` | 400 | `scope_not_probed` or `scope_changed`. Also the pure gate's own refusal, which names **every** failing signal. *Amended 2026-10-20 (feature 002, owner decision 149A):* for the two codes the message is plain words that name no path, one sentence for each code (`SCOPE_REFUSAL_WORDS` in `chat/remodel.py`), where it was the host's sentence, which can name the probe and the part's full path - both paths, for a probe minted for another file; the host's sentence is logged instead |
 | `RunFolderFailed` | 400 | `copy_failed`, `copy_exists`, `tag_failed`, every `error_code` this build has no row for, an `ok` reply this build cannot read, and a run folder that could not be prepared - including a carry-forward candidate that exists and will not parse (FR-029) |
 | `BridgeUnavailable` | 502 | The circuit is open or the transport failed, so the call was never sent. Retryable |

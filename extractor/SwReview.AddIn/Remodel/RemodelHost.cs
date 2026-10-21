@@ -158,7 +158,9 @@ public sealed class RemodelHostOptions
 /// off the SOLIDWORKS UI thread. The run itself executes on
 /// <see cref="RemodelHostOptions.Schedule"/> so that `remodel.stop` can be delivered while it
 /// is running; the only state the two share is the run's stop flag and the pending stop id,
-/// both written atomically.
+/// both written atomically, and - owner decision 155A - the run's end: the host freed from it,
+/// and what its ending holds back meanwhile, under one lock, which `init`'s reading of a run in
+/// flight takes too.
 /// </summary>
 public sealed class RemodelHost : IDisposable
 {

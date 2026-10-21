@@ -2801,6 +2801,12 @@ Each is beyond what decision 148A names, so nothing here was changed.
    right while the close is in flight. Start is switched off (004 T172), so no run reaches it at the
    pilot; 004's T172 now says that the commit switching it on settles it. The options: post the
    terminal status once the host is free, or keep the retryable refusal as it is.
+   *Settled 2026-10-20 by owner decision 155A (004 research R18.4; 004 T195, T196):* the first. Nothing
+   the page ends its running state on is posted while a run holds the host: the executor's caught
+   failure, the pipeline's own error and T167's words of a close made under the run are held, in the
+   order they were made, and told once `Execute` has closed the session and freed the host, then the
+   run's last word. The stop when the copy is gone, which also ended the page's running state mid-run,
+   is told in the stage of the engineer's own Stop. T172 no longer waits on it.
 5. **Two tests of a whole path, and two rules for a segment** (the review's finding 7).
    `RemodelCopy.IsFullPath` refuses a device path, which the bind's `BridgeDispatcher.IsFullyQualified`
    takes; and `CopyOf` takes a `.` segment, which `RemodelScope.HasRelativeSegment`, read by
@@ -2833,6 +2839,12 @@ Each is beyond what decision 148A names, so nothing here was changed.
    hidden until Start is switched on (004 T172), since only a run writes the report; and it bears on
    the draft constitution amendment's sentence that opening the copy is not a write. The options: skip
    `(none)` in `read_log_targets`, or report such lines as calls with no document behind them.
+   *Settled 2026-10-20 by owner decision 155A (004 research R18.2; 004 T191, T192):* the second. The
+   reader keeps the entry, and the report counts it apart, as a request whose calls name no document -
+   neither another target nor a write on the copy - and says so after its claim, naming the application
+   settings and the open of the copy among them and calling none of them a write. The open's `(none)`
+   covers more than this item named: the open holds no session until it returns, so the copy's tag,
+   rollback and rebuild record `(none)` too. T172 no longer waits on it.
 9. **A page that loads again mid-run offers what the host refuses** (the second review's; only once
    Start is switched on). A page that loads asks for `init` (`requestInit(true)`), and `applyInit` sets
    no running state: `init.latest_run` carries the plan's state, not whether the host is busy. So a
@@ -2841,6 +2853,12 @@ Each is beyond what decision 148A names, so nothing here was changed.
    Discard copy and Stop behaved so before this decision, which adds Open copy; item 4 covers only the
    window at a run's end. The fix would be a flag on `init.latest_run` that a run is in flight, which
    `applyInit` reads. Unreachable until Start is switched on, as 004's T172 now says.
+   *Settled 2026-10-20 by owner decision 155A (004 research R18.3; 004 T193, T194):* that flag,
+   `init.latest_run.running`, true while the run is in flight. A page that loads again shows the run
+   running - Stop pressable, none of the actions the host refuses offered - until the run's terminal
+   status or the answer to Stop. The flag is read, and the `init` posted, under the lock that frees the
+   host at the run's end, so a page is never told it after the run's ending (R18.4). T172 no longer
+   waits on it.
 
 ## R13. Decision 151A: the allowlist guards' one rule, the grammar's verbs, and 002's Terminal tab (owner, 2026-10-20)
 
