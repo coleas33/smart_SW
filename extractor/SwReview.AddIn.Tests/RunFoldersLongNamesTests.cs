@@ -238,30 +238,20 @@ public sealed class RunFoldersLongNamesTests : IDisposable
     [Fact]
     public void EveryHostHandsTheRunFoldersItsRunRootProbe()
     {
-        string addIn = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
         var calls = new List<string>();
         var options = new List<string>();
-        foreach (string file in Directory.GetFiles(addIn, "*.cs", SearchOption.AllDirectories))
+        foreach ((string name, string source) in AddInSources().Where(file => file.Name != "RunFolders.cs"))
         {
-            string relative = file.Substring(addIn.Length + 1);
-            if (relative.StartsWith(@"bin\", StringComparison.OrdinalIgnoreCase)
-                || relative.StartsWith(@"obj\", StringComparison.OrdinalIgnoreCase)
-                || Path.GetFileName(file) == "RunFolders.cs")
-            {
-                continue;
-            }
-
-            string source = File.ReadAllText(file);
             foreach (Match call in Regex.Matches(source, @"RunFolders\.(CreateFor\w+|NewestCheckFolder|FindNotSentReview|IsUnder)\("))
             {
-                calls.Add(Path.GetFileName(file) + " " + call.Groups[1].Value + Enclosed(source, call.Index + call.Length - 1, '(', ')'));
+                calls.Add(name + " " + call.Groups[1].Value + Enclosed(source, call.Index + call.Length - 1, '(', ')'));
             }
 
             foreach (Match made in Regex.Matches(source, @"new (PaneActionsOptions|CheckPaneHostOptions)\("))
             {
                 int after = Enclosed(source, made.Index + made.Length - 1, '(', ')').Length + made.Index + made.Length - 1;
                 string rest = source.Substring(after).TrimStart();
-                options.Add(Path.GetFileName(file) + " " + made.Groups[1].Value + " "
+                options.Add(name + " " + made.Groups[1].Value + " "
                     + (rest.StartsWith("{", StringComparison.Ordinal) ? Enclosed(rest, 0, '{', '}') : string.Empty));
             }
         }
@@ -288,6 +278,59 @@ public sealed class RunFoldersLongNamesTests : IDisposable
             call => Assert.Contains("RunRootProbe", call, StringComparison.Ordinal));
         Assert.Equal(5, options.Count);
         Assert.All(options, made => Assert.Contains("RunRootProbe = ", made, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// ...and the run root rule a run start is refused by reads the same probe, through the pane actions' own option: the
+    /// one way in since the coordinator's follow-up to the review of owner decision 160A, where each host also handed
+    /// <c>RefusedRunRoot</c> its probe as an argument. No call passes one, the refusal takes none, and it judges the root
+    /// with the option - which each host sets, above, and which each host's refusal cases, a refusing probe each, read.
+    /// </summary>
+    [Fact]
+    public void ARunStartIsRefusedThroughThePaneActionsOwnProbe()
+    {
+        var calls = new List<string>();
+        string? refusal = null;
+        foreach ((string name, string source) in AddInSources())
+        {
+            foreach (Match call in Regex.Matches(source, @"\.RefusedRunRoot\("))
+            {
+                calls.Add(name + " " + Enclosed(source, call.Index + call.Length - 1, '(', ')'));
+            }
+
+            Match defined = Regex.Match(source, @"public bool RefusedRunRoot\(");
+            if (defined.Success)
+            {
+                string parameters = Enclosed(source, defined.Index + defined.Length - 1, '(', ')');
+                int body = source.IndexOf('{', defined.Index + defined.Length - 1 + parameters.Length);
+                refusal = parameters + " " + Enclosed(source, body, '{', '}');
+            }
+        }
+
+        Assert.Equal(
+            new[] { "ModelCheckHost.cs", "RemodelHost.cs", "ReviewHost.cs", "StandardsHost.cs" },
+            calls.Select(call => call.Substring(0, call.IndexOf(' '))).OrderBy(name => name, StringComparer.Ordinal));
+        Assert.All(calls, call => Assert.DoesNotContain("RunRootProbe", call, StringComparison.Ordinal));
+        Assert.NotNull(refusal);
+        Assert.DoesNotContain("IRunRootProbe", refusal!, StringComparison.Ordinal);
+        Assert.Contains("RunRootRule.Judge(runRoot, _options.RunRootProbe())", refusal!, StringComparison.Ordinal);
+    }
+
+    /// <summary>The add-in's own C# files, by name and text, outside its build output.</summary>
+    private static IEnumerable<(string Name, string Text)> AddInSources()
+    {
+        string addIn = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
+        foreach (string file in Directory.GetFiles(addIn, "*.cs", SearchOption.AllDirectories))
+        {
+            string relative = file.Substring(addIn.Length + 1);
+            if (relative.StartsWith(@"bin\", StringComparison.OrdinalIgnoreCase)
+                || relative.StartsWith(@"obj\", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            yield return (Path.GetFileName(file), File.ReadAllText(file));
+        }
     }
 
     /// <summary>The text from the <paramref name="open"/> at <paramref name="at"/> to the <paramref name="close"/> that closes it.</summary>

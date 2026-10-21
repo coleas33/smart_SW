@@ -2894,8 +2894,7 @@ public sealed class RemodelHost : IDisposable
     /// anything else.
     /// </summary>
     private bool RunRootRefused(string? id, string runRoot, string notDone) =>
-        _actions.RefusedRunRoot(
-            id, runRoot, _options.RunRootProbe, notDone, RunRootRule.InSettingsOnTheReviewTab, PressAgain);
+        _actions.RefusedRunRoot(id, runRoot, notDone, RunRootRule.InSettingsOnTheReviewTab, PressAgain);
 
     /// <summary>What a plan or a Start refused for its run root says to do once the cause is gone (owner decision 154A).</summary>
     private const string PressAgain = "press Remodel a copy again";

@@ -2984,7 +2984,7 @@ public sealed class ReviewHost : IDisposable
     /// tab.
     /// </summary>
     private bool RunRootRefused(string? id, string runRoot) =>
-        _actions.RefusedRunRoot(id, runRoot, _options.RunRootProbe, "nothing was started", RunRootRule.InSettings, "try again");
+        _actions.RefusedRunRoot(id, runRoot, "nothing was started", RunRootRule.InSettings, "try again");
 
     /// <summary>
     /// The run root a start goes on under once the backend is ready (the reviews of decision 154A, N8): the run

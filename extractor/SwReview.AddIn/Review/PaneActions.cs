@@ -110,8 +110,9 @@ public sealed class PaneActionsOptions
     public Func<string?> RunRootSaved { get; set; } = () => null;
 
     /// <summary>
-    /// What the run root rule reads of Windows, as the owner's own rule reads it: the run folders are handed it when a
-    /// folder is held to the run root (the review of owner decision 160A). Windows' own by default.
+    /// What the run root rule reads of Windows: the rule judges a run start's root with it
+    /// (<see cref="PaneActions.RefusedRunRoot"/>), and the run folders are handed it when a folder is held to the run
+    /// root (the review of owner decision 160A) - one probe, and one way in. Windows' own by default.
     /// </summary>
     public Func<IRunRootProbe> RunRootProbe { get; set; } = () => Native.WindowsRunRootProbe.Instance;
 
@@ -534,15 +535,15 @@ public sealed class PaneActions
     /// (<see cref="RunRootRule.ChosenNotInForceRefusal"/>); the saved folder is told apart from the one in force by
     /// <see cref="RunRootRule.SameRunRoot"/>.
     /// </summary>
-    /// <param name="runRoot">The run root in force, the one the start would make its folder under.</param>
-    /// <param name="probe">What the rule reads of Windows.</param>
+    /// <param name="runRoot">The run root in force, the one the start would make its folder under, judged with the
+    /// owner's probe (<see cref="PaneActionsOptions.RunRootProbe"/>), the one the run folders are handed.</param>
     /// <param name="notDone">What was not done, true of this host: "nothing was checked".</param>
     /// <param name="where">Where the Settings are, seen from this tab: <see cref="RunRootRule.InSettings"/>, or
     /// <see cref="RunRootRule.InSettingsOnTheReviewTab"/>.</param>
     /// <param name="wayOn">What to do once the root is a local folder: "press Model check again".</param>
-    public bool RefusedRunRoot(string? id, string runRoot, IRunRootProbe probe, string notDone, string where, string wayOn)
+    public bool RefusedRunRoot(string? id, string runRoot, string notDone, string where, string wayOn)
     {
-        RunRootVerdict verdict = RunRootRule.Judge(runRoot, probe);
+        RunRootVerdict verdict = RunRootRule.Judge(runRoot, _options.RunRootProbe());
         if (verdict == RunRootVerdict.Accepted)
         {
             return false;

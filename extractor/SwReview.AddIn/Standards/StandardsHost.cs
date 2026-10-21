@@ -262,7 +262,7 @@ public sealed class StandardsHost : IDisposable
         }
 
         if (actions.RefusedRunRoot(
-                id, runRoot, _options.RunRootProbe, NothingChecked, RunRootRule.InSettingsOnTheReviewTab, PressAgain))
+                id, runRoot, NothingChecked, RunRootRule.InSettingsOnTheReviewTab, PressAgain))
         {
             return;
         }
