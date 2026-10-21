@@ -6,12 +6,13 @@ namespace SwReview.AddIn.Review;
 /// <summary>
 /// Owner decision 143A: the backend restart a settings save could not make because a turn was
 /// running, made as soon as nothing holds it back - no turn runs, and no other work the restart
-/// would end - with the settings in force at that moment.
+/// would end - with the settings saved at that moment, which are in force once it is made
+/// (owner decision 153A).
 ///
 /// <b>Why it exists.</b> `settings.save` asks whether a turn is running before it writes
 /// anything, and <see cref="BackendSupervisor.Restart"/> asks again before it stops the old
 /// backend. A turn the page starts in between - a follow-up, an answer or a Send goes to the
-/// backend directly, not through the host - leaves the settings written and in force in the
+/// backend directly, not through the host - leaves the settings written and saved in the
 /// host while the backend keeps the environment it was started with. The pane tells the
 /// engineer the backend restarts when that turn ends; this is what restarts it.
 ///
@@ -23,7 +24,7 @@ namespace SwReview.AddIn.Review;
 /// still waiting - so however many ask, the backend restarts once - and the restart reads the
 /// settings only then, so several saves during one turn restart it once, with the last of them.
 /// A save made when no turn runs restarts it at once (<see cref="Now(Action)"/>), under the same
-/// lock, and that restart is the one for the settings in force, so anything still waiting is
+/// lock, and that restart is the one for the settings saved last, so anything still waiting is
 /// dropped. A caller that waited for a restart someone else was making - or a save was - is told
 /// what became of it: made, or failed with that failure, and never "restarted" when it was not.
 ///
@@ -84,7 +85,7 @@ internal sealed class DeferredRestart : IDisposable
         /// <summary>No restart was waiting when the call came: nothing was asked, nothing changed.</summary>
         NotPending,
 
-        /// <summary>This call restarted the backend with the settings in force.</summary>
+        /// <summary>This call restarted the backend with the saved settings.</summary>
         Restarted,
 
         /// <summary>
@@ -193,7 +194,7 @@ internal sealed class DeferredRestart : IDisposable
     /// without asking the backend (owner decision 145A). Every restart reads it under the restart's
     /// own lock, and <see cref="Begin"/> marks such work under that lock, so the two never overlap;
     /// a throw is read as busy. Read under the lock, so it must be quick and must not block.</param>
-    /// <param name="restart">Restarts the backend with the settings in force when it is called.
+    /// <param name="restart">Restarts the backend with the settings saved when it is called.
     /// Throws <see cref="TurnRunningException"/> when the backend's own check finds a turn, and
     /// anything else when the restart fails.</param>
     /// <param name="restarted">Tells the page the backend was replaced.</param>
@@ -312,7 +313,7 @@ internal sealed class DeferredRestart : IDisposable
             }
             catch (Exception caught)
             {
-                // The restart for the settings in force was tried and failed. Retrying it when
+                // The restart for the saved settings was tried and failed. Retrying it when
                 // the turns end would fail the same way; the failure is the save's to report, and
                 // the answer of any caller that waited for it.
                 End(caught);

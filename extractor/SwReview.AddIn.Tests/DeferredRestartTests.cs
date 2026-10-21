@@ -56,6 +56,12 @@ namespace SwReview.AddIn.Tests;
 /// once the backend is ready. A restart takes seconds, and the dump attaches to whatever is active
 /// after it, so a review whose document changed meanwhile is refused, making nothing.
 ///
+/// Owner decision 153A adds section 13: <b>until a restart succeeds, the settings the backend was
+/// started with are in force</b>. A restart that fails before it stops the old backend leaves it up
+/// with its environment; every session then takes that backend's provider, model and effort, not
+/// the saved ones, and the Review tab is told the saved settings are not in force yet and that
+/// saving again retries.
+///
 /// The fakes run with no SOLIDWORKS, no Python and no provider; the one test that reads the
 /// backend's real answer to "is a turn running" uses the real <see cref="BackendClient"/>
 /// against a loopback listener, as <see cref="BackendClientSessionBodyTests"/> does.
@@ -136,6 +142,18 @@ public sealed class DeferredRestartTests
     /// not: in a save's answer, and after the failure a restart that waited posts (150A review).
     /// </summary>
     private const string RetryTheRestart = "Save the settings again to retry the restart.";
+
+    /// <summary>
+    /// What the Review tab is told while the backend that is up was started with settings other than
+    /// the saved ones - a restart failed before it stopped the old backend - ending with the way on
+    /// (owner decision 153A), pinned word for word.
+    /// </summary>
+    private const string NotInForce =
+        "The saved settings are not in force yet: the review backend did not restart with them, so reviews "
+        + "run with the settings it was started with. " + RetryTheRestart;
+
+    /// <summary>A restart's failure before it stops anything: the configured launcher cannot be found.</summary>
+    private const string LauncherGone = "FICT the launcher could not be resolved";
 
     /// <summary>Fictional keys, built from fragments and in no provider's format (AGENTS.md rule 2).</summary>
     private static readonly string OpenAiKey = string.Concat("FICT", "-saved-", "openai-", "143a-0001");
@@ -1803,12 +1821,14 @@ public sealed class DeferredRestartTests
             string reported = world.Last("status").GetProperty("message").GetString()!;
             Assert.Contains(Redaction.Mask, reported, StringComparison.Ordinal);
 
-            // The same failure, masked: the status with the way on after it (150A review), the
-            // refusal alone, its class's sentence naming the way on.
+            // The same failure, masked: the status with the way on after it (150A review) - since
+            // owner decision 153A the sentence that the saved settings are not in force, which ends
+            // with it, as the old backend runs on with the settings it was started with - the refusal
+            // alone, its class's sentence naming the way on.
             JsonElement? answer = call.Result;
             Assert.NotNull(answer);
             Assert.Equal("BackendUnavailable", answer!.Value.GetProperty("error_class").GetString());
-            Assert.Equal(answer.Value.GetProperty("message").GetString() + ". " + RetryTheRestart, reported);
+            Assert.Equal(answer.Value.GetProperty("message").GetString() + ". " + NotInForce, reported);
             Assert.Equal(0, world.Dump.Runs);
             Assert.Empty(world.Backend.Sessions);
             world.AssertNothingPostedContains(OpenAiKey);
@@ -2099,7 +2119,10 @@ public sealed class DeferredRestartTests
             world.Backend.EndTurn("chat-1");
             Eventually(() => world.Posted("status").Length == 2, "the failure's status");
             Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
-            Assert.Equal("FICT the launcher has gone. " + RetryTheRestart, world.Last("status").GetProperty("message").GetString());
+
+            // Since owner decision 153A the way on is the sentence that the saved settings are not in
+            // force, which ends with it: the old backend runs on with the settings it was started with.
+            Assert.Equal("FICT the launcher has gone. " + NotInForce, world.Last("status").GetProperty("message").GetString());
         }
 
         Assert.NotNull(world.Backend.Endpoint);
@@ -2726,10 +2749,13 @@ public sealed class DeferredRestartTests
     /// <summary>
     /// A restart that waited for a turn and then failed is told to the Review page as before, as a
     /// failed start is - `status {stage: "error"}` with the failure, masked - and now with the way on
-    /// after it, which is the same whether the restart stopped the old backend or failed before it
-    /// did: saving the settings again retries the restart (150A review, O2; until then the banner
-    /// carried the bare failure). The other tabs are handed the failure alone, and only once no
-    /// backend is up: the add-in adds their way on.
+    /// after it: saving the settings again retries the restart (150A review, O2; until then the
+    /// banner carried the bare failure). Whether the restart stopped the old backend or failed before
+    /// it did, the status ends with those words; one that failed before it did left that backend up
+    /// with the settings it was started with, which are in force until a restart succeeds, so its way
+    /// on is the sentence saying the saved settings are not in force yet, which ends with them (owner
+    /// decision 153A). The other tabs are handed the failure alone, and only once no backend is up:
+    /// the add-in adds their way on.
     /// </summary>
     [Theory]
     [InlineData(
@@ -2739,7 +2765,9 @@ public sealed class DeferredRestartTests
     [InlineData(
         "old backend still up",
         "FICT the launcher could not be resolved (log: C:\\Fictional\\FICT-logs\\backend.log)",
-        "FICT the launcher could not be resolved (log: C:\\Fictional\\FICT-logs\\backend.log). Save the settings again to retry the restart.")]
+        "FICT the launcher could not be resolved (log: C:\\Fictional\\FICT-logs\\backend.log). The saved settings "
+            + "are not in force yet: the review backend did not restart with them, so reviews run with the "
+            + "settings it was started with. Save the settings again to retry the restart.")]
     public void ARestartThatWaitedAndFailedSaysSavingAgainRetriesIt(string when, string failure, string said)
     {
         using var world = new RestartWorld();
@@ -2764,6 +2792,422 @@ public sealed class DeferredRestartTests
         Assert.Equal("error", status.GetProperty("stage").GetString());
         Assert.Equal(said, status.GetProperty("message").GetString());
         Assert.Equal(when == "old backend stopped" ? new[] { failure } : new string[0], world.FailuresToldToTheOtherTabs);
+    }
+
+    // ---- 13. until a restart succeeds, the settings the backend was started with are in force (153A)
+
+    /// <summary>
+    /// A restart can fail before it stops the old backend - the configured launcher cannot be
+    /// resolved, say - and nothing waits afterwards, so the next review goes to that backend, which
+    /// keeps the environment it was started with: the key, `OPENAI_BASE_URL`, Gemini Enterprise.
+    /// Until a restart succeeds, every session takes the provider, model and effort that backend
+    /// was started with, not the saved ones (owner decision 153A). It took the saved ones, and so
+    /// paired one provider's settings with another's environment (research 150A, Not changed) -
+    /// here a switch to Gemini, with a Gemini key, on a backend started for OpenAI with an OpenAI
+    /// key. Every way a session is made: a review, a recheck, a review with saved engineering
+    /// context and that review's Retry; whichever restart failed - a save's made at once, or one
+    /// that waited for a turn.
+    /// </summary>
+    [Theory]
+    [InlineData("review", "at once")]
+    [InlineData("review", "after waiting")]
+    [InlineData("recheck", "at once")]
+    [InlineData("recheck", "after waiting")]
+    [InlineData("context review", "at once")]
+    [InlineData("context review", "after waiting")]
+    [InlineData("context retry", "at once")]
+    [InlineData("context retry", "after waiting")]
+    public void ASessionAfterARestartThatFailedBeforeTheOldBackendStoppedTakesTheSettingsItWasStartedWith(
+        string session, string when)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        SaveWhoseRestartFailsBeforeTheOldBackendStops(world, when, ASwitchToGemini());
+
+        NewSessionRequest request = MakeASession(world, session);
+
+        Assert.Equal("openai", request.Provider);
+        Assert.Equal("gpt-5.6", request.Model);
+        Assert.Equal("high", request.Effort);
+        Assert.Equal(0, world.Backend.Sessions.Last().Generation);
+
+        // Saved all the same: the Settings form shows them, and the next restart is made with them.
+        Assert.Equal("gemini", world.Host.Settings.Provider);
+        Assert.Equal("gemini-3.5-flash", world.Host.Settings.Model);
+        Assert.Equal("low", world.Host.Settings.Effort);
+    }
+
+    /// <summary>
+    /// While the saved settings are not in force the Review tab is told so, and that saving again
+    /// retries, by every `init` - so a page that loads or reloads is told too - in one sentence of
+    /// the host's; and the status a restart that waited posts when it failed before it stopped the
+    /// old backend ends with that sentence rather than the bare way on, since that backend runs on
+    /// with the settings it was started with (owner decision 153A).
+    /// </summary>
+    [Theory]
+    [InlineData("at once")]
+    [InlineData("after waiting")]
+    public void WhileTheSavedSettingsAreNotInForceInitSaysSoAndThatSavingAgainRetries(string when)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+
+        SaveWhoseRestartFailsBeforeTheOldBackendStops(world, when, ASwitchToGemini());
+
+        if (when == "after waiting")
+        {
+            Assert.Equal(LauncherGone + ". " + NotInForce, world.Last("status").GetProperty("message").GetString());
+        }
+
+        Assert.Equal(NotInForce, Init(world, "init").GetProperty("settings_not_in_force").GetString());
+        Assert.Equal(NotInForce, Init(world, "reload").GetProperty("settings_not_in_force").GetString());
+    }
+
+    /// <summary>
+    /// The sentence is said only while it is true: never while the saved settings are the ones in
+    /// force - nothing failed, or a save after the failed one restarted the backend with its own,
+    /// or the settings saved are the ones in force already, so a failed restart left them in force
+    /// (a save of the same settings, or one back to them, its key typed again) - nor with no
+    /// backend at all, which is 150A's path: a restart that failed once the old backend had stopped
+    /// leaves nothing in force; nor while a restart waits, when 143A's promise is the true sentence
+    /// and nothing runs on the old backend before it is made. `init` carries null for each.
+    /// </summary>
+    [Theory]
+    [InlineData("nothing failed")]
+    [InlineData("saved again and restarted")]
+    [InlineData("the same settings saved again")]
+    [InlineData("the settings in force saved again")]
+    [InlineData("the old backend stopped")]
+    [InlineData("a restart waits")]
+    public void InitSaysNothingOfTheSettingsInForceWhileItIsNotTrue(string state)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        switch (state)
+        {
+            case "saved again and restarted":
+                SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "at once", ASwitchToGemini());
+                world.Backend.EarlyRestartFailure = null;
+                world.Receive("settings.save", "again", ASwitchToGemini());
+                world.Reply("settings.saved", "again");
+                break;
+
+            case "the same settings saved again":
+                SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "at once", Save());
+                break;
+
+            case "the settings in force saved again":
+                // Back to OpenAI from the switch, whose restart failed: the switch retired the
+                // stored key, so the engineer types it again - stored anew, the same key.
+                SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "at once", ASwitchToGemini());
+                world.Receive("settings.save", "back", Save(apiKey: OpenAiKey));
+                Assert.Equal("BackendNotRestarted", world.Reply("error", "back").GetProperty("error_class").GetString());
+                break;
+
+            case "the old backend stopped":
+                world.Backend.RestartFailure = new BackendStartException("FICT the backend would not start");
+                world.Receive("settings.save", "save", ASwitchToGemini());
+                world.Reply("error", "save");
+                Assert.Null(world.Backend.Endpoint);
+                break;
+
+            case "a restart waits":
+                SaveAsATurnStarts(world, "save", ASwitchToGemini());
+                world.Reply("settings.saved", "save");
+                Assert.True(world.Host.RestartAhead);
+                break;
+        }
+
+        Assert.Equal(JsonValueKind.Null, Init(world, "init").GetProperty("settings_not_in_force").ValueKind);
+    }
+
+    /// <summary>
+    /// The saved settings are in force when the backend was started with the same of everything a
+    /// session takes - the provider, the model, the effort - and of everything a save writes that
+    /// the backend's start reads: the key, by its value and by where it comes from (138A's marker
+    /// follows the second), the base URL and Gemini Enterprise's project and location. A save that
+    /// changes only one of them, whose restart fails before the old backend stops, is not in force
+    /// (owner decision 153A).
+    /// </summary>
+    [Theory]
+    [InlineData("provider")]
+    [InlineData("model")]
+    [InlineData("effort")]
+    [InlineData("key")]
+    [InlineData("where the key comes from")]
+    [InlineData("base URL")]
+    [InlineData("Gemini Enterprise's project")]
+    [InlineData("Gemini Enterprise's location")]
+    public void ASaveThatChangesOnlyOneSettingTheBackendNeedsIsNotInForceUntilItRestarts(string changed)
+    {
+        using var world = new RestartWorld();
+        Dictionary<string, object?> payload;
+        switch (changed)
+        {
+            case "provider":
+                // The same key typed for the other provider, so the provider alone changes.
+                payload = Save(provider: "gemini", apiKey: OpenAiKey);
+                break;
+
+            case "model":
+                payload = Save(model: "gpt-5.6-mini");
+                break;
+
+            case "effort":
+                payload = Save(effort: "low");
+                break;
+
+            case "key":
+                payload = Save(apiKey: string.Concat("FICT", "-saved-", "openai-", "153a-0003"));
+                break;
+
+            case "where the key comes from":
+                // The stored key removed, and the same key found in the workstation's environment:
+                // the backend was started naming the pane's key as the saved one (138A), and would
+                // not be now.
+                world.WorkstationEnvironment = name => name == "OPENAI_API_KEY" ? OpenAiKey : null;
+                payload = Save(apiKey: string.Empty);
+                break;
+
+            case "base URL":
+                payload = Save(baseUrl: "https://fict-gateway.invalid/v1");
+                break;
+
+            default:
+                world.Settings.Provider = "gemini";
+                world.Settings.Model = "gemini-3.5-flash";
+                world.Settings.SetApiKey(GeminiKey);
+                world.Settings.GeminiEnterprise = new GeminiEnterpriseSettings
+                {
+                    Project = "fict-project",
+                    Location = "fict-location",
+                };
+                payload = Save(
+                    provider: "gemini",
+                    model: "gemini-3.5-flash",
+                    geminiEnterprise: changed == "Gemini Enterprise's project"
+                        ? new { project = "fict-project-2", location = "fict-location" }
+                        : new { project = "fict-project", location = "fict-location-2" });
+                break;
+        }
+
+        world.Open();
+        world.Track("chat-1");
+        Assert.Equal(JsonValueKind.Null, Init(world, "before").GetProperty("settings_not_in_force").ValueKind);
+
+        SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "at once", payload);
+
+        Assert.Equal(NotInForce, Init(world, "after").GetProperty("settings_not_in_force").GetString());
+    }
+
+    /// <summary>
+    /// Two saves, the first failing before the old backend stopped and the second restarting the
+    /// backend - at once, or once the turn it met has ended: the saved settings are in force from
+    /// then on. The next review takes them, on the restarted backend, and `init` says nothing more.
+    /// </summary>
+    [Theory]
+    [InlineData("at once")]
+    [InlineData("after waiting")]
+    public void ASaveThatRestartsTheBackendAfterOneThatFailedPutsTheSavedSettingsInForce(string when)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "at once", Save(model: "gpt-5.6-mini", effort: "low"));
+        world.Backend.EarlyRestartFailure = null;
+
+        Dictionary<string, object?> second = ASwitchToGemini();
+        if (when == "at once")
+        {
+            world.Receive("settings.save", "second", second);
+        }
+        else
+        {
+            SaveAsATurnStarts(world, "second", second);
+            world.Backend.EndTurn("chat-1");
+            Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted");
+        }
+
+        world.Reply("settings.saved", "second");
+        Assert.Equal(1, world.Backend.Generation);
+        Assert.Equal(JsonValueKind.Null, Init(world, "init").GetProperty("settings_not_in_force").ValueKind);
+
+        NewSessionRequest request = MakeASession(world, "review");
+        Assert.Equal("gemini", request.Provider);
+        Assert.Equal("gemini-3.5-flash", request.Model);
+        Assert.Equal("low", request.Effort);
+        Assert.Equal(1, world.Backend.Sessions.Last().Generation);
+    }
+
+    /// <summary>
+    /// The add-in loads with saved settings whose first start fails: no backend, so no settings are
+    /// in force, and `init` says nothing of them - the add-in's word that the backend did not start
+    /// says how to go on (150A) - and a review is refused, as with no backend. A save then starts the
+    /// backend with its settings, which are in force from then on: a review takes them. A save whose
+    /// start fails too leaves no backend, and `init` still says nothing of them.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void WhenTheFirstStartFailedNothingIsInForceUntilASaveStartsTheBackend(bool saveStartsIt)
+    {
+        using var world = new RestartWorld();
+        world.Backend.Down = true;
+        world.Open();
+
+        Assert.Equal(JsonValueKind.Null, Init(world, "init").GetProperty("settings_not_in_force").ValueKind);
+        world.Receive("review.start", "refused", new { });
+        Assert.Equal("BackendUnavailable", world.Reply("error", "refused").GetProperty("error_class").GetString());
+
+        if (!saveStartsIt)
+        {
+            world.Backend.EarlyRestartFailure = new BackendStartException(LauncherGone);
+        }
+
+        world.Receive("settings.save", "save", ASwitchToGemini());
+
+        if (!saveStartsIt)
+        {
+            Assert.Equal("BackendNotRestarted", world.Reply("error", "save").GetProperty("error_class").GetString());
+            Assert.Null(world.Backend.Endpoint);
+            Assert.Equal(JsonValueKind.Null, Init(world, "after").GetProperty("settings_not_in_force").ValueKind);
+            return;
+        }
+
+        world.Reply("settings.saved", "save");
+        Assert.Equal(JsonValueKind.Null, Init(world, "after").GetProperty("settings_not_in_force").ValueKind);
+        NewSessionRequest request = MakeASession(world, "review");
+        Assert.Equal("gemini", request.Provider);
+        Assert.Equal("gemini-3.5-flash", request.Model);
+        Assert.Equal("low", request.Effort);
+    }
+
+    /// <summary>
+    /// The Review tab's Send box is saved without a restart (feature 015) and is no setting the
+    /// backend is started with, so its save leaves the settings in force as they were: `init` goes
+    /// on saying the saved settings are not in force while they are not, and says nothing while
+    /// they are.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TheSendBoxsSaveLeavesTheSettingsInForceAsTheyWere(bool afterAFailedRestart)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        if (afterAFailedRestart)
+        {
+            SaveWhoseRestartFailsBeforeTheOldBackendStops(world, "at once", ASwitchToGemini());
+        }
+
+        world.Receive("send_when_checked.save", "box", new { send_when_checked = false });
+        world.Reply("send_when_checked.saved", "box");
+
+        JsonElement said = Init(world, "init").GetProperty("settings_not_in_force");
+        if (afterAFailedRestart)
+        {
+            Assert.Equal(NotInForce, said.GetString());
+        }
+        else
+        {
+            Assert.Equal(JsonValueKind.Null, said.ValueKind);
+        }
+    }
+
+    /// <summary>A switch from the world's OpenAI settings to Gemini, with a Gemini key and another model and effort.</summary>
+    private static Dictionary<string, object?> ASwitchToGemini() =>
+        Save(provider: "gemini", model: "gemini-3.5-flash", effort: "low", apiKey: GeminiKey);
+
+    /// <summary>
+    /// A save of <paramref name="payload"/> whose restart fails before it stops the old backend - the
+    /// launcher cannot be resolved - made at once, or after waiting for a turn on chat-1, which the
+    /// caller tracks. Either way nothing waits afterwards, and the old backend is still up.
+    /// </summary>
+    private static void SaveWhoseRestartFailsBeforeTheOldBackendStops(RestartWorld world, string when, object payload)
+    {
+        world.Backend.EarlyRestartFailure = new BackendStartException(LauncherGone);
+        if (when == "at once")
+        {
+            world.Receive("settings.save", "save", payload);
+            Assert.Equal("BackendNotRestarted", world.Reply("error", "save").GetProperty("error_class").GetString());
+        }
+        else
+        {
+            SaveAsATurnStarts(world, "save", payload);
+            world.Reply("settings.saved", "save");
+            world.Backend.EndTurn("chat-1");
+            Eventually(
+                () => world.Posted("status").Any(status =>
+                    status.GetProperty("message").GetString()!.StartsWith(LauncherGone, StringComparison.Ordinal)),
+                "the failure's status");
+        }
+
+        Assert.False(world.Host.RestartAhead);
+        Assert.NotNull(world.Backend.Endpoint);
+        Assert.Equal(0, world.Backend.Generation);
+    }
+
+    /// <summary>The `init` the host answers a `ready` with.</summary>
+    private static JsonElement Init(RestartWorld world, string id)
+    {
+        world.Receive("ready", id, new { });
+        return world.Reply("init", id);
+    }
+
+    /// <summary>
+    /// Makes the session <paramref name="session"/> names and answers the request the backend was
+    /// asked to create it with: a review; a recheck of a review that waits; a review with saved
+    /// engineering context (feature 016); or that review's Retry (owner decision 108A).
+    /// </summary>
+    private static NewSessionRequest MakeASession(RestartWorld world, string session)
+    {
+        switch (session)
+        {
+            case "review":
+                world.Receive("review.start", "start", new { });
+                world.Reply("review.started", "start");
+                break;
+
+            case "recheck":
+                world.Track("waiting");
+                world.Receive("review.recheck", "recheck", new { chat_id = "waiting" });
+                world.Reply("review.rechecked", "recheck");
+                break;
+
+            case "context review":
+                ReviewWithContext(world);
+                break;
+
+            case "context retry":
+                string chatId = ReviewWithContext(world).GetProperty("chat_id").GetString()!;
+                world.Receive("review.start", "retry", new { retry_of = chatId });
+                world.Reply("review.started", "retry");
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(session), session, "no such session");
+        }
+
+        return world.Backend.Sessions.Last().Request;
+    }
+
+    /// <summary>Prepares engineering context and reviews with it, answering `review.started`.</summary>
+    private static JsonElement ReviewWithContext(RestartWorld world)
+    {
+        world.Receive("context.prepare", "prepare", new { });
+        JsonElement prepared = world.Reply("context.prepared", "prepare");
+        world.Receive("context.review", "context", new
+        {
+            run_id = prepared.GetProperty("run_id").GetString(),
+            context_id = Guid.NewGuid().ToString(),
+            head_digest = new string('a', 64),
+            package_sha256 = prepared.GetProperty("package_sha256").GetString(),
+        });
+        return world.Reply("review.started", "context");
     }
 
     // ---- the restart itself, with no host ------------------------------------------------------
@@ -3636,7 +4080,12 @@ public sealed class DeferredRestartTests
     }
 
     private static Dictionary<string, object?> Save(
-        string provider = "openai", string model = "gpt-5.6", string effort = "high", string? apiKey = null)
+        string provider = "openai",
+        string model = "gpt-5.6",
+        string effort = "high",
+        string? apiKey = null,
+        string? baseUrl = null,
+        object? geminiEnterprise = null)
     {
         return new Dictionary<string, object?>
         {
@@ -3644,8 +4093,8 @@ public sealed class DeferredRestartTests
             { "model", model },
             { "effort", effort },
             { "api_key", apiKey },
-            { "base_url", null },
-            { "gemini_enterprise", null },
+            { "base_url", baseUrl },
+            { "gemini_enterprise", geminiEnterprise },
         };
     }
 
@@ -3804,6 +4253,9 @@ public sealed class DeferredRestartTests
         /// <summary>Whether a remodel run is in progress on the backend, as the add-in answers it.</summary>
         public Func<bool> BackendBusy { get; set; } = () => false;
 
+        /// <summary>The workstation's environment as the host reads it; none of it by default.</summary>
+        public Func<string, string?> WorkstationEnvironment { get; set; } = _ => null;
+
         /// <summary>
         /// How many times the host asked for every other tab to be told the backend restarted
         /// (owner decision 145A), as the add-in tells the Model check, Standards and Remodel tabs.
@@ -3850,7 +4302,7 @@ public sealed class DeferredRestartTests
                     int read = Interlocked.Increment(ref _documentReads);
                     return DocumentAtRead != null ? DocumentAtRead(read) : Document;
                 },
-                Environment = _ => null,
+                Environment = name => WorkstationEnvironment(name),
                 Dump = Dump,
                 PrepareReview = Prepares
                     ? () => new ReviewPreparation(
