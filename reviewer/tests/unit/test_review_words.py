@@ -747,3 +747,25 @@ backend never sends it. The sentence names no path and says what to do."""
 def test_a_review_whose_document_changed_as_it_started_says_so_and_what_to_do() -> None:
     errors = load_words().labels.errors
     assert {key: errors.get(key) for key in DOCUMENT_CHANGED} == DOCUMENT_CHANGED
+
+
+BRIDGE_ON_ANOTHER_DOCUMENT = {
+    "BridgeOnAnotherDocument": (
+        "The SOLIDWORKS bridge is not attached to this review's document yet, so the review did "
+        "not start. It follows the active document once no review turn or remodel holds it. Wait "
+        "a moment, then try again."
+    ),
+}
+"""The class the add-in refuses a review's start with when the bridge the session would be given
+is not on the review's document and configuration (owner decision 152A): the tool service it
+belongs to is left on another document while a review turn or a remodel holds it, and for a moment
+after a switch, and the session's live checks run over it and write into the review's package. The
+add-in's own class, true of every start that carries it - a new review, a Retry, a context review
+and a Recheck - so the way on is "try again", and the tool service is asked to follow the active
+document as the refusal is made. The backend never sends it. The sentence names no path."""
+
+
+def test_a_review_whose_bridge_is_on_another_document_says_so_and_what_to_do() -> None:
+    errors = load_words().labels.errors
+    labels = {key: errors.get(key) for key in BRIDGE_ON_ANOTHER_DOCUMENT}
+    assert labels == BRIDGE_ON_ANOTHER_DOCUMENT

@@ -473,6 +473,14 @@ public class SwReviewAddIn : ISwAddin
             BackendRestarted = TellTheOtherTabsTheBackendRestarted,
             BackendRestartFailed = TellTheOtherTabsTheBackendDidNotStart,
 
+            // Owner decision 152A: a review's session is given the tool service's bridge only while
+            // that bridge serves the review's document, asked of the gate, which knows each
+            // attachment's document and configuration; and a start refused for a bridge left on
+            // another document asks the gate to follow the active one. Read through the field: the
+            // gate is built after these options, and one that has gone serves nothing.
+            BridgeDocument = bridge => _toolService?.DocumentServedBy(bridge),
+            FollowActiveDocument = () => _toolService?.FollowActiveDocument(),
+
             DrawingModels = DrawingModels,
             Dump = reviewDump,
             PrepareReview = reviewDump.Prepare,

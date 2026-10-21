@@ -56,6 +56,11 @@ namespace SwReview.AddIn.Tests;
 /// once the backend is ready. A restart takes seconds, and the dump attaches to whatever is active
 /// after it, so a review whose document changed meanwhile is refused, making nothing.
 ///
+/// Owner decision 152A adds section 13: <b>a session's bridge serves the review's document</b>.
+/// Every start that makes a session asks which document the bridge it would hand over serves, and
+/// refuses one that is not the review's, making nothing, rather than run its live checks over
+/// another document.
+///
 /// The fakes run with no SOLIDWORKS, no Python and no provider; the one test that reads the
 /// backend's real answer to "is a turn running" uses the real <see cref="BackendClient"/>
 /// against a loopback listener, as <see cref="BackendClientSessionBodyTests"/> does.
@@ -2766,6 +2771,392 @@ public sealed class DeferredRestartTests
         Assert.Equal(when == "old backend stopped" ? new[] { failure } : new string[0], world.FailuresToldToTheOtherTabs);
     }
 
+    // ---- 13. a session's bridge serves the review's document (owner decision 152A) ------------
+
+    /// <summary>
+    /// What a new review is refused with when the bridge it would be given is not on its document,
+    /// read before anything is made (owner decision 152A), pinned word for word.
+    /// </summary>
+    private const string BridgeElsewhereBeforeExtraction =
+        "the SOLIDWORKS bridge this review would be given is not attached to the review's document and "
+        + "configuration, so nothing was extracted and no run folder was made. It follows the active "
+        + "document once no review turn or remodel holds it: wait a moment, then press Review again.";
+
+    /// <summary>...and what any start is refused with at its session, where whatever it made stays made.</summary>
+    private const string BridgeElsewhereAtTheSession =
+        "the SOLIDWORKS bridge this review would be given is not attached to the review's document and "
+        + "configuration, so no review session was started and no check ran. It follows the active "
+        + "document once no review turn or remodel holds it: wait a moment, then try again.";
+
+    /// <summary>The bridge the tool service publishes: the pipe minted for its attach, and the review secret.</summary>
+    private static readonly BridgeConfig ReviewBridge = new BridgeConfig("swreview-FICT-152a-1", "FICT-review-secret-152a-1");
+
+    /// <summary>
+    /// Owner decision 152A, its second half. A session is given whatever bridge the tool service is
+    /// attached to when it is made, and its first check, the live interference check, runs over it
+    /// and writes its rows into the review's package - another document's, when the tool service
+    /// was left on another one (002 research, 149A's owner question 5). Every start that makes a
+    /// session now asks which document the bridge it would hand over serves - the tool service's own
+    /// record of its attachment, which its `ping` answers - and refuses one not on the review's, by
+    /// the pane's one rule (the path ignoring case, the configuration exactly), or on none:
+    /// `BridgeOnAnotherDocument`, retryable, in plain words naming no path; it asks the tool service
+    /// to follow the active document, so that pressing again can find the bridge there; and it makes
+    /// nothing - no session, no status, and for a new review no extraction and no run folder.
+    /// </summary>
+    [Theory]
+    [InlineData("review", "another document")]
+    [InlineData("review", "another configuration")]
+    [InlineData("review", "no service")]
+    [InlineData("prepared review", "another document")]
+    [InlineData("prepared review", "another configuration")]
+    [InlineData("retry", "another document")]
+    [InlineData("context review", "another document")]
+    [InlineData("context review", "another configuration")]
+    [InlineData("context review", "no service")]
+    [InlineData("context retry", "another document")]
+    [InlineData("context retry", "another configuration")]
+    [InlineData("recheck", "another document")]
+    [InlineData("recheck", "another configuration")]
+    [InlineData("recheck", "no service")]
+    public void AStartWhoseBridgeIsNotOnItsDocumentIsRefusedAndMakesNothing(string kind, string served)
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge, Prepares = kind == "prepared review" };
+        PageDocument reviewed = world.Document!;
+        PageDocument? servedNow = reviewed;
+        world.BridgeServes = bridge => bridge.Pipe == ReviewBridge.Pipe ? servedNow : null;
+        world.Open();
+        Directory.CreateDirectory(world.Settings.RunRoot);
+        var start = new SessionStart(world, kind);
+        start.Ready();
+        servedNow = served == "no service" ? null : Changed(reviewed, served);
+        int sessions = world.Backend.Sessions.Length;
+        int dumps = world.Dump.Runs;
+        int statuses = world.Posted("status").Length;
+        string[] folders = FoldersUnderTheRunRoot(world);
+
+        start.Press("press");
+
+        JsonElement error = world.Reply("error", "press");
+        Assert.Equal("BridgeOnAnotherDocument", error.GetProperty("error_class").GetString());
+        Assert.True(error.GetProperty("retryable").GetBoolean());
+        string message = error.GetProperty("message").GetString()!;
+        Assert.Equal(start.Extracts ? BridgeElsewhereBeforeExtraction : BridgeElsewhereAtTheSession, message);
+        Assert.DoesNotContain(@":\", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("FICT", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(sessions, world.Backend.Sessions.Length);
+        Assert.Equal(dumps, world.Dump.Runs);
+        Assert.Equal(folders, FoldersUnderTheRunRoot(world));
+        Assert.DoesNotContain(
+            world.Posted("status").Skip(statuses),
+            status => status.GetProperty("stage").GetString() is "extracting" or "checking");
+        Assert.Equal(1, world.FollowsAsked);
+    }
+
+    /// <summary>
+    /// A bridge on the review's document is handed over, and it is the one the session is given -
+    /// the same document however its path is spelled, since Windows names one file however it is
+    /// cased and the rule is the pane's one rule. Nothing is refused and the tool service is asked
+    /// nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("review", "the same")]
+    [InlineData("review", "spelled otherwise")]
+    [InlineData("prepared review", "spelled otherwise")]
+    [InlineData("retry", "spelled otherwise")]
+    [InlineData("context review", "the same")]
+    [InlineData("context review", "spelled otherwise")]
+    [InlineData("context retry", "spelled otherwise")]
+    [InlineData("recheck", "the same")]
+    [InlineData("recheck", "spelled otherwise")]
+    public void AStartWhoseBridgeIsOnItsDocumentIsGivenThatBridge(string kind, string served)
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge, Prepares = kind == "prepared review" };
+        PageDocument reviewed = world.Document!;
+        PageDocument? servedNow = reviewed;
+        world.BridgeServes = bridge => bridge.Pipe == ReviewBridge.Pipe ? servedNow : null;
+        world.Open();
+        var start = new SessionStart(world, kind);
+        start.Ready();
+        servedNow = served == "the same" ? reviewed : Changed(reviewed, served);
+        int sessions = world.Backend.Sessions.Length;
+
+        start.Press("press");
+
+        start.AssertStarted("press");
+        Assert.Equal(sessions + 1, world.Backend.Sessions.Length);
+        NewSessionRequest request = world.Backend.Sessions.Last().Request;
+        Assert.Equal(ReviewBridge.Pipe, request.Bridge!.Pipe);
+        Assert.Equal(ReviewBridge.Secret, request.Bridge.Secret);
+        Assert.Equal(0, world.FollowsAsked);
+    }
+
+    /// <summary>
+    /// The refusal is retryable, and truly: once the bridge serves the review's document - the tool
+    /// service has followed it - the same press starts the review, with that bridge: a new review
+    /// prepared afresh as the page always prepares one, a context review on the context it prepared,
+    /// a Retry or a Recheck on the review it names.
+    /// </summary>
+    [Theory]
+    [InlineData("review")]
+    [InlineData("prepared review")]
+    [InlineData("retry")]
+    [InlineData("context review")]
+    [InlineData("context retry")]
+    [InlineData("recheck")]
+    public void PressedAgainOnceTheBridgeIsOnItsDocumentTheStartGoesAhead(string kind)
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge, Prepares = kind == "prepared review" };
+        PageDocument reviewed = world.Document!;
+        PageDocument? servedNow = reviewed;
+        world.BridgeServes = bridge => bridge.Pipe == ReviewBridge.Pipe ? servedNow : null;
+        world.Open();
+        var start = new SessionStart(world, kind);
+        start.Ready();
+        servedNow = Changed(reviewed, "another configuration");
+        start.Press("refused");
+        Assert.Equal("BridgeOnAnotherDocument", world.Reply("error", "refused").GetProperty("error_class").GetString());
+        int sessions = world.Backend.Sessions.Length;
+
+        servedNow = reviewed;
+        start.Press("again");
+
+        start.AssertStarted("again");
+        Assert.Equal(sessions + 1, world.Backend.Sessions.Length);
+        Assert.Equal(ReviewBridge.Pipe, world.Backend.Sessions.Last().Request.Bridge!.Pipe);
+        Assert.Equal(1, world.FollowsAsked);
+    }
+
+    /// <summary>
+    /// The bridge is asked again at the session, after the extraction - minutes, in which the tool
+    /// service can follow another document - and one it attached to another document meanwhile is
+    /// refused there, in words true there: no session was started and no check ran. The run folder
+    /// keeps the evidence just extracted, of the review's document, as an extraction that fails keeps
+    /// its own; the next press makes a new one.
+    /// </summary>
+    [Fact]
+    public void ABridgeMovedToAnotherDocumentDuringTheExtractionIsRefusedAtTheSession()
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge };
+        PageDocument reviewed = world.Document!;
+        var moved = new BridgeConfig("swreview-FICT-152a-2", "FICT-review-secret-152a-2");
+        world.BridgeServes = bridge => bridge.Pipe == ReviewBridge.Pipe
+            ? reviewed
+            : bridge.Pipe == moved.Pipe ? Changed(reviewed, "another document") : null;
+        world.Open();
+        Directory.CreateDirectory(world.Settings.RunRoot);
+        string[] folders = FoldersUnderTheRunRoot(world);
+        world.Dump.OnRun = () => world.Bridge = moved;
+
+        world.Receive("review.start", "start", new { });
+
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("BridgeOnAnotherDocument", error.GetProperty("error_class").GetString());
+        Assert.Equal(BridgeElsewhereAtTheSession, error.GetProperty("message").GetString());
+        Assert.True(error.GetProperty("retryable").GetBoolean());
+        Assert.Equal(1, world.Dump.Runs);
+        Assert.Empty(world.Backend.Sessions);
+        string made = Assert.Single(FoldersUnderTheRunRoot(world).Except(folders));
+        Assert.True(File.Exists(Path.Combine(made, "package.json")));
+        Assert.Equal(1, world.FollowsAsked);
+    }
+
+    /// <summary>
+    /// ...and the session is given the bridge read at its creation, never the one read before the
+    /// extraction: one the tool service moved to the review's own document meanwhile is handed over.
+    /// </summary>
+    [Fact]
+    public void TheSessionIsGivenTheBridgeReadAtItsCreation()
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge };
+        PageDocument reviewed = world.Document!;
+        var moved = new BridgeConfig("swreview-FICT-152a-2", "FICT-review-secret-152a-2");
+        world.BridgeServes = bridge => bridge.Pipe == ReviewBridge.Pipe || bridge.Pipe == moved.Pipe ? reviewed : null;
+        world.Open();
+        world.Dump.OnRun = () => world.Bridge = moved;
+
+        world.Receive("review.start", "start", new { });
+
+        world.Reply("review.started", "start");
+        NewSessionRequest request = Assert.Single(world.Backend.Sessions).Request;
+        Assert.Equal(moved.Pipe, request.Bridge!.Pipe);
+        Assert.Equal(moved.Secret, request.Bridge.Secret);
+        Assert.Equal(0, world.FollowsAsked);
+    }
+
+    /// <summary>
+    /// The session is given the very bridge that was asked about. One the tool service publishes
+    /// between the question and the session - it re-attached, so the bridge asked about is closing -
+    /// is not handed over unasked: the session gets the one asked about, whose pipe serves the
+    /// review's document or nothing, never another document.
+    /// </summary>
+    [Fact]
+    public void TheSessionIsGivenTheBridgeThatWasAskedAboutAndNoOtherPublishedSince()
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge };
+        PageDocument reviewed = world.Document!;
+        var published = new BridgeConfig("swreview-FICT-152a-3", "FICT-review-secret-152a-3");
+        world.BridgeServes = bridge =>
+        {
+            if (bridge.Pipe == ReviewBridge.Pipe && world.Dump.Runs > 0)
+            {
+                world.Bridge = published;
+            }
+
+            return bridge.Pipe == ReviewBridge.Pipe ? reviewed : Changed(reviewed, "another document");
+        };
+        world.Open();
+
+        world.Receive("review.start", "start", new { });
+
+        world.Reply("review.started", "start");
+        NewSessionRequest request = Assert.Single(world.Backend.Sessions).Request;
+        Assert.Equal(ReviewBridge.Pipe, request.Bridge!.Pipe);
+        Assert.Equal(ReviewBridge.Secret, request.Bridge.Secret);
+    }
+
+    /// <summary>
+    /// With no bridge published - no tool service listening yet, or one being replaced - a session is
+    /// given none and nothing is asked, as before owner decision 152A: the backend runs no live check
+    /// and says so in the review's coverage, and nothing of another document can reach it.
+    /// </summary>
+    [Fact]
+    public void WithNoBridgeASessionIsGivenNoneAndNothingIsAsked()
+    {
+        using var world = new RestartWorld();
+        world.BridgeServes = _ => throw new InvalidOperationException("no bridge, so nothing is asked of one");
+        world.Open();
+
+        world.Receive("review.start", "start", new { });
+
+        world.Reply("review.started", "start");
+        Assert.Null(Assert.Single(world.Backend.Sessions).Request.Bridge);
+        Assert.Equal(0, world.FollowsAsked);
+    }
+
+    /// <summary>
+    /// A bridge whose document the host cannot be told is handed to no session: an answer of none,
+    /// and an answer that throws, are refused as a bridge on another document is. And by default a
+    /// host has no answer: a host given a bridge and nothing to ask about it refuses, rather than
+    /// hand over a bridge whose document it cannot vouch for.
+    /// </summary>
+    [Theory]
+    [InlineData("no answer")]
+    [InlineData("an answer that throws")]
+    public void ABridgeWhoseDocumentCannotBeToldIsHandedToNoSession(string answer)
+    {
+        Assert.Null(new ReviewHostOptions(new FakeChannel(), new FakeBackend(), "FICT-settings.json").BridgeDocument(ReviewBridge));
+
+        using var world = new RestartWorld { Bridge = ReviewBridge };
+        world.BridgeServes = answer == "no answer"
+            ? (Func<BridgeConfig, PageDocument?>?)null
+            : _ => throw new InvalidOperationException("the gate could not be asked");
+        world.Open();
+
+        world.Receive("review.start", "start", new { });
+
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("BridgeOnAnotherDocument", error.GetProperty("error_class").GetString());
+        Assert.Equal(BridgeElsewhereBeforeExtraction, error.GetProperty("message").GetString());
+        Assert.Empty(world.Backend.Sessions);
+        Assert.Equal(0, world.Dump.Runs);
+    }
+
+    /// <summary>
+    /// One kind of start that makes a review session (owner decision 152A): made ready with the bridge
+    /// on the review's document - whatever has to exist before it can be pressed - then pressed.
+    /// </summary>
+    private sealed class SessionStart
+    {
+        private readonly RestartWorld _world;
+        private readonly string _kind;
+        private string? _chatId;
+        private JsonElement _context;
+
+        public SessionStart(RestartWorld world, string kind)
+        {
+            _world = world;
+            _kind = kind;
+        }
+
+        /// <summary>Whether the start makes a run folder and extracts into it: a new review, a Retry of one among them.</summary>
+        public bool Extracts => _kind == "review" || _kind == "prepared review" || _kind == "retry";
+
+        public void Ready()
+        {
+            switch (_kind)
+            {
+                case "review":
+                case "prepared review":
+                    return;
+
+                case "retry":
+                    _world.Track("failed");
+                    _chatId = "failed";
+                    return;
+
+                case "recheck":
+                    _world.Track("waiting");
+                    _chatId = "waiting";
+                    return;
+
+                case "context review":
+                case "context retry":
+                    _world.Receive("context.prepare", "context", new { });
+                    JsonElement prepared = _world.Reply("context.prepared", "context");
+                    _context = JsonSerializer.SerializeToElement(new
+                    {
+                        run_id = prepared.GetProperty("run_id").GetString(),
+                        context_id = Guid.NewGuid().ToString(),
+                        head_digest = new string('a', 64),
+                        package_sha256 = prepared.GetProperty("package_sha256").GetString(),
+                    });
+                    if (_kind == "context retry")
+                    {
+                        _world.Receive("context.review", "first", _context);
+                        _chatId = _world.Reply("review.started", "first").GetProperty("chat_id").GetString();
+                    }
+
+                    return;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(_kind), _kind, "no such start");
+            }
+        }
+
+        public void Press(string id)
+        {
+            switch (_kind)
+            {
+                case "review":
+                    _world.Receive("review.start", id, new { });
+                    return;
+
+                case "prepared review":
+                    // The page prepares every review it starts, and a preparation is used up by the start.
+                    _world.Receive("review.prepare", id + "-prepare", new { });
+                    string preparation = _world.Reply("review.prepared", id + "-prepare").GetProperty("preparation_id").GetString()!;
+                    _world.Receive("review.start", id, new { preparation_id = preparation });
+                    return;
+
+                case "retry":
+                case "context retry":
+                    _world.Receive("review.start", id, new { retry_of = _chatId });
+                    return;
+
+                case "context review":
+                    _world.Receive("context.review", id, _context);
+                    return;
+
+                case "recheck":
+                    _world.Receive("review.recheck", id, new { chat_id = _chatId });
+                    return;
+            }
+        }
+
+        public void AssertStarted(string id) =>
+            _world.Reply(_kind == "recheck" ? "review.rechecked" : "review.started", id);
+    }
+
     // ---- the restart itself, with no host ------------------------------------------------------
 
     [Fact]
@@ -3748,8 +4139,11 @@ public sealed class DeferredRestartTests
         private readonly FakeChannel _channel = new FakeChannel();
         private readonly List<string> _failuresTold = new List<string>();
         private ReviewHost? _host;
+        private ReviewHostOptions? _options;
+        private BridgeConfig? _bridge;
         private int _otherTabsTold;
         private int _documentReads;
+        private int _followsAsked;
 
         public RestartWorld()
         {
@@ -3832,6 +4226,34 @@ public sealed class DeferredRestartTests
         /// <summary>What telling the other tabs of a failure does after it is recorded; a test makes it throw.</summary>
         public Action? TellingTheOtherTabsOfAFailure { get; set; }
 
+        /// <summary>
+        /// The tool service's review bridge as the add-in publishes it into the host's options (owner
+        /// decision 152A): none by default, as every case before 152A had it. Set while the host is
+        /// open, it is the gate publishing another service's bridge, or none.
+        /// </summary>
+        public BridgeConfig? Bridge
+        {
+            get => _options != null ? _options.Bridge : _bridge;
+            set
+            {
+                _bridge = value;
+                if (_options != null)
+                {
+                    _options.Bridge = value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The document and configuration the tool service behind a bridge is attached to, as the
+        /// add-in's gate answers it (owner decision 152A); null answers none, as for a pipe no
+        /// service listening now has.
+        /// </summary>
+        public Func<BridgeConfig, PageDocument?>? BridgeServes { get; set; }
+
+        /// <summary>How many times the host asked the tool service to follow the active document (owner decision 152A).</summary>
+        public int FollowsAsked => Volatile.Read(ref _followsAsked);
+
         public ReviewHost Host => _host ?? throw new InvalidOperationException("call Open() first");
 
         public void Open()
@@ -3841,10 +4263,13 @@ public sealed class DeferredRestartTests
                 Settings.Save(SettingsPath);
             }
 
-            _host = new ReviewHost(new ReviewHostOptions(_channel, BackendOverride ?? Backend, SettingsPath)
+            _options = new ReviewHostOptions(_channel, BackendOverride ?? Backend, SettingsPath)
             {
                 BuildMode = BuildMode.Development,
                 LogFolder = Path.Combine(Root, "logs"),
+                Bridge = _bridge,
+                BridgeDocument = bridge => BridgeServes?.Invoke(bridge),
+                FollowActiveDocument = () => Interlocked.Increment(ref _followsAsked),
                 CurrentDocument = () =>
                 {
                     int read = Interlocked.Increment(ref _documentReads);
@@ -3880,7 +4305,8 @@ public sealed class DeferredRestartTests
 
                     TellingTheOtherTabsOfAFailure?.Invoke();
                 },
-            });
+            };
+            _host = new ReviewHost(_options);
         }
 
         /// <summary>A review of the open document the host started, in a run folder of its own.</summary>

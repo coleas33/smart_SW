@@ -2812,6 +2812,11 @@ public sealed class ReviewHostTests
                 EntityResolver = UseResolver ? (ResolverOverride ?? Resolver) : null,
                 Opener = Opener,
                 Bridge = Bridge,
+
+                // Owner decision 152A: the host hands a session a bridge only once it is told the
+                // bridge serves the review's document. This world's tool service has followed the
+                // active document, as the add-in's does once nothing holds it.
+                BridgeDocument = _ => Document,
                 Engineer = Engineer,
                 Now = () => Now,
             };

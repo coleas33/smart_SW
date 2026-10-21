@@ -1126,6 +1126,28 @@ public sealed class ToolServiceWiringTests
         Assert.Contains("(_remodelHost != null && _remodelHost.RunInProgress)", gate, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Owner decision 152A, the add-in's half, read from its source for the reason above: the review
+    /// host asks the gate - read through the field per call, since the gate is built after the
+    /// review host's options - which document the bridge it is about to hand a session serves, and
+    /// asks it to follow the active document when that is not the review's. Either line dropped,
+    /// and every review start would be refused (a host that cannot ask refuses), or refused for
+    /// good on a configuration switch, with every host and gate case above still passing.
+    /// </summary>
+    [Fact]
+    public void TheAddInAsksTheGateWhichDocumentTheReviewBridgeServesAndToFollowTheActiveOne()
+    {
+        string addIn = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
+        string source = Regex.Replace(File.ReadAllText(Path.Combine(addIn, "SwReviewAddIn.cs")), @"\s+", " ");
+        int start = source.IndexOf("var reviewOptions = new ReviewHostOptions(", StringComparison.Ordinal);
+        int end = start < 0 ? -1 : source.IndexOf("_reviewHost = new ReviewHost(reviewOptions);", start, StringComparison.Ordinal);
+        Assert.True(end > start, "SwReviewAddIn no longer builds the review host's options before the review host.");
+        string options = source.Substring(start, end - start);
+
+        Assert.Contains("BridgeDocument = bridge => _toolService?.DocumentServedBy(bridge),", options, StringComparison.Ordinal);
+        Assert.Contains("FollowActiveDocument = () => _toolService?.FollowActiveDocument(),", options, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ARestartWhoseAttachFailsIsReportedAndTheNextDocumentTriesAgain()
     {

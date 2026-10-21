@@ -38,6 +38,7 @@
       "AlreadyAnswered": "That question was already answered, perhaps in another window. Reload the review to see its answer.",
       "BackendNotRestarted": "The settings are saved, but the review backend did not restart with them. Save Settings again to retry the restart.",
       "BackendUnavailable": "The review backend is not running or not answering. Save Settings to start it again, then retry.",
+      "BridgeOnAnotherDocument": "The SOLIDWORKS bridge is not attached to this review's document yet, so the review did not start. It follows the active document once no review turn or remodel holds it. Wait a moment, then try again.",
       "BridgeUnavailable": "SOLIDWORKS could not be reached. Check that the add-in is loaded, then try again.",
       "ContextExpired": "The document or saved evidence changed. Extract context evidence again.",
       "ContextPreparationFailed": "Evidence could not be extracted. Check that the part or assembly is saved and loaded, then extract context evidence again.",
