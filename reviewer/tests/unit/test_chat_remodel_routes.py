@@ -760,6 +760,59 @@ class TestTheRefusalMapping:
 
         assert probe(client, source).json()["error_class"] == "BridgeUnavailable"
 
+    @pytest.mark.parametrize("route", ["probe", "open"])
+    def test_an_unsaved_part_is_retryable_on_every_route(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        route: str,
+    ) -> None:
+        """Owner decision 159A (004 research R18.7 item 2): `DocumentDirty` is retryable throughout.
+
+        The add-in's own reading of the probe's signals answers it retryable, and this mapping did
+        not, so one class carried two flags. Retryable is the true one: saving the part, or closing
+        it unsaved and opening it again, makes the same press succeed. The bridge refuses it at the
+        probe and again at the open, as it reads the part again before the copy.
+        """
+        sentence = "'C:\\Fictional\\FICT-bracket.SLDPRT' has unsaved changes."
+        if route == "probe":
+            bridge.probe_raises = RemodelPreflightError(sentence, "source_dirty", {})
+            response = probe(client, source)
+        else:
+            bridge.open_raises = RemodelError(sentence, "source_dirty", {})
+            response = open_copy(client, run_dir, source)
+
+        assert response.status_code == 400, response.text
+        body = response.json()
+        assert body["error_class"] == "DocumentDirty"
+        assert body["retryable"] is True
+
+    @pytest.mark.parametrize("route", ["probe", "open"])
+    def test_a_part_that_references_other_files_stays_not_retryable(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        route: str,
+    ) -> None:
+        """Owner decision 159A: the other class the add-in words itself is unchanged, and false on
+        every route: pressing again changes nothing, and breaking the references is a change to the
+        part."""
+        sentence = "'C:\\Fictional\\FICT-bracket.SLDPRT' has 2 external file reference(s)."
+        if route == "probe":
+            bridge.probe_raises = RemodelPreflightError(sentence, "external_refs", {})
+            response = probe(client, source)
+        else:
+            bridge.open_raises = RemodelError(sentence, "external_refs", {})
+            response = open_copy(client, run_dir, source)
+
+        assert response.status_code == 400, response.text
+        assert response.json()["error_class"] == "ExternalReferences"
+        assert response.json()["retryable"] is False
+
 
 class TestAScopeRefusalInPlainWords:
     """Owner decision 149A: `ScopeRefused` reaches the Remodel tab in plain words, with no path.

@@ -172,9 +172,15 @@ class NotAPart(ChatError):
 
 
 class DocumentDirty(ChatError):
-    """`source_dirty`. The source is never saved by this feature, so the engineer saves it."""
+    """`source_dirty`. The source is never saved by this feature, so the engineer saves it.
+
+    Retryable (owner decision 159A, 004 research R19): saving the part, or closing it unsaved and
+    opening it again, makes the same press succeed, as the add-in's own reading of the probe's
+    signals has always said; the class carried two flags until then.
+    """
 
     error_class = "DocumentDirty"
+    retryable = True
 
 
 class ExternalReferences(ChatError):

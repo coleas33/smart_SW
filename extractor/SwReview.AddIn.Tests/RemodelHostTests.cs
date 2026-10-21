@@ -424,6 +424,45 @@ public sealed class RemodelHostTests
     /// <c>ProbeAndOpen_OnAReadOnlySourceFile_MakeAWritableCopyAndLeaveTheSourceExactlyAsItWas</c>
     /// and <c>RemodelCopyTests.AReadOnlySourceIsCopiedAndTheCopyIsWritable</c>.
     /// </summary>
+    /// <summary>
+    /// Owner decision 159A (004 T210; research R18.7 item 2): an unsaved part is refused retryable whoever refuses it -
+    /// saving it, or closing it unsaved and opening it again, makes the same press succeed. This host's own reading of the
+    /// probe's signals has always said so; the backend's mapping of the bridge's `source_dirty`, on the probe and the open,
+    /// did not and does now (<c>test_chat_remodel_routes.py</c>), and the flag of a refusal the backend answered reaches the
+    /// page as the backend gave it. A guard of this host's route, and of the flag passed on.
+    /// </summary>
+    [Theory]
+    [InlineData("signal")]
+    [InlineData("probe")]
+    [InlineData("open")]
+    public void AnUnsavedPartIsRefusedRetryableOnEveryRoute(string route)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            const string said = "'C:\\Fictional\\FICT-bracket.SLDPRT' has unsaved changes.";
+            if (route == "signal")
+            {
+                world.Pipeline.Signals.SaveFlagDirty = true;
+            }
+            else if (route == "probe")
+            {
+                world.Pipeline.ProbeFailure = TheBackends("DocumentDirty", said, retryable: true);
+            }
+            else
+            {
+                world.Pipeline.CopyFailure = TheBackends("DocumentDirty", said, retryable: true);
+            }
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("DocumentDirty", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.DocumentDirtyMessage, error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+        }
+    }
+
     [Fact]
     public void ACleanReadOnlySourceIsNotRefusedByTheHost()
     {
