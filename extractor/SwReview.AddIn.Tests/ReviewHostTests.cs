@@ -2729,6 +2729,153 @@ public sealed class ReviewHostTests
         }
     }
 
+    // ---- owner decision 154A: a run root on a share or reached through a link -----------
+
+    /// <summary>
+    /// Owner decision 154A (feature 002 T168): a Review-tab start - the preparation the add-in starts every
+    /// review with, a review, and a Retry, which reviews into a new run folder - refuses a run root the run
+    /// root rule refuses, up front, in the Review tab's words: what the root is, that nothing was started,
+    /// and the way on, a local folder in the settings file and a restart. Nothing is read of the model, no
+    /// run folder is made, nothing is extracted, no session is asked for, no status is posted, and no path
+    /// reaches the page.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FakeRunRootProbe.RefusedKinds), MemberType = typeof(FakeRunRootProbe))]
+    public void EveryReviewStartRefusesARunRootTheRuleRefusesAndMakesNothing(string kind)
+    {
+        using (var world = new ReviewWorld())
+        {
+            string local = world.Settings.RunRoot;
+            var refusing = FakeRunRootProbe.Refusing(kind, local);
+            world.Settings.RunRoot = refusing.RunRoot;
+            world.Probe = refusing.Probe;
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            int prepared = 0;
+            world.Prepare = () => { prepared++; return Preparation(world.Document!); };
+            world.Open();
+
+            world.Receive("review.prepare", "prepare", new { });
+            world.Receive("review.start", "start", new { });
+            world.Receive("review.start", "retry", new { retry_of = "chat-0" });
+
+            foreach (string id in new[] { "prepare", "start", "retry" })
+            {
+                JsonElement error = world.Reply("error", id);
+                Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
+                Assert.False(error.GetProperty("retryable").GetBoolean());
+                Assert.Equal(
+                    RunRootRule.Refusal(refusing.Verdict, "nothing was started", "try again"),
+                    error.GetProperty("message").GetString());
+            }
+
+            Assert.Equal(0, prepared);
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.Backend.Created);
+            Assert.False(Directory.Exists(local), "a refused start made the run root");
+            Assert.Empty(world.AllPosted("status"));
+            Assert.Empty(world.AllPosted("review.prepared"));
+            Assert.Empty(world.AllPosted("review.started"));
+            world.AssertNothingPostedContains(Path.GetFileName(Path.GetDirectoryName(local)!));
+        }
+    }
+
+    /// <summary>
+    /// The run root is judged before every other refusal a start makes - no document, a drawing active, no
+    /// backend - so an engineer is told first of the one thing nothing on the tab gets past, and nothing that
+    /// comes after the judgement is reached: a waiting settings restart is made only once the backend is
+    /// readied, which comes later.
+    /// </summary>
+    [Fact]
+    public void TheRunRootIsJudgedBeforeEveryOtherRefusalOfAReviewStart()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Probe = FakeRunRootProbe.OnANetworkDrive();
+            world.Backend.Endpoint = null;
+            world.Prepare = () => throw new InvalidOperationException("the preparation must not run");
+            world.Open();
+
+            world.Document = null;
+            world.Receive("review.prepare", "no-document-prepare", new { });
+            world.Receive("review.start", "no-document-start", new { });
+            world.Document = new PageDocument(@"C:\Fictional\FICT-drawing.SLDDRW", "Sheet1");
+            world.Receive("review.prepare", "drawing-prepare", new { });
+            world.Receive("review.start", "drawing-start", new { });
+
+            foreach (string id in new[] { "no-document-prepare", "no-document-start", "drawing-prepare", "drawing-start" })
+            {
+                Assert.Equal("RunRootRefused", world.Reply("error", id).GetProperty("error_class").GetString());
+            }
+        }
+    }
+
+    /// <summary>
+    /// A Recheck - a restored waiting review's Send, which re-runs its checks in its own run folder - hands
+    /// the backend a folder under the run root as a start does, so it is refused as a start is, before its
+    /// document is asked about; the record stands, unchanged.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FakeRunRootProbe.RefusedKinds), MemberType = typeof(FakeRunRootProbe))]
+    public void ARecheckRefusesARunRootTheRuleRefusesAndKeepsItsRecord(string kind)
+    {
+        using (var world = new ReviewWorld())
+        {
+            string run = world.TrackedRun("FICT-earlier");
+            var refusing = FakeRunRootProbe.Refusing(kind, world.Settings.RunRoot);
+            world.Settings.RunRoot = refusing.RunRoot;
+            world.Probe = refusing.Probe;
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Open();
+            world.Host.TrackSession("FICT-earlier", run, world.Document, new DateTimeOffset(Stamp), "not_sent");
+            SessionRecord original = Assert.Single(world.Host.Sessions);
+            world.Document = null;
+
+            world.Receive("review.recheck", "recheck", new { chat_id = "FICT-earlier" });
+
+            JsonElement error = world.Reply("error", "recheck");
+            Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
+            Assert.Equal(
+                RunRootRule.Refusal(refusing.Verdict, "nothing was started", "try again"),
+                error.GetProperty("message").GetString());
+            Assert.Empty(world.Backend.Created);
+            Assert.Same(original, Assert.Single(world.Host.Sessions));
+            Assert.Equal("not_sent", original.ModelStatus);
+            Assert.Empty(world.AllPosted("status"));
+            Assert.Empty(world.AllPosted("review.rechecked"));
+        }
+    }
+
+    /// <summary>
+    /// The run root in force is the one judged, wherever it came from: a settings file that names none holds
+    /// the default, Documents\SwReview\runs, and a Documents on a mapped drive puts it on a share. No document
+    /// is open, so nothing could be made under the real Documents whatever the answer; the probe is faked.
+    /// </summary>
+    [Fact]
+    public void TheDefaultRunRootIsTheOneJudgedWhenTheSettingsNameNone()
+    {
+        using (var world = new ReviewWorld())
+        {
+            File.WriteAllText(
+                world.SettingsPath,
+                "{\"version\": 1, \"provider\": \"openai\", \"model\": \"gpt-5.6\", \"effort\": \"high\", \"terminal_cli\": \"codex\"}");
+            FakeRunRootProbe probe = FakeRunRootProbe.OnANetworkDrive();
+            world.Probe = probe;
+            world.Document = null;
+            world.Open();
+            string defaultRoot = UserSettings.Defaults().RunRoot;
+            Assert.Equal(defaultRoot, world.Host.Settings.RunRoot);
+
+            world.Receive("review.start", "start", new { });
+
+            Assert.Equal("RunRootRefused", world.Reply("error", "start").GetProperty("error_class").GetString());
+            Assert.Equal(
+                defaultRoot.StartsWith(@"\\", StringComparison.Ordinal)
+                    ? new string[0]
+                    : new[] { "DriveOf " + defaultRoot.Substring(0, 2).ToUpperInvariant() + @"\" },
+                probe.Asked);
+        }
+    }
+
     // ---- the world ----------------------------------------------------------------------
 
     /// <summary>
@@ -2788,6 +2935,9 @@ public sealed class ReviewHostTests
         /// <summary>A resolver used instead of <see cref="Resolver"/>, for a test that needs a real lookup.</summary>
         public IEntityResolver? ResolverOverride { get; set; }
 
+        /// <summary>What the run root rule reads (owner decision 154A); Windows itself when null.</summary>
+        public IRunRootProbe? Probe { get; set; }
+
         public List<string> Posted { get; } = new List<string>();
 
         public ReviewHost Host => _host ?? throw new InvalidOperationException("call Open() first");
@@ -2815,6 +2965,11 @@ public sealed class ReviewHostTests
                 Engineer = Engineer,
                 Now = () => Now,
             };
+            if (Probe != null)
+            {
+                options.RunRootProbe = Probe;
+            }
+
             _host = new ReviewHost(options);
         }
 

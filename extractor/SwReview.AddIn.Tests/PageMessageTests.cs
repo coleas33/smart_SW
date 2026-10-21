@@ -768,6 +768,103 @@ public sealed class PageMessageTests
         }
     }
 
+    // ---- owner decision 154A: a run root the rule refuses is not saved -------------------
+
+    /// <summary>
+    /// Owner decision 154A (feature 002 T168): a save writes the run root in force - the page names none, and
+    /// the clone carries it - so a save whose run root the run root rule refuses is refused whole, in plain
+    /// words that say the settings were not saved and name the way on: a local folder in the settings file,
+    /// and a restart. Both writers are refused, the Settings Save and the send box, since they share the one
+    /// persist step: the file keeps every byte, the backend is not restarted, the settings in force stand, and
+    /// no path reaches the page.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FakeRunRootProbe.RefusedKinds), MemberType = typeof(FakeRunRootProbe))]
+    public void ASaveOfSettingsWhoseRunRootTheRuleRefusesIsNotSaved(string kind)
+    {
+        using (var world = new HostWorld())
+        {
+            string local = world.Settings.RunRoot;
+            var refusing = FakeRunRootProbe.Refusing(kind, local);
+            world.Settings.RunRoot = refusing.RunRoot;
+            world.Probe = refusing.Probe;
+            world.Open();
+            byte[] before = File.ReadAllBytes(world.SettingsPath);
+
+            world.Receive("settings.save", "save", Save(effort: "low", apiKey: Key));
+            world.Receive("send_when_checked.save", "box", new { send_when_checked = false });
+
+            foreach (string id in new[] { "save", "box" })
+            {
+                JsonElement error = world.Reply("error", id);
+                Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
+                Assert.False(error.GetProperty("retryable").GetBoolean());
+                Assert.Equal(
+                    RunRootRule.Refusal(refusing.Verdict, "the settings were not saved", "try again"),
+                    error.GetProperty("message").GetString());
+            }
+
+            Assert.Equal(before, File.ReadAllBytes(world.SettingsPath));
+            Assert.Equal(0, world.Backend.Restarts);
+            Assert.Equal("high", world.Host.Settings.Effort);
+            Assert.True(world.Host.Settings.SendsWhenChecked);
+            Assert.Null(world.Host.Settings.ApiKeyProtected);
+            Assert.Empty(Posted(world, "settings.saved"));
+            Assert.Empty(Posted(world, "send_when_checked.saved"));
+            world.AssertNothingPostedContains(Path.GetFileName(Path.GetDirectoryName(local)!));
+            world.AssertNothingPostedContains(Key);
+        }
+    }
+
+    /// <summary>
+    /// A settings file that names no run root holds the default, Documents\SwReview\runs, which a save would
+    /// write into it for the first time: under a Documents on a mapped drive it is on a share, so it is not
+    /// written - the file keeps naming none.
+    /// </summary>
+    [Fact]
+    public void ADefaultRunRootTheRuleRefusesIsNotWrittenIntoAFileThatNamesNone()
+    {
+        using (var world = new HostWorld())
+        {
+            File.WriteAllText(
+                world.SettingsPath,
+                "{\"version\": 1, \"provider\": \"openai\", \"model\": \"gpt-5.6\", \"effort\": \"high\", \"terminal_cli\": \"codex\"}");
+            world.Probe = FakeRunRootProbe.OnANetworkDrive();
+            world.Open();
+            byte[] before = File.ReadAllBytes(world.SettingsPath);
+
+            world.Receive("settings.save", "save", Save(effort: "low"));
+
+            Assert.Equal("RunRootRefused", world.Reply("error", "save").GetProperty("error_class").GetString());
+            Assert.Equal(before, File.ReadAllBytes(world.SettingsPath));
+            Assert.DoesNotContain("run_root", File.ReadAllText(world.SettingsPath));
+            Assert.Equal(0, world.Backend.Restarts);
+        }
+    }
+
+    /// <summary>A run root the rule accepts is saved as before: the rule refuses only what it names.</summary>
+    [Fact]
+    public void ASaveOfSettingsWhoseRunRootTheRuleAcceptsIsSavedAsBefore()
+    {
+        using (var world = new HostWorld())
+        {
+            world.Probe = FakeRunRootProbe.Local();
+            world.Open();
+
+            world.Receive("settings.save", "save", Save(effort: "low"));
+
+            world.Reply("settings.saved", "save");
+            Assert.Equal("low", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.Effort);
+            Assert.Equal(1, world.Backend.Restarts);
+        }
+    }
+
+    private static JsonElement[] Posted(HostWorld world, string type) => world.Posted
+        .Select(message => JsonDocument.Parse(message).RootElement)
+        .Where(root => root.GetProperty("type").GetString() == type)
+        .Select(root => root.GetProperty("payload").Clone())
+        .ToArray();
+
     // ---- helpers ------------------------------------------------------------------------
 
     private static Dictionary<string, object?> Save(
@@ -824,6 +921,9 @@ public sealed class PageMessageTests
 
         public PageDocument? Document { get; set; }
 
+        /// <summary>What the run root rule reads (owner decision 154A); Windows itself when null.</summary>
+        public IRunRootProbe? Probe { get; set; }
+
         public List<string> Posted { get; } = new List<string>();
 
         public ReviewHost Host => _host ?? throw new InvalidOperationException("call Open() first");
@@ -843,6 +943,11 @@ public sealed class PageMessageTests
                 CurrentDocument = () => Document,
                 Environment = name => Environment.TryGetValue(name, out string? value) ? value : null,
             };
+            if (Probe != null)
+            {
+                options.RunRootProbe = Probe;
+            }
+
             _host = new ReviewHost(options);
         }
 

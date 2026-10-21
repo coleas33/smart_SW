@@ -123,6 +123,12 @@ public sealed class RemodelHostOptions
     /// answers it through the review host (`ReviewHost.RestartAhead`). By default none does.
     /// </summary>
     public Func<bool> RestartAhead { get; set; } = () => false;
+
+    /// <summary>
+    /// What the run root rule reads of Windows (owner decision 154A): a share, a mapped or substituted drive,
+    /// a link. Windows itself by default; injected so a test fakes each without making one.
+    /// </summary>
+    public IRunRootProbe RunRootProbe { get; set; } = Native.WindowsRunRootProbe.Instance;
 }
 
 /// <summary>
@@ -1051,6 +1057,15 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     private void Plan(string? id)
     {
+        // Owner decision 154A: first - before a run in progress, the document, the seat, the gate, an earlier
+        // plan's session or the probe is asked about. The run folder is made under the run root, and the backend
+        // refuses one on a share and spells one reached through a link otherwise than this host binds it, so the
+        // copy's open would refuse it (feature 011 research R12.9, items 1 and 2).
+        if (RunRootRefused(id, "nothing was copied"))
+        {
+            return;
+        }
+
         if (_busy)
         {
             SendRunInProgress(id);
@@ -1557,6 +1572,13 @@ public sealed class RemodelHost : IDisposable
 
     private void Start(string? id, JsonElement payload)
     {
+        // Owner decision 154A: first, as a plan is refused - the run hands its folder to the backend and the
+        // bridge again.
+        if (RunRootRefused(id, "the plan was not applied"))
+        {
+            return;
+        }
+
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
@@ -2538,6 +2560,14 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     private void SendRefusal(string? id, RemodelRefusal refusal) =>
         _actions.SendError(id, refusal.ErrorClass, refusal.Message, refusal.Retryable);
+
+    /// <summary>
+    /// Owner decision 154A: a plan or a Start refuses a run root the run root rule refuses, in this tab's words,
+    /// which its page shows whole - <paramref name="notDone"/> says what the press did not do - before it does
+    /// anything else.
+    /// </summary>
+    private bool RunRootRefused(string? id, string notDone) =>
+        _actions.RefusedRunRoot(id, _options.RunRoot(), _options.RunRootProbe, notDone, "press Remodel a copy again");
 
     private void SendRunInProgress(string? id) =>
         _actions.SendError(

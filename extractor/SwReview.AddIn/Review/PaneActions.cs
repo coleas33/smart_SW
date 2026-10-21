@@ -510,6 +510,31 @@ public sealed class PaneActions
         }
     }
 
+    /// <summary>
+    /// Owner decision 154A: refuses a run start - or a settings save - whose run root the run root rule refuses
+    /// (<see cref="RunRootRule"/>: on a network share, reached through a link, or written as a device path), and
+    /// says whether it did. The one refusal every host makes, written once: <c>error {error_class:
+    /// "RunRootRefused"}</c>, not retryable - pressing again cannot help until the settings name a local folder
+    /// and SOLIDWORKS is restarted - in the rule's words for what the root is, with the host's own
+    /// <paramref name="notDone"/> and <paramref name="wayOn"/>, and no path. Each caller asks before it does
+    /// anything else, so a refused start reads, makes and restarts nothing.
+    /// </summary>
+    /// <param name="runRoot">The run root the start would make its folder under, or the save would write.</param>
+    /// <param name="probe">What the rule reads of Windows.</param>
+    /// <param name="notDone">What was not done, true of this host: "nothing was checked".</param>
+    /// <param name="wayOn">What to do once the root is a local folder: "press Model check again".</param>
+    public bool RefusedRunRoot(string? id, string runRoot, IRunRootProbe probe, string notDone, string wayOn)
+    {
+        RunRootVerdict verdict = RunRootRule.Judge(runRoot, probe);
+        if (verdict == RunRootVerdict.Accepted)
+        {
+            return false;
+        }
+
+        SendError(id, "RunRootRefused", RunRootRule.Refusal(verdict, notDone, wayOn), retryable: false);
+        return true;
+    }
+
     /// <summary>Sends one `error`, with the message masked (FR-015).</summary>
     public void SendError(string? id, string errorClass, string message, bool retryable)
     {

@@ -9,7 +9,11 @@ The shared token, origin, error and run-root rules in Feature 002 apply unchange
 constructing a provider. The reply is `context.prepared {run_id, package_sha256,
 document}`. The host retains the directory, exact package digest and root document /
 configuration. Another preparation, ordinary review or active-document notification
-invalidates it. The host rechecks the document after extraction.
+invalidates it. The host rechecks the document after extraction. *Amended 2026-10-20 (feature 002,
+owner decision 154A):* a preparation, and `context.review` below, are refused first,
+`RunRootRefused`, with nothing extracted and no session asked for, when the run root is on a
+network share, reached through a link or written as a device path (002 `pane-host-messages.md`,
+"The run root rule").
 
 `context.selection {run_id, package_sha256}` asks for exactly one selected component
 or face against that prepared package. `context.selected` returns an observation ID,

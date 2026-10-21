@@ -541,6 +541,50 @@ public sealed class ModelCheckHostTests
         }
     }
 
+    // ---- owner decision 154A: a run root on a share or reached through a link -----------
+
+    /// <summary>
+    /// Owner decision 154A (feature 002 T168): `check.start` refuses a run root the run root rule refuses,
+    /// first - before the document is asked about - in the Model check tab's words, which its page shows
+    /// whole: what the root is, that nothing was checked, and the way on, a local folder in the settings file,
+    /// a restart, and Model check pressed again. No check folder is made, nothing is extracted or registered,
+    /// no status is posted and no path reaches the page.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FakeRunRootProbe.RefusedKinds), MemberType = typeof(FakeRunRootProbe))]
+    public void CheckStartRefusesARunRootTheRuleRefusesFirstAndMakesNothing(string kind)
+    {
+        using (var world = new CheckWorld())
+        {
+            var refusing = FakeRunRootProbe.Refusing(kind, world.RunRoot);
+            world.RunRootSpelling = refusing.RunRoot;
+            world.Probe = refusing.Probe;
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDPRT", "Default");
+            world.Open();
+
+            world.Receive("check.start", "c1", new { scope = "part" });
+            world.Document = null;
+            world.Receive("check.start", "c2", new { scope = "part" });
+
+            foreach (string id in new[] { "c1", "c2" })
+            {
+                JsonElement error = world.Reply("error", id);
+                Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
+                Assert.False(error.GetProperty("retryable").GetBoolean());
+                Assert.Equal(
+                    RunRootRule.Refusal(refusing.Verdict, "nothing was checked", "press Model check again"),
+                    error.GetProperty("message").GetString());
+            }
+
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.RunFolders());
+            Assert.Empty(world.Registered);
+            Assert.Empty(world.AllPosted("status"));
+            Assert.Empty(world.AllPosted("check.extracted"));
+            Assert.DoesNotContain(world.Posted, message => message.Contains(Path.GetFileName(Path.GetDirectoryName(world.RunRoot)!)));
+        }
+    }
+
     // ---- the world ----------------------------------------------------------------------
 
     private sealed class CheckWorld : IDisposable
@@ -564,6 +608,12 @@ public sealed class ModelCheckHostTests
 
         public bool BlankRunRoot { get; set; }
 
+        /// <summary>The run root as the setting spells it, when not <see cref="RunRoot"/> (owner decision 154A).</summary>
+        public string? RunRootSpelling { get; set; }
+
+        /// <summary>What the run root rule reads (owner decision 154A); Windows itself when null.</summary>
+        public IRunRootProbe? Probe { get; set; }
+
         public PageDocument? Document { get; set; }
 
         public string? ProfilePath { get; set; }
@@ -583,8 +633,8 @@ public sealed class ModelCheckHostTests
 
         public void Open()
         {
-            _host = new ModelCheckHost(new ModelCheckHostOptions(
-                new CollectingChannel(Posted), () => BlankRunRoot ? "   " : RunRoot)
+            var options = new ModelCheckHostOptions(
+                new CollectingChannel(Posted), () => BlankRunRoot ? "   " : RunRootSpelling ?? RunRoot)
             {
                 Backend = () => Endpoint,
                 CurrentDocument = () => Document,
@@ -593,7 +643,13 @@ public sealed class ModelCheckHostTests
                 RegisterLatestRun = directory => Registered.Add(directory),
                 LogFolder = () => LogFolder,
                 Now = () => Stamp,
-            });
+            };
+            if (Probe != null)
+            {
+                options.RunRootProbe = Probe;
+            }
+
+            _host = new ModelCheckHost(options);
         }
 
         public string[] RunFolders() =>

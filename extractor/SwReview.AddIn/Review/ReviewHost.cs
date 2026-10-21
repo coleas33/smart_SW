@@ -298,6 +298,12 @@ public sealed class ReviewHostOptions
     /// </summary>
     public Action<string> BackendRestartFailed { get; set; } = _ => { };
 
+    /// <summary>
+    /// What the run root rule reads of Windows (owner decision 154A): a share, a mapped or substituted drive,
+    /// a link. Windows itself by default; injected so a test fakes each without making one.
+    /// </summary>
+    public IRunRootProbe RunRootProbe { get; set; } = Native.WindowsRunRootProbe.Instance;
+
     internal static string DefaultLogFolder() => System.IO.Path.Combine(
         System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
         "SwReview",
@@ -1260,6 +1266,15 @@ public sealed class ReviewHost : IDisposable
 
     private bool PersistSettings(UserSettings next, string? id)
     {
+        // Owner decision 154A: a run root the run root rule refuses is never written. The page names no run
+        // root - the one in force is carried in the clone - so a save under such a root, the Settings Save's
+        // and the send box's alike, is refused whole: nothing is written and the backend is not restarted.
+        // The root is set in the settings file, which the add-in reads when it loads.
+        if (_actions.RefusedRunRoot(id, next.RunRoot, _options.RunRootProbe, "the settings were not saved", "try again"))
+        {
+            return false;
+        }
+
         try
         {
             next.Save(_options.SettingsPath);
@@ -1968,6 +1983,7 @@ public sealed class ReviewHost : IDisposable
         long generation = ExpirePreparedContext();
         _preparationId = null;
         _preparedDocument = null;
+        if (RunRootRefused(id)) return;
         if (!ContextReady(id)) return;
         PageDocument? document = _options.CurrentDocument();
         if (document == null || !document.IsAttachable)
@@ -2072,6 +2088,7 @@ public sealed class ReviewHost : IDisposable
 
     private void ReviewContext(string? id, JsonElement payload)
     {
+        if (RunRootRefused(id)) return;
         PreparedContext? prepared = CurrentContext(id, payload);
         if (prepared == null) return;
         string? contextId = Text(payload, "context_id");
@@ -2094,6 +2111,11 @@ public sealed class ReviewHost : IDisposable
         ExpirePreparedContext();
         _preparationId = null;
         _preparedDocument = null;
+        if (RunRootRefused(id))
+        {
+            return;
+        }
+
         PageDocument? document = _options.CurrentDocument();
         if (document != null && document.Kind == "drawing")
         {
@@ -2147,6 +2169,14 @@ public sealed class ReviewHost : IDisposable
     private void StartReview(string? id, JsonElement payload)
     {
         ExpirePreparedContext();
+
+        // Owner decision 154A: first, before the document is read or the backend readied - which can make a
+        // waiting settings restart - and so before a review, a Retry or a context review's Retry makes anything.
+        if (RunRootRefused(id))
+        {
+            return;
+        }
+
         PageDocument? document = _options.CurrentDocument();
         if (document == null)
         {
@@ -2303,6 +2333,15 @@ public sealed class ReviewHost : IDisposable
     private void SendContextRetryNotActive(string? id) =>
         SendError(id, "ReviewNotActive", "Open or switch to the reviewed document and configuration before retrying its review with saved context.", retryable: true);
 
+    /// <summary>
+    /// Owner decision 154A: a Review-tab start - a preparation, a review, a Retry, a Recheck, context evidence
+    /// and a review with it - refuses a run root the run root rule refuses, in this tab's words, before it does
+    /// anything else: each hands the backend a run folder under the run root, which the backend refuses on a
+    /// share and spells otherwise through a link. Written once for every start on the tab.
+    /// </summary>
+    private bool RunRootRefused(string? id) =>
+        _actions.RefusedRunRoot(id, _settings.RunRoot, _options.RunRootProbe, "nothing was started", "try again");
+
     private bool CanReviewDocument(PageDocument document, string? id)
     {
         if (document.Kind != "drawing") return true;
@@ -2312,6 +2351,11 @@ public sealed class ReviewHost : IDisposable
 
     private void RecheckReview(string? id, JsonElement payload)
     {
+        if (RunRootRefused(id))
+        {
+            return;
+        }
+
         string? chatId = Blank(Text(payload, "chat_id"));
         if (chatId == null)
         {

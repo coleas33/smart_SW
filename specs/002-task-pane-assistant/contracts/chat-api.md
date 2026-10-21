@@ -185,7 +185,13 @@ and Win32 device paths, and requires the result to be a descendant of the config
 `error_class: "InvalidRunDir"`. The same rule applies to every host-side path action in
 `pane-host-messages.md`. *Amended 2026-10-19 (owner decision 146A):* `InvalidRunDir` is this
 rule's alone, and its sentence in the words file states the rule; a folder that passes it and
-already holds another run's files is `400 RunDirTaken` to `POST /sessions` (above).
+already holds another run's files is `400 RunDirTaken` to `POST /sessions` (above). *Amended
+2026-10-20 (owner decision 154A):* the rule is unchanged. The pane's add-in refuses a run root on a
+network share, reached through a link or written as a device path before any request names a
+folder under it (`pane-host-messages.md`, "The run root rule"), so the pane no longer meets
+`InvalidRunDir` for one; the command line and any other caller still do. The rule reads a run
+folder's text alone for a UNC path, so a folder on a mapped network drive passes it and is written
+over the network; the add-in refuses that root.
 
 `check_id` is the check run folder's *name*, so a check is addressable after a restart
 without any server-side registry. It is caller-supplied too and goes through the same

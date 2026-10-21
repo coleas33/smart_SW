@@ -5504,6 +5504,113 @@ public sealed class RemodelHostTests
         }
     }
 
+    // ---- owner decision 154A: a run root on a share or reached through a link -----------
+
+    /// <summary>
+    /// Owner decision 154A (feature 002 T168; feature 011 research R12.9, items 1 and 2): a plan refuses a
+    /// run root the run root rule refuses, first - before a run in progress, the document, the seat or a
+    /// waiting settings restart is asked about - in the Remodel tab's words, which its page shows whole: what
+    /// the root is, that nothing was copied, and the way on, a local folder in the settings file, a restart,
+    /// and Remodel a copy pressed again. The gate is not entered, nothing is asked of the pipeline - no probe of
+    /// the part, no copy - no run folder is made, no status is posted, and no path reaches the page; an earlier
+    /// plan waiting for Start is left as it is.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FakeRunRootProbe.RefusedKinds), MemberType = typeof(FakeRunRootProbe))]
+    public void APlanRefusesARunRootTheRuleRefusesFirstAndMakesNothing(string kind)
+    {
+        using (var world = new RemodelWorld())
+        {
+            var refusing = FakeRunRootProbe.Refusing(kind, world.RunRoot);
+            world.RunRootSpelling = refusing.RunRoot;
+            world.Probe = refusing.Probe;
+            world.Open();
+            int gates = 0;
+            world.Options.BeginRun = begin =>
+            {
+                gates++;
+                begin();
+                return null;
+            };
+
+            world.Receive("remodel.plan", "p1", new { });
+            world.Document = null;
+            world.Receive("remodel.plan", "p2", new { });
+
+            foreach (string id in new[] { "p1", "p2" })
+            {
+                JsonElement error = world.Reply("error", id);
+                Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
+                Assert.False(error.GetProperty("retryable").GetBoolean());
+                Assert.Equal(
+                    RunRootRule.Refusal(refusing.Verdict, "nothing was copied", "press Remodel a copy again"),
+                    error.GetProperty("message").GetString());
+            }
+
+            Assert.Equal(0, gates);
+            Assert.Empty(world.Pipeline.Calls);
+            world.AssertNothingWasCopied();
+            Assert.False(world.Host.RunInProgress);
+            Assert.Null(world.Host.LatestRun);
+            Assert.Empty(world.Registered);
+            Assert.DoesNotContain(world.Posted, message => message.Contains("\"type\":\"status\""));
+            Assert.DoesNotContain(world.Posted, message => message.Contains(Path.GetFileName(Path.GetDirectoryName(world.RunRoot)!)));
+        }
+    }
+
+    /// <summary>
+    /// A Start refuses a run root the rule refuses as a plan does, in the Remodel tab's words - the plan was
+    /// not applied - before the run it names is looked up, and begins nothing: the gate is not entered, the
+    /// run is not handed to the pipeline, the plan stays planned and startable once the root is accepted
+    /// again. Here the rule's answer changes after the plan, as a run folder whose root was replaced by a link
+    /// would; the faked drive goes from local to a substituted one.
+    /// </summary>
+    [Fact]
+    public void AStartRefusesARunRootTheRuleRefusesAndBeginsNothing()
+    {
+        using (var world = new RemodelWorld())
+        {
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            world.Probe = probe;
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reply("remodel.planned", "p1");
+            RemodelRun planned = world.Host.LatestRun!;
+            List<string> callsBefore = world.Pipeline.Calls.ToList();
+            int gates = 0;
+            Func<Action, BackendRequestException?> allowed = world.Options.BeginRun;
+            world.Options.BeginRun = begin =>
+            {
+                gates++;
+                return allowed(begin);
+            };
+
+            probe.Substitutes[world.RunRoot.Substring(0, 2)] = @"C:\Fictional\work";
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            world.Receive("remodel.start", "s2", new { run_dir = @"C:\Fictional\no-such-run" });
+
+            foreach (string id in new[] { "s1", "s2" })
+            {
+                JsonElement error = world.Reply("error", id);
+                Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
+                Assert.False(error.GetProperty("retryable").GetBoolean());
+                Assert.Equal(
+                    RunRootRule.Refusal(RunRootVerdict.Link, "the plan was not applied", "press Remodel a copy again"),
+                    error.GetProperty("message").GetString());
+            }
+
+            Assert.Equal(0, gates);
+            Assert.Equal(callsBefore, world.Pipeline.Calls);
+            Assert.DoesNotContain(world.Posted, message => message.Contains("\"type\":\"remodel.started\""));
+            Assert.Equal(RemodelRunPhase.Planned, planned.Phase);
+            Assert.False(world.Host.RunInProgress);
+
+            probe.Substitutes.Clear();
+            world.Receive("remodel.start", "s3", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("remodel.started", "s3");
+        }
+    }
+
     private sealed class RemodelWorld : IDisposable
     {
         private readonly string _root;
@@ -5524,6 +5631,12 @@ public sealed class RemodelHostTests
         }
 
         public string RunRoot { get; }
+
+        /// <summary>The run root as the setting spells it, when not <see cref="RunRoot"/> (owner decision 154A).</summary>
+        public string? RunRootSpelling { get; set; }
+
+        /// <summary>What the run root rule reads (owner decision 154A); Windows itself when null.</summary>
+        public IRunRootProbe? Probe { get; set; }
 
         public string LogFolder { get; }
 
@@ -5584,7 +5697,7 @@ public sealed class RemodelHostTests
 
         public void Open()
         {
-            _options = new RemodelHostOptions(new CollectingChannel(Posted), () => RunRoot)
+            _options = new RemodelHostOptions(new CollectingChannel(Posted), () => RunRootSpelling ?? RunRoot)
             {
                 Backend = () => Endpoint,
                 CurrentDocument = () => Document,
@@ -5607,6 +5720,11 @@ public sealed class RemodelHostTests
                 // a worker, which is what lets `remodel.stop` be delivered at all.
                 Schedule = work => work(),
             };
+            if (Probe != null)
+            {
+                _options.RunRootProbe = Probe;
+            }
+
             _host = new RemodelHost(_options, StartValidated);
         }
 

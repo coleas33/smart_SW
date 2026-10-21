@@ -65,6 +65,12 @@ public sealed class ModelCheckHostOptions
 
     /// <summary>Values that must never reach the page (FR-015).</summary>
     public Func<IEnumerable<string?>> Secrets { get; set; } = () => new string?[0];
+
+    /// <summary>
+    /// What the run root rule reads of Windows (owner decision 154A): a share, a mapped or substituted drive,
+    /// a link. Windows itself by default; injected so a test fakes each without making one.
+    /// </summary>
+    public IRunRootProbe RunRootProbe { get; set; } = Native.WindowsRunRootProbe.Instance;
 }
 
 /// <summary>
@@ -194,6 +200,14 @@ public sealed class ModelCheckHost : IDisposable
     private void StartCheck(string? id)
     {
         PaneActions actions = _pane.Actions;
+
+        // Owner decision 154A: first - the check's folder is made under the run root and handed to the backend,
+        // which refuses one on a share - in this tab's words, which its page shows whole.
+        if (actions.RefusedRunRoot(
+                id, _options.RunRoot(), _options.RunRootProbe, "nothing was checked", "press Model check again"))
+        {
+            return;
+        }
 
         PageDocument? document = _options.CurrentDocument();
         if (document == null)

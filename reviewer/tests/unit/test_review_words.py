@@ -747,3 +747,24 @@ backend never sends it. The sentence names no path and says what to do."""
 def test_a_review_whose_document_changed_as_it_started_says_so_and_what_to_do() -> None:
     errors = load_words().labels.errors
     assert {key: errors.get(key) for key in DOCUMENT_CHANGED} == DOCUMENT_CHANGED
+
+
+RUN_ROOT_REFUSED = {
+    "RunRootRefused": (
+        "Runs are made only in a local folder reached by its own path, not on a network share or "
+        "through a link, so nothing was saved or started. Set the run root in the add-in's "
+        "settings file to a local folder, then restart SOLIDWORKS."
+    ),
+}
+"""The class the add-in refuses a settings save and every run start with when the run root is not a
+local folder reached by its own path - on a network share, reached through a link, or written as a
+device path (owner decision 154A) - before anything is written or made. The backend writes only into
+a local folder and resolves the run folder it is sent, so such a root failed deep in a run. The
+sentence states the rule, which is true of each of the three, and the way on: the run root lives in
+the settings file, which the add-in reads when it loads. The add-in's own class; the backend never
+sends it. No path: the message in the fold says which of the three it is."""
+
+
+def test_a_run_root_on_a_share_or_through_a_link_is_refused_with_the_way_on() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in RUN_ROOT_REFUSED} == RUN_ROOT_REFUSED
