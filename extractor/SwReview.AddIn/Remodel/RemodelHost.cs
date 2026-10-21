@@ -455,6 +455,24 @@ public sealed class RemodelHost : IDisposable
     private string? _pendingStopId;
 
     /// <summary>
+    /// Owner decision 155A (004 research R18): orders the end of a run - the host freed from it - with what
+    /// an `init` reads of a run in flight and posts (<see cref="SendInit"/>), and with what the run's ending
+    /// holds back meanwhile (<see cref="HoldUntilTheHostIsFree"/>). Held only to read and write the run's
+    /// fields and to post, which queues the message to the pane and returns, so nothing under it waits on
+    /// another thread: SOLIDWORKS' application thread takes it too, when a session's ending is told during
+    /// a run (<see cref="PostWhatWasLeft"/>), and a wait on that thread under it could hang SOLIDWORKS.
+    /// </summary>
+    private readonly object _endingLock = new object();
+
+    /// <summary>
+    /// Owner decision 155A: what a run's ending tells the page while the run still holds the host - a
+    /// `status` the page ends its running state on (`ready`, `error`), and the refusal posted beside one -
+    /// in the order it was made, told by <see cref="Execute"/> once the host is free. Guarded by
+    /// <see cref="_endingLock"/>.
+    /// </summary>
+    private readonly List<Action> _heldForTheEnd = new List<Action>();
+
+    /// <summary>
     /// The host as shipped: Start is switched on or off by <see cref="RemodelStart.SeatValidated"/>
     /// (004 T172).
     /// </summary>
@@ -672,8 +690,11 @@ public sealed class RemodelHost : IDisposable
 
         run.RequestStop();
 
-        // Owner decision 155A: in plain words, naming no path; the run folder holds the copy's.
-        PostStatus("error", CopyGoneMessage);
+        // Owner decision 155A: in plain words, naming no path - the run folder holds the copy's - and
+        // told as the engineer's own Stop is told, in a stage the page shows in its run line while the
+        // run goes on to its end, not in one that ends the page's running state while the run still
+        // finishes the change in flight and holds the host.
+        PostStatus("applying", CopyGoneMessage);
     }
 
     /// <summary>
@@ -786,7 +807,9 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>
     /// The one post both seams make: the status error when there are words, nothing when there
-    /// are none, and never a throw.
+    /// are none, and never a throw. While a run holds the host - its own close, or the run's discard
+    /// of its copy, ends a session - the words wait for the run's ending, since the page ends its
+    /// running state on them (owner decision 155A).
     /// </summary>
     private void PostWhatWasLeft(Func<string?> words)
     {
@@ -795,7 +818,7 @@ public sealed class RemodelHost : IDisposable
             string? message = words();
             if (message != null)
             {
-                PostStatus("error", message);
+                HoldUntilTheHostIsFree(() => PostStatus("error", message));
             }
         }
         catch (Exception)
@@ -982,13 +1005,37 @@ public sealed class RemodelHost : IDisposable
 
     // ---- ready / init -------------------------------------------------------------------
 
+    /// <summary>
+    /// Answers `ready` with `init`. Whether the latest run is in flight is read, and the `init` posted, under
+    /// <see cref="_endingLock"/> (owner decision 155A): an `init` that reads the run in flight is posted
+    /// before the host is freed from it, and so before the run's ending reaches the page, or it reads that
+    /// the run is not - never told after the ending that the run is in flight, which would leave a page
+    /// loaded again showing a run that has ended. Everything else is read before the lock is taken: the
+    /// active document is read on SOLIDWORKS' application thread, which takes that lock when a session's
+    /// ending is told during a run.
+    /// </summary>
     private void SendInit(string? id)
     {
         BackendEndpoint? endpoint = _options.Backend();
         RemodelRun? latest = LatestRun;
         RemodelLimits limits = _options.Limits;
+        Dictionary<string, object?>? latestRun = latest == null
+            ? null
+            : new Dictionary<string, object?>
+            {
+                { "run_dir", latest.RunDirectory },
+                { "at", latest.At.ToString("o", CultureInfo.InvariantCulture) },
+                { "state", StateOf(latest.RunDirectory) },
 
-        _actions.Send("init", id, new Dictionary<string, object?>
+                // Decision 24A, amended on review: the notice is told once per plan,
+                // and a page that loads again starts from this alone. Read afresh by
+                // the notice's own rule, whatever holds the host, since `init`
+                // describes the run it names; the notice's once-per-plan claim is
+                // neither spent nor needed here.
+                { "plan_lost", IsLostPlan(latest) ? LostMessage(latest) : null },
+            };
+
+        var init = new Dictionary<string, object?>
         {
             {
                 "backend",
@@ -1025,31 +1072,22 @@ public sealed class RemodelHost : IDisposable
                 "remodel",
                 RemodelCapabilityPayload()
             },
+            { "latest_run", latestRun },
+        };
+
+        lock (_endingLock)
+        {
+            if (latestRun != null)
             {
-                "latest_run",
-                latest == null
-                    ? null
-                    : new Dictionary<string, object?>
-                    {
-                        { "run_dir", latest.RunDirectory },
-                        { "at", latest.At.ToString("o", CultureInfo.InvariantCulture) },
-                        { "state", StateOf(latest.RunDirectory) },
+                // Owner decision 155A (feature 011 research R12.9 item 9): whether this run is in
+                // flight - started and not yet ended - which `state`, the plan's, does not say. A page
+                // that loads again starts from `init` alone, and shows the run running, Stop
+                // pressable, rather than offering what the host refuses.
+                latestRun["running"] = ReferenceEquals(_active, latest);
+            }
 
-                        // Decision 24A, amended on review: the notice is told once per plan,
-                        // and a page that loads again starts from this alone. Read afresh by
-                        // the notice's own rule, whatever holds the host, since `init`
-                        // describes the run it names; the notice's once-per-plan claim is
-                        // neither spent nor needed here.
-                        { "plan_lost", IsLostPlan(latest) ? LostMessage(latest) : null },
-
-                        // Owner decision 155A (feature 011 research R12.9 item 9): whether this run
-                        // is in flight - started and not yet ended - which `state`, the plan's, does
-                        // not say. A page that loads again starts from `init` alone, and shows the
-                        // run running, Stop pressable, rather than offering what the host refuses.
-                        { "running", ReferenceEquals(_active, latest) },
-                    }
-            },
-        });
+            _actions.Send("init", id, init);
+        }
     }
 
     private Dictionary<string, object?> RemodelCapabilityPayload()
@@ -1749,11 +1787,19 @@ public sealed class RemodelHost : IDisposable
     /// Never throws into the scheduler: a faulted background task in a SOLIDWORKS add-in is an
     /// unobserved exception nobody sees. A failure is a `status {stage: "error"}` and an
     /// `error` message, and the run ends `failed`.
+    ///
+    /// Owner decision 155A (004 research R18; feature 011 research R12.9 item 4): the page ends its
+    /// running state - and offers Open copy and Discard copy again - on a `status` of `ready` or
+    /// `error`, so none is posted while the run holds the host. What the ending says before the host
+    /// is free - the failure caught here, the pipeline's own error, T167's words of a close that left
+    /// something - is held (<see cref="HoldUntilTheHostIsFree"/>) and told once the session is closed
+    /// and the host freed, in the order it was made, then the run's last word, then the stop's answer.
     /// </summary>
     private void Execute(IRemodelPipeline pipeline, RemodelRun run)
     {
         RemodelRunOutcome outcome;
         string? closeProblem = null;
+        List<Action> held;
         try
         {
             PostStatus("judging", "Running the plan against the copy...");
@@ -1764,14 +1810,20 @@ public sealed class RemodelHost : IDisposable
             // Unsolicited: `remodel.started` was answered before the run began, so there is no
             // message left to reply to. The class still travels, for the reason it does on the
             // message thread.
-            PostStatus("error", refusal.Message);
-            SendRefusal(null, refusal);
+            HoldUntilTheHostIsFree(() =>
+            {
+                PostStatus("error", PageWords(refusal));
+                SendRefusal(null, refusal);
+            });
             outcome = new RemodelRunOutcome("failed", 0);
         }
         catch (Exception failure)
         {
-            PostStatus("error", failure.Message);
-            _actions.SendError(null, "HostError", failure.Message, retryable: false);
+            HoldUntilTheHostIsFree(() =>
+            {
+                PostStatus("error", failure.Message);
+                _actions.SendError(null, "HostError", failure.Message, retryable: false);
+            });
             outcome = new RemodelRunOutcome("failed", 0);
         }
         finally
@@ -1791,9 +1843,12 @@ public sealed class RemodelHost : IDisposable
                 }
             }
 
-            run.Phase = RemodelRunPhase.Finished;
-            _active = null;
-            _busy = false;
+            held = FreeTheHostFromTheRun(run);
+        }
+
+        foreach (Action post in held)
+        {
+            post();
         }
 
         if (closeProblem != null)
@@ -2552,6 +2607,56 @@ public sealed class RemodelHost : IDisposable
         AnnounceLostPlan();
     }
 
+    // ---- a run's ending and the host's freeing (owner decision 155A) -----------------------------
+
+    /// <summary>
+    /// Whether the page ends its running state on a `status` of <paramref name="stage"/> - and offers the
+    /// copy actions again: `ready` and `error` (`remodel.js`, `showStatus`).
+    /// </summary>
+    private static bool EndsTheRunOnThePage(string stage) =>
+        string.Equals(stage, "ready", StringComparison.Ordinal)
+        || string.Equals(stage, "error", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Owner decision 155A: posts <paramref name="post"/> now, or holds it while a run holds the host,
+    /// for <see cref="Execute"/> to tell once the host is free - so a page that ends its running state
+    /// on what it is told is never offered what the host would refuse for a run that is not over. Only
+    /// a run's own ending holds anything: its executor's failure, its pipeline's error, and the words of
+    /// a close made under it.
+    /// </summary>
+    private void HoldUntilTheHostIsFree(Action post)
+    {
+        lock (_endingLock)
+        {
+            if (_active != null)
+            {
+                _heldForTheEnd.Add(post);
+                return;
+            }
+        }
+
+        post();
+    }
+
+    /// <summary>
+    /// Owner decision 155A: frees the host from <paramref name="run"/>, which has ended, and hands back what
+    /// its ending held, in the order it was made, for the caller to tell: one step under
+    /// <see cref="_endingLock"/>, so nothing is held after it and an `init` reads the run in flight only
+    /// before it.
+    /// </summary>
+    private List<Action> FreeTheHostFromTheRun(RemodelRun run)
+    {
+        lock (_endingLock)
+        {
+            run.Phase = RemodelRunPhase.Finished;
+            _active = null;
+            _busy = false;
+            var held = new List<Action>(_heldForTheEnd);
+            _heldForTheEnd.Clear();
+            return held;
+        }
+    }
+
     /// <summary>
     /// Whether a settings restart stands before the press. Only words for the page hang on it, so
     /// a reading that throws is none: the press goes on through the gate, which decides.
@@ -2657,7 +2762,21 @@ public sealed class RemodelHost : IDisposable
         /// </summary>
         public bool StopRequested => _run != null && _run.StopRequested;
 
-        public void Status(string stage, string message) => _host.PostStatus(stage, message);
+        /// <summary>
+        /// A stage the page ends its running state on waits for the run's ending while a run holds the host
+        /// (owner decision 155A): the pipeline posts its own error before it answers, and the host is not
+        /// free until `Execute` has closed the run's session.
+        /// </summary>
+        public void Status(string stage, string message)
+        {
+            if (EndsTheRunOnThePage(stage))
+            {
+                _host.HoldUntilTheHostIsFree(() => _host.PostStatus(stage, message));
+                return;
+            }
+
+            _host.PostStatus(stage, message);
+        }
 
         public void Progress(int applied, int total, int seq, string kind, string? subjectName) =>
             _host._actions.Send("remodel.progress", null, new Dictionary<string, object?>

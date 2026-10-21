@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using SwReview.AddIn.Remodel;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.ToolService;
@@ -1401,6 +1402,11 @@ public sealed class RemodelHostTests
     /// <summary>
     /// RK-14: the engineer closes or deletes the copy mid-run. The run aborts from the pane
     /// side with the change log intact, rather than writing into whatever is there now.
+    /// *Changed deliberately 2026-10-20 (owner decision 155A, 004 research R18):* the page is
+    /// told the run is stopping in a status of the stage the engineer's own Stop is told in,
+    /// where it was told in `error`, which ends the page's running state while the run still
+    /// holds the host
+    /// (<see cref="TheStopWhenTheCopyIsGoneLeavesThePageRunningUntilTheRunEnds"/>).
     /// </summary>
     [Fact]
     public void ADocumentChangedWhoseCopyWentAwayAbortsTheRun()
@@ -1427,7 +1433,8 @@ public sealed class RemodelHostTests
             Assert.Equal(true, afterAbort);
             Assert.Contains(
                 world.AllPosted("status"),
-                status => status.GetProperty("stage").GetString() == "error");
+                status => status.GetProperty("stage").GetString() == "applying"
+                    && status.GetProperty("message").GetString() == RemodelHost.CopyGoneMessage);
         }
     }
 
@@ -5215,7 +5222,254 @@ public sealed class RemodelHostTests
         }
     }
 
-    // ---- a settings restart and a plan or a run (owner decision 145A) ---------------------------
+    // ---- owner decision 155A: a run's ending reaches the page once the host is free ------------
+
+    /// <summary>Whether a message is a `status` that ends the page's running state: `ready` and `error` do (`remodel.js`, `showStatus`).</summary>
+    private static bool EndsTheRunOnThePage(JsonElement message)
+    {
+        if (message.GetProperty("type").GetString() != "status")
+        {
+            return false;
+        }
+
+        string? stage = message.GetProperty("payload").GetProperty("stage").GetString();
+        return stage == "ready" || stage == "error";
+    }
+
+    /// <summary>
+    /// The endings of a run that tell the page something in a stage that ends its running state: a run the
+    /// executor refused by name, one that failed with no named refusal, a pipeline that posted its own error
+    /// before it answered, a close that left something (T167's words, told through
+    /// <c>ToolServiceOptions.RemodelSessionEnded</c> while the close is answered), and a run that saved.
+    /// </summary>
+    public static IEnumerable<object[]> RunEndings => new[]
+    {
+        new object[] { "refused" },
+        new object[] { "failed" },
+        new object[] { "pipeline" },
+        new object[] { "left" },
+        new object[] { "saved" },
+    };
+
+    /// <summary>The words T167 posts for a close that left one setting changed, as <see cref="RunEndings"/>' "left" has it.</summary>
+    private static readonly string LeftBehind =
+        RemodelHost.SessionEndedMessage(new[] { RemodelSystemToggles.InputDimValOnCreate }, false, copyClosed: true)!;
+
+    /// <summary>
+    /// Owner decision 155A, test first (004 T195; feature 011 research R12.9 item 4): the page offers Open copy
+    /// and Discard copy again on the run's terminal status, and that status reached it - posted by the
+    /// pipeline, by `Execute` as it caught the failure, or as T167's words while the close was answered -
+    /// before `Execute` had closed the run's session and freed the host, so a press in that window was refused
+    /// `RunInProgress`. Every status that ends the page's running state is now posted once the host is free,
+    /// in the order the ending made them, the run's own last word last.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RunEndings))]
+    public void EveryStatusThatEndsTheRunOnThePageIsPostedOnceTheHostIsFree(string ending)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            switch (ending)
+            {
+                case "refused":
+                    world.Pipeline.RunFailure = new RemodelRefusal(
+                        "RunNotPlanned", "FICT this run was not planned, so nothing was started.", retryable: false);
+                    break;
+                case "failed":
+                    world.Pipeline.RunFailure = new IOException("FICT the backend stopped answering.");
+                    break;
+                case "pipeline":
+                    world.Pipeline.RunState = "failed";
+                    world.Pipeline.DuringRun = reporter => reporter.Status("error", "FICT the run failed in the backend.");
+                    break;
+                case "left":
+                    world.Pipeline.DuringClose = () => world.Host.SessionEnded(
+                        new[] { RemodelSystemToggles.InputDimValOnCreate }, false, copyClosed: true);
+                    break;
+            }
+
+            var ended = new List<(string Words, bool Busy)>();
+            world.WhenPosted = root =>
+            {
+                if (EndsTheRunOnThePage(root))
+                {
+                    ended.Add((root.GetProperty("payload").GetProperty("message").GetString()!, world.Host.RunInProgress));
+                }
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("remodel.started", "s1");
+            Assert.Equal(1, world.Pipeline.Count("close"));
+            string[] expected = ending switch
+            {
+                "refused" => new[] { "FICT this run was not planned, so nothing was started.", "The run ended without saving the copy. The report says why." },
+                "failed" => new[] { "FICT the backend stopped answering.", "The run ended without saving the copy. The report says why." },
+                "pipeline" => new[] { "FICT the run failed in the backend.", "The run ended without saving the copy. The report says why." },
+                "left" => new[] { LeftBehind, "The run ended 'saved'. Open the report for the change list, the grade and the geometry comparison." },
+                _ => new[] { "The run ended 'saved'. Open the report for the change list, the grade and the geometry comparison." },
+            };
+            Assert.Equal(expected, ended.Select(status => status.Words).ToArray());
+            Assert.All(ended, status => Assert.False(status.Busy, "a status that ends the run on the page was posted while the run held the host: " + status.Words));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 155A (004 T195): a refusal the executor raised still reaches the page with its class, as
+    /// an unsolicited `error`, and between the run line's word on it and the run's last word - after the host
+    /// is free, as they are.
+    /// </summary>
+    [Fact]
+    public void TheExecutorsRefusalIsToldAfterTheHostIsFreeBetweenItsStatusAndTheRunsLastWord()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.RunFailure = new RemodelRefusal("RunNotPlanned", "FICT this run was not planned.", retryable: false);
+            int closedAt = -1;
+            world.Pipeline.DuringClose = () => closedAt = world.Posted.Count;
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement refusal = Assert.Single(world.AllPosted("error"));
+            Assert.Equal("RunNotPlanned", refusal.GetProperty("error_class").GetString());
+            Assert.Equal("FICT this run was not planned.", refusal.GetProperty("message").GetString());
+
+            // After the close: the run line's word on the refusal, the refusal, and the run's last word.
+            Assert.Equal(world.Posted.Count - 3, closedAt);
+            Assert.Equal(new[] { "status", "error", "status" }, world.TypesPostedSince(closedAt));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 155A, test first (004 T195): the press R12.9 item 4 describes - Open copy or Discard copy
+    /// pressed the moment a failed run's terminal status offers it - is answered, not refused
+    /// `RunInProgress`, since the status now reaches the page once the host is free.
+    /// </summary>
+    [Theory]
+    [InlineData("remodel.open_copy")]
+    [InlineData("remodel.discard_copy")]
+    public void ACopyActionPressedAsSoonAsAFailedRunsEndIsOfferedIsAnswered(string press)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.RunFailure = new RemodelRefusal("RunNotPlanned", "FICT this run was not planned.", retryable: false);
+            bool pressed = false;
+            world.WhenPosted = root =>
+            {
+                if (!pressed && EndsTheRunOnThePage(root))
+                {
+                    pressed = true;
+                    world.Receive(press, "c1", new { run_dir = world.ExpectedRunDirectory });
+                }
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.True(pressed);
+            world.Reply("ok", "c1");
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 155A, test first (004 T195): the stop when the copy is gone is told as the engineer's own
+    /// Stop is told - in a stage the page shows in its run line while the run goes on (`applying`) - and not in
+    /// one that ends the page's running state, which it was: the page then offered Open copy and Discard copy,
+    /// and disabled Stop, while the run was still finishing the change in flight and closing. The run's own
+    /// last word, once the host is free, is the one status that ends it.
+    /// </summary>
+    [Fact]
+    public void TheStopWhenTheCopyIsGoneLeavesThePageRunningUntilTheRunEnds()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+            {
+                File.Delete(world.ExpectedCopyPath);
+                world.Document = null;
+                world.Host.DocumentChanged();
+            };
+            var ended = new List<bool>();
+            world.WhenPosted = root =>
+            {
+                if (EndsTheRunOnThePage(root))
+                {
+                    ended.Add(world.Host.RunInProgress);
+                }
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement gone = Assert.Single(
+                world.AllPosted("status"),
+                status => status.GetProperty("message").GetString() == RemodelHost.CopyGoneMessage);
+            Assert.Equal("applying", gone.GetProperty("stage").GetString());
+            Assert.Equal(new[] { false }, ended);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 155A (004 T195): `init` and a run's ending are told in one order. An `init` answered
+    /// on the page's thread as the run ends on its own reads that the run is in flight and is posted before the
+    /// host is freed and the ending told, or reads that it is not: it is never told after the ending that the
+    /// run is in flight, which would leave a page loaded again showing a run that has ended, with Stop the
+    /// only button on offer. Here the `init` is held inside its post, after it has read the run in flight, until
+    /// the run's close has begun, and a moment more.
+    /// </summary>
+    [Fact]
+    public void AnInitAnsweredAsTheRunEndsIsNeverToldAfterTheEndingThatTheRunIsInFlight()
+    {
+        using (var world = new RemodelWorld())
+        using (var entered = new ManualResetEventSlim())
+        using (var closing = new ManualResetEventSlim())
+        {
+            int testThread = Environment.CurrentManagedThreadId;
+            world.Channel = new PausingChannel(world.Posted, json =>
+            {
+                if (Environment.CurrentManagedThreadId != testThread && json.Contains("\"type\":\"init\""))
+                {
+                    entered.Set();
+                    closing.Wait(TimeSpan.FromSeconds(10));
+                    Thread.Sleep(200);
+                }
+            });
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            var init = new Thread(() => world.Receive("ready", "r9", new { })) { IsBackground = true, Name = "fict-page-thread" };
+            world.Pipeline.DuringRun = reporter =>
+            {
+                init.Start();
+                Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the init was never posted");
+            };
+            world.Pipeline.DuringClose = () => closing.Set();
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.True(init.Join(TimeSpan.FromSeconds(10)), "the init never finished");
+
+            List<JsonElement> posted;
+            lock (world.Posted)
+            {
+                posted = world.Posted.Select(json => JsonDocument.Parse(json).RootElement.Clone()).ToList();
+            }
+
+            int initAt = posted.FindIndex(message => message.GetProperty("type").GetString() == "init");
+            int startedAt = posted.FindIndex(message => message.GetProperty("type").GetString() == "remodel.started");
+            int endedAt = posted.FindIndex(startedAt + 1, EndsTheRunOnThePage);
+            Assert.True(initAt >= 0 && startedAt >= 0 && endedAt > startedAt);
+            bool running = posted[initAt].GetProperty("payload").GetProperty("latest_run").GetProperty("running").GetBoolean();
+            Assert.True(
+                !running || initAt < endedAt,
+                "the page was told the run is in flight after it was told the run had ended");
+        }
+    }
+
 
     /// <summary>
     /// Owner decision 145A: a plan holds the backend for as long as it runs, as a turn does, so it
@@ -5859,6 +6113,18 @@ public sealed class RemodelHostTests
 
         public List<string> Posted { get; } = new List<string>();
 
+        /// <summary>
+        /// Owner decision 155A: what the page does the moment a message reaches it, run after the message
+        /// is collected - a press made as soon as the page offers it.
+        /// </summary>
+        public Action<JsonElement>? WhenPosted { get; set; }
+
+        /// <summary>
+        /// Owner decision 155A: the channel the host is built with, when a case needs one of its own;
+        /// null builds the collecting channel over <see cref="Posted"/>.
+        /// </summary>
+        public IPageChannel? Channel { get; set; }
+
         /// <summary>Every run folder the host handed to `RegisterLatestRun`, in order.</summary>
         public List<string> Registered { get; } = new List<string>();
 
@@ -5875,7 +6141,8 @@ public sealed class RemodelHostTests
 
         public void Open()
         {
-            _options = new RemodelHostOptions(new CollectingChannel(Posted), () => RunRoot)
+            _options = new RemodelHostOptions(
+                Channel ?? new CollectingChannel(Posted, root => WhenPosted?.Invoke(root)), () => RunRoot)
             {
                 Backend = () => Endpoint,
                 CurrentDocument = () => Document,
@@ -6172,6 +6439,32 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 155A: a page channel two threads post to - the host's message thread and its run -
+    /// which collects every message under a lock and runs <c>beforePosted</c> on the posting thread first,
+    /// so a case can hold one post where it is made.
+    /// </summary>
+    private sealed class PausingChannel : IPageChannel
+    {
+        private readonly List<string> _posted;
+        private readonly Action<string> _beforePosted;
+
+        public PausingChannel(List<string> posted, Action<string> beforePosted)
+        {
+            _posted = posted;
+            _beforePosted = beforePosted;
+        }
+
+        public void PostMessage(string json)
+        {
+            _beforePosted(json);
+            lock (_posted)
+            {
+                _posted.Add(json);
+            }
+        }
+    }
+
     /// <summary>A page that is gone: every post throws.</summary>
     private sealed class ThrowingChannel : IPageChannel
     {
@@ -6186,7 +6479,13 @@ public sealed class RemodelHostTests
 
         private readonly List<string> _posted;
 
-        public CollectingChannel(List<string> posted) => _posted = posted;
+        private readonly Action<JsonElement>? _whenPosted;
+
+        public CollectingChannel(List<string> posted, Action<JsonElement>? whenPosted = null)
+        {
+            _posted = posted;
+            _whenPosted = whenPosted;
+        }
 
         /// <summary>
         /// Collects what the page would receive - and checks every `status` on the way past.
@@ -6209,6 +6508,7 @@ public sealed class RemodelHostTests
             }
 
             _posted.Add(json);
+            _whenPosted?.Invoke(root);
         }
     }
 
