@@ -1675,6 +1675,10 @@ no broken link.
   - `POST /remodel/runs` and the routes after it (`RunInProgress`, `RunNotPlanned`,
     `ResumeRefused`) name the run folder too, and are not reached while Start is switched off in
     this build (`StartNotValidated`).
+  - *Settled in part 2026-10-20 by owner decision 155A (owner question 3, below; 004 research
+    R18.1):* `DocumentDirty` and `ExternalReferences` - the add-in's own sentences now, whoever
+    refused - the add-in's `RunNotFound` and its word on a copy gone during a run speak plain words
+    and name no path. The rest of this list stands, recorded again in 004 research R18.7.
 
 **3. Kept recorded.** Both questions stand as recorded, behaviour unchanged, each with a dated
 note where it is recorded: 146A's owner question 1, above, and 011 `research.md` R9.5 item 1's
@@ -1706,6 +1710,15 @@ second question.
      add-in's own plain sentences for the two classes are never reached. Give them plain words in the
      backend's mapping, as the scope codes now have, and the rest of the list above with them -
      the add-in's own `RunNotFound` and its word on a copy gone during a run among them?
+     *Settled 2026-10-20 by owner decision 155A ("4A"; 004 research R18.1; 004 T189, T190):* the four
+     the decision names - `DocumentDirty`, `ExternalReferences`, `RunNotFound` and the stop when the
+     copy is gone - say it in plain words with no path. For the first two the tab prints the add-in's
+     own sentences, reached at last, whoever refused - in the refusal and in the run line's status -
+     rather than plain words in the backend's mapping: one sentence per class serves every refusal
+     under it, which the host can say from the class alone, where `ScopeRefused`'s two codes need
+     the backend's two sentences. The backend's body keeps the bridge's sentence, which the
+     tool-service log records on the refused request's line. The rest of the list above stays as it
+     is, recorded again for the owner in 004 research R18.7.
   4. The scope gate's own refusals, which name signals by their tokens: reword them for the tab,
      which would change the reports' coverage lines too, or leave them? And `scope_changed` after
      the copy: the bridge's sentence named the signals that differed ("the copy's scope signals
@@ -1972,6 +1985,9 @@ words for the strip.
     "Backend ready". 143A's and 145A's rule is that nothing runs on the old backend with settings
     replaced since; this breaks it. Older than 150A (143A's edge case: one that fails before it
     stops anything leaves the old backend up); closing it is a design choice left to the owner.
+    *Settled by decision 153A (2026-10-20)*: until a restart succeeds, every session takes the
+    provider, model and effort the backend was started with, and the pane says the saved
+    settings are not in force yet and that saving again retries (153A, below).
   - A save made while the add-in unloads - its restart refused because the backend client is
     unloading (`BackendClient.cs:212` to `:218`), or its start told to stop - is answered
     `BackendNotRestarted`, whose sentence says to save again. Answering it as the add-in stopping,
@@ -2046,6 +2062,492 @@ words for the strip.
   T160, T162 and T163. 150A's tasks landed as T143 to T155, the numbers the commits that made
   them name, and were renumbered T153 to T165 when 150A was merged after 149A, whose Phase 14
   holds T143 to T152.
+
+### 153A. Until a restart succeeds, the settings the backend was started with are in force (2026-10-20)
+
+- **Question**: 150A left one mixed state on record (150A, "Not changed", second item). A settings
+  restart can fail before it stops the old backend - the configured launcher cannot be resolved,
+  say - and it then ends what waited (`End(caught)` in `DeferredRestart.Now` and `Apply`; a save's
+  in `ReviewHost.Save`), so nothing waits any more. The next review went to the old backend, which
+  keeps the environment it was started with - the key, `OPENAI_BASE_URL`, Gemini Enterprise -
+  while its session took the new provider, model and effort from the saved settings, and the strip
+  said "Backend ready". A switch from OpenAI to Gemini so ran Gemini sessions on a backend holding
+  the OpenAI key, with whatever Gemini key the workstation exports, or none. That broke 143A's and
+  145A's rule that nothing runs with settings replaced since the backend started.
+- **Decision** (owner decision 153A, "2A", test first): "until a restart succeeds, sessions take the
+  settings the running backend was started with - provider, model and effort - and the pane says
+  the saved settings are not in force yet and that saving again retries."
+
+**1. The settings in force.**
+
+- `ReviewHost._inForce` holds the settings the backend that is up was started with. Every start of
+  the backend goes through the host and one transition, `StartWith`, which records the settings the
+  start was made with once it has returned, and never when it throws - a turn the backend's own
+  check found, which changed nothing, or a failure, before the old backend stopped or after: every
+  restart, a save's at once or one made after waiting (143A, 145A), through `RestartWith`; and,
+  since the second review (C1), the add-in's first start, through `ReviewHost.FirstStart`, under
+  the same restart lock. The host takes the settings it loads when it is built, which the first
+  start is made with unless a save comes first. With no backend up nothing is in force, whatever
+  the record holds: every reader asks for the endpoint first, or is refused for want of one.
+- Recorded in the host, beside the saved settings it is compared with, rather than in
+  `BackendClient`, which starts every process under its gate: `IBackendClient` has ten
+  implementations, nine of them test fakes, which would each grow a member, and every start passes
+  through the host's restart lock - the first too, since the second review - under which the
+  record is written.
+- "In force" now means what the backend runs with. 150A's records and the comments said a save's
+  settings were "written and in force in the host" before its restart; the comments now say
+  "saved" (`ReviewHost.Settings`, `Save`, `SavedNotRestarted`, and `DeferredRestart`'s summary,
+  `Outcome.Restarted`, its `restart` parameter and `Now`'s failure), `RestartWithSettingsInForce`
+  is `RestartWithSavedSettings`, and the contracts carry a dated note.
+- The decision names the model and the effort with the provider, though the backend's environment
+  holds neither: a session takes the three that the backend was started with together, so a save
+  that changed only the model, whose restart failed, leaves the old model in force until a restart
+  succeeds.
+
+**2. Every consumer of the saved settings, and which take the settings in force.**
+
+- Taking them now, each pinned by cases that failed before (T166): every session. `review.start` -
+  a review, and an ordinary Retry - `review.recheck`, which a restored waiting review's Send makes
+  before its `/send` (feature 015), `context.review`, and a context review's Retry (`review.start`
+  with `retry_of`, owner decision 108A) all go through `CreateReviewSession`, which creates the
+  session with `_inForce`'s provider, model and effort.
+- Taking none of the provider settings, and why:
+  - A turn call - a follow-up (`POST /sessions/{chat_id}/messages`) or the answers (`/evidence`,
+    `/evidence/{request_id}`) - carries no provider, model or effort: the backend continues the
+    chat's own run, built when its session was.
+  - A live waiting review's Send (`POST /sessions/{chat_id}/send`, feature 015) has an empty body,
+    and the backend sends with the chat's own provider, model and effort, those of its session,
+    which is now created with the settings in force. A restored review's Send is a recheck first
+    (above).
+  - The remodel run's backend calls carry none: `POST /remodel/runs` sends `run_dir` and `bridge`,
+    and the backend builds the run's judge with its default provider from its own environment, so
+    it runs with the environment in force whatever is saved - the Remodel route's case 138A left
+    open, which this does not change. The probe, the open and the plan take no provider at all.
+  - The check runs - `POST /checks/rms` and `/checks/standards` - use no provider, no key and no
+    network.
+  - `models.list`, and a save's own check of its model, ask the backend for the provider the
+    Settings form shows, which is the saved one the engineer edits; they run nothing.
+  - `context.prepare` and `context.selection` create no session: they check the backend is ready
+    (143A) and read saved evidence.
+  - The Terminal tab takes the saved settings for a CLI of its own, which is not the backend, and
+    is hidden (FR-020).
+  - The other tabs - Model check, Standards and Remodel, which 145A tells of restarts - take the run
+    root, the endpoint and, the two check tabs, the Standards profile path; and the saved key only to
+    mask it (Not changed, below). Nothing they run takes a provider setting.
+  - The run root, the Python launcher and the Standards profile path go into the backend's start or
+    a session, but no `settings.save` writes them (`Save` clones them from the settings the add-in
+    loaded), so they cannot differ from the ones in force; the Send box is saved without a restart
+    and is no part of the backend's environment.
+
+**3. The pane says the saved settings are not in force yet.**
+
+- `init` carries `settings_not_in_force`: the host's sentence "The saved settings are not in force
+  yet: the review backend did not restart with them, so reviews run with the settings it was
+  started with. Save the settings again to retry the restart." while it is true, or null. It is
+  true while a backend is up, no restart waits or is being made, and the saved settings differ from
+  the ones in force in a provider, model, effort, key, base URL, or Gemini Enterprise project or
+  location (`ReviewHost.SettingsNotInForce`, `SameBackendSettings`) - each, since the review (N5),
+  as the backend's start reads it for the provider: the base URL for openai alone, trimmed, a blank
+  one none, and Gemini Enterprise for gemini alone. The key is compared as it
+  resolves, by its value and by where it comes from, which 138A's marker follows - not as stored,
+  since DPAPI stores the same key anew each time it is typed.
+- The Review page holds the sentence from every `init` (`state.notInForce`, `holdNotInForce`), and
+  its banner says it whenever it says nothing else (`showBanner`): a status that clears the banner
+  leaves the sentence on it; another word takes the banner, and the sentence comes back once that
+  word goes. An `init` carrying null takes it off, and so does `backend.stopped`. Every `init`
+  carries it, so a page that loads or loads again is told.
+- A restart that waited and failed before it stopped the old backend, leaving the saved settings
+  not in force, says so in its `status`: the failure, then the sentence, which ends with 150A's way
+  on, where it ended with the way on alone. One that failed once the old backend had stopped keeps
+  150A's words. Since the review (S1) that `status` carries `settings_not_in_force` as `init` does,
+  and the page holds the sentence from it, since no `init` follows it.
+- The save's own answer is unchanged: `BackendNotRestarted`'s sentence already says the settings
+  are saved, that the backend did not restart with them, and that saving again retries, and the
+  page asks for its `init` after it (150A), which now carries the sentence.
+- No label changes: the sentence is the host's, carried by `init` and a `status`, and no error
+  class is new, so `review_words_v1.yaml` and the pane fixtures are untouched.
+- Designs weighed:
+  - *The strip*: "Backend ready" is true - a backend is up, and reviews run on it - a badge has no
+    room for the way on, and every status rewrites it.
+  - *The banner from `init`, as any other banner*: the first status of the next review takes it off
+    while that review runs with the settings in force, when it matters most.
+  - *The banner's resting text*, chosen: a holder and one line in `showBanner`, and the sentence is
+    on screen whenever nothing more urgent is.
+  - *A flag in `init` and the words in the page*: the restart's `status` says the same sentence, so
+    it would be written twice, in C# and in the page; the host composes every other sentence about
+    a restart (143A, 145A, 150A).
+  - *A field on every `status`, or on the review's reply*: a field on several messages for one
+    state; not small.
+- Null while a restart waits or is being made: 143A's and 145A's promise is the true sentence then,
+  nothing new runs on the old backend before the restart is made, and saving again is not the way
+  on while a turn runs, since the save is refused.
+
+**4. Edge cases**, each decided and tested (T166, T168):
+
+- A restart that fails once the old backend stopped: no backend, so nothing is in force; `init`
+  carries null, the strip says the backend is not running (150A), and a restart that waited keeps
+  150A's way on word for word.
+- Two saves, the first failing before the old backend stopped and the second restarting it, at once
+  or once the turn it met has ended: the second's settings are in force from then on, the next
+  review takes them on the restarted backend, and `init` carries null.
+- A save of the settings in force - the same settings saved again, or a return to them after a
+  failed switch, the key typed again and so stored anew - whose restart fails before the old
+  backend stops: the saved settings are the ones in force, so `init` carries null and sessions take
+  them. The save is still answered `BackendNotRestarted` (150A): the restart did fail, and saving
+  again retries it.
+- Each setting a save writes that the backend needs, changed alone - the provider, the model, the
+  effort, the key, where the key comes from, the base URL, Gemini Enterprise's project or its
+  location: not in force until a restart succeeds.
+- The add-in loads with saved settings whose first start fails: no backend and nothing in force,
+  `init` carries null, and a review is refused as with no backend; a save that starts the backend
+  puts its settings in force, and the next review takes them; a save whose start fails too leaves no
+  backend, and `init` still carries null.
+- The Send box's save leaves the settings in force as they were: `init` goes on saying the saved
+  settings are not in force while they are not, and says nothing while they are.
+- A restart that waits or is being made: `init` carries null meanwhile.
+- The other tabs: nothing there takes a provider setting (item 2). A restart that failed before it
+  stopped the old backend tells them nothing, as 145A decided, and their tokens still work.
+
+- **Evidence** (at `bd07f29`):
+  - The session: `CreateReviewSession` built `POST /sessions` from `_settings.Provider`, `.Model` and
+    `.Effort` (`ReviewHost.cs:2393` to `:2395`), and a save puts its settings in `_settings`
+    (`PersistSettings`, `:1272`) before its restart (`:1209`).
+  - The failure that leaves the old backend up: `BackendClient.Restart` builds its start options
+    (`BackendLocator.Resolve`, `BackendClient.cs:235`) before `BackendSupervisor.Restart` stops
+    anything (`BackendProcess.cs:777`, through `Start` at `:766`, which stops at `:769`); `Now` and
+    `Apply` then end what waited (`DeferredRestart.cs:318`, `:414`).
+  - The backend's environment: `BackendClient.StartOptions` (`:228`) writes the key under the
+    provider's variables, names the provider whose key the pane saved (138A), and writes
+    `OPENAI_BASE_URL` and Gemini Enterprise; the server builds each session from the request's
+    provider, model and effort and the key in its environment (`chat/server.py:2146`,
+    `ChatServer._settings`).
+  - The first start: `SwReviewAddIn.cs:544` to `:546` reads `_reviewHost.Settings` after the host is
+    built and queues the start (`:1043`).
+  - The consumers that take no provider setting: `chat/server.py` `send_review` (`:1482`, the
+    chat's own provider, model and effort at `:1490`), `post_message` (`:1499`), `answer_evidence`
+    (`:1513`), `run_check` (`:1661`) and `run_standards` (`:1687`); `chat/remodel.py` `start_run`
+    (`:694`, `self.settings(body)` with no provider at `:702`); `RemodelBackendClient.StartRun`
+    (`RemodelBackendClient.cs:115`); the Review page's restored Send, `recheckThenSend`
+    (`app.js:1390`).
+- **Review**: an independent adversarial review of the branch at `5e36305` found no must-fix - the
+  record stays true through every restart and is read after the restart gate by every session
+  path, and the consumers left alone are right, checked in the backend - and the items below,
+  settled test first by T171 to T177:
+  - After a restart that waited and failed before it stopped the old backend, the Review page never
+    held the sentence (S1). Its `status` said it, but no `init` followed, so the next ready status -
+    a review's preparation, say - took it off the banner, and the review ran with the settings in
+    force with nothing on screen (the reviewer's probe D: the failure, then two ready statuses). That
+    `status` now carries `settings_not_in_force` from the reading its way on is made from
+    (`ReviewHost.PostRestartFailed`, its payload built where every `status`'s is,
+    `PaneActions.StatusPayload`), and the page holds it as it holds `init`'s (`showStatus`). The Not
+    changed item that said a later status could take it off understated this, and is gone.
+  - The hosts masked the saved key alone (S2). After a switch whose restart failed before the old
+    backend stopped, a session's failure quoting the key that backend runs with reached the page
+    unmasked, in the `status` and in the refusal (the reviewer's probe B). The backend masks the keys
+    in its own environment, so this lost a second layer rather than opening a leak, but 153A makes
+    the state last. Every host now masks the saved key and the key the backend was started with:
+    `ReviewHost.KeysToMask`, which the review host masks and the add-in hands the Model check,
+    Standards and Remodel hosts (`SwReviewAddIn.KeysToMask`). The Not changed item that left this
+    to the owner is gone.
+  - The branch of that `status` for the settings in force was pinned by nothing (N4): the reviewer's
+    mutation, saying the sentence whenever a backend was up, left every case green. A waited restart
+    of the settings in force that fails before the old backend stops keeps 150A's way on, and a case
+    pins it.
+  - Each setting was compared for every provider (N5), while the backend's start reads the base URL
+    for openai alone and Gemini Enterprise for gemini alone, so a settings file edited by hand could
+    have the pane say the saved settings were not in force when nothing the backend reads differed.
+    The start and the comparison read one rule now (`BackendClient.BaseUrlFor`,
+    `ReadsGeminiEnterprise`), which `BackendProcessTests` pins on the start's side.
+  - Words that still called the saved settings "in force" (N6): `ReviewHost`'s promise, eight
+    comments of `DeferredRestartTests`, `chat-api.md`'s settings bullet, and the 143A and 150A words
+    of the `settings.save` row, whose 153A note now says they were changed.
+  - A second ordering of the first-start race (O2): recorded under Not changed, with
+    `BackendSupervisor`'s summary saying a restart added there must go through the review host's
+    restart, or the record drifts; settled by the second review (C1, below), which made the first
+    start the host's.
+  - Existing cases changed deliberately: none. The comments of eight cases change their words
+    alone, and the test world's backend can now fail `POST /sessions` (`SessionFailure`).
+- **Second review**: a Codex adversarial review of the branch at `d41ae2c` said it needed
+  attention, with two findings, settled test first by T178 to T182:
+  - The add-in's first start was made outside the host (C1, high). `SwReviewAddIn.StartBackend`
+    called `BackendClient.Start` with the settings read as the add-in loaded, while the host took
+    those as in force when it was built. Codex's ordering needs no failure: the first start's
+    thread-pool item comes late; a save on the page pump restarts the backend with its settings and
+    records them; the first start then replaces that backend with one started with the settings
+    loaded, recording nothing, so sessions took the saved provider, model and effort on a backend
+    started with the loaded settings' environment, and the keys masked left its key out. O2, the
+    ordering recorded under Not changed - a save whose restart failed, then the first start - came
+    from the same cause. The first start is the host's now (`ReviewHost.FirstStart`): made under the
+    lock every restart holds for its whole length (`DeferredRestart.First`), with the settings saved
+    when it is made and the key resolved from them then, and recorded by the transition every
+    restart records by (`StartWith`, which `RestartWith` goes through). One that comes after a
+    restart has started the backend finds it up and starts nothing: a second start with the settings
+    loaded would replace it under the record, and one with the saved settings would end any review
+    already running on it. One after a save whose restart failed, with no backend, starts the backend
+    with the settings saved then. Once the host is disposed it starts nothing and is thrown, so the
+    add-in logs that the backend did not start, as a start the unloading client refused was. The
+    add-in queues it with nothing read beforehand and says what it said: `backend_starting` before,
+    `ready` after, and on a failure the way on to every page (150A). Both Not changed items on the
+    first start are gone, and `BackendSupervisor`'s summary says every start is the host's.
+  - An `init` read while a restart waited could reach the page after that restart's failure word
+    and take its sentence off (C2, medium): `init` is read on the page pump and the failure's word
+    posted from the restart's thread, and the page took whichever came last. Of the two ways Codex
+    named - one lock for each reading and its post, or a number the page checks - the number holds
+    in whatever order the posts arrive, the status path included: each reading of whether the saved
+    settings are in force is taken together with its number, one past the last, under one lock
+    (`ReviewHost.ReadSettingsNotInForce`); `init` and the failure's word carry it
+    (`settings_not_in_force_revision`); and the Review page takes a reading only when its number is
+    above the last it took (`holdNotInForce`), and one with no number - its own, at
+    `backend.stopped` - as before. A case holds an `init` inside its reading while a save puts the
+    settings in force, and the reading taken after it is numbered above it; with the number taken
+    apart from the reading, the older reading took the higher one (mutation C2d).
+  - Existing cases changed deliberately: `AFailedFirstStartTellsEveryPageTheWayOn` reads
+    `StartBackend()`, which takes nothing now, where it read `StartBackend(UserSettings settings,
+    ResolvedApiKey key)` - an anchor; nothing it asserts moves. The Review page driver's `init`
+    carries `settings_not_in_force_revision`, null unless a case sets it.
+- **Third review**: a Codex adversarial review of the fixes at `4c604e2` found one more race (R1,
+  medium), settled test first by T183 to T185:
+  - Every start publishes the backend's endpoint before it records the settings it was made with:
+    `BackendSupervisor.Start` sets `Current` inside the backend client's start, and `StartWith`
+    records the settings once that has returned. After a save that switched the provider and failed
+    with no backend up, the first start - made, since C1, with the saved settings - left a moment in
+    which the backend was up with the saved settings while the record still held the settings
+    loaded. An `init` read then said the saved settings were not in force, numbered above the
+    failure's word, and the page held it: the add-in's `ready` asks for no `init` on a page that has
+    the backend, and one it asks for while another is pending is dropped (`showStatus`,
+    `requestInit`). `DeferredRestart.First` marks nothing, so `init` could not tell that moment from
+    a failed restart's.
+  - The same moment had two more readers. A session made then - a review, a recheck, a context
+    review, their Retries - took its provider, model and effort from the record, the settings
+    loaded, on the backend started with the saved ones' environment: the pairing 153A ended. And the
+    keys masked - the saved key and the recorded one - left out the key that backend was started
+    with once a save made meanwhile had replaced the saved settings.
+  - Fixed where the moment is made. `StartWith`, the one transition every start goes through, marks
+    the start under way from just before it starts the backend until it has recorded the settings,
+    or thrown (`ReviewHost._starting`, the settings it was made with), and records them before it
+    takes the mark off. `SettingsNotInForce` says nothing while a start is under way, as while a
+    restart waits or is being made, and reads the endpoint first, so a start whose endpoint it read
+    is still under way, or has recorded its settings. `CreateReviewSession` makes no session while
+    one is: just before it reads the settings in force it refuses the session as a review asked for
+    before the backend is up is refused - `BackendUnavailable`, retryable, in the same words
+    (`BackendNotRunningYet`, which `BackendReady` now shares). A review extracts first, so its
+    evidence stays in its run folder, as for a backend that stops during an extraction; in practice
+    the moment is over long before an extraction is. `KeysToMask` added the key of a start under way -
+    only while it was under way, the fourth review found (S1, below).
+  - Marking `_making` in `DeferredRestart.First`, as a save's restart is marked, was weighed and
+    left. `Ahead` is what the Remodel tab reads to tell its page that a press waits "for the review
+    backend to restart with the saved settings" (145A, whose third review took out words that said
+    the backend was restarting when it might not be), and a first start is no restart. Nor does
+    `Ahead` reach the other two readers: a review's gate reads only whether a restart waits, and the
+    keys masked read no restart at all. A mark made in `StartWith` covers every start by
+    construction, as the record itself does.
+  - The same window in the restarts, checked as the review asked. `RestartWith` goes through
+    `StartWith`, so a restart, too, publishes the new backend's endpoint before it records the
+    settings. `init` was never wrong there: a save's restart made at once holds `_making` from before
+    it starts the backend until after the record (`DeferredRestart.Now`, its `finally`), and one that
+    waited stays pending until `End`, after the record, so `Ahead` covered the moment. Sessions never
+    met it: a save's restart is made on the page pump that makes sessions, and a review waits under
+    the restart lock for one that waited. The keys masked did, when a save was made during a restart
+    that waited, and the mark covered that only while the restart was under way: its failure, told
+    once it was over, named its key unmasked (the fourth review, S1). Two guards pin the `init` read
+    during either restart; they passed before the change.
+  - The page is unchanged: the word it held is no longer said.
+  - Existing cases changed deliberately: none. `MakeASession`'s first three asks moved into
+    `AskForASession`, which the new cases use to expect a refusal, and the test world's backend can
+    hold a start once it has published the backend's endpoint (`Published`).
+- **Fourth review** (2026-10-21): a focused review of the third fix at `2ca804a` found no must-fix -
+  the fix closes R1 for every start under way - and the items below, settled test first by T186 to
+  T188:
+  - A start's failure was told with the key it was made with unmasked, once a save made while it was
+    under way had replaced the saved key (S1, a leak older than 153A, which the third review's words
+    overstated). `StartWith` took the mark off before anyone told the failure: a restart that waited
+    tells it in its `status` and its word to every other tab, and the add-in tells the first start's in
+    its `status` and in `addin.log` (`SwReviewAddIn.StartBackend`, `Report`), each masked with the saved
+    key - by then the save's - and the one recorded, neither of them the failed start's. The reviewer's
+    probes showed it for a restart that waited (P1) and for the first start after a failed save (P2),
+    at `2ca804a` and at `4c604e2`. Every key a start has been made with is now kept, each once, from
+    just before the start (`ReviewHost._keysStarted`, an array replaced whole under the restart lock and
+    never changed), and `KeysToMask` masks every one besides the saved key and the one recorded;
+    `_starting` serves the `init` and the session alone. One place for the last start's key would not
+    do: the save that waits for the first start makes its own restart as soon as the first start lets
+    the lock go, which can be before the add-in, on the first start's thread, tells the failure - a
+    case lets that restart begin first (mutation F3). A key no backend holds any more stays masked for
+    the life of the host, which hides nothing a page needs.
+  - Nothing pinned the restart's half of the mark (S2): the reviewer's mutant, marking the first start
+    alone (MF), passed every case. A guard now holds a restart that waited under way while a save
+    replaces the key, and asks that the restart's key be among the keys masked; with S1 that reads the
+    keys kept, and MF (mutation F4) is red there and in the case of that restart's failure.
+  - A recheck refused while a start was under way had posted `checking` first, and nothing after the
+    refusal took that word off the badge (N5). The start under way is read before a recheck's
+    `checking` status now - and, for every session, still before the settings in force.
+  - The contracts said no session is made "between publishing the endpoint and recording" (N6); the
+    host refuses one for the whole of the start, and they say "while a start of the backend is under
+    way".
+  - The reading orders the review named (N3): MR3, whether the saved settings are in force read with
+    the start under way before the endpoint, is pinned - a case begins the first start, and has it
+    publish its endpoint, inside the `init`'s reading of that endpoint, through the test world's
+    backend (`EndpointRead`), and mutation F6 is red there. MR1 and MR2 are recorded under Not changed.
+  - Existing cases changed deliberately: the check the first-start cases end with,
+    `AssertTheBackendAndTheSettingsInForceAgree`, asked that the keys masked be the backend's key
+    alone; they are that key and every key a start was made with now (S1), and it asks for exactly
+    those, from the keys the test world's backend was asked to start with (`KeysAsked`), without
+    printing them. Three cases went red against `2ca804a` for that check alone.
+- **Not changed**:
+  - A backend that dies while the saved settings are not in force: no host posts `backend.stopped`
+    (150A), so the Review page goes on saying reviews run with the settings it was started with until
+    its next `init`, while a review is refused for want of a backend.
+  - A page that reloads while a restart waits is told nothing of the promise: `init` carries no word
+    of a restart that waits (143A), and `settings_not_in_force` is null then, by decision.
+  - A save of the settings in force whose restart failed is answered `BackendNotRestarted`, as any
+    save whose restart failed (edge cases, above).
+  - `models.list`, and a save's check of its model, ask the backend that is up for the provider the
+    Settings form shows; a backend started for another provider may not list it, and the model is
+    then saved unchecked, as on any provider switch.
+  - The mark of a start under way (`_starting`) and the record of the settings in force
+    (`_inForce`) are two references, written in an order no case can pin (mutation W7): the mark
+    comes off only once the record is written, as a comment in `StartWith` says. One reference
+    holding both, written once, would make that order a single write, at the cost of changing every
+    reader of the record; left as it is (third review).
+  - Two more reading orders no case pins (the fourth review, N3): `CreateReviewSession` reads the start
+    under way before the settings in force (MR1), and nothing is called between the two readings, so
+    no case can hold a start there; and `KeysToMask` read the mark after the record (MR2), which S1
+    made moot, since the keys masked now read the keys kept, which only grow. MR3 is pinned (Fourth
+    review, above).
+  - A start that begins after a session's check (the fourth review, N4): `CreateSession` reads the
+    endpoint after `CreateReviewSession` has read the start under way and the settings in force, so a
+    start that began between them would pair the settings recorded before it with the backend it
+    started. In production only the first start can begin then, delayed, and only after a save started
+    a backend that then died, followed by a later save whose restart failed before it stopped
+    anything: practically unreachable. Two fixes are open to the owner: take the restart lock across
+    that reading and `POST /sessions`, so that no start overlaps a session's making, at the cost of the
+    page pump waiting through a start under way; or read the endpoint with the settings in force and
+    have `CreateSession` post to that endpoint, refusing the session when it has changed - an
+    `IBackendClient` change, which ten implementations would follow.
+- **Existing cases changed deliberately**: three cases pinned word for word the `status` a restart
+  that waited posts when it failed before it stopped the old backend - the "old backend still up"
+  half of `ARestartThatWaitedAndFailedSaysSavingAgainRetriesIt`, the "after waiting" half of
+  `ARestartThatFailsBeforeTheOldBackendStoppedTellsTheOtherTabsNothing`, and both halves of
+  `ACallThatWaitedForARestartThatFailedBeforeStoppingAnythingIsToldThatFailure` - and now expect the
+  failure followed by the 153A sentence, which ends with the same way on, since the saved settings
+  in each differ from the ones in force; nothing else they assert moves. The test world's `Save`
+  helper takes a base URL and Gemini Enterprise, and its environment can be set
+  (`WorkstationEnvironment`); the Review page driver's `init` carries `settings_not_in_force`, null
+  unless a case sets it, and null with no backend, as the host's.
+- **Mutations**: each fix taken out once with one exact replacement, the tree rebuilt, the classes
+  run - for the host's, `DeferredRestartTests`, `ReviewPageBackendRestartTests`,
+  `OtherTabsBackendRestartTests`, `ReviewHostTests` and `PageMessageTests`, 399 cases; for the
+  page's, `ReviewPageBackendRestartTests`, 22 - and the file restored byte for byte (checked by
+  sha256): 22 mutations, 107 red results in all - 90 for the host's 17, 17 for the page's 5 - and
+  every mutation turned at least one case red. Existing cases went red as well: four of 143A's
+  that read a session made after a restart that waited (H2); three that pin the words of a waited
+  restart's failure once the old backend had stopped (H4); four runs of two `ReviewHostTests`
+  cases that read a session's settings (H17); and 143A's case that a restart takes only its own
+  sentence off the banner (P3).
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | H1 | `ReviewHost.CreateReviewSession` | a session takes the saved settings | 8 |
+  | H2 | `ReviewHost.RestartWith` | a restart that succeeds records nothing | 8 |
+  | H3 | `ReviewHost.RestartWith` | recorded before the restart, so one that fails is recorded too | 23 |
+  | H4 | `ReviewHost.SettingsNotInForce` | said with no backend up | 5 |
+  | H5 | `ReviewHost.SettingsNotInForce` | said while a restart waits or is being made | 1 |
+  | H6 | `ReviewHost.SameBackendSettings` | the provider not compared | 1 |
+  | H7 | `ReviewHost.SameBackendSettings` | the model not compared | 1 |
+  | H8 | `ReviewHost.SameBackendSettings` | the effort not compared | 5 |
+  | H9 | `ReviewHost.SameBackendSettings` | the key's value not compared | 1 |
+  | H10 | `ReviewHost.SameBackendSettings` | where the key comes from not compared | 1 |
+  | H11 | `ReviewHost.SameBackendSettings` | the key compared as stored, not as it resolves | 1 |
+  | H12 | `ReviewHost.SameBackendSettings` | the base URL not compared | 1 |
+  | H13 | `ReviewHost.SameBackendSettings` | Gemini Enterprise's project not compared | 1 |
+  | H14 | `ReviewHost.SameBackendSettings` | Gemini Enterprise's location not compared | 1 |
+  | H15 | `ReviewHost` | a restart that waited and failed keeps the bare way on | 5 |
+  | H16 | `ReviewHost.SendInit` | `init` says nothing | 11 |
+  | H17 | `ReviewHost` | the settings loaded not recorded for the first start | 16 |
+  | P1 | `app.js` | `init`'s sentence ignored | 6 |
+  | P2 | `app.js`, `showBanner` | the banner does not fall back to the sentence | 6 |
+  | P3 | `app.js`, `holdNotInForce` | any banner taken for the sentence's | 2 |
+  | P4 | `app.js`, `holdNotInForce` | the sentence held until now left on the banner | 2 |
+  | P5 | `app.js` | `backend.stopped` leaves the sentence | 1 |
+
+  For the review: 14 mutations, the same way, the host's classes with `BackendProcessTests` as well,
+  456 cases, and the page's, 24 - 22 red results in all, and every mutation turned at least one case
+  red; `BackendProcessTests`' case that the base URL is written only for the provider that reads it
+  went red with R12 besides.
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | R1 | `ReviewHost.PostRestartFailed` | the failure's `status` carries no `settings_not_in_force` | 3 |
+  | R2 | `ReviewHost.PostRestartFailed` | its way on says the sentence whenever a backend is up (the reviewer's M1) | 1 |
+  | R3 | `app.js`, `showStatus` | the field ignored | 2 |
+  | R4 | `app.js`, `showStatus` | every `status` read for the field, carried or not | 2 |
+  | R5 | `ReviewHost.KeysToMask` | without the key the backend was started with | 2 |
+  | R6 | `ReviewHost` | the host masks the saved key alone | 1 |
+  | R7 | `SwReviewAddIn` | the Model check tab masks the saved key alone | 1 |
+  | R8 | `SwReviewAddIn` | the Standards tab masks the saved key alone | 1 |
+  | R9 | `SwReviewAddIn` | the Remodel tab masks the saved key alone | 1 |
+  | R10 | `ReviewHost.SameBackendSettings` | the base URL compared as stored, for every provider | 3 |
+  | R11 | `ReviewHost.SameBackendSettings` | Gemini Enterprise compared for every provider | 1 |
+  | R12 | `BackendClient.BaseUrlFor` | the base URL read for every provider | 2 |
+  | R13 | `BackendClient.BaseUrlFor` | the base URL not trimmed | 1 |
+  | R14 | `BackendClient.ReadsGeminiEnterprise` | Gemini Enterprise read for every provider | 1 |
+
+  For the second review: 14 mutations, the same way - the host's classes, 467 cases (468 once
+  C2d's case was written), and the page's, 25 - 41 red results in all, every mutation red. C2d, the
+  lock that takes a reading and its number together, survived until a case held an `init` inside its
+  reading; C2a and C2c were run again once that case was written.
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | C1a | `DeferredRestart.First` | the first start not under the restart lock | 2 |
+  | C1b | `ReviewHost.FirstStart` | the first start made though a backend is up | 2 |
+  | C1c | `ReviewHost.FirstStart` | the first start records nothing | 2 |
+  | C1d | `ReviewHost.FirstStart` | made with the settings recorded, not the saved ones | 2 |
+  | C1e | `ReviewHost.StartWith` | no start records the settings it was made with | 15 |
+  | C1f | `DeferredRestart.First` | a first start made once disposed | 1 |
+  | C1g | `SwReviewAddIn.StartBackend` | the add-in starts the backend itself, with the settings read at load | 1 |
+  | C2a | `ReviewHost.SendInit` | `init` carries no number | 2 |
+  | C2b | `ReviewHost.PostRestartFailed` | the failure's word carries no number | 1 |
+  | C2c | `ReviewHost.ReadSettingsNotInForce` | every reading numbered alike | 2 |
+  | C2d | `ReviewHost.ReadSettingsNotInForce` | a reading and its number taken apart | 1 |
+  | C2e | `app.js`, `holdNotInForce` | every reading taken, whatever its number | 1 |
+  | C2f | `app.js`, `holdNotInForce` | the number of a reading taken never kept | 1 |
+  | C2g | `app.js`, `holdNotInForce` | a word with no number not taken | 8 |
+
+  For the third review: 7 mutations, the same way - the host's classes, 475 cases - 43 red results in
+  all, six of the seven turning at least one case red. W5, the mark left on a start that threw, turned
+  28 existing cases red - the sessions, `init`'s sentence, the failure's word and the keys masked after
+  a restart that threw - and none of the new ones, whose starts all succeed. W7 survived: it takes the
+  mark off before the settings are recorded, a moment no case can hold, since nothing is called
+  between the two (Not changed, below).
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | W1 | `ReviewHost.StartWith` | no start marked under way | 5 |
+  | W2 | `ReviewHost.SettingsNotInForce` | read while a start is under way | 1 |
+  | W3 | `ReviewHost.CreateReviewSession` | a session made while a start is under way | 3 |
+  | W4 | `ReviewHost.KeysToMask` | the key of a start under way not masked | 1 |
+  | W5 | `ReviewHost.StartWith` | the mark left on a start that threw | 28 |
+  | W6 | `ReviewHost.StartWith` | the mark set once the start has returned | 5 |
+  | W7 | `ReviewHost.StartWith` | the mark taken off before the settings are recorded | 0 |
+
+  For the fourth review: 7 mutations, the same way - the host's classes, 480 cases - 20 red results
+  in all, every mutation red. F3 is the one place for the last start's key the review warned of, red
+  where the waiting save's restart begins before the add-in tells the first start's failure; F4 is the
+  reviewer's MF.
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | F1 | `ReviewHost.KeysToMask` | the keys masked leave out the keys starts were made with | 6 |
+  | F2 | `ReviewHost.StartWith` | a start's key kept only once the start has succeeded | 5 |
+  | F3 | `ReviewHost.StartWith` | one place for the last start's key, not every key | 4 |
+  | F4 | `ReviewHost.StartWith`, `FirstStart` | only the first start keeps its key and is marked under way (MF) | 2 |
+  | F5 | `ReviewHost.CreateReviewSession` | a recheck's `checking` posted before the start under way is read | 1 |
+  | F6 | `ReviewHost.SettingsNotInForce` | the start under way read before the endpoint (MR3) | 1 |
+  | F7 | `ReviewHost.KeysToMask` | the keys masked not each once | 1 |
+
+- **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first; the review's, T171, T173
+  and T175; the second review's, T178 and T180; the third's, T183; and the fourth's, T186. 153A's
+  tasks are T166 to T188: it lands first among this round's 002 decisions, so its numbers stand.
 
 ### 154A. A run root on a share or reached through a link is refused before anything is made (2026-10-20)
 
@@ -2772,3 +3274,9 @@ engineering context's, the Model check's, the Standards', the Remodel host's and
   go, the run root to join 153A's `SameBackendSettings`, and the delayed first start that could replace a
   newer root (Codex's third finding) to be shown closed by 153A's `FirstStart`, with a test - and these tasks
   renumbered after 153A's T188 - done on 2026-10-21, T189 to T200.
+
+### 156A. 002's other words for the hidden Terminal tab, and an invalid escape in a test (2026-10-20)
+
+- **Question**: Other words in 002 still describe the hidden Terminal tab as shown, and a test's fictional Windows path has an invalid escape.
+- **Decision**: Add dated notes wherever the spec describes that tab, built and hidden since 2026-09-19, and fix invalid Python escapes without changing values or product behaviour.
+- **Change**: Annotated `spec.md` and settled 011's research R13.5 item 2; audited `reviewer/tests/` and `reviewer/src/` and made the affected test literal raw with the same value.

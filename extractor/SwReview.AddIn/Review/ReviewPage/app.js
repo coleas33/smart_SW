@@ -205,7 +205,15 @@
     replacedToken: null,
     // A save's restart failed and no `init` has named a backend since (owner decision 150A): the
     // strip says the backend is not running, not that it is starting.
-    notRunning: false
+    notRunning: false,
+    // The host's sentence while the backend that is up runs with settings other than the saved
+    // ones - a restart failed before it stopped the old backend - as the last `init` carried it,
+    // or null (owner decision 153A): what the banner says whenever it says nothing else.
+    notInForce: null,
+    // The number of the host's last reading of whether the saved settings are in force that this
+    // page took (owner decision 153A, found on review): a reading numbered no higher is an older
+    // one, delivered late, and changes nothing.
+    notInForceRevision: 0
   };
 
   var ui = {};
@@ -293,6 +301,8 @@
         state.token = null;
         closeStream();
         setTurnRunning(false);
+        // No backend holds any settings: none are in force (owner decision 153A).
+        holdNotInForce(null);
         renderBackendState('The backend stopped. Save Settings to start it again.', true);
         return;
       case 'backend.restarted':
@@ -2792,8 +2802,34 @@
   }
 
   function showBanner(text) {
-    ui.banner.textContent = text || '';
-    ui.banner.hidden = !text;
+    // While the saved settings are not in force, the host's sentence saying so is what the banner
+    // says when it is given nothing else to say (owner decision 153A).
+    var shown = text || state.notInForce || '';
+    ui.banner.textContent = shown;
+    ui.banner.hidden = !shown;
+  }
+
+  /**
+   * Owner decision 153A: holds the host's sentence that the saved settings are not in force, or
+   * none. A banner saying nothing, or saying the sentence held until now, takes the new one, or
+   * nothing; any other word stays where it is, and the sentence comes back once that word goes.
+   */
+  function holdNotInForce(sentence, revision) {
+    // Found on review (C2): the host numbers its readings in the order it takes them, and posts them
+    // from different threads - an `init` read before a restart failed can come after that failure's
+    // word - so a reading numbered no higher than the last one taken is not taken. One with no
+    // number is the page's own (`backend.stopped`).
+    if (typeof revision === 'number') {
+      if (revision <= state.notInForceRevision) {
+        return;
+      }
+      state.notInForceRevision = revision;
+    }
+    var resting = ui.banner.hidden || ui.banner.textContent === state.notInForce;
+    state.notInForce = (typeof sentence === 'string' && sentence) ? sentence : null;
+    if (resting) {
+      showBanner('');
+    }
   }
 
   function showStreamState(text) {
@@ -2821,6 +2857,12 @@
   function showStatus(payload) {
     var message = (payload && payload.message) || '';
     var stage = payload && payload.stage;
+    // Owner decision 153A, found on review: the host's word that a restart which waited has failed
+    // says whether the saved settings are in force, as `init` does, and no `init` follows it - so
+    // the sentence is held from here too. A status that does not carry it leaves it as it is.
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'settings_not_in_force')) {
+      holdNotInForce(payload.settings_not_in_force, payload.settings_not_in_force_revision);
+    }
     if (stage === 'error') {
       showBanner(message);
       renderBackendState('Error', true);
@@ -3118,6 +3160,9 @@
       renderBackendState(
         state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),
         state.notRunning);
+      // Owner decision 153A: every `init` says whether the saved settings are in force, so a page
+      // that loads again is told too.
+      holdNotInForce(payload.settings_not_in_force, payload.settings_not_in_force_revision);
       if (loadModels && state.backend) {
         refreshModels();
       }

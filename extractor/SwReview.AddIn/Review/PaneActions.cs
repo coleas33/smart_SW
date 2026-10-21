@@ -567,11 +567,7 @@ public sealed class PaneActions
     /// decision 150A). Nothing else is so marked.</param>
     public void PostStatus(string stage, string message, bool lifecycle)
     {
-        var payload = new Dictionary<string, object?>
-        {
-            { "stage", stage },
-            { "message", Redact(message) },
-        };
+        Dictionary<string, object?> payload = StatusPayload(stage, message);
         if (lifecycle)
         {
             payload["lifecycle"] = true;
@@ -579,6 +575,18 @@ public sealed class PaneActions
 
         Send("status", null, payload);
     }
+
+    /// <summary>
+    /// A `status` payload - the stage, and the message with every secret masked - for a sender that
+    /// adds a field of its own before it sends it (the Review host's `settings_not_in_force`, owner
+    /// decision 153A). Every `status` is built here, in one shape.
+    /// </summary>
+    internal Dictionary<string, object?> StatusPayload(string stage, string message) =>
+        new Dictionary<string, object?>
+        {
+            { "stage", stage },
+            { "message", Redact(message) },
+        };
 
     /// <summary>
     /// Tells the page the backend was restarted with saved settings, so the port and token of its

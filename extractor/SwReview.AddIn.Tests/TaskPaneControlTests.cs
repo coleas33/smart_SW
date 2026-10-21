@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
+using SwReview.AddIn.Review;
 using Xunit;
 
 namespace SwReview.AddIn.Tests;
@@ -189,6 +191,49 @@ public sealed class TaskPaneControlTests
                     "{\"type\":\"status\",\"payload\":{\"stage\":\"ready\"}}"));
 
             Assert.True(escaped == null, "Posting to an unopened Standards tab threw: " + escaped);
+        });
+    }
+
+    /// <summary>
+    /// Owner decision 155A's review (004 T202): a post from another thread is queued onto the pane's thread
+    /// and returns at once; it never waits on that thread, which in SOLIDWORKS is the application thread. The
+    /// Remodel host posts `init` under a lock that thread takes when a session's ending is told during a run
+    /// (`RemodelHost.SendInit`), so a channel that waited on it could hang SOLIDWORKS. Here the pane's thread
+    /// stays busy while another thread posts to every channel; a post that waited would not return within the
+    /// bound, and the case fails rather than hangs.
+    /// </summary>
+    [Fact]
+    public void APostFromAnotherThreadIsQueuedAndNeverWaitsOnThePanesThread()
+    {
+        WithPane(pane =>
+        {
+            // Not disposed: under a regression the poster still holds it once the bound has passed.
+            var posted = new ManualResetEventSlim();
+            var poster = new Thread(() =>
+            {
+                try
+                {
+                    foreach (IPageChannel channel in new[]
+                    {
+                        pane.ReviewChannel, pane.TerminalChannel, pane.ModelCheckChannel, pane.RemodelChannel,
+                        pane.StandardsChannel,
+                    })
+                    {
+                        channel.PostMessage("{\"type\":\"status\",\"payload\":{\"stage\":\"ready\"}}");
+                    }
+
+                    posted.Set();
+                }
+                catch (Exception)
+                {
+                    // A post that throws is not one that waited; the bound below still decides.
+                }
+            })
+            { IsBackground = true, Name = "fict-host-thread" };
+            poster.Start();
+
+            // The pane's thread waits here, busy: a channel that waited on it would not return.
+            Assert.True(posted.Wait(TimeSpan.FromSeconds(5)), "a post from another thread waited on the pane's thread");
         });
     }
 

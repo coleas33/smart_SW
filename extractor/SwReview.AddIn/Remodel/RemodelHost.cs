@@ -172,7 +172,9 @@ public sealed class RemodelHostOptions
 /// off the SOLIDWORKS UI thread. The run itself executes on
 /// <see cref="RemodelHostOptions.Schedule"/> so that `remodel.stop` can be delivered while it
 /// is running; the only state the two share is the run's stop flag and the pending stop id,
-/// both written atomically.
+/// both written atomically, and - owner decision 155A - the run's end: the host freed from it,
+/// and what its ending holds back meanwhile, under one lock, which `init`'s reading of a run in
+/// flight takes too.
 /// </summary>
 public sealed class RemodelHost : IDisposable
 {
@@ -329,6 +331,50 @@ public sealed class RemodelHost : IDisposable
         + "document SOLIDWORKS has active under the run. Press Open copy again once the run has finished.";
 
     /// <summary>
+    /// Owner decision 155A (004 research R18): what the tab says for `DocumentDirty`, whoever refused - this
+    /// host's own reading of the probe's signals, or the bridge's probe or its reading of the part again
+    /// inside `remodel.open`, before the copy. The bridge's sentences name the part's full path, and the
+    /// backend passes them on, so the page is given these words instead (<see cref="PageWords"/>); the
+    /// bridge's sentence stays in the tool-service log's line for the request it refused. No path, the way
+    /// on by the button's label, and the engineer's part vouched for alone, as the tab's other refusals of a
+    /// plan do (<see cref="DocumentChangedMessage"/>).
+    /// </summary>
+    public const string DocumentDirtyMessage =
+        "Your part has unsaved changes, and the re-modeler copies the part as it is saved on disk, so "
+        + "nothing was copied and no new plan was made. " + PartNotChanged + " Save it, or close it "
+        + "without saving and open it again, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 155A: what the tab says for `ExternalReferences`, whoever refused, by
+    /// <see cref="DocumentDirtyMessage"/>'s rules. It names no button: pressing again changes nothing, and
+    /// breaking the part's references is a change to the engineer's own part, which this tab does not ask
+    /// for.
+    /// </summary>
+    public const string ExternalReferencesMessage =
+        "This part references other files, which this remodel cannot copy with it, so nothing was "
+        + "copied and no new plan was made. " + PartNotChanged + " This version remodels only parts "
+        + "that reference no other files.";
+
+    /// <summary>
+    /// Owner decision 155A: what every row that looks a run up answers for a run folder this host has no
+    /// record of (`RunNotFound`) - Start, the result, Open copy, Discard copy, Show and the shared rows'
+    /// lookup - where it named the folder the page sent. A host keeps its runs for as long as it lives, so
+    /// a page naming one it does not have is showing a run from before it.
+    /// </summary>
+    public const string RunNotFoundMessage =
+        "This tab no longer has that run, so nothing was done with it. Press Remodel a copy to plan again.";
+
+    /// <summary>
+    /// Owner decision 155A: what the page is told when the copy goes away while a run is in progress (RK-14)
+    /// and the run is stopped, where it named the copy's full path. Told as the engineer's own Stop is told,
+    /// a stage the page shows in its run line while the run goes on to its end (<see cref="DocumentChanged"/>).
+    /// </summary>
+    public const string CopyGoneMessage =
+        "The copy is gone, so the run is stopping: the change in flight is finished first, and the "
+        + "change log stays in the run folder. " + PartNotChanged + " Once the run has ended, press "
+        + "Remodel a copy to plan again.";
+
+    /// <summary>
     /// The reason both of 004 T159's refusals give: the copy could not be made the active document
     /// before a dump - SOLIDWORKS does not have it open, would not activate it, had another
     /// document active afterwards, or no copy was left to activate - so it was not read, since a
@@ -425,6 +471,24 @@ public sealed class RemodelHost : IDisposable
     private string? _pendingStopId;
 
     /// <summary>
+    /// Owner decision 155A (004 research R18): orders the end of a run - the host freed from it - with what
+    /// an `init` reads of a run in flight and posts (<see cref="SendInit"/>), and with what the run's ending
+    /// holds back meanwhile (<see cref="HoldUntilTheHostIsFree"/>). Held only to read and write the run's
+    /// fields and to post, which queues the message to the pane and returns, so nothing under it waits on
+    /// another thread: SOLIDWORKS' application thread takes it too, when a session's ending is told during
+    /// a run (<see cref="PostWhatWasLeft"/>), and a wait on that thread under it could hang SOLIDWORKS.
+    /// </summary>
+    private readonly object _endingLock = new object();
+
+    /// <summary>
+    /// Owner decision 155A: what a run's ending tells the page while the run still holds the host - a
+    /// `status` the page ends its running state on (`ready`, `error`), and the refusal posted beside one -
+    /// in the order it was made, told by <see cref="Execute"/> once the host is free. Guarded by
+    /// <see cref="_endingLock"/>.
+    /// </summary>
+    private readonly List<Action> _heldForTheEnd = new List<Action>();
+
+    /// <summary>
     /// The host as shipped: Start is switched on or off by <see cref="RemodelStart.SeatValidated"/>
     /// (004 T172).
     /// </summary>
@@ -450,8 +514,7 @@ public sealed class RemodelHost : IDisposable
             new PaneRunLookup(
                 "run_dir",
                 "RunNotFound",
-                runDir => $"this pane did not start a remodel run in '{runDir}', so it does not "
-                    + "know which folder to open.",
+                _ => RunNotFoundMessage,
                 runDir => FindRun(runDir)?.RunDirectory))
         {
             RunRootsInForce = () => options.RunRootsInForce(),
@@ -643,10 +706,12 @@ public sealed class RemodelHost : IDisposable
         }
 
         run.RequestStop();
-        PostStatus(
-            "error",
-            $"the copy '{run.CopyPath}' is no longer there, so the run is stopping. The change "
-            + "log in the run folder is intact.");
+
+        // Owner decision 155A: in plain words, naming no path - the run folder holds the copy's - and
+        // told as the engineer's own Stop is told, in a stage the page shows in its run line while the
+        // run goes on to its end, not in one that ends the page's running state while the run still
+        // finishes the change in flight and holds the host.
+        PostStatus("applying", CopyGoneMessage);
     }
 
     /// <summary>
@@ -759,7 +824,9 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>
     /// The one post both seams make: the status error when there are words, nothing when there
-    /// are none, and never a throw.
+    /// are none, and never a throw. While a run holds the host - its own close, or the run's discard
+    /// of its copy, ends a session - the words wait for the run's ending, since the page ends its
+    /// running state on them (owner decision 155A).
     /// </summary>
     private void PostWhatWasLeft(Func<string?> words)
     {
@@ -768,7 +835,7 @@ public sealed class RemodelHost : IDisposable
             string? message = words();
             if (message != null)
             {
-                PostStatus("error", message);
+                HoldUntilTheHostIsFree(() => PostStatus("error", message));
             }
         }
         catch (Exception)
@@ -955,13 +1022,37 @@ public sealed class RemodelHost : IDisposable
 
     // ---- ready / init -------------------------------------------------------------------
 
+    /// <summary>
+    /// Answers `ready` with `init`. Whether the latest run is in flight is read, and the `init` posted, under
+    /// <see cref="_endingLock"/> (owner decision 155A): an `init` that reads the run in flight is posted
+    /// before the host is freed from it, and so before the run's ending reaches the page, or it reads that
+    /// the run is not - never told after the ending that the run is in flight, which would leave a page
+    /// loaded again showing a run that has ended. Everything else is read before the lock is taken: the
+    /// active document is read on SOLIDWORKS' application thread, which takes that lock when a session's
+    /// ending is told during a run.
+    /// </summary>
     private void SendInit(string? id)
     {
         BackendEndpoint? endpoint = _options.Backend();
         RemodelRun? latest = LatestRun;
         RemodelLimits limits = _options.Limits;
+        Dictionary<string, object?>? latestRun = latest == null
+            ? null
+            : new Dictionary<string, object?>
+            {
+                { "run_dir", latest.RunDirectory },
+                { "at", latest.At.ToString("o", CultureInfo.InvariantCulture) },
+                { "state", StateOf(latest.RunDirectory) },
 
-        _actions.Send("init", id, new Dictionary<string, object?>
+                // Decision 24A, amended on review: the notice is told once per plan,
+                // and a page that loads again starts from this alone. Read afresh by
+                // the notice's own rule, whatever holds the host, since `init`
+                // describes the run it names; the notice's once-per-plan claim is
+                // neither spent nor needed here.
+                { "plan_lost", IsLostPlan(latest) ? LostMessage(latest) : null },
+            };
+
+        var init = new Dictionary<string, object?>
         {
             {
                 "backend",
@@ -998,25 +1089,22 @@ public sealed class RemodelHost : IDisposable
                 "remodel",
                 RemodelCapabilityPayload()
             },
-            {
-                "latest_run",
-                latest == null
-                    ? null
-                    : new Dictionary<string, object?>
-                    {
-                        { "run_dir", latest.RunDirectory },
-                        { "at", latest.At.ToString("o", CultureInfo.InvariantCulture) },
-                        { "state", StateOf(latest.RunDirectory) },
+            { "latest_run", latestRun },
+        };
 
-                        // Decision 24A, amended on review: the notice is told once per plan,
-                        // and a page that loads again starts from this alone. Read afresh by
-                        // the notice's own rule, whatever holds the host, since `init`
-                        // describes the run it names; the notice's once-per-plan claim is
-                        // neither spent nor needed here.
-                        { "plan_lost", IsLostPlan(latest) ? LostMessage(latest) : null },
-                    }
-            },
-        });
+        lock (_endingLock)
+        {
+            if (latestRun != null)
+            {
+                // Owner decision 155A (feature 011 research R12.9 item 9): whether this run is in
+                // flight - started and not yet ended - which `state`, the plan's, does not say. A page
+                // that loads again starts from `init` alone, and shows the run running, Stop
+                // pressable, rather than offering what the host refuses.
+                latestRun["running"] = ReferenceEquals(_active, latest);
+            }
+
+            _actions.Send("init", id, init);
+        }
     }
 
     private Dictionary<string, object?> RemodelCapabilityPayload()
@@ -1187,7 +1275,7 @@ public sealed class RemodelHost : IDisposable
             }
             catch (Exception failure)
             {
-                PostStatus("error", failure.Message);
+                PostStatus("error", PageWords(failure));
                 throw;
             }
 
@@ -1228,7 +1316,7 @@ public sealed class RemodelHost : IDisposable
             {
                 // The run folder is left behind on purpose: whatever it holds is the evidence
                 // for why the run stopped (constitution Principle I).
-                PostStatus("error", failure.Message);
+                PostStatus("error", PageWords(failure));
                 EndTheSessionOfAFailedPlan(pipeline, runDirectory);
                 throw;
             }
@@ -1299,7 +1387,7 @@ public sealed class RemodelHost : IDisposable
             }
             catch (Exception failure)
             {
-                PostStatus("error", failure.Message);
+                PostStatus("error", PageWords(failure));
                 EndTheSessionOfAFailedPlan(pipeline, runDirectory);
                 throw;
             }
@@ -1534,26 +1622,18 @@ public sealed class RemodelHost : IDisposable
     {
         ScopeSignals signals = scope.Signals;
 
+        // Owner decision 155A: one sentence per class, the tab's own, whoever refused (PageWords). The
+        // bridge as built never reaches these two: its probe refuses `source_dirty` and `external_refs`
+        // before it answers a dirty save flag or a count of references.
         if (signals.SaveFlagDirty == true)
         {
-            _actions.SendError(
-                id,
-                "DocumentDirty",
-                "the part has unsaved changes. This feature never saves your file, so save it "
-                + "or close it yourself, then press Remodel again.",
-                retryable: true);
+            _actions.SendError(id, "DocumentDirty", DocumentDirtyMessage, retryable: true);
             return false;
         }
 
         if (signals.ExternalReferenceCount > 0)
         {
-            _actions.SendError(
-                id,
-                "ExternalReferences",
-                $"the part carries {signals.ExternalReferenceCount} external file "
-                + (signals.ExternalReferenceCount == 1 ? "reference" : "references")
-                + ", which a copy cannot carry with it.",
-                retryable: false);
+            _actions.SendError(id, "ExternalReferences", ExternalReferencesMessage, retryable: false);
             return false;
         }
 
@@ -1613,7 +1693,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -1777,11 +1857,19 @@ public sealed class RemodelHost : IDisposable
     /// Never throws into the scheduler: a faulted background task in a SOLIDWORKS add-in is an
     /// unobserved exception nobody sees. A failure is a `status {stage: "error"}` and an
     /// `error` message, and the run ends `failed`.
+    ///
+    /// Owner decision 155A (004 research R18; feature 011 research R12.9 item 4): the page ends its
+    /// running state - and offers Open copy and Discard copy again - on a `status` of `ready` or
+    /// `error`, so none is posted while the run holds the host. What the ending says before the host
+    /// is free - the failure caught here, the pipeline's own error, T167's words of a close that left
+    /// something - is held (<see cref="HoldUntilTheHostIsFree"/>) and told once the session is closed
+    /// and the host freed, in the order it was made, then the run's last word, then the stop's answer.
     /// </summary>
     private void Execute(IRemodelPipeline pipeline, RemodelRun run)
     {
         RemodelRunOutcome outcome;
         string? closeProblem = null;
+        List<Action> held;
         try
         {
             PostStatus("judging", "Running the plan against the copy...");
@@ -1792,14 +1880,20 @@ public sealed class RemodelHost : IDisposable
             // Unsolicited: `remodel.started` was answered before the run began, so there is no
             // message left to reply to. The class still travels, for the reason it does on the
             // message thread.
-            PostStatus("error", refusal.Message);
-            SendRefusal(null, refusal);
+            HoldUntilTheHostIsFree(() =>
+            {
+                PostStatus("error", PageWords(refusal));
+                SendRefusal(null, refusal);
+            });
             outcome = new RemodelRunOutcome("failed", 0);
         }
         catch (Exception failure)
         {
-            PostStatus("error", failure.Message);
-            _actions.SendError(null, "HostError", failure.Message, retryable: false);
+            HoldUntilTheHostIsFree(() =>
+            {
+                PostStatus("error", failure.Message);
+                _actions.SendError(null, "HostError", failure.Message, retryable: false);
+            });
             outcome = new RemodelRunOutcome("failed", 0);
         }
         finally
@@ -1819,9 +1913,12 @@ public sealed class RemodelHost : IDisposable
                 }
             }
 
-            run.Phase = RemodelRunPhase.Finished;
-            _active = null;
-            _busy = false;
+            held = FreeTheHostFromTheRun(run);
+        }
+
+        foreach (Action post in held)
+        {
+            post();
         }
 
         if (closeProblem != null)
@@ -2012,7 +2109,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -2051,7 +2148,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -2118,7 +2215,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -2254,7 +2351,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -2580,6 +2677,56 @@ public sealed class RemodelHost : IDisposable
         AnnounceLostPlan();
     }
 
+    // ---- a run's ending and the host's freeing (owner decision 155A) -----------------------------
+
+    /// <summary>
+    /// Whether the page ends its running state on a `status` of <paramref name="stage"/> - and offers the
+    /// copy actions again: `ready` and `error` (`remodel.js`, `showStatus`).
+    /// </summary>
+    private static bool EndsTheRunOnThePage(string stage) =>
+        string.Equals(stage, "ready", StringComparison.Ordinal)
+        || string.Equals(stage, "error", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Owner decision 155A: posts <paramref name="post"/> now, or holds it while a run holds the host,
+    /// for <see cref="Execute"/> to tell once the host is free - so a page that ends its running state
+    /// on what it is told is never offered what the host would refuse for a run that is not over. Only
+    /// a run's own ending holds anything: its executor's failure, its pipeline's error, and the words of
+    /// a close made under it.
+    /// </summary>
+    private void HoldUntilTheHostIsFree(Action post)
+    {
+        lock (_endingLock)
+        {
+            if (_active != null)
+            {
+                _heldForTheEnd.Add(post);
+                return;
+            }
+        }
+
+        post();
+    }
+
+    /// <summary>
+    /// Owner decision 155A: frees the host from <paramref name="run"/>, which has ended, and hands back what
+    /// its ending held, in the order it was made, for the caller to tell: one step under
+    /// <see cref="_endingLock"/>, so nothing is held after it and an `init` reads the run in flight only
+    /// before it.
+    /// </summary>
+    private List<Action> FreeTheHostFromTheRun(RemodelRun run)
+    {
+        lock (_endingLock)
+        {
+            run.Phase = RemodelRunPhase.Finished;
+            _active = null;
+            _busy = false;
+            var held = new List<Action>(_heldForTheEnd);
+            _heldForTheEnd.Clear();
+            return held;
+        }
+    }
+
     /// <summary>
     /// Whether a settings restart stands before the press. Only words for the page hang on it, so
     /// a reading that throws is none: the press goes on through the gate, which decides.
@@ -2605,7 +2752,31 @@ public sealed class RemodelHost : IDisposable
     /// is three chances to drop it.
     /// </summary>
     private void SendRefusal(string? id, RemodelRefusal refusal) =>
-        _actions.SendError(id, refusal.ErrorClass, refusal.Message, refusal.Retryable);
+        _actions.SendError(id, refusal.ErrorClass, PageWords(refusal), refusal.Retryable);
+
+    /// <summary>
+    /// Owner decision 155A (004 research R18): the classes whose words on this tab are the host's own,
+    /// whoever refused. The bridge refuses both with a sentence naming the part's full path, which the
+    /// backend passes on unchanged (`BRIDGE_REFUSALS`) and the tool-service log keeps on the refused
+    /// request's line; one sentence per class, the one the host already had for its own reading of the
+    /// probe, is what the page prints.
+    /// </summary>
+    private static readonly Dictionary<string, string> TabWords =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            { "DocumentDirty", DocumentDirtyMessage },
+            { "ExternalReferences", ExternalReferencesMessage },
+        };
+
+    /// <summary>
+    /// The words a failure reaches the page in, in a refusal and in the run line's `status {stage:
+    /// "error"}` alike: <see cref="TabWords"/>' sentence for a refusal of one of its classes, and the
+    /// failure's own message otherwise (owner decision 155A).
+    /// </summary>
+    private static string PageWords(Exception failure) =>
+        failure is RemodelRefusal refusal && TabWords.TryGetValue(refusal.ErrorClass, out string? words)
+            ? words
+            : failure.Message;
 
     /// <summary>
     /// Owner decision 154A: a plan or a Start refuses a run root the run root rule refuses, in this tab's words,
@@ -2650,12 +2821,13 @@ public sealed class RemodelHost : IDisposable
             + "share one SOLIDWORKS session and neither could be attributed.",
             retryable: true);
 
-    private void SendRunNotFound(string? id, string? runDir) =>
-        _actions.SendError(
-            id,
-            "RunNotFound",
-            $"this pane did not start a remodel run in '{runDir}', so it will not act on it.",
-            retryable: false);
+    /// <summary>
+    /// `RunNotFound` for a run folder the page named that this host has no record of, in
+    /// <see cref="RunNotFoundMessage"/>'s plain words: the folder the page sent is not repeated (owner
+    /// decision 155A).
+    /// </summary>
+    private void SendRunNotFound(string? id) =>
+        _actions.SendError(id, "RunNotFound", RunNotFoundMessage, retryable: false);
 
     private void SendUnavailable(string? id, RemodelAvailability availability) =>
         _actions.SendError(
@@ -2695,7 +2867,21 @@ public sealed class RemodelHost : IDisposable
         /// </summary>
         public bool StopRequested => _run != null && _run.StopRequested;
 
-        public void Status(string stage, string message) => _host.PostStatus(stage, message);
+        /// <summary>
+        /// A stage the page ends its running state on waits for the run's ending while a run holds the host
+        /// (owner decision 155A): the pipeline posts its own error before it answers, and the host is not
+        /// free until `Execute` has closed the run's session.
+        /// </summary>
+        public void Status(string stage, string message)
+        {
+            if (EndsTheRunOnThePage(stage))
+            {
+                _host.HoldUntilTheHostIsFree(() => _host.PostStatus(stage, message));
+                return;
+            }
+
+            _host.PostStatus(stage, message);
+        }
 
         public void Progress(int applied, int total, int seq, string kind, string? subjectName) =>
             _host._actions.Send("remodel.progress", null, new Dictionary<string, object?>
