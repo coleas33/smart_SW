@@ -153,6 +153,13 @@ public sealed class RemodelRun
     internal void RequestStop() => Interlocked.Exchange(ref _stop, 1);
 
     /// <summary>
+    /// Owner decision 159A, on review: takes back a stop asked for while a Start whose run was never handed to its
+    /// scheduler held the run - the copy going away as it failed - so the plan, which stays startable, carries no stop
+    /// into its next run (<c>RemodelHost.LetGoOfARunNeverHandedOn</c>).
+    /// </summary>
+    internal void WithdrawStop() => Interlocked.Exchange(ref _stop, 0);
+
+    /// <summary>
     /// Claims the one `remodel.plan_lost` this run's plan is told with (decision 24A): true the
     /// first time, false ever after. The attachment a plan was made on never comes back -
     /// every start mints a new one - so a plan lost once is lost for good, and every refresh

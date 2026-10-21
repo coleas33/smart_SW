@@ -259,7 +259,8 @@ public sealed class RemodelWiringTests
     /// <summary>
     /// Owner decision 159A (004 T208): the add-in hands the Remodel host its own log, so the sentence a failure carried,
     /// which the tab tells in its own words since it can name a path, reaches the log the tab's View log opens - and is
-    /// not lost: the host's log is nowhere by default, so no test writes into the engineer's.
+    /// not lost: the host's log is nowhere by default, so no test writes into the engineer's. *Changed deliberately
+    /// 2026-10-21 (159A, on review; 004 T229):* read from the code alone, where a line commented out met it.
     /// </summary>
     [Fact]
     public void TheAddInHandsTheRemodelHostItsLog()
@@ -278,10 +279,15 @@ public sealed class RemodelWiringTests
     private static string Collapsed(string relativePath) =>
         Regex.Replace(File.ReadAllText(Path.Combine(AddIn(), relativePath)), @"\s+", " ");
 
-    /// <summary><c>SwReviewAddIn.StartRemodelHost</c>, up to where it starts the remodel pump.</summary>
+    /// <summary>
+    /// <c>SwReviewAddIn.StartRemodelHost</c>, up to where it starts the remodel pump: its code, every run of white space as
+    /// one space, with no comment line in it, so no pin is met by a line commented out (owner decision 159A, on review:
+    /// <see cref="TheAddInHandsTheRemodelHostItsLog"/> passed with its line commented out).
+    /// </summary>
     private static string StartRemodelHost()
     {
-        string source = Collapsed("SwReviewAddIn.cs");
+        string source = Regex.Replace(
+            AdapterShape.CodeOutsideComments(File.ReadAllText(Path.Combine(AddIn(), "SwReviewAddIn.cs"))), @"\s+", " ");
         int start = source.IndexOf("private void StartRemodelHost(", StringComparison.Ordinal);
         int end = start < 0 ? -1 : source.IndexOf("StartRemodelPump();", start, StringComparison.Ordinal);
         Assert.True(end > start, "SwReviewAddIn.StartRemodelHost was not found, or no longer starts the remodel pump.");

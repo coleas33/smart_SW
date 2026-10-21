@@ -1114,21 +1114,41 @@ public sealed class BackendRemodelPipelineTests : IDisposable
     }
 
     /// <summary>
-    /// The host calls this on its way to deleting `copy/`, including on paths where the backend
-    /// never started. The folder is what the engineer asked to be rid of; a close that cannot be
-    /// made must not stop it.
+    /// With no tool service listening there is no bridge to hold a session - its teardown ended any - so a close is a
+    /// quiet no-op. *Changed deliberately 2026-10-21 (owner decision 159A, on review; 004 T223, research R19.9):* this case
+    /// pinned a backend that is not running as a quiet no-op too, and the host then took the close for done although the
+    /// bridge may still hold the session; that half is <see cref="CloseCopyWithNoBackendRunningIsRefusedAsNotSent"/>. The
+    /// host's way to deleting `copy/` goes on either way: it deletes whatever the close answers.
     /// </summary>
     [Fact]
-    public void CloseCopyWithNoBackendOrNoBridgeIsAQuietNoOp()
+    public void CloseCopyWithNoBridgeIsAQuietNoOp()
     {
-        var world = new World(this) { Endpoint = null };
+        var world = new World(this) { Bridge = null };
         world.Pipeline.CloseCopy(world.RunFolder());
 
-        var second = new World(this) { Bridge = null };
-        second.Pipeline.CloseCopy(second.RunFolder());
+        var neither = new World(this) { Bridge = null, Endpoint = null };
+        neither.Pipeline.CloseCopy(neither.RunFolder());
 
         Assert.Empty(world.Backend.Calls);
-        Assert.Empty(second.Backend.Calls);
+        Assert.Empty(neither.Backend.Calls);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T223; research R19.9; the mutation review's M6): a backend that is
+    /// not running cannot carry a close, and the bridge may still hold the session the run or the plan opened - a backend
+    /// that stopped after the open leaves it so. The close is refused, `BackendUnavailable` and retryable, sending nothing,
+    /// so the host reads it as a close that was not answered, where it was a quiet no-op it took for done.
+    /// </summary>
+    [Fact]
+    public void CloseCopyWithNoBackendRunningIsRefusedAsNotSent()
+    {
+        var world = new World(this) { Endpoint = null };
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.CloseCopy(world.RunFolder()));
+
+        Assert.Equal("BackendUnavailable", refusal.ErrorClass);
+        Assert.True(refusal.Retryable);
+        Assert.Empty(world.Backend.Calls);
     }
 
     // ---- native open-copy identity and SOLIDWORKS lock files -------------------------------

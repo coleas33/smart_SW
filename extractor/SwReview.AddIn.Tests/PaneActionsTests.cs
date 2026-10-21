@@ -221,7 +221,11 @@ public sealed class PaneActionsTests
             // -1 is not a swPersistReferencedObjectStates_e value: SOLIDWORKS never answered
             // at all, which is a different thing from a reference that resolved to nothing.
             Assert.Equal(-1, shown.GetProperty("state_code").GetInt32());
-            Assert.Contains("SOLIDWORKS did not answer", shown.GetProperty("message").GetString()!);
+
+            // Owner decision 159A, on review (004 T229): exactly the failure's own message on these tabs - the
+            // default of `PaneActionsOptions.FailureWords`, which only the Remodel host answers in its own words -
+            // where a contains let a prefix, or the whole exception, through.
+            Assert.Equal("SOLIDWORKS did not answer", shown.GetProperty("message").GetString());
             Assert.Equal(JsonValueKind.Null, shown.GetProperty("full_path").ValueKind);
         }
     }
@@ -474,7 +478,9 @@ public sealed class PaneActionsTests
             Assert.Equal("OpenFailed", error.GetProperty("error_class").GetString());
 
             string message = error.GetProperty("message").GetString()!;
-            Assert.Contains("no application is associated", message);
+
+            // Owner decision 159A, on review (004 T229): exactly the failure's own message, masked, on these tabs.
+            Assert.Equal("no application is associated with " + Redaction.Mask, message);
             Assert.DoesNotContain(Secret, message);
             world.AssertNothingPostedContains(Secret);
         }

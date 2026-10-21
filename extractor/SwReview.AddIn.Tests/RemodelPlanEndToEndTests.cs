@@ -322,6 +322,33 @@ public sealed class RemodelPlanEndToEndTests
     }
 
     /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's M1 - a guard). In the real chain a plan's own close
+    /// at the plan, while Start is switched off, is told as every session's ending is (T167), so the host marks the plan's
+    /// session ended as well as closed at the plan. Only the rule that an ended session loses no plan closed at the plan
+    /// (<c>RemodelHost.IsLostPlan</c>) keeps such a plan from being told lost the moment it is made: the page hears nothing
+    /// of a lost plan, and `init` says none is. The host's own tests close no session this way - their close reports no
+    /// ending - so this case is that rule's pin.
+    /// </summary>
+    [Fact]
+    public void AStartOffPlansOwnCloseInTheRealChainNeverTellsItLost()
+    {
+        using (var world = new PlanWorld())
+        {
+            world.Receive("remodel.plan", "p1");
+            world.Reply("remodel.planned", "p1");
+
+            Assert.True(world.Host!.LatestRun!.SessionClosedAtPlan);
+            Assert.True(world.Host.LatestRun.SessionEnded);
+            Assert.DoesNotContain(
+                world.PostedSince(0), message => message.GetProperty("type").GetString() == "remodel.plan_lost");
+            world.Receive("ready", "r1");
+            Assert.Equal(
+                JsonValueKind.Null,
+                world.Reply("init", "r1").GetProperty("latest_run").GetProperty("plan_lost").ValueKind);
+        }
+    }
+
+    /// <summary>
     /// Owner decision 155A (004 T191): the run report reads `remodel.open`'s completed request line in the
     /// run's `remodel.log` as a request whose calls name no document - `target=(none)`, the line the
     /// report's own fixture of it carries (`test_remodel_report.py`, `OPEN_LINE`) - because every allowlisted

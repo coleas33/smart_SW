@@ -481,19 +481,22 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>
     /// Owner decision 159A: `BridgeUnavailable` when the close of an earlier plan waiting for Start failed with no
-    /// named refusal (004 T173), where the sentence ended with the failure's own message.
+    /// named refusal (004 T173), where the sentence ended with the failure's own message. On review (the mutation
+    /// review's M3 and M6): every close of that plan that was not answered, the bridge's own `BridgeUnavailable` and a
+    /// close that never reached the bridge included, in words that say what is known rather than who did not answer.
     /// </summary>
     public const string EarlierPlanNotClosedMessage =
-        "SOLIDWORKS did not answer the close of the earlier plan, so that plan is left as it was and no new plan "
-        + "was made. " + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
+        "Closing the earlier plan's copy was not confirmed, so that plan is left as it was and no new plan was made. "
+        + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
 
     /// <summary>
     /// Owner decision 159A: the run's last word when the close of its session was not answered (004 T180), where it
-    /// ended with the failure's own message.
+    /// ended with the failure's own message. On review (the mutation review's M6): a close that never reached the bridge
+    /// included, in words that say what is known rather than who did not answer.
     /// </summary>
     public const string RunCloseNotAnsweredMessage =
-        "The run ended, but SOLIDWORKS did not answer its close, so the copy may still be open; the report and the "
-        + "saved artifacts are kept. " + PartNotChanged + " " + PressViewLog;
+        "The run ended, but closing its copy was not confirmed, so the copy may still be open in SOLIDWORKS; the report "
+        + "and the saved artifacts are kept. " + PartNotChanged + " " + PressViewLog;
 
     /// <summary>
     /// Owner decision 159A: `OpenFailed` for Open copy - SOLIDWORKS would not open or activate the copy, or answered
@@ -849,13 +852,15 @@ public sealed class RemodelHost : IDisposable
     /// <see cref="PostStatus(string, string)"/>, marked as the add-in's own word on the backend when <paramref name="lifecycle"/>
     /// (owner decision 145A). Owner decision 159A (004 research R19): that word's `error` - the backend did not start, a
     /// first start or a settings restart once the old backend had stopped - carries the failure, which can end in the
-    /// backend's log's path (decision 150A); this tab tells it in <see cref="BackendDidNotStartMessage"/>, the failure logged.
+    /// backend's log's path (decision 150A); this tab tells it in <see cref="BackendDidNotStartMessage"/>. On review: the
+    /// failure is not logged here. Those words send the engineer to the Review tab, which shows it whole, and the add-in's
+    /// own report of a first start that failed logs it (<c>SwReviewAddIn.StartBackend</c>); a second line was the same
+    /// failure twice.
     /// </summary>
     public void PostStatus(string stage, string message, bool lifecycle)
     {
         if (lifecycle && string.Equals(stage, "error", StringComparison.Ordinal))
         {
-            Log("the backend's start", message);
             _actions.PostStatus(stage, BackendDidNotStartMessage, lifecycle);
             return;
         }
@@ -1670,7 +1675,9 @@ public sealed class RemodelHost : IDisposable
     ///
     /// A close the bridge could not answer - refused as <c>BridgeUnavailable</c>, or failed with no
     /// named refusal at all - refuses the new plan with <c>BridgeUnavailable</c> and leaves the
-    /// earlier plan as it was (lane D's default, 2026-09-27). A close that answered with what it
+    /// earlier plan as it was (lane D's default, 2026-09-27); since owner decision 159A, on review, so does
+    /// a close that never reached the bridge (<see cref="CloseNotAnsweredClasses"/>), with its own class, and
+    /// each in <see cref="EarlierPlanNotClosedMessage"/>. A close that answered with what it
     /// left - any other named refusal - lets the new plan go ahead: the routine clears the session
     /// whatever it left, and what it left reaches the page as T167's one status error through
     /// <c>ToolServiceOptions.RemodelSessionEnded</c>, which is told every ending, so nothing is
@@ -1688,18 +1695,14 @@ public sealed class RemodelHost : IDisposable
         if (HoldsItsSession(waiting, attachment)
             && CloseSession(pipeline, waiting.RunDirectory, out Exception? notAnswered) == CloseAnswer.NotAnswered)
         {
-            if (notAnswered is RemodelRefusal refusal)
-            {
-                SendRefusal(id, refusal, "remodel.plan");
-            }
-            else
-            {
-                // Owner decision 159A (004 research R19): the close's failure, which ended this sentence, can
-                // name the bridge's pipe; it goes to the log.
-                Log("remodel.plan, the earlier plan's close", notAnswered!);
-                _actions.SendError(id, BridgeUnavailableClass, EarlierPlanNotClosedMessage, retryable: true);
-            }
-
+            // Owner decision 159A (004 research R19): the close's failure, which can name the bridge's pipe, goes to
+            // the log. On review (the mutation review's M3): whoever did not answer - the bridge, its refusal carried
+            // by the backend, or a close that never reached it - the earlier plan is left as it was, and the tab says
+            // so in one sentence; the class the close was refused with is kept, and any other failure is
+            // `BridgeUnavailable`. Pressing again sends the close again.
+            Log("remodel.plan, the earlier plan's close", notAnswered!);
+            string errorClass = notAnswered is RemodelRefusal refusal ? refusal.ErrorClass : BridgeUnavailableClass;
+            _actions.SendError(id, errorClass, EarlierPlanNotClosedMessage, retryable: true);
             return false;
         }
 
@@ -1723,11 +1726,31 @@ public sealed class RemodelHost : IDisposable
         AnsweredWithWhatItLeft,
 
         /// <summary>
-        /// <c>BridgeUnavailable</c>, or a failure with no named refusal at all: the bridge may still
-        /// hold the session.
+        /// <c>BridgeUnavailable</c>, a close that never reached the bridge's routine
+        /// (<see cref="CloseNotAnsweredClasses"/>), or a failure with no named refusal at all: the bridge
+        /// may still hold the session.
         /// </summary>
         NotAnswered,
     }
+
+    /// <summary>
+    /// The classes a close is refused with when the bridge's end-of-session routine may not have run: the
+    /// bridge did not answer (<c>BridgeUnavailable</c>); and, owner decision 159A on review (the mutation
+    /// review's M6, older than 159A), the close never reached it - the add-in's client gave up on the review
+    /// backend after its 30 seconds while the backend waited 60 for the bridge, or no backend was running
+    /// (<c>BackendUnavailable</c>), the backend's answer could not be read (<c>HttpError</c>,
+    /// <c>BadResponse</c>), or the backend refused the request before asking the bridge (<c>InvalidRunDir</c>,
+    /// <c>InvalidRequest</c>). Any other named refusal is the routine's answer with what it left.
+    /// </summary>
+    private static readonly HashSet<string> CloseNotAnsweredClasses = new HashSet<string>(StringComparer.Ordinal)
+    {
+        BridgeUnavailableClass,
+        "BackendUnavailable",
+        "HttpError",
+        "BadResponse",
+        "InvalidRunDir",
+        "InvalidRequest",
+    };
 
     /// <summary>
     /// One close of the session the bridge holds for <paramref name="runDirectory"/>'s plan, through
@@ -1745,8 +1768,7 @@ public sealed class RemodelHost : IDisposable
             pipeline.CloseCopy(runDirectory);
             return CloseAnswer.Closed;
         }
-        catch (RemodelRefusal refusal)
-            when (!string.Equals(refusal.ErrorClass, BridgeUnavailableClass, StringComparison.Ordinal))
+        catch (RemodelRefusal refusal) when (!CloseNotAnsweredClasses.Contains(refusal.ErrorClass))
         {
             return CloseAnswer.AnsweredWithWhatItLeft;
         }
@@ -2082,7 +2104,10 @@ public sealed class RemodelHost : IDisposable
         {
             // The page was told the run began, and none is coming: it is told the run is over by
             // the status a run's end posts, and the failure is answered as any failure is - in this
-            // tab's words, its message logged (owner decision 159A).
+            // tab's words, its message logged (owner decision 159A). The run is let go of first, under
+            // the lock that frees the host (159A, on review), so the stop when the copy goes away is
+            // never told after that last word.
+            LetGoOfARunNeverHandedOn(run);
             PostStatus("error", PageWords(failure));
             throw;
         }
@@ -2093,7 +2118,7 @@ public sealed class RemodelHost : IDisposable
                 // Nothing runs: what Start set is undone, the plan stays startable, and nothing is
                 // left in flight for Stop.
                 run.Phase = phaseBefore;
-                _active = null;
+                LetGoOfARunNeverHandedOn(run);
                 // Decision 24A: a re-attach or a teardown that took the plan's session while Start
                 // held the host was not announced then; it is now, as the end of a plan announces it.
                 FreeTheHost();
@@ -3035,6 +3060,24 @@ public sealed class RemodelHost : IDisposable
             stops = new List<string?>(_pendingStops);
             _pendingStops.Clear();
             return held;
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 research R19.9; the race review's finding R3): lets go of a run Start set in
+    /// flight and never handed to its scheduler, under the lock that frees the host, and takes back a stop asked for
+    /// meanwhile. The stop when the copy goes away is decided under that lock on SOLIDWORKS' thread: it either reached the
+    /// run before - told before the run's last word, and taken back here, so the plan, which stays startable, carries no
+    /// stop into its next run - or finds no run in flight. Let go of outside the lock, after the run's last word, it was
+    /// told after that word, and its flag stopped the next run before it began, answered `remodel.stopped` unasked. Called
+    /// before that last word is told, and again as Start frees the host; the second finds nothing to do.
+    /// </summary>
+    private void LetGoOfARunNeverHandedOn(RemodelRun run)
+    {
+        lock (_endingLock)
+        {
+            _active = null;
+            run.WithdrawStop();
         }
     }
 

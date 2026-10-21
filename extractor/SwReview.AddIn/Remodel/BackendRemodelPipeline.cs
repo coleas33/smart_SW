@@ -216,14 +216,26 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
 
     public void CloseCopy(string runDirectory)
     {
-        // Called on the host's way to deleting `copy/`, including on paths where the backend
-        // never started or the tool service never attached. There is nothing open to close in
-        // either case, and the folder is what the engineer asked to be rid of: a close that
-        // cannot be made must not stop the delete.
+        // Called on the host's way to deleting `copy/`, including on paths where the tool service
+        // never attached, and the folder is what the engineer asked to be rid of: the host deletes
+        // it whatever the close answers. With no tool service listening there is no bridge to hold
+        // a session - its teardown ended any - so there is nothing to close.
         BridgeConfig? bridge = _remodelBridge();
-        if (_endpoint() == null || bridge == null)
+        if (bridge == null)
         {
             return;
+        }
+
+        // Owner decision 159A, on review (the mutation review's M6): a backend that is not running
+        // cannot carry the close, and the bridge may still hold the session - one that stopped after
+        // the open leaves it so - so the close is refused as not sent, which the host reads as a close
+        // that was not answered. It was a quiet no-op, which the host took for done.
+        if (_endpoint() == null)
+        {
+            throw new RemodelRefusal(
+                "BackendUnavailable",
+                "the review backend is not running, so the close was not sent.",
+                retryable: true);
         }
 
         try
