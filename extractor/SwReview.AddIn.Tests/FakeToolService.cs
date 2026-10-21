@@ -59,7 +59,18 @@ internal sealed class FakeToolService : IToolService
     /// <summary>What the gate wrote into this service's own tool-service log.</summary>
     public List<string> LogLines { get; } = new List<string>();
 
-    public void WriteLog(string line) => LogLines.Add(line);
+    /// <summary>
+    /// Runs inside <see cref="WriteLog"/> with the line, before it is recorded, on the gate's thread: a
+    /// real log takes a lock of its own and appends to a file there (owner decision 158A, on its review:
+    /// S4).
+    /// </summary>
+    public Action<string>? DuringWriteLog { get; set; }
+
+    public void WriteLog(string line)
+    {
+        DuringWriteLog?.Invoke(line);
+        LogLines.Add(line);
+    }
 
     /// <summary>Every folder <see cref="BindRemodelRun"/> was handed, in order (004 T158).</summary>
     public List<string> Bound { get; } = new List<string>();

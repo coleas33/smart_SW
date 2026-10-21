@@ -1196,7 +1196,8 @@ public sealed class ToolServiceWiringTests
 
     /// <summary>
     /// Each hold is its own: letting one go twice lets it go once, and the bridge stays held until
-    /// every hold is let go.
+    /// every hold is let go - two of one kind too, as two chats' turn calls are (owner decision 158A,
+    /// on its review: S2).
     /// </summary>
     [Fact]
     public void LettingAHoldGoTwiceLetsItGoOnce()
@@ -1204,8 +1205,8 @@ public sealed class ToolServiceWiringTests
         var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
-        IDisposable first = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
-        IDisposable second = gate.HoldAttachment(ToolServiceHolder.Remodel)!;
+        IDisposable first = gate.HoldAttachment(ToolServiceHolder.TurnCall)!;
+        IDisposable second = gate.HoldAttachment(ToolServiceHolder.TurnCall)!;
         first.Dispose();
         first.Dispose();
         world.DocumentPath = @"C:\models\bracket.SLDPRT";
@@ -1374,7 +1375,9 @@ public sealed class ToolServiceWiringTests
     /// A hold ignored past the limit is said once, in the tool-service log of the attachment it held -
     /// after the line its switch was skipped with - naming its holder's kind and how long it had held,
     /// in hours, minutes and seconds, and naming no path and no document: what holds, never what it
-    /// holds for.
+    /// holds for. It says the hold no longer holds back the follow by itself, which is true of every
+    /// holder - the busy question still keeps the bridge under a turn the backend has marked running,
+    /// or a remodel plan or run in progress (owner decision 158A, on its review).
     /// </summary>
     [Theory]
     [InlineData(ToolServiceHolder.ReviewSession, "a review session's start")]
@@ -1398,7 +1401,7 @@ public sealed class ToolServiceWiringTests
         Assert.StartsWith(@"not re-attaching to C:\models\bracket.SLDPRT: ", first.LogLines[0], StringComparison.Ordinal);
         Assert.Equal(
             "ignoring a hold by " + kind + ": held for 1:01:01, longer than the 1:00:00 limit, so it no longer "
-            + "holds back following the active document; its work is not stopped",
+            + "holds back following the active document by itself; its work is not stopped",
             first.LogLines[1]);
         Assert.DoesNotContain(@"C:\", first.LogLines[1], StringComparison.Ordinal);
         Assert.Empty(world.Services[1].LogLines);
@@ -1406,10 +1409,36 @@ public sealed class ToolServiceWiringTests
     }
 
     /// <summary>
+    /// ...in whole hours, minutes and seconds, cut and not rounded: a hold held a moment short of two
+    /// hours says 1:59:59, neither 2:00:00 nor 2:59:59 (owner decision 158A, on its review: RC6).
+    /// </summary>
+    [Fact]
+    public void HowLongAHoldHeldIsSaidCutNotRounded()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+        IDisposable hold = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        world.Clock = TimeSpan.FromHours(2) - TimeSpan.FromMilliseconds(100);
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, world.Starts);
+        Assert.StartsWith(
+            "ignoring a hold by a review session's start: held for 1:59:59, longer than the 1:00:00 limit, ",
+            Assert.Single(first.LogLines),
+            StringComparison.Ordinal);
+        hold.Dispose();
+    }
+
+    /// <summary>
     /// ...said once, though the follow it no longer holds back stays owed. Past the limit a look asks the
-    /// busy question as for no hold, and while that answers busy - a turn running, a plan or a run in
-    /// progress - nothing is re-attached and a look is asked for again a poll later, saying nothing more:
-    /// ignoring a hold changes the hold, not the busy question. A day's hold says its hours past 24.
+    /// busy question as for no hold, and while that answers busy - a turn the backend has marked running,
+    /// a plan or a run in progress - nothing is re-attached and a look is asked for again a poll later,
+    /// saying nothing more: ignoring a hold changes the hold, not the busy question. A day's hold says
+    /// its hours past 24.
     /// </summary>
     [Fact]
     public void AnIgnoredHoldIsSaidOnceWhileTheBusyQuestionKeepsTheFollowOwed()
@@ -1483,9 +1512,10 @@ public sealed class ToolServiceWiringTests
 
     /// <summary>
     /// A holder that lets go after its hold was ignored lets go of nothing more - not of another hold,
-    /// which a count of holds would have let go of in its place - and is said nowhere, its line written
-    /// when it was ignored. Letting it go twice does nothing either. The other hold holds until it is let
-    /// go, and the follow is made then.
+    /// which a count of holds would have let go of in its place, nor of another of its kind, as two
+    /// chats' turn calls are (owner decision 158A, on its review: S2) - and is said nowhere, its line
+    /// written when it was ignored. Letting it go twice does nothing either. The other hold holds until
+    /// it is let go, and the follow is made then.
     /// </summary>
     [Fact]
     public void AHoldLetGoAfterItWasIgnoredLetsGoOfNoOtherHold()
@@ -1494,7 +1524,7 @@ public sealed class ToolServiceWiringTests
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
         FakeToolService first = world.Services[0];
-        IDisposable stuck = gate.HoldAttachment(ToolServiceHolder.Remodel)!;
+        IDisposable stuck = gate.HoldAttachment(ToolServiceHolder.TurnCall)!;
         world.Clock = ToolServiceGate.HoldLimit + TimeSpan.FromSeconds(1);
         IDisposable working = gate.HoldAttachment(ToolServiceHolder.TurnCall)!;
         world.DocumentPath = @"C:\models\bracket.SLDPRT";
@@ -1504,7 +1534,7 @@ public sealed class ToolServiceWiringTests
         Assert.Equal(1, world.Starts);
         Assert.Equal(0, world.BusyQuestions);
         Assert.Equal(2, first.LogLines.Count);
-        Assert.StartsWith("ignoring a hold by a Remodel plan or run: held for 1:00:01, ", first.LogLines[0], StringComparison.Ordinal);
+        Assert.StartsWith("ignoring a hold by a page call that starts a turn: held for 1:00:01, ", first.LogLines[0], StringComparison.Ordinal);
         Assert.StartsWith(@"not re-attaching to C:\models\bracket.SLDPRT: ", first.LogLines[1], StringComparison.Ordinal);
 
         stuck.Dispose();
@@ -1601,6 +1631,54 @@ public sealed class ToolServiceWiringTests
     }
 
     /// <summary>
+    /// The line is written once the gate's lock is let go, as the gate's other lines are (owner decision
+    /// 158A, on its review: S4). A tool-service log takes a lock of its own and appends to a file, and the
+    /// gate's lock is one the SOLIDWORKS application thread takes on every document change, so nothing is
+    /// written under it (155A's lesson, 004 research R18). So work asking for a hold on another thread
+    /// while the line is being written gets one at once - a hold taken since the follow noted the holds,
+    /// which keeps the bridge as any does (152A's X2) - and the follow is made once it is let go.
+    /// </summary>
+    [Fact]
+    public void AnIgnoredHoldsLineIsWrittenWithTheGatesLockLetGo()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+        IDisposable stuck = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        IDisposable? asked = null;
+        bool answered = false;
+        first.DuringWriteLog = line =>
+        {
+            if (!line.StartsWith("ignoring a hold ", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var work = new Thread(() => asked = gate.HoldAttachment(ToolServiceHolder.TurnCall)) { IsBackground = true };
+            work.Start();
+            answered = work.Join(TimeSpan.FromSeconds(15));
+        };
+        world.Clock = ToolServiceGate.HoldLimit + TimeSpan.FromSeconds(1);
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.True(answered, "a hold asked for on another thread while the line was written waited for the gate's lock.");
+        Assert.NotNull(asked);
+        Assert.Equal(1, world.Starts);
+        Assert.False(first.Disposed);
+        Assert.Equal(1, world.LooksWaiting);
+
+        asked!.Dispose();
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        stuck.Dispose();
+    }
+
+    /// <summary>
     /// The gate's own clock - the add-in's, every other case here moving its own - ages a hold with
     /// time: under a limit set short for the case, a hold a quarter of a second old no longer holds back
     /// a follow, where under the gate's own limit, an hour, the same hold still does.
@@ -1635,31 +1713,84 @@ public sealed class ToolServiceWiringTests
     }
 
     /// <summary>
-    /// The limit is an hour: three times the longest hold any holder makes and more. A remodel run's
-    /// executor reads its twenty minutes of wall clock before each change (004, <c>RemodelLimits</c>),
-    /// and its hold also covers its last change, its verifying dump and its close; a review session's
-    /// start holds until `POST /sessions` gives up, the backend client's 30 seconds; a page call that
-    /// starts a turn, the proxy's 120; a plan, its calls, the re-modeler's client's 30 each. So a working
-    /// hold never meets it - and a bound raised past a third of it fails here, for the limit to be weighed
-    /// again.
+    /// The gate's own clock is a stopwatch of its own, read from its source: a clock that only goes
+    /// forward, so a change of the system's time neither ages a hold nor keeps one young. Any clock that
+    /// moves passes <see cref="TheGatesOwnClockAgesAHoldWithTime"/>, the system's time among them (owner
+    /// decision 158A, on its review: RE4).
     /// </summary>
     [Fact]
-    public void TheHoldLimitIsAnHourAndThreeTimesEveryHoldersOwnBound()
+    public void TheGatesOwnClockIsAStopwatchOfItsOwn()
+    {
+        string built = AddInSource(
+            Path.Combine("ToolService", "ToolServiceGate.cs"), "public ToolServiceGate(", "public PageDocument? DocumentServedBy(");
+
+        Assert.Contains("Stopwatch ownClock = Stopwatch.StartNew();", built, StringComparison.Ordinal);
+        Assert.Contains("_clock = clock ?? (() => ownClock.Elapsed);", built, StringComparison.Ordinal);
+        Assert.DoesNotContain("DateTime", built, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A limit of no time, or less, is refused when the gate is built - as a poll the settings restart's
+    /// watcher could not wait out is (<c>DeferredRestart</c>) - rather than ignoring every hold the moment
+    /// it is taken (owner decision 158A, on its review: R2).
+    /// </summary>
+    [Theory]
+    [InlineData(0L)]
+    [InlineData(-1L)]
+    [InlineData(-TimeSpan.TicksPerHour)]
+    public void AHoldLimitOfNoTimeOrLessIsRefusedWhenTheGateIsBuilt(long ticks)
+    {
+        var world = new GateWorld { HoldLimit = TimeSpan.FromTicks(ticks) };
+
+        ArgumentOutOfRangeException refused = Assert.Throws<ArgumentOutOfRangeException>(() => world.Gate());
+
+        Assert.Equal("holdLimit", refused.ParamName);
+    }
+
+    /// <summary>...and the shortest limit, a tick, is taken: a hold held two ticks no longer holds back a follow.</summary>
+    [Fact]
+    public void AHoldLimitOfATickIsTaken()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", HoldLimit = TimeSpan.FromTicks(1) };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        IDisposable hold = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        world.Clock = TimeSpan.FromTicks(2);
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, world.Starts);
+        hold.Dispose();
+    }
+
+    /// <summary>
+    /// The limit is an hour, far past the holds the busy question cannot see while they hold: a review
+    /// session's start, which holds until `POST /sessions` gives up, the backend client's 30 seconds, and
+    /// a page call that starts a turn, which holds until the proxy's 120 - each read from its own
+    /// constant, so a bound raised toward the limit fails here, for the limit to be weighed again. A
+    /// Remodel plan or run is bounded by no time: its hold covers the model's judgement turn, which only
+    /// its steps bound, and a healthy run can outlast the hour; what keeps the bridge under it is the busy
+    /// question, never the limit (<see cref="RemodelHostTests.ThroughTheGateARunHeldPastTheHoldLimitIsStillNotTakenDownUnder"/>,
+    /// <see cref="RemodelHostTests.APlanOrARunTakesItsHoldOnlyOnceTheHostIsBusy"/>). Owner decision 158A,
+    /// on its review (S1): this case first claimed three times a run's twenty minutes, which bound only
+    /// its changes.
+    /// </summary>
+    [Fact]
+    public void TheHoldLimitIsAnHourFarPastTheHoldsTheBusyQuestionCannotSee()
     {
         Assert.Equal(TimeSpan.FromHours(1), ToolServiceGate.HoldLimit);
         var bounds = new Dictionary<string, TimeSpan>
         {
-            ["a remodel run's wall clock"] = TimeSpan.FromMinutes(SwReview.AddIn.Remodel.RemodelLimits.Default.MaxMinutes),
-            ["POST /sessions"] = CallTimeoutOf(typeof(BackendClient)),
+            ["a review session's start, until POST /sessions gives up"] = CallTimeoutOf(typeof(BackendClient)),
             ["a page call that starts a turn"] = CallTimeoutOf(typeof(BackendProxyHandler)),
-            ["a plan's call"] = CallTimeoutOf(typeof(SwReview.AddIn.Remodel.RemodelBackendClient)),
         };
 
         foreach (KeyValuePair<string, TimeSpan> bound in bounds)
         {
             Assert.True(
-                ToolServiceGate.HoldLimit.Ticks >= 3 * bound.Value.Ticks,
-                bound.Key + "'s own bound, " + bound.Value + ", is more than a third of the hold limit.");
+                ToolServiceGate.HoldLimit.Ticks >= 10 * bound.Value.Ticks,
+                bound.Key + "'s own bound, " + bound.Value + ", is more than a tenth of the hold limit.");
         }
     }
 
@@ -1687,7 +1818,8 @@ public sealed class ToolServiceWiringTests
     /// from its source: the one fan-out a document or a configuration change runs asks the gate to
     /// follow by the active document's path alone, and the gate is asked to follow the active document
     /// as it is, its configuration included, from one place only - the review host's request, made
-    /// when a review finds its bridge on another document or configuration.
+    /// when a review finds its bridge on another document or configuration. Asked by a call or handed
+    /// on as a method group alike (owner decision 158A, on its review: RG2); comments are not read.
     /// </summary>
     [Fact]
     public void TheAddInFollowsAConfigurationSwitchOnlyWhenAReviewAsks()
@@ -1699,11 +1831,14 @@ public sealed class ToolServiceWiringTests
             AddInSource("SwReviewAddIn.cs", "private void OnActiveConfigurationChanged(", "private void FollowActiveConfiguration("),
             StringComparison.Ordinal);
 
-        var asked = new Regex(@"\.FollowActiveDocument\(\)", RegexOptions.CultureInvariant);
+        var asked = new Regex(@"\.FollowActiveDocument\b", RegexOptions.CultureInvariant);
         string addIn = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
         var callers = Directory.EnumerateFiles(addIn, "*.cs", SearchOption.AllDirectories)
             .Where(file => !file.Split(Path.DirectorySeparatorChar).Any(part => part == "obj" || part == "bin"))
-            .SelectMany(file => asked.Matches(File.ReadAllText(file)).Cast<Match>().Select(_ => Path.GetFileName(file)))
+            .SelectMany(file => File.ReadAllLines(file)
+                .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+                .SelectMany(line => asked.Matches(line).Cast<Match>())
+                .Select(_ => Path.GetFileName(file)))
             .OrderBy(file => file, StringComparer.Ordinal)
             .ToArray();
         Assert.Equal(new[] { "ReviewHost.cs", "SwReviewAddIn.cs" }, callers);

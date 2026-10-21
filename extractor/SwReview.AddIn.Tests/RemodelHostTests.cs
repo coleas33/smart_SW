@@ -2986,6 +2986,32 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// ...and takes its hold only once the host is busy (owner decision 158A, on its review: S3). So
+    /// whenever the Remodel host holds the tool service, <see cref="RemodelHost.RunInProgress"/> is true,
+    /// and the gate's busy question, which the add-in reads it first in, keeps the bridge under a plan or
+    /// a run whether or not its hold is past the gate's limit: the limit only ever says such a hold, and
+    /// a plan or a run that never ended would hold the follow back through the busy question.
+    /// </summary>
+    [Fact]
+    public void APlanOrARunTakesItsHoldOnlyOnceTheHostIsBusy()
+    {
+        using (var world = new RemodelWorld())
+        {
+            var holds = new CountedHolds();
+            var busyAsTaken = new List<bool>();
+            world.Hold = holds.Take;
+            holds.OnTake = () => busyAsTaken.Add(world.Host.RunInProgress);
+            world.Open();
+
+            world.Receive("remodel.plan", "p1", new { });
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("remodel.started", "s1");
+            Assert.Equal(new[] { true, true }, busyAsTaken.ToArray());
+        }
+    }
+
+    /// <summary>
     /// ...and letting go comes first, so a hold that fails as it is let go must not keep the host
     /// busy - a host left busy holds back every plan, and every settings restart, until SOLIDWORKS
     /// restarts - nor change the press's answer, nor reach a run's own thread, which nothing waits on.

@@ -177,12 +177,12 @@ public enum ToolServiceHolder
 /// only if, under the lock the holds are taken under, none is held and none was taken since it
 /// noted them before its question.
 ///
-/// <b>And a hold holds the bridge for an hour at most</b> (owner decision 158A). Each holder bounds
-/// its own work and lets go when it ends, but a holder that never let go would keep the tool service
-/// on its document for good. A hold held longer than <see cref="HoldLimit"/> no longer holds back a
-/// follow, and is said once in the tool-service log by its holder's kind and how long it held. Its
-/// work is not stopped, and the busy question is asked as for no hold, so a follow still waits for a
-/// turn or a remodel plan or run that is still going.
+/// <b>And a hold by itself holds the bridge for an hour at most</b> (owner decision 158A). Each holder
+/// lets go when its work ends, but one that never let go would keep the tool service on its document
+/// for good. A hold held longer than <see cref="HoldLimit"/> no longer holds back a follow by itself,
+/// and is said once in the tool-service log by its holder's kind and how long it held. Its work is not
+/// stopped, and the busy question is asked as for no hold, so a follow still waits for a turn the
+/// backend has marked running, or a remodel plan or run in progress - which the limit does not bound.
 ///
 /// Thread-safe, because it is not called from one thread: the pane's calls come from the
 /// application thread and the start itself completes on a worker.
@@ -199,21 +199,24 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     public static readonly TimeSpan FollowPoll = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// How long a hold holds back a follow (owner decision 158A): an hour. A hold held longer no
-    /// longer does - the look that finds it so asks the busy question as for no hold - and is said once
-    /// in the tool-service log, by its holder's kind and how long it held. Nothing else is done to it:
-    /// its work is not stopped, and letting it go later lets go of nothing more.
+    /// How long a hold by itself holds back a follow (owner decision 158A): an hour. A hold held longer
+    /// no longer does - the look that finds it so asks the busy question as for no hold - and is said
+    /// once in the tool-service log, by its holder's kind and how long it held. Nothing else is done to
+    /// it: its work is not stopped, and letting it go later lets go of nothing more.
     ///
-    /// <b>Why an hour.</b> Every holder bounds its own hold, and a remodel run's is the longest: its
-    /// executor reads its twenty minutes of wall clock (004, <see cref="RemodelLimits"/>) before each
-    /// change, and the hold also covers the last change, the verifying dump and the session's close. A
-    /// review session's start holds until `POST /sessions` gives up, after the backend client's 30
-    /// seconds; a page call that starts a turn, the proxy's 120; a plan, its calls of 30 seconds each and
-    /// its dump. An hour is three times the longest, so a working hold never meets it, and a holder that
-    /// never lets go holds the follow back an hour and a poll, not for ever. A remodel plan or run is
-    /// covered by that margin and not exempt: past it, the add-in's busy question still reads one in
-    /// progress first, so the bridge is not taken down under it - an exemption would protect nothing
-    /// more, and would leave one holder that could hold the follow back for ever.
+    /// <b>Why an hour.</b> The limit is for the holds the busy question cannot see while they hold: a
+    /// review session's start, which holds until `POST /sessions` gives up, after the backend client's
+    /// 30 seconds, and a page call that starts a turn, which holds until the proxy's 120 seconds, before
+    /// the backend has marked its turn running. An hour is thirty times the longer of the two, so neither
+    /// meets it working, and one that never let go holds the follow back an hour and a poll, not for
+    /// ever. A remodel plan or run is bounded by no time: its hold covers the model's judgement turn,
+    /// which only its steps bound, its twenty minutes of changes (004, <see cref="RemodelLimits"/>), the
+    /// after-dump, the verification, the save and the close, so a healthy one can outlast the hour, and
+    /// its hold is then said. But the Remodel host is busy whenever it holds, and the add-in's busy
+    /// question reads a plan or a run in progress first, so the bridge is never taken down under one,
+    /// past the limit or not, and one that never ended would hold the follow back through the busy
+    /// question, which this limit does not bound. A plan or a run is not exempt: an exemption would
+    /// change only the line (on the decision's review: S1, S3).
     /// </summary>
     public static readonly TimeSpan HoldLimit = TimeSpan.FromHours(1);
 
@@ -311,7 +314,7 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// under the gate's lock, so it must not wait; injectable so the tests are deterministic.</param>
     /// <param name="holdLimit">How long a hold holds back a follow: <see cref="HoldLimit"/>, which the
     /// add-in keeps. Injectable so a case can see the gate's own clock age a hold in a quarter of a
-    /// second.</param>
+    /// second; one of no time or less is refused.</param>
     public ToolServiceGate(
         Func<PageDocument?> activeDocument,
         Func<IToolService> start,
@@ -336,6 +339,15 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         _later = later ?? (work => Task.Delay(FollowPoll).ContinueWith(_ => work(), TaskScheduler.Default));
         Stopwatch ownClock = Stopwatch.StartNew();
         _clock = clock ?? (() => ownClock.Elapsed);
+
+        // Refused here, as a poll the restart's watcher could not wait out is (DeferredRestart), rather
+        // than ignoring every hold the moment it is taken (owner decision 158A, on its review: R2).
+        if (holdLimit <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(holdLimit), holdLimit, "a hold limit must be longer than no time at all.");
+        }
+
         _holdLimit = holdLimit ?? HoldLimit;
     }
 
@@ -419,7 +431,7 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// lets it go; disposing it again does nothing.
     ///
     /// <b>For an hour at most</b> (owner decision 158A): a hold held longer than <see cref="HoldLimit"/>,
-    /// measured from when it was taken, no longer holds back a follow, and is said once in the
+    /// measured from when it was taken, no longer holds back a follow by itself, and is said once in the
     /// tool-service log by <paramref name="holder"/>'s kind and how long it held - never a path. Its work
     /// is not stopped, and letting it go afterwards lets go of nothing more.
     /// </summary>
@@ -511,12 +523,14 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
 
     /// <summary>
     /// Owner decision 158A: the tool-service log's line for a hold ignored past the limit - what held, in
-    /// fixed words, and for how long, and never a path or a document's name.
+    /// fixed words, and for how long, and never a path or a document's name. "By itself": the busy
+    /// question still keeps the bridge under a turn the backend has marked running, or a remodel plan or
+    /// run in progress, so the line is true of every holder (on its review).
     /// </summary>
     private string IgnoredLine(ToolServiceHolder holder, TimeSpan held) =>
         "ignoring a hold by " + HolderWords(holder) + ": held for " + HoursMinutesSeconds(held)
         + ", longer than the " + HoursMinutesSeconds(_holdLimit) + " limit, so it no longer holds back "
-        + "following the active document; its work is not stopped";
+        + "following the active document by itself; its work is not stopped";
 
     private static string HolderWords(ToolServiceHolder holder) => holder switch
     {
