@@ -2735,7 +2735,7 @@ public sealed class ReviewHostTests
     // ---- owner decision 154A: a run root on a share or reached through a link -----------
 
     /// <summary>
-    /// Owner decision 154A (feature 002 T168): a Review-tab start - the preparation the add-in starts every
+    /// Owner decision 154A (feature 002 T191): a Review-tab start - the preparation the add-in starts every
     /// review with, a review, and a Retry, which reviews into a new run folder - refuses a run root the run
     /// root rule refuses, up front, in the Review tab's words: what the root is, that nothing was started,
     /// and the way on, a local folder chosen for runs in this tab's Settings. Nothing is read of the model, no
@@ -2880,7 +2880,7 @@ public sealed class ReviewHostTests
     }
 
     /// <summary>
-    /// The owner's follow-up to decision 154A (feature 002 T171): a run's folder is made under the run root in
+    /// The owner's follow-up to decision 154A (feature 002 T194): a run's folder is made under the run root in
     /// force - the one the backend was last started with - and not under a folder chosen in a save whose
     /// restart failed: no backend was started with it, and a backend refuses a run folder outside the run root
     /// it was started with.
@@ -2916,7 +2916,7 @@ public sealed class ReviewHostTests
     }
 
     /// <summary>
-    /// The owner's follow-up to decision 154A (feature 002 T171, added when mutations H16 and H17 survived):
+    /// The owner's follow-up to decision 154A (feature 002 T194, added when mutations H16 and H17 survived):
     /// while a folder chosen for runs waits for the restart that brings it in - here, after one that failed -
     /// a review start judges the run root in force, the one its folder would be made under, and not the folder
     /// chosen; and `init` names the run root in force as `run_root`, beside the settings' own.

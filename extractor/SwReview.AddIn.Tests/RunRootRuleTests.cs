@@ -16,7 +16,7 @@ using Xunit;
 namespace SwReview.AddIn.Tests;
 
 /// <summary>
-/// Owner decision 154A (feature 002 T166, research 154A): a run root is acceptable only when it is a local
+/// Owner decision 154A (feature 002 T189, research 154A): a run root is acceptable only when it is a local
 /// folder reached by its own path. The backend writes only into a local folder and refuses a UNC or device
 /// path for every route, and it resolves the run folder it is sent, following a junction, a symbolic link, a
 /// substituted drive or a mapped network drive, where the add-in binds its own spelling - so under a run root

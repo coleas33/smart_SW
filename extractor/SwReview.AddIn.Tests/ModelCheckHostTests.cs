@@ -544,7 +544,7 @@ public sealed class ModelCheckHostTests
     // ---- owner decision 154A: a run root on a share or reached through a link -----------
 
     /// <summary>
-    /// Owner decision 154A (feature 002 T168): `check.start` refuses a run root the run root rule refuses,
+    /// Owner decision 154A (feature 002 T191): `check.start` refuses a run root the run root rule refuses,
     /// first - before the document is asked about - in the Model check tab's words, which its page shows
     /// whole: what the root is, that nothing was checked, and the way on, a local folder chosen for runs in
     /// Settings on the Review tab, since this page has none (the reviews' F5), and Model check pressed again.

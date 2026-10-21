@@ -771,12 +771,12 @@ public sealed class PageMessageTests
     // ---- owner decision 154A and its follow-up: the run root in Settings -------------------
 
     /// <summary>
-    /// The owner's follow-up to decision 154A (feature 002 T171, "A Field + don't block"): a save never
+    /// The owner's follow-up to decision 154A (feature 002 T194, "A Field + don't block"): a save never
     /// refuses other settings because of the run root. With a refused run root in force and none chosen - the
     /// page sent no folder, or the one in force - the save goes through as any save does: every setting is
     /// written, the backend is restarted, the run root in force stays, and the answer also says the run root
     /// is refused, in the rule's words for the root left in force, with the way on and no path. The send box
-    /// saves as it always did. Changed deliberately from decision 154A's first answer (T168), which refused
+    /// saves as it always did. Changed deliberately from decision 154A's first answer (T191), which refused
     /// the whole save and the box, so that no key or model could be saved until the file was edited by hand.
     /// </summary>
     [Theory]
@@ -824,7 +824,7 @@ public sealed class PageMessageTests
     /// A settings file that names no run root holds the default, Documents\SwReview\runs: under a Documents
     /// on a mapped drive it is refused, and a save goes through all the same - the default written into the
     /// file, as every save writes the run root in force - and its answer says the run root is refused.
-    /// Changed deliberately from decision 154A's first answer (T168), which refused the save and wrote nothing.
+    /// Changed deliberately from decision 154A's first answer (T191), which refused the save and wrote nothing.
     /// </summary>
     [Fact]
     public void ASaveUnderARefusedDefaultRunRootGoesThroughAndSaysSo()

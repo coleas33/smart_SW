@@ -6,7 +6,7 @@ using Xunit;
 namespace SwReview.AddIn.Tests;
 
 /// <summary>
-/// The owner's follow-up to decision 154A (feature 002 T171): the run root in force is the one the running
+/// The owner's follow-up to decision 154A (feature 002 T194): the run root in force is the one the running
 /// backend was started with - the review host's <c>RunRoot</c> - and every tab makes and finds its run folders
 /// under it. The backend refuses a run folder outside the run root it was started with, and finds a check or a
 /// review by name under it, so a tab that read the settings saved would, between a save and the restart that

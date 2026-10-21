@@ -223,7 +223,7 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// Owner decision 154A, the owner's follow-up (feature 002 T171): a folder chosen for runs in a save whose
+    /// Owner decision 154A, the owner's follow-up (feature 002 T194): a folder chosen for runs in a save whose
     /// restart a turn holds back comes into force with that restart, not before. Until it is made, the run root
     /// in force is the one the running backend was started with, under which it still accepts a run's folder;
     /// the restart is made with the folder chosen, and brings it in.

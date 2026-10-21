@@ -6,7 +6,7 @@ using Xunit;
 namespace SwReview.AddIn.Tests;
 
 /// <summary>
-/// Owner decision 154A, the owner's follow-up ("A Field + don't block", feature 002 T171): the run root is a
+/// Owner decision 154A, the owner's follow-up ("A Field + don't block", feature 002 T194): the run root is a
 /// field of the Review tab's Settings, against the real page in an offscreen WebView2.
 ///
 /// The field shows the run root the settings name, and a save sends the folder in it - `run_root` on
