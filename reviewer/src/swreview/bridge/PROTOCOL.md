@@ -105,7 +105,7 @@ candidate, so a review without one never pings.
 ## Circuit breaker
 
 `status: "circuit_open"` from the host, or `CIRCUIT_LIMIT` (3) consecutive failures of any
-kind but the two uncounted refusals above, opens the circuit locally: every further call raises `BridgeOpenError` naming the
+kind but the three uncounted refusals above, opens the circuit locally: every further call raises `BridgeOpenError` naming the
 last error without touching the pipe. The host does not recover without a restart, and the
 review is better off continuing offline with honest `failed` coverage. One success resets
 the count (a local trip only - a host that answered `circuit_open` will keep doing so).
