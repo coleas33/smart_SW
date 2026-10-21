@@ -6538,6 +6538,7 @@ public sealed class RemodelHostTests
         new object[] { "Open report: Windows could not open it" },
         new object[] { "Open run folder: Windows could not open it" },
         new object[] { "View log: the log folder could not be made" },
+        new object[] { "View log: Windows could not open it" },
         new object[] { "the restart gate: the restart failed" },
         new object[] { "the add-in: the backend did not start" },
     };
@@ -6721,6 +6722,13 @@ public sealed class RemodelHostTests
                     File.WriteAllText(blocker, "a file where the log folder would be");
                     world.LogFolder = Path.Combine(blocker, "logs");
                     said = blocker;
+                    words = RemodelHost.LogFolderNotOpenedMessage;
+                    world.Receive("log.open", "l1", new { });
+                    AnAnswerIs(world, "l1", "OpenFailed", words);
+                    break;
+                case "View log: Windows could not open it":
+                    said = $"no application is associated with '{world.LogFolder}'";
+                    world.Opener.Failure = new System.ComponentModel.Win32Exception(said);
                     words = RemodelHost.LogFolderNotOpenedMessage;
                     world.Receive("log.open", "l1", new { });
                     AnAnswerIs(world, "l1", "OpenFailed", words);
@@ -7172,6 +7180,34 @@ public sealed class RemodelHostTests
             world.Receive("remodel.start", "s2", new { run_dir = runDir });
             world.Reply("remodel.started", "s2");
             Assert.Equal(1, world.Pipeline.Count("run"));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T208, a guard): only the gate's `BackendUnavailable` that can be pressed again - the
+    /// restart failed, or the backend did not answer whether a turn runs - is told in the tab's own words. The gate's other
+    /// refusals keep the words the review host writes for this tab, which name no path, with their class and flag: a remodel
+    /// run in flight, and the add-in unloading, whose `BackendUnavailable` cannot be pressed again. A turn's is pinned by
+    /// <see cref="APlanTheRestartGateRefusesIsAnsweredWithItsRefusalAndNothingHappens"/>.
+    /// </summary>
+    [Theory]
+    [InlineData("RemodelRunning", true)]
+    [InlineData("BackendUnavailable", false)]
+    public void AGateRefusalThatIsNotTheRestartsKeepsTheReviewHostsWords(string errorClass, bool retryable)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            string words = $"FICT the review host's words for {errorClass}.";
+            world.Options.BeginRun = begin => new BackendRequestException(errorClass, words, retryable);
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal(errorClass, error.GetProperty("error_class").GetString());
+            Assert.Equal(words, error.GetProperty("message").GetString());
+            Assert.Equal(retryable, error.GetProperty("retryable").GetBoolean());
+            Assert.Empty(world.Pipeline.Calls);
         }
     }
 

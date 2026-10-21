@@ -2958,7 +2958,7 @@ public sealed class RemodelHost : IDisposable
         // Owner decision 159A (004 research R19): the gate's `BackendUnavailable` that can be pressed again - the restart
         // the press made or waited for failed, whose failure can end in the backend's log's path (decision 150A), or the
         // backend did not answer whether a turn runs - leaves the backend not restarted with the saved settings, and is
-        // told in this tab's words, its own logged. The gate's other refusals - a turn, a run that cannot be read, the
+        // told in this tab's words, its own logged. The gate's other refusals - a turn, a remodel run in flight, the
         // add-in unloading - keep the words the review host writes for this tab, which name no path.
         if (string.Equals(held.ErrorClass, "BackendUnavailable", StringComparison.Ordinal) && held.Retryable)
         {
