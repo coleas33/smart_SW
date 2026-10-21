@@ -1205,6 +1205,16 @@
 
     var latest = payload.latest_run;
     if (loadLatest && latest && latest.run_dir) {
+      // Owner decision 155A: a run in flight in the host - this page loaded again while it runs - is
+      // shown running, as the page that pressed Start showed it: Stop pressable, and none of the actions
+      // the host refuses while the run holds it. Its terminal status or the answer to Stop ends it, as
+      // for any run. An `init` that says no run is in flight never ends a run this page shows running:
+      // only those two do.
+      if (latest.running === true) {
+        state.running = true;
+        setRunStatus('Running...');
+      }
+
       renderRun(latest.run_dir);
 
       // Decision 24A, amended on review: the host tells a lost plan once, so a page that has

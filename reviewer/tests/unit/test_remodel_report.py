@@ -68,6 +68,7 @@ from swreview.remodel.plan import (
 from swreview.remodel.report import (
     ENGINEER_STOP,
     LOG_FILE_NAME,
+    NO_TARGET,
     REPORT_FILE_NAME,
     SAVE,
     SECTIONS,
@@ -77,6 +78,7 @@ from swreview.remodel.report import (
 )
 from swreview.remodel.scope import Refusal, ScopeSignals
 from swreview.remodel.tolerances import IDENTITY
+from tests.support.contracts import REPO_ROOT
 from tests.support.features import FeatureSpec, feature, fillet_feature, folder
 from tests.support.remodel import remodel_package, scope_signals
 
@@ -829,6 +831,201 @@ def test_one_request_that_wrote_to_two_paths_names_both(tmp_path: Path) -> None:
     run_dir = logged(tmp_path / "two", request_line(f"{COPY_PATH},{other}"))
 
     assert read_log_targets(run_dir) == (COPY_PATH, other)
+
+
+# --- 11. calls that name no document (owner decision 155A) --------------------------------
+
+
+OPEN_LINE = (
+    "[2026-09-16T14:22:05.6074993+00:00] id=1 command=remodel.open status=ok elapsed_ms=56 "
+    "gated=GetOpenDocumentByName,GetSaveFlag,IsOpenedReadOnly,ListExternalFileReferencesCount2,"
+    "GetUserPreferenceToggle,get_CommandInProgress,ISldWorks.SetUserPreferenceToggle,"
+    "ISldWorks.set_CommandInProgress,ISldWorks.OpenDoc7,ICustomPropertyManager.Add3,"
+    "IFeatureManager.EditRollback,GetFeatures,IsRolledBack,IModelDoc2.ForceRebuild3,"
+    "GetWhatsWrongCount,GetType,GetBodies2,IsWeldment,GetSheetMetalFolder,IsMeshBody,"
+    "IsGraphicsBody,Is3DInterconnectFeature,GetImportedFileName,GetConfigurationNames,"
+    "GetTypeName2,GetUnits target=(none)"
+)
+"""`remodel.open`'s completed request line in `remodel.log`, as the tool service writes it
+(`ToolServiceRequestLogger.Format`): captured on 2026-10-20 from the production chain
+`RemodelPlanEndToEndTests` drives - the real dispatcher, gate and recorder over stand-ins for
+SOLIDWORKS - with this fixture's stamp. Every allowlisted call the open makes - the settings it
+changes, the open of the copy, and the copy's tag, rollback and rebuild - is made before the
+bridge holds the run's session, so the line names no document
+(`RemodelGateRecorder.NoTarget`); `RemodelPlanEndToEndTests` pins that it still does."""
+
+
+TEARDOWN_LINE = (
+    "[2026-09-16T14:41:58.0000000+00:00] remodel teardown thread=posted "
+    "reason=tool_service_stopped verified=true tag_removed=true copy_closed=false "
+    "settings_restored=3 settings_outstanding=swWarnSaveUpdateErrors "
+    "gated=ICustomPropertyManager.Delete2,ISldWorks.CloseDoc,ISldWorks.SetUserPreferenceToggle "
+    f"target={COPY_PATH} "
+    'failures="close: COMException: CloseDoc refused; the settings were not all put back: the '
+    "engineer's SOLIDWORKS settings were not all put back: 1 of the four writes failed. The ones "
+    "that landed are back; the rest are still holding the run's value, and the next Restore() "
+    'retries them."'
+)
+"""A teardown line with failures, as `ToolServiceHost.TeardownLine` writes it into the run's
+`remodel.log` when a re-attach or an unload ends the session, mid-run included: captured on
+2026-10-20 from `ToolServiceWiringTests`' seated world - the routine's close refused and one
+setting left - with this fixture's stamp and copy path. Its `failures=` follows the target,
+holds commas and is quoted."""
+
+
+def test_a_teardown_lines_target_is_read_to_its_failures(
+    tmp_path: Path, graded: GradedRun
+) -> None:
+    """Owner decision 155A's review (004 T200): the target field ends where `failures=` begins,
+    as it ends at `refused=` and `error=`. Read to the end of the line instead, a teardown line
+    with failures was two targets of junk - the copy's path run into the failures and split at
+    their commas - and the claim was withdrawn on them."""
+    run_dir = logged(tmp_path / "teardown", OPEN_LINE, *log_lines(), TEARDOWN_LINE)
+
+    targets = read_log_targets(run_dir)
+    text = report(graded, log_targets=targets)
+
+    assert targets == (NO_TARGET, COPY_PATH, COPY_PATH, COPY_PATH)
+    assert "cannot claim" not in text
+    assert "3 of 3 mutating request(s)" in text
+
+
+def test_no_target_is_the_hosts_own_token() -> None:
+    """The report reads the token the tool service writes, one spelling for both sides."""
+    host = REPO_ROOT / "extractor" / "SwReview.AddIn" / "ToolService" / "ToolServiceHost.cs"
+    token = re.search(
+        r'public const string NoTarget = "([^"]+)";', host.read_text(encoding="utf-8")
+    )
+
+    assert token is not None, "ToolServiceHost.cs has no RemodelGateRecorder.NoTarget"
+    assert token.group(1) == NO_TARGET
+
+
+def test_the_open_of_a_run_is_read_as_a_request_that_names_no_document(tmp_path: Path) -> None:
+    """The reader keeps every entry as the log holds it, `(none)` included: what to make of one
+    is the report's to say, and it says it once (`_where_the_writes_went`)."""
+    run_dir = logged(tmp_path / "opened", OPEN_LINE, *log_lines())
+
+    assert read_log_targets(run_dir) == (NO_TARGET, COPY_PATH, COPY_PATH)
+
+
+class TestCallsThatNameNoDocument:
+    """Owner decision 155A, test first (004 T191): `remodel.open`'s line names no document, so a
+    report that counted `(none)` as another target could never claim that every write went to the
+    copy - on a run where every write did. Those calls are counted as naming no document: not as
+    writes to another document, and not as writes to the copy, which the log cannot show. The words
+    stay true of what they are: the settings a run changes are the application's, and opening the
+    copy is not a write (the draft constitution amendment, pull request #4)."""
+
+    def test_a_run_whose_writes_all_went_to_the_copy_still_claims_it(
+        self, tmp_path: Path, graded: GradedRun
+    ) -> None:
+        run_dir = logged(tmp_path / "claimed", OPEN_LINE, *log_lines())
+
+        text = report(graded, log_targets=read_log_targets(run_dir))
+
+        assert "cannot claim" not in text
+        # Changed on purpose on the decision's review (004 T198): the claim is of the writes that
+        # name a document, since the open's line is a mutating request too (research R18.8).
+        assert f"Every write of this run that names a document went to `{COPY_PATH}`." in text
+        assert "2 of 2 mutating request(s) in `remodel.log` that name a document name it" in text
+        assert f"`{NO_TARGET}`" in text
+        assert "1 request(s) whose calls name no document" in text
+        assert "not as writes to another one" in text
+
+    def test_a_write_to_another_path_still_withdraws_the_claim_and_none_is_not_named_as_one(
+        self, graded: GradedRun
+    ) -> None:
+        elsewhere = "C:\\work\\bracket.SLDPRT"
+
+        text = report(graded, log_targets=(NO_TARGET, COPY_PATH, elsewhere))
+
+        assert "cannot claim** that every write that names a document went to" in text
+        assert f"(`{elsewhere}`)" in text
+        assert f"`{NO_TARGET}`, `" not in text and f", `{NO_TARGET}`" not in text
+        assert "1 of 2 mutating request(s) in `remodel.log` that name a document name one" in text
+        assert "1 request(s) whose calls name no document" in text
+
+    def test_a_log_that_names_no_document_at_all_records_no_write(
+        self, graded: GradedRun
+    ) -> None:
+        """A run whose only targets name no document - one that ended before its first change
+        command, its log holding the open's line alone - has recorded no write that names a
+        document: the claim is not made, and nothing is said to have gone elsewhere."""
+        untargeted = [row.model_copy(update={"target_path": None}) for row in changes()]
+
+        text = report(graded, changes=untargeted, log_targets=(NO_TARGET,))
+
+        # Changed on purpose on the decision's review (004 T198): the log holds the open's
+        # mutating request, so "no write was recorded" was untrue (research R18.8).
+        assert "No write that names a document was recorded for this run" in text
+        assert "no mutating request that names a document" in text
+        assert "cannot claim" not in text
+        assert "Every write of this run" not in text
+        assert "1 request(s) whose calls name no document" in text
+
+    @pytest.mark.parametrize(
+        ("targeted", "log_targets"),
+        [
+            (True, (NO_TARGET, COPY_PATH, COPY_PATH)),
+            (True, (NO_TARGET, COPY_PATH, "C:\\work\\bracket.SLDPRT")),
+            (False, (NO_TARGET,)),
+        ],
+        ids=["claimed", "withdrawn", "no-write"],
+    )
+    def test_no_sentence_speaks_of_every_write_while_the_log_holds_one_that_names_no_document(
+        self, graded: GradedRun, targeted: bool, log_targets: tuple[str, ...]
+    ) -> None:
+        """Owner decision 155A's review (004 T198): the code calls a `(none)` entry's calls writes -
+        the settings a run changes, and the copy's tag, rollback and rebuild before the run holds
+        it - so while the log holds one, no sentence of the claim speaks of every write, or of
+        every mutating request, unqualified: each speaks of those that name a document."""
+        rows = changes() if targeted else [
+            row.model_copy(update={"target_path": None}) for row in changes()
+        ]
+
+        text = report(graded, changes=rows, log_targets=log_targets)
+        said = next(line for line in text.splitlines() if "(FR-041)" in line or "No write" in line)
+
+        for unqualified in (
+            "Every write of this run went to",
+            "that every write went to",
+            "No write was recorded",
+            "mutating request(s) in `remodel.log` name ",
+            "holds no mutating request.",
+        ):
+            assert unqualified not in said, unqualified
+        assert "that names a document" in said or "that name a document" in said
+
+    def test_without_one_the_sentences_are_as_they_were(self, graded: GradedRun) -> None:
+        """And with no `(none)` entry, nothing is qualified: the three sentences read as they did
+        before the decision, the golden report's among them."""
+        untargeted = [row.model_copy(update={"target_path": None}) for row in changes()]
+        elsewhere = "C:\\work\\bracket.SLDPRT"
+
+        claimed = report(graded, log_targets=(COPY_PATH, COPY_PATH))
+        withdrawn = report(graded, log_targets=(COPY_PATH, elsewhere))
+        nothing = report(graded, changes=untargeted, log_targets=())
+
+        assert f"Every write of this run went to `{COPY_PATH}`." in claimed
+        assert "2 of 2 mutating request(s) in `remodel.log` name it (FR-041)." in claimed
+        assert f"cannot claim** that every write went to `{COPY_PATH}`." in withdrawn
+        assert "1 of 2 mutating request(s) in `remodel.log` name one." in withdrawn
+        assert "No write was recorded for this run" in nothing
+        assert "`remodel.log` holds no mutating request." in nothing
+        for text in (claimed, withdrawn, nothing):
+            assert "name a document" not in text and "names a document" not in text
+
+    def test_the_words_never_call_them_writes_to_another_document(
+        self, graded: GradedRun
+    ) -> None:
+        text = report(graded, log_targets=(NO_TARGET, COPY_PATH, COPY_PATH))
+        said = next(line for line in text.splitlines() if "name no document" in line)
+
+        assert "application settings" in said
+        assert "the open of the copy" in said
+        assert "name another target" not in said
+        assert "elsewhere" not in said
 
 
 def test_write_report_writes_the_rendered_report_into_the_run_folder(

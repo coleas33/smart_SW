@@ -320,6 +320,40 @@ public sealed class RemodelPlanEndToEndTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 155A (004 T191): the run report reads `remodel.open`'s completed request line in the
+    /// run's `remodel.log` as a request whose calls name no document - `target=(none)`, the line the
+    /// report's own fixture of it carries (`test_remodel_report.py`, `OPEN_LINE`) - because every allowlisted
+    /// call the open makes, the settings it changes, the open of the copy and the copy's tag, rollback and
+    /// rebuild, comes before the bridge holds the run's session. A guard, true before the decision and
+    /// after it, which tells whoever changes what the recorder names that the report's words read it.
+    /// </summary>
+    [Fact]
+    public void TheOpensRequestLineInTheRunsLogNamesNoDocument()
+    {
+        using (var world = new PlanWorld())
+        {
+            world.Receive("remodel.plan", "p1");
+            string runDirectory = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+
+            string open = Assert.Single(
+                File.ReadAllLines(Path.Combine(runDirectory, RemodelRunLog.FileName)),
+                line => line.Contains(" command=remodel.open status="));
+            Assert.EndsWith(" target=" + RemodelGateRecorder.NoTarget, open, StringComparison.Ordinal);
+            string[] gated = open.Substring(open.IndexOf(" gated=", StringComparison.Ordinal) + " gated=".Length)
+                .Split(' ')[0]
+                .Split(',');
+            foreach (string key in new[]
+                     {
+                         "ISldWorks.SetUserPreferenceToggle", "ISldWorks.set_CommandInProgress", "ISldWorks.OpenDoc7",
+                         "ICustomPropertyManager.Add3", "IFeatureManager.EditRollback", "IModelDoc2.ForceRebuild3",
+                     })
+            {
+                Assert.Contains(key, gated);
+            }
+        }
+    }
+
     // ---- the world -------------------------------------------------------------------------------
 
     /// <summary>
