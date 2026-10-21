@@ -73,6 +73,7 @@
    * names a backend (owner decision 150A).
    */
   var NOT_RUNNING = 'Backend not running';
+  var START_IT_AGAIN = 'The backend is not running. Save Settings on the Review tab to start it again.';
 
   var pending = Object.create(null);
   var nextId = 0;
@@ -1190,6 +1191,13 @@
     renderLimits();
     if (state.backend) {
       state.notRunning = false;
+    } else if (payload.backend_start_failed === true) {
+      // A page opened after the failure missed its status (owner decision 160A).
+      state.notRunning = true;
+      if (ui.banner.hidden) {
+        showBanner(START_IT_AGAIN);
+        state.lifecycleBanner = true;
+      }
     }
     renderBackendState(
       state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),
@@ -1200,7 +1208,12 @@
     }
 
     if (!state.remodelAvailable) {
-      showBanner(state.remodelAvailabilityMessage || NO_SEAT_MESSAGE);
+      var availability = state.remodelAvailabilityMessage || NO_SEAT_MESSAGE;
+      // Both can be true on a page opened after a failed start: the seat's refusal stays visible,
+      // with the backend's way on, rather than covering it (owner decision 160A).
+      var failedStart = !state.backend && payload.backend_start_failed === true;
+      showBanner(availability + (failedStart ? ' ' + START_IT_AGAIN : ''));
+      state.lifecycleBanner = failedStart;
     }
 
     var latest = payload.latest_run;
@@ -1246,10 +1259,16 @@
     } else if (state.remodelAvailable
         && !wasAvailable
         && previousMessage
-        && ui.banner.textContent === previousMessage) {
+        && (ui.banner.textContent === previousMessage
+          || ui.banner.textContent === previousMessage + ' ' + START_IT_AGAIN)) {
       // Clear only the banner this capability check created; an unrelated error that arrived
       // while the seat was attaching remains visible for the engineer.
-      hideBanner();
+      if (state.notRunning && !state.backend) {
+        showBanner(START_IT_AGAIN);
+        state.lifecycleBanner = true;
+      } else {
+        hideBanner();
+      }
     }
     renderControls();
   }

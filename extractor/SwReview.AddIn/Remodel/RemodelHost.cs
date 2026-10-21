@@ -53,6 +53,9 @@ public sealed class RemodelHostOptions
     /// <summary>The backend's endpoint, or null before it is listening.</summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
 
+    /// <summary>A failed start with no backend up, remembered by the Review host (owner decision 160A).</summary>
+    public Func<bool> BackendStartFailed { get; set; } = () => false;
+
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
 
@@ -1108,6 +1111,7 @@ public sealed class RemodelHost : IDisposable
                     }
             },
             { "token", endpoint?.Token },
+            { "backend_start_failed", endpoint == null && _options.BackendStartFailed() },
             { "run_root", _options.RunRoot() },
             { "document", DocumentPayload(_options.CurrentDocument()) },
             {

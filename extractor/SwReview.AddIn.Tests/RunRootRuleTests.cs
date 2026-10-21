@@ -31,8 +31,8 @@ namespace SwReview.AddIn.Tests;
 /// unverified; and any root whose final path - the nearest existing folder's, which is what the backend's own
 /// resolution reads - differs from its spelling other than by letter case and from its long-name form too,
 /// read only then (the reviews of decision 154A, findings F1 to F3). A root that does not exist yet is judged
-/// by its nearest existing folder. A root no folder can be made under - blank, written with characters no
-/// folder can have, on a drive that is not there - is left to the run folder, which reports it as before.
+/// by its nearest existing folder. Decision 160A refuses invalid folder names on their text, at the save
+/// and at every run start. A blank root or one on a drive that is not there stays left to the run folder.
 ///
 /// Most cases run over <see cref="FakeRunRootProbe"/>, which fakes what this machine cannot make without
 /// rights or side effects (a share, a mapped drive, a substituted drive); the cases a test can make for real
@@ -499,14 +499,55 @@ public sealed class RunRootRuleTests : IDisposable
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    [InlineData(@"C:\Fictional\a:b")]
-    [InlineData(@"C:\Fictional\x<y")]
     public void ARootTheRuleCannotReadIsLeftToTheRunFolder(string? runRoot)
     {
         FakeRunRootProbe probe = FakeRunRootProbe.Local();
 
         Assert.Equal(RunRootVerdict.Accepted, RunRootRule.Judge(runRoot, probe));
         Assert.Empty(probe.Asked);
+    }
+
+    /// <summary>
+    /// Decision 160A: no folder can ever be made under these roots, so the save and every run
+    /// refuse them on their text, with no disk reading and no path in the save's words.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Fictional\a:b")]
+    [InlineData(@"C:\Fictional\x<y")]
+    [InlineData(@"C:\Fictional\x>y")]
+    [InlineData(@"C:\Fictional\x|y")]
+    [InlineData(@"C:\Fictional\x*y")]
+    [InlineData(@"C:\Fictional\x?y")]
+    [InlineData("C:\\Fictional\\runs\"")]
+    [InlineData("C:\\Fictional\\x\u0001y")]
+    public void AnInvalidFolderNameIsRefusedBeforeAnythingIsAsked(string runRoot)
+    {
+        FakeRunRootProbe probe = FakeRunRootProbe.Local();
+
+        RunRootVerdict verdict = RunRootRule.Judge(runRoot, probe);
+        Assert.Equal("InvalidFolderName", verdict.ToString());
+        Assert.Empty(probe.Asked);
+        Assert.Empty(probe.Normalized);
+        Assert.Equal(
+            "The folder chosen for runs has a name Windows cannot use for a folder, so the run root was not "
+            + "changed; the other settings were saved. Use folder names of at most 255 characters, with no "
+            + "invalid characters, then save again.",
+            RunRootRule.ChosenRefusal(verdict));
+    }
+
+    [Fact]
+    public void AnInvalidFolderNameAlreadyInForceHasPlainWordsForTheRunAndTheSave()
+    {
+        RunRootVerdict verdict = RunRootRule.Judge(@"C:\Fictional\x<y", FakeRunRootProbe.Local());
+
+        Assert.Equal(
+            "The run root has a name Windows cannot use for a folder, so nothing was checked. Choose a local "
+            + "folder for runs in Settings on the Review tab, then press Model check again.",
+            RunRootRule.Refusal(verdict, "nothing was checked", RunRootRule.InSettingsOnTheReviewTab, "press Model check again"));
+        Assert.Equal(
+            "The run root has a name Windows cannot use for a folder, so every run is refused until it is "
+            + "changed; the settings were saved. Choose a local folder for runs, then save again.",
+            RunRootRule.KeptRefusal(verdict));
     }
 
     [Fact]
@@ -520,16 +561,14 @@ public sealed class RunRootRuleTests : IDisposable
     }
 
     /// <summary>
-    /// The reviews of 154A's merge, N8 (feature 002 T204): a folder name longer than the 255 characters Windows
-    /// allows names no folder, as a character no folder can have does: it is left to the run folder, whose making
-    /// says so in Windows' own words, before anything is read - not opened, and so not called a part that cannot
-    /// be read, which its open's answer (an invalid name) made it. A name of 255 characters is read as any other.
+    /// Decision 160A deliberately changes 154A's N8: an impossible name is refused before any
+    /// disk reading, both at the save and at a run start. The boundary of 255 stays accepted.
     /// </summary>
     [Fact]
-    public void AFolderNameLongerThanWindowsAllowsIsLeftToTheRunFolder()
+    public void AFolderNameLongerThanWindowsAllowsIsRefusedBeforeAnythingIsAsked()
     {
         FakeRunRootProbe tooLong = FakeRunRootProbe.Local();
-        Assert.Equal(RunRootVerdict.Accepted, RunRootRule.Judge(Fictional + @"\" + new string('a', 256) + @"\runs", tooLong));
+        Assert.Equal("InvalidFolderName", RunRootRule.Judge(Fictional + @"\" + new string('a', 256) + @"\runs", tooLong).ToString());
         Assert.Empty(tooLong.Asked);
         Assert.Empty(tooLong.Normalized);
 
@@ -980,19 +1019,17 @@ public sealed class RunRootRuleTests : IDisposable
     }
 
     /// <summary>
-    /// The reviews of 154A's merge, N8 (feature 002 T204), for real: Windows answers the open of a folder name
-    /// longer than 255 characters as an invalid name, which the probe reads as a part that cannot be read - true of
-    /// the probe, and why the rule never asks it: the rule leaves such a root to the run folder, where the first
-    /// answer called it a root that could not be checked. A name of 255 characters, not made, is not there.
+    /// Decision 160A changes only the rule's answer: the probe still reports an unreadable
+    /// invalid name, and the rule refuses it from the text before asking the probe.
     /// </summary>
     [Fact]
-    public void ARealRootWithAFolderNameLongerThanWindowsAllowsIsLeftToTheRunFolder()
+    public void ARealRootWithAFolderNameLongerThanWindowsAllowsIsRefused()
     {
         string tooLong = Path.Combine(_root, new string('a', 256));
 
         Assert.Equal(RunRootEntry.Unreadable, WindowsRunRootProbe.Instance.EntryOf(tooLong));
         Assert.Equal(RunRootEntry.Missing, WindowsRunRootProbe.Instance.EntryOf(Path.Combine(_root, new string('a', 255))));
-        Assert.Equal(RunRootVerdict.Accepted, RunRootRule.Judge(Path.Combine(tooLong, "runs"), WindowsRunRootProbe.Instance));
+        Assert.Equal("InvalidFolderName", RunRootRule.Judge(Path.Combine(tooLong, "runs"), WindowsRunRootProbe.Instance).ToString());
     }
 
     /// <summary>

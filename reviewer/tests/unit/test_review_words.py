@@ -703,6 +703,12 @@ def test_a_save_whose_restart_failed_says_the_settings_are_saved() -> None:
     assert {key: errors.get(key) for key in SAVE_NOT_RESTARTED} == SAVE_NOT_RESTARTED
 
 
+def test_a_save_during_unload_says_saved_and_stopping_without_a_retry() -> None:
+    assert load_words().labels.errors.get("AddInStopping") == (
+        "The settings are saved. The add-in is stopping; nothing else needs doing."
+    )
+
+
 RUN_DIR_REFUSALS = {
     "InvalidRunDir": (
         "The backend refused the run folder's path: it writes only into a local folder inside "

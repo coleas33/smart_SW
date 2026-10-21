@@ -182,6 +182,15 @@ internal sealed class ReviewPageDriver
 
     public string KeySource { get; set; } = "settings";
 
+    /// <summary>Whether every `init` names no backend and no token, as the host's does while none is up.</summary>
+    public bool NoBackend { get; set; }
+
+    /// <summary>
+    /// What `init` carries as `backend_start_failed`: whether the last start or restart failed with no backend
+    /// up (owner decision 160A).
+    /// </summary>
+    public bool BackendStartFailed { get; set; }
+
     /// <summary>
     /// What `init` carries as `settings_not_in_force`: the host's sentence while the backend that is
     /// up runs with settings other than the saved ones (owner decision 153A), or null.
@@ -782,8 +791,9 @@ var h = {
     /// </summary>
     private object Init(bool backendUp = true, string? token = null) => new
     {
-        backend = backendUp ? new { port = 51999, origin = Origin } : null,
-        token = backendUp ? token ?? BackendToken : null,
+        backend = backendUp && !NoBackend ? new { port = 51999, origin = Origin } : null,
+        token = backendUp && !NoBackend ? token ?? BackendToken : null,
+        backend_start_failed = BackendStartFailed,
         settings = Settings(),
         key_source = KeySource,
         engineering_context = ContextPrepared != null,

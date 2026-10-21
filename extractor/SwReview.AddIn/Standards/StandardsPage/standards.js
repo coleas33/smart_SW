@@ -115,6 +115,10 @@
     onInit: applyProfile,
     onDocument: sayWhatWouldBeGraded,
 
+    // A failed check clears this page's result, so an Accept's notice has a place of its own
+    // beside the check's status, and the failure keeps the banner (owner decision 160A).
+    acceptNoticeId: 'accept-notice',
+
     // What a waiver binds to, in words. This family grades parts, assemblies and drawings, so
     // the label says "document": an engineer waiving a drawing check must see that every
     // dimension on that drawing is covered for as long as the fingerprint holds

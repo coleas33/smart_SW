@@ -491,6 +491,29 @@ public sealed class ReviewHost : IDisposable
     private volatile UserSettings? _starting;
 
     /// <summary>
+    /// Owner decision 160A: whether the last start of the backend this host made - the add-in's first or a
+    /// restart - threw. Taken off as each start begins and set when one throws, both by <see cref="StartWith"/>
+    /// alone, under the restart's own lock; read from any thread. Remembered for a page that loads, or loads
+    /// again, after the failure's `status` was posted (<see cref="BackendStartFailed"/>).
+    /// </summary>
+    private volatile bool _lastStartFailed;
+
+    /// <summary>
+    /// Owner decision 160A: the add-in is unloading - set first thing in <see cref="Dispose"/>. A save that has
+    /// written its settings reads it before its restart, in its catch and after a restart returns, and is
+    /// answered `AddInStopping` rather than told to save again (<see cref="SendSavedWhileStopping"/>).
+    /// </summary>
+    private volatile bool _stopping;
+
+    /// <summary>
+    /// Owner decision 160A: whether the last start or restart failed with no backend up and none being started -
+    /// what every tab's `init` says as `backend_start_failed`, this host's and, handed on by the add-in, the
+    /// Model check, Standards and Remodel hosts'. False while a backend is up, an old one a restart that failed
+    /// before it stopped it left among them.
+    /// </summary>
+    public bool BackendStartFailed => _starting == null && _lastStartFailed && _options.Backend.Endpoint == null;
+
+    /// <summary>
     /// Owner decision 153A, found on the fourth review (S1): every key a start of the backend has been made
     /// with since the host was built - the first start's and every restart's, made or failed - each once,
     /// in the order made. A start's failure is told once the start is no longer under way: a restart that
@@ -1058,6 +1081,7 @@ public sealed class ReviewHost : IDisposable
 
     public void Dispose()
     {
+        _stopping = true;
         // First, so nothing asks the backend about a turn or restarts it once the host is going.
         _restart.Dispose();
         _events.Dispose();
@@ -1183,6 +1207,7 @@ public sealed class ReviewHost : IDisposable
                     }
             },
             { "token", endpoint?.Token },
+            { "backend_start_failed", endpoint == null && BackendStartFailed },
             { "settings", View(_settings) },
             { "key_source", key.Source },
             { "run_root", RunRoot },
@@ -1397,6 +1422,12 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
+        if (_stopping)
+        {
+            SendSavedWhileStopping(id, runRootNote);
+            return;
+        }
+
         ResolvedApiKey key = next.ResolveApiKey(_options.Environment);
         string? promise = null;
         try
@@ -1413,11 +1444,17 @@ public sealed class ReviewHost : IDisposable
             else
             {
                 // The Review page learns of it from the reply; the other tabs from this.
-                TellTheOtherTabs();
+                if (!_stopping) TellTheOtherTabs();
             }
         }
         catch (Exception failure)
         {
+            if (_stopping)
+            {
+                SendSavedWhileStopping(id, runRootNote);
+                return;
+            }
+
             // Whatever the restart threw - a BackendStartException, or anything outside that
             // wrapper, such as the new backend's log not opened - the settings are written and
             // saved here, and only the restart failed: the save says so, with the reason, masked,
@@ -1435,12 +1472,31 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
+        if (_stopping)
+        {
+            SendSavedWhileStopping(id, runRootNote);
+            return;
+        }
+
         SendSettings("settings.saved", id, runRootNote);
 
         if (promise != null)
         {
             PostStatus("error", promise);
         }
+    }
+
+    /// <summary>
+    /// Owner decision 160A: the answer to a save whose settings were written while the add-in unloads -
+    /// `AddInStopping`, not retryable: the settings are saved, and nothing else needs doing, where
+    /// `BackendNotRestarted` would say to save again. It still says what the save says of the run root.
+    /// </summary>
+    private void SendSavedWhileStopping(string? id, Dictionary<string, object?>? runRootNote)
+    {
+        Dictionary<string, object?> stopping = _actions.ErrorPayload(
+            "AddInStopping", "The settings are saved. The add-in is stopping; nothing else needs doing.", retryable: false);
+        AddRunRootNote(stopping, runRootNote);
+        Send("error", id, stopping);
     }
 
     private void SaveSendWhenChecked(string? id, JsonElement payload)
@@ -1500,7 +1556,7 @@ public sealed class ReviewHost : IDisposable
     /// default run root, as a blank run root in the settings file is. Null when the save names none - absent,
     /// null or not text - which leaves the run root as it is. The reviews of 154A's merge, F2: Explorer's
     /// "Copy as path" puts a path in double quotes, so one pair around the whole is taken off, and what it held
-    /// trimmed again; a quote on one side alone is left, and is no full path.
+    /// trimmed again; a quote on one side alone is left for the full-path and folder-name checks.
     /// </summary>
     private static string? ChosenRunRoot(JsonElement payload)
     {
@@ -1981,6 +2037,7 @@ public sealed class ReviewHost : IDisposable
         // The mark comes off only once the settings are recorded, or the start has thrown, never before:
         // a reader that finds no start under way finds the settings of the backend up recorded.
         _starting = settings;
+        _lastStartFailed = false;
         try
         {
             start(settings, key);
@@ -1993,6 +2050,11 @@ public sealed class ReviewHost : IDisposable
             }
 
             _inForce = settings;
+        }
+        catch
+        {
+            _lastStartFailed = true;
+            throw;
         }
         finally
         {

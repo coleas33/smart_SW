@@ -36,6 +36,123 @@ public sealed class PageMessageTests
 
     // ---- ready / init -------------------------------------------------------------------
 
+    [Theory]
+    [InlineData("first")]
+    [InlineData("save")]
+    public void InitRemembersAFailedStartWithNoBackendAcrossPageReloads(string start)
+    {
+        using var world = new HostWorld();
+        world.Backend.Endpoint = null;
+        world.Open();
+        world.Receive("ready", "before", new { });
+        Assert.False(world.Reply("init", "before").GetProperty("backend_start_failed").GetBoolean());
+
+        var failure = new BackendStartException("FICT the backend did not start.");
+        if (start == "first")
+        {
+            Assert.Throws<BackendStartException>(() => world.Host.FirstStart((_, __) => throw failure));
+        }
+        else
+        {
+            world.Backend.RestartFailure = failure;
+            world.Receive("settings.save", "save", Save());
+        }
+
+        foreach (string id in new[] { "loaded", "reloaded" })
+        {
+            world.Receive("ready", id, new { });
+            JsonElement init = world.Reply("init", id);
+            Assert.Equal(JsonValueKind.Null, init.GetProperty("backend").ValueKind);
+            Assert.True(init.GetProperty("backend_start_failed").GetBoolean());
+        }
+
+        world.Host.FirstStart((_, __) =>
+        {
+            world.Receive("ready", "starting", new { });
+            Assert.False(world.Reply("init", "starting").GetProperty("backend_start_failed").GetBoolean());
+            world.Backend.Endpoint = new BackendEndpoint(51235, "FICT-new-token");
+        });
+        world.Receive("ready", "started", new { });
+        Assert.False(world.Reply("init", "started").GetProperty("backend_start_failed").GetBoolean());
+    }
+
+    [Fact]
+    public void InitDoesNotCallARestartFailedWhileTheOldBackendIsUpANonRunningBackend()
+    {
+        using var world = new HostWorld();
+        world.Open();
+        world.Backend.RestartFailure = new InvalidOperationException("FICT failed before stopping the old backend.");
+        world.Receive("settings.save", "save", Save());
+        world.Receive("ready", "ready", new { });
+        JsonElement init = world.Reply("init", "ready");
+        Assert.Equal(JsonValueKind.Object, init.GetProperty("backend").ValueKind);
+        Assert.False(init.GetProperty("backend_start_failed").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public void ASaveDuringUnloadSaysTheSettingsAreSavedAndTheAddInIsStopping(bool startInFlight, bool restartFails)
+    {
+        using var world = new HostWorld();
+        world.Open();
+        if (startInFlight)
+        {
+            world.Backend.BeforeRestart = () => world.Host.Dispose();
+        }
+        else
+        {
+            world.Host.Dispose();
+        }
+        if (restartFails)
+        {
+            world.Backend.RestartFailure = new BackendStartException("FICT the start was stopped by unload.");
+        }
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        JsonElement answer = world.Reply("error", "save");
+        Assert.Equal("AddInStopping", answer.GetProperty("error_class").GetString());
+        Assert.False(answer.GetProperty("retryable").GetBoolean());
+        Assert.Equal("The settings are saved. The add-in is stopping; nothing else needs doing.",
+            answer.GetProperty("message").GetString());
+        Assert.Equal("low", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.Effort);
+        Assert.Equal("low", world.Host.Settings.Effort);
+        Assert.Empty(Posted(world, "settings.saved"));
+        Assert.Empty(Posted(world, "backend.restarted"));
+        Assert.Equal(0, world.OtherTabsRestarted);
+        Assert.Equal(startInFlight && !restartFails ? 1 : 0, world.Backend.Restarts);
+    }
+
+    [Theory]
+    [InlineData("quote")]
+    [InlineData("long")]
+    public void AChosenFolderNoFolderCanBeMadeUnderIsTheOneFieldNotSaved(string kind)
+    {
+        using var world = new HostWorld();
+        world.Probe = FakeRunRootProbe.Local();
+        world.Open();
+        string previous = world.Host.Settings.RunRoot;
+        string chosen = @"C:\Fictional\" + (kind == "quote" ? "runs\"" : new string('x', 256));
+        Dictionary<string, object?> payload = Save(effort: "low");
+        payload["run_root"] = chosen;
+
+        world.Receive("settings.save", "save", payload);
+
+        JsonElement saved = world.Reply("settings.saved", "save");
+        JsonElement refusal = saved.GetProperty("run_root_refusal");
+        Assert.Equal("RunRootRefused", refusal.GetProperty("error_class").GetString());
+        Assert.False(refusal.GetProperty("retryable").GetBoolean());
+        Assert.DoesNotContain(chosen, refusal.GetProperty("message").GetString()!);
+        Assert.Contains("the run root was not changed", refusal.GetProperty("message").GetString()!);
+        UserSettings stored = UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings;
+        Assert.Equal(previous, stored.RunRoot);
+        Assert.Equal(previous, saved.GetProperty("settings").GetProperty("run_root").GetString());
+        Assert.Equal("low", stored.Effort);
+        Assert.Equal(previous, world.Backend.RestartedWith!.RunRoot);
+    }
+
     [Fact]
     public void ReadyIsAnsweredWithInitCarryingTheBackendOriginAndNoKey()
     {
@@ -1275,6 +1392,8 @@ public sealed class PageMessageTests
 
         public List<string> Posted { get; } = new List<string>();
 
+        public int OtherTabsRestarted { get; private set; }
+
         public ReviewHost Host => _host ?? throw new InvalidOperationException("call Open() first");
 
         /// <summary>Writes the settings file if the test has not, then builds the host.</summary>
@@ -1291,6 +1410,7 @@ public sealed class PageMessageTests
                 LogFolder = Path.Combine(_root, "logs"),
                 CurrentDocument = () => Document,
                 Environment = name => Environment.TryGetValue(name, out string? value) ? value : null,
+                BackendRestarted = () => OtherTabsRestarted++,
             };
             options.RunRootProbe = Probe ?? FakeRunRootProbe.Local();
 
@@ -1416,8 +1536,11 @@ public sealed class PageMessageTests
         /// <summary>What a restart throws, when set: a backend that did not start (owner decision 154A, follow-up).</summary>
         public Exception? RestartFailure { get; set; }
 
+        public Action? BeforeRestart { get; set; }
+
         public void Restart(UserSettings settings, ResolvedApiKey key)
         {
+            BeforeRestart?.Invoke();
             if (RestartFailure != null)
             {
                 throw RestartFailure;

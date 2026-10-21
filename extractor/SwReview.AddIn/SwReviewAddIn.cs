@@ -630,6 +630,7 @@ public class SwReviewAddIn : ISwAddin
             RunRootForANewRun = RunRootForANewRun,
             RunRootSaved = RunRootSaved,
             Backend = () => _backend?.Endpoint,
+            BackendStartFailed = () => _reviewHost?.BackendStartFailed == true,
             CurrentDocument = CurrentDocument,
 
             // The Review tab's own setting, read fresh: the page relays it so the check can say
@@ -744,6 +745,7 @@ public class SwReviewAddIn : ISwAddin
             RunRootForANewRun = RunRootForANewRun,
             RunRootSaved = RunRootSaved,
             Backend = () => _backend?.Endpoint,
+            BackendStartFailed = () => _reviewHost?.BackendStartFailed == true,
             CurrentDocument = CurrentDocument,
             Dump = reviewOptions.Dump,
             EntityResolver = () => reviewOptions.EntityResolver,
@@ -865,6 +867,7 @@ public class SwReviewAddIn : ISwAddin
             RunRootForANewRun = RunRootForANewRun,
             RunRootSaved = RunRootSaved,
             Backend = endpoint,
+            BackendStartFailed = () => _reviewHost?.BackendStartFailed == true,
             CurrentDocument = CurrentDocument,
             RemodelAvailability = () => _toolService?.RemodelCapability
                 ?? RemodelAvailability.Unknown,

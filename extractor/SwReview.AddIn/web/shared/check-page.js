@@ -102,6 +102,10 @@
    *     a waiver is bound to - a part for one family, any graded document for the other.
    *   - `describeCounts(result)`: the one-line sentence about the counts, printed after a check
    *     and after an accept. The buckets it reads are the family's, so the family writes it.
+   *   - `acceptNoticeId`, optional: the element an Accept whose check is not shown again says so
+   *     in, kept apart from the banner a failed check uses (owner decision 160A). The Standards
+   *     page has one, since its failed check clears the rows; without one the notice takes the
+   *     banner, as on the Model check page.
    *
    * And two hooks, both optional, for the facts one family's `init` carries and the other's
    * does not. A page that defines neither behaves exactly as it did before they existed:
@@ -485,13 +489,22 @@
 
     /**
      * An Accept whose exception is written but whose check is not shown again: the exception, why
-     * it is not shown, and the way on, in the banner. Both the exception and why are said, because
-     * a page that said only why would invite a second acceptance of the same rule.
+     * it is not shown, and the way on, in the page's own place for it (`acceptNoticeId`) or in the
+     * banner. Both the exception and why are said, because a page that said only why would invite a
+     * second acceptance of the same rule.
      */
     function acceptedWithoutReRead(exceptionId, why) {
-      showBanner(
-        'Accepted as ' + (exceptionId || 'a new exception') + why
-          + ' Press the check again to see where it stands.');
+      var notice = 'Accepted as ' + (exceptionId || 'a new exception') + why
+        + ' Press the check again to see where it stands.';
+      // The Standards tab clears every result row when a check fails. Its own place survives that
+      // clear and leaves the failure banner visible too (owner decision 160A).
+      if (ui.acceptNotice) {
+        dom.clear(ui.acceptNotice);
+        dom.write(ui.acceptNotice, notice);
+        ui.acceptNotice.hidden = false;
+      } else {
+        showBanner(notice);
+      }
     }
 
     /** Points at the row that was just accepted, and names the exception that covers it. */
@@ -1391,6 +1404,7 @@
       ui.documentName = byId('document-name');
       ui.backendState = byId('backend-state');
       ui.banner = byId('banner');
+      ui.acceptNotice = page.acceptNoticeId ? byId(page.acceptNoticeId) : null;
       ui.runCheck = byId('run-check');
       ui.openReport = byId('open-report');
       ui.openFolder = byId('open-folder');
@@ -1511,6 +1525,13 @@
       renderBinding();
       if (state.backend) {
         state.notRunning = false;
+      } else if (payload.backend_start_failed === true) {
+        // A page opened after the failure missed its status (owner decision 160A).
+        state.notRunning = true;
+        if (ui.banner.hidden) {
+          showBanner('The backend is not running. Save Settings on the Review tab to start it again.');
+          state.lifecycleBanner = true;
+        }
       }
       renderBackendState(
         state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),

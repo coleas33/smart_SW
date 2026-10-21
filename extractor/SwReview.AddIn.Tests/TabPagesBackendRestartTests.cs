@@ -467,7 +467,7 @@ public sealed class TabPagesBackendRestartTests
     }
 
     /// <summary>
-    /// ...but the exception that Accept wrote is saved, and the page says so, in its banner, as it
+    /// ...but the exception that Accept wrote is saved, and the page says so, in its notice, as it
     /// says so of an Accept whose re-read failed - naming the exception, why its check was not
     /// shown again, and the way on - so the engineer is not left to accept the rule a second time
     /// (owner decision 150A; until then the dropped re-read said nothing).
@@ -483,7 +483,7 @@ public sealed class TabPagesBackendRestartTests
             Assert.Equal(
                 "Accepted as " + TabPageDriver.ExceptionId + ", and the exception is saved; a newer check was "
                     + "pressed before this check was re-read. Press the check again to see where it stands.",
-                await driver.Banner());
+                await driver.AcceptNotice());
         });
     }
 
@@ -504,12 +504,56 @@ public sealed class TabPagesBackendRestartTests
             await driver.RefuseGets();
 
             await driver.AcceptTheFirstRule();
-            await driver.UntilBanner("said the Accept's re-read failed");
+            await driver.UntilAcceptNotice("said the Accept's re-read failed");
 
             Assert.Equal(
                 "Accepted as " + TabPageDriver.ExceptionId + ", but the check could not be re-read: "
                     + TabPageDriver.RefusedGet + " Press the check again to see where it stands.",
-                await driver.Banner());
+                await driver.AcceptNotice());
+        });
+    }
+
+    /// <summary>
+    /// Owner decision 160A: on the Standards page a check that fails and an Accept's notice no longer share
+    /// one banner. A failed check clears the result's rows there, so the notice - the one word that the
+    /// exception is saved - has its own place outside them, and the failure keeps the banner, whichever
+    /// lands first.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AStandardsCheckFailureAndAnAcceptNoticeBothStayVisible(bool failureFirst)
+    {
+        const string Failure = "FICT the extraction failed before anything was graded.";
+        TabPageDriver.Run(TabPageDriver.Standards, driver => driver.WithLatestResult = true, async driver =>
+        {
+            await driver.UntilTheLatestResultIsRead();
+            await driver.Settle();
+            await driver.HoldGets();
+            await driver.AcceptTheFirstRule();
+            await driver.UntilReads(2, "asked to re-read the accepted check");
+
+            if (failureFirst)
+            {
+                driver.StartRefusal = ("ExtractionFailed", Failure);
+                await driver.Click("run-check");
+                await driver.UntilBanner("showed the check's failure");
+                await driver.ReleaseGets();
+            }
+            else
+            {
+                await driver.RefuseGets();
+                await driver.ReleaseGets();
+                await driver.UntilAcceptNotice("showed the Accept's notice");
+                driver.StartRefusal = ("ExtractionFailed", Failure);
+                await driver.Click("run-check");
+                await driver.UntilBanner("showed the check's failure");
+            }
+
+            Assert.Equal(Failure, await driver.Banner());
+            string notice = Assert.IsType<string>(await driver.AcceptNotice());
+            Assert.StartsWith("Accepted as " + TabPageDriver.ExceptionId, notice, StringComparison.Ordinal);
+            Assert.Contains("Press the check again to see where it stands.", notice, StringComparison.Ordinal);
         });
     }
 
@@ -615,6 +659,120 @@ public sealed class TabPagesBackendRestartTests
 
     /// <summary>What the strip says from the add-in's word that the backend did not start (owner decision 150A).</summary>
     private const string NotRunning = "Backend not running";
+
+    /// <summary>
+    /// Owner decision 160A: a page that loads, or loads again, after a failed start or restart - whose `status` it never
+    /// saw - is told so by `init` (`backend_start_failed`) and says the backend is not running, with the way on the add-in
+    /// gives the other tabs, where it said "Backend starting"; an `init` that names a backend takes both down.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void APageLoadedOrReloadedAfterAFailedStartSaysTheBackendIsNotRunningAndHowToStartIt(string tab)
+    {
+        TabPageDriver.Run(tab, driver =>
+        {
+            driver.NoBackend = true;
+            driver.BackendStartFailed = true;
+        }, async driver =>
+        {
+            Assert.Equal((NotRunning, true), await driver.Strip());
+            Assert.Equal("The backend is not running. Save Settings on the Review tab to start it again.", await driver.Banner());
+
+            await driver.Reload();
+            Assert.Equal((NotRunning, true), await driver.Strip());
+            Assert.Equal("The backend is not running. Save Settings on the Review tab to start it again.", await driver.Banner());
+
+            driver.NoBackend = false;
+            driver.BackendStartFailed = false;
+            int readies = driver.Readies;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for the running backend");
+            await driver.Settle();
+            Assert.Equal(("Backend ready", false), await driver.Strip());
+            Assert.Null(await driver.Banner());
+        });
+    }
+
+    /// <summary>...while one that loads before the first start has finished, which has not failed, still says it is starting.</summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void APageLoadedBeforeTheFirstStartFinishesStillSaysBackendStarting(string tab)
+    {
+        TabPageDriver.Run(tab, driver => driver.NoBackend = true, async driver =>
+        {
+            Assert.Equal(("Backend starting", true), await driver.Strip());
+            Assert.Null(await driver.Banner());
+        });
+    }
+
+    /// <summary>
+    /// The Remodel page with no seat, after a failed start: the seat's own word keeps the banner, with the way on after
+    /// it, rather than one covering the other (owner decision 160A).
+    /// </summary>
+    [Fact]
+    public void ARemodelPageWithNoSeatStillNamesTheWayOnAfterAFailedStart()
+    {
+        TabPageDriver.Run(TabPageDriver.Remodel, driver =>
+        {
+            driver.NoBackend = true;
+            driver.BackendStartFailed = true;
+            driver.RemodelAvailable = false;
+        }, async driver =>
+        {
+            Assert.Equal((NotRunning, true), await driver.Strip());
+            string banner = Assert.IsType<string>(await driver.Banner());
+            Assert.Contains(TabPageDriver.NoRemodelSeat, banner, StringComparison.Ordinal);
+            Assert.Contains("Save Settings on the Review tab to start it again.", banner, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>...an `init` that names a backend takes the way on down and leaves the seat's word, if it still holds.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ARemodelPageWithNoSeatDropsTheFailedBackendNoticeOnceAnInitNamesOne(bool seatAvailable)
+    {
+        TabPageDriver.Run(TabPageDriver.Remodel, driver =>
+        {
+            driver.NoBackend = true;
+            driver.BackendStartFailed = true;
+            driver.RemodelAvailable = false;
+        }, async driver =>
+        {
+            driver.NoBackend = false;
+            driver.BackendStartFailed = false;
+            driver.RemodelAvailable = seatAvailable;
+            int readies = driver.Readies;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for the running backend");
+            await driver.Settle();
+
+            Assert.Equal(("Backend ready", false), await driver.Strip());
+            Assert.Equal(seatAvailable ? null : TabPageDriver.NoRemodelSeat, await driver.Banner());
+        });
+    }
+
+    /// <summary>...and one that names a seat while the backend is still not running takes the seat's word down and leaves the way on.</summary>
+    [Fact]
+    public void ARemodelPageDropsTheSeatNoticeOnceItsInitNamesASeatWhileTheBackendIsStillNotRunning()
+    {
+        TabPageDriver.Run(TabPageDriver.Remodel, driver =>
+        {
+            driver.NoBackend = true;
+            driver.BackendStartFailed = true;
+            driver.RemodelAvailable = false;
+        }, async driver =>
+        {
+            driver.RemodelAvailable = true;
+            int readies = driver.Readies;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Readies == readies + 1, "asked for the available seat");
+            await driver.Settle();
+
+            Assert.Equal((NotRunning, true), await driver.Strip());
+            Assert.Equal("The backend is not running. Save Settings on the Review tab to start it again.", await driver.Banner());
+        });
+    }
 
     /// <summary>
     /// The strip follows the add-in's word that the backend did not start - a failed start or
@@ -806,6 +964,9 @@ public sealed class TabPagesBackendRestartTests
         /// <summary>Why the stubbed backend refuses a `GET` once <see cref="RefuseGets"/> is called.</summary>
         public const string RefusedGet = "FICT the check folder is gone.";
 
+        /// <summary>The remodel seat's own word when the Remodel page's `init` says it is not available.</summary>
+        public const string NoRemodelSeat = "FICT the remodel seat is unavailable.";
+
         private const string RemodelRunDir = @"C:\SwReviewRuns\20260916-142201-bracket-remodel";
 
         private readonly string _kind;
@@ -860,6 +1021,15 @@ public sealed class TabPagesBackendRestartTests
         /// restart that failed, say.
         /// </summary>
         public bool NoBackend { get; set; }
+
+        /// <summary>
+        /// What `init` carries as `backend_start_failed`: whether the last start or restart failed with no
+        /// backend up (owner decision 160A).
+        /// </summary>
+        public bool BackendStartFailed { get; set; }
+
+        /// <summary>Whether the Remodel page's `init` says the remodel seat is available; when not, it says <see cref="NoRemodelSeat"/>.</summary>
+        public bool RemodelAvailable { get; set; } = true;
 
         public int Readies => Count("ready");
 
@@ -922,6 +1092,33 @@ public sealed class TabPagesBackendRestartTests
                 + "return banner.hidden ? null : banner.textContent; }())");
             JsonElement banner = JsonDocument.Parse(raw).RootElement;
             return banner.ValueKind == JsonValueKind.Null ? null : banner.GetString();
+        }
+
+        /// <summary>
+        /// The Accept's notice, or null while it is hidden: on the Standards page its own place, `accept-notice`
+        /// (owner decision 160A); on the Model check page the banner, where it has been since 150A.
+        /// </summary>
+        public async Task<string?> AcceptNotice()
+        {
+            if (_kind != Standards)
+            {
+                return await Banner();
+            }
+
+            string raw = await Page.ExecuteScriptAsync(
+                "(function () { var note = document.getElementById('accept-notice'); "
+                + "return !note || note.hidden ? null : note.textContent; }())");
+            JsonElement note = JsonDocument.Parse(raw).RootElement;
+            return note.ValueKind == JsonValueKind.Null ? null : note.GetString();
+        }
+
+        /// <summary>Loads the page again, as the engineer's reload does, and answers its first `ready` with `init`.</summary>
+        public async Task Reload()
+        {
+            _booted = false;
+            _bootReady = null;
+            Page.Reload();
+            await BootAsync();
         }
 
         /// <summary>The backend strip: its text, and whether it wears the warning colour.</summary>
@@ -991,6 +1188,21 @@ public sealed class TabPagesBackendRestartTests
         {
             var bound = System.Diagnostics.Stopwatch.StartNew();
             while (await Banner() == null)
+            {
+                if (bound.Elapsed > TimeSpan.FromSeconds(30))
+                {
+                    throw new TimeoutException("the page never " + what + ".");
+                }
+
+                await Task.Delay(5);
+            }
+        }
+
+        /// <summary>Waits, bounded, until the Accept's notice shows (<see cref="AcceptNotice"/>).</summary>
+        public async Task UntilAcceptNotice(string what)
+        {
+            var bound = System.Diagnostics.Stopwatch.StartNew();
+            while (await AcceptNotice() == null)
             {
                 if (bound.Elapsed > TimeSpan.FromSeconds(30))
                 {
@@ -1299,6 +1511,7 @@ public sealed class TabPagesBackendRestartTests
                     {
                         backend,
                         token,
+                        backend_start_failed = BackendStartFailed,
                         run_root = @"C:\SwReviewRuns",
                         standards_profile = (string?)null,
                         document = new { path = @"C:\vault\bracket.sldprt", configuration = "Default", kind = "part" },
@@ -1312,6 +1525,7 @@ public sealed class TabPagesBackendRestartTests
                     {
                         backend,
                         token,
+                        backend_start_failed = BackendStartFailed,
                         run_root = @"C:\SwReviewRuns",
                         profile_path = @"C:\Fictional\FICT-standards.yaml",
                         document = new { path = @"C:\vault\top-plate.sldasm", configuration = "AsBuilt", kind = "assembly" },
@@ -1325,10 +1539,11 @@ public sealed class TabPagesBackendRestartTests
                     {
                         backend,
                         token,
+                        backend_start_failed = BackendStartFailed,
                         run_root = @"C:\SwReviewRuns",
                         document = new { path = @"C:\vault\bracket.sldprt", configuration = "Default", kind = "part" },
                         limits = new { max_changes = 250, max_minutes = 20, max_rebuild_seconds = 120 },
-                        remodel = new { available = true, message = (string?)null },
+                        remodel = new { available = RemodelAvailable, message = RemodelAvailable ? null : NoRemodelSeat },
                         latest_run = WithLatestResult
                             ? new { run_dir = RemodelRunDir, at = "2026-09-16T14:22:01.0000000", state = "saved", plan_lost = (string?)null }
                             : null,

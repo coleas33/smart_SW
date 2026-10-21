@@ -39,6 +39,9 @@ public enum RunRootVerdict
     /// run folders, so every run's folder would lie under another folder than the backend's run root.
     /// </summary>
     NameEndsInSpaceOrPeriod,
+
+    /// <summary>Has a character no Windows folder name can have, or a name longer than 255 characters (decision 160A).</summary>
+    InvalidFolderName,
 }
 
 /// <summary>What kind of drive a drive root is, as the run root rule reads it.</summary>
@@ -146,16 +149,23 @@ public interface IRunRootProbe
 /// backend's own resolution reads, compared with its spelling and, when it is not that, with its long-name
 /// form, read only now that no part is a link: one that differs from both other than by letter case is
 /// reached through a link of some other kind, and refused; one that is an 8.3 short name's long name is not
-/// (finding F3); and one that cannot be read leaves the root unverified. A root no folder can be made under -
-/// blank, written with a character no folder can have or a name longer than a folder's can be (the reviews of
-/// 154A's merge, N8), on a drive letter that names no drive - is not refused: the run folder reports it, as
-/// before.
+/// (finding F3); and one that cannot be read leaves the root unverified. Since decision 160A, a character no
+/// folder can have or a name longer than 255 characters is refused on the text too: the save must not keep a
+/// folder no run can ever be made under. A blank root, one with no full form or on a drive letter that names
+/// no drive is still left to the run folder.
 /// </summary>
 public static class RunRootRule
 {
     /// <summary>What the rule finds of <paramref name="runRoot"/>, read through <paramref name="probe"/>.</summary>
-    public static RunRootVerdict Judge(string? runRoot, IRunRootProbe probe)
+    public static RunRootVerdict Judge(string? runRoot, IRunRootProbe probe) => Judge(runRoot, probe, out _);
+
+    /// <summary>
+    /// Also hands a search the verified, existing root in its final long-name form (decision 160A).
+    /// A missing root has no such answer. Reusing this reading avoids opening an 8.3-spelled root twice.
+    /// </summary>
+    internal static RunRootVerdict Judge(string? runRoot, IRunRootProbe probe, out string? existingLongRoot)
     {
+        existingLongRoot = null;
         if (probe == null)
         {
             throw new ArgumentNullException(nameof(probe));
@@ -176,7 +186,7 @@ public static class RunRootRule
 
         if (NamesNoFolderCanHave(written))
         {
-            return RunRootVerdict.Accepted;
+            return RunRootVerdict.InvalidFolderName;
         }
 
         // The reviews of 154A's merge, F1: a name Windows reads two ways, on its text too.
@@ -253,6 +263,7 @@ public static class RunRootRule
 
         if (SameFolder(final, reached))
         {
+            if (SameFolder(reached, full)) existingLongRoot = final;
             return RunRootVerdict.Accepted;
         }
 
@@ -267,7 +278,9 @@ public static class RunRootRule
             return RunRootVerdict.Unverified;
         }
 
-        return SameFolder(final, longForm) ? RunRootVerdict.Accepted : RunRootVerdict.Link;
+        if (!SameFolder(final, longForm)) return RunRootVerdict.Link;
+        if (SameFolder(reached, full)) existingLongRoot = longForm;
+        return RunRootVerdict.Accepted;
     }
 
     /// <summary>
@@ -280,7 +293,7 @@ public static class RunRootRule
     /// which a save checks by this rule and brings into force with the backend's restart.
     /// </summary>
     public static string Refusal(RunRootVerdict verdict, string notDone, string where, string wayOn) =>
-        "The run root " + Kind(verdict) + Rule + ", so " + notDone + ". Choose a local folder for runs " + where + ", then "
+        "The run root " + Kind(verdict) + RuleFor(verdict) + ", so " + notDone + ". Choose a local folder for runs " + where + ", then "
         + wayOn + ".";
 
     /// <summary>Where the Review tab's own refusals send the engineer: the Settings on that tab.</summary>
@@ -331,7 +344,11 @@ public static class RunRootRule
     /// root.
     /// </summary>
     public static string ChosenRefusal(RunRootVerdict verdict) =>
-        "The folder chosen for runs " + Kind(verdict) + Rule
+        verdict == RunRootVerdict.InvalidFolderName
+        ? "The folder chosen for runs has a name Windows cannot use for a folder, so the run root was not "
+            + "changed; the other settings were saved. Use folder names of at most 255 characters, with no "
+            + "invalid characters, then save again."
+        : "The folder chosen for runs " + Kind(verdict) + Rule
         + ", so the run root was not changed; the other settings were saved. Choose a local folder for runs, then save again.";
 
     /// <summary>
@@ -340,7 +357,7 @@ public static class RunRootRule
     /// goes through, and its answer says every run is refused until the run root is changed.
     /// </summary>
     public static string KeptRefusal(RunRootVerdict verdict) =>
-        "The run root " + Kind(verdict) + Rule
+        "The run root " + Kind(verdict) + RuleFor(verdict)
         + ", so every run is refused until it is changed; the settings were saved. Choose a local folder for runs, then save again.";
 
     /// <summary>
@@ -362,7 +379,7 @@ public static class RunRootRule
     /// local folder chosen again, which <see cref="Refusal"/> says and the engineer has just done. No path.
     /// </summary>
     public static string ChosenNotInForceRefusal(RunRootVerdict verdict, string notDone, string where, string wayOn) =>
-        "The run root in force " + Kind(verdict) + Rule + ", so " + notDone + ". The folder chosen for runs " + where
+        "The run root in force " + Kind(verdict) + RuleFor(verdict) + ", so " + notDone + ". The folder chosen for runs " + where
         + " is not in force until the review backend restarts with it: save the settings again to retry the restart, then "
         + wayOn + ".";
 
@@ -392,6 +409,9 @@ public static class RunRootRule
     /// <summary>The rule, as every refusal states it.</summary>
     private const string Rule = ", and runs are made only in a local folder reached by its own path";
 
+    /// <summary>An impossible name needs usable folder names; locality and links do not explain its refusal.</summary>
+    private static string RuleFor(RunRootVerdict verdict) => verdict == RunRootVerdict.InvalidFolderName ? "" : Rule;
+
     /// <summary>What a refused root is, after its subject: "is on a network share ...".</summary>
     private static string Kind(RunRootVerdict verdict)
     {
@@ -407,6 +427,8 @@ public static class RunRootRule
                 return "could not be checked, since a part of its path cannot be read";
             case RunRootVerdict.NameEndsInSpaceOrPeriod:
                 return "has a folder whose name ends in a space or a period, which Windows reads both with and without it";
+            case RunRootVerdict.InvalidFolderName:
+                return "has a name Windows cannot use for a folder";
             default:
                 throw new ArgumentOutOfRangeException(nameof(verdict), verdict, "an accepted run root is not refused");
         }
@@ -416,8 +438,8 @@ public static class RunRootRule
     /// Whether <paramref name="written"/> names something no folder's path can: a character Windows refuses in a
     /// name, a wildcard, a control character, or a colon anywhere but after a drive letter - or, since the reviews of
     /// 154A's merge (N8), a name longer than the 255 characters a folder's can be, whose open Windows answers as an
-    /// invalid name, which the walk would read as a part that cannot be read. No folder can be made under such a
-    /// root, and its run folder says so in Windows' own words; the rule reads nothing of it.
+    /// invalid name, which the walk would read as a part that cannot be read. Decision 160A refuses such a
+    /// root at the save and at every run start; the rule reads nothing of it.
     /// </summary>
     private static bool NamesNoFolderCanHave(string written)
     {

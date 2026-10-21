@@ -360,6 +360,142 @@ return JSON.stringify({
         + "return JSON.stringify({ text: strip.textContent, className: strip.className });";
 
     /// <summary>
+    /// Owner decision 160A: the add-in's word that the first start failed - an `error` status while the page holds
+    /// no backend - leaves the strip saying the backend is not running, as the other tabs' strips say it (150A),
+    /// where it said "Error", until an `init` names a backend; one that names none leaves it so.
+    /// </summary>
+    [Fact]
+    public void AFailedFirstStartLeavesTheStripNotRunningUntilAnInitNamesABackend()
+    {
+        ReviewPageDriver.Run(driver => driver.NoBackend = true, async driver =>
+        {
+            const string Failure = "FICT the backend did not start. Save Settings to start it again.";
+            await driver.Post("status", new { stage = "error", message = Failure });
+            Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
+
+            int readies = driver.Posted("ready").Length;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for init again");
+            await driver.Settle();
+            Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
+
+            driver.NoBackend = false;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Posted("ready").Length == readies + 2, "asked for the running backend");
+            await driver.Settle();
+            Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// ...and a `status` that is not an error - "Backend ready." from a start made since - does not overwrite it: the
+    /// strip says the backend is not running until the `init` that status asks for names a backend.
+    /// </summary>
+    [Fact]
+    public void AReadyStatusAfterAFailedFirstStartKeepsTheStripNotRunningUntilItsInitNamesABackend()
+    {
+        ReviewPageDriver.Run(driver => driver.NoBackend = true, async driver =>
+        {
+            await driver.Post("status", new { stage = "error", message = "FICT the backend did not start." });
+            driver.HoldReady = true;
+            int readies = driver.Posted("ready").Length;
+
+            await driver.Post("status", new { stage = "ready", message = "Backend ready." });
+            await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for the backend named by ready");
+            Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
+
+            await driver.ReleaseReady(backendUp: false);
+            Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
+
+            driver.NoBackend = false;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Posted("ready").Length == readies + 2, "asked for the running backend");
+            await driver.Settle();
+            Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// Owner decision 160A: a page that loads, or loads again, after a failed start or restart - whose `status` it
+    /// never saw - is told so by `init` (`backend_start_failed`), and says the backend is not running and the way
+    /// on, "Save Settings to start it again", where it said "Backend starting"; an `init` that names a backend takes
+    /// both down.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void APageLoadedAfterAFailedStartSaysTheBackendIsNotRunningAndHowToStartIt(bool reload)
+    {
+        ReviewPageDriver.Run(driver =>
+        {
+            driver.NoBackend = true;
+            driver.BackendStartFailed = true;
+        }, async driver =>
+        {
+            if (reload)
+            {
+                await driver.Reload();
+            }
+
+            Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
+            JsonElement banner = await driver.Read(Banner);
+            Assert.False(banner.GetProperty("hidden").GetBoolean());
+            Assert.Equal("The backend is not running. Save Settings to start it again.", banner.GetProperty("text").GetString());
+
+            driver.NoBackend = false;
+            driver.BackendStartFailed = false;
+            int readies = driver.Posted("ready").Length;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for the running backend");
+            await driver.Settle();
+            Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+            Assert.True((await driver.Read(Banner)).GetProperty("hidden").GetBoolean());
+        });
+    }
+
+    /// <summary>...while one that loads before the first start has finished, which has not failed, still says it is starting.</summary>
+    [Fact]
+    public void APageLoadedBeforeTheFirstStartFinishesStillSaysBackendStarting()
+    {
+        ReviewPageDriver.Run(driver => driver.NoBackend = true, async driver =>
+        {
+            Assert.Equal("Backend starting", (await driver.Read(Strip)).GetProperty("text").GetString());
+            Assert.True((await driver.Read(Banner)).GetProperty("hidden").GetBoolean());
+        });
+    }
+
+    /// <summary>
+    /// ...and an `init` that takes down 153A's sentence - no backend up, nothing in force - leaves the banner to the way
+    /// on: the page weighs the sentence before the failed start's word, which takes the banner only when it says
+    /// nothing else.
+    /// </summary>
+    [Fact]
+    public void AFailedStartInitReplacesTheOldSettingsNotInForceSentenceWithTheWayOn()
+    {
+        ReviewPageDriver.Run(driver =>
+        {
+            driver.SettingsNotInForce = NotInForce;
+            driver.SettingsNotInForceRevision = 1;
+        }, async driver =>
+        {
+            Assert.Equal(NotInForce, (await driver.Read(Banner)).GetProperty("text").GetString());
+            driver.NoBackend = true;
+            driver.BackendStartFailed = true;
+            driver.SettingsNotInForce = null;
+            driver.SettingsNotInForceRevision = 2;
+            int readies = driver.Posted("ready").Length;
+
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for the failed backend");
+            await driver.Settle();
+
+            JsonElement banner = await driver.Read(Banner);
+            Assert.False(banner.GetProperty("hidden").GetBoolean());
+            Assert.Equal("The backend is not running. Save Settings to start it again.", banner.GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
     /// A save whose restart failed is a save that was kept (owner decision 150A): the save's line
     /// says so in the class's sentence - the settings are saved, the backend did not restart, save
     /// again to retry - with the class and the reason in the fold; and, as after a save that
@@ -406,6 +542,50 @@ return JSON.stringify({
             await driver.Settle();
 
             Assert.Equal(NotRestartedMessage, (await driver.Read(SaveLine)).GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// Owner decision 160A: a save answered `AddInStopping` - written while the add-in unloads - shows the class's
+    /// sentence on its line, with the class in the fold, or with no labels the message whole, never "class:
+    /// message"; and the page asks for no `init`, since nothing more will answer it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ASaveDuringUnloadSaysTheSettingsAreSavedAndTheAddInIsStopping(bool withLabels)
+    {
+        ReviewPageDriver.Run(driver =>
+        {
+            if (withLabels)
+            {
+                driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json()));
+            }
+            driver.SettingsSaveError = new
+            {
+                error_class = "AddInStopping",
+                message = LabelsSample.AddInStopping,
+                retryable = false,
+            };
+        }, async driver =>
+        {
+            int readies = driver.Posted("ready").Length;
+            await driver.Click("save-settings");
+            await driver.Settle();
+
+            JsonElement line = await driver.Read(SaveLine);
+            string visible = line.GetProperty("visible").GetString()!.Trim();
+            Assert.StartsWith(LabelsSample.AddInStopping, visible, StringComparison.Ordinal);
+            Assert.DoesNotContain("AddInStopping", visible, StringComparison.Ordinal);
+            Assert.Equal(readies, driver.Posted("ready").Length);
+            if (withLabels)
+            {
+                Assert.Contains("AddInStopping", line.GetProperty("fold").GetString()!, StringComparison.Ordinal);
+            }
+            else
+            {
+                Assert.Equal(LabelsSample.AddInStopping, line.GetProperty("text").GetString());
+            }
         });
     }
 

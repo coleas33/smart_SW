@@ -62,10 +62,11 @@
   var DOT = ' · ';
 
   /**
-   * What the strip says after a save whose restart failed, until an `init` names a backend (owner
-   * decision 150A), as the check pages' and the Remodel page's strips say it.
+   * What the strip says after a failed start or restart, until an `init` names a backend (owner
+   * decisions 150A and 160A), as the check pages' and the Remodel page's strips say it.
    */
   var NOT_RUNNING = 'Backend not running';
+  var START_IT_AGAIN = 'The backend is not running. Save Settings to start it again.';
 
   var pending = Object.create(null);
   var nextId = 0;
@@ -203,8 +204,8 @@
     // The token the page held when `backend.restarted` arrived: an `init` that names it was read
     // before the restart, and is not the new backend.
     replacedToken: null,
-    // A save's restart failed and no `init` has named a backend since (owner decision 150A): the
-    // strip says the backend is not running, not that it is starting.
+    // A start or restart failed and no `init` has named a backend since (owner decisions 150A and
+    // 160A): the strip says the backend is not running, not that it is starting.
     notRunning: false,
     // The host's sentence while the backend that is up runs with settings other than the saved
     // ones - a restart failed before it stopped the old backend - as the last `init` carried it,
@@ -2865,7 +2866,10 @@
     }
     if (stage === 'error') {
       showBanner(message);
-      renderBackendState('Error', true);
+      if (!state.backend) {
+        state.notRunning = true;
+      }
+      renderBackendState(state.notRunning ? NOT_RUNNING : 'Error', true);
       return;
     }
     if (stage === 'ready') {
@@ -2876,7 +2880,8 @@
         requestInit(true);
       }
     }
-    renderBackendState(message || stage || '', false);
+    renderBackendState(state.notRunning && !state.backend ? NOT_RUNNING : (message || stage || ''),
+      state.notRunning && !state.backend);
   }
 
   function renderBackendState(text, bad) {
@@ -3069,6 +3074,7 @@
       var notRestarted = error.errorClass === 'BackendNotRestarted';
       ui.saveState.className = 'note bad';
       errorInto(ui.saveState, error, error.errorClass === 'TurnRunning' || notRestarted
+        || error.errorClass === 'AddInStopping'
         ? error.message
         : (error.errorClass + ': ' + error.message));
       if (notRestarted) {
@@ -3154,15 +3160,24 @@
       renderSettings(payload.settings, payload.key_source);
       renderDocument();
       renderBinding();
+      // Read this before the failed-start notice: no backend means no settings are in force, and
+      // removing the old sentence must leave room for the way on (owner decision 160A).
+      holdNotInForce(payload.settings_not_in_force, payload.settings_not_in_force_revision);
       if (state.backend) {
         state.notRunning = false;
+        if (ui.banner.textContent === START_IT_AGAIN) {
+          showBanner('');
+        }
+      } else if (payload.backend_start_failed === true) {
+        // A page opened after the failure missed its status (owner decision 160A).
+        state.notRunning = true;
+        if (ui.banner.hidden) {
+          showBanner(START_IT_AGAIN);
+        }
       }
       renderBackendState(
         state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),
         state.notRunning);
-      // Owner decision 153A: every `init` says whether the saved settings are in force, so a page
-      // that loads again is told too.
-      holdNotInForce(payload.settings_not_in_force, payload.settings_not_in_force_revision);
       if (loadModels && state.backend) {
         refreshModels();
       }

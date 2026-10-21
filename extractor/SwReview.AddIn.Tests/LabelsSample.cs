@@ -41,6 +41,9 @@ internal static class LabelsSample
     public const string BackendNotRestarted =
         "The settings are saved, but the review backend did not restart with them. Save Settings again to retry the restart.";
 
+    public const string AddInStopping =
+        "The settings are saved. The add-in is stopping; nothing else needs doing.";
+
     /// <summary>
     /// A run root the run root rule refuses (owner decision 154A): the words file's sentence for it, true since the
     /// reviews of 154A's merge (F1) of a folder name ending in a space or a period too.
@@ -113,6 +116,7 @@ internal static class LabelsSample
                 { "AlreadyAnswered", AlreadyAnswered },
                 { "InvalidSettings", InvalidSettings },
                 { "BackendNotRestarted", BackendNotRestarted },
+                { "AddInStopping", AddInStopping },
                 { "RunRootRefused", RunRootRefused },
             }
         },

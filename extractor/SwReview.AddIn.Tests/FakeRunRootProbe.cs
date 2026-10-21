@@ -70,8 +70,9 @@ internal sealed class FakeRunRootProbe : IRunRootProbe
     public static FakeRunRootProbe Local() => new FakeRunRootProbe();
 
     /// <summary>
-    /// The five things the rule refuses a run root as, for a host's tests to be refused each way - the fifth, a
-    /// folder name ending in a period, since the reviews of 154A's merge (F1).
+    /// The things the rule refuses a run root as, for a host's tests to be refused each way - the fifth, a
+    /// folder name ending in a period, since the reviews of 154A's merge (F1), and the sixth, a name no folder
+    /// can have, since owner decision 160A.
     /// </summary>
     public static IEnumerable<object[]> RefusedKinds() => new[]
     {
@@ -80,14 +81,15 @@ internal sealed class FakeRunRootProbe : IRunRootProbe
         new object[] { "a device path" },
         new object[] { "could not be checked" },
         new object[] { "a name ending in a period" },
+        new object[] { "an invalid folder name" },
     };
 
     /// <summary>
     /// A run root and a probe the rule refuses as <paramref name="kind"/>, made from a host's local root:
     /// the root on a mapped network drive, the root on a substituted drive, the root written as a device
-    /// path, the root below a folder that cannot be read, or the root with a period after its last folder's
-    /// name. Nothing is made or touched: the probe is faked, and a device path and a name ending in a period
-    /// are refused on sight.
+    /// path, the root below a folder that cannot be read, the root with a period after its last folder's
+    /// name, or the root with a quote after it, a character no folder can have. Nothing is made or touched: the
+    /// probe is faked, and a device path, a name ending in a period and a quote are refused on sight.
     /// </summary>
     public static (string RunRoot, FakeRunRootProbe Probe, RunRootVerdict Verdict) Refusing(string kind, string localRoot)
     {
@@ -107,6 +109,8 @@ internal sealed class FakeRunRootProbe : IRunRootProbe
                 return (localRoot, unreadable, RunRootVerdict.Unverified);
             case "a name ending in a period":
                 return (localRoot.TrimEnd('\\') + ".", Local(), RunRootVerdict.NameEndsInSpaceOrPeriod);
+            case "an invalid folder name":
+                return (localRoot.TrimEnd('\\') + "\"", Local(), RunRootVerdict.InvalidFolderName);
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), kind, "not a kind the rule refuses");
         }
