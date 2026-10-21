@@ -56,7 +56,7 @@ public sealed class DrawingOpenGuard : AllowlistGuard
     };
 
     /// <summary>The allowlist, for reading: the tests assert it as an exact set.</summary>
-    public static readonly IReadOnlyCollection<string> AllowedKeys = AllowedKeySet;
+    public static readonly IReadOnlyCollection<string> AllowedKeys = new ReadOnlySet<string>(AllowedKeySet);
 
     /// <summary>
     /// The seam's three keys; a bare name - every read - is the read-only guard's answer, unchanged.

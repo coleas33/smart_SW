@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
 
 namespace SwReview.Extractor.Guard;
 
@@ -48,8 +46,10 @@ public enum BareNamePolicy
 /// fails as it is built. The tests read
 /// each guard's keys and bare-name policy through it. <see cref="RemodelProbeGuard"/> and
 /// <see cref="SuppressTestGuard"/> are not built on it: they are exemptions over the read-only guard, not
-/// allowlists - a name on their lists passes, matched ignoring case, and every other, bare or qualified, is
-/// the read-only guard's answer - so this rule would change their answers (research R13.1).
+/// allowlists - a name on their lists passes, and every other, bare or qualified, is the read-only guard's
+/// answer - so this rule would change their answers (research R13.1). Their lists are matched ignoring case,
+/// but for the probe's run-scoped members, matched ordinally since owner decision 160A, a case variant of one
+/// refused before the read-only guard is asked (research R14).
 /// </summary>
 public abstract class AllowlistGuard : ICallGuard
 {
@@ -99,13 +99,14 @@ public abstract class AllowlistGuard : ICallGuard
         }
 
         BareNames = bareNames;
-        Keys = new ReadOnlyCollection<string>(_keys.ToList());
-        Reads = new ReadOnlyCollection<string>(_reads.ToList());
+        Keys = new ReadOnlySet<string>(_keys);
+        Reads = new ReadOnlySet<string>(_reads);
     }
 
     /// <summary>
-    /// The guard's own interface-qualified keys, for reading: a copy of the set <see cref="Assert"/> matches
-    /// ordinally, so nothing done to it changes what the guard allows.
+    /// The guard's own interface-qualified keys, for reading: a read-only view of the set <see cref="Assert"/>
+    /// matches ordinally, which implements no mutable collection interface, so nothing done through it changes
+    /// what the guard allows (owner decision 160A; a read-only copy until then).
     /// </summary>
     public IReadOnlyCollection<string> Keys { get; }
 

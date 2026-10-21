@@ -638,7 +638,7 @@ public class RemodelSaveTargetTests
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.slddrw")]
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS")]
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.png")]
-    // The copy path spelled differently: another case, or an 8.3 short name.
+    // Another case, or a fictional short spelling whose folder does not exist to expand it.
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\BRACKET-RMS.SLDPRT")]
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.sldprt")]
     [InlineData(@"C:\runs\202609~1\copy\bracket-RMS.SLDPRT")]
@@ -650,6 +650,17 @@ public class RemodelSaveTargetTests
 
         Assert.Equal("Save3", refusal.MemberName);
         Assert.False(string.IsNullOrWhiteSpace(refusal.Message));
+    }
+
+    [Fact]
+    public void AssertSaveTarget_TheRefusalDescribesTheCanonicalPathComparison()
+    {
+        const string candidate = @"C:\runs\20260916-142201-bracket-remodel\copy\other-RMS.SLDPRT";
+        MutatingCallError refusal = Assert.Throws<MutatingCallError>(
+            () => RemodelScope.AssertSaveTarget(candidate, CopyPath, RunDirectory, SourcePath));
+
+        Assert.Contains("The canonical paths must match exactly, including letter case.", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("8.3", refusal.Message, StringComparison.Ordinal);
     }
 
     [Fact]
