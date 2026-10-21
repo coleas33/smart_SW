@@ -3295,6 +3295,12 @@ constants are spelled as the guard lists them, so no host spelling changed.
 `RemodelProbeGuardTests.ARunScopedMemberPassesExactlyAndACaseVariantIsRefused` holds all fifteen: each
 passes as listed, and its lower-case spelling is refused, naming it.
 
+*Corrected on the decision's review, 2026-10-21 (R14.7, item 2):* the creation exemption is matched
+ordinally too. Decision 21A's tests do not tie it to ignoring case - the review made it ordinal and no case
+went red, in the extractor's suite or the add-in's - while each of its eight members' lower-case spellings
+passed the probe's guard. A case variant of a creation member is the read-only guard's answer now, which
+refuses all eight.
+
 ### R14.2 The guards' published lists read-only (T212, T213)
 
 R13.5 item 3: each allowlist guard's static list was its `HashSet` typed as a read-only collection, so code
@@ -3324,7 +3330,7 @@ pass their comparer.
 published as R13.5 item 3's lists were - the denylist's `HashSet` and the prefixes' array typed as
 `IReadOnlyCollection<string>` - so code in the process could cast one back and take a denial out, widening the
 read-only guard itself. Nothing in the product does. The item named the allowlist guards' lists, and Codex kept
-to them; the same view would close these two.
+to them; the same view would close these two. *Done on the decision's review, 2026-10-21 (R14.7, item 1).*
 
 ### R14.3 The save target's refusal says what it compares (T214, T215)
 
@@ -3382,3 +3388,61 @@ live"`, the tokenizer required) 18,112 passed and 5 skipped on 3.12 and the same
 --isolated --python 3.11 --all-extras`); `ruff check` clean; no broken link; every changed file LF in the
 index and CRLF in the working copy. `3fa50ec` on its own, built and run in a worktree of its own: zero
 warnings, 10,114 and 3,540 passed. SOLIDWORKS was not started.
+
+### R14.7 The decision's review: the read-only guard's lists, the creation set, and the copy's 8.3 spelling tested (T218 to T220)
+
+**Source.** Two independent reviews of the decision, by Opus and by Codex, found nothing that must be fixed,
+and one more round was asked for on what they found, test first (2026-10-21). Claude did it, each test before its
+change and each shown red by mutation. These three items are this feature's; the rest are feature 002's (its
+research, 160A, *The decision's review*, and Phase 21). Nothing here starts SOLIDWORKS, adds a write path or widens
+a guard: items 1 and 2 narrow the guards, and item 3 tests a claim.
+
+1. **The read-only guard's own lists read-only too** (R14.2's finding on the way). `ReadOnlyGuard.DeniedMembers`,
+   its denylist's `HashSet`, and `DeniedPrefixes`, its prefixes' array, were published typed as
+   `IReadOnlyCollection<string>`: the review cast each back and edited it, after which `ReadOnlyGuard.Assert`
+   allowed `IModelDoc2.Save3` and `IFeatureManager.FeatureExtrusion3`. Each is a `ReadOnlySet` view now, which
+   takes any read-only collection, the prefixes' array among them, so neither can be cast to a set, a list or an
+   array, generic or not. Every reader only enumerates them or passes its own comparer (`AllowlistGuardTests`,
+   `ToolServiceWiringTests`, `CreationFamilyGuardTests`, `GuardTests`), and the guard's own lookups stay on its
+   private set and array, so no denial moved and no answer changed. `GuardListReadOnlyTests` holds the two lists
+   (14 cases, from 12), and holds every list to implementing the non-generic `IList` and `ICollection` no more than
+   the generic ones - an array implements both - two assertions added to the case deliberately: stronger, none
+   loosened.
+2. **The probe's creation set matched ordinally.** R14.1 kept `RemodelProbeGuard`'s creation exemption matched
+   ignoring case for decision 21A's tests. The review made it ordinal and no case went red, while all eight
+   lower-case variants of its members passed the probe's guard. It is ordinal now: a case variant of a creation
+   member is not on the set, so it is the read-only guard's answer, which refuses each of the eight. It needs no
+   refusal of its own, as the run-scoped members do: the read-only guard allows two of those by name, and none of
+   these.
+   `RemodelProbeGuardTests.ACreationMemberPassesExactlyAndACaseVariantIsRefused` mirrors the run-scoped case: each
+   member passes as listed, and its lower-case spelling is refused, naming it. `SuppressTestGuard`'s list is
+   still matched ignoring case. R14.1 is corrected by a dated note.
+3. **An existing copy spelled with 8.3 names passes `AssertSaveTarget`, tested on the real disk.** R14.3, and
+   004's contract after it, said so as argued. `RemodelSaveTargetTests.AssertSaveTarget_AnExistingCopySpeltWithItsShortNames_Passes`
+   makes a fictional run's copy under the temp folder and asks `AssertSaveTarget` of its spelling with the short
+   names Windows gave its folders (`GetShortPathName`): it passes; and with the run folder deleted, the same
+   spelling - nothing on the disk to expand it - is refused. This machine's system drive makes 8.3 names (the
+   review measured it), so both halves ran. On a volume that makes none, `GetShortPathName` answers the long path:
+   the case then checks only that the copy passes as spelled, and says so.
+
+**Tests first, and their red shown by mutation.** Against the guards as round one left them, the new rows were red
+10 times - the two lists' rows, and the eight creation members' variants - and the 8.3 case was green, the claim
+being true; each change was then shown red by mutation, as in R14.5, the extractor's suite run whole (10,125
+cases):
+
+| Id | Where | Taken out | Red |
+|---|---|---|---|
+| M114 | `ReadOnlyGuard.DeniedMembers` | a view, not the set | 1 |
+| M115 | `ReadOnlyGuard.DeniedPrefixes` | a view, not the array | 1 |
+| M116 | `RemodelProbeGuard` | the creation set matched ordinally (ignoring case again) | 8 |
+| M117 | `RemodelScope.AssertSaveTarget` | the candidate canonicalized (compared as written) | 1 |
+
+M117 shows the real-disk case can fail: with the candidate compared as written, the copy's short spelling is
+refused.
+
+**Evidence.** *Landed as*: commit `ffc5b76` (T218, T219), and the records commit that adds T220. Measured on the development machine on 2026-10-21, on the round's whole tree - these items
+and 002's (`15db42b`) - with the records: the build at zero warnings from scratch; `SwReview.Extractor.Tests` 10,125
+passed, from 10,114, the 11 new cases here, and `SwReview.AddIn.Tests` 3,640, from 3,609, 002's; the Python suite
+18,112 passed and 5 skipped on 3.12 and the same on 3.11 (`--isolated`); `ruff check` clean; no broken link; every
+changed file LF in the index and CRLF in the working copy. `ffc5b76` on its own, built from scratch and run in a
+worktree of its own: zero warnings, 10,125 and 3,609 passed. SOLIDWORKS was not started.

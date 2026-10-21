@@ -454,6 +454,13 @@ the base's `Keys` and `Reads` - is a read-only view over the guard's own set (`R
 implements no `ICollection<string>` or `ISet<string>`: it counts and enumerates as before, and no cast
 reaches the set a guard matches, the one `RemodelGuard.IsAllowlisted` reads among them.
 
+*Amended on the decision's review, 2026-10-21 (research R14.7):* the read-only guard's own two lists,
+`ReadOnlyGuard.DeniedMembers` and `DeniedPrefixes` - its denials and its prefixes, which until then could be cast
+back to the set and the array and edited, widening the guard itself - are the same view, and no list a guard
+publishes implements the non-generic `IList` or `ICollection` either; so every list a guard publishes is read-only,
+as the paragraph above says of the allowlist guards' alone. And the probe's creation exemption is matched ordinally too, a case variant of one the
+read-only guard's answer, which refuses it; `SuppressTestGuard`'s list is still matched ignoring case.
+
 The tests read each guard's keys and bare-name policy through the rule (`Keys`, `BareNames`,
 `Reads`): the read audit's `Judged`, which judges a key of an allowlist guard whole only in a file
 that builds that guard (section 1); the creation tests' `AllowlistsByName`; and the confirmed open's

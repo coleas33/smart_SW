@@ -445,7 +445,11 @@ description: "Task list for the read-only drawing context"
 - [x] T216 *Added 2026-10-21 (owner decision 160A)*: `docs/review-backlog.md`'s 2026-09-13 finding on 004's `guard-allowlist.md` - `ISldWorks.OpenDoc7` off the allowlist - marked resolved by decision 148A (2026-10-20), in the backlog's style, with what settled it (R12.9 item 7). Docs only. Acceptance: no broken link *Landed as*: the records commit that adds this task
 - [x] T217 *Added 2026-10-21 (owner decision 160A)*: the records. Research R14, with dated notes settling R12.9 items 3, 6 and 7 and R13.5 item 3; `contracts/guard.md` section 9; 004's `guard-allowlist.md` (the probe's exemptions, the published lists, `AssertSaveTarget`'s refusal); this phase, its dependencies and its coverage. Docs only. Acceptance: no broken link; the gates pass *Landed as*: the records commit that adds this task (2026-10-21: no broken link; C# 0 warnings on a `--no-incremental` build, 10,114 and 3,609 passed, from 10,086 and 3,540 on `main`; Python 3.12 and 3.11 (`--isolated`) 18,112 passed and 5 skipped each; `ruff check` clean)
 
-**Dependencies**: T211 after T210, T213 after T212, T215 after T214; T216 stands alone; T217 last.
+- [x] T218 [P] *Added 2026-10-21 (the review of owner decision 160A)*: the guards' last mutable lists, the creation set's letter case and the copy's 8.3 spelling, tests. `GuardListReadOnlyTests`: `ReadOnlyGuard.DeniedMembers` and `DeniedPrefixes` as rows, and every row held to implementing neither `IList` nor `ICollection` too (14 cases; the two assertions added deliberately, stronger). `RemodelProbeGuardTests.ACreationMemberPassesExactlyAndACaseVariantIsRefused` (8 cases). `RemodelSaveTargetTests.AssertSaveTarget_AnExistingCopySpeltWithItsShortNames_Passes`, on the real disk (research R14.7). Acceptance: red against round one's guards (10) and by mutation (R14.7, M114 to M117) *Landed as*: commit `ffc5b76`, with T219
+- [x] T219 *Added 2026-10-21 (the review of owner decision 160A)*: implement T218. `Guard/ReadOnlySet.cs` takes any read-only collection; `ReadOnlyGuard` publishes its two lists as views; `RemodelProbeGuard`'s creation set matched ordinally; `AllowlistGuard`'s description says so. No denial, key or exemption added or removed. Acceptance: T218 green; every guard test green; zero warnings; FR-005 *Landed as*: commit `ffc5b76`; red under M114 to M117 (research R14.7)
+- [x] T220 *Added 2026-10-21 (the review of owner decision 160A)*: the records. Research R14.7, with dated notes on R14.1 and R14.2; `contracts/guard.md` section 9; 004's `guard-allowlist.md` (the probe's exemptions, the published lists, `AssertSaveTarget`'s 8.3 spelling); this phase, its dependencies and its coverage. Docs only. Acceptance: no broken link; the gates pass *Landed as*: the records commit that adds this task (2026-10-21: no broken link; C# 0 warnings on a `--no-incremental` build, 10,125 and 3,640 passed, from 10,114 and 3,609; Python 3.12 and 3.11 (`--isolated`) 18,112 passed and 5 skipped each; `ruff check` clean)
+
+**Dependencies**: T211 after T210, T213 after T212, T215 after T214; T216 stands alone; T217 after them; T219 after T218; T220 last.
 
 **Checkpoint**: the probe's gate exempts only its members' exact spellings; every list a guard publishes is a read-only view; the save target's refusal says what it compares; and the backlog's item is marked settled.
 
@@ -516,7 +520,7 @@ Every probe below is one run of `swreview-extract probe drawings --out <folder> 
 - T145 after T120; T146 after T145; T147 after T146; T148 after T147 (decision 140A); T149 after T148; T150 after T149; T151 after T150; T152 after T146; T153 after T151 (its review); T154 after T153; T155 after T154; T156 after T155; T157 after T156; T158 after T157 (its second review); T159 after T158; T160 after T159; T161 after T160; T162 after T161 (its second pass)
 - T182 after T181; T183 after T182; T184 after T183; T185 after T184; T186 after T185; T187 after T186; T188 after T187; T189 after T188; T190 after T189 (decision 148A); T191 after T190; T192 after T191; T193 after T190 (its review); T194 after T193; T195 after T193; T196 after T192, T194 and T195; T197 after T196 (its second review); T198 after T197; T199 after T198
 - T200 after T199; T201 after T200; T202 after T201; T203 after T199; T204 any time; T205 after T202, T203 and T204 (decision 151A); T206 after T205 (its review); T207 after T205; T208 after T207; T209 after T206 and T208
-- T210 after T209; T211 after T210; T212 after T209; T213 after T212; T214 any time; T215 after T214; T216 any time; T217 after T211, T213, T215 and T216 (decision 160A)
+- T210 after T209; T211 after T210; T212 after T209; T213 after T212; T214 any time; T215 after T214; T216 any time; T217 after T211, T213, T215 and T216 (decision 160A); T218 after T217; T219 after T218; T220 after T219 (its review)
 - T163 after T162; T164 after T163; T165 after T164; T166 after T165; T167 after T166; T168 after T167; T169 after T168; T170 after T169; T171 after T164 and T175; T172 after T170 (decision 144A); T173 after T170; T174 after T173; T175 after T174; T176 after T175; T177 after T176 and T172 (its review); T178 after T177; T179 after T177; T180 after T179; T181 after T178 and T180 (its second review)
 - T051 after T050, T035 and T048; T053 after T052 and T051; T055 after T054 and T053; T084 after T055; T085 after T084; T096 after T085; T097 after T096; T098 after T053
 - T087 after T086, T076 and T023 (added 2026-09-23, decision 10A); T090 after T087 and 009 T087; T091 after T090
@@ -568,7 +572,7 @@ Every functional requirement and success criterion has at least one task whose a
 | FR-002 | T013, T014 | FR-028 | T039, T040 |
 | FR-003 | T013, T014 | FR-029 | T041, T042 |
 | FR-004 | T014, T017, T062 | FR-030 | T039, T041 |
-| FR-005 | T003, T004, T115, T116, T120, T145 to T152, T156, T160, T163 to T171, T173 to T175, T178, T179, T182 to T189, T191 to T194, T197, T198, T200 to T203, T206 to T208, T210 to T213 | FR-031 | T041, T042 |
+| FR-005 | T003, T004, T115, T116, T120, T145 to T152, T156, T160, T163 to T171, T173 to T175, T178, T179, T182 to T189, T191 to T194, T197, T198, T200 to T203, T206 to T208, T210 to T213, T218, T219 | FR-031 | T041, T042 |
 | FR-006 | T003, T004, T145 to T152, T154, T156, T159, T160, T165, T166, T173, T179, T184, T185, T193, T201, T206 | FR-032 | T047, T048 |
 | FR-007 | T015, T062 | FR-033 | T045, T046 |
 | FR-008 | T018 to T021, T063 | FR-034 | T043, T044, T047 |
@@ -598,7 +602,7 @@ Every functional requirement and success criterion has at least one task whose a
 | SC-001 | T062 | SC-006 | T050, T067 |
 | SC-002 | T063 | SC-007 | T049 |
 | SC-003 | T038 | SC-008 | T045, T067 |
-| SC-004 | T034, T038 | SC-009 | T003, T004, T115, T116, T120, T145 to T152, T154, T159, T163 to T170, T173 to T175, T182 to T187, T193, T200 to T203, T206 to T208, T210 to T213 |
+| SC-004 | T034, T038 | SC-009 | T003, T004, T115, T116, T120, T145 to T152, T154, T159, T163 to T170, T173 to T175, T182 to T187, T193, T200 to T203, T206 to T208, T210 to T213, T218, T219 |
 | SC-005 | T026, T039, T065 | SC-010 | T066 |
 | | | SC-011 | T069, T071, T080, T081, T077, T095, T113, T114, T125, T126, T129 to T132 |
 
