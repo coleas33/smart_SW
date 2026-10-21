@@ -91,6 +91,12 @@ own sentence: a refusal's class and sentence, or the whole of an exception, mask
 it carries the failure's sentence, a path included - that is what it is kept for, and why the tab does not
 print it; the tab's words send whoever needs it there by View log's label.
 
+*Amended 2026-10-21 on the decision's review (`research.md` R19.9):* `addin.log` keeps every line. The add-in's
+appends are made one at a time; the file is shared with any other reader or writer; a holder that shares it
+with neither is waited out for up to 300 ms, while no line waits already; and a line that still cannot be
+written is kept, at most 1,000, and written ahead of the next. The Remodel tab's lines leave out the add-in's
+word that the backend did not start, which the add-in's own start report logs.
+
 *Added 2026-10-19 (owner decision 144A; feature 011's research R11.1):* the pane seat's gate log.
 `remodel.open_copy` and the activation of the copy before each dump call SOLIDWORKS through the
 pane seat's own gate (`guard-allowlist.md`, "The re-modeler's pane seat"), and each writes two

@@ -30,7 +30,7 @@ nothing else.
 | `GET /remodel/runs/{job_id}/events` | | `replay_events(<run_dir>/events.jsonl, after)`, with `after` a query parameter | `200 {events, next}` |
 | `POST /remodel/runs/{job_id}/package-after` | `{path}` | Hands the run the dump the add-in just wrote, ending the `dump_after` rendezvous | `200 {ok}` |
 | `POST /remodel/runs/{job_id}/stop` | `{}` | Sets the run's stop flag. Idempotent | `200 {stopping}` |
-| `POST /remodel/close` | `{run_dir, bridge, discard_copy}` | `client.close_document(discard_copy)`. A copy that is not open is a no-op. *Amended 2026-09-28 (U26, T186):* then, unless a run is in flight for that folder, re-checks a source attestation nothing has re-checked yet and files the verdict | `200 {closed}` |
+| `POST /remodel/close` | `{run_dir, bridge, discard_copy}` | `client.close_document(discard_copy)`. A copy that is not open is a no-op. *Amended 2026-09-28 (U26, T186):* then, unless a run is in flight for that folder, re-checks a source attestation nothing has re-checked yet and files the verdict. *Amended 2026-10-21 (owner decision 159A, on review; `research.md` R19.9):* the add-in reads a close refused `BridgeUnavailable`, `BackendUnavailable`, `HttpError`, `BadResponse`, `InvalidRunDir` or `InvalidRequest` as not answered - the bridge may still hold the session - and any other class as the end-of-session routine's answer with what it left; and with no backend running it sends no close, and reads it as not answered | `200 {closed}` |
 
 Before phase B starts, the worker performs a deterministic run-entry preflight. The plan must
 still be `planned`, its scope verdict must be `ok`, and it must carry the attested copy tuple
