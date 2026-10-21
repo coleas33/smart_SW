@@ -5470,6 +5470,141 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 155A's review (004 T202): `SendInit` reads the active document before it takes the
+    /// ending's lock. The add-in reads it on SOLIDWORKS' application thread and waits for the answer
+    /// (`SwReviewAddIn.CurrentDocument`), and that thread takes the lock when a session's ending is told
+    /// during a run (`PostWhatWasLeft`); read under the lock, a page's `init` would hold the lock and wait on
+    /// the thread waiting for it, and SOLIDWORKS would hang. Here SOLIDWORKS' thread, played by a thread of
+    /// its own, is told a session ended once the page's `init` has asked it for the active document, and the
+    /// `init` must finish within a bound, so a regression fails rather than hangs.
+    /// </summary>
+    [Fact]
+    public void AnInitNeverWaitsOnSolidworksThreadWhileItHoldsTheEndingsLock()
+    {
+        using (var world = new RemodelWorld())
+        using (var app = new FakeAppThread())
+        {
+            var gate = new ManualResetEventSlim();
+            var solidworks = (IAppThreadInvoker)app;
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            PageDocument? active = world.Document;
+
+            // As the add-in reads it: on SOLIDWORKS' thread, waited for - here within a bound, so a thread
+            // that never answers ends the wait rather than the test run.
+            world.Options.CurrentDocument = () =>
+            {
+                PageDocument? read = null;
+                var done = new ManualResetEventSlim();
+                solidworks.Post(() =>
+                {
+                    read = active;
+                    done.Set();
+                });
+                return done.Wait(TimeSpan.FromSeconds(15)) ? read : null;
+            };
+
+            bool asked = false;
+            bool finished = false;
+            world.Pipeline.DuringRun = reporter =>
+            {
+                // SOLIDWORKS' thread is busy until the gate opens, then a session's ending is told on it, as
+                // the tool service tells one during a run.
+                solidworks.Post(() =>
+                {
+                    gate.Wait(TimeSpan.FromSeconds(15));
+                    world.Host.SessionEnded(new[] { RemodelSystemToggles.InputDimValOnCreate }, false, copyClosed: true);
+                });
+                int posted = app.Posted;
+                var page = new Thread(() => world.Receive("ready", "r9", new { })) { IsBackground = true, Name = "fict-page-thread" };
+                page.Start();
+
+                // The page's init has asked SOLIDWORKS' thread for the active document; then it is let go.
+                asked = SpinWait.SpinUntil(() => app.Posted > posted, TimeSpan.FromSeconds(10));
+                gate.Set();
+                finished = page.Join(TimeSpan.FromSeconds(5));
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.True(asked, "the page's init never asked SOLIDWORKS' thread for the active document");
+            Assert.True(finished, "the page's init and SOLIDWORKS' application thread waited on each other");
+            Assert.True(world.Reply("init", "r9").GetProperty("latest_run").GetProperty("running").GetBoolean());
+            Assert.Single(world.AllPosted("status"), status => status.GetProperty("message").GetString() == LeftBehind);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 155A's review (004 T202): what a run's ending held is told once - at that run's end -
+    /// and never again at a later run's. Two runs in one host, the first refused by its executor: its words
+    /// reach the page once, in the run line and in the refusal.
+    /// </summary>
+    [Fact]
+    public void WhatARunsEndingHeldIsToldOnceAndNotAgainAtTheNextRunsEnd()
+    {
+        using (var world = new RemodelWorld())
+        {
+            const string refused = "FICT the first run was not planned, so nothing was started.";
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.RunFailure = new RemodelRefusal("RunNotPlanned", refused, retryable: false);
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Pipeline.RunFailure = null;
+            world.Receive("remodel.plan", "p2", new { });
+            string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            Assert.NotEqual(world.ExpectedRunDirectory, second);
+            world.Receive("remodel.start", "s2", new { run_dir = second });
+
+            world.Reply("remodel.started", "s2");
+            Assert.Single(world.AllPosted("status"), status => status.GetProperty("message").GetString() == refused);
+            Assert.Single(world.AllPosted("error"), error => error.GetProperty("message").GetString() == refused);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 155A's review (004 T202): only the stages that end the page's running state wait for the
+    /// run's end. `applying`, `verifying` and `saving` reach the page as the pipeline posts them, while the run
+    /// holds the host and before the progress reported after them; held, the run line would stand still for the
+    /// whole of a run that can take twenty minutes.
+    /// </summary>
+    [Fact]
+    public void TheRunsOtherStagesReachThePageAsTheyArePostedWhileTheRunHoldsTheHost()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            var stages = new List<(string Stage, bool Busy)>();
+            world.WhenPosted = root =>
+            {
+                if (root.GetProperty("type").GetString() == "status")
+                {
+                    stages.Add((root.GetProperty("payload").GetProperty("stage").GetString()!, world.Host.RunInProgress));
+                }
+            };
+            world.Pipeline.DuringRun = reporter =>
+            {
+                reporter.Status("applying", "Applying the plan to the copy...");
+                reporter.Status("verifying", "Verifying the copy against the baseline...");
+                reporter.Status("saving", "Saving the copy...");
+                reporter.Progress(3, 3, 3, "rename", "Fillet3");
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            foreach (string stage in new[] { "applying", "verifying", "saving" })
+            {
+                Assert.Contains((stage, true), stages);
+            }
+
+            int saving = world.Posted.FindIndex(json => json.Contains("\"stage\":\"saving\""));
+            Assert.True(saving >= 0 && saving < world.IndexOf("remodel.progress"), "the run's stages were held past its progress");
+        }
+    }
+
+    // ---- a settings restart and a plan or a run (owner decision 145A) ---------------------------
 
     /// <summary>
     /// Owner decision 145A: a plan holds the backend for as long as it runs, as a turn does, so it
