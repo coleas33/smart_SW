@@ -2592,6 +2592,52 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 158A: a run is not exempt from the hold's limit, and needs no exemption. Its hold,
+    /// held longer than <see cref="ToolServiceGate.HoldLimit"/>, is ignored and said by its kind; but
+    /// that ends nothing - the run goes on to its end - and only lets the look ask the busy question,
+    /// which reads the run in progress (<see cref="RemodelHost.RunInProgress"/>, as the add-in's reads it
+    /// first). So the bridge is not taken down under the run, and the switch is followed once it ends.
+    /// </summary>
+    [Fact]
+    public void ThroughTheGateARunHeldPastTheHoldLimitIsStillNotTakenDownUnder()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            ToolServiceGate gate = world.AttachGate();
+            gate.EnsureStarted();
+            world.Receive("remodel.plan", "p1", new { });
+            string? planned = gate.Attachment;
+            var running = (FakeToolService)gate.Service!;
+            world.Pipeline.DuringRun = reporter =>
+            {
+                world.SwitchTo(gate, @"C:\parts\frame.SLDPRT");
+                world.GateClock = ToolServiceGate.HoldLimit + TimeSpan.FromSeconds(1);
+                world.RunLooks();
+
+                Assert.Equal(planned, gate.Attachment);
+                Assert.False(running.Disposed);
+                Assert.Single(running.LogLines, line => line.StartsWith("ignoring a hold by a Remodel plan or run: held for 1:00:01, ", StringComparison.Ordinal));
+                Assert.Equal(1, world.LooksWaiting);
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("remodel.started", "s1");
+            Assert.Equal(1, world.Pipeline.Count("run"));
+            Assert.Equal("ready", world.LastPosted("status").GetProperty("stage").GetString());
+            Assert.Equal(planned, gate.Attachment);
+            Assert.False(world.Host.RunInProgress);
+
+            world.RunLooks();
+
+            Assert.Equal(@"C:\parts\frame.SLDPRT", gate.DocumentPath);
+            Assert.True(running.Disposed);
+            Assert.Equal(0, world.LooksWaiting);
+        }
+    }
+
+    /// <summary>
     /// Owner decision 152A keeps the planned copy's attachment exactly as 004 T180 keeps it. The
     /// plan held the bridge while its copy was opened and made active, so that switch was skipped;
     /// once the plan ends the gate looks again, finds the exact held copy active, keeps the plan's
@@ -3097,6 +3143,32 @@ public sealed class RemodelHostTests
             Assert.Equal(new[] { true, true }, busyAsLetGo.ToArray());
             Assert.False(world.Host.RunInProgress);
             Assert.Equal(0, holds.Held);
+        }
+    }
+
+    /// <summary>
+    /// ...and takes its hold only once the host is busy (owner decision 158A, on its review: S3). So
+    /// whenever the Remodel host holds the tool service, <see cref="RemodelHost.RunInProgress"/> is true,
+    /// and the gate's busy question, which the add-in reads it first in, keeps the bridge under a plan or
+    /// a run whether or not its hold is past the gate's limit: the limit only ever says such a hold, and
+    /// a plan or a run that never ended would hold the follow back through the busy question.
+    /// </summary>
+    [Fact]
+    public void APlanOrARunTakesItsHoldOnlyOnceTheHostIsBusy()
+    {
+        using (var world = new RemodelWorld())
+        {
+            var holds = new CountedHolds();
+            var busyAsTaken = new List<bool>();
+            world.Hold = holds.Take;
+            holds.OnTake = () => busyAsTaken.Add(world.Host.RunInProgress);
+            world.Open();
+
+            world.Receive("remodel.plan", "p1", new { });
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("remodel.started", "s1");
+            Assert.Equal(new[] { true, true }, busyAsTaken.ToArray());
         }
     }
 
@@ -8629,7 +8701,7 @@ public sealed class RemodelHostTests
 
                 // Owner decision 152A, on the Codex review (X2): the gate's hold once one is
                 // attached, as the add-in wires it, and nothing to hold before.
-                HoldToolService = () => Hold != null ? Hold() : _gate != null ? _gate.HoldAttachment() : ToolServiceHold.Nothing,
+                HoldToolService = () => Hold != null ? Hold() : _gate != null ? _gate.HoldAttachment(ToolServiceHolder.Remodel) : ToolServiceHold.Nothing,
 
                 // Owner decision 159A: the host's log, collected, where the add-in writes it to its own.
                 Log = line =>
@@ -8786,9 +8858,16 @@ public sealed class RemodelHostTests
                 (what, failure) => { },
                 schedule: work => work(),
                 busy: () => Host.RunInProgress,
-                later: look => _looks.Add(look));
+                later: look => _looks.Add(look),
+                clock: () => GateClock);
             return _gate;
         }
+
+        /// <summary>
+        /// The time on the clock <see cref="AttachGate"/>'s gate reads its holds' ages off (owner decision
+        /// 158A). It stands still until a case moves it.
+        /// </summary>
+        public TimeSpan GateClock { get; set; }
 
         /// <summary>
         /// SOLIDWORKS makes <paramref name="path"/> the active document, or switches it to
