@@ -6890,6 +6890,71 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 152A merged with 154A (feature 002 T225): a plan whose gate brings in a run root the rule
+    /// refuses is refused `RunRootRefused`, its way on a local folder for runs, before it takes its hold on the
+    /// tool service - whether or not one is to be had: refused for the hold instead, its way on, pressing again
+    /// in a moment, would only meet the run root.
+    /// </summary>
+    [Theory]
+    [InlineData("a hold to be had")]
+    [InlineData("no hold to be had")]
+    public void APlanWhoseGateBringsInARefusedRunRootIsRefusedForThatBeforeItHoldsTheToolService(string hold)
+    {
+        using (var world = new RemodelWorld())
+        {
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            probe.Drives[@"Y:\"] = RunRootDrive.Network;
+            world.Probe = probe;
+            var holds = new CountedHolds();
+            world.Hold = hold == "a hold to be had" ? holds.Take : () => null;
+            world.Open();
+            Func<Action, BackendRequestException?> allowed = world.Options.BeginRun;
+            world.Options.BeginRun = begin =>
+            {
+                world.RunRootSpelling = @"Y:\Fictional\runs";
+                return allowed(begin);
+            };
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal("RunRootRefused", world.Reply("error", "p1").GetProperty("error_class").GetString());
+            Assert.Equal(0, holds.Taken);
+            Assert.Empty(world.Pipeline.Calls);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
+    /// ...and a Start of a plan made under a run root a save has since moved is refused `RunRootChanged`, its way
+    /// on a plan again, before it takes its hold - whether or not one is to be had, when it would otherwise be
+    /// refused as a session lost. The plan stays planned.
+    /// </summary>
+    [Theory]
+    [InlineData("a hold to be had")]
+    [InlineData("no hold to be had")]
+    public void AStartOfAPlanMadeUnderAnEarlierRunRootIsRefusedForThatBeforeItHoldsTheToolService(string hold)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reply("remodel.planned", "p1");
+            RemodelRun planned = world.Host.LatestRun!;
+            var holds = new CountedHolds();
+            world.Hold = hold == "a hold to be had" ? holds.Take : () => null;
+            world.RunRootSpelling = Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "moved", "runs");
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal("RunRootChanged", world.Reply("error", "s1").GetProperty("error_class").GetString());
+            Assert.Equal(0, holds.Taken);
+            Assert.Empty(world.AllPosted("remodel.started"));
+            Assert.Equal(RemodelRunPhase.Planned, planned.Phase);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
     /// Owner decision 154A, with 153A's record of the settings in force (feature 002 T201): a plan's gate holds
     /// back every settings restart, but not the add-in's first start of the backend, which can be under way once the
     /// gate is passed. While one that would bring another run root into force is, the plan is refused before

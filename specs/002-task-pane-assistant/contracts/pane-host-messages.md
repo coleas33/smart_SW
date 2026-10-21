@@ -145,6 +145,17 @@ bridge until its session is tracked, and every page call the proxy passes on tha
 holds it while the call is out, so the tool service does not take that bridge down under them to
 follow the active document; with no service listening to hold, both go on as before.
 
+*Amended 2026-10-21 (owner decision 152A merged with 153A and 154A; [research.md](../research.md),
+152A, the merge of `main`):* where these refusals meet 153A's and 154A's, the one whose way on the
+other cannot mend is answered first. At a review session: a start of the backend under way
+(`BackendUnavailable`), then the run root judged again (`RunRootRefused`, `RunRootChosenNotInForce`)
+and the run folder under the run root in force (`RunRootChanged`), and only then the bridge
+(`BridgeOnAnotherDocument`), so a start refused for any of the first takes no hold and asks the
+tool service to follow nothing; a Recheck posts `checking` only after all of them. Before a new
+review's extraction: the run root judged again, then the bridge. After it: the document read again
+(`DocumentChanged`), then the session; and a new review refused at its session, whatever refused it,
+posts the `ready` status above.
+
 `report.open` and `folder.open` resolve the path from the host's own session record keyed by
 `chat_id`; the page never supplies a path. `log.open` uses the host's log folder. Every
 resolved path is canonicalized and must be a descendant of `run_root` (or the log folder)

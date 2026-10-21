@@ -2757,6 +2757,99 @@ T206, landed on `main` first; the commits that made them carry their first numbe
   3.11 (`--isolated`). `ruff check` clean, and no broken link.
 - **Tests**: T220 and T222 in [tasks.md](tasks.md), each written first.
 
+#### The merge of `main`: 154A's run root beside 152A's bridge (2026-10-21)
+
+- **Question**: 154A landed on `main` (pull request #30) after 153A, with a run root in force that
+  every run start judges - again once the backend is ready or its gate is passed - and a run folder
+  that must lie under it. The coordinator asked, for the owner: 152A's tasks renumbered after 153A's
+  and 154A's first, in a commit of its own; `main` merged in, never rebased, each conflict resolved
+  keeping both sides' intent; 152A's hold, bridge check and post-extraction reading placed beside
+  154A's run-root reads and 153A's start under way, so a session is given exactly the bridge
+  checked, the settings in force and a folder under the run root in force; and the order of the
+  refusals decided so each says what is true, and pinned.
+- **The renumbering** (`caccf04`): T166 to T183 became T207 to T224 (the note under this entry's
+  heading), the commits keeping their first numbers. 152A's section of `DeferredRestartTests.cs`,
+  numbered 13 beside 153A's, became 15, since 154A's is 14, and moved after 153A's, so the file
+  reads 13, 14, 15 once merged; T209, T215 and `ReviewHostTests.cs` name it.
+- **Decision** (the coordinator, for the owner, 2026-10-21): where two refusals meet, the one whose
+  way on the other cannot mend is answered first. At a review session (`CreateReviewSession`): a
+  start of the backend under way (153A); the run root judged again, then the run folder under the
+  run root in force (154A); then the hold and the bridge (152A); then a Recheck's `checking` status
+  and the settings in force. Before a new review's extraction: the run root judged again, then the
+  bridge. In a plan and a Start: the run root judged again, and a Start's folder under it, then the
+  hold. After a new review's extraction, its document read again (152A, on the Codex review) still
+  comes before the session.
+- **Why**: each refusal says what is true, and so must its way on once it is the one answered. The
+  bridge's - wait a moment, then try again - and the hold's - press again in a moment - are no way
+  past a start of the backend under way or a run root that moved, which pressing again would only
+  meet; their ways on - press again once the backend is up, a run made again under the run root in
+  force, a local folder for runs - do not hang on the bridge. A start under way comes first because
+  153A reads it before anything of the settings in force, the run root among them, as 154A kept. The
+  document read after the extraction stays first because its way on, the review's document active
+  again and Review pressed, makes a new run under the run root in force, which mends a moved run
+  root too. A start refused before its bridge is asked about takes no hold and asks the tool service
+  to follow nothing.
+- **Changed with it**: a new review refused at its session after its extraction - for a start under
+  way or a run root that moved, as for its bridge - now ends the extraction's statuses with a
+  `ready` status (T215's rule). On `main` those two left the status line saying that it was
+  extracting.
+- **The conflicts** (`d1ac5bb`), each resolved keeping both sides:
+  - `ReviewHost.cs`, two hunks in `StartReview` - before the extraction, the run root judged again
+    and 152A's bridge, in that order; after it, 152A's document read again and the session asked for
+    with 154A's run-root arguments. `CreateReviewSession` merged without a conflict, in an order
+    that asked the bridge first, and was reordered as decided.
+  - `RemodelHost.cs`, three hunks: both options kept; in `Plan` and `Start`, the run root before the
+    hold.
+  - `DeferredRestartTests.cs`: 154A's section 14 and 152A's section 15, both added after 153A's 13,
+    interleaved by git - each taken whole, 14 then 15, and checked against its side's own blob.
+  - `ErrorLabelsCoverTheHostTests.cs` and `test_review_words.py`: both sides' classes and pins.
+  - `review-send-failure-events.json`: the pin is the sha256 of `review-waiting.json` as
+    regenerated, with CRLF (`ad7f1681...`). Both generators wrote the four pane fixtures, which
+    match git's merge of the labels byte for byte; `review-waiting-apply-failure.json`, captured, is
+    as it was.
+  - The 002 records merged without a conflict, in id order: 152A's entry and Phase 16, then 153A's,
+    154A's and 156A's.
+- **Not changed**: a session reads 153A's record twice, as on `main` - the run root in
+  `RunRootToUse`, the provider, model and effort just before `POST /sessions` - and now asks about
+  the bridge between the two readings; only the add-in's first start, begun after the start under
+  way was read, could move the record there, which 153A's fourth review found practically
+  unreachable (N4 there).
+- **Tests**: T225 in [tasks.md](tasks.md), written on the merge and run against each order it could
+  have taken - git's own at the session, and 152A's side of each conflict first - in which each case
+  of its kind is red (Mutations, below): at the session, a folder under a run root a save has since
+  moved is refused `RunRootChanged` (a new review, a Recheck, a context review and its Retry), a
+  start asked for while a start of the backend is under way `BackendUnavailable` (a Recheck and a
+  context review), and a run root a waiting restart brings in that the rule refuses `RunRootRefused`
+  (a new review before its extraction, a Recheck at its session), each though the bridge is on
+  another document too, with no hold taken and no follow asked; a plan and a Start refused for their
+  run root take no hold, whether or not one is to be had; and a new review whose document and run
+  root both changed while it extracted is refused for its document (a guard of the order kept).
+- **Mutations**: as before - each resolution taken out once, by the order git or one side alone
+  would have left or by one exact replacement, the tree rebuilt, `DeferredRestartTests`,
+  `ReviewHostTests`, `RemodelHostTests`, `EngineeringContextHostTests` and `ToolServiceWiringTests`
+  run (980 cases), and the file restored byte for byte (checked by its sha256): 9 mutations, 37 red
+  results, every one red. The orders are red only in T225's cases, which no earlier case pinned.
+
+  | Id | Where | Taken out | Red |
+  |---|---|---|---|
+  | ZM6 | `CreateReviewSession` | git's order: the hold and the bridge before the start under way and the run root | 7: T225's at the session - the run root moved (four), the start under way (two), the refused run root at a Recheck |
+  | ZM7 | `CreateReviewSession` | the bridge between the start under way and the run root | 5: the run root moved (four), the refused run root at a Recheck |
+  | ZM8 | `StartReview` | the bridge before the run root judged again, before the extraction (152A's side first) | 1: the refused run root before a new review's extraction |
+  | ZM9 | `RemodelHost.Plan` | the hold before the run root judged again (152A's side first) | 2: the plan, a hold to be had and none |
+  | ZM10 | `RemodelHost.Start` | the hold before the run root judged again and the folder checked (152A's side first) | 2: the Start, a hold to be had and none |
+  | ZM11 | `StartReview` | `main`'s side alone: no `ready` after a refusal at the session | 2: the new review whose run root moved while it extracted, and T215's whose bridge moved |
+  | ZM12 | `CreateReviewSession` | the session given the bridge published now, not the one checked | 1: the bridge asked about and no other (T209) |
+  | ZM13 | `CreateReviewSession` | the session given the saved settings, not those in force | 8: 153A's eight sessions after a failed restart |
+  | ZM14 | `CreateReviewSession` | a folder not under the run root in force let through | 9: 154A's five of a moved run root and T225's four |
+- **Evidence** (2026-10-21, on the merge with T225): the C# build, `--no-incremental`, at zero
+  warnings; `SwReview.Extractor.Tests` 10,086 passed and `SwReview.AddIn.Tests` 3,535, from 3,522 on
+  the merge - T225's 13; the restart classes, the stub-children collection and the tool-service
+  classes, 1,055 cases, five times in a row. Python - the words, fixture, pin and labels tests,
+  every reader of `tasks.md` and `research.md`, `test_every_tasks_list_defines_each_task_id_once`
+  among them, the client and tool tests, and the rest the merge touched, 2,250 cases - passed on
+  3.12 and on 3.11 (`--isolated`). `ruff check` clean, no broken link, and every changed file
+  `i/lf`.
+
 ### 153A. Until a restart succeeds, the settings the backend was started with are in force (2026-10-20)
 
 - **Question**: 150A left one mixed state on record (150A, "Not changed", second item). A settings

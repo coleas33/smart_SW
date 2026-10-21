@@ -5535,6 +5535,193 @@ public sealed class DeferredRestartTests
         }
     }
 
+    // The merge with 153A and 154A (feature 002 T225): which refusal a start meets first. Each says what is
+    // true; the bridge's way on - wait a moment, then try again - is no way past a start of the backend under
+    // way or a run root that moved, so those are answered first, and the bridge is asked about only by a start
+    // that would otherwise go ahead.
+
+    /// <summary>
+    /// A start whose run folder is under a run root a save has since moved is refused `RunRootChanged` (154A) -
+    /// its way on, a run made again under the run root in force - though the bridge it would be given is on
+    /// another document too: no hold is taken, and the tool service is asked to follow nothing. A new review whose
+    /// run root moved while its evidence was extracted then ends the extraction's statuses with `ready`, as one
+    /// refused at its session for its bridge does.
+    /// </summary>
+    [Theory]
+    [InlineData("review")]
+    [InlineData("recheck")]
+    [InlineData("context review")]
+    [InlineData("context retry")]
+    public void AStartWhoseFolderIsUnderARunRootNoLongerInForceIsRefusedForThatBeforeItsBridgeIsAsked(string kind)
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge };
+        PageDocument reviewed = world.Document!;
+        PageDocument? servedNow = reviewed;
+        var holds = new CountedHolds();
+        world.BridgeServes = _ => servedNow;
+        world.Hold = holds.Take;
+        world.Open();
+        Directory.CreateDirectory(world.Settings.RunRoot);
+        var start = new SessionStart(world, kind);
+        start.Ready();
+        string chosen = ChosenRoot(world);
+        if (kind == "review")
+        {
+            // Both move while the evidence is extracted: asked before it, the bridge was on the review's document.
+            world.Dump.OnRun = () =>
+            {
+                MoveTheRunRootInForce(world, chosen);
+                servedNow = Changed(reviewed, "another document");
+            };
+        }
+        else
+        {
+            MoveTheRunRootInForce(world, chosen);
+            servedNow = Changed(reviewed, "another document");
+        }
+
+        int sessions = world.Backend.Sessions.Length;
+        int taken = holds.Taken;
+        int follows = world.FollowsAsked;
+
+        start.Press("press");
+
+        JsonElement error = world.Reply("error", "press");
+        Assert.Equal("RunRootChanged", error.GetProperty("error_class").GetString());
+        Assert.False(error.GetProperty("retryable").GetBoolean());
+        Assert.Equal(chosen, world.Host.RunRoot);
+        Assert.Equal(sessions, world.Backend.Sessions.Length);
+        Assert.Equal(taken, holds.Taken);
+        Assert.Equal(follows, world.FollowsAsked);
+        if (kind == "review")
+        {
+            JsonElement status = world.Last("status");
+            Assert.Equal("ready", status.GetProperty("stage").GetString());
+            Assert.Equal(ExtractedButNotReviewed, status.GetProperty("message").GetString());
+        }
+    }
+
+    /// <summary>
+    /// ...a start asked for while a start of the backend is under way is refused `BackendUnavailable` (153A),
+    /// though its bridge is on another document too: the start under way is read before anything of the
+    /// settings in force, and the bridge is asked about only once it is over. Nothing is held, the tool service
+    /// is asked to follow nothing, and a Recheck posts no `checking` status.
+    /// </summary>
+    [Theory]
+    [InlineData("recheck")]
+    [InlineData("context review")]
+    public void AStartAskedForWhileAStartOfTheBackendIsUnderWayIsRefusedForThatBeforeItsBridgeIsAsked(string session)
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge };
+        using var published = new ManualResetEventSlim(false);
+        using var letGo = new ManualResetEventSlim(false);
+        PageDocument reviewed = world.Document!;
+        var holds = new CountedHolds();
+        world.BridgeServes = _ => Changed(reviewed, "another document");
+        world.Hold = holds.Take;
+        try
+        {
+            ASaveThatSwitchedTheProviderFailedWithNoBackendUp(world);
+            Caller<bool> first = FirstStartHeldOncePublished(world, published, letGo);
+
+            JsonElement refused = world.Reply("error", AskForASession(world, session));
+            letGo.Set();
+            Assert.True(first.Finishes(TimeSpan.FromSeconds(10)), "the first start never finished");
+            Assert.True(first.Result);
+
+            Assert.Equal("BackendUnavailable", refused.GetProperty("error_class").GetString());
+            Assert.True(refused.GetProperty("retryable").GetBoolean());
+            Assert.Empty(world.Backend.Sessions);
+            Assert.Equal(0, holds.Taken);
+            Assert.Equal(0, world.FollowsAsked);
+            Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("stage").GetString() == "checking");
+        }
+        finally
+        {
+            letGo.Set();
+        }
+    }
+
+    /// <summary>
+    /// ...a start whose restart - one a save during a turn left waiting, which the start makes - brings in a run
+    /// root the rule refuses is refused `RunRootRefused` (154A), its way on a local folder for runs in Settings,
+    /// though its bridge is on another document too: a new review before anything is extracted, a Recheck at its
+    /// session. Nothing is made or held, and the tool service is asked to follow nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("review.start")]
+    [InlineData("review.recheck")]
+    public void AStartWhoseRestartBringsInARefusedRunRootIsRefusedForThatBeforeItsBridgeIsAsked(string start)
+    {
+        FakeRunRootProbe probe = FakeRunRootProbe.Local();
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10), Probe = probe, Bridge = ReviewBridge };
+        PageDocument reviewed = world.Document!;
+        var holds = new CountedHolds();
+        world.BridgeServes = _ => Changed(reviewed, "another document");
+        world.Hold = holds.Take;
+        world.Open();
+        world.Track("chat-1");
+        world.Track("waiting");
+        const string chosen = @"Y:\Fictional\runs";
+        SaveAsATurnStarts(world, "save", Choosing(chosen, Save(effort: "low")));
+        world.Backend.EndTurn("chat-1");
+        probe.Drives[@"Y:\"] = RunRootDrive.Network;
+
+        world.Receive(start, "start", new { chat_id = "waiting" });
+
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("RunRootRefused", error.GetProperty("error_class").GetString());
+        Assert.Equal(chosen, world.Host.RunRoot);
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.Empty(world.Backend.Sessions);
+        Assert.Equal(0, holds.Taken);
+        Assert.Equal(0, world.FollowsAsked);
+    }
+
+    /// <summary>
+    /// ...and a new review whose document and run root both changed while its evidence was extracted is refused
+    /// `DocumentChanged` (152A, on the Codex review): read again before the session is asked for, so before 153A's
+    /// and 154A's refusals there - and its way on, the review's document active again and Review pressed, makes a
+    /// new run under the run root in force, which mends both. A guard of the order the merge kept.
+    /// </summary>
+    [Fact]
+    public void ANewReviewWhoseDocumentAndRunRootBothChangedWhileItExtractedIsRefusedForItsDocument()
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge };
+        PageDocument reviewed = world.Document!;
+        var holds = new CountedHolds();
+        world.BridgeServes = _ => reviewed;
+        world.Hold = holds.Take;
+        world.Open();
+        string chosen = ChosenRoot(world);
+        world.Dump.OnRun = () =>
+        {
+            MoveTheRunRootInForce(world, chosen);
+            world.Document = Changed(reviewed, "another configuration");
+        };
+
+        world.Receive("review.start", "start", new { });
+
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("DocumentChanged", error.GetProperty("error_class").GetString());
+        Assert.Equal(chosen, world.Host.RunRoot);
+        Assert.Empty(world.Backend.Sessions);
+        Assert.Equal(0, holds.Taken);
+        Assert.Equal(0, world.FollowsAsked);
+        Assert.Equal(ExtractedButNotReviewed, world.Last("status").GetProperty("message").GetString());
+    }
+
+    /// <summary>
+    /// A settings save that chooses <paramref name="runRoot"/> for runs and changes nothing else, whose restart is
+    /// made at once and succeeds: the run root in force moves to it.
+    /// </summary>
+    private static void MoveTheRunRootInForce(RestartWorld world, string runRoot)
+    {
+        world.Receive("settings.save", "move-run-root", Choosing(runRoot, Save()));
+        world.Reply("settings.saved", "move-run-root");
+        Assert.Equal(runRoot, world.Host.RunRoot);
+    }
+
     /// <summary>
     /// One kind of start that makes a review session (owner decision 152A): made ready with the bridge
     /// on the review's document - whatever has to exist before it can be pressed - then pressed.

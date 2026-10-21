@@ -148,7 +148,13 @@ and Start refuses the plan by name.**
   planned, the next look keeps the plan's attachment for its copy as before. With no service
   listening to hold - none started, or one a follow is taking down - a plan is refused
   `RemodelUnavailable`, retryable, in the words while the tool service attaches, and a Start
-  `SessionLost`, before any pipeline call; nothing waits for the next service.
+  `SessionLost`, before any pipeline call; nothing waits for the next service. *Merged with owner
+  decision 154A, 2026-10-21 (002 `research.md`, 152A, the merge of `main`):* a plan and a Start
+  judge again the run root their gate may have brought in - and a Start checks its plan's folder
+  under it - before they take the hold, so a press refused for its run root (`RunRootRefused`,
+  `RunRootChosenNotInForce`, `RunRootChanged`, or `BackendUnavailable` while a start of the backend
+  would bring another in) takes none, whether or not one was to be had: the hold's way on, pressing
+  again in a moment, would only meet the run root.
 - Start pressed twice after a re-attach is refused twice, identically, and leaves the host free to
   plan; the new plan is made on the attachment listening now and starts. A refused plan tracks no
   run, so a Start naming its folder is `RunNotFound`, and it neither rescues nor invalidates an
