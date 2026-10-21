@@ -2289,6 +2289,44 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// The 152A review's R5, pinned as it stands and put to the owner. With Start switched off - the
+    /// shipped build - a plan closes its session before it answers (004 T176), so no held copy keeps
+    /// the attachment (T180), and the look once the plan ends follows whatever the plan's close left
+    /// active: the original part, normally, which is the document attached to, so nothing changes; or
+    /// the copy, when the close left it open and active, which the tool service then follows - a
+    /// re-attach, which tells the plan lost (24A). Before 152A that switch was skipped for good.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ThroughTheGateWithStartSwitchedOffTheLookFollowsWhatThePlansCloseLeftActive(bool copyLeftActive)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.StartValidated = false;
+            world.Open();
+            using (ToolServiceGate gate = world.AttachLifecycleGate())
+            {
+                gate.EnsureStarted();
+                IToolService original = gate.Service!;
+                world.Pipeline.DuringPlan = () => world.SwitchTo(gate, world.ExpectedCopyPath);
+
+                world.Receive("remodel.plan", "p1", new { });
+                if (!copyLeftActive)
+                {
+                    world.SwitchTo(gate, SourcePath);
+                }
+
+                world.RunLooks();
+
+                Assert.Equal(copyLeftActive, ((FakeToolService)original).Disposed);
+                Assert.Equal(copyLeftActive ? 1 : 0, world.AllPosted("remodel.plan_lost").Length);
+                Assert.Equal(0, world.LooksWaiting);
+            }
+        }
+    }
+
     // ---- remodel.result ------------------------------------------------------------------
 
     /// <summary>

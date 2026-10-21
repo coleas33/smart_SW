@@ -141,10 +141,12 @@ public interface IToolServiceAccess
 /// backend - a follow-up, an answer or a Send reaches it without the host - and the add-in learns
 /// that one has ended only by asking, as the settings restart's watcher asks (owner decision 143A).
 /// A switch that lands while a start or a follow is in flight is owed too, and looked at as soon as
-/// that work is over, so no switch is lost to one in progress. And a review that finds the bridge
-/// on another document than its own asks the gate to follow the active document
-/// (<see cref="FollowActiveDocument"/>), which is how a configuration switch - not followed at the
-/// switch, since it names the same path - reaches the bridge before that review runs.
+/// that work is over, so no switch is lost to one in progress. Such a follow is a switch's, and is
+/// made as at the switch: by the path, so a configuration switch re-attaches nothing wherever it
+/// lands (004, decision 22A). And a review that finds the bridge on another document than its own
+/// asks the gate to follow the active document as it is, its configuration included
+/// (<see cref="FollowActiveDocument"/>), which is how a configuration switch reaches the bridge
+/// before that review runs.
 ///
 /// Thread-safe, because it is not called from one thread: the pane's calls come from the
 /// application thread and the start itself completes on a worker.
@@ -154,10 +156,23 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// <summary>
     /// How long a follow owed while work holds the bridge waits before the gate asks again (owner
     /// decision 152A): a second, as the settings restart's watcher waits (143A). A look costs the
-    /// add-in one `GET /sessions/{chat_id}` per open chat, off the application thread, and only
-    /// while a follow is owed.
+    /// add-in the busy question - the remodel run, then one `GET /sessions/{chat_id}` per review it
+    /// tracks until one does not rule a turn out - off the application thread, and only while a
+    /// follow is owed.
     /// </summary>
     public static readonly TimeSpan FollowPoll = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// What a follow owes (owner decision 152A, ordered so that the larger debt covers the smaller):
+    /// nothing; a switch's follow, made as at the switch, by the document's path; or a review's
+    /// request, made by the review's own rule, the path ignoring case and the configuration exactly.
+    /// </summary>
+    private enum Owed
+    {
+        Nothing,
+        Path,
+        Configuration,
+    }
 
     private readonly Func<PageDocument?> _activeDocument;
     private readonly Func<IToolService> _start;
@@ -175,12 +190,13 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     private bool _disposed;
 
     /// <summary>
-    /// Owner decision 152A: a follow is owed - one was skipped while work held the bridge, asked for
-    /// while a start or a follow was in flight, or asked for by a review - and has not been made
-    /// since. Cleared when a follow or a start reads the active document to act on it: whatever is
-    /// asked after that reading is owed afresh. Guarded by <see cref="_lock"/>.
+    /// Owner decision 152A: what is owed - a follow skipped while work held the bridge, a switch that
+    /// landed while a start or a follow was in flight, or a review's request - and not made since.
+    /// Taken by a follow as it asks whether work holds the bridge, and by a follow or a start as it
+    /// reads the active document to act on it: whatever is asked after that is owed afresh. Guarded
+    /// by <see cref="_lock"/>.
     /// </summary>
-    private bool _owed;
+    private Owed _owed;
 
     /// <summary>
     /// Owner decision 152A: a look again is scheduled and has not run yet, so no second one is.
@@ -262,11 +278,13 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
 
     /// <summary>
     /// Owner decision 152A: asked by a review that found the bridge on another document than its
-    /// own. The gate follows the document active now - its path and its configuration - as any
-    /// follow does: not while work holds the bridge, when it waits for the hold to end; not away
-    /// from the planned copy a waiting plan holds (004 T180); and to nothing for a drawing or no
-    /// document. Returns at once: everything but the decision to schedule runs on the scheduled
-    /// thread. Never throws.
+    /// own. The gate follows the document active now as the review compares it - the path ignoring
+    /// case and the configuration exactly, <see cref="PageDocument.IsSameDocument(PageDocument)"/>,
+    /// so that what it calls the same the review does too (the 152A review's R3) - as any follow is
+    /// made: not while work holds the bridge, when it waits for the hold to end; not away from the
+    /// planned copy a waiting plan holds (004 T180); and to nothing for a drawing or no document.
+    /// Returns at once: everything but the decision to schedule runs on the scheduled thread. Never
+    /// throws.
     /// </summary>
     public void FollowActiveDocument()
     {
@@ -280,7 +298,7 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
 
             // Owed whatever happens next: a follow or a start in flight looks again when it ends
             // (Settle), and with none listening there is nothing to follow from.
-            _owed = true;
+            Owe(Owed.Configuration);
             look = !_starting && !_asking && _service != null;
             if (look)
             {
@@ -473,9 +491,9 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
             {
                 // A start or a follow is in flight. It reads the active document when it runs, but
                 // this switch can land after that reading, and was then dropped until the next
-                // switch: it is owed instead, and looked at once that work is over (owner decision
-                // 152A; Settle).
-                _owed = true;
+                // switch: it is owed instead, as a switch's follow, and looked at once that work is
+                // over (owner decision 152A; Settle).
+                Owe(Owed.Path);
                 return;
             }
 
@@ -532,6 +550,20 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// </summary>
     private void FollowCore(IToolService attached, string? switchedTo)
     {
+        // What this follow is for: what was owed when it asks - taken now, so that whatever is asked
+        // while the question is out is owed afresh (the 152A review's N2) - and a switch's own follow
+        // at least.
+        Owed owed;
+        lock (_lock)
+        {
+            owed = Take();
+        }
+
+        if (switchedTo != null && owed < Owed.Path)
+        {
+            owed = Owed.Path;
+        }
+
         bool busy;
         try
         {
@@ -540,14 +572,10 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         catch (Exception failure)
         {
             // A question that cannot be answered counts as busy - nothing is torn down - and is
-            // said, as before 152A; it is not asked again every poll, since nothing says the next
-            // answer would come: the next switch, or a review's request, asks again.
-            lock (_lock)
-            {
-                _starting = false;
-                _owed = false;
-            }
-
+            // said, as before 152A; this follow is not asked again every poll, since nothing says
+            // the next answer would come: the next switch, or a review's request, asks again. A
+            // switch that landed while the question was out is owed, and looked at now (Settle).
+            Settle();
             _report("The SwReview tool service could not be asked whether it is busy.", failure);
             return;
         }
@@ -559,20 +587,21 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
                 Log(attached, "not re-attaching to " + switchedTo + ": a turn is running against " + attached.DocumentPath);
             }
 
-            Defer();
+            Defer(owed);
             return;
         }
 
-        FollowNow(attached);
+        FollowNow(attached, owed);
     }
 
     /// <summary>
     /// A follow once nothing holds the bridge: the document active now, read now - never an older
-    /// event's - is followed, unless it is the one attached to, its configuration included (owner
-    /// decision 152A), no part or assembly at all, or the exact held copy of a waiting plan
-    /// (004 T180).
+    /// event's - is followed, unless it is no part or assembly at all, the exact held copy of a
+    /// waiting plan (004 T180), or the one attached to - by its path for a switch's follow, as at the
+    /// switch, and by the review's own rule for a review's request, its configuration included (owner
+    /// decision 152A; <see cref="Serves"/>).
     /// </summary>
-    private void FollowNow(IToolService attached)
+    private void FollowNow(IToolService attached, Owed owed)
     {
         PageDocument? current;
         bool preserve = false;
@@ -580,12 +609,17 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         {
             lock (_lock)
             {
-                // Acted on now: whatever is asked after this reading is owed afresh.
-                _owed = false;
+                // Acted on now: what was asked while the busy question was out is this follow's too,
+                // and whatever is asked after this reading is owed afresh.
+                Owed meanwhile = Take();
+                if (meanwhile > owed)
+                {
+                    owed = meanwhile;
+                }
             }
 
             current = _activeDocument();
-            if (current == null || !current.IsAttachable || Serves(attached, current))
+            if (current == null || !current.IsAttachable || Serves(attached, current, owed))
             {
                 Settle();
                 return;
@@ -647,7 +681,7 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
             lock (_lock)
             {
                 _asking = false;
-                if (_disposed || !_owed || _starting || _service == null)
+                if (_disposed || _owed == Owed.Nothing || _starting || _service == null)
                 {
                     return;
                 }
@@ -675,7 +709,7 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         lock (_lock)
         {
             _starting = false;
-            look = !_disposed && _owed && !_asking && _service != null;
+            look = !_disposed && _owed != Owed.Nothing && !_asking && _service != null;
             if (look)
             {
                 _asking = true;
@@ -689,16 +723,16 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     }
 
     /// <summary>
-    /// Work holds the bridge (owner decision 152A): <c>_starting</c> is let go, the follow is owed,
-    /// and it is asked again a poll later - one look waiting at a time.
+    /// Work holds the bridge (owner decision 152A): <c>_starting</c> is let go, the follow is owed as
+    /// what it was for, and it is asked again a poll later - one look waiting at a time.
     /// </summary>
-    private void Defer()
+    private void Defer(Owed owed)
     {
         bool look;
         lock (_lock)
         {
             _starting = false;
-            _owed = true;
+            Owe(owed);
             look = !_disposed && !_asking;
             if (look)
             {
@@ -730,6 +764,23 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         }
     }
 
+    /// <summary>Owes <paramref name="owed"/> at least: the larger debt covers the smaller. Under <see cref="_lock"/>.</summary>
+    private void Owe(Owed owed)
+    {
+        if (owed > _owed)
+        {
+            _owed = owed;
+        }
+    }
+
+    /// <summary>What is owed, taken: nothing is owed after it. Under <see cref="_lock"/>.</summary>
+    private Owed Take()
+    {
+        Owed owed = _owed;
+        _owed = Owed.Nothing;
+        return owed;
+    }
+
     private void ClearStarting()
     {
         lock (_lock)
@@ -745,7 +796,7 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         lock (_lock)
         {
             _disposed = true;
-            _owed = false;
+            _owed = Owed.Nothing;
             service = _service;
             _service = null;
         }
@@ -760,9 +811,10 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         {
             lock (_lock)
             {
-                // Owner decision 152A: this start attaches to what is active when it runs, so a
-                // follow owed before this reading is made by it, and one asked after it is owed afresh.
-                _owed = false;
+                // Owner decision 152A: this start attaches to what is active when it runs, as it is,
+                // so a follow owed before this reading - a switch's or a review's - is made by it, and
+                // one asked after it is owed afresh.
+                Take();
             }
 
             PageDocument? document = _activeDocument();
@@ -805,7 +857,7 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
 
             // Owner decision 152A: a switch that landed after this start read the active document
             // is looked at once the service is published, not dropped.
-            look = !abandoned && _owed && !_asking;
+            look = !abandoned && _owed != Owed.Nothing && !_asking;
             if (look)
             {
                 _asking = true;
@@ -838,12 +890,18 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
 
     /// <summary>
     /// Owner decision 152A: whether <paramref name="service"/> is attached to
-    /// <paramref name="document"/> - the same path, by <see cref="SameDocument"/>, and the same
-    /// configuration exactly, as SOLIDWORKS names configurations - the rule a follow decides by.
+    /// <paramref name="document"/>, by the rule of what is owed. A switch's follow is made as at the
+    /// switch, by <see cref="SameDocument"/> - the path, canonically and ignoring case - so a
+    /// configuration switch re-attaches nothing wherever it lands (004, decision 22A; the 152A
+    /// review's N3). A review's request is made by the review's own rule,
+    /// <see cref="PageDocument.IsSameDocument(PageDocument)"/> - the path ignoring case and the
+    /// configuration exactly - so that a document the attach spelled otherwise, which the review
+    /// refuses, is followed rather than called the same (the 152A review's R3).
     /// </summary>
-    private static bool Serves(IToolService service, PageDocument document) =>
-        SameDocument(service.DocumentPath, document.Path)
-        && string.Equals(service.Configuration, document.Configuration, StringComparison.Ordinal);
+    private static bool Serves(IToolService service, PageDocument document, Owed owed) =>
+        owed == Owed.Configuration
+            ? document.IsSameDocument(service.DocumentPath, service.Configuration)
+            : SameDocument(service.DocumentPath, document.Path);
 
     /// <summary>
     /// Whether a path names a document a scope can be attached to: the rule

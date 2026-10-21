@@ -1031,9 +1031,11 @@ public class SwReviewAddIn : ISwAddin
             schedule: null,
             // What holds the bridge, and so what stops it being re-attached to another document
             // (docs/history/pane-findings-2026-09-16.md, finding 1). Both read late: the remodel host is
-            // built after this gate is, and either can be gone by the time the question is asked.
-            busy: () => (_reviewHost != null && _reviewHost.AnyTurnRunning())
-                || (_remodelHost != null && _remodelHost.RunInProgress),
+            // built after this gate is, and either can be gone by the time the question is asked. Owner
+            // decision 152A, on review: the remodel run first, which costs nothing, then whether a turn
+            // may be running - a chat the backend does not answer about counts - since the gate asks
+            // again every second while a follow is owed, and a "no" takes the bridge down.
+            busy: () => (_remodelHost != null && _remodelHost.RunInProgress) || (_reviewHost != null && _reviewHost.TurnMayBeRunning()),
             preserveAttachment: (path, attachment) => _remodelHost?.KeepCopyAttachment(path, attachment) == true,
             afterStopped: _ => _remodelHost?.RefreshAvailability());
     }

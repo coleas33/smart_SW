@@ -3062,6 +3062,45 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
+    /// The 152A review's R1. The tool-service gate asks whether work holds the bridge before every
+    /// follow, and since owner decision 152A every second while a follow is owed, for the length of a
+    /// turn; a "no" takes the bridge down, which cannot be undone. A chat the backend gives no usable
+    /// answer about may have a turn running - not knowing whether a turn runs is not knowing that none
+    /// does, as the settings restart reads it (143A) - so the gate's question, `TurnMayBeRunning`,
+    /// answers yes to it, where `AnyTurnRunning`, which a save asks, answers no. With no backend
+    /// process at all no turn can run, and it answers no, so the tool service still follows the
+    /// engineer while the backend is down.
+    /// </summary>
+    [Theory]
+    [InlineData("a turn running", true)]
+    [InlineData("no answer", true)]
+    [InlineData("no turn", false)]
+    [InlineData("no backend", false)]
+    public void TheGatesQuestionCountsAChatTheBackendDoesNotAnswerAboutAsATurnThatMayRun(string state, bool mayRun)
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        world.Track("chat-2");
+        if (state != "no turn")
+        {
+            world.Backend.StartTurn("chat-2");
+        }
+
+        if (state == "no answer")
+        {
+            world.Backend.StopsAnswering();
+        }
+        else if (state == "no backend")
+        {
+            world.Backend.Down = true;
+        }
+
+        Assert.Equal(mayRun, world.Host.TurnMayBeRunning());
+        Assert.Equal(state == "a turn running", world.Host.AnyTurnRunning());
+    }
+
+    /// <summary>
     /// One kind of start that makes a review session (owner decision 152A): made ready with the bridge
     /// on the review's document - whatever has to exist before it can be pressed - then pressed.
     /// </summary>

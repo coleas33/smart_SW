@@ -875,6 +875,248 @@ public sealed class ToolServiceWiringTests
         }
     }
 
+    // ---- what the 152A review found ---------------------------------------------------------
+
+    /// <summary>
+    /// The 152A review's R3. A review compares its document with the bridge's by the pane's one rule
+    /// (<see cref="PageDocument.IsSameDocument(PageDocument)"/>: the path ignoring case), and the gate
+    /// compares paths canonically; a document the attach spelled otherwise - opened through `..`, say -
+    /// was refused by the review and called the same by the gate, so the review's request re-attached
+    /// nothing and the refusal never cleared. A review's request is decided by the review's rule; a
+    /// switch keeps the gate's.
+    /// </summary>
+    [Fact]
+    public void AReviewsRequestFollowsADocumentTheAttachSpelledOtherwise()
+    {
+        var world = new GateWorld
+        {
+            DocumentPath = @"C:\models\frame.SLDASM",
+            Configuration = "Default",
+            AttachSpelling = () => @"C:\models\sub\..\frame.SLDASM",
+        };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.AttachSpelling = null;
+        var reviewed = new PageDocument(@"C:\models\frame.SLDASM", "Default");
+        Assert.False(reviewed.IsSameDocument(gate.DocumentServedBy(world.Published!)));
+
+        gate.FollowDocument(@"C:\models\frame.SLDASM");
+        Assert.Equal(1, world.Starts);
+
+        gate.FollowActiveDocument();
+
+        Assert.Equal(2, world.Starts);
+        Assert.True(reviewed.IsSameDocument(gate.DocumentServedBy(world.Published!)));
+    }
+
+    /// <summary>
+    /// The 152A review's N3. A configuration switch is the same document at the switch, and
+    /// re-attaches nothing (004, decision 22A) - also when it lands while a start or a follow is in
+    /// flight, and is looked at once that work is over, and when the hold that skipped a switch ends
+    /// with the attached document back in another configuration. Only a review's request follows a
+    /// configuration.
+    /// </summary>
+    [Theory]
+    [InlineData("during a start")]
+    [InlineData("once a hold ends")]
+    public void AConfigurationSwitchReattachesNothingWhereverItLands(string when)
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Configuration = "Default" };
+        ToolServiceGate gate = world.Gate();
+        if (when == "during a start")
+        {
+            world.AfterAttach = () =>
+            {
+                world.AfterAttach = null;
+                world.Configuration = "Machined";
+                gate.FollowDocument(@"C:\models\frame.SLDASM");
+            };
+            gate.EnsureStarted();
+        }
+        else
+        {
+            gate.EnsureStarted();
+            world.Busy = true;
+            world.DocumentPath = @"C:\models\bracket.SLDPRT";
+            gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+            world.DocumentPath = @"C:\models\frame.SLDASM";
+            world.Configuration = "Machined";
+            gate.FollowDocument(@"C:\models\frame.SLDASM");
+            world.Busy = false;
+            world.RunLooks();
+        }
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal("Default", gate.DocumentServedBy(world.Published!)!.Configuration);
+        Assert.Equal(0, world.LooksWaiting);
+
+        gate.FollowActiveDocument();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal("Machined", gate.DocumentServedBy(world.Published!)!.Configuration);
+    }
+
+    /// <summary>
+    /// The 152A review's R4. A switch that lands just after a follow read the active document - a
+    /// look that found the attached document, so re-attaches nothing - is looked at as soon as that
+    /// look is over, not left until the next switch.
+    /// </summary>
+    [Fact]
+    public void ASwitchThatLandsJustAfterALooksReadingIsFollowedOnceTheLookIsOver()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        world.Busy = false;
+        world.DocumentPath = @"C:\models\frame.SLDASM";
+        world.AfterActive = () =>
+        {
+            world.AfterActive = null;
+            world.DocumentPath = @"C:\models\plate.SLDPRT";
+            gate.FollowDocument(@"C:\models\plate.SLDPRT");
+        };
+
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\plate.SLDPRT", gate.DocumentPath);
+        Assert.Equal(0, world.LooksWaiting);
+    }
+
+    /// <summary>
+    /// The 152A review's R4. A review's request that comes while a start is in flight is owed, and
+    /// looked at once the start is listening: a review refused as the tool service attached is not
+    /// left on the configuration the start found.
+    /// </summary>
+    [Fact]
+    public void AReviewsRequestWhileAStartIsInFlightIsFollowedOnceItIsListening()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Configuration = "Default" };
+        ToolServiceGate gate = world.Gate();
+        world.AfterAttach = () =>
+        {
+            world.AfterAttach = null;
+            world.Configuration = "Machined";
+            gate.FollowActiveDocument();
+        };
+
+        gate.EnsureStarted();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal("Machined", gate.DocumentServedBy(world.Published!)!.Configuration);
+    }
+
+    /// <summary>
+    /// The 152A review's R4. A busy question that throws counts as busy and is said, as before 152A,
+    /// and owes nothing: nothing says the next answer would come, so it is not asked again every poll,
+    /// nor at once. The next switch, or a review's request, asks again.
+    /// </summary>
+    [Fact]
+    public void ABusyQuestionThatThrowsIsSaidAndOwesNothing()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.BusyFailure = new InvalidOperationException("the backend did not answer");
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Contains("the backend did not answer", Assert.Single(world.Reports), StringComparison.Ordinal);
+        Assert.Equal(1, world.BusyQuestions);
+        Assert.Equal(0, world.LooksWaiting);
+        Assert.Equal(1, world.Starts);
+    }
+
+    /// <summary>
+    /// The same for a look: a look whose busy question throws is said, and owes nothing - neither a
+    /// look at once nor one a poll later - so a question that keeps throwing is not asked back to back.
+    /// </summary>
+    [Fact]
+    public void ALookWhoseBusyQuestionThrowsIsSaidAndAsksNoMore()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true };
+        var queued = new Queue<Action>();
+        ToolServiceGate gate = world.Gate(work => queued.Enqueue(work));
+        gate.EnsureStarted();
+        queued.Dequeue()();
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        queued.Dequeue()();
+        Assert.Equal(1, world.LooksWaiting);
+        world.BusyFailure = new InvalidOperationException("the backend did not answer");
+
+        world.RunLooks();
+
+        Assert.Empty(queued);
+        Assert.Equal(0, world.LooksWaiting);
+        Assert.Equal(2, world.BusyQuestions);
+        Assert.Equal(1, world.Starts);
+        Assert.Contains("the backend did not answer", Assert.Single(world.Reports), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The 152A review's N2. A switch that lands while the busy question is out is owed, and is not
+    /// dropped when that question then throws: it is looked at once the question is over, and the
+    /// look asks afresh.
+    /// </summary>
+    [Fact]
+    public void ASwitchMadeWhileTheBusyQuestionIsOutIsFollowedThoughTheQuestionThrows()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        int asked = 0;
+        world.OnBusy = () =>
+        {
+            asked++;
+            world.BusyFailure = null;
+            if (asked == 1)
+            {
+                world.DocumentPath = @"C:\models\plate.SLDPRT";
+                gate.FollowDocument(@"C:\models\plate.SLDPRT");
+                world.BusyFailure = new InvalidOperationException("the backend did not answer");
+            }
+        };
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, asked);
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\plate.SLDPRT", gate.DocumentPath);
+        Assert.Single(world.Reports);
+    }
+
+    /// <summary>
+    /// The 152A review's R4. A switch back to the attached document while a follow's busy question is
+    /// out is read with the rest by that follow, which re-attaches nothing and owes no second look:
+    /// the busy question is asked once.
+    /// </summary>
+    [Fact]
+    public void ASwitchBackWhileTheBusyQuestionIsOutCostsNoSecondQuestion()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.OnBusy = () =>
+        {
+            world.OnBusy = null;
+            world.DocumentPath = @"C:\models\frame.SLDASM";
+            gate.FollowDocument(@"C:\models\frame.SLDASM");
+        };
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(1, world.BusyQuestions);
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(@"C:\models\frame.SLDASM", gate.DocumentPath);
+        Assert.Equal(0, world.LooksWaiting);
+    }
+
     // ---- the attachment the Remodel tab compares (decision 22A, 004 T160) ---------------------
 
     /// <summary>
@@ -1124,6 +1366,14 @@ public sealed class ToolServiceWiringTests
         Assert.Contains("preserveAttachment: (path, attachment) => _remodelHost?.KeepCopyAttachment(path, attachment) == true", gate, StringComparison.Ordinal);
         Assert.Contains("afterStopped: _ => _remodelHost?.RefreshAvailability()", gate, StringComparison.Ordinal);
         Assert.Contains("(_remodelHost != null && _remodelHost.RunInProgress)", gate, StringComparison.Ordinal);
+
+        // The 152A review's R1: the gate's question reads the remodel run first, which costs nothing,
+        // and then whether a turn may be running - a chat the backend does not answer about counts -
+        // since a follow owed is asked again every second for the length of a turn.
+        Assert.Contains(
+            "busy: () => (_remodelHost != null && _remodelHost.RunInProgress) || (_reviewHost != null && _reviewHost.TurnMayBeRunning()),",
+            gate,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -3641,7 +3891,21 @@ public sealed class ToolServiceWiringTests
         /// and its configuration - because what the gate decides from is the document, not a bool:
         /// a drawing is open and is still not something a scope can be attached to.
         /// </summary>
-        public PageDocument? Active() => DocumentOpen ? new PageDocument(DocumentPath, Configuration) : null;
+        public PageDocument? Active()
+        {
+            PageDocument? active = DocumentOpen ? new PageDocument(DocumentPath, Configuration) : null;
+            AfterActive?.Invoke();
+            return active;
+        }
+
+        /// <summary>Runs once a reading of the active document is made, before the gate has it: a switch that lands just after it.</summary>
+        public Action? AfterActive { get; set; }
+
+        /// <summary>
+        /// How the next start spells the document it attaches to, when not as <see cref="DocumentPath"/>
+        /// does: SOLIDWORKS names a document as it was opened (the 152A review's R3).
+        /// </summary>
+        public Func<string>? AttachSpelling { get; set; }
 
         /// <summary>A review turn or a remodel run is holding the bridge.</summary>
         public bool Busy { get; set; }
@@ -3774,7 +4038,7 @@ public sealed class ToolServiceWiringTests
                 throw Failure;
             }
 
-            var service = new FakeToolService(++_next, DocumentPath, Configuration);
+            var service = new FakeToolService(++_next, AttachSpelling?.Invoke() ?? DocumentPath, Configuration);
             Services.Add(service);
             AfterAttach?.Invoke();
             return service;

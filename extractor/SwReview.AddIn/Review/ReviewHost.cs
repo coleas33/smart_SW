@@ -771,6 +771,17 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     public bool AnyTurnRunning() => LookAtTheTurns(stopAtNoAnswer: false) == TurnsSeen.Running;
 
+    /// <summary>
+    /// Whether a turn may be running on a chat this host started (owner decision 152A, the review's
+    /// R1): one is seen running, or the backend gives no usable answer about one - not knowing whether
+    /// a turn runs is not knowing that none does, as the settings restart reads it (143A) - and none
+    /// with no backend process at all, which runs no turn. What the tool-service gate asks before it
+    /// takes the bridge down (`SwReviewAddIn`), which cannot be undone, and asks every second while a
+    /// follow is owed; <see cref="AnyTurnRunning"/>, which a save asks, reads no answer as none.
+    /// </summary>
+    public bool TurnMayBeRunning() =>
+        _options.Backend.Endpoint != null && LookAtTheTurns(stopAtNoAnswer: true) != TurnsSeen.None;
+
     /// <param name="stopAtNoAnswer">Stop at the first chat the backend gives no usable answer
     /// about, as the restart for saved settings does (owner decision 143A): such a chat holds it
     /// back whatever the other chats say, and its look must cost one round trip's timeout, not one
