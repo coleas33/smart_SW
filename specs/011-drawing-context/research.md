@@ -2781,11 +2781,13 @@ Each is beyond what decision 148A names, so nothing here was changed.
    the bridge is asked, for a review as for a plan; so a run root on a share - the default, the
    Documents folder, when Documents is redirected to one - plans nothing, though both seats take a
    share's path to a run's copy. Whether run roots on a share are to work is the owner's call.
-   *Settled by 154A (2026-10-20):* they are not to work, and are told so up front. The settings save
-   and every run start - a review, a check, a plan and a Start among them - refuse a run root on a
-   network share (a UNC path, a mapped network drive, a final path on a share) before anything is
-   read, made or asked of the backend, in plain words that name the way on, a local folder, and no
-   path; the backend's rule stays, and so do both seats' rules for the copy's path (002
+   *Settled by 154A (2026-10-20):* they are not to work, and are told so up front. Every run start
+   - a review, a check, a plan and a Start among them - refuses a run root on a network share (a UNC
+   path, a mapped network drive, a final path on a share) before anything is read, made or asked of
+   the backend, in plain words that name the way on, a local folder chosen for runs in Settings, and
+   no path; the Settings panel's field for runs, added by the owner's follow-up the same day, saves no
+   such folder and says so, and a save is never refused for the run root. The backend's rule stays,
+   and so do both seats' rules for the copy's path (002
    [research.md](../002-task-pane-assistant/research.md), 154A).
 2. **A run root reached through a link is spelled two ways.** The backend resolves the run folder
    it is sent (`Path.resolve()`), which follows a junction, a symbolic link, a `subst` drive or a
@@ -2797,8 +2799,9 @@ Each is beyond what decision 148A names, so nothing here was changed.
    compares the two run folders by the file they name. Nothing was changed. *Settled by 154A
    (2026-10-20):* neither option was taken. A run root reached through a link - a substituted
    drive, a junction or a symbolic link among its existing folders, any root whose final path
-   differs from its full path other than by letter case - is refused by the settings save and every
-   run start before anything is made, so for every run root accepted the backend's spelling of a run
+   differs from its full path other than by letter case - is refused by every run start before
+   anything is made, and not saved from the Settings panel's field for runs, so for every run root
+   accepted the backend's spelling of a run
    folder and the host's differ at most in letter case, which step 4 compares ignoring; the copy
    path, the bind and step 4's comparison are unchanged (002
    [research.md](../002-task-pane-assistant/research.md), 154A).

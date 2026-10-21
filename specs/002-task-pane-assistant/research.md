@@ -2131,7 +2131,9 @@ words for the strip.
 
 **2. Where it refuses.**
 
-- **The settings.** `settings.save` carries no run root - the Settings panel has no field for one
+- **The settings.** *Replaced the same day, before it landed, by the owner's follow-up (below): a
+  field for runs in Settings, and no save refused for the run root.* `settings.save` carries no run
+  root - the Settings panel has no field for one
   (`index.html:46` to `:100`, `saveSettings` at `app.js:2983`) - and a save writes a clone of the
   settings in force (`ReviewHost.cs:1171`, and `:1253` for the send box), run root included, which
   the add-in read from the settings file when it loaded (`ReviewHost.cs:431`, `SwReviewAddIn.cs:390`).
@@ -2156,7 +2158,8 @@ words for the strip.
     before - so each is refused as a start is. The run root in force is read once per load, so a
     Recheck, `context.review` and Start meet a refused root only when the rule's answer changed
     since the folder was made - a folder of the root replaced by a link, a drive mapped - which the
-    tests fake.
+    tests fake. (*Since the owner's follow-up* the run root in force also moves with a restart that
+    brings in a folder chosen in Settings, which the rule accepted.)
   - Written once: `PaneActions.RefusedRunRoot` judges the root, sends the one refusal and says
     whether it did; each host calls it once per start, with its own words.
 - **Not a run start, and not refused**: `context.selection`, which reads a selection against a
@@ -2167,7 +2170,8 @@ words for the strip.
   chose. The Terminal tab, which would make a folder under the root, is hidden (151A) and its host
   not attached; recorded below.
 
-**3. The words.**
+**3. The words.** *Their way on, and the save's row, replaced the same day by the owner's follow-up
+(below), before they landed: the way on is now the decision's example.*
 
 - One class, `RunRootRefused`, not retryable: pressing again cannot help until the settings file
   names a local folder and SOLIDWORKS is restarted. The Review page shows a class's sentence first,
@@ -2254,34 +2258,24 @@ network; the add-in now refuses that root.
   export of it, which is not a repository, fails the tests that read the repository's history;
   `ruff check` clean; no broken link. `b722e0c` builds alone with zero warnings, and its rule and
   run-folder tests pass.
-- **Not changed**, put to the owner:
-  1. A run-root field in Settings, beside the Standards profile path, which has none either
-     (`docs/review-backlog.md`'s finding on `StandardsProfilePath`). With one, the way on would be
-     "choose a local folder for runs in Settings", with no file and no restart. It would move the run
-     root under a live session: the reviews, checks and plans tracked under the old root, the
-     backend's `--run-root`, and `PaneActions`' containment of `report.open` and `folder.open`.
-  2. A settings save under a refused root is refused whole, so a provider, a model or a key cannot
-     be saved until the settings file names a local folder and SOLIDWORKS is restarted; with no
-     settings file and Documents on a share, the engineer writes the file by hand. The alternative
-     weighed above writes the refused root.
-  3. A volume's mount point among the root's parts is refused, though the backend spells a folder on
+- **Not changed**, put to the owner (the first answer's items on a run-root field, on the save refused
+  whole, on `InvalidRunDir`'s and `RunFolderFailed`'s "the run root in Settings" and on the words not
+  naming the settings file are settled by the owner's follow-up, below, and dropped):
+  1. A volume's mount point among the root's parts is refused, though the backend spells a folder on
      a volume with no drive letter the same: the walk reads the tag, which a mount point shares with
      a junction. Telling them apart reads the reparse point's target.
-  4. The searches of a refused root - the check tabs' newest check, at every `init`, and the waiting
+  2. The searches of a refused root - the check tabs' newest check, at every `init`, and the waiting
      review, at every `sessions.list` - still enumerate it, and on a share whose server does not
      answer they wait on the network as before.
-  5. `InvalidRunDir`'s and `RunFolderFailed`'s sentences still send the engineer to "the run root in
-     Settings", which the Settings panel does not show (146A's words).
-  6. The Terminal tab, hidden, makes its run folder under the root unjudged; were it shown again,
+  3. The Terminal tab, hidden, makes its run folder under the root unjudged; were it shown again,
      its start would want the rule.
-  7. What the rule cannot read, it does not refuse: a part that cannot be opened, a final path that
+  4. What the rule cannot read, it does not refuse: a part that cannot be opened, a final path that
      cannot be read, a drive letter naming no drive - a mapped drive not connected may read so.
-  8. The words do not say where the settings file is - no path - and the workstation runbook does.
-  9. The add-in reads the settings once, when it loads, and a save writes the settings in force over
-     a hand edit made since; older than 154A, which now refuses only a save under a refused root.
-  10. The rule judges the root when a start begins. A root that becomes a share or a link between
-      that and the backend's reading - a drive mapped, a folder replaced by a junction, in seconds -
-      meets the backend's rule, and the refusal deep in a run, as before.
+  5. The add-in reads the settings file once, when it loads, and a save writes the settings in force
+     over a hand edit made since; older than 154A.
+  6. The rule judges the root when a start begins. A root that becomes a share or a link between
+     that and the backend's reading - a drive mapped, a folder replaced by a junction, in seconds -
+     meets the backend's rule, and the refusal deep in a run, as before.
 - **Mutations**: each fix taken out once with one exact replacement - two for the order mutants - the
   tree rebuilt, the named cases run and the file restored byte for byte (checked by sha256).
   36 of 38 mutations of the add-in's own code turned at least one case red, 167 red results in all;
@@ -2332,7 +2326,9 @@ network; the add-in now refuses that root.
   | W2 | `review_words_v1.yaml` | the sentence's way on | 7 Python |
   | F1 | `review-send-failure-events.json` | the pin moved to the regenerated fixture | 3 |
 
-  P3 and P6 are equivalent here, and recorded rather than dropped. P3: the test host,
+  H6 and H15 took out the first answer's save refusal and its words, which the owner's follow-up
+  removed; they are kept as they were run. P3 and P6 are equivalent here, and recorded rather than
+  dropped. P3: the test host,
   `testhost.net48.exe`, declares itself long-path aware and this machine has long paths enabled
   (`LongPathsEnabled` is 1), so here `CreateFileW` reaches past MAX_PATH with or without the `\\?\`
   form, and the real long-path case passes either way. `SLDWORKS.exe` declares no such thing, so in
@@ -2343,3 +2339,186 @@ network; the add-in now refuses that root.
   point case (`AReparsePointIsALinkOnlyWhenItNamesAnotherPath`, a third-party tag with and without
   the surrogate bit, which needs no rights) was added for it; the rule's and the probe's mutations
   were run again with it.
+
+#### The owner's follow-up: a field for runs in Settings, and no save refused for the run root (2026-10-20)
+
+- **Question**: the settings' part of item 2 refused a save whole while the run root was refused, so no
+  key, model or provider could be saved until the settings file was edited by hand and SOLIDWORKS
+  restarted, which the first answer put to the owner.
+- **Decision** (the owner's answer, 2026-10-20, "A Field + don't block"): "Add a run-root field to the
+  Settings panel, checked by the same rule, so the way on becomes "choose a local folder in Settings".
+  Save never refuses other settings because of the root. Every run start still refuses up front, as you
+  built." It replaces the settings' part of item 2 and the way on in item 3, before either landed; the
+  rule (item 1), the run starts (item 2) and the backend's rule (item 4) stand.
+
+**What a change of run root meets** - read at `6861284`, before anything was built:
+
+- The backend is bound to its run root when it starts: `swreview chat serve --run-root`, from the
+  settings the add-in starts or restarts it with (`BackendClient.cs:237`, `BackendProcess.cs:548`).
+  `resolve_run_dir` (`server.py:516` to `:537`) refuses a run folder outside it, and
+  `GET /reviews/{run_id}` and `GET /checks/{check_id}` find a review or a check by name under it. So a
+  running backend needs a restart for a new run root - which a save makes already: at once, or, through
+  `DeferredRestart` (143A, 145A), once no turn or remodel run holds it back.
+- Every tab read the run root from the settings saved: the Review host from `_settings`, and the Model
+  check, Standards and Remodel hosts through `(_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot`
+  (`SwReviewAddIn.cs:571`, `:685`, `:806`). A save replaces `_settings` before its restart, so between
+  the two - a restart a turn or a remodel run holds back, or one that failed - `RunFolders` would make a
+  check's or a review's folder under the new root, which the backend still running refuses
+  (`InvalidRunDir`); and the check tabs' newest check (`CheckPaneHost`'s latest-run lookup), the waiting
+  review (`RunFolders.FindNotSentReview`) and `PaneActions`' containment of `report.open` and
+  `folder.open` would look under a root the backend does not.
+- So the run root is now held twice, each named: the run root **saved**, `UserSettings.RunRoot`, which
+  the field shows and a save writes; and the run root **in force**, `ReviewHost.RunRoot`, the one the
+  backend was last started with - the settings' at the add-in's load, which the backend is started with,
+  moved only when a restart the host makes succeeds (`ReviewHost.RestartBackend`, the one call every
+  restart goes through, at once or deferred). Every tab makes its run folders, judges its starts, looks
+  for its newest run and contains its paths under the run root in force: the Review host itself
+  (`PaneActions`' root, `init.run_root`, the waiting review, `context.prepare`'s and `review.start`'s
+  folders, every start's judgement), and the other three tabs through `SwReviewAddIn.RunRootInForce`,
+  one named reading in place of three copies. A restart that waits, or fails, leaves the two apart, and
+  the run root in force stands until one is made.
+
+**1. The field.** "Folder for runs (run root)", in the Review tab's Settings under the Gemini Enterprise
+fields, with a line saying it is a local folder on this computer, not a network share or a link, and that
+blank is `Documents\SwReview\runs`. A plain text field, not a folder picker: the page cannot read the
+file system - a WebView2 page under its own CSP, and no browser hands a page a folder's path - so a picker
+would be a new page-to-host message and a folder dialog the host opens on the SOLIDWORKS UI thread,
+plumbing the decision does not need. The field shows the run root saved, as every field shows what is
+saved: showing the one in force while a restart waits would have the next save write it back over the
+folder chosen. "(run root)" ties the field to the words that say run root - `InvalidRunDir`'s and
+`RunFolderFailed`'s "Check the run root in Settings", which are true now, and were checked and kept.
+
+**2. The save** (`ReviewHost.ChooseRunRoot`, after the payload's own refusals, before the write):
+
+- `settings.save` carries `run_root`, the field trimmed. Absent, null or not text, the run root saved
+  stays, as a page older than the field sends none. Trimmed, as every text field is; empty, it chooses
+  the default, as a blank `run_root` in the file does (`UserSettings.cs:467`).
+- A folder that differs from the run root saved - compared as written, ordinally - is judged by the
+  rule. Accepted, it is written with the rest, and the save's restart brings it into force. Refused, it
+  is the one field not written: every other field is, the backend is restarted with them, the run root
+  stands, and the answer says so. The field then shows the run root saved, which the save did not change.
+- Otherwise the run root saved is kept - the file's, or the default when it names none - and judged:
+  when the rule refuses it the save still goes through, and its answer says every run is refused until
+  the run root is changed. The whole-save refusal is gone, and `PersistSettings` is as it was before
+  154A, so the send box saves as it always did.
+- The answer: `settings.saved` carries `run_root_refusal {error_class: "RunRootRefused", message,
+  retryable: false}` when there is anything to say, and nothing otherwise. A save whose restart fails is
+  still a save (150A), answered `BackendNotRestarted`, and that error carries the same `run_root_refusal`,
+  so what the save says of the run root is not lost with the restart. Both are built by
+  `PaneActions.ErrorPayload`, which `SendError` now sends: one shape and one masking for an error and a
+  note.
+- The page shows it under the field, as the send box shows its error: the class's sentence, with the
+  class and the message in a fold, or with no labels the message. The next save written takes it down
+  when its answer carries none; a save refused before anything was written - a turn running, a setting
+  refused - says nothing of the run root, and leaves the note as it was.
+
+**3. The words.** Every run start's way on is now the decision's: "Choose a local folder for runs in
+Settings, then" what to do there (`RunRootRule.Refusal`; "try again" on the Review tab, "press Model check
+again" and the rest as before). The words file's sentence is "Runs are made only in a local folder
+reached by its own path, not on a network share or through a link. Choose a local folder for runs in
+Settings." - true of every start and of the note under the field alike, so it no longer says what was not
+done; the message does. A save's two messages, with no path:
+
+| Case | Message, for a root on a share (`Link` and `DevicePath` say what the root is as a run start's words do) |
+|---|---|
+| A folder chosen and refused (`RunRootRule.ChosenRefusal`) | "The folder chosen for runs is on a network share or a mapped network drive, and runs are made only in a local folder reached by its own path, so the run root was not changed; the other settings were saved. Choose a local folder for runs, then save again." |
+| The run root kept and refused (`RunRootRule.KeptRefusal`) | "The run root is on a network share or a mapped network drive, and runs are made only in a local folder reached by its own path, so every run is refused until it is changed; the settings were saved. Choose a local folder for runs, then save again." |
+
+The fixtures were regenerated by their generators again - the same four files, each in the one line,
+`review-not-sent-session.json` unchanged - and `review-send-failure-events.json`'s pin moved to the new
+`review-waiting.json` (`f3237bad...`, its bytes as written on Windows, CRLF);
+`review-waiting-apply-failure.json`, captured, keeps its labels as captured.
+
+- **Tests**: T171 in [tasks.md](tasks.md), written first and run against stubs - `ReviewHost.RunRoot`
+  reading the settings saved, `ChosenRefusal` and `KeptRefusal` empty, the save ignoring `run_root`, no
+  field on the page, the add-in's tabs reading the settings saved: 30 of the first 32 cases failed, and
+  the 4 written next for a save whose restart fails, and for a save refused before anything was written,
+  failed too. The two that passed are a guard, `ASaveOfSettingsWhoseRunRootTheRuleAcceptsIsSavedAsBefore`,
+  and `AReviewIsMadeUnderTheRunRootInForceNotUnderOneChosenWhoseRestartFailed`, which the stub's save
+  passed by ignoring the folder chosen, and which mutations H7, H9 and H10 turn red. `RunRootWiringTests`
+  was rewritten, after it was seen red, to the one named reading the implementation chose
+  (`TheRunRootInForceIsTheReviewHosts` is red under A2). A 38th case,
+  `WhileAFolderChosenWaitsAReviewStartJudgesTheRunRootInForceAndInitNamesIt`, was added when mutations H16
+  and H17 survived the first pass (Mutations, below), and fails with each. Changed deliberately: T168's
+  two save tests, `ASaveOfSettingsWhoseRunRootTheRuleRefusesIsNotSaved` and
+  `ADefaultRunRootTheRuleRefusesIsNotWrittenIntoAFileThatNamesNone`, replaced by
+  `ASaveUnderARefusedRunRootSavesEverySettingAndSaysTheRunRootIsRefused` and
+  `ASaveUnderARefusedDefaultRunRootGoesThroughAndSaysSo`, since a save no longer refuses; the rule's
+  words case, to the new way on; `ASaveOfSettingsWhoseRunRootTheRuleAcceptsIsSavedAsBefore`, which now
+  also says its answer carries no note; `test_review_words.py`'s pin, to the new sentence; and
+  `ErrorLabelsCoverTheHostTests`' scan, which reads an `ErrorPayload("<class>"` literal as it reads a
+  `SendError(id, "<class>"` one - `BackendNotRestarted` is built that way now, and the scan, which lost
+  it, failed until it read the new form: stronger, not looser.
+- **Gates**: 2026-10-20, on the follow-up's tree: C# 0 warnings on a `--no-incremental` build,
+  `SwReview.Extractor.Tests` 10,059 and `SwReview.AddIn.Tests` 3,116 passed, from 10,059 and 3,087 at
+  `6861284` (38 cases new or changed, 4 of the first answer's replaced); Python, the touched files and
+  the words, fixture and pin tests (`test_review_words.py`, `test_pane_fixture.py`,
+  `test_pane_waiting_fixtures.py`, `test_replay_fixture_hygiene.py`, `test_support_mechanical.py`,
+  `test_chat_server.py`), 443 passed on 3.12 and 443 on 3.11 (`uv run --isolated --python 3.11`);
+  `ruff check` clean; no broken link. The full Python suites are run by the coordinator.
+- **Not changed**, put to the owner:
+  1. Runs made under the old run root stay where they are, and the pane reaches them no more by name:
+     the backend finds a review or a check by name under the run root it was started with, so a review
+     of this session made before the change cannot be restored (`UnknownReview`), and a Recheck of one
+     sends the backend a folder outside its run root (`InvalidRunDir`); the check tabs' newest check
+     and the waiting review are looked for under the new root; and `report.open` and `folder.open`
+     refuse a folder outside it (`PathRefused`). The folders open by hand.
+  2. A relative run root typed in the field is accepted, as one in the settings file was: the add-in
+     makes its run folders under it resolved against SOLIDWORKS's working folder at each run, and the
+     backend against the one it inherited when it started, so once SOLIDWORKS moves its own the backend
+     refuses the run's folder (`InvalidRunDir`, whose sentence sends the engineer to the run root in
+     Settings). Refusing a relative root is a rule the decision does not name.
+  3. The field shows the run root saved, and `init.run_root` the one in force; they differ only while a
+     save's restart waits, or after one failed, and the page shows no sign of it.
+  4. The hidden Terminal tab makes its run folder under the run root read when the add-in loaded
+     (`TaskPaneOptions.RunRoot`), neither saved nor in force, and unjudged (the first answer's item 3).
+- **Mutations**: as for the first answer - each fix taken out once with one exact replacement, the tree
+  rebuilt, the named cases run (the rule's, the page's, the wiring's, `PageMessageTests`, the follow-up's
+  and the first answer's run-start cases: 153, and 154 once a case was added) and the file restored byte
+  for byte (checked by sha256). All 32 mutations of the add-in's code and its page turned at least one case
+  red, 94 red results in all - H16 and H17 only once the case for them was added. Of the words file, two
+  mutations, 7 Python red results each and 1 C# for the first; and of the pin, one, 3 red:
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | M1 | `RunRootRule.Refusal` | the way on, a local folder chosen in Settings (the settings file and a restart put back) | 3 |
+  | M2 | `RunRootRule.ChosenRefusal` | the folder chosen named as such, not as the run root | 3 |
+  | M3 | `RunRootRule.ChosenRefusal` | the other settings said to be saved | 3 |
+  | M4 | `RunRootRule.KeptRefusal` | the settings said to be saved | 3 |
+  | H1 | `ReviewHost.ChooseRunRoot` | a folder chosen and accepted written | 4 |
+  | H2 | `ReviewHost.ChooseRunRoot` | a folder chosen and refused not written | 4 |
+  | H3 | `ReviewHost.ChooseRunRoot` | the run root kept judged | 5 |
+  | H4 | `ReviewHost.ChooseRunRoot` | the run root sent back unchanged judged as kept, not as chosen | 3 |
+  | H5 | `ReviewHost.ChosenRunRoot` | an empty field the default | 1 |
+  | H6 | `ReviewHost.ChosenRunRoot` | the folder chosen trimmed | 2 |
+  | H7 | `ReviewHost.RestartBackend` | the run root in force moved only once the restart is made | 4 |
+  | H8 | `ReviewHost.RestartBackend` | the run root in force moved by a restart | 4 |
+  | H9 | `ReviewHost.RunRoot` | the run root in force, not the one saved | 4 |
+  | H10 | `ReviewHost.StartReview` | a review's folder made under the run root in force | 1 |
+  | H11 | `ReviewHost.SendSettings` | `run_root_refusal` on `settings.saved` | 7 |
+  | H12 | `ReviewHost.Save` | `run_root_refusal` on `BackendNotRestarted` | 2 |
+  | H13 | `ReviewHost.AddRunRootRefusal` | the note's class, `RunRootRefused` | 8 |
+  | H14 | `ReviewHost.AddRunRootRefusal` | the note not retryable | 8 |
+  | H15 | `ReviewHost.PersistSettings` | the whole-save refusal's removal (the refusal put back) | 8 |
+  | H16 | `ReviewHost.RunRootRefused` | a Review-tab start judging the run root in force, not the one saved | 1 |
+  | H17 | `ReviewHost` `init` | `run_root` the run root in force, not the one saved | 1 |
+  | A1 | `SwReviewAddIn` | the Model check tab on the run root in force | 2 |
+  | A2 | `SwReviewAddIn.RunRootInForce` | the review host's run root in force, not its settings' | 1 |
+  | G1 | `app.js` `saveSettings` | the folder sent as `run_root` | 1 |
+  | G2 | `app.js` `saveSettings` | the folder sent trimmed | 1 |
+  | G3 | `app.js` `renderSettings` | the field filled from the settings | 1 |
+  | G4 | `app.js` `saveSettings` | a saved answer's note shown | 4 |
+  | G5 | `app.js` `saveSettings` | a `BackendNotRestarted` answer's note shown | 1 |
+  | G6 | `app.js` `asError` | an error's `run_root_refusal` kept | 1 |
+  | G7 | `app.js` `showRunRootRefusal` | the note taken down by a save that carries none | 1 |
+  | G8 | `app.js` `saveSettings` | the note left by a save refused before anything was written (taken down at every save) | 1 |
+  | G9 | `app.js` `showRunRootRefusal` | the class's sentence first, not the message alone | 1 |
+  | W1 | `review_words_v1.yaml` | the class's sentence | 7 Python, 1 C# |
+  | W2 | `review_words_v1.yaml` | the way on, a local folder chosen in Settings (the settings file and a restart put back) | 7 Python |
+  | F1 | `review-send-failure-events.json` | the pin moved to the regenerated fixture | 3 |
+
+  H16 and H17 survived the first pass: no case started a review, or asked for `init`, while a folder
+  chosen waited for its restart, so judging or naming the run root saved there went unseen.
+  `WhileAFolderChosenWaitsAReviewStartJudgesTheRunRootInForceAndInitNamesIt` was added for them, and H7
+  to H10, H16 and H17 were run again with it; their counts above are the second pass's, and H7's and H9's
+  first were 3.
