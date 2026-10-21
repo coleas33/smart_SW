@@ -2059,3 +2059,9 @@ words for the strip.
   T160, T162 and T163. 150A's tasks landed as T143 to T155, the numbers the commits that made
   them name, and were renumbered T153 to T165 when 150A was merged after 149A, whose Phase 14
   holds T143 to T152.
+
+### 156A. 002's other words for the hidden Terminal tab, and an invalid escape in a test (2026-10-20)
+
+- **Question**: Other words in 002 still describe the hidden Terminal tab as shown, and a test's fictional Windows path has an invalid escape.
+- **Decision**: Add dated notes wherever the spec describes that tab, built and hidden since 2026-09-19, and fix invalid Python escapes without changing values or product behaviour.
+- **Change**: Annotated `spec.md` and settled 011's research R13.5 item 2; audited `reviewer/tests/` and `reviewer/src/` and made the affected test literal raw with the same value.
