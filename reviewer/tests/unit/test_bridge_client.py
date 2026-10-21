@@ -49,6 +49,7 @@ from swreview.bridge.client import (
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PROTOCOL_DOC = REPO_ROOT / "extractor" / "SwReview.Extractor.Console" / "Serve" / "PROTOCOL.md"
+PYTHON_PROTOCOL_DOC = REPO_ROOT / "reviewer" / "src" / "swreview" / "bridge" / "PROTOCOL.md"
 DISPATCHER = (
     REPO_ROOT / "extractor" / "SwReview.Extractor" / "Bridge" / "BridgeDispatcher.cs"
 )
@@ -177,6 +178,12 @@ def test_the_client_and_the_host_agree_on_the_protocol_version() -> None:
     assert constant is not None, f"no ProtocolVersion constant in {DISPATCHER}"
     assert stated.group(1) == constant.group(1)
     assert PROTOCOL_VERSION == constant.group(1)
+    # Owner decision 159A, on the final review (B11): this side's own notes say it too.
+    noted = re.search(
+        r"\(protocol version ([0-9.]+)\)", PYTHON_PROTOCOL_DOC.read_text(encoding="utf-8")
+    )
+    assert noted is not None, f"no protocol version noted in {PYTHON_PROTOCOL_DOC}"
+    assert noted.group(1) == constant.group(1)
 
 
 def test_the_views_are_the_ones_the_host_can_frame() -> None:

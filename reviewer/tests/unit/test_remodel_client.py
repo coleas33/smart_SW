@@ -298,16 +298,18 @@ def test_every_command_after_open_names_its_run_first() -> None:
             assert sent["run_id"] == RUN
 
 
+@pytest.mark.parametrize("no_run", [None, ""])
 @pytest.mark.parametrize(
     ("method", "kwargs", "command", "params"),
     [row for row in CALLS if row[2] in COMMANDS_AFTER_OPEN],
 )
 def test_a_client_given_no_run_sends_nothing_after_open(
-    method: str, kwargs: dict[str, Any], command: str, params: dict[str, Any]
+    method: str, kwargs: dict[str, Any], command: str, params: dict[str, Any], no_run: str | None
 ) -> None:
     """A command after the open with no run to name is a bug in the caller, refused here before a
-    line is written, as an out-of-set value is."""
-    bridge, transport = client(run_id=None)
+    line is written, as an out-of-set value is. An empty run names none either: the bridge would
+    refuse it as `bad_request`, so it is not sent (owner decision 159A, on the final review: B1)."""
+    bridge, transport = client(run_id=no_run)
 
     with pytest.raises(BridgeError, match="no run") as caught:
         getattr(bridge, method)(**kwargs)
@@ -348,6 +350,29 @@ def test_another_runs_refusal_stops_the_run_as_a_copy_not_its_own_does() -> None
         bridge.rename("cA==", "Fillet1_2")
 
     assert caught.value.error_code == "session_mismatch"
+
+
+def test_the_contracts_command_table_is_what_the_client_sends() -> None:
+    """Owner decision 159A, on the final review (B12): `bridge-remodel.md`'s command table, read
+    from the file, names each command's parameters in the order this client sends them, the run
+    first after the open - so a row the protocol changes on one side alone fails here."""
+    contract = (
+        Path(__file__).resolve().parents[3]
+        / "specs"
+        / "004-resilient-remodeler"
+        / "contracts"
+        / "bridge-remodel.md"
+    ).read_text(encoding="utf-8")
+    section = contract[
+        contract.index("## The commands") : contract.index("### `remodel.probe_scope`")
+    ]
+    rows = dict(re.findall(r"^\| `(remodel\.[a-z_]+)` \| `\{([^}]*)\}` \|", section, re.MULTILINE))
+    documented = {
+        command: [name.strip().removesuffix("[]") for name in cell.split(",") if name.strip()]
+        for command, cell in rows.items()
+    }
+
+    assert documented == {command: list(params) for _, _, command, params in CALLS}
 
 
 def test_the_family_needs_protocol_1_5() -> None:
