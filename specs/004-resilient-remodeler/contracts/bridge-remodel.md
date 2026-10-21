@@ -606,7 +606,17 @@ attachment: `ToolServiceHost.Start` builds one, behind a pipe name minted fresh 
 When the add-in re-attaches the tool service (`ToolServiceGate.FollowDocument`, on a document
 switch with nothing holding the bridge), the old dispatcher goes with its pipe and the new one
 has no session. **The session does not survive the re-attach**; nothing in this protocol carries
-it across, and no command is added to do so.
+it across, and no command is added to do so. *Amended 2026-10-20 (owner decision 152A):* the
+add-in re-attaches it too once a turn, a plan or a run that held the bridge across a switch ends,
+and when a review asks it to follow the active document; a plan's session goes with the old
+attachment as it does at a switch, except while its exact held copy is the active document (T180).
+The pane's own check of a review session's bridge reads the attachment's record of the document
+and configuration it was bound to - the values `ping` answers - from the add-in's gate, not over
+the pipe. *Amended 2026-10-20 (owner decision 152A, on the Codex review):* a plan and a run hold
+the attachment through the add-in's gate while they run, so a follow does not take it down under
+them, even one whose busy question was answered before they began (`pane-remodel-messages.md`,
+decision 22A's section); the `remodel.*` family is not asked the configuration the review's live
+commands are (Serve/PROTOCOL.md).
 
 The pane refuses Start first: `RemodelHost` records the attachment each plan was made on and
 answers `remodel.start` with `SessionLost` when it is not the one listening now, before any

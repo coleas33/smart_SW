@@ -2520,7 +2520,9 @@ public sealed class RemodelHostTests
     /// <summary>
     /// Through the gate, a run holds the tool service: a document switch while it runs is asked
     /// whether work is holding the bridge, `RunInProgress` says yes, and the gate re-attaches
-    /// nothing - so no refresh reaches the host and nothing is told, during the run or after it.
+    /// nothing - so no refresh reaches the host and nothing is told while the run holds it. Once
+    /// the run has ended the gate follows the switch it skipped, to the document active then (owner
+    /// decision 152A), and the run is finished, so nothing is told then either.
     /// </summary>
     [Fact]
     public void ThroughTheGateARunHoldsTheServiceSoASwitchWhileItRunsTellsNothing()
@@ -2539,6 +2541,442 @@ public sealed class RemodelHostTests
             world.Reply("remodel.started", "s1");
             Assert.Equal(planned, gate.Attachment);
             Assert.Empty(world.AllPosted("remodel.plan_lost"));
+
+            Assert.Equal(1, world.LooksWaiting);
+            world.RunLooks();
+
+            Assert.NotEqual(planned, gate.Attachment);
+            Assert.Equal(@"C:\parts\frame.SLDPRT", gate.DocumentPath);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(0, world.LooksWaiting);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 152A keeps the planned copy's attachment exactly as 004 T180 keeps it. The
+    /// plan held the bridge while its copy was opened and made active, so that switch was skipped;
+    /// once the plan ends the gate looks again, finds the exact held copy active, keeps the plan's
+    /// attachment and asks no more - nothing is told, and Start goes ahead on the plan's session.
+    /// </summary>
+    [Fact]
+    public void ThroughTheGateTheLookOnceAPlanEndsKeepsTheAttachmentItsCopyHolds()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            using (ToolServiceGate gate = world.AttachLifecycleGate())
+            {
+                gate.EnsureStarted();
+                IToolService original = gate.Service!;
+                world.Pipeline.DuringPlan = () => world.SwitchTo(gate, world.ExpectedCopyPath);
+
+                world.Receive("remodel.plan", "p1", new { });
+
+                Assert.Equal(1, world.LooksWaiting);
+                world.RunLooks();
+
+                Assert.Same(original, gate.Service);
+                Assert.False(((FakeToolService)original).Disposed);
+                Assert.Equal(0, world.LooksWaiting);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                world.Reply("remodel.started", "s1");
+                Assert.Equal(1, world.Pipeline.Count("run"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The 152A review's R5, pinned as it stands and put to the owner. With Start switched off - the
+    /// shipped build - a plan closes its session before it answers (004 T176), so no held copy keeps
+    /// the attachment (T180), and the look once the plan ends follows whatever the plan's close left
+    /// active: the original part, normally, which is the document attached to, so nothing changes; or
+    /// the copy, when the close left it open and active, which the tool service then follows - a
+    /// re-attach, which tells the plan lost (24A). Before 152A that switch was skipped for good.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ThroughTheGateWithStartSwitchedOffTheLookFollowsWhatThePlansCloseLeftActive(bool copyLeftActive)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.StartValidated = false;
+            world.Open();
+            using (ToolServiceGate gate = world.AttachLifecycleGate())
+            {
+                gate.EnsureStarted();
+                IToolService original = gate.Service!;
+                world.Pipeline.DuringPlan = () => world.SwitchTo(gate, world.ExpectedCopyPath);
+
+                world.Receive("remodel.plan", "p1", new { });
+                if (!copyLeftActive)
+                {
+                    world.SwitchTo(gate, SourcePath);
+                }
+
+                world.RunLooks();
+
+                Assert.Equal(copyLeftActive, ((FakeToolService)original).Disposed);
+                Assert.Equal(copyLeftActive ? 1 : 0, world.AllPosted("remodel.plan_lost").Length);
+                Assert.Equal(0, world.LooksWaiting);
+            }
+        }
+    }
+
+    // ---- a plan or a run holds the tool service through the gate (152A, the Codex review: X2) --
+
+    /// <summary>
+    /// The Codex review of 152A, X2, as it found it. A look's busy question asks the run first, then
+    /// whether a turn may be running - a round trip per open chat - and a plan can begin while that
+    /// round trip is out: it marks the host busy, too late for the question, makes its copy the active
+    /// document, and is not yet a plan whose held copy keeps the attachment (004 T180), since it is
+    /// tracked only once planned. The look took the bridge down under it. The plan holds the tool
+    /// service through the gate before it reads its attachment, and the look takes the bridge down
+    /// only if no hold was taken while its question was out: it waits, and once the plan is planned
+    /// the next look keeps the plan's attachment for its copy, and Start runs on its session. The plan
+    /// runs on a thread of its own, as on the Remodel tab's pump, and is held in its planning while the
+    /// look decides.
+    /// </summary>
+    [Fact]
+    public void ThroughTheGateAPlanBegunWhileALooksTurnQuestionIsOutIsNotTornDownUnderIt()
+    {
+        using (var world = new RemodelWorld())
+        using (var planning = new ManualResetEventSlim(false))
+        using (var release = new ManualResetEventSlim(false))
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            Thread? plan = null;
+            Exception? planFailure = null;
+            bool asked = false;
+            using (ToolServiceGate gate = world.AttachLifecycleGate(turnQuery: () =>
+            {
+                if (asked)
+                {
+                    return false;
+                }
+
+                // The run was asked first and was not in progress; the backend's answer is had - no
+                // turn - and on its way back the plan begins on the page's thread.
+                asked = true;
+                plan = new Thread(() =>
+                {
+                    try
+                    {
+                        world.Receive("remodel.plan", "p1", new { });
+                    }
+                    catch (Exception failure)
+                    {
+                        planFailure = failure;
+                    }
+                }) { IsBackground = true };
+                plan.Start();
+                Assert.True(planning.Wait(TimeSpan.FromSeconds(10)), "the plan never reached its planning");
+                return false;
+            }))
+            {
+                gate.EnsureStarted();
+                IToolService original = gate.Service!;
+                world.Pipeline.DuringPlan = () =>
+                {
+                    world.SwitchTo(gate, world.ExpectedCopyPath);
+                    planning.Set();
+                    Assert.True(release.Wait(TimeSpan.FromSeconds(10)), "the plan was never let go on");
+                };
+                try
+                {
+                    gate.FollowActiveDocument();
+
+                    Assert.Same(original, gate.Service);
+                    Assert.False(((FakeToolService)original).Disposed);
+                    Assert.Equal(1, world.LooksWaiting);
+                }
+                finally
+                {
+                    release.Set();
+                    Assert.True(plan == null || plan.Join(TimeSpan.FromSeconds(10)), "the plan never finished");
+                }
+
+                Assert.Null(planFailure);
+                world.Reply("remodel.planned", "p1");
+                world.RunLooks();
+
+                Assert.Same(original, gate.Service);
+                Assert.False(((FakeToolService)original).Disposed);
+                Assert.Equal(0, world.LooksWaiting);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                world.Reply("remodel.started", "s1");
+                Assert.Equal(1, world.Pipeline.Count("run"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// ...and the same race with Start: pressed while a look's round trip is out, its run makes the
+    /// plan no longer one a held copy keeps the attachment for (004 T180: a planned plan only), and the
+    /// look took the bridge down under the run. Start holds the tool service through the gate before
+    /// the run is handed on, and holds it until the run's session is closed: the look waits.
+    /// </summary>
+    [Fact]
+    public void ThroughTheGateARunBegunWhileALooksTurnQuestionIsOutIsNotTornDownUnderIt()
+    {
+        using (var world = new RemodelWorld())
+        {
+            var runs = new Queue<Action>();
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Scheduler = work => runs.Enqueue(work);
+            world.Open();
+            bool armed = false;
+            using (ToolServiceGate gate = world.AttachLifecycleGate(turnQuery: () =>
+            {
+                if (!armed)
+                {
+                    return false;
+                }
+
+                // The run was asked first and was not in progress; the backend's answer is had - no
+                // turn - and on its way back Start is pressed.
+                armed = false;
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                return false;
+            }))
+            {
+                gate.EnsureStarted();
+                IToolService original = gate.Service!;
+                world.Pipeline.DuringPlan = () => world.SwitchTo(gate, world.ExpectedCopyPath);
+                world.Receive("remodel.plan", "p1", new { });
+                world.RunLooks();
+                Assert.Same(original, gate.Service);
+                bool closedHeld = false;
+                world.Pipeline.DuringClose = () => closedHeld = gate.Service == original && !((FakeToolService)original).Disposed;
+                armed = true;
+
+                gate.FollowActiveDocument();
+
+                world.Reply("remodel.started", "s1");
+                Assert.False(((FakeToolService)original).Disposed);
+                Assert.Equal(1, world.LooksWaiting);
+                world.RunLooks();
+                Assert.False(((FakeToolService)original).Disposed);
+                Assert.Equal(1, world.LooksWaiting);
+
+                runs.Dequeue()();
+
+                Assert.Equal(1, world.Pipeline.Count("run"));
+                Assert.True(closedHeld, "the run's session was not closed on the bridge it ran on");
+                Assert.False(world.Host.RunInProgress);
+                world.RunLooks();
+                Assert.True(((FakeToolService)original).Disposed);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A plan holds the tool service from before it reads the attachment its session will live on
+    /// until it ends, whatever ends it - planned, refused on its second reading of the document, a
+    /// probe or a copy that failed - and a run until its session is closed: the host never leaves a
+    /// hold behind, which would keep the tool service off every document for good.
+    /// </summary>
+    [Theory]
+    [InlineData("planned")]
+    [InlineData("its document changed")]
+    [InlineData("its probe failed")]
+    [InlineData("its copy failed")]
+    [InlineData("run")]
+    public void APlanOrARunHoldsTheToolServiceWhileItRunsAndLetsGoWhenItEnds(string ending)
+    {
+        using (var world = new RemodelWorld())
+        {
+            var holds = new CountedHolds();
+            int readsAtTheHold = -1;
+            var during = new List<(int Taken, int Held)>();
+            world.Hold = holds.Take;
+            holds.OnTake = () => readsAtTheHold = world.AttachmentReads.Count;
+            world.Pipeline.DuringPlan = () => during.Add((holds.Taken, holds.Held));
+            world.Pipeline.DuringRun = _ => during.Add((holds.Taken, holds.Held));
+            world.Pipeline.DuringClose = () => during.Add((holds.Taken, holds.Held));
+            if (ending == "its probe failed") world.Pipeline.ProbeFailure = new InvalidOperationException("FICT probe failed");
+            if (ending == "its copy failed") world.Pipeline.CopyFailure = new InvalidOperationException("FICT copy failed");
+            world.Open();
+            int readsBefore = world.AttachmentReads.Count;
+            if (ending == "its document changed")
+            {
+                world.Options.BeginRun = begin =>
+                {
+                    world.Document = new PageDocument(@"C:\parts\frame.SLDPRT", "Default");
+                    begin();
+                    return null;
+                };
+            }
+
+            world.Receive("remodel.plan", "p1", new { });
+            if (ending == "run")
+            {
+                during.Clear();
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                world.Reply("remodel.started", "s1");
+                Assert.Equal(2, holds.Taken);
+                Assert.Equal(new[] { (2, 1), (2, 1) }, during.ToArray());
+            }
+            else
+            {
+                Assert.Equal(1, holds.Taken);
+                Assert.Equal(readsBefore, readsAtTheHold);
+                Assert.All(during, seen => Assert.Equal((1, 1), seen));
+            }
+
+            Assert.Equal(0, holds.Held);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
+    /// With no service listening to hold - none has started, or a follow has begun taking the bridge
+    /// down - a plan finds none, and is refused as one is while the tool service attaches, before any
+    /// call and with the host free again; and a Start, whose plan's session goes with the attachment
+    /// being taken down, is refused as a lost session. Nothing waits: the page's thread is never held
+    /// for the attach.
+    /// </summary>
+    [Theory]
+    [InlineData("plan")]
+    [InlineData("start")]
+    public void AnythingTheGateGivesNoHoldIsRefusedAndTheHostIsFreeAgain(string press)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            if (press == "start")
+            {
+                world.Receive("remodel.plan", "p1", new { });
+            }
+
+            int calls = world.Pipeline.Calls.Count;
+            world.Hold = () => null;
+
+            if (press == "plan")
+            {
+                world.Receive("remodel.plan", "p2", new { });
+                JsonElement error = world.Reply("error", "p2");
+                Assert.Equal("RemodelUnavailable", error.GetProperty("error_class").GetString());
+                Assert.Equal(RemodelHost.SeatCheckingMessage, error.GetProperty("message").GetString());
+                Assert.True(error.GetProperty("retryable").GetBoolean());
+            }
+            else
+            {
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                JsonElement error = world.Reply("error", "s1");
+                Assert.Equal("SessionLost", error.GetProperty("error_class").GetString());
+                Assert.False(error.GetProperty("retryable").GetBoolean());
+                Assert.Empty(world.AllPosted("remodel.started"));
+            }
+
+            Assert.Equal(calls, world.Pipeline.Calls.Count);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
+    /// Through the gate: a plan pressed while a follow takes the bridge down - after the follow has
+    /// withdrawn the service and before the next one listens - is refused as above, and holds nothing.
+    /// </summary>
+    [Fact]
+    public void ThroughTheGateAPlanPressedWhileAFollowTakesTheBridgeDownIsRefused()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            bool pressed = false;
+            using (ToolServiceGate gate = world.AttachLifecycleGate(cleanup: () =>
+            {
+                if (!pressed)
+                {
+                    pressed = true;
+                    world.Receive("remodel.plan", "p1", new { });
+                }
+            }))
+            {
+                gate.EnsureStarted();
+
+                world.SwitchTo(gate, @"C:\parts\frame.SLDPRT");
+
+                Assert.Equal("RemodelUnavailable", world.ErrorClass("p1"));
+                Assert.Empty(world.Pipeline.Calls);
+                Assert.False(world.Host.RunInProgress);
+                Assert.Equal(@"C:\parts\frame.SLDPRT", gate.DocumentPath);
+                world.SwitchTo(gate, @"C:\parts\plate.SLDPRT");
+                Assert.Equal(@"C:\parts\plate.SLDPRT", gate.DocumentPath);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The review of 152A's Codex fixes, N4: a plan or a run lets go of its hold before it frees the
+    /// host. A run ends on a thread of its own, and a plan pressed the moment the host is free takes a
+    /// hold of its own; a run that freed the host first and let go after let go of that plan's hold,
+    /// leaving the plan unheld. So each lets go while the host is still busy.
+    /// </summary>
+    [Fact]
+    public void APlanOrARunLetsGoOfItsHoldBeforeItFreesTheHost()
+    {
+        using (var world = new RemodelWorld())
+        {
+            var holds = new CountedHolds();
+            var busyAsLetGo = new List<bool>();
+            world.Hold = holds.Take;
+            holds.OnRelease = () => busyAsLetGo.Add(world.Host.RunInProgress);
+            world.Open();
+
+            world.Receive("remodel.plan", "p1", new { });
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("remodel.started", "s1");
+            Assert.Equal(new[] { true, true }, busyAsLetGo.ToArray());
+            Assert.False(world.Host.RunInProgress);
+            Assert.Equal(0, holds.Held);
+        }
+    }
+
+    /// <summary>
+    /// ...and letting go comes first, so a hold that fails as it is let go must not keep the host
+    /// busy - a host left busy holds back every plan, and every settings restart, until SOLIDWORKS
+    /// restarts - nor change the press's answer, nor reach a run's own thread, which nothing waits on.
+    /// The gate's own holds never fail; a host is handed whatever <c>HoldToolService</c> answers.
+    /// </summary>
+    [Theory]
+    [InlineData("plan")]
+    [InlineData("run")]
+    public void AHoldThatFailsAsItIsLetGoStillFreesTheHost(string press)
+    {
+        using (var world = new RemodelWorld())
+        {
+            var holds = new CountedHolds();
+            world.Hold = holds.Take;
+            world.Open();
+            if (press == "run")
+            {
+                world.Receive("remodel.plan", "p1", new { });
+            }
+
+            holds.OnRelease = () => throw new InvalidOperationException("FICT the hold would not let go");
+
+            if (press == "plan")
+            {
+                world.Receive("remodel.plan", "x", new { });
+                world.Reply("remodel.planned", "x");
+            }
+            else
+            {
+                world.Receive("remodel.start", "x", new { run_dir = world.ExpectedRunDirectory });
+                world.Reply("remodel.started", "x");
+                Assert.Equal(1, world.Pipeline.Count("run"));
+            }
+
+            Assert.Empty(world.AllPosted("error"));
+            Assert.False(world.Host.RunInProgress);
+            Assert.Equal(0, holds.Held);
         }
     }
 
@@ -6452,6 +6890,71 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 152A merged with 154A (feature 002 T225): a plan whose gate brings in a run root the rule
+    /// refuses is refused `RunRootRefused`, its way on a local folder for runs, before it takes its hold on the
+    /// tool service - whether or not one is to be had: 154A judges the run root before anything is asked or made
+    /// under it, and the hold asks the tool service (corrected on the final reviews, N1).
+    /// </summary>
+    [Theory]
+    [InlineData("a hold to be had")]
+    [InlineData("no hold to be had")]
+    public void APlanWhoseGateBringsInARefusedRunRootIsRefusedForThatBeforeItHoldsTheToolService(string hold)
+    {
+        using (var world = new RemodelWorld())
+        {
+            FakeRunRootProbe probe = FakeRunRootProbe.Local();
+            probe.Drives[@"Y:\"] = RunRootDrive.Network;
+            world.Probe = probe;
+            var holds = new CountedHolds();
+            world.Hold = hold == "a hold to be had" ? holds.Take : () => null;
+            world.Open();
+            Func<Action, BackendRequestException?> allowed = world.Options.BeginRun;
+            world.Options.BeginRun = begin =>
+            {
+                world.RunRootSpelling = @"Y:\Fictional\runs";
+                return allowed(begin);
+            };
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal("RunRootRefused", world.Reply("error", "p1").GetProperty("error_class").GetString());
+            Assert.Equal(0, holds.Taken);
+            Assert.Empty(world.Pipeline.Calls);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
+    /// ...and a Start of a plan made under a run root a save has since moved is refused `RunRootChanged`, its way
+    /// on a plan again, before it takes its hold - whether or not one is to be had, when it would otherwise be
+    /// refused as a session lost. The plan stays planned.
+    /// </summary>
+    [Theory]
+    [InlineData("a hold to be had")]
+    [InlineData("no hold to be had")]
+    public void AStartOfAPlanMadeUnderAnEarlierRunRootIsRefusedForThatBeforeItHoldsTheToolService(string hold)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reply("remodel.planned", "p1");
+            RemodelRun planned = world.Host.LatestRun!;
+            var holds = new CountedHolds();
+            world.Hold = hold == "a hold to be had" ? holds.Take : () => null;
+            world.RunRootSpelling = Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "moved", "runs");
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal("RunRootChanged", world.Reply("error", "s1").GetProperty("error_class").GetString());
+            Assert.Equal(0, holds.Taken);
+            Assert.Empty(world.AllPosted("remodel.started"));
+            Assert.Equal(RemodelRunPhase.Planned, planned.Phase);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
     /// Owner decision 154A, with 153A's record of the settings in force (feature 002 T201): a plan's gate holds
     /// back every settings restart, but not the add-in's first start of the backend, which can be under way once the
     /// gate is passed. While one that would bring another run root into force is, the plan is refused before
@@ -6560,6 +7063,7 @@ public sealed class RemodelHostTests
     private sealed class RemodelWorld : IDisposable
     {
         private readonly string _root;
+        private readonly List<Action> _looks = new List<Action>();
         private RemodelHost? _host;
         private RemodelHostOptions? _options;
         private ToolServiceGate? _gate;
@@ -6681,7 +7185,11 @@ public sealed class RemodelHostTests
                 // Inline, so the message order a test reads is the order the page would see and
                 // nothing has to be waited for. The add-in's own scheduler runs the same body on
                 // a worker, which is what lets `remodel.stop` be delivered at all.
-                Schedule = work => work(),
+                Schedule = Scheduler ?? (work => work()),
+
+                // Owner decision 152A, on the Codex review (X2): the gate's hold once one is
+                // attached, as the add-in wires it, and nothing to hold before.
+                HoldToolService = () => Hold != null ? Hold() : _gate != null ? _gate.HoldAttachment() : ToolServiceHold.Nothing,
             };
             _options.RunRootProbe = Probe ?? FakeRunRootProbe.Local();
 
@@ -6726,6 +7234,15 @@ public sealed class RemodelHostTests
 
         public string? AttachmentNow => _gate != null ? _gate.Attachment : Attachment;
 
+        /// <summary>
+        /// What the host holds the tool service with, when a case answers it itself (owner decision
+        /// 152A, on the Codex review: X2); unset, the attached gate's hold, and nothing with no gate.
+        /// </summary>
+        public Func<IDisposable?>? Hold { get; set; }
+
+        /// <summary>Where a Start's run executes, when not inline: a case that keeps it to run later.</summary>
+        public Action<Action>? Scheduler { get; set; }
+
         public bool KeepCopyAttachment(string path, string? attachment)
         {
             // Compile against the pre-fix public surface, then exercise the optional seam when present.
@@ -6751,10 +7268,31 @@ public sealed class RemodelHostTests
                 failures: copyClosed ? new string[0] : new[] { "fictional copy remains open" });
         }
 
-        public ToolServiceGate AttachLifecycleGate(Action? cleanup = null, Action<Action>? scheduler = null)
+        /// <summary>
+        /// How many looks again the gate has asked for and none has run yet (owner decision 152A):
+        /// the add-in's gate runs each a poll later, and this world keeps it until a case runs it.
+        /// </summary>
+        public int LooksWaiting => _looks.Count;
+
+        /// <summary>Runs every look waiting now, as the polls coming due would; a look asked for meanwhile waits.</summary>
+        public void RunLooks()
+        {
+            Action[] due = _looks.ToArray();
+            _looks.Clear();
+            foreach (Action look in due)
+            {
+                look();
+            }
+        }
+
+        /// <param name="turnQuery">The second half of the add-in's busy question, asked after the run:
+        /// whether a turn may be running - a round trip per open chat, which a case can make take as
+        /// long as it needs (owner decision 152A, on the Codex review: X2). None by default.</param>
+        public ToolServiceGate AttachLifecycleGate(
+            Action? cleanup = null, Action<Action>? scheduler = null, Func<bool>? turnQuery = null)
         {
             Func<PageDocument?> document = () => Document;
-            Func<IToolService> start = () => new FakeToolService(++_services, Document!.Path)
+            Func<IToolService> start = () => new FakeToolService(++_services, Document!.Path, Document!.Configuration)
             {
                 DuringDispose = () =>
                 {
@@ -6770,19 +7308,23 @@ public sealed class RemodelHostTests
             };
             Action<string, Exception?> report = (what, failure) => { };
             Action<Action> schedule = scheduler ?? (work => work());
-            Func<bool> busy = () => Host.RunInProgress;
+            Func<bool> busy = () => Host.RunInProgress || (turnQuery != null && turnQuery());
             Func<string, string, bool> preserve = (path, attachment) => KeepCopyAttachment(path, attachment);
             Action<IToolService> stopped = _ =>
             {
                 Lifecycle.Add("stopped");
                 RefreshLifecycleAvailability(true);
             };
-            System.Reflection.ConstructorInfo? constructor = typeof(ToolServiceGate).GetConstructors()
-                .SingleOrDefault(candidate => candidate.GetParameters().Length == 8);
-            _gate = constructor == null
-                ? new ToolServiceGate(document, start, publish, report, schedule, busy)
-                : (ToolServiceGate)constructor.Invoke(new object[]
-                    { document, start, publish, report, schedule, busy, preserve, stopped });
+            _gate = new ToolServiceGate(
+                document,
+                start,
+                publish,
+                report,
+                schedule,
+                busy,
+                preserveAttachment: preserve,
+                afterStopped: stopped,
+                later: look => _looks.Add(look));
             return _gate;
         }
 
@@ -6790,11 +7332,12 @@ public sealed class RemodelHostTests
         {
             _gate = new ToolServiceGate(
                 () => Document,
-                () => new FakeToolService(++_services, Document!.Path),
+                () => new FakeToolService(++_services, Document!.Path, Document!.Configuration),
                 _ => Host.RefreshAvailability(),
                 (what, failure) => { },
                 schedule: work => work(),
-                busy: () => Host.RunInProgress);
+                busy: () => Host.RunInProgress,
+                later: look => _looks.Add(look));
             return _gate;
         }
 

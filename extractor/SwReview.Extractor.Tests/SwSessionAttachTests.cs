@@ -467,3 +467,57 @@ public sealed class SwSessionReadOnlyOpenTests : IDisposable
 
     private SwGate Gate() => new SwGate(new CircuitBreaker()) { Observer = _observer };
 }
+
+/// <summary>
+/// Owner decision 152A, on the review of its Codex fixes (S1): the in-process bridge's live
+/// commands compare the configuration active in their session's document now
+/// (<see cref="SwSessionConfiguration.ActiveConfigurationName"/>) with the one the session was bound
+/// to (<see cref="SwSessionConfiguration.ConfigurationName"/>). The two reads are told apart here, on
+/// the interop stand-ins: the active one follows a switch made in SOLIDWORKS and the bound one does
+/// not, both go through the session's gate, and a document that reports no active configuration
+/// answers none. A body that read the bound configuration would let every live command through
+/// after a switch, and one that answered none would refuse every one; neither shows in the
+/// dispatcher's cases, which are handed the reading.
+/// </summary>
+public sealed class SwSessionActiveConfigurationTests
+{
+    private const string AssemblyPath = @"C:\Fictional\FICT-frame\FICT-frame.SLDASM";
+
+    [Fact]
+    public void TheActiveConfigurationFollowsASwitchWhereTheBoundOneDoesNot_BothReadThroughTheGate()
+    {
+        var bound = new InteropRecorder<IConfiguration>(typeof(Configuration)).Answer("get_Name", "Default");
+        var machined = new InteropRecorder<IConfiguration>(typeof(Configuration)).Answer("get_Name", "FICT-machined");
+        object? active = bound.Instance;
+        var manager = new InteropRecorder<IConfigurationManager>(typeof(ConfigurationManager))
+            .Handle("get_ActiveConfiguration", arguments => active);
+        var document = new InteropRecorder<IModelDoc2>(typeof(ModelDoc2))
+            .Answer("GetType", 2)
+            .Answer("GetPathName", AssemblyPath)
+            .Answer("get_ConfigurationManager", manager.Instance);
+        var app = new InteropRecorder<ISldWorks>()
+            .Answer("get_ActiveDoc", document.Instance)
+            .Answer("RevisionNumber", "32.5.0");
+        var gate = new SwGate(new CircuitBreaker());
+        SwSession session = SwSession.Attach(app.Instance, documentPath: null, configurationName: null, gate);
+        Assert.Equal("Default", session.ActiveConfigurationName());
+
+        active = machined.Instance;
+        var activeRead = new RecordingGateObserver();
+        gate.Observer = activeRead;
+        string? now = session.ActiveConfigurationName();
+        var boundRead = new RecordingGateObserver();
+        gate.Observer = boundRead;
+        string? attachedIn = session.ConfigurationName();
+
+        Assert.Equal("FICT-machined", now);
+        Assert.Equal("Default", attachedIn);
+        Assert.Equal(new[] { "ConfigurationManager.ActiveConfiguration", "Configuration.Name" }, activeRead.Members);
+        Assert.Equal(new[] { "Configuration.Name" }, boundRead.Members);
+        Assert.Empty(activeRead.Refusals);
+        Assert.Empty(boundRead.Refusals);
+
+        active = null;
+        Assert.Null(session.ActiveConfigurationName());
+    }
+}

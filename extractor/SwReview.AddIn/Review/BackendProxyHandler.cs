@@ -71,6 +71,10 @@ public sealed class ProxiedResponse
 /// settings saved during a turn - the host's answer, since the call is for a chat of the
 /// backend being replaced and must not start a turn there (owner decision 143A).</item>
 /// </list>
+///
+/// And a call that would start a turn holds the tool service's attachment while it is out (owner
+/// decision 152A, on the Codex review: X2), so no follow of the active document takes the bridge
+/// down under the turn it starts.
 /// </summary>
 public sealed class BackendProxyHandler
 {
@@ -82,6 +86,7 @@ public sealed class BackendProxyHandler
     private readonly Func<BackendEndpoint?> _endpoint;
     private readonly Func<ProxiedRequest, ProxiedResponse> _send;
     private readonly Func<BackendRequestException?> _turnRefusal;
+    private readonly Func<IDisposable?> _holdTheBridge;
 
     public BackendProxyHandler(Func<BackendEndpoint?> endpoint, Func<ProxiedRequest, ProxiedResponse> send)
         : this(endpoint, send, () => null)
@@ -96,10 +101,28 @@ public sealed class BackendProxyHandler
         Func<BackendEndpoint?> endpoint,
         Func<ProxiedRequest, ProxiedResponse> send,
         Func<BackendRequestException?> turnRefusal)
+        : this(endpoint, send, turnRefusal, () => ToolServiceHold.Nothing)
+    {
+    }
+
+    /// <param name="endpoint">Where the backend is, asked per call.</param>
+    /// <param name="send">The transport.</param>
+    /// <param name="turnRefusal">As above.</param>
+    /// <param name="holdTheBridge">Owner decision 152A, on the Codex review (X2): asked, per call that
+    /// would start a turn and is not refused, for a hold on the tool service's attachment, which is
+    /// let go once the call is answered: the backend marks the turn running before it answers, so a
+    /// follow of the active document whose busy question was had before the turn began does not take
+    /// the bridge down under it. Null - none listening to hold - sends the call on as before.</param>
+    public BackendProxyHandler(
+        Func<BackendEndpoint?> endpoint,
+        Func<ProxiedRequest, ProxiedResponse> send,
+        Func<BackendRequestException?> turnRefusal,
+        Func<IDisposable?> holdTheBridge)
     {
         _endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
         _send = send ?? throw new ArgumentNullException(nameof(send));
         _turnRefusal = turnRefusal ?? throw new ArgumentNullException(nameof(turnRefusal));
+        _holdTheBridge = holdTheBridge ?? throw new ArgumentNullException(nameof(holdTheBridge));
     }
 
     /// <summary>
@@ -112,18 +135,55 @@ public sealed class BackendProxyHandler
         IEnumerable<KeyValuePair<string, string>>? headers,
         Stream? content)
     {
+        if (!StartsATurn(requestUri, method))
+        {
+            return Forward(requestUri, method, headers, content);
+        }
+
         // Before the backend is looked for: while the backend is being restarted there is
         // none, and a call that would start a turn is held to the host's answer rather than
         // told the backend is not running.
-        if (StartsATurn(requestUri, method))
+        ProxiedResponse? refused = RefuseTurn();
+        if (refused != null)
         {
-            ProxiedResponse? refused = RefuseTurn();
-            if (refused != null)
-            {
-                return refused;
-            }
+            return refused;
         }
 
+        // Owner decision 152A, on the Codex review (X2): the call is held to the tool service's
+        // attachment while it is out, and let go once it is answered. A hold that cannot be asked for
+        // is answered as a host that throws instead of answering is, and the call is not sent; none
+        // to be had sends it on as before - its chat's bridge, given when the chat was made, serves
+        // the attachment going away or none, and waiting would change nothing it reaches.
+        IDisposable? hold;
+        try
+        {
+            hold = _holdTheBridge();
+        }
+        catch (Exception failure)
+        {
+            return ProxyFailed(failure);
+        }
+
+        try
+        {
+            return Forward(requestUri, method, headers, content);
+        }
+        finally
+        {
+            hold?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Sends one call on to the backend and answers what it answered, or the proxy's own refusal: no
+    /// backend yet, the event stream, a backend that did not answer, a call this side could not make.
+    /// </summary>
+    private ProxiedResponse? Forward(
+        string requestUri,
+        string method,
+        IEnumerable<KeyValuePair<string, string>>? headers,
+        Stream? content)
+    {
         BackendEndpoint? endpoint = _endpoint();
         if (endpoint == null)
         {
@@ -175,14 +235,21 @@ public sealed class BackendProxyHandler
             // all, which the page cannot tell apart from the web filter it is routing
             // around. Answered, not retryable, and named differently from the backend's own
             // failures so a log says which side broke.
-            return Error(
-                500,
-                "Internal Server Error",
-                "ProxyFailed",
-                "the pane could not make this call: " + failure.Message,
-                retryable: false);
+            return ProxyFailed(failure);
         }
     }
+
+    /// <summary>
+    /// This side's own failure to make a call, answered: `ProxyFailed`, not retryable, carrying what
+    /// failed - never a request left with no answer.
+    /// </summary>
+    private static ProxiedResponse ProxyFailed(Exception failure) =>
+        Error(
+            500,
+            "Internal Server Error",
+            "ProxyFailed",
+            "the pane could not make this call: " + failure.Message,
+            retryable: false);
 
     /// <summary>
     /// Whether a page call would start a turn, or resume one: a `POST` to
@@ -244,12 +311,7 @@ public sealed class BackendProxyHandler
         }
         catch (Exception failure)
         {
-            return Error(
-                500,
-                "Internal Server Error",
-                "ProxyFailed",
-                "the pane could not make this call: " + failure.Message,
-                retryable: false);
+            return ProxyFailed(failure);
         }
 
         if (refusal == null)

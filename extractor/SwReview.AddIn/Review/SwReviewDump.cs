@@ -73,9 +73,10 @@ public sealed class SwReviewDump : IReviewDump
             ISwSession session = trace.Step("attach", () =>
                 SwSession.AttachForDump(_swApp, documentPath: null, configurationName: null, gate: gate));
             string? configuration = session.ConfigurationName();
+            string documentPath = session.Document.GetPathName();
 
             progress(
-                $"Extracting {Path.GetFileName(session.Document.GetPathName())}"
+                $"Extracting {Path.GetFileName(documentPath)}"
                 + (configuration == null ? "" : $" [{configuration}]")
                 + "...");
 
@@ -114,7 +115,12 @@ public sealed class SwReviewDump : IReviewDump
                 // means: a zero would say "this weldment has no cut list" or "this drawing has
                 // no sheets", which is a statement about the design rather than about the dump.
                 result.Package.CutListItems?.Count,
-                result.Package.DrawingRecords?.Sum(drawing => drawing.Sheets.Count));
+                result.Package.DrawingRecords?.Sum(drawing => drawing.Sheets.Count),
+
+                // Owner decision 152A, on review (S2): what this attach found active and extracted,
+                // which the Review tab compares with the review's document - no reading made before
+                // the attach can say it.
+                new PageDocument(documentPath, configuration));
         });
     }
 }

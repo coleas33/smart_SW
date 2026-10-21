@@ -42,8 +42,8 @@ public sealed class ErrorLabelsCoverTheHostTests
                      "PreparationFailed", "RunFolderFailed", "ExtractionFailed", "InvalidSettings", "UnknownModel",
                      "FakeProviderNotAllowed", "InvalidRequest", "UnknownMessage", "HostError", "PathRefused",
                      "NotFound", "OpenFailed", "UnknownChat", "UnknownCheck", "HttpError", "SettingNotSaved", "ReviewNotActive",
-                     "RemodelRunning", "DocumentChanged", "BackendNotRestarted", "RunRootRefused", "RunRootChanged",
-                     "RunRootNotFullPath", "RunRootChosenNotInForce",
+                     "RemodelRunning", "DocumentChanged", "BackendNotRestarted", "BridgeOnAnotherDocument",
+                     "RunRootRefused", "RunRootChanged", "RunRootNotFullPath", "RunRootChosenNotInForce",
                  })
         {
             Assert.Contains(expected, classes);

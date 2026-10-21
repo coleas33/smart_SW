@@ -1087,7 +1087,29 @@ Two operational rules, and a third added by the owner's decision 22A (2026-09-25
   R13.1, R13.4):* T167 is decided - a re-attach or an unload ends the session on the application
   thread before the pipe closes, the copy closed unsaved and the settings restored - and planning
   again while a plan waits closes the earlier plan's session first and marks that plan lost
-  (004 T173).
+  (004 T173). *Amended 2026-10-20 (owner decision 152A; 002 `research.md`, 152A):* a switch the
+  tool service skipped while a turn or a plan or a run held the bridge is no longer left until the
+  next switch: the gate looks again every second while one is owed and, once nothing holds the
+  bridge, follows the document active then, by its path - a re-attach, which loses a plan made on
+  the old attachment as any re-attach does, told as 24A tells it. The planned copy's own attachment
+  (T180) is kept by that look exactly as by a switch: the plan holds the bridge while it opens and
+  activates its copy, so that switch is owed, and the look once the plan ends finds the held copy
+  active and keeps the plan's attachment. With Start switched off a plan's session is closed at the
+  plan (T176), so the look follows whatever the plan's close left active - the original, normally,
+  or the copy if the close left it open and active, which tells the plan lost; put to the owner. A
+  configuration switch re-attaches nothing, at the switch or in a look; a review that finds the
+  bridge on another configuration asks the gate to follow the active document, which re-attaches
+  it, and a plan on the old attachment is then lost like any other. *Amended 2026-10-20 (owner
+  decision 152A, on the Codex review; 002 `research.md`, 152A):* a look's busy question is a round
+  trip, and a plan could begin while it was out - too late for the question, its copy made active,
+  not yet the planned plan whose held copy keeps the attachment - and the look took the bridge down
+  under it; so could a Start. A plan and a run now hold the attachment through the gate from just
+  after the host is marked busy until it is free again, and a follow takes the bridge down only if no
+  hold was taken while its question was out. With none listening to hold, a plan is refused as while
+  the tool service attaches and a Start as a lost session (`contracts/pane-remodel-messages.md`).
+  *Noted 2026-10-21 (002 `research.md`, 152A, the merge of `main` and its final reviews, N5):* since
+  the merge with 154A a plan and a Start hold from just after the run root is judged again, which
+  follows the gate, so a press refused for its run root holds nothing.
 
 ---
 

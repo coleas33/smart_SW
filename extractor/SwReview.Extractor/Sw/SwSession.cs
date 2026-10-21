@@ -77,6 +77,29 @@ public static class SwSessionConfiguration
             ? null
             : session.Gate.Call("Configuration.Name", () => configuration.Name);
     }
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X1): the name of the configuration active in the
+    /// session's document now - which a switch in SOLIDWORKS changes, where
+    /// <see cref="ConfigurationName"/> answers the one the session was bound to - read through the
+    /// session's gate, the reads <see cref="SwSession.Attach"/> makes, or null when the document reports
+    /// none. What the in-process bridge's live commands compare with the configuration they attached in.
+    /// </summary>
+    public static string? ActiveConfigurationName(this ISwSession session)
+    {
+        if (session == null)
+        {
+            throw new ArgumentNullException(nameof(session));
+        }
+
+        IModelDoc2 document = session.Document;
+        var configuration = session.Gate.Call(
+            "ConfigurationManager.ActiveConfiguration",
+            () => document.ConfigurationManager?.ActiveConfiguration) as IConfiguration;
+        return configuration == null
+            ? null
+            : session.Gate.Call("Configuration.Name", () => configuration.Name);
+    }
 }
 
 /// <summary>

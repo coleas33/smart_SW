@@ -250,6 +250,34 @@ public sealed class ReviewHostOptions
     /// <summary>The in-process tool service, once it is listening (T048); null before that.</summary>
     public BridgeConfig? Bridge { get; set; }
 
+    /// <summary>
+    /// Owner decision 152A: the document and configuration the tool service behind a bridge is
+    /// attached to - what that bridge answers to `ping` - or null when no service listening now has
+    /// the bridge's pipe. Asked at every review session's start with the bridge the session is about
+    /// to be given; in the add-in, the tool-service gate's answer. None by default: a host given a
+    /// <see cref="Bridge"/> and nothing to ask about it refuses every start rather than hand over a
+    /// bridge whose document it cannot vouch for.
+    /// </summary>
+    public Func<BridgeConfig, PageDocument?> BridgeDocument { get; set; } = _ => null;
+
+    /// <summary>
+    /// Owner decision 152A: asks the tool service to follow the active document - once no review
+    /// turn or remodel holds the bridge - as a review start refused for a bridge on another document
+    /// does, so that the next press can find it on the review's. Nothing by default.
+    /// </summary>
+    public Action FollowActiveDocument { get; set; } = () => { };
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds the tool service's attachment for a review
+    /// session being made - from before the bridge it is given is read until the session is tracked, so
+    /// that a follow of the active document neither takes that bridge down while `POST /sessions` runs
+    /// the review's checks over it, nor before the gate's busy question can see the session's turn - or
+    /// null when no service is listening to hold, and the session is given what is published, as
+    /// before. The add-in answers it through the gate (`ToolServiceGate.HoldAttachment`). By default
+    /// there is no gate, and nothing is held.
+    /// </summary>
+    public Func<IDisposable?> HoldToolService { get; set; } = () => ToolServiceHold.Nothing;
+
     /// <summary>Who the review and its dispositions are attributed to.</summary>
     public string Engineer { get; set; } = System.Environment.UserName;
 
@@ -896,6 +924,17 @@ public sealed class ReviewHost : IDisposable
     /// leave the engineer unable to fix the settings that are keeping it down.
     /// </summary>
     public bool AnyTurnRunning() => LookAtTheTurns(stopAtNoAnswer: false) == TurnsSeen.Running;
+
+    /// <summary>
+    /// Whether a turn may be running on a chat this host started (owner decision 152A, the review's
+    /// R1): one is seen running, or the backend gives no usable answer about one - not knowing whether
+    /// a turn runs is not knowing that none does, as the settings restart reads it (143A) - and none
+    /// with no backend process at all, which runs no turn. What the tool-service gate asks before it
+    /// takes the bridge down (`SwReviewAddIn`), which cannot be undone, and asks every second while a
+    /// follow is owed; <see cref="AnyTurnRunning"/>, which a save asks, reads no answer as none.
+    /// </summary>
+    public bool TurnMayBeRunning() =>
+        _options.Backend.Endpoint != null && LookAtTheTurns(stopAtNoAnswer: true) != TurnsSeen.None;
 
     /// <param name="stopAtNoAnswer">Stop at the first chat the backend gives no usable answer
     /// about, as the restart for saved settings does (owner decision 143A): such a chat holds it
@@ -2712,6 +2751,18 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
+        // Owner decision 152A: the session will be given the tool service's bridge, and its live
+        // checks run over whatever document that is attached to. Asked before anything is made, so
+        // a bridge left on another document costs no extraction; asked again at the session, which
+        // is given the bridge read then (CreateReviewSession). After the run root (merged with 154A,
+        // 2026-10-21), as at the session: 154A judges the run root before anything is asked or made
+        // under it, and this asks the tool service (corrected on the final reviews, N1).
+        if (!BridgeServes(document))
+        {
+            RefuseBridgeElsewhere(id, BridgeElsewhereBeforeExtractionMessage);
+            return;
+        }
+
         string runDirectory;
         try
         {
@@ -2747,9 +2798,35 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
-        CreateReviewSession(document, runDirectory, Blank(Text(payload, "retry_of")),
+        // Owner decision 152A, on the Codex review (X1): the extraction runs on the SOLIDWORKS
+        // application thread in one call, so a switch made during it - of document or of configuration -
+        // lands as it ends. A switch of configuration re-attaches nothing (004, decision 22A), so the
+        // bridge asked about at the session still serves the review's configuration by its record, while
+        // the session's live checks run on the one active then - which the bridge now refuses, one by
+        // one, so the review would run half. So the document is read again now, the last moment before
+        // the session is given the bridge, and a change is refused as before the extraction, in words
+        // true here. The run folder keeps what was extracted, as one whose extraction fails keeps its own.
+        // And on the review of those fixes (S2): the dump attaches to whatever is active as it begins,
+        // which can be another document than both readings - switched after the second, and back during
+        // the extraction - so what it says it extracted is compared too, and a dump that says nothing is
+        // not taken for the review's.
+        if (!document.IsSameDocument(summary.Extracted) || !document.IsSameDocument(_options.CurrentDocument()))
+        {
+            SendError(id, "DocumentChanged", DocumentChangedAtTheSessionMessage, retryable: true);
+            PostStatus("ready", ExtractedButNotReviewedStatus);
+            return;
+        }
+
+        if (!CreateReviewSession(document, runDirectory, Blank(Text(payload, "retry_of")),
             _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, summary,
-            runRoot, NewReviewRunRootChanged);
+            runRoot, NewReviewRunRootChanged))
+        {
+            // Refused at its session after all - a start of the backend under way (153A), a run root
+            // moved while it extracted (154A), its bridge moved to another document (152A) - and the
+            // status line is told the extraction is over here too, rather than left saying it is
+            // extracting: nothing is left half made.
+            PostStatus("ready", ExtractedButNotReviewedStatus);
+        }
     }
 
     /// <summary>
@@ -2900,6 +2977,122 @@ public sealed class ReviewHost : IDisposable
         + "active document, then press Review again.";
 
     /// <summary>
+    /// ...and what it answers when the active document, read again once the evidence is extracted, is
+    /// not the review's (owner decision 152A, on the Codex review: X1) - a switch made during the
+    /// extraction, a configuration's above all, which re-attaches no bridge. The run folder keeps what
+    /// was extracted. No path, as <see cref="DocumentChangedMessage"/> names none.
+    /// </summary>
+    private const string DocumentChangedAtTheSessionMessage =
+        "the active document or its configuration changed while the evidence was extracted, so no review "
+        + "session was started and no check ran. Make the part or assembly and the configuration you want "
+        + "reviewed active again, then press Review again.";
+
+    /// <summary>
+    /// The status a new review refused after its extraction ends the extraction's statuses with (owner
+    /// decision 152A, on the Codex review): the extraction is over, and nothing was sent.
+    /// </summary>
+    private const string ExtractedButNotReviewedStatus =
+        "Evidence extracted, but no review was started; no review tokens used.";
+
+    /// <summary>
+    /// What a new review is refused with when the bridge it would be given is not on its document
+    /// and configuration, read before anything is made (owner decision 152A). No path, as
+    /// <see cref="DocumentChangedMessage"/> names none.
+    /// </summary>
+    private const string BridgeElsewhereBeforeExtractionMessage =
+        "the SOLIDWORKS bridge this review would be given is not attached to the review's document and "
+        + "configuration, so nothing was extracted and no run folder was made. It follows the active "
+        + "document once no review turn or remodel holds it: wait a moment, then press Review again.";
+
+    /// <summary>
+    /// ...and what any start is refused with at its session (owner decision 152A): true of every
+    /// start that makes one, a new review whose bridge moved while it extracted among them, whose
+    /// run folder keeps the evidence just extracted, as one whose extraction fails keeps its own.
+    /// </summary>
+    private const string BridgeElsewhereAtTheSessionMessage =
+        "the SOLIDWORKS bridge this review would be given is not attached to the review's document and "
+        + "configuration, so no review session was started and no check ran. It follows the active "
+        + "document once no review turn or remodel holds it: wait a moment, then try again.";
+
+    /// <summary>
+    /// Owner decision 152A, on the final review (C1): the hold a session's start takes, and the bridge it
+    /// would hand over, read under it. The hold is asked for first and the bridge read after, so a bridge
+    /// read under a hold is vouched for by the bridge check - which asks the gate whether the service
+    /// listening now, the one held, has its pipe. A hold the gate cannot give - no service listening as it
+    /// was asked for, a re-attach under way - can be followed by a bridge that re-attach published since,
+    /// which nothing would hold while `POST /sessions` is out, and a follow could take it down under the
+    /// review's first checks; so with a bridge published, the hold is asked for again, and the bridge read
+    /// again under it. Answers the hold, or null when there is still none to be had: the caller then hands
+    /// over no bridge - refusing one published, giving none when none is.
+    /// </summary>
+    private IDisposable? HoldForTheBridge(out BridgeConfig? bridge)
+    {
+        IDisposable? hold = _options.HoldToolService();
+        bridge = _options.Bridge;
+        if (hold == null && bridge != null)
+        {
+            hold = _options.HoldToolService();
+            bridge = _options.Bridge;
+        }
+
+        return hold;
+    }
+
+    /// <summary>
+    /// Owner decision 152A: whether the bridge published now - the one a session made now would be
+    /// given - serves <paramref name="document"/>.
+    /// </summary>
+    private bool BridgeServes(PageDocument? document) => BridgeServes(document, _options.Bridge);
+
+    /// <summary>
+    /// Owner decision 152A: whether <paramref name="bridge"/> serves <paramref name="document"/>, by
+    /// the pane's one rule (<see cref="PageDocument.IsSameDocument(PageDocument)"/>: the path ignoring
+    /// case, the configuration exactly), asked of the tool service's record of its attach - what its
+    /// `ping` answers. No bridge at all is no refusal: no tool service is listening, the session is
+    /// given none, and the backend runs no live check and says so, as before 152A. A bridge no
+    /// service listening now has, and an answer that cannot be had, serve no document.
+    /// </summary>
+    private bool BridgeServes(PageDocument? document, BridgeConfig? bridge)
+    {
+        if (bridge == null)
+        {
+            return true;
+        }
+
+        PageDocument? served;
+        try
+        {
+            served = _options.BridgeDocument(bridge);
+        }
+        catch (Exception)
+        {
+            served = null;
+        }
+
+        return document != null && document.IsSameDocument(served);
+    }
+
+    /// <summary>
+    /// Refuses a start whose bridge is not on its document (owner decision 152A), retryable, and asks
+    /// the tool service to follow the active document - the review's, which every start has checked
+    /// is active - so that the next press can find the bridge there: at once when nothing holds it,
+    /// once the hold ends when a review turn or a remodel does.
+    /// </summary>
+    private void RefuseBridgeElsewhere(string? id, string message)
+    {
+        try
+        {
+            _options.FollowActiveDocument();
+        }
+        catch (Exception)
+        {
+            // Asking is a courtesy to the next press; the refusal stands either way.
+        }
+
+        SendError(id, "BridgeOnAnotherDocument", message, retryable: true);
+    }
+
+    /// <summary>
     /// What a review asked for before the backend is up is refused with, retryable - and one whose
     /// session would be made while a start of it is under way (owner decision 153A, found on Codex's
     /// re-review, R1).
@@ -2947,6 +3140,7 @@ public sealed class ReviewHost : IDisposable
                 return false;
             }
         }
+
         // Found on Codex's re-review (R1): not while a start is under way, which publishes the backend's
         // endpoint before it records the settings it was made with, so the settings in force are not yet
         // those of the backend up. Refused as a review asked for before the backend is up is; read before
@@ -2975,6 +3169,35 @@ public sealed class ReviewHost : IDisposable
             return false;
         }
 
+        // Owner decision 152A, on the Codex review (X2): the tool service is held from before the bridge
+        // is read until the session is tracked, at the end of this method - `POST /sessions` runs the
+        // review's checks over the bridge, and the gate's busy question sees the session's turn only
+        // once it is tracked - so a follow whose question was answered before this session existed
+        // does not take the bridge down under it. And no bridge is handed over unheld (the final
+        // review, C1): one published with no hold to be had is held at a second asking, or refused
+        // below (HoldForTheBridge). With nothing published, the session is given none, as before.
+        using IDisposable? hold = HoldForTheBridge(out BridgeConfig? bridge);
+
+        // Owner decision 152A: every start that makes a session - a new review, a Retry, a context
+        // review and its Retry, a Recheck - asks which document the bridge it hands over serves, and
+        // hands over only one on the review's. The bridge is read once, here, and that one is given:
+        // a pipe serves one attachment for its whole life, so a session given it either reaches the
+        // document asked about or nothing. Merged with 153A and 154A (2026-10-21), it is asked last,
+        // in the order those two leave: 153A reads a start under way before anything of the settings
+        // in force, the run root among them, and 154A judges the run root, and the folder under it,
+        // before anything is asked or made under it - and the hold and this question ask the tool
+        // service, and a refusal asks it to follow (corrected on the final reviews, N1). So the
+        // session is given the bridge checked here, a run folder under the run root in force checked
+        // above, and the settings in force read below.
+        if ((hold == null && bridge != null) || !BridgeServes(document, bridge))
+        {
+            // Nothing runs over this bridge: let it go before the tool service is asked to follow,
+            // which a hold still held would put off a poll.
+            hold?.Dispose();
+            RefuseBridgeElsewhere(id, BridgeElsewhereAtTheSessionMessage);
+            return false;
+        }
+
         if (mode == ReviewMode.Recheck)
         {
             // A recheck replaces this tracked chat; a fresh start instead sends the earlier
@@ -2998,7 +3221,7 @@ public sealed class ReviewHost : IDisposable
                 inForce.Model,
                 inForce.Effort,
                 _options.Engineer,
-                _options.Bridge,
+                bridge,
                 // FR-028: the page's Retry on an error card starts a fresh chat that says
                 // which one it is replacing, so the pair can be read back in the run folder.
                 mode == ReviewMode.Recheck ? null : previousChatId,

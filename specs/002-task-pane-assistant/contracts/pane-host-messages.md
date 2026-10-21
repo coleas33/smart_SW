@@ -112,6 +112,59 @@ record can be restored and rechecked like any tracked review, and another list a
 A newer sent, missing, unreadable or mismatched head offers nothing, without falling back to an
 older folder; an unreadable run root also offers nothing.
 
+*Amended 2026-10-20 (owner decision 152A):* every start that makes a review session - `review.start`
+(a new review, or a Retry, with saved context or without), `context.review` and `review.recheck` -
+asks which document and configuration the bridge it would hand to `POST /sessions` serves - the
+tool service's record of its attach, which the bridge's `ping` answers - and hands over only one on
+the review's document, by the rule above (the path ignoring case, the configuration exactly). One on
+another document, or one no tool service listening now has, is refused
+`error {error_class: "BridgeOnAnotherDocument", retryable: true}`, in words that name no path: no
+session is created and no status of an extraction or a check is posted - a Recheck posts `checking`
+only once its bridge is asked - and the host asks the tool service to follow the active document,
+which it does once no review turn or remodel holds the bridge, so that pressing again goes ahead. A
+new review is asked before its run folder is made, so nothing is extracted; every start is asked
+again at its session, which is given the very bridge asked about. With no bridge published - no
+tool service listening - the session is given none, as before. How the tool service follows is 004
+[`pane-remodel-messages.md`](../../004-resilient-remodeler/contracts/pane-remodel-messages.md),
+decision 22A's section.
+
+*Amended 2026-10-20 (owner decision 152A, on the Codex review):* a new review's `review.start` reads
+the active document again once its evidence is extracted - the extraction runs in one call on the
+application thread, so a switch made during it lands as it ends, and a configuration switch
+re-attaches no bridge, whose record still names the review's configuration - and refuses one that is
+not the review's, by the rule above, `error {error_class: "DocumentChanged", retryable: true}`, in
+words true there that name no path: no review session was started and no check ran; make the part or
+assembly and the configuration active again, then press Review. The run folder keeps what was
+extracted, and the tool service is asked nothing. A new review refused after its extraction - so, or
+`BridgeOnAnotherDocument` at its session - then posts
+`status {stage: "ready", message: "Evidence extracted, but no review was started; no review tokens used."}`,
+which ends the extraction's statuses. The bridge a session is given refuses its live commands while
+its document's active configuration is not the one it attached in ([`chat-api.md`](chat-api.md)).
+And every start that makes a session holds the tool service's attachment from before it reads the
+bridge until its session is tracked, and every page call the proxy passes on that would start a turn
+holds it while the call is out, so the tool service does not take that bridge down under them to
+follow the active document; with no service listening to hold, both go on as before.
+
+*Amended 2026-10-21 (owner decision 152A merged with 153A and 154A; [research.md](../research.md),
+152A, the merge of `main`):* where these refusals meet 153A's and 154A's, they come in the order
+those decisions leave - 153A reads a start under way before anything of the settings in force, the
+run root among them, and 154A judges the run root, and the folder under it, before anything is asked
+or made under it (corrected on the final reviews, N1). At a review session: a start of the backend
+under way (`BackendUnavailable`), then the run root judged again (`RunRootRefused`,
+`RunRootChosenNotInForce`) and the run folder under the run root in force (`RunRootChanged`), and
+only then the bridge (`BridgeOnAnotherDocument`), so a start refused for any of the first takes no
+hold and asks the tool service to follow nothing; a Recheck posts `checking` only after all of them.
+Before a new review's extraction: the run root judged again, then the bridge. After it: the document
+read again (`DocumentChanged`), then the session; and a new review refused at its session, whatever
+refused it, posts the `ready` status above.
+
+*Amended 2026-10-21 (owner decision 152A, on its final reviews: C1; [research.md](../research.md),
+152A, the final reviews):* a start that finds no service to hold while a bridge is published - a
+re-attach that ended since the hold was asked for, or one taking its service down - asks for the
+hold once more and reads the bridge again under it; with still none to be had, it is refused
+`BridgeOnAnotherDocument`, retryable, rather than given a bridge nothing holds. With nothing
+published, the session is given none, as before.
+
 `report.open` and `folder.open` resolve the path from the host's own session record keyed by
 `chat_id`; the page never supplies a path. `log.open` uses the host's log folder. Every
 resolved path is canonicalized and must be a descendant of `run_root` (or the log folder)

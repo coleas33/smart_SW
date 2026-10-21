@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using SwReview.AddIn.Remodel;
 using SwReview.AddIn.Review;
 using SwReview.Extractor.Sw;
@@ -22,6 +23,13 @@ public interface IToolService : IDisposable
 
     /// <summary>The document the scope is attached to.</summary>
     string DocumentPath { get; }
+
+    /// <summary>
+    /// Owner decision 152A: the configuration the scope is bound to - with
+    /// <see cref="DocumentPath"/>, what this service's bridge answers to <c>ping</c>, read from the
+    /// one attach that bound both.
+    /// </summary>
+    string? Configuration { get; }
 
     /// <summary>Pipe plus the review secret; goes to the backend's <c>POST /sessions</c>.</summary>
     BridgeConfig ReviewBridge { get; }
@@ -126,11 +134,53 @@ public interface IToolServiceAccess
 /// from <see cref="EnsureStarted"/> because the two answer different questions: "is there one?"
 /// and "is it the right one?".
 ///
+/// <b>And it follows once the hold ends</b> (owner decision 152A). A switch made while a review
+/// turn or a remodel run holds the bridge is skipped, as before; the gate now owes the follow and
+/// asks again every <see cref="FollowPoll"/> until nothing holds the bridge, then attaches to the
+/// document active at that moment. It asks rather than being told: a turn begins and ends on the
+/// backend - a follow-up, an answer or a Send reaches it without the host - and the add-in learns
+/// that one has ended only by asking, as the settings restart's watcher asks (owner decision 143A).
+/// A switch that lands while a start or a follow is in flight is owed too, and looked at as soon as
+/// that work is over, so no switch is lost to one in progress. Such a follow is a switch's, and is
+/// made as at the switch: by the path, so a configuration switch re-attaches nothing wherever it
+/// lands (004, decision 22A). And a review that finds the bridge on another document than its own
+/// asks the gate to follow the active document as it is, its configuration included
+/// (<see cref="FollowActiveDocument"/>), which is how a configuration switch reaches the bridge
+/// before that review runs.
+///
+/// <b>And work holds the bridge through it</b> (owner decision 152A, on the Codex review: X2). The
+/// busy question is a round trip, and work can begin while it is out: so a remodel plan or run, a
+/// review session being made and a turn being started through the pane each hold the attachment
+/// (<see cref="HoldAttachment"/>) before they read the bridge, and a follow takes the bridge down
+/// only if, under the lock the holds are taken under, none is held and none was taken since it
+/// noted them before its question.
+///
 /// Thread-safe, because it is not called from one thread: the pane's calls come from the
 /// application thread and the start itself completes on a worker.
 /// </summary>
 public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
 {
+    /// <summary>
+    /// How long a follow owed while work holds the bridge waits before the gate asks again (owner
+    /// decision 152A): a second, as the settings restart's watcher waits (143A). A look costs the
+    /// add-in the busy question - the remodel run, then one `GET /sessions/{chat_id}` per review it
+    /// tracks until one does not rule a turn out - off the application thread, and only while a
+    /// follow is owed.
+    /// </summary>
+    public static readonly TimeSpan FollowPoll = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// What a follow owes (owner decision 152A, ordered so that the larger debt covers the smaller):
+    /// nothing; a switch's follow, made as at the switch, by the document's path; or a review's
+    /// request, made by the review's own rule, the path ignoring case and the configuration exactly.
+    /// </summary>
+    private enum Owed
+    {
+        Nothing,
+        Path,
+        Configuration,
+    }
+
     private readonly Func<PageDocument?> _activeDocument;
     private readonly Func<IToolService> _start;
     private readonly Action<IToolService?> _publish;
@@ -139,11 +189,40 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     private readonly Func<bool> _busy;
     private readonly Func<string, string, bool>? _preserveAttachment;
     private readonly Action<IToolService> _afterStopped;
+    private readonly Action<Action> _later;
     private readonly object _lock = new object();
 
     private IToolService? _service;
     private bool _starting;
     private bool _disposed;
+
+    /// <summary>
+    /// Owner decision 152A: what is owed - a follow skipped while work held the bridge, a switch that
+    /// landed while a start or a follow was in flight, or a review's request - and not made since.
+    /// Taken by a follow as it asks whether work holds the bridge, and by a follow or a start as it
+    /// reads the active document to act on it: whatever is asked after that is owed afresh. Guarded
+    /// by <see cref="_lock"/>.
+    /// </summary>
+    private Owed _owed;
+
+    /// <summary>
+    /// Owner decision 152A: a look again is scheduled and has not run yet, so no second one is.
+    /// Guarded by <see cref="_lock"/>.
+    /// </summary>
+    private bool _asking;
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds taken on the service listening now and not
+    /// let go - work running over its bridge (<see cref="HoldAttachment"/>). Guarded by
+    /// <see cref="_lock"/>.
+    /// </summary>
+    private int _holds;
+
+    /// <summary>
+    /// ...and every hold ever taken, counted: a follow notes it before it asks whether work holds the
+    /// bridge, and takes the bridge down only if none was taken since. Guarded by <see cref="_lock"/>.
+    /// </summary>
+    private long _holdsTaken;
 
     /// <param name="activeDocument">SOLIDWORKS' active document, or null when nothing is open.
     /// The document rather than a yes/no, because a drawing is open and is still not something a
@@ -162,13 +241,18 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// is just as invisible if it is not said.</param>
     /// <param name="schedule">Where the start runs. Defaults to the thread pool.</param>
     /// <param name="busy">Whether work is holding the bridge - in the add-in, a review turn or
-    /// a remodel run. Asked by <see cref="FollowDocument"/> only, on the scheduled thread and
-    /// off the lock, because the add-in's answer costs an HTTP round trip per open chat.
-    /// Defaults to "never busy", which is right for a gate with no work to hold it.</param>
+    /// a remodel run. Asked by every follow, on the scheduled thread and off the lock, because
+    /// the add-in's answer costs an HTTP round trip per open chat. Defaults to "never busy",
+    /// which is right for a gate with no work to hold it. Work that holds the attachment
+    /// (<see cref="HoldAttachment"/>) holds the bridge whatever this answers, and a follow that
+    /// finds a hold held asks it nothing.</param>
     /// <param name="preserveAttachment">Whether the exact active copy still belongs to a held
     /// planned session on this pipe. Optional; called off the lock on the scheduled thread.</param>
     /// <param name="afterStopped">Notification after the Dispose attempt, including a thrown or
     /// deferred cleanup. Returning from Dispose alone proves no cleanup facts.</param>
+    /// <param name="later">Where a look again runs once a follow is owed while work holds the
+    /// bridge (owner decision 152A): once, after <see cref="FollowPoll"/>, off the caller's thread.
+    /// Defaults to a delay on the thread pool; injectable so the tests are deterministic.</param>
     public ToolServiceGate(
         Func<PageDocument?> activeDocument,
         Func<IToolService> start,
@@ -177,7 +261,8 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         Action<Action>? schedule = null,
         Func<bool>? busy = null,
         Func<string, string, bool>? preserveAttachment = null,
-        Action<IToolService>? afterStopped = null)
+        Action<IToolService>? afterStopped = null,
+        Action<Action>? later = null)
     {
         _activeDocument = activeDocument ?? throw new ArgumentNullException(nameof(activeDocument));
         _start = start ?? throw new ArgumentNullException(nameof(start));
@@ -187,6 +272,127 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         _busy = busy ?? (() => false);
         _preserveAttachment = preserveAttachment;
         _afterStopped = afterStopped ?? (_ => { });
+        _later = later ?? (work => Task.Delay(FollowPoll).ContinueWith(_ => work(), TaskScheduler.Default));
+    }
+
+    /// <summary>
+    /// Owner decision 152A: the document and configuration the service listening on
+    /// <paramref name="bridge"/>'s pipe is attached to - what that bridge answers to <c>ping</c>,
+    /// read from the service's record of its attach rather than over its pipe, where it would wait
+    /// behind every command ahead of it on the application thread - or null when no service
+    /// listening now has that pipe: before the first start, another attachment's, one a re-attach
+    /// is taking down, and any after <see cref="Dispose"/>. A pipe name is minted per start, so it
+    /// names one attachment, and a pipe that is closed serves no document. What a review asks
+    /// before its session is given the bridge.
+    /// </summary>
+    public PageDocument? DocumentServedBy(BridgeConfig bridge)
+    {
+        if (bridge == null)
+        {
+            throw new ArgumentNullException(nameof(bridge));
+        }
+
+        IToolService? service = Service;
+        return service != null && string.Equals(service.PipeName, bridge.Pipe, StringComparison.Ordinal)
+            ? new PageDocument(service.DocumentPath, service.Configuration)
+            : null;
+    }
+
+    /// <summary>
+    /// Owner decision 152A: asked by a review that found the bridge on another document than its
+    /// own. The gate follows the document active now as the review compares it - the path ignoring
+    /// case and the configuration exactly, <see cref="PageDocument.IsSameDocument(PageDocument)"/>,
+    /// so that what it calls the same the review does too (the 152A review's R3) - as any follow is
+    /// made: not while work holds the bridge, when it waits for the hold to end; not away from the
+    /// planned copy a waiting plan holds (004 T180); and to nothing for a drawing or no document.
+    /// Returns at once: everything but the decision to schedule runs on the scheduled thread. Never
+    /// throws.
+    /// </summary>
+    public void FollowActiveDocument()
+    {
+        bool look;
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            // Owed whatever happens next: a follow or a start in flight looks again when it ends
+            // (Settle), and with none listening there is nothing to follow from.
+            Owe(Owed.Configuration);
+            look = !_starting && !_asking && _service != null;
+            if (look)
+            {
+                _asking = true;
+            }
+        }
+
+        if (look)
+        {
+            Ask(_schedule, LookAgain);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds the service listening now for work about to
+    /// run over its bridge - a remodel plan or run, a review session being made, a turn being started -
+    /// so that no follow takes it down until the hold is let go; or null when no service is listening to
+    /// hold: none has started, a follow has begun taking one down and the next is not listening yet, or
+    /// the gate is disposed. Work that finds none starts on no bridge being taken down - it is refused,
+    /// or goes on with the bridge it was given, as each host says - and waits for nothing.
+    ///
+    /// <b>Why a hold, and not the busy question alone.</b> A follow asks whether work holds the bridge
+    /// before it takes it down, and the add-in's answer is a round trip per open chat: work can begin
+    /// while the question is out, after its answer was had, and a remodel plan making its copy active
+    /// is not yet the plan a held copy keeps the attachment for (004 T180). So the hold is taken under
+    /// the gate's lock, and the follow takes the bridge down under that lock only if no hold is held and
+    /// none was taken since it noted them, before its question: the two cannot pass each other. A hold
+    /// held when a follow begins answers its busy question without the round trip.
+    ///
+    /// Taken and let go under the gate's lock, which is never held while anything is waited for, so
+    /// this never waits either - on the SOLIDWORKS application thread least of all. Disposing the hold
+    /// lets it go; disposing it again does nothing.
+    /// </summary>
+    public IDisposable? HoldAttachment()
+    {
+        lock (_lock)
+        {
+            if (_disposed || _service == null)
+            {
+                return null;
+            }
+
+            _holds++;
+            _holdsTaken++;
+        }
+
+        return new Hold(this);
+    }
+
+    /// <summary>A hold on the gate, let go once (<see cref="HoldAttachment"/>).</summary>
+    private sealed class Hold : IDisposable
+    {
+        private ToolServiceGate? _gate;
+
+        public Hold(ToolServiceGate gate)
+        {
+            _gate = gate;
+        }
+
+        public void Dispose() => Interlocked.Exchange(ref _gate, null)?.LetGo();
+    }
+
+    /// <summary>
+    /// A hold let go. A follow it kept owed is looked at when its poll comes due, as any follow owed
+    /// while work holds the bridge is.
+    /// </summary>
+    private void LetGo()
+    {
+        lock (_lock)
+        {
+            _holds--;
+        }
     }
 
     /// <summary>The running service, or null. Null is an ordinary state, not a failure.</summary>
@@ -338,7 +544,14 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// remodel plan waiting for Start does not make the host busy (decision 22A). T180 preserves
     /// its original attachment only while its exact held copy is active; an ordinary document
     /// switch still tears it down. The Remodel tab refuses a lost plan by name, and tells the
-    /// engineer after the disposal attempt without claiming delayed cleanup succeeded.
+    /// engineer after the disposal attempt without claiming delayed cleanup succeeded. Since owner
+    /// decision 152A the skipped switch is owed, and followed once the hold ends (the class
+    /// remarks).
+    ///
+    /// A configuration switch reaches this method as the same path, and is the same document case:
+    /// it re-attaches nothing at the switch (004, decision 22A). A follow made for any other reason
+    /// - a hold that ended, a review's request - attaches to the document as it is, its
+    /// configuration included.
     /// </summary>
     public void FollowDocument(string? activePath)
     {
@@ -351,14 +564,23 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         bool skipped = false;
         lock (_lock)
         {
-            if (_disposed || _starting || _service == null)
+            if (_disposed || (_service == null && !_starting))
             {
-                // A start already in flight will attach to whatever is active when it runs, and
-                // no service at all is EnsureStarted's business, not this method's.
+                // No service at all is EnsureStarted's business, not this method's.
                 return;
             }
 
-            if (SameDocument(_service.DocumentPath, activePath!))
+            if (_starting)
+            {
+                // A start or a follow is in flight. It reads the active document when it runs, but
+                // this switch can land after that reading, and was then dropped until the next
+                // switch: it is owed instead, as a switch's follow, and looked at once that work is
+                // over (owner decision 152A; Settle).
+                Owe(Owed.Path);
+                return;
+            }
+
+            if (SameDocument(_service!.DocumentPath, activePath!))
             {
                 return;
             }
@@ -403,50 +625,129 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     }
 
     /// <summary>
-    /// The rest of <see cref="FollowDocument"/>, on the scheduled thread: ask whether work is
-    /// holding the bridge, and if not, take the old service down and start one against the
-    /// document that is active now.
+    /// The rest of a follow, on the scheduled thread, with <c>_starting</c> already claimed: ask
+    /// whether work is holding the bridge, and if not, follow the document active now
+    /// (<see cref="FollowNow"/>). While work holds it, the follow is owed and asked again a poll
+    /// later (owner decision 152A); the tool-service log says why once, for the switch that was
+    /// skipped - <paramref name="switchedTo"/>, null for a look again, which writes nothing.
     /// </summary>
-    private void FollowCore(IToolService attached, string activePath)
+    private void FollowCore(IToolService attached, string? switchedTo)
     {
-        bool busy;
+        // What this follow is for: what was owed when it asks - taken now, so that whatever is asked
+        // while the question is out is owed afresh (the 152A review's N2) - and a switch's own follow
+        // at least. And the holds taken so far, noted before the question is asked (the Codex review's
+        // X2): one taken while it is out keeps the bridge (FollowNow), and one held now is work holding
+        // the bridge, answered without the question's round trip.
+        Owed owed;
+        long holdsTaken;
+        bool held;
+        lock (_lock)
+        {
+            owed = Take();
+            holdsTaken = _holdsTaken;
+            held = _holds > 0;
+        }
+
+        if (switchedTo != null && owed < Owed.Path)
+        {
+            owed = Owed.Path;
+        }
+
+        bool busy = held;
+        if (!held)
+        {
+            try
+            {
+                busy = _busy();
+            }
+            catch (Exception failure)
+            {
+                // A question that cannot be answered counts as busy - nothing is torn down - and is
+                // said, as before 152A; this follow is not asked again every poll, since nothing says
+                // the next answer would come: the next switch, or a review's request, asks again. A
+                // switch that landed while the question was out is owed, and looked at now (Settle).
+                Settle();
+                _report("The SwReview tool service could not be asked whether it is busy.", failure);
+                return;
+            }
+        }
+
+        if (busy)
+        {
+            LogSkipped(attached, switchedTo);
+            Defer(owed);
+            return;
+        }
+
+        FollowNow(attached, owed, holdsTaken, switchedTo);
+    }
+
+    /// <summary>
+    /// The tool-service log's one line for a switch skipped while work holds the bridge - the one case
+    /// where the bridge really does keep answering about the other document - and nothing for a look,
+    /// <paramref name="switchedTo"/> null, which would write it every poll.
+    /// </summary>
+    private static void LogSkipped(IToolService attached, string? switchedTo)
+    {
+        if (switchedTo != null)
+        {
+            Log(attached, "not re-attaching to " + switchedTo + ": a turn is running against " + attached.DocumentPath);
+        }
+    }
+
+    /// <summary>
+    /// A follow once nothing holds the bridge: the document active now, read now - never an older
+    /// event's - is followed, unless it is no part or assembly at all, the exact held copy of a
+    /// waiting plan (004 T180), or the one attached to - by its path for a switch's follow, as at the
+    /// switch, and by the review's own rule for a review's request, its configuration included (owner
+    /// decision 152A; <see cref="Serves"/>) - and not while work holds the bridge that began holding it
+    /// while the busy question was out (the Codex review's X2; <paramref name="holdsTaken"/>, the holds
+    /// taken before the question was asked).
+    /// </summary>
+    private void FollowNow(IToolService attached, Owed owed, long holdsTaken, string? switchedTo)
+    {
+        PageDocument? current;
         bool preserve = false;
         try
         {
-            busy = _busy();
-            if (!busy && _preserveAttachment != null)
+            lock (_lock)
             {
-                // A second document event can arrive while this follow is queued. Preserve the
-                // exact held copy only if it is active now, never from the older event's path.
-                PageDocument? current = _activeDocument();
-                if (current == null || !current.IsAttachable || SameDocument(attached.DocumentPath, current.Path))
+                // Acted on now: what was asked while the busy question was out is this follow's too,
+                // and whatever is asked after this reading is owed afresh.
+                Owed meanwhile = Take();
+                if (meanwhile > owed)
                 {
-                    ClearStarting();
-                    return;
+                    owed = meanwhile;
                 }
+            }
 
-                activePath = current.Path;
-                preserve = _preserveAttachment(activePath, attached.PipeName);
+            current = _activeDocument();
+            if (current == null || !current.IsAttachable || Serves(attached, current, owed))
+            {
+                Settle();
+                return;
+            }
+
+            if (_preserveAttachment != null)
+            {
+                preserve = _preserveAttachment(current.Path, attached.PipeName);
             }
         }
         catch (Exception failure)
         {
-            ClearStarting();
+            Settle();
             _report("The SwReview tool service could not be asked whether it is busy.", failure);
             return;
         }
 
-        if (busy || preserve)
+        if (preserve)
         {
-            ClearStarting();
-            Log(
-                attached,
-                "not re-attaching to " + activePath
-                + (busy ? ": a turn is running against " : ": the planned copy still belongs to ")
-                + attached.DocumentPath);
+            Settle();
+            Log(attached, "not re-attaching to " + current.Path + ": the planned copy still belongs to " + attached.DocumentPath);
             return;
         }
 
+        bool heldMeanwhile;
         lock (_lock)
         {
             if (_disposed || !ReferenceEquals(_service, attached))
@@ -457,16 +758,150 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
                 return;
             }
 
-            // The gate answers null from here until the new service is listening, which is what
-            // makes the Remodel tab refuse a run rather than start one against a pipe that is
-            // closing. `_starting` is already ours.
-            _service = null;
+            // Owner decision 152A, on the Codex review (X2): work that took a hold since the holds were
+            // noted, before the busy question - after its answer was had - holds the bridge, held now
+            // or let go since, and its turn or its run may be under way; the bridge is not taken down
+            // under it. A hold held when they were noted made this follow busy then (FollowCore), so
+            // the count alone decides. Decided under the lock every hold is taken under, so a hold and
+            // this cannot pass each other: work that asks after this finds no service to hold.
+            heldMeanwhile = _holdsTaken != holdsTaken;
+            if (!heldMeanwhile)
+            {
+                // The gate answers null from here until the new service is listening, which is what
+                // makes the Remodel tab refuse a run rather than start one against a pipe that is
+                // closing. `_starting` is already ours.
+                _service = null;
+            }
+        }
+
+        if (heldMeanwhile)
+        {
+            // Owed, and asked again a poll later, afresh: by then the work holds the bridge still,
+            // or the busy question sees what it began.
+            LogSkipped(attached, switchedTo);
+            Defer(owed);
+            return;
         }
 
         Stop(attached);
 
         // Inline: this is the scheduled thread, which is the one StartCore is owed.
         StartCore();
+    }
+
+    /// <summary>
+    /// Owner decision 152A: a look again at a follow that is owed, on the thread <c>later</c> or
+    /// the schedule ran it on. It claims <c>_starting</c> as a switch's follow does, so it never
+    /// runs beside a start or a follow - the work in flight looks again itself when it ends - and
+    /// asks nothing when nothing is owed any more, the gate is disposed or nothing is listening.
+    /// Never throws: it runs on a thread no caller waits on.
+    /// </summary>
+    private void LookAgain()
+    {
+        try
+        {
+            IToolService attached;
+            lock (_lock)
+            {
+                _asking = false;
+                if (_disposed || _owed == Owed.Nothing || _starting || _service == null)
+                {
+                    return;
+                }
+
+                attached = _service;
+                _starting = true;
+            }
+
+            FollowCore(attached, switchedTo: null);
+        }
+        catch (Exception failure)
+        {
+            ClearStarting();
+            _report("The SwReview tool service could not follow the active document.", failure);
+        }
+    }
+
+    /// <summary>
+    /// Work in flight - a start or a follow - is over: <c>_starting</c> is let go, and a follow
+    /// owed meanwhile is looked at now rather than a poll later (owner decision 152A).
+    /// </summary>
+    private void Settle()
+    {
+        bool look;
+        lock (_lock)
+        {
+            _starting = false;
+            look = !_disposed && _owed != Owed.Nothing && !_asking && _service != null;
+            if (look)
+            {
+                _asking = true;
+            }
+        }
+
+        if (look)
+        {
+            Ask(_schedule, LookAgain);
+        }
+    }
+
+    /// <summary>
+    /// Work holds the bridge (owner decision 152A): <c>_starting</c> is let go, the follow is owed as
+    /// what it was for, and it is asked again a poll later - one look waiting at a time.
+    /// </summary>
+    private void Defer(Owed owed)
+    {
+        bool look;
+        lock (_lock)
+        {
+            _starting = false;
+            Owe(owed);
+            look = !_disposed && !_asking;
+            if (look)
+            {
+                _asking = true;
+            }
+        }
+
+        if (look)
+        {
+            Ask(_later, LookAgain);
+        }
+    }
+
+    /// <summary>Hands a look to <paramref name="where"/>; one that cannot be handed over is said, and none is left waiting.</summary>
+    private void Ask(Action<Action> where, Action look)
+    {
+        try
+        {
+            where(look);
+        }
+        catch (Exception failure)
+        {
+            lock (_lock)
+            {
+                _asking = false;
+            }
+
+            _report("The SwReview tool service could not be scheduled.", failure);
+        }
+    }
+
+    /// <summary>Owes <paramref name="owed"/> at least: the larger debt covers the smaller. Under <see cref="_lock"/>.</summary>
+    private void Owe(Owed owed)
+    {
+        if (owed > _owed)
+        {
+            _owed = owed;
+        }
+    }
+
+    /// <summary>What is owed, taken: nothing is owed after it. Under <see cref="_lock"/>.</summary>
+    private Owed Take()
+    {
+        Owed owed = _owed;
+        _owed = Owed.Nothing;
+        return owed;
     }
 
     private void ClearStarting()
@@ -484,6 +919,7 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         lock (_lock)
         {
             _disposed = true;
+            _owed = Owed.Nothing;
             service = _service;
             _service = null;
         }
@@ -496,6 +932,14 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         IToolService service;
         try
         {
+            lock (_lock)
+            {
+                // Owner decision 152A: this start attaches to what is active when it runs, as it is,
+                // so a follow owed before this reading - a switch's or a review's - is made by it, and
+                // one asked after it is owed afresh.
+                Take();
+            }
+
             PageDocument? document = _activeDocument();
             if (document == null)
             {
@@ -524,6 +968,7 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         }
 
         bool abandoned;
+        bool look;
         lock (_lock)
         {
             _starting = false;
@@ -531,6 +976,14 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
             if (!abandoned)
             {
                 _service = service;
+            }
+
+            // Owner decision 152A: a switch that landed after this start read the active document
+            // is looked at once the service is published, not dropped.
+            look = !abandoned && _owed != Owed.Nothing && !_asking;
+            if (look)
+            {
+                _asking = true;
             }
         }
 
@@ -551,7 +1004,27 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
             // The host is listening either way; what failed is the handover to the backend.
             _report("The SwReview tool service could not be given to the review backend.", failure);
         }
+
+        if (look)
+        {
+            Ask(_schedule, LookAgain);
+        }
     }
+
+    /// <summary>
+    /// Owner decision 152A: whether <paramref name="service"/> is attached to
+    /// <paramref name="document"/>, by the rule of what is owed. A switch's follow is made as at the
+    /// switch, by <see cref="SameDocument"/> - the path, canonically and ignoring case - so a
+    /// configuration switch re-attaches nothing wherever it lands (004, decision 22A; the 152A
+    /// review's N3). A review's request is made by the review's own rule,
+    /// <see cref="PageDocument.IsSameDocument(PageDocument)"/> - the path ignoring case and the
+    /// configuration exactly - so that a document the attach spelled otherwise, which the review
+    /// refuses, is followed rather than called the same (the 152A review's R3).
+    /// </summary>
+    private static bool Serves(IToolService service, PageDocument document, Owed owed) =>
+        owed == Owed.Configuration
+            ? document.IsSameDocument(service.DocumentPath, service.Configuration)
+            : SameDocument(service.DocumentPath, document.Path);
 
     /// <summary>
     /// Whether a path names a document a scope can be attached to: the rule

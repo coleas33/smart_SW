@@ -412,6 +412,11 @@ public class SwReviewAddIn : ISwAddin
             // being replaced, and the review host answers it instead. Read through the field:
             // the host is built after this pane, and one that has gone answers nothing.
             PageTurnRefusal = () => _reviewHost?.PageTurnRefusal(),
+
+            // Owner decision 152A, on the Codex review (X2): a page call that would start a turn holds
+            // the tool service through the gate while it is out. Read through the field: the gate is
+            // built after this pane.
+            HoldToolService = () => _toolService?.HoldAttachment(),
         });
 
         _panel = _pane.Actions;
@@ -473,6 +478,18 @@ public class SwReviewAddIn : ISwAddin
             // one that failed once the old backend had stopped, as a failed first start is told.
             BackendRestarted = TellTheOtherTabsTheBackendRestarted,
             BackendRestartFailed = TellTheOtherTabsTheBackendDidNotStart,
+
+            // Owner decision 152A: a review's session is given the tool service's bridge only while
+            // that bridge serves the review's document, asked of the gate, which knows each
+            // attachment's document and configuration; and a start refused for a bridge left on
+            // another document asks the gate to follow the active one. Read through the field: the
+            // gate is built after these options, and one that has gone serves nothing.
+            BridgeDocument = bridge => _toolService?.DocumentServedBy(bridge),
+            FollowActiveDocument = () => _toolService?.FollowActiveDocument(),
+
+            // ...and on the Codex review (X2), a review session being made holds the tool service
+            // through the gate from before its bridge is read until it is tracked.
+            HoldToolService = () => _toolService?.HoldAttachment(),
 
             DrawingModels = DrawingModels,
             Dump = reviewDump,
@@ -863,6 +880,12 @@ public class SwReviewAddIn : ISwAddin
             // first when a restart stands before the press, read through the field per call.
             BeginRun = BeginRemodelRun,
             RestartAhead = () => _reviewHost?.RestartAhead == true,
+
+            // Owner decision 152A, on the Codex review (X2): a plan or a run holds the tool service
+            // through the gate, read through the field per call, so no follow of the active document
+            // takes the bridge down under it; with no gate there is no bridge to hold, and it is
+            // refused as while the tool service attaches.
+            HoldToolService = () => _toolService?.HoldAttachment(),
             Pipeline = new BackendRemodelPipeline(
                 endpoint,
                 () => _toolService?.RemodelBridge,
@@ -1070,9 +1093,11 @@ public class SwReviewAddIn : ISwAddin
             schedule: null,
             // What holds the bridge, and so what stops it being re-attached to another document
             // (docs/history/pane-findings-2026-09-16.md, finding 1). Both read late: the remodel host is
-            // built after this gate is, and either can be gone by the time the question is asked.
-            busy: () => (_reviewHost != null && _reviewHost.AnyTurnRunning())
-                || (_remodelHost != null && _remodelHost.RunInProgress),
+            // built after this gate is, and either can be gone by the time the question is asked. Owner
+            // decision 152A, on review: the remodel run first, which costs nothing, then whether a turn
+            // may be running - a chat the backend does not answer about counts - since the gate asks
+            // again every second while a follow is owed, and a "no" takes the bridge down.
+            busy: () => (_remodelHost != null && _remodelHost.RunInProgress) || (_reviewHost != null && _reviewHost.TurnMayBeRunning()),
             preserveAttachment: (path, attachment) => _remodelHost?.KeepCopyAttachment(path, attachment) == true,
             afterStopped: _ => _remodelHost?.RefreshAvailability());
     }

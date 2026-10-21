@@ -731,6 +731,7 @@ public sealed class ToolServiceHost : IToolService
         bool remodelSeatAvailable,
         ISwSession session,
         string documentPath,
+        string configuration,
         string captureDirectory)
     {
         _server = server;
@@ -747,6 +748,7 @@ public sealed class ToolServiceHost : IToolService
         RemodelSeatAvailable = remodelSeatAvailable;
         Session = session;
         DocumentPath = documentPath;
+        Configuration = configuration;
         CaptureDirectory = captureDirectory;
     }
 
@@ -783,6 +785,14 @@ public sealed class ToolServiceHost : IToolService
 
     /// <summary>The document the scope is bound to; component ids only mean anything for it.</summary>
     public string DocumentPath { get; }
+
+    /// <summary>
+    /// Owner decision 152A: the configuration the scope is bound to - the one the attach found
+    /// active, and the one this service's bridge answers to <c>ping</c>, both read from the attach
+    /// (<see cref="Attached.Configuration"/>). A review is handed this bridge only while it serves the
+    /// review's document and configuration.
+    /// </summary>
+    public string? Configuration { get; }
 
     public string CaptureDirectory { get; }
 
@@ -908,6 +918,7 @@ public sealed class ToolServiceHost : IToolService
             attached.Services.RemodelSeat != null,
             attached.Session,
             attached.DocumentPath,
+            attached.Configuration,
             captureDirectory);
     }
 
@@ -1290,6 +1301,13 @@ public sealed class ToolServiceHost : IToolService
             SwVersion = session.SwVersion,
             DocumentPath = documentPath,
             Configuration = session.Configuration.Name,
+
+            // Owner decision 152A, on the Codex review (X1): a switch of configuration re-attaches
+            // nothing (004, decision 22A), and the live commands run on the configuration active when
+            // they run, mapped through the component table walked in this one. So each asks first and
+            // is refused while another is active; every request runs on the application thread, where
+            // this reading is made too.
+            ActiveConfiguration = () => session.ActiveConfigurationName(),
 
             // Lever 10a. Review scope only, which the ScopedSecretPolicy enforces: a mesh
             // fetch writes a file and can take seconds, so it is not general chat's to call.

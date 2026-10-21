@@ -1293,6 +1293,267 @@ public class BridgeDispatcherTests : IDisposable
         }
     }
 
+    // ---- the live commands answer of the bound configuration (owner decision 152A, X1) -------
+    //
+    // The Codex review of 152A, X1: capture, measure, interference and tessellate run on the attached
+    // document's active configuration and map what they find through the component table walked in
+    // the configuration the bridge attached in, and a switch of configuration re-attaches nothing
+    // (004, decision 22A) - so another configuration's interference rows entered a review through the
+    // bound one's table. A host that reads the active configuration (BridgeServices.ActiveConfiguration)
+    // has each of the four ask it first, after the secret and the name, and refuse while it is not the
+    // bound one; nothing runs, so nothing is written.
+
+    /// <summary>The four live commands, each with parameters that would otherwise run it.</summary>
+    public static IEnumerable<object[]> LiveCommands() => new[]
+    {
+        new object[] { BridgeCommands.Capture, "{\"persist_ref\":\"cmVm\",\"view\":\"iso\"}" },
+        new object[] { BridgeCommands.Measure, "{\"persist_ref_a\":\"aa\",\"persist_ref_b\":\"bb\"}" },
+        new object[] { BridgeCommands.Interference, "{}" },
+        new object[] { BridgeCommands.Tessellate, "{\"component_id\":\"cmp:0002\"}" },
+    };
+
+    /// <summary>
+    /// The refusal word for word. Changed deliberately on the review of the Codex fixes (N5,
+    /// 2026-10-21): its way on was "Make 'Default' active again in SOLIDWORKS.", which cannot be done
+    /// once that configuration is renamed - the name is what is compared - and every live command was
+    /// then refused with it; the way on now holds either way.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(LiveCommands))]
+    public void ALiveCommandWhileAnotherConfigurationIsActiveIsRefusedAndRunsNothing(string command, string parameters)
+    {
+        var live = new LiveSources();
+        int asked = 0;
+
+        BridgeResponse response = live.Dispatcher(this, () =>
+        {
+            asked++;
+            return "FICT-machined";
+        }).Dispatch(Request("9", command, parameters));
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Null(response.Result);
+        Assert.Equal(
+            "configuration changed: this bridge answers about configuration 'Default' of C:\\work\\bracket-assy.SLDASM, "
+            + "and 'FICT-machined' is active now, so a live command would answer about another configuration than "
+            + "the one extracted. Make the configuration you started with active again, or press Review to start "
+            + "a new review.",
+            response.Error);
+        Assert.StartsWith(SwBridgeDispatcher.ConfigurationChangedPrefix + ": ", response.Error!, StringComparison.Ordinal);
+        Assert.Equal(1, asked);
+        live.AssertNothingRan();
+    }
+
+    [Theory]
+    [MemberData(nameof(LiveCommands))]
+    public void ALiveCommandWhileTheBoundConfigurationIsActiveRunsAsBefore(string command, string parameters)
+    {
+        var live = new LiveSources();
+        int asked = 0;
+
+        BridgeResponse response = live.Dispatcher(this, () =>
+        {
+            asked++;
+            return "Default";
+        }).Dispatch(Request("9", command, parameters));
+
+        Assert.Equal(BridgeStatus.Ok, response.Status);
+        Assert.Equal(1, asked);
+        Assert.Equal(1, live.Ran(command));
+    }
+
+    /// <summary>
+    /// The configuration is the one attached in exactly, by its name, as the pane's one rule compares
+    /// it; a host that cannot read one as active - no configuration answered - is refused too, in words
+    /// that say so; and a host that reads none (the console host) compares nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("default", true)]
+    [InlineData("Default ", true)]
+    [InlineData(null, true)]
+    [InlineData("Default", false)]
+    public void TheConfigurationIsTheOneAttachedInExactly(string? active, bool refused)
+    {
+        var live = new LiveSources();
+
+        BridgeResponse response = live.Dispatcher(this, () => active)
+            .Dispatch(Request("9", BridgeCommands.Capture, "{\"persist_ref\":\"cmVm\",\"view\":\"iso\"}"));
+
+        Assert.Equal(refused ? BridgeStatus.Error : BridgeStatus.Ok, response.Status);
+        Assert.Equal(refused ? 0 : 1, live.Ran(BridgeCommands.Capture));
+        if (refused)
+        {
+            Assert.Equal(SwBridgeDispatcher.ConfigurationChangedError(@"C:\work\bracket-assy.SLDASM", "Default", active), response.Error);
+        }
+
+        if (active == null)
+        {
+            Assert.Contains("no configuration can be read as active now", response.Error!, StringComparison.Ordinal);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(LiveCommands))]
+    public void AHostThatReadsNoActiveConfigurationComparesNothing(string command, string parameters)
+    {
+        var live = new LiveSources();
+
+        BridgeResponse response = live.Dispatcher(this, activeConfiguration: null)
+            .Dispatch(Request("9", command, parameters));
+
+        Assert.Equal(BridgeStatus.Ok, response.Status);
+        Assert.Equal(1, live.Ran(command));
+    }
+
+    /// <summary>
+    /// A reading that throws runs nothing: the command is answered as any failure is, never run on a
+    /// configuration nobody could name.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(LiveCommands))]
+    public void AReadingThatThrowsRunsNothing(string command, string parameters)
+    {
+        var live = new LiveSources();
+
+        BridgeResponse response = live.Dispatcher(this, () => throw new InvalidOperationException("FICT: no answer"))
+            .Dispatch(Request("9", command, parameters));
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Equal("InvalidOperationException: FICT: no answer", response.Error);
+        live.AssertNothingRan();
+    }
+
+    /// <summary>
+    /// Only the four live commands ask. `ping` answers the attachment's own record, `drawing.read`
+    /// reads a confirmed drawing whatever the model shows, and the remodel family works on its copy:
+    /// none of them is refused, and none asks.
+    /// </summary>
+    [Theory]
+    [InlineData("ping", null)]
+    [InlineData("drawing.read", "{\"run_id\":\"20261019-101500-FICT\",\"document_id\":\"doc:0007\"}")]
+    [InlineData("remodel.probe_scope", "{}")]
+    public void ACommandThatIsNotLiveIsNotAsked(string command, string? parameters)
+    {
+        var live = new LiveSources();
+
+        BridgeResponse response = live.Dispatcher(this, () => throw new InvalidOperationException("asked"))
+            .Dispatch(Request("9", command, parameters));
+
+        Assert.DoesNotContain("asked", response.Error ?? string.Empty, StringComparison.Ordinal);
+        if (command == BridgeCommands.Ping)
+        {
+            var ping = Assert.IsType<PingResult>(response.Result);
+            Assert.Equal("Default", ping.Configuration);
+        }
+
+        if (command == BridgeCommands.DrawingRead)
+        {
+            Assert.Equal(BridgeStatus.Ok, response.Status);
+        }
+    }
+
+    /// <summary>
+    /// The secret and the name come first: a refused secret and an unknown name are answered as
+    /// before, and SOLIDWORKS is asked nothing - not even the configuration.
+    /// </summary>
+    [Theory]
+    [InlineData("{\"id\":\"9\",\"command\":\"capture\",\"secret\":\"FICT-wrong\",\"params\":{\"persist_ref\":\"cmVm\"}}", "unauthorized")]
+    [InlineData("{\"id\":\"9\",\"command\":\"Save3\",\"secret\":\"FICT-review\"}", "unauthorized")]
+    [InlineData("{\"id\":\"9\",\"command\":\"Save3\"}", "Unknown command 'Save3'.")]
+    public void TheSecretAndTheNameAreJudgedBeforeTheConfigurationIsAsked(string line, string answer)
+    {
+        var live = new LiveSources();
+        int asked = 0;
+        Func<string?> active = () =>
+        {
+            asked++;
+            return "FICT-machined";
+        };
+        SwBridgeDispatcher dispatcher = line.Contains("secret")
+            ? live.Dispatcher(this, active, new ScopedSecretPolicy("FICT-review", "FICT-chat", "FICT-remodel"))
+            : live.Dispatcher(this, active);
+
+        BridgeResponse response = dispatcher.Dispatch(JsonSerializer.Deserialize<BridgeRequest>(line, BridgeCodec.Options)!);
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.StartsWith(answer, response.Error!, StringComparison.Ordinal);
+        Assert.Equal(0, asked);
+        live.AssertNothingRan();
+    }
+
+    /// <summary>The live sources a dispatcher is built over, each counting the calls that reached it.</summary>
+    private sealed class LiveSources
+    {
+        public FakeCaptureView Capture { get; } = new FakeCaptureView();
+
+        public FakeMeasureSource Measure { get; } = new FakeMeasureSource(new MeasureReading(1.0, 1.0, 0.0, 0.0));
+
+        public FakeInterferenceDetector Interference { get; } = new FakeInterferenceDetector();
+
+        public CountingTessellateSource Tessellate { get; } = new CountingTessellateSource();
+
+        public FakeConfirmedDrawings Drawings { get; } = new FakeConfirmedDrawings();
+
+        public SwBridgeDispatcher Dispatcher(
+            BridgeDispatcherTests tests, Func<string?>? activeConfiguration, ISecretPolicy? secrets = null)
+        {
+            var services = new BridgeServices(
+                Capture,
+                Measure,
+                new FakeInterferenceSource(Interference),
+                Index(null),
+                tests._captureDirectory)
+            {
+                SwVersion = "32.5.0",
+                DocumentPath = @"C:\work\bracket-assy.SLDASM",
+                Configuration = "Default",
+                ActiveConfiguration = activeConfiguration,
+                TessellateSource = Tessellate,
+                ConfirmedDrawings = Drawings,
+            };
+
+            return new SwBridgeDispatcher(services, secrets ?? NoSecretPolicy.Instance);
+        }
+
+        /// <summary>How many times <paramref name="command"/>'s source was reached.</summary>
+        public int Ran(string command)
+        {
+            switch (command)
+            {
+                case BridgeCommands.Capture:
+                    return Capture.Calls.Count > 0 ? 1 : 0;
+                case BridgeCommands.Measure:
+                    return Measure.LastA != null ? 1 : 0;
+                case BridgeCommands.Interference:
+                    return Interference.Scopes.Count;
+                case BridgeCommands.Tessellate:
+                    return Tessellate.Calls;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(command), command, "not a live command");
+            }
+        }
+
+        public void AssertNothingRan()
+        {
+            Assert.Empty(Capture.Calls);
+            Assert.Null(Measure.LastA);
+            Assert.Empty(Interference.Scopes);
+            Assert.Equal(0, Tessellate.Calls);
+        }
+    }
+
+    /// <summary>A mesh export that counts its calls and answers no body.</summary>
+    private sealed class CountingTessellateSource : ITessellateSource
+    {
+        public int Calls { get; private set; }
+
+        public TessellateCommandResult Tessellate(string componentId, string packageDirectory)
+        {
+            Calls++;
+            return new TessellateCommandResult();
+        }
+    }
+
     // ---- helpers -----------------------------------------------------------------
 
     private static BridgeRequest Request(string id, string command, string? paramsJson = null)

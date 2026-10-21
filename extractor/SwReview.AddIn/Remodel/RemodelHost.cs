@@ -149,6 +149,16 @@ public sealed class RemodelHostOptions
     public Func<bool> RestartAhead { get; set; } = () => false;
 
     /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds the tool service's attachment for a plan or
+    /// a run, taken once the host is busy and before the attachment is read, and let go when the host
+    /// is free again - so no follow of the active document takes the bridge down under them, even one
+    /// whose busy question was out as they began - or null when no service is listening to hold, which
+    /// refuses the press. The add-in answers it through the gate (<c>ToolServiceGate.HoldAttachment</c>).
+    /// By default there is no gate, and nothing is held.
+    /// </summary>
+    public Func<IDisposable?> HoldToolService { get; set; } = () => ToolServiceHold.Nothing;
+
+    /// <summary>
     /// What the run root rule reads of Windows (owner decision 154A): a share, a mapped or substituted drive,
     /// a link. Windows itself by default; injected so a test fakes each without making one.
     /// </summary>
@@ -479,6 +489,13 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>A plan or a run is in flight. One per host.</summary>
     private volatile bool _busy;
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): the hold on the tool service's attachment the plan
+    /// or run that made the host busy took (<see cref="RemodelHostOptions.HoldToolService"/>), and null
+    /// while the host is free. Let go with <see cref="_busy"/>, by whichever thread frees the host.
+    /// </summary>
+    private IDisposable? _toolServiceHold;
 
     /// <summary>The run the executor is inside, so `remodel.stop` has something to set.</summary>
     private volatile RemodelRun? _active;
@@ -1258,6 +1275,19 @@ public sealed class RemodelHost : IDisposable
                 return;
             }
 
+            // Owner decision 152A, on the Codex review (X2): the plan holds the tool service before it
+            // reads its attachment, so no follow takes the bridge down under it - the busy question a
+            // follow asks can have been answered before this plan began. None listening to hold - none
+            // started, or a follow taking one down - is refused as while the tool service attaches.
+            // After the run root (merged with 154A, 2026-10-21): 154A judges the run root before anything
+            // is asked or made under it, and the hold asks the tool service (corrected on the final
+            // reviews, N1).
+            if (!HoldTheToolService())
+            {
+                SendUnavailable(id, RemodelAvailability.Unknown);
+                return;
+            }
+
             // The document was read before the gate, and the gate can wait through a settings
             // restart - seconds, up to the backend's handshake - in which the engineer can make
             // another document active. Read again now the host is busy, before any call: a plan of
@@ -1820,6 +1850,17 @@ public sealed class RemodelHost : IDisposable
                 return;
             }
 
+            // Owner decision 152A, on the Codex review (X2): the run holds the tool service until its
+            // session is closed (Execute), taken before the session is read again below. None
+            // listening to hold means the plan's attachment is gone or going, and its session with it.
+            // After the run root (merged with 154A, 2026-10-21), as at a plan: the run root, and the
+            // plan's folder under it, before anything is asked of the tool service.
+            if (!HoldTheToolService())
+            {
+                _actions.SendError(id, "SessionLost", LostSessionWords(run) ?? SessionLostMessage, retryable: false);
+                return;
+            }
+
             // The gate may have waited through a settings restart - seconds in which the host was
             // not busy, so the tool service was free to re-attach, or a teardown to end the plan's
             // session. Read again now the host is busy, which a re-attach of the service's own asks
@@ -1930,6 +1971,11 @@ public sealed class RemodelHost : IDisposable
                 }
             }
 
+            // Owner decision 152A, on the Codex review (X2): held until the run's session is closed,
+            // above, on the bridge it ran on - and let go before the host is free, since this is the
+            // run's own thread (on review, N4): a plan pressed the moment the host is free takes a hold
+            // of its own, which letting go after would let go of.
+            LetGoOfTheToolService();
             held = FreeTheHostFromTheRun(run);
         }
 
@@ -2690,6 +2736,9 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     private void FreeTheHost()
     {
+        // The hold first, as a run's end lets go of it (Execute): nothing held is let go once the host
+        // is free for the next press.
+        LetGoOfTheToolService();
         _busy = false;
         AnnounceLostPlan();
     }
@@ -2741,6 +2790,44 @@ public sealed class RemodelHost : IDisposable
             var held = new List<Action>(_heldForTheEnd);
             _heldForTheEnd.Clear();
             return held;
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds the tool service's attachment for the plan
+    /// or run that has just made the host busy (<see cref="RemodelHostOptions.HoldToolService"/>), and
+    /// answers whether one could be held. Never waits: a hold is taken under the gate's lock alone. A
+    /// delegate that throws is the press's failure, and the caller's <c>finally</c> frees the host.
+    /// </summary>
+    private bool HoldTheToolService()
+    {
+        IDisposable? hold = _options.HoldToolService();
+        if (hold == null)
+        {
+            return false;
+        }
+
+        Interlocked.Exchange(ref _toolServiceHold, hold)?.Dispose();
+        return true;
+    }
+
+    /// <summary>
+    /// Lets go of the hold the plan or run took, once, on whichever thread frees the host - the
+    /// message thread for a plan or a Start that handed nothing on, the run's own once its session is
+    /// closed (<see cref="Execute"/>). Never throws: it comes before the host is freed (on review,
+    /// N4), and a hold that fails as it is let go must neither keep the host busy - which would hold
+    /// back every plan and every settings restart - nor reach a run's own thread, which no one waits
+    /// on. The gate's own holds never fail.
+    /// </summary>
+    private void LetGoOfTheToolService()
+    {
+        try
+        {
+            Interlocked.Exchange(ref _toolServiceHold, null)?.Dispose();
+        }
+        catch (Exception)
+        {
+            // The hold's own failure, and the host is freed all the same.
         }
     }
 
