@@ -2067,20 +2067,20 @@ words for the strip.
 
 **1. The settings in force.**
 
-- `ReviewHost._inForce` holds the settings the backend that is up was started with. The add-in
-  starts the backend with the settings the host loads, just after building it
-  (`SwReviewAddIn.StartReviewHost`, `StartBackend`), so the host takes those when it is built; every
-  later start is a restart the host makes, a save's at once or one made after waiting (143A, 145A),
-  and both go through one method, `RestartWith`, which records the settings the restart was made
-  with once `IBackendClient.Restart` has returned, and never when it throws - a turn the backend's
-  own check found, which changed nothing, or a failure, before the old backend stopped or after.
-  With no backend up nothing is in force, whatever the record holds: every reader asks for the
-  endpoint first, or is refused for want of one.
+- `ReviewHost._inForce` holds the settings the backend that is up was started with. Every start of
+  the backend goes through the host and one transition, `StartWith`, which records the settings the
+  start was made with once it has returned, and never when it throws - a turn the backend's own
+  check found, which changed nothing, or a failure, before the old backend stopped or after: every
+  restart, a save's at once or one made after waiting (143A, 145A), through `RestartWith`; and,
+  since the second review (C1), the add-in's first start, through `ReviewHost.FirstStart`, under
+  the same restart lock. The host takes the settings it loads when it is built, which the first
+  start is made with unless a save comes first. With no backend up nothing is in force, whatever
+  the record holds: every reader asks for the endpoint first, or is refused for want of one.
 - Recorded in the host, beside the saved settings it is compared with, rather than in
   `BackendClient`, which starts every process under its gate: `IBackendClient` has ten
-  implementations, nine of them test fakes, which would each grow a member, and every start but
-  the first already passes through the host's restart lock, under which the record is written (the
-  first start: Not changed, below).
+  implementations, nine of them test fakes, which would each grow a member, and every start passes
+  through the host's restart lock - the first too, since the second review - under which the
+  record is written.
 - "In force" now means what the backend runs with. 150A's records and the comments said a save's
   settings were "written and in force in the host" before its restart; the comments now say
   "saved" (`ReviewHost.Settings`, `Save`, `SavedNotRestarted`, and `DeferredRestart`'s summary,
@@ -2248,29 +2248,51 @@ words for the strip.
   - Words that still called the saved settings "in force" (N6): `ReviewHost`'s promise, eight
     comments of `DeferredRestartTests`, `chat-api.md`'s settings bullet, and the 143A and 150A words
     of the `settings.save` row, whose 153A note now says they were changed.
-  - A second ordering of the first-start race (O2): recorded under Not changed, below, and
-    `BackendSupervisor`'s summary now says a restart added there must go through the review host's
-    restart, or the record drifts.
+  - A second ordering of the first-start race (O2): recorded under Not changed, with
+    `BackendSupervisor`'s summary saying a restart added there must go through the review host's
+    restart, or the record drifts; settled by the second review (C1, below), which made the first
+    start the host's.
   - Existing cases changed deliberately: none. The comments of eight cases change their words
     alone, and the test world's backend can now fail `POST /sessions` (`SessionFailure`).
+- **Second review**: a Codex adversarial review of the branch at `d41ae2c` said it needed
+  attention, with two findings, settled test first by T178 to T182:
+  - The add-in's first start was made outside the host (C1, high). `SwReviewAddIn.StartBackend`
+    called `BackendClient.Start` with the settings read as the add-in loaded, while the host took
+    those as in force when it was built. Codex's ordering needs no failure: the first start's
+    thread-pool item comes late; a save on the page pump restarts the backend with its settings and
+    records them; the first start then replaces that backend with one started with the settings
+    loaded, recording nothing, so sessions took the saved provider, model and effort on a backend
+    started with the loaded settings' environment, and the keys masked left its key out. O2, the
+    ordering recorded under Not changed - a save whose restart failed, then the first start - came
+    from the same cause. The first start is the host's now (`ReviewHost.FirstStart`): made under the
+    lock every restart holds for its whole length (`DeferredRestart.First`), with the settings saved
+    when it is made and the key resolved from them then, and recorded by the transition every
+    restart records by (`StartWith`, which `RestartWith` goes through). One that comes after a
+    restart has started the backend finds it up and starts nothing: a second start with the settings
+    loaded would replace it under the record, and one with the saved settings would end any review
+    already running on it. One after a save whose restart failed, with no backend, starts the backend
+    with the settings saved then. Once the host is disposed it starts nothing and is thrown, so the
+    add-in logs that the backend did not start, as a start the unloading client refused was. The
+    add-in queues it with nothing read beforehand and says what it said: `backend_starting` before,
+    `ready` after, and on a failure the way on to every page (150A). Both Not changed items on the
+    first start are gone, and `BackendSupervisor`'s summary says every start is the host's.
+  - An `init` read while a restart waited could reach the page after that restart's failure word
+    and take its sentence off (C2, medium): `init` is read on the page pump and the failure's word
+    posted from the restart's thread, and the page took whichever came last. Of the two ways Codex
+    named - one lock for each reading and its post, or a number the page checks - the number holds
+    in whatever order the posts arrive, the status path included: each reading of whether the saved
+    settings are in force is taken together with its number, one past the last, under one lock
+    (`ReviewHost.ReadSettingsNotInForce`); `init` and the failure's word carry it
+    (`settings_not_in_force_revision`); and the Review page takes a reading only when its number is
+    above the last it took (`holdNotInForce`), and one with no number - its own, at
+    `backend.stopped` - as before. A case holds an `init` inside its reading while a save puts the
+    settings in force, and the reading taken after it is numbered above it; with the number taken
+    apart from the reading, the older reading took the higher one (mutation C2d).
+  - Existing cases changed deliberately: `AFailedFirstStartTellsEveryPageTheWayOn` reads
+    `StartBackend()`, which takes nothing now, where it read `StartBackend(UserSettings settings,
+    ResolvedApiKey key)` - an anchor; nothing it asserts moves. The Review page driver's `init`
+    carries `settings_not_in_force_revision`, null unless a case sets it.
 - **Not changed**:
-  - The first start's record is taken when the host is built, from the settings it loads, which are
-    the ones the add-in starts the backend with. A save whose restart reached `BackendClient`'s gate
-    before the first start's thread-pool item did would be overtaken by that start: the backend
-    would run the loaded settings while the record held the saved ones. That needs the page loaded
-    and a save made before an item queued at load has begun, and before 153A sessions of the saved
-    settings ran on that backend just the same; recording in `BackendClient`, under its gate, would
-    close it, at the cost in item 1. Left to the owner.
-  - A second ordering of that race, which 153A makes worse (found on review, O2): a save handled
-    after the page pump starts and before the add-in reads the settings it starts the backend with
-    (`SwReviewAddIn.cs:544`), whose restart fails; the first start, queued just after, then starts
-    the backend with the saved settings while the record holds the loaded ones, so `init` says the
-    saved settings are not in force and sessions take the loaded ones on a backend started with the
-    saved ones' environment - before 153A they took the saved ones. It needs a Save within the load
-    sequence. Routing the first start through the host, under its restart lock, would close both
-    orderings; it changes the add-in's first start, the path the pilot depends on most, so it is the
-    owner's call. `BackendSupervisor` restarts nothing of its own accord, and its summary says a
-    restart added there - for a crash, say - must go through the review host's, or the record drifts.
   - A backend that dies while the saved settings are not in force: no host posts `backend.stopped`
     (150A), so the Review page goes on saying reviews run with the settings it was started with until
     its next `init`, while a review is refused for want of a backend.
@@ -2349,9 +2371,31 @@ words for the strip.
   | R13 | `BackendClient.BaseUrlFor` | the base URL not trimmed | 1 |
   | R14 | `BackendClient.ReadsGeminiEnterprise` | Gemini Enterprise read for every provider | 1 |
 
-- **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first; and the review's, T171, T173
-  and T175. 153A's tasks took T166 to T177 provisionally, the numbers decision 152A's phase takes
-  too; whichever lands second is renumbered.
+  For the second review: 14 mutations, the same way - the host's classes, 467 cases (468 once
+  C2d's case was written), and the page's, 25 - 41 red results in all, every mutation red. C2d, the
+  lock that takes a reading and its number together, survived until a case held an `init` inside its
+  reading; C2a and C2c were run again once that case was written.
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | C1a | `DeferredRestart.First` | the first start not under the restart lock | 2 |
+  | C1b | `ReviewHost.FirstStart` | the first start made though a backend is up | 2 |
+  | C1c | `ReviewHost.FirstStart` | the first start records nothing | 2 |
+  | C1d | `ReviewHost.FirstStart` | made with the settings recorded, not the saved ones | 2 |
+  | C1e | `ReviewHost.StartWith` | no start records the settings it was made with | 15 |
+  | C1f | `DeferredRestart.First` | a first start made once disposed | 1 |
+  | C1g | `SwReviewAddIn.StartBackend` | the add-in starts the backend itself, with the settings read at load | 1 |
+  | C2a | `ReviewHost.SendInit` | `init` carries no number | 2 |
+  | C2b | `ReviewHost.PostRestartFailed` | the failure's word carries no number | 1 |
+  | C2c | `ReviewHost.ReadSettingsNotInForce` | every reading numbered alike | 2 |
+  | C2d | `ReviewHost.ReadSettingsNotInForce` | a reading and its number taken apart | 1 |
+  | C2e | `app.js`, `holdNotInForce` | every reading taken, whatever its number | 1 |
+  | C2f | `app.js`, `holdNotInForce` | the number of a reading taken never kept | 1 |
+  | C2g | `app.js`, `holdNotInForce` | a word with no number not taken | 8 |
+
+- **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first; the review's, T171, T173
+  and T175; and the second review's, T178 and T180. 153A's tasks are T166 to T182: it lands first
+  among this round's 002 decisions, so its numbers stand.
 
 ### 156A. 002's other words for the hidden Terminal tab, and an invalid escape in a test (2026-10-20)
 
