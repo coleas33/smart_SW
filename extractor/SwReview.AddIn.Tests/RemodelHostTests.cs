@@ -2627,12 +2627,17 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
-    /// The 152A review's R5, pinned as it stands and put to the owner. With Start switched off - the
+    /// The 152A review's R5, put to the owner as 152A's question 3. With Start switched off - the
     /// shipped build - a plan closes its session before it answers (004 T176), so no held copy keeps
     /// the attachment (T180), and the look once the plan ends follows whatever the plan's close left
     /// active: the original part, normally, which is the document attached to, so nothing changes; or
     /// the copy, when the close left it open and active, which the tool service then follows - a
-    /// re-attach, which tells the plan lost (24A). Before 152A that switch was skipped for good.
+    /// re-attach. Before 152A that switch was skipped for good. *Changed deliberately 2026-10-21 (owner
+    /// decision 159A, 004 research R19):* the follow is kept - the tool service follows the document
+    /// SOLIDWORKS has active - and the re-attach no longer tells the plan lost, where it did in words
+    /// that said SOLIDWORKS switched documents: a plan the host closed at the plan holds no session a
+    /// re-attach could take, and no Start can use it in this build either way. The follow itself is now
+    /// pinned too.
     /// </summary>
     [Theory]
     [InlineData(false)]
@@ -2658,9 +2663,100 @@ public sealed class RemodelHostTests
                 world.RunLooks();
 
                 Assert.Equal(copyLeftActive, ((FakeToolService)original).Disposed);
-                Assert.Equal(copyLeftActive ? 1 : 0, world.AllPosted("remodel.plan_lost").Length);
+                Assert.Equal(copyLeftActive ? world.ExpectedCopyPath : SourcePath, gate.DocumentPath);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
                 Assert.Equal(0, world.LooksWaiting);
             }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T212; 002 research 152A's owner question 3): with Start switched off, the
+    /// look once a plan ends follows the copy the plan's close left open and active - the tool service follows the
+    /// document SOLIDWORKS has active, as 152A made it - and the plan is not told lost: its session was closed at the
+    /// plan (004 T176), so the re-attach took nothing from it, and `init` says nothing is lost either. The run line
+    /// keeps the plan; Start answers what it answers every plan in this build, `StartNotValidated`. Once the engineer
+    /// closes the copy, as the teardown's words ask, the tool service follows their part again, and nothing is told.
+    /// </summary>
+    [Fact]
+    public void WithStartSwitchedOffAPlanIsNotToldLostWhenTheToolServiceFollowsTheCopyItsCloseLeftActive()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.StartValidated = false;
+            world.Open();
+            using (ToolServiceGate gate = world.AttachLifecycleGate())
+            {
+                gate.EnsureStarted();
+                world.Pipeline.DuringPlan = () => world.SwitchTo(gate, world.ExpectedCopyPath);
+
+                world.Receive("remodel.plan", "p1", new { });
+                world.RunLooks();
+
+                Assert.Equal(world.ExpectedCopyPath, gate.DocumentPath);
+                Assert.True(world.Host.LatestRun!.SessionClosedAtPlan);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+                world.Receive("ready", "r1", new { });
+                Assert.Equal(JsonValueKind.Null, world.Reply("init", "r1").GetProperty("latest_run").GetProperty("plan_lost").ValueKind);
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                Assert.Equal("StartNotValidated", world.ErrorClass("s1"));
+
+                world.SwitchTo(gate, SourcePath);
+
+                Assert.Equal(SourcePath, gate.DocumentPath);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T212): the same rule for any re-attach, the engineer's own switch to another
+    /// part included - a re-attach loses a plan by taking the session it holds, and a plan the host closed at the plan
+    /// holds none, so nothing is told and `init` says nothing is lost.
+    /// </summary>
+    [Fact]
+    public void WithStartSwitchedOffAReattachTellsNothingOfAPlanTheHostClosedAtThePlan()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            ToolServiceGate gate = world.AttachGate();
+            gate.EnsureStarted();
+            world.Receive("remodel.plan", "p1", new { });
+            string? planned = gate.Attachment;
+
+            world.SwitchTo(gate, @"C:\parts\frame.SLDPRT");
+
+            Assert.NotEqual(planned, gate.Attachment);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            world.Receive("ready", "r1", new { });
+            Assert.Equal(JsonValueKind.Null, world.Reply("init", "r1").GetProperty("latest_run").GetProperty("plan_lost").ValueKind);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T212): a guard of what the rule leaves. With Start switched off, a plan whose close the
+    /// bridge could not answer keeps its session (004 T176), and a re-attach takes it: that plan is told lost, as before.
+    /// So is one planning again set aside (004 T173), whose notice says so in its own words.
+    /// </summary>
+    [Fact]
+    public void WithStartSwitchedOffAPlanStillHoldingItsSessionIsToldLostOnAReattach()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            ToolServiceGate gate = world.AttachGate();
+            gate.EnsureStarted();
+            world.Pipeline.CloseFailure = new RemodelRefusal(
+                "BridgeUnavailable", "FICT the bridge did not answer remodel.close.", retryable: true);
+            world.Receive("remodel.plan", "p1", new { });
+            Assert.False(world.Host.LatestRun!.SessionClosedAtPlan);
+            world.Pipeline.CloseFailure = null;
+
+            world.SwitchTo(gate, @"C:\parts\frame.SLDPRT");
+
+            JsonElement lost = Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(RemodelHost.PlanLostMessage, lost.GetProperty("message").GetString());
         }
     }
 

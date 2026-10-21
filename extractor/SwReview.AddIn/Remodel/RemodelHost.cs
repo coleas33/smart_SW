@@ -2270,14 +2270,21 @@ public sealed class RemodelHost : IDisposable
     /// One rule for the two ways the page hears of it: the notice
     /// (<see cref="AnnounceLostPlan"/>) and `init.latest_run.plan_lost`, which a page that loads
     /// again starts from (<see cref="SendInit"/>; decision 24A, amended on review).
+    ///
+    /// Owner decision 159A (004 research R19; 002 research 152A's owner question 3): a plan this host
+    /// closed at the plan, while Start is switched off (004 T176), holds no session for a re-attach or
+    /// a teardown to take, and no Start can use it in this build either way, so neither makes it lost -
+    /// the tool service following the copy the plan's close left active included, which was told as
+    /// SOLIDWORKS switching documents. Planning again, which sets such a plan aside, still does.
     /// </summary>
     private bool IsLostPlan(RemodelRun? run) =>
         run != null
         && run.Phase == RemodelRunPhase.Planned
         && !run.CopyDiscarded
         && (run.ClosedByPlanAgain
-            || (run.SessionEnded && !run.SessionClosedAtPlan)
-            || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()));
+            || (!run.SessionClosedAtPlan
+                && (run.SessionEnded
+                    || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()))));
 
     /// <summary>
     /// The sentence a lost plan is told with: <see cref="PlanClosedMessage"/> for one planning

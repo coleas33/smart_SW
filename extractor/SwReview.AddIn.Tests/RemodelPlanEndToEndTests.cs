@@ -296,11 +296,13 @@ public sealed class RemodelPlanEndToEndTests
     /// <summary>
     /// T167 and decision 24A in this build (004 T176): a plan waiting for Start holds no session, so
     /// when the tool service stops - a re-attach or an unload - its teardown finds nothing to end and
-    /// makes no SOLIDWORKS call, and the page hears only that the plan is lost, never a teardown's
-    /// failure after it.
+    /// makes no SOLIDWORKS call, and the page hears nothing of it: no teardown's failure, and - owner
+    /// decision 159A (004 research R19) - no lost plan, since the plan's session was closed at the plan
+    /// and the stop took nothing from it. *Changed deliberately 2026-10-21 (159A):* the page heard the
+    /// plan was lost, and this case was named for it; what else it pins is as it was.
     /// </summary>
     [Fact]
-    public void AToolServiceThatStopsWhileAPlanWaitsFindsNoSessionAndThePageHearsOnlyThatThePlanIsLost()
+    public void AToolServiceThatStopsWhileAPlanWaitsFindsNoSessionAndThePageHearsNothingOfIt()
     {
         using (var world = new PlanWorld())
         {
@@ -312,8 +314,7 @@ public sealed class RemodelPlanEndToEndTests
             world.Gate.Dispose();
 
             List<JsonElement> told = world.PostedSince(before);
-            JsonElement lost = Assert.Single(told, message => message.GetProperty("type").GetString() == "remodel.plan_lost");
-            Assert.Equal(RemodelHost.PlanLostMessage, lost.GetProperty("payload").GetProperty("message").GetString());
+            Assert.DoesNotContain(told, message => message.GetProperty("type").GetString() == "remodel.plan_lost");
             Assert.Empty(world.StatusErrors(before));
             Assert.Equal(calls, world.Solidworks.Application.Calls.Count);
             Assert.False(world.Solidworks.CopyOpen);

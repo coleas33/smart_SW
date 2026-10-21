@@ -121,8 +121,9 @@ public sealed class RemodelRun
     /// ended this plan's bridge session as soon as the plan was made, because Start is switched off
     /// in this build and no Start could use it, and the bridge answered that close. A plan marked
     /// so holds no session: no close is sent for it again - not by Discard, not by planning again -
-    /// and it is <b>not</b> lost, since nothing it needs went away. Set once, by the host that
-    /// planned it, and never cleared. Volatile for the reason <see cref="ClosedByPlanAgain"/> is.
+    /// and it is <b>not</b> lost, since nothing it needs went away; nor, owner decision 159A, by a
+    /// re-attach or a teardown later, which have no session of it to take. Set once, by the host
+    /// that planned it, and never cleared. Volatile for the reason <see cref="ClosedByPlanAgain"/> is.
     /// </summary>
     public bool SessionClosedAtPlan => Volatile.Read(ref _sessionClosedAtPlan);
 
