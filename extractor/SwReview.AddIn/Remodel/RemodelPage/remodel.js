@@ -74,8 +74,25 @@
    */
   var NOT_RUNNING = 'Backend not running';
 
+  /**
+   * Where a change that did not hold says to read why, by the button's label (owner decision 159A,
+   * on review): the run's own words for it can name the copy's full path.
+   */
+  var CHANGE_DID_NOT_HOLD = 'Press Open report to see why.';
+
+  /** What a change's error code is shown as: a code, never a sentence or a path (159A, on review). */
+  var ERROR_CODE = /^[A-Za-z][A-Za-z0-9_.-]*$/;
+
   var pending = Object.create(null);
   var nextId = 0;
+
+  /**
+   * What this load's request ids begin with, so no two loads of the page share one (owner decision
+   * 159A, on review): the host answers a request of an earlier load - its Stop, at the run's end -
+   * under that load's id, after the page has loaded again, and an id numbered from `m1` at every
+   * load was this load's too, which took that answer for its own request's.
+   */
+  var idPrefix = 'm' + Date.now().toString(36) + Math.floor(Math.random() * 0x100000000).toString(36) + '-';
 
   var state = {
     backend: null,
@@ -130,7 +147,7 @@
   // ---- transport: the host ----------------------------------------------------------------
 
   function send(type, payload) {
-    var id = 'm' + (++nextId);
+    var id = idPrefix + (++nextId);
     var message = { type: type, id: id, payload: payload || {} };
     return new Promise(function (resolve, reject) {
       pending[id] = { resolve: resolve, reject: reject };
@@ -157,6 +174,13 @@
       } else {
         waiting.resolve(message.payload || {});
       }
+      return;
+    }
+
+    if (typeof message.id === 'string' && message.id) {
+      // A reply to a request this load did not send - an earlier load's, answered after this one
+      // loaded (owner decision 159A, on review). The host's own messages carry no id, so this is no
+      // word to this page, an `error` included.
       return;
     }
 
@@ -367,6 +391,13 @@
         endRun();
       })
       .catch(function (error) {
+        // A Stop that crossed the run's end finds the host free (owner decision 159A, on review).
+        // Every way a run is freed posts its terminal `status`, whose banner says how the run ended,
+        // so this answer has nothing to add, and is not put over it.
+        if (error.errorClass === 'RunNotFound') {
+          return;
+        }
+
         showBanner(error.message);
       });
   }
@@ -698,10 +729,14 @@
     row.appendChild(head);
 
     if (change.error_code || change.error) {
+      // Owner decision 159A, on review: its code and where to read why, by the button's label - not
+      // the executor's own sentence, which can name the copy's full path. That sentence stays where
+      // the run records it: the change's record and the report in the run folder.
+      var code = dom.scalar(change.error_code);
       row.appendChild(dom.el(
         'p',
         'error',
-        dom.scalar(change.error_code) + (change.error ? ': ' + dom.scalar(change.error) : '')));
+        (ERROR_CODE.test(code) ? code + '. ' : '') + CHANGE_DID_NOT_HOLD));
     }
 
     if (change.status === 'attempting') {

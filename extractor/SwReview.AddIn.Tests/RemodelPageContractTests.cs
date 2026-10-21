@@ -402,10 +402,41 @@ public sealed class RemodelPageContractTests
         Assert.Contains("reorder", text);
         Assert.Contains("Fillet3", text);
 
-        // The failed change names its bridge error code and the sentence beside it, rather than
-        // being a row that simply says "failed".
-        Assert.Contains("ReorderRefused", text);
-        Assert.Contains("the anchor moved", text);
+        // The failed change names its bridge error code and where to read why, rather than being a
+        // row that simply says "failed". *Changed deliberately 2026-10-21 (owner decision 159A, on
+        // review; 004 T227, research R19.9):* where to read why, by the button's label, in place of
+        // the executor's own sentence, which can name the copy's full path.
+        Assert.Contains("ReorderRefused. Press Open report to see why.", text);
+        Assert.DoesNotContain("the anchor moved", text);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T227; research R19.9, R19.8 item 4): a change that did not hold is
+    /// shown in plain words that name no path - its code, and where to read why, by the button's label - where its row
+    /// printed the executor's own sentence (`remodel/apply.py`, `str(exc)`), which can name the copy's full path. That
+    /// sentence stays where the run records it: the change's record and the report in the run folder. A change pushed
+    /// while the run applies is shown the same way, and a code that is not one - here a path - is left out.
+    /// </summary>
+    [Fact]
+    public void AChangeThatDidNotHoldIsShownInPlainWordsThatNameNoPath()
+    {
+        string said = JsonSerializer.Serialize(
+            @"the bridge refused the reorder in 'C:\Fictional\runs\20260101-000000-FICT-remodel\copy\FICT-bracket-RMS.SLDPRT'");
+        JsonElement rendered = RenderMutated(
+            "result.changes[1].error = " + said + ";",
+            "var pushed = " + RemodelResultSample.LiveChangeJson() + ";"
+            + "pushed.status = 'rolled_back';"
+            + "pushed.error_code = " + JsonSerializer.Serialize(@"C:\Fictional\FICT-code") + ";"
+            + "pushed.error = " + said + ";"
+            + "append(pushed);"
+            + "var rows = document.querySelectorAll('#changes .change .error');"
+            + "return JSON.stringify({ok: true, "
+            + "failed: document.querySelector('#changes .change[data-seq=\"2\"] .error').textContent, "
+            + "pushed: rows[rows.length - 1].textContent});");
+
+        Assert.True(rendered.GetProperty("ok").GetBoolean(), rendered.ToString());
+        Assert.Equal("ReorderRefused. Press Open report to see why.", rendered.GetProperty("failed").GetString());
+        Assert.Equal("Press Open report to see why.", rendered.GetProperty("pushed").GetString());
     }
 
     /// <summary>
@@ -1656,6 +1687,195 @@ public sealed class RemodelPageContractTests
         Assert.Equal("plan-run start-run open-copy discard-copy", offered);
     }
 
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T215; research R19.9; the race review's finding R1): a page that
+    /// loads again asks afresh, and the host answers an earlier load's request - its Stop, answered at the run's end
+    /// since 159A - under that load's id, to whichever load the pane shows then
+    /// (<c>RemodelHostTests.EveryStopIsAnsweredUnderItsOwnIdThoughThePageLoadedAgain</c>). The page numbered its
+    /// requests from `m1` at every load, so that answer was taken for this load's request with the same id: here `m6`,
+    /// the earlier load's Stop and this load's sixth request - ready, the result, Open report, Open run folder and View
+    /// log, then the result its run's last word makes it ask for. The result's own reply was dropped and the result view
+    /// emptied.
+    /// </summary>
+    [Fact]
+    public void AnEarlierLoadsAnswerToStopIsNeverTakenForTheResultOfThePageThatLoadedAgain()
+    {
+        HostStub? stub = null;
+        string? before = null;
+        string? after = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                stub!.LatestRun = LatestRun("applying", running: true);
+                await Reload(page);
+                await Click(page, "open-report");
+                await Click(page, "open-folder");
+                await Click(page, "open-log");
+                before = await TextOf(page, "run-state");
+
+                stub.Post("status", new { stage = "ready", message = HostStub.StoppedRunsEnd });
+                page.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    type = "remodel.stopped",
+                    id = "m6",
+                    payload = new { changes_applied = 2 },
+                }));
+                await Settled(page);
+                after = await TextOf(page, "run-state");
+            });
+
+        Assert.StartsWith("State: saved", before);
+        Assert.Equal(before, after);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T215; research R19.9; the race review's finding R1): a reply to a
+    /// request this load never sent - an earlier load's, answered after this one loaded - is not this page's to show. An
+    /// `error` carrying such an id was shown in the banner as if the host had refused something this page asked.
+    /// </summary>
+    [Fact]
+    public void AReplyToARequestThisLoadNeverSentLeavesTheBannerAsItWas()
+    {
+        string? banner = null;
+        bool hidden = false;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { _ = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                page.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    type = "error",
+                    id = "m3",
+                    payload = new
+                    {
+                        error_class = "RunNotFound",
+                        message = "no remodel run is in flight, so there is nothing to stop.",
+                        retryable = false,
+                    },
+                }));
+                await Settled(page);
+                banner = await Banner(page);
+                hidden = await Hidden(page, "banner");
+            });
+
+        Assert.Equal(string.Empty, banner);
+        Assert.True(hidden);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T221; research R19.9; the race review's finding R4): a Stop the page
+    /// sent as the run ended crosses its last word, and the host, free, answers it `RunNotFound` (159A;
+    /// <c>RemodelHostTests.AStopThatArrivesOnceItsRunHasEndedIsAnsweredAtOnceAndStoresNothing</c>). That answer put its
+    /// words in the banner over the one the run's `error` put there, which says how the run ended. Every way a run is
+    /// freed posts a terminal `status`, so the answer adds nothing.
+    /// </summary>
+    [Fact]
+    public void AStopThatCrossesARunsErrorEndLeavesTheBannerSayingHowTheRunEnded()
+    {
+        const string failed = "The run ended without saving the copy. The report says why.";
+        HostStub? stub = null;
+        string? banner = null;
+        string? offered = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page =>
+            {
+                stub = new HostStub(page)
+                {
+                    StopEndsWith = ("error", failed),
+                    StopCrossesTheRunsEnd = true,
+                };
+            },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                await Click(page, "start-run");
+                await Click(page, "stop-run");
+                banner = await Banner(page);
+                offered = await Pressable(page);
+            });
+
+        Assert.Contains("remodel.stop", stub!.Received);
+        Assert.Equal(failed, banner);
+        Assert.Equal("plan-run start-run open-copy discard-copy", offered);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's M4): the second of the two ways out the
+    /// `remodel.stop` row describes, pinned on its own side. This host answers Stop only after the run's terminal
+    /// `status`, so the page hears the end from that status (R19.2); an answer no terminal `status` has preceded - an
+    /// order this host never produces (research R19.8, item 1) - ends the run on the page and writes the answer into the
+    /// run line.
+    /// </summary>
+    [Fact]
+    public void AnAnswerToStopThatNoTerminalStatusPrecededEndsTheRunOnItsWords()
+    {
+        HostStub? stub = null;
+        string? line = null;
+        string? offered = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page) { StopEndsWith = null }; },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                await Click(page, "start-run");
+                await Click(page, "stop-run");
+                line = await TextOf(page, "run-status");
+                offered = await Pressable(page);
+            });
+
+        Assert.Contains("remodel.stop", stub!.Received);
+        Assert.Equal(
+            "Stopping. 2 change(s) applied; the change in flight is finished and the artifacts are finalized first.",
+            line);
+        Assert.Equal("plan-run start-run open-copy discard-copy", offered);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's M4): R19.2's other side. Only an `error` that ends a
+    /// run clears the run line; one while no run is running - here the add-in's word that the backend did not start, after
+    /// a plan - puts up its banner and leaves the line as it was.
+    /// </summary>
+    [Fact]
+    public void AnErrorWhileNoRunIsRunningLeavesTheRunLineAsItWas()
+    {
+        HostStub? stub = null;
+        string? before = null;
+        string? after = null;
+        string? banner = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                before = await TextOf(page, "run-status");
+
+                stub!.Post("status", new { stage = "error", message = RemodelHost.BackendDidNotStartMessage, lifecycle = true });
+                await Settled(page);
+                after = await TextOf(page, "run-status");
+                banner = await Banner(page);
+            });
+
+        Assert.Equal("Planned. Press Start to apply the plan to the copy.", before);
+        Assert.Equal(before, after);
+        Assert.Equal(RemodelHost.BackendDidNotStartMessage, banner);
+    }
+
     /// <summary>The run buttons the page offers now, by id, in the page's order, or "-" for none (owner decision 155A).</summary>
     private static async Task<string> Pressable(CoreWebView2 page)
     {
@@ -1950,9 +2170,18 @@ public sealed class RemodelPageContractTests
 
         /// <summary>
         /// Owner decision 159A: the last word of a run the engineer stopped, which `remodel.stop` is answered after,
-        /// as `RemodelHost.Execute` tells a run's end: `ready` with the state the run ended in, by default.
+        /// as `RemodelHost.Execute` tells a run's end: `ready` with the state the run ended in, by default. Null on the
+        /// decision's review (004 T229): the answer with no terminal `status` before it, an order this host never
+        /// produces, for the second of the two ways out the `remodel.stop` row describes.
         /// </summary>
-        public (string Stage, string Message) StopEndsWith { get; set; } = ("ready", StoppedRunsEnd);
+        public (string Stage, string Message)? StopEndsWith { get; set; } = ("ready", StoppedRunsEnd);
+
+        /// <summary>
+        /// Owner decision 159A, on review (004 T221; the race review's finding R4): when set, `remodel.stop` crosses the
+        /// run's end - the run's last word (<see cref="StopEndsWith"/>) reaches the page first, and the Stop finds the host
+        /// free and is answered `RunNotFound`, as `RemodelHost` answers a Stop decided once the run has ended.
+        /// </summary>
+        public bool StopCrossesTheRunsEnd { get; set; }
 
         /// <summary>What `RemodelHost.Execute` tells the page as a stopped run ends: its state, `truncated`, and where to look.</summary>
         public const string StoppedRunsEnd =
@@ -2043,11 +2272,31 @@ public sealed class RemodelPageContractTests
                     Reply("remodel.result", id, Parse(RemodelResultSample.ResultJson()));
                     return;
                 case "remodel.stop":
+                    if (StopCrossesTheRunsEnd)
+                    {
+                        // A Stop the page sent as the run ended (159A, on review): the run's last word, posted once the
+                        // host is free, reaches the page first, and the Stop, decided after the freeing, is answered at once.
+                        (string Stage, string Message) end = StopEndsWith
+                            ?? throw new InvalidOperationException("a Stop crosses the end of a run that has one");
+                        Post("status", new { stage = end.Stage, message = end.Message });
+                        Reply("error", id, new
+                        {
+                            error_class = "RunNotFound",
+                            message = "no remodel run is in flight, so there is nothing to stop.",
+                            retryable = false,
+                        });
+                        return;
+                    }
+
                     // As `RemodelHost` answers it (owner decision 159A): its word that the run is stopping as the
                     // Stop reaches the run; then, once the executor has finalized and the host is free, the run's last
                     // word; then the answer. Until 159A this stub answered at once, an order the host never produces.
                     Post("status", new { stage = "applying", message = RemodelHost.StoppingMessage });
-                    Post("status", new { stage = StopEndsWith.Stage, message = StopEndsWith.Message });
+                    if (StopEndsWith.HasValue)
+                    {
+                        Post("status", new { stage = StopEndsWith.Value.Stage, message = StopEndsWith.Value.Message });
+                    }
+
                     Reply("remodel.stopped", id, new { changes_applied = 2 });
                     return;
                 default:
