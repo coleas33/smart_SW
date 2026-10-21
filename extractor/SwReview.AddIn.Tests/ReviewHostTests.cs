@@ -2763,6 +2763,10 @@ public sealed class ReviewHostTests
             LogFolder = Path.Combine(_root, "logs");
             Settings = UserSettings.Defaults();
             Settings.RunRoot = Path.Combine(_root, "runs");
+
+            // The dump attaches to the document active as it begins, as the real one does, and says
+            // so (owner decision 152A, on review: S2).
+            Dump.Attaches = () => Document;
         }
 
         public string SettingsPath { get; }
@@ -2986,12 +2990,19 @@ public sealed class ReviewHostTests
         /// <summary>Runs inside the dump, which is where the active document can change under it.</summary>
         public Action? OnRun { get; set; }
 
+        /// <summary>
+        /// What the dump attaches to as it begins - the active document, as the real dump's attach
+        /// finds it - and says it extracted (<see cref="DumpSummary.Extracted"/>); none answers none.
+        /// </summary>
+        public Func<PageDocument?>? Attaches { get; set; }
+
         public DumpSummary Run(
             string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)
         {
             Runs++;
             LastDirectory = outputDirectory;
             LastProfile = profile;
+            PageDocument? attached = Attaches?.Invoke();
             OnRun?.Invoke();
             foreach (string message in Progress)
             {
@@ -3007,7 +3018,8 @@ public sealed class ReviewHostTests
                 Path.Combine(outputDirectory, "package.json"),
                 components: 12,
                 gaps: Gaps,
-                unexamined: Unexamined);
+                unexamined: Unexamined,
+                extracted: attached);
         }
     }
 

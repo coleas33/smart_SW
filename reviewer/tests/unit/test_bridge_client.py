@@ -33,10 +33,12 @@ from swreview.bridge.client import (
     BRIDGE_VIEWS,
     CIRCUIT_LIMIT,
     COMMANDS,
+    CONFIGURATION_CHANGED_MARKER,
     DRAWING_READ_MODES,
     PROTOCOL_VERSION,
     REFUSING_COMMANDS,
     BridgeClient,
+    BridgeConfigurationChangedError,
     BridgeDocumentClosedError,
     BridgeError,
     BridgeOpenError,
@@ -588,6 +590,104 @@ def test_a_closed_document_neither_counts_nor_clears_a_solidworks_failure() -> N
 
     with pytest.raises(BridgeError):
         bridge.ping()
+    assert bridge.circuit_open
+
+
+# --- a live command refused for another configuration (owner decision 152A) --------------
+
+CONFIGURATION_CHANGED = (
+    "configuration changed: this bridge answers about configuration 'Default' of "
+    "C:\\Fictional\\FICT-frame.SLDASM, and 'FICT-machined' is active now, so a live command "
+    "would answer about another configuration than the one extracted. Make the configuration "
+    "you started with active again, or press Review to start a new review."
+)
+"""The add-in's refusal of a live command while its document's active configuration is not the
+one it attached in (`SwBridgeDispatcher.ConfigurationChangedError`), as the host sends it."""
+
+
+def test_the_configuration_marker_is_the_hosts_own_opening() -> None:
+    """The host opens its refusal with `ConfigurationChangedPrefix`: the two ends name it once
+    each, so a change to one alone fails here rather than at a seat."""
+    constant = re.search(
+        r'public const string ConfigurationChangedPrefix = "([^"]+)";',
+        DISPATCHER.read_text(encoding="utf-8"),
+    )
+
+    assert constant is not None, f"no ConfigurationChangedPrefix constant in {DISPATCHER}"
+    assert CONFIGURATION_CHANGED_MARKER == constant.group(1)
+
+
+def test_a_configuration_changed_refusal_is_a_named_failure() -> None:
+    bridge, _ = client(failed("1", CONFIGURATION_CHANGED), secret="s")
+
+    with pytest.raises(BridgeConfigurationChangedError) as caught:
+        bridge.capture("YWJj", "iso")
+
+    assert isinstance(caught.value, BridgeError)
+    assert CONFIGURATION_CHANGED in str(caught.value)
+
+
+def test_a_configuration_changed_refusal_does_not_open_the_circuit_so_live_calls_resume() -> None:
+    """Owner decision 152A, on review (its question 5, decided for the owner, who may revert): a
+    definite answer from a healthy host, as a closed document is, so it is not counted - a run, or
+    the general-chat terminal's session, keeps its live calls once the configuration is switched
+    back, where three refusals used to open the circuit for good."""
+    bridge, transport = client(
+        *[failed(str(index + 1), CONFIGURATION_CHANGED) for index in range(4)],
+        ok("5", {"pong": True}),
+        secret="s",
+    )
+
+    for _ in range(4):
+        with pytest.raises(BridgeConfigurationChangedError):
+            bridge.ping()
+
+    assert not bridge.circuit_open
+    assert bridge.ping() == {"pong": True}
+    assert len(transport.requests) == 5
+
+
+def test_a_configuration_changed_refusal_neither_counts_nor_clears_a_solidworks_failure() -> None:
+    """It leaves the breaker's count exactly where it was: the third COM failure still opens it."""
+    bridge, _ = client(
+        failed("1", "COM failure"),
+        failed("2", "COM failure"),
+        failed("3", CONFIGURATION_CHANGED),
+        failed("4", "COM failure"),
+        secret="s",
+    )
+
+    for _ in range(2):
+        with pytest.raises(BridgeError):
+            bridge.ping()
+    with pytest.raises(BridgeConfigurationChangedError):
+        bridge.ping()
+    assert not bridge.circuit_open
+
+    with pytest.raises(BridgeError):
+        bridge.ping()
+    assert bridge.circuit_open
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "COMException: the configuration changed under the call",
+        "Interference failed: configuration changed while detecting",
+    ],
+)
+def test_only_an_error_that_opens_with_the_marker_is_the_refusal(text: str) -> None:
+    """Matched at the opening, as `unauthorized` is: a SOLIDWORKS failure whose sentence merely
+    mentions a configuration change is a failure like any other, and is counted."""
+    bridge, _ = client(
+        *[failed(str(index + 1), text) for index in range(CIRCUIT_LIMIT)], secret="s"
+    )
+
+    for _ in range(CIRCUIT_LIMIT):
+        with pytest.raises(BridgeError) as caught:
+            bridge.ping()
+        assert not isinstance(caught.value, BridgeConfigurationChangedError)
+
     assert bridge.circuit_open
 
 

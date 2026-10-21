@@ -3245,6 +3245,76 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
+    /// The review of 152A's Codex fixes, S2. The dump attaches to whatever is active when it begins,
+    /// which can be another document than every reading made before it: switched after 149A's second
+    /// reading - while the run folder is made and the status posted - and switched back during the
+    /// extraction, the dump extracts the other one, and the reading made once it ends sees the
+    /// review's own document again. So the session is checked against what the dump says it extracted
+    /// too, and such a review is refused as one whose document changed during its extraction, in the
+    /// same words, leaving nothing half made: no session, the status line told the extraction is over,
+    /// the tool service asked nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("another configuration")]
+    [InlineData("another document")]
+    public void ANewReviewWhoseDumpAttachedToAnotherDocumentIsRefusedThoughItsOwnIsActiveAgain(string change)
+    {
+        using var world = new RestartWorld { Bridge = ReviewBridge };
+        PageDocument reviewed = world.Document!;
+        world.BridgeServes = bridge => bridge.Pipe == ReviewBridge.Pipe ? reviewed : null;
+        world.Open();
+        int statuses = world.Posted("status").Length;
+        world.Dump.BeforeAttach = () => world.Document = Changed(reviewed, change);
+        world.Dump.OnRun = () => world.Document = reviewed;
+
+        world.Receive("review.start", "start", new { });
+
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("DocumentChanged", error.GetProperty("error_class").GetString());
+        Assert.Equal(DocumentChangedAtTheSession, error.GetProperty("message").GetString());
+        Assert.True(error.GetProperty("retryable").GetBoolean());
+        Assert.Equal(1, world.Dump.Runs);
+        Assert.Same(reviewed, world.Document);
+        Assert.Empty(world.Backend.Sessions);
+        Assert.Equal(0, world.FollowsAsked);
+        Assert.Equal(
+            new[] { "extracting", "ready" },
+            world.Posted("status").Skip(statuses).Select(status => status.GetProperty("stage").GetString()).ToArray());
+        Assert.Equal(ExtractedButNotReviewed, world.Last("status").GetProperty("message").GetString());
+    }
+
+    /// <summary>
+    /// ...and evidence a dump says nothing of is not taken for the review's: the add-in's dump always
+    /// says what it attached to, and one that does not is refused as one that attached elsewhere,
+    /// rather than vouched for. The same document however its path is spelled is the review's.
+    /// </summary>
+    [Theory]
+    [InlineData("says nothing", false)]
+    [InlineData("spelled otherwise", true)]
+    public void WhatTheDumpSaysItExtractedDecides(string said, bool started)
+    {
+        using var world = new RestartWorld();
+        PageDocument reviewed = world.Document!;
+        world.Open();
+        world.Dump.Attaches = said == "says nothing"
+            ? (Func<PageDocument?>)(() => null)
+            : () => Changed(reviewed, said);
+
+        world.Receive("review.start", "start", new { });
+
+        if (started)
+        {
+            world.Reply("review.started", "start");
+            Assert.Single(world.Backend.Sessions);
+        }
+        else
+        {
+            Assert.Equal("DocumentChanged", world.Reply("error", "start").GetProperty("error_class").GetString());
+            Assert.Empty(world.Backend.Sessions);
+        }
+    }
+
+    /// <summary>
     /// The Codex review of 152A, X2, for a review session. A review's checks run over the bridge while
     /// `POST /sessions` is out - its live interference check first - and the session is tracked, so
     /// that the gate's busy question asks after its turn, only once that call has answered. A follow
@@ -4524,6 +4594,9 @@ public sealed class DeferredRestartTests
             Settings.Python = Path.Combine(Root, "swreview.exe");
             File.WriteAllText(Settings.Python, string.Empty);
             Settings.SetApiKey(OpenAiKey);
+
+            // The dump attaches to the document active as it begins, as the real one does.
+            Dump.Attaches = () => Document;
         }
 
         public string Root { get; }
@@ -5240,15 +5313,30 @@ public sealed class DeferredRestartTests
         /// <summary>Runs as each dump begins, before anything is written.</summary>
         public Action? OnRun { get; set; }
 
+        /// <summary>
+        /// Runs as each dump begins, before it attaches: a switch that lands in the moment between the
+        /// host's last reading of the document and the dump's attach (owner decision 152A, on review:
+        /// S2). <see cref="OnRun"/> runs after the attach, during the extraction.
+        /// </summary>
+        public Action? BeforeAttach { get; set; }
+
+        /// <summary>
+        /// What the dump attaches to as it begins - the active document, as the real dump's attach
+        /// finds it - and says it extracted (<see cref="DumpSummary.Extracted"/>); none answers none.
+        /// </summary>
+        public Func<PageDocument?>? Attaches { get; set; }
+
         public DumpSummary Run(string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)
         {
+            BeforeAttach?.Invoke();
+            PageDocument? attached = Attaches?.Invoke();
             OnRun?.Invoke();
             Interlocked.Increment(ref _runs);
 
             // A package to digest: a context review is bound to its package's SHA-256.
             string package = Path.Combine(outputDirectory, "package.json");
             File.WriteAllText(package, "{\"package_id\":\"FICT-package\"}");
-            return new DumpSummary(package, components: 12, gaps: 0);
+            return new DumpSummary(package, components: 12, gaps: 0, extracted: attached);
         }
     }
 

@@ -1312,6 +1312,12 @@ public class BridgeDispatcherTests : IDisposable
         new object[] { BridgeCommands.Tessellate, "{\"component_id\":\"cmp:0002\"}" },
     };
 
+    /// <summary>
+    /// The refusal word for word. Changed deliberately on the review of the Codex fixes (N5,
+    /// 2026-10-21): its way on was "Make 'Default' active again in SOLIDWORKS.", which cannot be done
+    /// once that configuration is renamed - the name is what is compared - and every live command was
+    /// then refused with it; the way on now holds either way.
+    /// </summary>
     [Theory]
     [MemberData(nameof(LiveCommands))]
     public void ALiveCommandWhileAnotherConfigurationIsActiveIsRefusedAndRunsNothing(string command, string parameters)
@@ -1330,7 +1336,8 @@ public class BridgeDispatcherTests : IDisposable
         Assert.Equal(
             "configuration changed: this bridge answers about configuration 'Default' of C:\\work\\bracket-assy.SLDASM, "
             + "and 'FICT-machined' is active now, so a live command would answer about another configuration than "
-            + "the one extracted. Make 'Default' active again in SOLIDWORKS.",
+            + "the one extracted. Make the configuration you started with active again, or press Review to start "
+            + "a new review.",
             response.Error);
         Assert.StartsWith(SwBridgeDispatcher.ConfigurationChangedPrefix + ": ", response.Error!, StringComparison.Ordinal);
         Assert.Equal(1, asked);

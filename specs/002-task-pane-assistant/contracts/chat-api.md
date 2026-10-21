@@ -111,8 +111,10 @@ unchanged. *Amended 2026-10-20 (owner decision 152A, on the Codex review):* that
 of its live commands - `capture`, `measure`, `interference`, `tessellate` - only while its document's
 active configuration is the one it attached in, and refuses one otherwise, before it runs, with an
 `error` that starts `configuration changed: ` (`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`,
-Errors that are not command failures). The backend's client takes it as any bridge failure: failed
-coverage carrying the sentence, counted toward its breaker.
+Errors that are not command failures). The backend's client takes it as it takes a closed
+document: failed coverage carrying the sentence, not counted toward its breaker, so live calls go
+on once the configuration is switched back (`reviewer/src/swreview/bridge/PROTOCOL.md`; decided
+on review for the owner, who may revert).
 
 Concurrency: one running turn per chat; the server serializes messages and evidence
 answers per chat and refuses with 409 rather than queueing silently.

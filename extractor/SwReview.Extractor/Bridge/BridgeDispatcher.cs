@@ -431,14 +431,16 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// <summary>
     /// The whole refusal: which configuration of which document this bridge answers about, which one
     /// is active instead, and the way on. Named for the document, as the closed-document answer is,
-    /// because the engineer reads it against the model in front of them.
+    /// because the engineer reads it against the model in front of them. The way on holds whatever
+    /// happened to the configuration (on review, N5): the name is what is compared, and one renamed
+    /// since cannot be made active again under its old name, so a new review is offered beside it.
     /// </summary>
     public static string ConfigurationChangedError(string? documentPath, string? bound, string? active) =>
         ConfigurationChangedPrefix + ": this bridge answers about configuration '" + bound + "' of "
         + (documentPath ?? "the document it attached to") + ", and "
         + (active == null ? "no configuration can be read as active" : "'" + active + "' is active")
-        + " now, so a live command would answer about another configuration than the one extracted. Make '"
-        + bound + "' active again in SOLIDWORKS.";
+        + " now, so a live command would answer about another configuration than the one extracted. Make "
+        + "the configuration you started with active again, or press Review to start a new review.";
 
     /// <summary>
     /// Decision 140A (2026-10-19): every command this bridge answers - its own fixed set, the six

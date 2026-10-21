@@ -317,6 +317,9 @@ public sealed class EngineeringContextHostTests
             {
                 CurrentDocument = ReadDocument, Dump = Dump, EngineeringSelection = Selection, Engineer = "fictional-engineer", Environment = _ => null,
             });
+
+            // The dump attaches to the document active as it begins, as the real one does.
+            Dump.Attaches = () => Document;
         }
 
         private PageDocument? ReadDocument()
@@ -389,13 +392,21 @@ public sealed class EngineeringContextHostTests
         public int Runs;
         public string? Directory;
         public Action? OnRun;
+
+        /// <summary>
+        /// What the dump attaches to as it begins, and says it extracted - the active document, as
+        /// the real dump's attach finds it (owner decision 152A, on review: S2).
+        /// </summary>
+        public Func<PageDocument?>? Attaches;
+
         public DumpSummary Run(string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)
         {
             Runs++;
+            PageDocument? attached = Attaches?.Invoke();
             OnRun?.Invoke();
             Directory = outputDirectory;
             File.WriteAllText(Path.Combine(outputDirectory, "package.json"), "{}");
-            return new DumpSummary(Path.Combine(outputDirectory, "package.json"), 1, 0);
+            return new DumpSummary(Path.Combine(outputDirectory, "package.json"), 1, 0, extracted: attached);
         }
     }
 

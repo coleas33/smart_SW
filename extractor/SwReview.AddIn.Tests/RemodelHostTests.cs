@@ -2615,6 +2615,74 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// The review of 152A's Codex fixes, N4: a plan or a run lets go of its hold before it frees the
+    /// host. A run ends on a thread of its own, and a plan pressed the moment the host is free takes a
+    /// hold of its own; a run that freed the host first and let go after let go of that plan's hold,
+    /// leaving the plan unheld. So each lets go while the host is still busy.
+    /// </summary>
+    [Fact]
+    public void APlanOrARunLetsGoOfItsHoldBeforeItFreesTheHost()
+    {
+        using (var world = new RemodelWorld())
+        {
+            var holds = new CountedHolds();
+            var busyAsLetGo = new List<bool>();
+            world.Hold = holds.Take;
+            holds.OnRelease = () => busyAsLetGo.Add(world.Host.RunInProgress);
+            world.Open();
+
+            world.Receive("remodel.plan", "p1", new { });
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("remodel.started", "s1");
+            Assert.Equal(new[] { true, true }, busyAsLetGo.ToArray());
+            Assert.False(world.Host.RunInProgress);
+            Assert.Equal(0, holds.Held);
+        }
+    }
+
+    /// <summary>
+    /// ...and letting go comes first, so a hold that fails as it is let go must not keep the host
+    /// busy - a host left busy holds back every plan, and every settings restart, until SOLIDWORKS
+    /// restarts - nor change the press's answer, nor reach a run's own thread, which nothing waits on.
+    /// The gate's own holds never fail; a host is handed whatever <c>HoldToolService</c> answers.
+    /// </summary>
+    [Theory]
+    [InlineData("plan")]
+    [InlineData("run")]
+    public void AHoldThatFailsAsItIsLetGoStillFreesTheHost(string press)
+    {
+        using (var world = new RemodelWorld())
+        {
+            var holds = new CountedHolds();
+            world.Hold = holds.Take;
+            world.Open();
+            if (press == "run")
+            {
+                world.Receive("remodel.plan", "p1", new { });
+            }
+
+            holds.OnRelease = () => throw new InvalidOperationException("FICT the hold would not let go");
+
+            if (press == "plan")
+            {
+                world.Receive("remodel.plan", "x", new { });
+                world.Reply("remodel.planned", "x");
+            }
+            else
+            {
+                world.Receive("remodel.start", "x", new { run_dir = world.ExpectedRunDirectory });
+                world.Reply("remodel.started", "x");
+                Assert.Equal(1, world.Pipeline.Count("run"));
+            }
+
+            Assert.Empty(world.AllPosted("error"));
+            Assert.False(world.Host.RunInProgress);
+            Assert.Equal(0, holds.Held);
+        }
+    }
+
     // ---- remodel.result ------------------------------------------------------------------
 
     /// <summary>

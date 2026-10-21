@@ -2310,7 +2310,11 @@ public sealed class ReviewHost : IDisposable
         // one, so the review would run half. So the document is read again now, the last moment before
         // the session is given the bridge, and a change is refused as before the extraction, in words
         // true here. The run folder keeps what was extracted, as one whose extraction fails keeps its own.
-        if (!document.IsSameDocument(_options.CurrentDocument()))
+        // And on the review of those fixes (S2): the dump attaches to whatever is active as it begins,
+        // which can be another document than both readings - switched after the second, and back during
+        // the extraction - so what it says it extracted is compared too, and a dump that says nothing is
+        // not taken for the review's.
+        if (!document.IsSameDocument(summary.Extracted) || !document.IsSameDocument(_options.CurrentDocument()))
         {
             SendError(id, "DocumentChanged", DocumentChangedAtTheSessionMessage, retryable: true);
             PostStatus("ready", ExtractedButNotReviewedStatus);

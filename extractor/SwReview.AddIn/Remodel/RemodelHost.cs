@@ -1789,11 +1789,13 @@ public sealed class RemodelHost : IDisposable
 
             run.Phase = RemodelRunPhase.Finished;
             _active = null;
-            _busy = false;
 
             // Owner decision 152A, on the Codex review (X2): held until the run's session is closed,
-            // above, on the bridge it ran on.
+            // above, on the bridge it ran on - and let go before the host is free, since this is the
+            // run's own thread (on review, N4): a plan pressed the moment the host is free takes a hold
+            // of its own, which letting go after would let go of.
             LetGoOfTheToolService();
+            _busy = false;
         }
 
         if (closeProblem != null)
@@ -2548,8 +2550,10 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     private void FreeTheHost()
     {
-        _busy = false;
+        // The hold first, as a run's end lets go of it (Execute): nothing held is let go once the host
+        // is free for the next press.
         LetGoOfTheToolService();
+        _busy = false;
         AnnounceLostPlan();
     }
 
@@ -2574,9 +2578,22 @@ public sealed class RemodelHost : IDisposable
     /// <summary>
     /// Lets go of the hold the plan or run took, once, on whichever thread frees the host - the
     /// message thread for a plan or a Start that handed nothing on, the run's own once its session is
-    /// closed (<see cref="Execute"/>).
+    /// closed (<see cref="Execute"/>). Never throws: it comes before the host is freed (on review,
+    /// N4), and a hold that fails as it is let go must neither keep the host busy - which would hold
+    /// back every plan and every settings restart - nor reach a run's own thread, which no one waits
+    /// on. The gate's own holds never fail.
     /// </summary>
-    private void LetGoOfTheToolService() => Interlocked.Exchange(ref _toolServiceHold, null)?.Dispose();
+    private void LetGoOfTheToolService()
+    {
+        try
+        {
+            Interlocked.Exchange(ref _toolServiceHold, null)?.Dispose();
+        }
+        catch (Exception)
+        {
+            // The hold's own failure, and the host is freed all the same.
+        }
+    }
 
     /// <summary>
     /// Whether a settings restart stands before the press. Only words for the page hang on it, so
