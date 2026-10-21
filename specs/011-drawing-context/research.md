@@ -2802,11 +2802,14 @@ Each is beyond what decision 148A names, so nothing here was changed.
    pilot; 004's T172 now says that the commit switching it on settles it. The options: post the
    terminal status once the host is free, or keep the retryable refusal as it is.
    *Settled 2026-10-20 by owner decision 155A (004 research R18.4; 004 T195, T196):* the first. Nothing
-   the page ends its running state on is posted while a run holds the host: the executor's caught
-   failure, the pipeline's own error and T167's words of a close made under the run are held, in the
-   order they were made, and told once `Execute` has closed the session and freed the host, then the
-   run's last word. The stop when the copy is gone, which also ended the page's running state mid-run,
-   is told in the stage of the engineer's own Stop. T172 no longer waits on it.
+   the page ends its running state on is posted while a run holds the host but one, as before: a Start
+   whose run cannot be handed to its scheduler posts its `error` before it frees the host, on the host's
+   message thread, where a press waits behind it and meets a free host (named on the decision's review,
+   004 R18.8). The executor's caught failure, the pipeline's own error and T167's words of a close made
+   under the run are held, in the order they were made, and told once `Execute` has closed the session
+   and freed the host, then the run's last word. The stop when the copy is gone, which also ended the
+   page's running state mid-run, is told in the stage of the engineer's own Stop. T172 no longer waits
+   on it.
 5. **Two tests of a whole path, and two rules for a segment** (the review's finding 7).
    `RemodelCopy.IsFullPath` refuses a device path, which the bind's `BridgeDispatcher.IsFullyQualified`
    takes; and `CopyOf` takes a `.` segment, which `RemodelScope.HasRelativeSegment`, read by

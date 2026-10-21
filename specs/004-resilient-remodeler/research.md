@@ -2020,11 +2020,13 @@ executor's). `ScopeAllowsARun` sends the same two constants. Two designs were we
   its own. 149A's `SCOPE_REFUSAL_WORDS` is untouched, and so is the backend: its body keeps the bridge's
   sentence (149A's pins of that stand), which the page never prints. Whoever debugs reads the bridge's
   sentence where it is already written - the tool-service log's line for the refused request
-  (`ToolServiceRequestLogger`, `error="..."`), and the run's `remodel.log` for the open's. No line was
-  added: the host has no log of its own a test would not write into the engineer's (`AddInLog`), and the
-  backend's `WARNING` line stays 149A's, for the two scope codes. The pipeline's own rule, "the class and
-  the sentence are carried through unchanged", still holds: the host words the class, as it words its
-  own refusals.
+  (`ToolServiceRequestLogger`, `error="..."`), the open's as the probe's: a refused open holds no
+  session, and the run's `remodel.log` is written only while a session holds the run's folder
+  (`BridgeDispatcher.RemodelRunDirectory`), so the open's line goes to the tool-service log alone
+  (corrected on the decision's review, R18.8). No line was added: the host has no log of its own a test
+  would not write into the engineer's (`AddInLog`), and the backend's `WARNING` line stays 149A's, for
+  the two scope codes. The pipeline's own rule, "the class and the sentence are carried through
+  unchanged", still holds: the host words the class, as it words its own refusals.
 
 **The words**, each naming no path, saying what was not done, vouching for the engineer's part alone (the
 tab's other refusals of a plan do, `PartNotChanged`), and naming the way on by the button's label where
@@ -2059,7 +2061,11 @@ target's); the backend's `RunFolderFailed` and `PackageMissing` naming the run f
 `copy_path_for`'s; the host's `RunFolderFailed` naming the run root; a pipeline failure's own message in
 the run line; `DiscardFailed` and `OpenFailed` carrying an exception's message; the restart gate's
 `BackendUnavailable` carrying a restart's failure, which can end in the log's path (150A); and, once
-Start is switched on, `POST /remodel/runs`' refusals naming the run folder.
+Start is switched on, `POST /remodel/runs`' refusals naming the run folder, and Show change's
+`entity.shown {ok: false, message}`, which carries a failure's own message when showing throws
+(`PaneActions.ShowPersistRef`) - among them the attach's refusal while a drawing is the active
+document, naming the drawing's full path (`SwSession`: "'{path}' is a drawing, which has no
+configuration to bind a session to; ...") - added on the decision's review (R18.8).
 
 ### R18.2 The run report and calls that name no document (T191, T192)
 
@@ -2084,9 +2090,14 @@ copy. They are counted apart, as naming no document, and not as writes to anothe
 skipping `(none)` in the reader, would have dropped evidence the report exists to show; the module's rule
 is that it never claims from intent and never quietly omits. The words stay true: the settings are the
 application's, opening the copy is not a write (the draft constitution amendment, pull request #4), none
-of the calls is called a write, and "among them" holds of the tag, rollback and rebuild too.
-`NO_WRITE_RECORD` now ends "holds no mutating request that names a document", true with or without such
-entries; the golden report, whose log names the copy alone, is unchanged byte for byte.
+of the calls is called a write, and "among them" holds of the tag, rollback and rebuild too. While the
+log holds such an entry, the claim's three sentences speak only of the writes, and the mutating
+requests, that name a document ("Every write of this run that names a document went to ...", "No write
+that names a document was recorded ...", "N of M mutating request(s) in `remodel.log` that name a
+document"): the entry's calls include writes - the copy's tag, rollback and rebuild - and the open's
+line is a mutating request. With none they read as they did before the decision, so the golden report,
+whose log names the copy alone, is unchanged byte for byte (corrected on the decision's review, R18.8,
+where T192 had qualified `NO_WRITE_RECORD`'s last clause alone, on every run).
 
 The token is `NO_TARGET`, pinned to `RemodelGateRecorder.NoTarget` read from `ToolServiceHost.cs`, and the
 test's line is the real one: `RemodelPlanEndToEndTests.TheOpensRequestLineInTheRunsLogNamesNoDocument`
@@ -2161,6 +2172,12 @@ which queues the message to the pane and returns.
 - `RemodelHostTests.ADocumentChangedWhoseCopyWentAwayAbortsTheRun` (T195): it looks for the stop's own
   status, `CopyGoneMessage` in `applying`, where it looked for an `error` status, which the stop no longer
   posts. The abort it pins is unchanged.
+- Three of T191's own cases of `test_remodel_report.py`'s `TestCallsThatNameNoDocument` (T198, on the
+  decision's review): `test_a_run_whose_writes_all_went_to_the_copy_still_claims_it`,
+  `test_a_write_to_another_path_still_withdraws_the_claim_and_none_is_not_named_as_one` and
+  `test_a_log_that_names_no_document_at_all_records_no_write` read the claim's qualified words (R18.2),
+  each assertion as strict as it was or stricter. What they pin - the claim made, withdrawn or not
+  made, the counts, the sentence on calls that name no document - is unchanged.
 
 No test was loosened. The harness gained two hooks used by the new cases only: `RemodelWorld.WhenPosted`,
 run after a message is collected, and `RemodelWorld.Channel`, a channel of a case's own
@@ -2168,9 +2185,10 @@ run after a message is collected, and `RemodelWorld.Channel`, a channel of a cas
 
 ### R18.6 The mutations
 
-Each fix taken out once, by one exact replacement in one file, in this worktree: the solution built (or,
-for the report, nothing to build), the named class run, and the file restored byte for byte, checked by
-its sha256. Every mutation is red.
+Each fix taken out once, by one exact replacement in one file (M22, M23 and M25 by two in one file), in
+this worktree: the solution built (or, for the report, nothing to build), the named class run, and the
+file restored byte for byte, checked by its sha256. Every mutation is red. M22 to M28 are the review's
+(R18.8).
 
 | Id | Taken out | Red |
 |---|---|---|
@@ -2198,8 +2216,15 @@ its sha256. Every mutation is red.
 | M19 | the copy-gone stop told in `error` again | 2 cases of 2 tests: `TheStopWhenTheCopyIsGoneLeavesThePageRunningUntilTheRunEnds` and `ADocumentChangedWhoseCopyWentAwayAbortsTheRun` |
 | M20 | `init`'s reading of a run in flight, and its post, out of the lock | 1 case of 1 test: `AnInitAnsweredAsTheRunEndsIsNeverToldAfterTheEndingThatTheRunIsInFlight` |
 | M21 | the freeing handing back nothing of what the ending held | 7 cases of 4 tests: the four endings that hold something, the order of the executor's refusal, and two older cases that read the ending's refusal, `ARefusalRaisedByTheExecutorIsAnsweredWithItsOwnClassAndEndsTheRun` and `AnAfterReadingOfACopyThatCouldNotBeMadeTheActiveDocumentEndsTheRunInTheHostsWords` |
+| M22 | the claim never qualified, a `(none)` entry in the log or not | 6 cases of 4 tests: the three of `TestCallsThatNameNoDocument` changed on purpose (R18.5) and the three of `test_no_sentence_speaks_of_every_write_while_the_log_holds_one_that_names_no_document` |
+| M23 | the claim always qualified, with no `(none)` entry too | 2 cases of 2 tests: `test_without_one_the_sentences_are_as_they_were` and the golden report, `test_the_whole_report` |
+| M24 | a target read past ` failures=`, as before the review | 1 case of 1 test: `test_a_teardown_lines_target_is_read_to_its_failures` |
+| M25 | `init`'s active document read under the ending's lock (the review's probe A) | 1 case of 1 test: `AnInitNeverWaitsOnSolidworksThreadWhileItHoldsTheEndingsLock`, failed within its bound rather than hung |
+| M26 | what an ending held left in the list once told | 1 case of 1 test: `WhatARunsEndingHeldIsToldOnceAndNotAgainAtTheNextRunsEnd` |
+| M27 | every stage of a run held until its end, not only those that end the page's running state | 1 case of 1 test: `TheRunsOtherStagesReachThePageAsTheyArePostedWhileTheRunHoldsTheHost` |
+| M28 | `TaskPaneControl.PostToPage` waiting on the pane's thread (`Invoke` for `BeginInvoke`) | 1 case of 1 test: `TaskPaneControlTests.APostFromAnotherThreadIsQueuedAndNeverWaitsOnThePanesThread` |
 
-24 mutations, 59 red results.
+31 mutations, 72 red results: 24 and 59 before the review, 7 and 13 on it.
 
 The case `AnInitAnsweredAsTheRunEndsIsNeverToldAfterTheEndingThatTheRunIsInFlight` was first written to
 look for the run's terminal status from the start of the log, where the plan's own `ready` stood, so its
@@ -2213,9 +2238,30 @@ before T196 (the ten cases of T195) and under M20, which takes the lock out.
    disk, whose path is the evidence for whoever reads the message?
 2. **One class, two flags**: `DocumentDirty` is retryable from the host's own check and not from the
    backend's mapping. The page reads no flag; align them, or leave them?
-3. **152A's change to the tool service's follow at a run's end** touches `RemodelHost.Execute`'s
-   `finally`, which this decision restructured (the freeing now under `_endingLock`, and what was held told
-   after it): the two land together at the merge.
+3. **Decision 152A beside this one** (corrected on the decision's review, R18.8, where this item said
+   152A's follow at a run's end touched `RemodelHost.Execute`'s `finally`): it does not touch
+   `RemodelHost.cs`. 152A's branch (`bridgedoc-152a`) follows the document a hold leaves active through
+   the tool-service gate's own poll (`ToolServiceGate.FollowPoll`), so it meets none of this decision's
+   changes to `Execute`; the review's trial merge of the two branches was clean, built at zero warnings
+   and passed the 672 tests it ran. Nothing waits on it.
+4. **A Stop that crosses the run's end** (the review's; older than this decision, whose freeing keeps the
+   window as it was). `Stop` reads `_active` and only then stores its id in `_pendingStopId`, while
+   `Execute` frees the host and then takes that id to answer it. A Stop that reads the run in flight
+   just before the host is freed, and stores its id just after `Execute` has taken it, is not answered at
+   that run's end: its "Stopping: ..." status is posted after the run's last word, its id lingers, and
+   the next run's end answers it with `remodel.stopped`, carrying that run's count, though no one stopped
+   it. Read `_active` and store the id under `_endingLock`, and take the id as the host is freed, so a
+   Stop either reaches the run or is refused as having nothing to stop; or leave it - on Stop's side the
+   window is a few instructions wide, and only a run opens it?
+5. **The run line after a Stop** (the review's; older than this decision). The host answers
+   `remodel.stop` with `remodel.stopped` once the executor has finalized, after the run's terminal
+   `status`, and the page writes its answer into the run line last ("Stopping. N change(s) applied; the
+   change in flight is finished and the artifacts are finalized first."), so a stopped run's line ends on
+   "Stopping" over the terminal status's "The run ended 'truncated'. ...". T193's page case
+   (`APageLoadedAgainWhileItsRunRunsShowsItRunningAndCanStopIt`) has its stand-in answer Stop at once,
+   before any terminal status, an order the host never produces; what it pins - Stop pressable and its
+   answer ending the run on the page - holds in either order. Word the answer as the end of the run, or
+   leave the line as it is?
 
 **Evidence** (2026-10-20; before at `bd07f29`, after on the branch): the C# build, `--no-incremental`,
 at zero warnings both times; `SwReview.Extractor.Tests` 10,059 passed before and after, and
@@ -2225,3 +2271,68 @@ stub-children collection, 666 cases, green five times in a row. Python, not live
 `SWREVIEW_REQUIRE_TOKENIZER=1`: 18,089 passed and 5 skipped before, and 18,095 passed and 5 skipped
 after - the six new cases of T191 - on 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`) alike.
 `ruff check` clean, and no broken link.
+
+### R18.8 The decision's review (T198 to T203)
+
+An independent adversarial review of T189 to T197 found no must-fix: four should-fixes, one older
+defect in the report's path, and six nits. Each change was made test first, and each fix, and each
+property the new cases pin, was taken out once and was red (R18.6, M22 to M28); the teardown line's
+guard pins the log's format, which has no fix of its own to take out.
+
+- **S1, the claim beside calls that name no document** (T198, T199). The code calls a `(none)` entry's
+  calls writes - the settings a run changes, and the copy's tag, rollback and rebuild before the run
+  holds it - and the open's line is a mutating request, so "No write was recorded", "Every write of this
+  run went to" and "N of M mutating request(s)" were untrue beside one: on every run, and most plainly
+  on one that ended before its first change. While the log holds such an entry the three sentences
+  speak of the writes, and the mutating requests, that name a document (R18.2); with none they read as
+  they did, and the golden report is unchanged. 7 cases red before T199, three of them T191's own,
+  changed on purpose (R18.5).
+- **F11, a teardown line's target** (T200, T201; older than the decision, in the path it changed). The
+  report read a line's target up to ` refused=` or ` error=`, the fields a request line writes after
+  it, but a teardown line - which a re-attach or an unload writes into the run's `remodel.log`, mid-run
+  too - writes ` failures="..."` there, quoted and holding commas. A teardown with failures was read as
+  targets of junk, the copy's path run into the failures and split at their commas, and the claim was
+  withdrawn on them. `_TARGET` now ends a target at ` failures=` too. The test's line is a real teardown
+  line, captured from `ToolServiceWiringTests`' seated world: 1 case red before T201; the guard
+  `ToolServiceWiringTests.ATeardownLinePutsOnlyRefusedAndFailuresAfterItsTarget` pins that a teardown
+  line writes only those two fields after its target.
+- **S2, the ending lock's deadlock** (T202). No test held R18.4's reason for reading the active
+  document before taking the lock (the review's probe A).
+  `AnInitNeverWaitsOnSolidworksThreadWhileItHoldsTheEndingsLock` plays SOLIDWORKS' application thread
+  (`FakeAppThread`): the `init` reads the active document on it and waits, a session's ending is told
+  on it once the `init` has asked, and each wait is bounded, so a regression fails rather than hangs.
+- **S3, a held ending told once** (T202). `WhatARunsEndingHeldIsToldOnceAndNotAgainAtTheNextRunsEnd`:
+  two runs in one host, the first refused by its executor, whose words reach the page once.
+- **S4, the run's other stages** (T202).
+  `TheRunsOtherStagesReachThePageAsTheyArePostedWhileTheRunHoldsTheHost`: `applying`, `verifying` and
+  `saving` reach the page while the run holds the host, ahead of the progress posted after them; only
+  `ready` and `error` wait for its end.
+- **N5, a post never waits on the pane's thread** (T202). The ending's lock is held while posting,
+  which is safe only because a post is queued: `IPageChannel` now says a post never waits on the
+  pane's thread, SOLIDWORKS' application thread, and `TaskPaneControl.PostToPage`'s `BeginInvoke`
+  says why. `TaskPaneControlTests.APostFromAnotherThreadIsQueuedAndNeverWaitsOnThePanesThread` posts
+  to every channel from another thread while the pane's thread waits for it.
+- **N6** (T203). The `status` row of `contracts/pane-remodel-messages.md` and feature 011 research R12.9
+  item 4's note said no `ready` or `error` is posted while a run holds the host; one is, as R18.4 said:
+  Start's failed hand-over posts its `error` before it frees the host, on the host's message thread,
+  where a press waits behind it and meets a free host. Both now name it.
+- **N7** (T203). R18.1 said the open's refusal is kept in the run's `remodel.log`; a refused open holds
+  no session, so its line goes to the tool-service log alone. Corrected.
+- **N8** (T203). R18.7 item 3 said decision 152A's follow touched `Execute`'s `finally`; 152A does not
+  touch `RemodelHost.cs`. Corrected.
+- **N9** (T203). R18.1's list of what else the tab can print with a path missed Show change's
+  `entity.shown {ok: false, message}`. Added.
+- **N10** (T202). `RemodelHostTests`' section header for decision 145A's cases, lost when this
+  decision's cases went in above it, is restored.
+- **For the owner, no change**: two defects older than the decision, R18.7 items 4 and 5.
+
+**Evidence** (2026-10-20, on the branch): the C# build, `--no-incremental`, at zero warnings after every
+mutation was restored; `SwReview.Extractor.Tests` 10,059 passed, and `SwReview.AddIn.Tests` 3,043,
+where it was 3,038 before the review - the five new cases of T200 (1) and T202 (4) - with the remodel
+host, page and end-to-end classes, the restart classes, the stub-children collection,
+`TaskPaneControlTests` and `ToolServiceWiringTests`, 778 cases, green five times in a row.
+Python, not live, with `SWREVIEW_REQUIRE_TOKENIZER=1`, the files the review touched or that read what
+it touched - `test_remodel_report.py` (with T198's 4 new cases and T200's 1),
+`test_remodel_apply_log.py`, `test_chat_remodel_routes.py`, `test_workstation_test_plan.py`,
+`test_workstation_handover.py`, `test_committable_paths.py` and `test_remodel_flow.py`: 526 passed on
+3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`) alike. `ruff check` clean, and no broken link.
