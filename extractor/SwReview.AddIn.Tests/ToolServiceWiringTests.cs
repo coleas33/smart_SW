@@ -2071,6 +2071,39 @@ public sealed class ToolServiceWiringTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 155A's review (004 T200): the run report reads a line's target up to the field written
+    /// after it (`report.py`, `_TARGET`): `refused=` and `error=` on a request line, and on a teardown line -
+    /// which a re-attach or an unload writes into the run's `remodel.log`, mid-run too - `refused=` and
+    /// `failures=`. A guard: a teardown line carrying every field it can puts only those two after its target,
+    /// in that order, so the report's boundaries are the line's own.
+    /// </summary>
+    [Fact]
+    public void ATeardownLinePutsOnlyRefusedAndFailuresAfterItsTarget()
+    {
+        const string copy = @"C:\FICT\runs\20260101-000000-part-remodel\copy\part-RMS.SLDPRT";
+        var outcome = new RemodelSessionEnd(
+            RemodelSessionEnd.ReasonToolServiceStopped,
+            @"C:\FICT\runs\20260101-000000-part-remodel",
+            copy,
+            verified: true,
+            failedCheck: null,
+            tagRemoved: true,
+            copyClosed: false,
+            settingsOutstanding: new[] { "swWarnSaveUpdateErrors" },
+            failures: new[] { "close: COMException: CloseDoc refused", "the settings were not all put back" });
+        var activity = new SwGateActivity(
+            new[] { "ISldWorks.CloseDoc" }, new[] { "IModelDoc2.EditDelete" }, new[] { copy });
+
+        string line = ToolServiceHost.TeardownLine(DateTimeOffset.Now, outcome, activity, "posted");
+
+        Assert.EndsWith(
+            " target=" + copy + " refused=IModelDoc2.EditDelete"
+            + " failures=\"close: COMException: CloseDoc refused; the settings were not all put back\"",
+            line,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ATeardownThatLeftSomethingSaysWhatInItsLineAndTellsTheHost()
     {

@@ -214,13 +214,15 @@ REBIND_COVERAGE = (
     "waiver and this run cannot be told apart from one that did not"
 )
 
-_TARGET = re.compile(r"(?:^| )target=(?P<paths>.*?)(?= refused=| error=|$)")
+_TARGET = re.compile(r"(?:^| )target=(?P<paths>.*?)(?= refused=| error=| failures=|$)")
 """`remodel.log`'s per-request target field, as `ToolServiceRequestLogger.Format` writes
 it: absent on a request that wrote nothing, comma-separated when one request wrote to
 more than one path.
 
 The field is read to the **boundary of the next field** - ` refused=` or ` error=`, the
-two `Format` can write after it - and not to the first space: the host appends the target
+two `Format` can write after it, and ` failures=`, which `ToolServiceHost.TeardownLine`
+writes after it on the line a re-attach or an unload leaves, mid-run too (owner decision
+155A's review) - and not to the first space: the host appends the target
 raw and unescaped, so `C:\\Users\\First Last\\...` is an ordinary target and a parse that
 stopped at its space would hand the report a truncated token that never equals the
 attested copy path. The comma stays the separator it is on the host's side, because that

@@ -855,6 +855,41 @@ bridge holds the run's session, so the line names no document
 (`RemodelGateRecorder.NoTarget`); `RemodelPlanEndToEndTests` pins that it still does."""
 
 
+TEARDOWN_LINE = (
+    "[2026-09-16T14:41:58.0000000+00:00] remodel teardown thread=posted "
+    "reason=tool_service_stopped verified=true tag_removed=true copy_closed=false "
+    "settings_restored=3 settings_outstanding=swWarnSaveUpdateErrors "
+    "gated=ICustomPropertyManager.Delete2,ISldWorks.CloseDoc,ISldWorks.SetUserPreferenceToggle "
+    f"target={COPY_PATH} "
+    'failures="close: COMException: CloseDoc refused; the settings were not all put back: the '
+    "engineer's SOLIDWORKS settings were not all put back: 1 of the four writes failed. The ones "
+    "that landed are back; the rest are still holding the run's value, and the next Restore() "
+    'retries them."'
+)
+"""A teardown line with failures, as `ToolServiceHost.TeardownLine` writes it into the run's
+`remodel.log` when a re-attach or an unload ends the session, mid-run included: captured on
+2026-10-20 from `ToolServiceWiringTests`' seated world - the routine's close refused and one
+setting left - with this fixture's stamp and copy path. Its `failures=` follows the target,
+holds commas and is quoted."""
+
+
+def test_a_teardown_lines_target_is_read_to_its_failures(
+    tmp_path: Path, graded: GradedRun
+) -> None:
+    """Owner decision 155A's review (004 T200): the target field ends where `failures=` begins,
+    as it ends at `refused=` and `error=`. Read to the end of the line instead, a teardown line
+    with failures was two targets of junk - the copy's path run into the failures and split at
+    their commas - and the claim was withdrawn on them."""
+    run_dir = logged(tmp_path / "teardown", OPEN_LINE, *log_lines(), TEARDOWN_LINE)
+
+    targets = read_log_targets(run_dir)
+    text = report(graded, log_targets=targets)
+
+    assert targets == (NO_TARGET, COPY_PATH, COPY_PATH, COPY_PATH)
+    assert "cannot claim" not in text
+    assert "3 of 3 mutating request(s)" in text
+
+
 def test_no_target_is_the_hosts_own_token() -> None:
     """The report reads the token the tool service writes, one spelling for both sides."""
     host = REPO_ROOT / "extractor" / "SwReview.AddIn" / "ToolService" / "ToolServiceHost.cs"
