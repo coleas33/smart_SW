@@ -372,7 +372,7 @@ public sealed class CheckHoldTests
         IDisposable? evaluation = world.HoldEvaluation(runDirectory);
         Assert.NotNull(evaluation);
         Assert.True(world.CheckInProgress);
-        world.Advance(CheckPaneHostOptions.DefaultHandOverLimit + TimeSpan.FromMinutes(5));
+        world.Advance(CheckHoldOptions.DefaultHandOverLimit + TimeSpan.FromMinutes(5));
         Assert.True(world.CheckInProgress);
 
         evaluation!.Dispose();
@@ -502,7 +502,7 @@ public sealed class CheckHoldTests
         world.Press("c1");
         string runDirectory = world.Extracted("c1");
 
-        world.Advance(CheckPaneHostOptions.DefaultHandOverLimit - TimeSpan.FromTicks(1));
+        world.Advance(CheckHoldOptions.DefaultHandOverLimit - TimeSpan.FromTicks(1));
         Assert.True(world.CheckInProgress);
         world.Advance(TimeSpan.FromTicks(1));
         Assert.False(world.CheckInProgress);
@@ -536,7 +536,7 @@ public sealed class CheckHoldTests
         Assert.True(world.CheckInProgress);
         world.Advance(TimeSpan.FromTicks(1));
         Assert.False(world.CheckInProgress);
-        Assert.Equal(TimeSpan.FromSeconds(60), CheckPaneHostOptions.DefaultHandOverLimit);
+        Assert.Equal(TimeSpan.FromSeconds(60), CheckHoldOptions.DefaultHandOverLimit);
     }
 
     /// <summary>
@@ -549,14 +549,14 @@ public sealed class CheckHoldTests
     {
         var channel = new CollectingChannel(new List<string>());
         Func<string> runRoot = () => @"C:\Fictional\FICT-runs";
-        Func<TimeSpan> pane = new CheckPaneHostOptions(channel, runRoot, "check.start", _ => { }).Clock;
-        Func<TimeSpan> model = new ModelCheckHostOptions(channel, runRoot).Clock;
-        Func<TimeSpan> standards = new StandardsHostOptions(channel, runRoot).Clock;
-        TimeSpan[] before = { CheckPaneHostOptions.MonotonicClock(), pane(), model(), standards() };
+        Func<TimeSpan> pane = new CheckPaneHostOptions(channel, runRoot, "check.start", _ => { }).Hold.Clock;
+        Func<TimeSpan> model = new ModelCheckHostOptions(channel, runRoot).Hold.Clock;
+        Func<TimeSpan> standards = new StandardsHostOptions(channel, runRoot).Hold.Clock;
+        TimeSpan[] before = { CheckHoldOptions.MonotonicClock(), pane(), model(), standards() };
 
         System.Threading.Thread.Sleep(50);
 
-        Assert.True(CheckPaneHostOptions.MonotonicClock() > before[0], "the add-in's clock did not move");
+        Assert.True(CheckHoldOptions.MonotonicClock() > before[0], "the add-in's clock did not move");
         Assert.True(pane() > before[1], "the check pane's default clock did not move");
         Assert.True(model() > before[2], "the Model check host's default clock did not move");
         Assert.True(standards() > before[3], "the Standards host's default clock did not move");
@@ -675,7 +675,7 @@ public sealed class CheckHoldTests
         /// <summary>Runs as the run is registered as the pane's latest; a case makes it throw.</summary>
         public Action? Registering { get; set; }
 
-        public TimeSpan HandOverLimit { get; set; } = CheckPaneHostOptions.DefaultHandOverLimit;
+        public TimeSpan HandOverLimit { get; set; } = CheckHoldOptions.DefaultHandOverLimit;
 
         /// <summary>Whether a settings restart stands before the press, as the review host would answer it.</summary>
         public bool RestartAhead { get; set; }
@@ -733,10 +733,13 @@ public sealed class CheckHoldTests
                     LogFolder = () => Path.Combine(Root, "logs"),
                     Now = () => Stamp,
                     RunRootProbe = Probe ?? FakeRunRootProbe.Local(),
-                    BeginCheck = Gate,
-                    RestartAhead = () => RestartAhead,
-                    HandOverLimit = HandOverLimit,
-                    Clock = () => _clock,
+                    Hold =
+                    {
+                        BeginCheck = Gate,
+                        RestartAhead = () => RestartAhead,
+                        HandOverLimit = HandOverLimit,
+                        Clock = () => _clock,
+                    },
                 };
                 if (RunRootForANewRun != null)
                 {
@@ -756,10 +759,13 @@ public sealed class CheckHoldTests
                     LogFolder = () => Path.Combine(Root, "logs"),
                     Now = () => Stamp,
                     RunRootProbe = Probe ?? FakeRunRootProbe.Local(),
-                    BeginCheck = Gate,
-                    RestartAhead = () => RestartAhead,
-                    HandOverLimit = HandOverLimit,
-                    Clock = () => _clock,
+                    Hold =
+                    {
+                        BeginCheck = Gate,
+                        RestartAhead = () => RestartAhead,
+                        HandOverLimit = HandOverLimit,
+                        Clock = () => _clock,
+                    },
                 };
                 if (RunRootForANewRun != null)
                 {

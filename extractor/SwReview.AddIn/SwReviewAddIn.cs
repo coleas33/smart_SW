@@ -668,8 +668,11 @@ public class SwReviewAddIn : ISwAddin
             // the review host making a waiting one first - and holds that restart back until the page's
             // evaluation of it has been answered. The page is told first when a restart stands before the
             // press, read through the field per call.
-            BeginCheck = BeginCheck,
-            RestartAhead = () => _reviewHost?.RestartAhead == true,
+            Hold =
+            {
+                BeginCheck = BeginCheck,
+                RestartAhead = () => _reviewHost?.RestartAhead == true,
+            },
         });
 
         StartModelCheckPump();
@@ -782,8 +785,11 @@ public class SwReviewAddIn : ISwAddin
             Secrets = KeysToMask,
 
             // Owner decision 157A: as the Model check tab's.
-            BeginCheck = BeginCheck,
-            RestartAhead = () => _reviewHost?.RestartAhead == true,
+            Hold =
+            {
+                BeginCheck = BeginCheck,
+                RestartAhead = () => _reviewHost?.RestartAhead == true,
+            },
         });
 
         StartStandardsPump();

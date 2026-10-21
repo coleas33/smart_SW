@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using SwReview.Extractor.Dump;
 
 namespace SwReview.AddIn.Review;
 
@@ -132,12 +133,29 @@ public sealed class CheckPaneHostOptions
     public Func<IEnumerable<string?>> Secrets { get; set; } = () => new string?[0];
 
     /// <summary>
-    /// Owner decision 157A: begins a check as a turn begins, so a settings restart and a check never overlap.
-    /// Called with the step that marks the check in progress, after every refusal that needs no call: a settings
-    /// restart that waits is made first, or the one being made is waited for, then the step is run under the
-    /// restart's own lock and null answered; or the step is not run and the refusal is answered - what holds the
-    /// restart back, or the restart's failure - with its class, words and flag. The add-in answers it through the
-    /// review host (`ReviewHost.BeginCheck`). By default there is no restart to wait for, and the step runs at once.
+    /// Owner decision 157A: how a check of this tab holds a settings restart back. The owner hands on its own
+    /// options' (<c>ModelCheckHostOptions.Hold</c>, <c>StandardsHostOptions.Hold</c>), the one object, so each is
+    /// declared once and read where it is used. No restart to wait for, by default.
+    /// </summary>
+    public CheckHoldOptions Hold { get; set; } = new CheckHoldOptions();
+}
+
+/// <summary>
+/// Owner decision 157A: how a check holds a settings restart back - the gate it begins through, the word on a restart
+/// ahead, and how long a run handed to the page waits for its evaluation, by which clock. Declared once (the reviews of
+/// 157A): a check tab's options hold one (<c>ModelCheckHostOptions.Hold</c>, <c>StandardsHostOptions.Hold</c>) and
+/// hand it on whole to its pane's (<see cref="CheckPaneHostOptions.Hold"/>), so what the add-in sets on a tab is what
+/// <see cref="CheckPaneHost"/> reads.
+/// </summary>
+public sealed class CheckHoldOptions
+{
+    /// <summary>
+    /// Begins a check as a turn begins, so a settings restart and a check never overlap. Called with the step that
+    /// marks the check in progress, after every refusal that needs no call: a settings restart that waits is made
+    /// first, or the one being made is waited for, then the step is run under the restart's own lock and null
+    /// answered; or the step is not run and the refusal is answered - what holds the restart back, or the restart's
+    /// failure - with its class, words and flag. The add-in answers it through the review host
+    /// (`ReviewHost.BeginCheck`). By default there is no restart to wait for, and the step runs at once.
     /// </summary>
     public Func<Action, BackendRequestException?> BeginCheck { get; set; } = begin =>
     {
@@ -146,17 +164,16 @@ public sealed class CheckPaneHostOptions
     };
 
     /// <summary>
-    /// Owner decision 157A: whether a settings restart stands before a check - one waits to be made, or one is
-    /// being made - which the gate (<see cref="BeginCheck"/>) makes, or waits for, first. Read only to tell the
-    /// page so; the gate decides. The add-in answers it through the review host (`ReviewHost.RestartAhead`). By
-    /// default none does.
+    /// Whether a settings restart stands before a check - one waits to be made, or one is being made - which the gate
+    /// (<see cref="BeginCheck"/>) makes, or waits for, first. Read only to tell the page so; the gate decides. The
+    /// add-in answers it through the review host (`ReviewHost.RestartAhead`). By default none does.
     /// </summary>
     public Func<bool> RestartAhead { get; set; } = () => false;
 
     /// <summary>
-    /// Owner decision 157A: how long a check, once its run is handed to the page, holds the restart back waiting
-    /// for the page's evaluation call to reach the pane's proxy. The page makes that call as soon as it reads the
-    /// reply; a page that has gone - reloaded, or closed - never makes it, and this bounds the hold it leaves.
+    /// How long a check, once its run is handed to the page, holds the restart back waiting for the page's evaluation
+    /// call to reach the pane's proxy. The page makes that call as soon as it reads the reply; a page that has gone -
+    /// reloaded, or closed - never makes it, and this bounds the hold it leaves.
     /// </summary>
     public TimeSpan HandOverLimit { get; set; } = DefaultHandOverLimit;
 
@@ -165,7 +182,7 @@ public sealed class CheckPaneHostOptions
 
     /// <summary>
     /// A clock that only goes forward, for the <see cref="HandOverLimit"/>: <see cref="MonotonicClock"/> by default,
-    /// which no change of the wall clock moves. Injected so the limit is testable.
+    /// which no change of the wall clock moves, and which the add-in runs with. Injected so the limit is testable.
     /// </summary>
     public Func<TimeSpan> Clock { get; set; } = MonotonicClock;
 
@@ -173,6 +190,89 @@ public sealed class CheckPaneHostOptions
     public static TimeSpan MonotonicClock() => Monotonic.Elapsed;
 
     private static readonly System.Diagnostics.Stopwatch Monotonic = System.Diagnostics.Stopwatch.StartNew();
+}
+
+/// <summary>
+/// Owner decision 157A, the reviews: what is a check tab's own in the start <see cref="CheckPaneHost.RunCheck"/> makes
+/// once every refusal that needs no call is behind it - its words, its run folder, its extraction's profile and its
+/// reply - so that start is written once for both tabs. Built once by each owner; every reading of its options is a
+/// callback, read fresh.
+/// </summary>
+public sealed class CheckStart
+{
+    /// <param name="restartFirst">What the page is told before the gate when a settings restart stands before the press.</param>
+    /// <param name="documentChanged">The refusal for a press whose document changed while its gate waited, `DocumentChanged`.</param>
+    /// <param name="nothingChecked">What a refused start did not do, in the tab's words.</param>
+    /// <param name="pressAgain">What a refused start says to do once the cause is gone.</param>
+    /// <param name="runRootForANewRun">The run root a check's folder is made under, read once the gate is passed and once the extraction is over.</param>
+    /// <param name="probe">What the run root rule reads of Windows.</param>
+    /// <param name="createFolder">Makes the run folder under a run root for a document, at a time.</param>
+    /// <param name="folder">The run folder, named in the refusal when it cannot be made.</param>
+    /// <param name="reading">The status while the model is read, given the document's name.</param>
+    /// <param name="profile">The extraction's profile.</param>
+    /// <param name="during">What was going on when the run root moved, for the refusal the move earns.</param>
+    /// <param name="next">What the page does once the run is handed to it, closing the `ready` status.</param>
+    /// <param name="extractedType">The reply that hands the run to the page.</param>
+    /// <param name="counts">The reply's counts of what the extraction read.</param>
+    public CheckStart(
+        string restartFirst,
+        string documentChanged,
+        string nothingChecked,
+        string pressAgain,
+        Func<string?> runRootForANewRun,
+        Func<IRunRootProbe> probe,
+        Func<string, string?, DateTime, string> createFolder,
+        string folder,
+        Func<string, string> reading,
+        DumpProfile profile,
+        string during,
+        string next,
+        string extractedType,
+        Func<DumpSummary, Dictionary<string, object?>> counts)
+    {
+        RestartFirst = restartFirst ?? throw new ArgumentNullException(nameof(restartFirst));
+        DocumentChanged = documentChanged ?? throw new ArgumentNullException(nameof(documentChanged));
+        NothingChecked = nothingChecked ?? throw new ArgumentNullException(nameof(nothingChecked));
+        PressAgain = pressAgain ?? throw new ArgumentNullException(nameof(pressAgain));
+        RunRootForANewRun = runRootForANewRun ?? throw new ArgumentNullException(nameof(runRootForANewRun));
+        Probe = probe ?? throw new ArgumentNullException(nameof(probe));
+        CreateFolder = createFolder ?? throw new ArgumentNullException(nameof(createFolder));
+        Folder = folder ?? throw new ArgumentNullException(nameof(folder));
+        Reading = reading ?? throw new ArgumentNullException(nameof(reading));
+        Profile = profile;
+        During = during ?? throw new ArgumentNullException(nameof(during));
+        Next = next ?? throw new ArgumentNullException(nameof(next));
+        ExtractedType = extractedType ?? throw new ArgumentNullException(nameof(extractedType));
+        Counts = counts ?? throw new ArgumentNullException(nameof(counts));
+    }
+
+    public string RestartFirst { get; }
+
+    public string DocumentChanged { get; }
+
+    public string NothingChecked { get; }
+
+    public string PressAgain { get; }
+
+    public Func<string?> RunRootForANewRun { get; }
+
+    public Func<IRunRootProbe> Probe { get; }
+
+    public Func<string, string?, DateTime, string> CreateFolder { get; }
+
+    public string Folder { get; }
+
+    public Func<string, string> Reading { get; }
+
+    public DumpProfile Profile { get; }
+
+    public string During { get; }
+
+    public string Next { get; }
+
+    public string ExtractedType { get; }
+
+    public Func<DumpSummary, Dictionary<string, object?>> Counts { get; }
 }
 
 /// <summary>
@@ -212,13 +312,14 @@ public sealed class CheckPaneHostOptions
 /// resolves `document_id` through the package that was just written.
 ///
 /// <b>A check holds a settings restart back</b> (owner decision 157A), as a remodel run does since
-/// 145A, and the hold is kept here for both owners: an owner's start begins through the review host's
-/// gate (<see cref="BeginCheck"/>) once every refusal that needs no call is behind it, and the hold lasts
-/// until the page's evaluation of the check has been answered - through the start, the hand-over of its
-/// run to the page (<see cref="HandOver"/>) and the evaluation the pane's proxy holds it for while it is
-/// out (<see cref="HoldEvaluation"/>) - or until the start ends any other way (<see cref="EndCheck"/>), or
-/// the hand-over's limit passes with no evaluation, for a page that has gone. The review host's restart
-/// reads <see cref="CheckInProgress"/> under its own lock.
+/// 145A, and the hold is kept here for both owners. Once every refusal that needs no call is behind it,
+/// an owner's start is <see cref="RunCheck"/>, written once for both tabs in each one's words
+/// (<see cref="CheckStart"/>): it begins through the review host's gate (<see cref="BeginCheck"/>), and
+/// the hold lasts until the page's evaluation of the check has been answered - through the start, the
+/// hand-over of its run to the page (<see cref="HandOver"/>) and the evaluation the pane's proxy holds
+/// it for while it is out (<see cref="HoldEvaluation"/>) - or until the start ends any other way
+/// (<see cref="EndCheck"/>), or the hand-over's limit passes with no evaluation, for a page that has
+/// gone. The review host's restart reads <see cref="CheckInProgress"/> under its own lock.
 ///
 /// Threading: <see cref="Receive"/> is not re-entrant and must not run on the SOLIDWORKS UI
 /// thread - an owner's start step occupies the application thread for as long as its dump
@@ -299,9 +400,124 @@ public sealed class CheckPaneHost : IDisposable
         {
             lock (_holdLock)
             {
-                TimeSpan now = _options.Clock();
+                TimeSpan now = _options.Hold.Clock();
                 return _holds.Any(hold => Holds(hold, now));
             }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 157A: a check's start once every refusal that needs no call is behind it, the same on both tabs
+    /// in <paramref name="start"/>'s words (the reviews of 157A: written once). It begins through the review host's
+    /// gate (<see cref="BeginCheck"/>); the run root and the document are read again once the gate is passed, since its
+    /// wait can move either; the run folder is made under the run root - the one <paramref name="judged"/> before the
+    /// gate, or the one it moved to, judged again - and the model extracted into it by <paramref name="dump"/>; the run
+    /// root is read again once the extraction is over (the reviews of 154A's merge, N6); and the run is registered as
+    /// the pane's latest, handed over (<see cref="HandOver"/>) and the page told. The folder is made before the dump
+    /// because the dump writes into it, and registered before the reply, so an evaluation the page sends the instant it
+    /// reads the reply resolves ids through the right folder. Every way out but the hand-over lets the hold go.
+    /// </summary>
+    public void RunCheck(string? id, string judged, PageDocument document, IReviewDump dump, CheckStart start)
+    {
+        if (!BeginCheck(id, start.RestartFirst))
+        {
+            return;
+        }
+
+        try
+        {
+            // The gate can have made a restart that brought another run root into force: judged again before
+            // anything is made under it (the reviews of decision 154A, N8).
+            string? runRoot = _actions.RunRootToUse(
+                id,
+                judged,
+                start.RunRootForANewRun(),
+                start.Probe(),
+                start.NothingChecked,
+                RunRootRule.InSettingsOnTheReviewTab,
+                start.PressAgain);
+            if (runRoot == null)
+            {
+                return;
+            }
+
+            // ...and it can have waited through a restart for seconds, in which the engineer can make another
+            // document active, which the dump would read: read again, and a check of another document than the one
+            // pressed for is refused, before anything is made.
+            if (!document.IsSameDocument(_options.CurrentDocument()))
+            {
+                _actions.SendError(id, "DocumentChanged", start.DocumentChanged, retryable: true);
+                return;
+            }
+
+            string runDirectory;
+            try
+            {
+                runDirectory = start.CreateFolder(runRoot, document.Path, _options.Now());
+            }
+            catch (Exception failure)
+            {
+                PostStatus("error", failure.Message);
+                _actions.SendError(
+                    id,
+                    "RunFolderFailed",
+                    $"{start.Folder} could not be created under '{runRoot}': " + failure.Message,
+                    retryable: false);
+                return;
+            }
+
+            DumpSummary summary;
+            PostStatus("extracting", start.Reading(RunFolders.DocumentName(document.Path)));
+            try
+            {
+                summary = dump.Run(runDirectory, message => PostStatus("extracting", message), start.Profile);
+            }
+            catch (Exception failure)
+            {
+                // The folder is left behind on purpose: whatever the dump did write is the evidence for why it
+                // stopped (constitution Principle I). It is not registered, because a half-written package must not
+                // become the folder Show and the Ask tab read from.
+                PostStatus("error", failure.Message);
+                _actions.SendError(id, "ExtractionFailed", failure.Message, retryable: true);
+                return;
+            }
+
+            // The reviews of 154A's merge, N6: the extraction took minutes. Since owner decision 157A no restart can
+            // move the run root meanwhile while a backend is up - the check holds it back - but a start that brings a
+            // backend up where there was none, which nothing holds back (a save's with no backend up, or the add-in's
+            // first), can have brought another run root into force. Read again: the check goes on only while its
+            // folder is under the run root in force, and is answered here otherwise.
+            if (_actions.AnsweredForAMovedRunRoot(
+                    id, runDirectory, start.RunRootForANewRun(), start.During, start.NothingChecked, start.PressAgain))
+            {
+                return;
+            }
+
+            TrackCheck(runDirectory);
+
+            PostStatus(
+                "ready",
+                (summary.Gaps == 0 ? "Extracted" : $"Extracted with {summary.Gaps} gaps")
+                    + DumpSummary.UnexaminedClause(summary.Unexamined)
+                    + start.Next);
+
+            // The hold now waits for the page's evaluation of this run, handed over before the page is told, so an
+            // evaluation sent the instant it reads this finds it.
+            HandOver(runDirectory);
+            _actions.Send(start.ExtractedType, id, new Dictionary<string, object?>
+            {
+                { "run_dir", runDirectory },
+                { "document", document.Path },
+                { "configuration", document.Configuration },
+                { "counts", start.Counts(summary) },
+                { "gaps", summary.Gaps },
+            });
+        }
+        finally
+        {
+            // Every way out but the hand-over lets the hold go. After the hand-over no start holds it - the hold is
+            // the evaluation's - and this does nothing, so no flag says which way the start ended.
+            EndCheck();
         }
     }
 
@@ -312,10 +528,10 @@ public sealed class CheckPaneHost : IDisposable
     /// gate's refusal - its class, words and flag - and nothing is held. The page is told first, in
     /// <paramref name="restartFirst"/>, when a restart stands before the press, since the gate can wait through it for
     /// seconds. A gate that throws leaves nothing held, whether or not it took the hold, and the throw is the press's
-    /// answer. Answers whether the check holds the restart now; the owner then ends its start with
-    /// <see cref="HandOver"/> or, any other way, <see cref="EndCheck"/>.
+    /// answer. Answers whether the check holds the restart now; its start then ends with <see cref="HandOver"/> or,
+    /// any other way, <see cref="EndCheck"/>.
     /// </summary>
-    public bool BeginCheck(string? id, string restartFirst)
+    private bool BeginCheck(string? id, string restartFirst)
     {
         if (RestartAhead())
         {
@@ -325,7 +541,7 @@ public sealed class CheckPaneHost : IDisposable
         BackendRequestException? held;
         try
         {
-            held = _options.BeginCheck(TakeTheHold);
+            held = _options.Hold.BeginCheck(TakeTheHold);
         }
         catch (Exception)
         {
@@ -349,7 +565,7 @@ public sealed class CheckPaneHost : IDisposable
     /// proxy takes the hold over for that evaluation (<see cref="HoldEvaluation"/>), or the hand-over's limit passes.
     /// Called before the page is told, so an evaluation sent the instant it is finds the hold handed over.
     /// </summary>
-    public void HandOver(string runDirectory)
+    private void HandOver(string runDirectory)
     {
         lock (_holdLock)
         {
@@ -359,7 +575,7 @@ public sealed class CheckPaneHost : IDisposable
             }
 
             _startHold.HandedOver = runDirectory;
-            _startHold.HandedOverAt = _options.Clock();
+            _startHold.HandedOverAt = _options.Hold.Clock();
             _startHold = null;
         }
     }
@@ -368,7 +584,7 @@ public sealed class CheckPaneHost : IDisposable
     /// Owner decision 157A: the start of the check that holds the restart has ended without handing its run on - it
     /// was refused, or failed, once its gate was passed - and lets the hold go. Nothing when no start holds it.
     /// </summary>
-    public void EndCheck()
+    private void EndCheck()
     {
         lock (_holdLock)
         {
@@ -391,7 +607,7 @@ public sealed class CheckPaneHost : IDisposable
     {
         lock (_holdLock)
         {
-            TimeSpan now = _options.Clock();
+            TimeSpan now = _options.Hold.Clock();
             CheckHold? hold = _holds.FirstOrDefault(candidate =>
                 candidate.HandedOver != null
                 && !candidate.TakenOver
@@ -630,7 +846,7 @@ public sealed class CheckPaneHost : IDisposable
     {
         lock (_holdLock)
         {
-            TimeSpan now = _options.Clock();
+            TimeSpan now = _options.Hold.Clock();
             _holds.RemoveAll(hold => !Holds(hold, now));
             _startHold = new CheckHold();
             _holds.Add(_startHold);
@@ -642,7 +858,7 @@ public sealed class CheckPaneHost : IDisposable
     /// proxy holds its evaluation, and once handed over, until the hand-over's limit. Called under <see cref="_holdLock"/>.
     /// </summary>
     private bool Holds(CheckHold hold, TimeSpan now) =>
-        hold.HandedOver == null || hold.TakenOver || now - hold.HandedOverAt < _options.HandOverLimit;
+        hold.HandedOver == null || hold.TakenOver || now - hold.HandedOverAt < _options.Hold.HandOverLimit;
 
     /// <summary>Lets <paramref name="hold"/> go, once its evaluation has been answered: that hold, and no other check's.</summary>
     private void LetGo(CheckHold hold)
@@ -661,7 +877,7 @@ public sealed class CheckPaneHost : IDisposable
     {
         try
         {
-            return _options.RestartAhead();
+            return _options.Hold.RestartAhead();
         }
         catch (Exception)
         {

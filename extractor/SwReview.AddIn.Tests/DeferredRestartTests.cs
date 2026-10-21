@@ -6933,7 +6933,7 @@ public sealed class DeferredRestartTests
         world.Receive("settings.save", "save", Save(effort: "low"));
         world.Reply("settings.saved", "save");
 
-        check.Advance(CheckPaneHostOptions.DefaultHandOverLimit - TimeSpan.FromMilliseconds(1));
+        check.Advance(CheckHoldOptions.DefaultHandOverLimit - TimeSpan.FromMilliseconds(1));
         Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
         Assert.Equal(0, world.Backend.RestartsAsked);
         Assert.True(check.CheckInProgress);
@@ -9172,9 +9172,12 @@ public sealed class DeferredRestartTests
                     LogFolder = () => Path.Combine(world.Root, "logs"),
                     Now = () => Stamp,
                     RunRootProbe = FakeRunRootProbe.Local(),
-                    BeginCheck = begin => world.Host.BeginCheck(begin),
-                    RestartAhead = () => world.Host.RestartAhead,
-                    Clock = clock,
+                    Hold =
+                    {
+                        BeginCheck = begin => world.Host.BeginCheck(begin),
+                        RestartAhead = () => world.Host.RestartAhead,
+                        Clock = clock,
+                    },
                 });
                 world.ModelChecking = () => _modelCheck.CheckInProgress;
             }
@@ -9194,9 +9197,12 @@ public sealed class DeferredRestartTests
                     LogFolder = () => Path.Combine(world.Root, "logs"),
                     Now = () => Stamp,
                     RunRootProbe = FakeRunRootProbe.Local(),
-                    BeginCheck = begin => world.Host.BeginCheck(begin),
-                    RestartAhead = () => world.Host.RestartAhead,
-                    Clock = clock,
+                    Hold =
+                    {
+                        BeginCheck = begin => world.Host.BeginCheck(begin),
+                        RestartAhead = () => world.Host.RestartAhead,
+                        Clock = clock,
+                    },
                 });
                 world.StandardsChecking = () => _standards.CheckInProgress;
             }
