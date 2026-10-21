@@ -731,6 +731,7 @@ public sealed class ToolServiceHost : IToolService
         bool remodelSeatAvailable,
         ISwSession session,
         string documentPath,
+        string configuration,
         string captureDirectory)
     {
         _server = server;
@@ -747,6 +748,7 @@ public sealed class ToolServiceHost : IToolService
         RemodelSeatAvailable = remodelSeatAvailable;
         Session = session;
         DocumentPath = documentPath;
+        Configuration = configuration;
         CaptureDirectory = captureDirectory;
     }
 
@@ -783,6 +785,14 @@ public sealed class ToolServiceHost : IToolService
 
     /// <summary>The document the scope is bound to; component ids only mean anything for it.</summary>
     public string DocumentPath { get; }
+
+    /// <summary>
+    /// Owner decision 152A: the configuration the scope is bound to - the one the attach found
+    /// active, and the one this service's bridge answers to <c>ping</c>, both read from the attach
+    /// (<see cref="Attached.Configuration"/>). A review is handed this bridge only while it serves the
+    /// review's document and configuration.
+    /// </summary>
+    public string? Configuration { get; }
 
     public string CaptureDirectory { get; }
 
@@ -908,6 +918,7 @@ public sealed class ToolServiceHost : IToolService
             attached.Services.RemodelSeat != null,
             attached.Session,
             attached.DocumentPath,
+            attached.Configuration,
             captureDirectory);
     }
 

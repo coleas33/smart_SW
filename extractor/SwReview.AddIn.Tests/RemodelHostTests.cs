@@ -2222,7 +2222,9 @@ public sealed class RemodelHostTests
     /// <summary>
     /// Through the gate, a run holds the tool service: a document switch while it runs is asked
     /// whether work is holding the bridge, `RunInProgress` says yes, and the gate re-attaches
-    /// nothing - so no refresh reaches the host and nothing is told, during the run or after it.
+    /// nothing - so no refresh reaches the host and nothing is told while the run holds it. Once
+    /// the run has ended the gate follows the switch it skipped, to the document active then (owner
+    /// decision 152A), and the run is finished, so nothing is told then either.
     /// </summary>
     [Fact]
     public void ThroughTheGateARunHoldsTheServiceSoASwitchWhileItRunsTellsNothing()
@@ -2241,6 +2243,49 @@ public sealed class RemodelHostTests
             world.Reply("remodel.started", "s1");
             Assert.Equal(planned, gate.Attachment);
             Assert.Empty(world.AllPosted("remodel.plan_lost"));
+
+            Assert.Equal(1, world.LooksWaiting);
+            world.RunLooks();
+
+            Assert.NotEqual(planned, gate.Attachment);
+            Assert.Equal(@"C:\parts\frame.SLDPRT", gate.DocumentPath);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(0, world.LooksWaiting);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 152A keeps the planned copy's attachment exactly as 004 T180 keeps it. The
+    /// plan held the bridge while its copy was opened and made active, so that switch was skipped;
+    /// once the plan ends the gate looks again, finds the exact held copy active, keeps the plan's
+    /// attachment and asks no more - nothing is told, and Start goes ahead on the plan's session.
+    /// </summary>
+    [Fact]
+    public void ThroughTheGateTheLookOnceAPlanEndsKeepsTheAttachmentItsCopyHolds()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            using (ToolServiceGate gate = world.AttachLifecycleGate())
+            {
+                gate.EnsureStarted();
+                IToolService original = gate.Service!;
+                world.Pipeline.DuringPlan = () => world.SwitchTo(gate, world.ExpectedCopyPath);
+
+                world.Receive("remodel.plan", "p1", new { });
+
+                Assert.Equal(1, world.LooksWaiting);
+                world.RunLooks();
+
+                Assert.Same(original, gate.Service);
+                Assert.False(((FakeToolService)original).Disposed);
+                Assert.Equal(0, world.LooksWaiting);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                world.Reply("remodel.started", "s1");
+                Assert.Equal(1, world.Pipeline.Count("run"));
+            }
         }
     }
 
@@ -5507,6 +5552,7 @@ public sealed class RemodelHostTests
     private sealed class RemodelWorld : IDisposable
     {
         private readonly string _root;
+        private readonly List<Action> _looks = new List<Action>();
         private RemodelHost? _host;
         private RemodelHostOptions? _options;
         private ToolServiceGate? _gate;
@@ -5673,10 +5719,27 @@ public sealed class RemodelHostTests
                 failures: copyClosed ? new string[0] : new[] { "fictional copy remains open" });
         }
 
+        /// <summary>
+        /// How many looks again the gate has asked for and none has run yet (owner decision 152A):
+        /// the add-in's gate runs each a poll later, and this world keeps it until a case runs it.
+        /// </summary>
+        public int LooksWaiting => _looks.Count;
+
+        /// <summary>Runs every look waiting now, as the polls coming due would; a look asked for meanwhile waits.</summary>
+        public void RunLooks()
+        {
+            Action[] due = _looks.ToArray();
+            _looks.Clear();
+            foreach (Action look in due)
+            {
+                look();
+            }
+        }
+
         public ToolServiceGate AttachLifecycleGate(Action? cleanup = null, Action<Action>? scheduler = null)
         {
             Func<PageDocument?> document = () => Document;
-            Func<IToolService> start = () => new FakeToolService(++_services, Document!.Path)
+            Func<IToolService> start = () => new FakeToolService(++_services, Document!.Path, Document!.Configuration)
             {
                 DuringDispose = () =>
                 {
@@ -5699,12 +5762,16 @@ public sealed class RemodelHostTests
                 Lifecycle.Add("stopped");
                 RefreshLifecycleAvailability(true);
             };
-            System.Reflection.ConstructorInfo? constructor = typeof(ToolServiceGate).GetConstructors()
-                .SingleOrDefault(candidate => candidate.GetParameters().Length == 8);
-            _gate = constructor == null
-                ? new ToolServiceGate(document, start, publish, report, schedule, busy)
-                : (ToolServiceGate)constructor.Invoke(new object[]
-                    { document, start, publish, report, schedule, busy, preserve, stopped });
+            _gate = new ToolServiceGate(
+                document,
+                start,
+                publish,
+                report,
+                schedule,
+                busy,
+                preserveAttachment: preserve,
+                afterStopped: stopped,
+                later: look => _looks.Add(look));
             return _gate;
         }
 
@@ -5712,11 +5779,12 @@ public sealed class RemodelHostTests
         {
             _gate = new ToolServiceGate(
                 () => Document,
-                () => new FakeToolService(++_services, Document!.Path),
+                () => new FakeToolService(++_services, Document!.Path, Document!.Configuration),
                 _ => Host.RefreshAvailability(),
                 (what, failure) => { },
                 schedule: work => work(),
-                busy: () => Host.RunInProgress);
+                busy: () => Host.RunInProgress,
+                later: look => _looks.Add(look));
             return _gate;
         }
 

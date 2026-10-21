@@ -18,7 +18,7 @@ namespace SwReview.AddIn.Tests;
 /// </summary>
 internal sealed class FakeToolService : IToolService
 {
-    public FakeToolService(int ordinal, string? documentPath = null)
+    public FakeToolService(int ordinal, string? documentPath = null, string? configuration = null)
     {
         PipeName = "swreview-fake-" + ordinal;
         ReviewBridge = new BridgeConfig(PipeName, "review-secret-" + ordinal);
@@ -26,12 +26,16 @@ internal sealed class FakeToolService : IToolService
         RemodelBridge = new BridgeConfig(PipeName, "remodel-secret-" + ordinal);
         RemodelSeatAvailable = false;
         DocumentPath = documentPath ?? @"C:\models\bracket-" + ordinal + ".sldasm";
+        Configuration = configuration;
         Session = new FakeSession();
     }
 
     public string PipeName { get; }
 
     public string DocumentPath { get; }
+
+    /// <summary>The configuration the scope is bound to (owner decision 152A); none unless a case names one.</summary>
+    public string? Configuration { get; }
 
     public BridgeConfig ReviewBridge { get; }
 
