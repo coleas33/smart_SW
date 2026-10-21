@@ -2332,7 +2332,8 @@ words for the strip.
     before the backend is up is refused - `BackendUnavailable`, retryable, in the same words
     (`BackendNotRunningYet`, which `BackendReady` now shares). A review extracts first, so its
     evidence stays in its run folder, as for a backend that stops during an extraction; in practice
-    the moment is over long before an extraction is. `KeysToMask` adds the key of a start under way.
+    the moment is over long before an extraction is. `KeysToMask` added the key of a start under way -
+    only while it was under way, the fourth review found (S1, below).
   - Marking `_making` in `DeferredRestart.First`, as a save's restart is marked, was weighed and
     left. `Ahead` is what the Remodel tab reads to tell its page that a press waits "for the review
     backend to restart with the saved settings" (145A, whose third review took out words that said
@@ -2347,12 +2348,50 @@ words for the strip.
     waited stays pending until `End`, after the record, so `Ahead` covered the moment. Sessions never
     met it: a save's restart is made on the page pump that makes sessions, and a review waits under
     the restart lock for one that waited. The keys masked did, when a save was made during a restart
-    that waited, and the mark covers that now. Two guards pin the `init` read during either restart;
-    they passed before the change.
+    that waited, and the mark covered that only while the restart was under way: its failure, told
+    once it was over, named its key unmasked (the fourth review, S1). Two guards pin the `init` read
+    during either restart; they passed before the change.
   - The page is unchanged: the word it held is no longer said.
   - Existing cases changed deliberately: none. `MakeASession`'s first three asks moved into
     `AskForASession`, which the new cases use to expect a refusal, and the test world's backend can
     hold a start once it has published the backend's endpoint (`Published`).
+- **Fourth review** (2026-10-21): a focused review of the third fix at `2ca804a` found no must-fix -
+  the fix closes R1 for every start under way - and the items below, settled test first by T186 to
+  T188:
+  - A start's failure was told with the key it was made with unmasked, once a save made while it was
+    under way had replaced the saved key (S1, a leak older than 153A, which the third review's words
+    overstated). `StartWith` took the mark off before anyone told the failure: a restart that waited
+    tells it in its `status` and its word to every other tab, and the add-in tells the first start's in
+    its `status` and in `addin.log` (`SwReviewAddIn.StartBackend`, `Report`), each masked with the saved
+    key - by then the save's - and the one recorded, neither of them the failed start's. The reviewer's
+    probes showed it for a restart that waited (P1) and for the first start after a failed save (P2),
+    at `2ca804a` and at `4c604e2`. Every key a start has been made with is now kept, each once, from
+    just before the start (`ReviewHost._keysStarted`, an array replaced whole under the restart lock and
+    never changed), and `KeysToMask` masks every one besides the saved key and the one recorded;
+    `_starting` serves the `init` and the session alone. One place for the last start's key would not
+    do: the save that waits for the first start makes its own restart as soon as the first start lets
+    the lock go, which can be before the add-in, on the first start's thread, tells the failure - a
+    case lets that restart begin first (mutation F3). A key no backend holds any more stays masked for
+    the life of the host, which hides nothing a page needs.
+  - Nothing pinned the restart's half of the mark (S2): the reviewer's mutant, marking the first start
+    alone (MF), passed every case. A guard now holds a restart that waited under way while a save
+    replaces the key, and asks that the restart's key be among the keys masked; with S1 that reads the
+    keys kept, and MF (mutation F4) is red there and in the case of that restart's failure.
+  - A recheck refused while a start was under way had posted `checking` first, and nothing after the
+    refusal took that word off the badge (N5). The start under way is read before a recheck's
+    `checking` status now - and, for every session, still before the settings in force.
+  - The contracts said no session is made "between publishing the endpoint and recording" (N6); the
+    host refuses one for the whole of the start, and they say "while a start of the backend is under
+    way".
+  - The reading orders the review named (N3): MR3, whether the saved settings are in force read with
+    the start under way before the endpoint, is pinned - a case begins the first start, and has it
+    publish its endpoint, inside the `init`'s reading of that endpoint, through the test world's
+    backend (`EndpointRead`), and mutation F6 is red there. MR1 and MR2 are recorded under Not changed.
+  - Existing cases changed deliberately: the check the first-start cases end with,
+    `AssertTheBackendAndTheSettingsInForceAgree`, asked that the keys masked be the backend's key
+    alone; they are that key and every key a start was made with now (S1), and it asks for exactly
+    those, from the keys the test world's backend was asked to start with (`KeysAsked`), without
+    printing them. Three cases went red against `2ca804a` for that check alone.
 - **Not changed**:
   - A backend that dies while the saved settings are not in force: no host posts `backend.stopped`
     (150A), so the Review page goes on saying reviews run with the settings it was started with until
@@ -2369,6 +2408,21 @@ words for the strip.
     comes off only once the record is written, as a comment in `StartWith` says. One reference
     holding both, written once, would make that order a single write, at the cost of changing every
     reader of the record; left as it is (third review).
+  - Two more reading orders no case pins (the fourth review, N3): `CreateReviewSession` reads the start
+    under way before the settings in force (MR1), and nothing is called between the two readings, so
+    no case can hold a start there; and `KeysToMask` read the mark after the record (MR2), which S1
+    made moot, since the keys masked now read the keys kept, which only grow. MR3 is pinned (Fourth
+    review, above).
+  - A start that begins after a session's check (the fourth review, N4): `CreateSession` reads the
+    endpoint after `CreateReviewSession` has read the start under way and the settings in force, so a
+    start that began between them would pair the settings recorded before it with the backend it
+    started. In production only the first start can begin then, delayed, and only after a save started
+    a backend that then died, followed by a later save whose restart failed before it stopped
+    anything: practically unreachable. Two fixes are open to the owner: take the restart lock across
+    that reading and `POST /sessions`, so that no start overlaps a session's making, at the cost of the
+    page pump waiting through a start under way; or read the endpoint with the settings in force and
+    have `CreateSession` post to that endpoint, refusing the session when it has changed - an
+    `IBackendClient` change, which ten implementations would follow.
 - **Existing cases changed deliberately**: three cases pinned word for word the `status` a restart
   that waited posts when it failed before it stopped the old backend - the "old backend still up"
   half of `ARestartThatWaitedAndFailedSaysSavingAgainRetriesIt`, the "after waiting" half of
@@ -2476,9 +2530,24 @@ words for the strip.
   | W6 | `ReviewHost.StartWith` | the mark set once the start has returned | 5 |
   | W7 | `ReviewHost.StartWith` | the mark taken off before the settings are recorded | 0 |
 
+  For the fourth review: 7 mutations, the same way - the host's classes, 480 cases - 20 red results
+  in all, every mutation red. F3 is the one place for the last start's key the review warned of, red
+  where the waiting save's restart begins before the add-in tells the first start's failure; F4 is the
+  reviewer's MF.
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | F1 | `ReviewHost.KeysToMask` | the keys masked leave out the keys starts were made with | 6 |
+  | F2 | `ReviewHost.StartWith` | a start's key kept only once the start has succeeded | 5 |
+  | F3 | `ReviewHost.StartWith` | one place for the last start's key, not every key | 4 |
+  | F4 | `ReviewHost.StartWith`, `FirstStart` | only the first start keeps its key and is marked under way (MF) | 2 |
+  | F5 | `ReviewHost.CreateReviewSession` | a recheck's `checking` posted before the start under way is read | 1 |
+  | F6 | `ReviewHost.SettingsNotInForce` | the start under way read before the endpoint (MR3) | 1 |
+  | F7 | `ReviewHost.KeysToMask` | the keys masked not each once | 1 |
+
 - **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first; the review's, T171, T173
-  and T175; the second review's, T178 and T180; and the third's, T183. 153A's tasks are T166 to
-  T185: it lands first among this round's 002 decisions, so its numbers stand.
+  and T175; the second review's, T178 and T180; the third's, T183; and the fourth's, T186. 153A's
+  tasks are T166 to T188: it lands first among this round's 002 decisions, so its numbers stand.
 
 ### 156A. 002's other words for the hidden Terminal tab, and an invalid escape in a test (2026-10-20)
 
