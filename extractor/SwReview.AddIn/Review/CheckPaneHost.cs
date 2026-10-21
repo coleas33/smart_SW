@@ -212,13 +212,17 @@ public sealed class CheckHoldOptions
 }
 
 /// <summary>
-/// Owner decision 157A, the reviews: what is a check tab's own in the start <see cref="CheckPaneHost.RunCheck"/> makes
-/// once every refusal that needs no call is behind it - its words, its run folder, its extraction's profile and its
-/// reply - so that start is written once for both tabs. Built once by each owner; every reading of its options is a
-/// callback, read fresh.
+/// Owner decision 157A, the reviews: what is a check tab's own in the start <see cref="CheckPaneHost.StartCheck"/>
+/// makes - its words, its own refusals, its run folder, its extraction's profile and its reply - so that start is
+/// written once for both tabs, its refusals before the gate among it (the final reviews of 157A). Built once by each
+/// owner; every reading of its options is a callback, read fresh.
 /// </summary>
 public sealed class CheckStart
 {
+    /// <param name="noDocument">The refusal for a press with no document active, `NoDocument`.</param>
+    /// <param name="refuses">The tab's own refusals of the document, which need no call: answers whether it refused
+    /// the press, having sent the refusal.</param>
+    /// <param name="dump">The in-process extractor, or null before the add-in is attached.</param>
     /// <param name="restartFirst">What the page is told before the gate when a settings restart stands before the press.</param>
     /// <param name="documentChanged">The refusal for a press whose document changed while its gate waited, `DocumentChanged`.</param>
     /// <param name="nothingChecked">What a refused start did not do, in the tab's words.</param>
@@ -234,6 +238,9 @@ public sealed class CheckStart
     /// <param name="extractedType">The reply that hands the run to the page.</param>
     /// <param name="counts">The reply's counts of what the extraction read.</param>
     public CheckStart(
+        string noDocument,
+        Func<string?, PageDocument, bool> refuses,
+        Func<IReviewDump?> dump,
         string restartFirst,
         string documentChanged,
         string nothingChecked,
@@ -249,6 +256,9 @@ public sealed class CheckStart
         string extractedType,
         Func<DumpSummary, Dictionary<string, object?>> counts)
     {
+        NoDocument = noDocument ?? throw new ArgumentNullException(nameof(noDocument));
+        Refuses = refuses ?? throw new ArgumentNullException(nameof(refuses));
+        Dump = dump ?? throw new ArgumentNullException(nameof(dump));
         RestartFirst = restartFirst ?? throw new ArgumentNullException(nameof(restartFirst));
         DocumentChanged = documentChanged ?? throw new ArgumentNullException(nameof(documentChanged));
         NothingChecked = nothingChecked ?? throw new ArgumentNullException(nameof(nothingChecked));
@@ -264,6 +274,12 @@ public sealed class CheckStart
         ExtractedType = extractedType ?? throw new ArgumentNullException(nameof(extractedType));
         Counts = counts ?? throw new ArgumentNullException(nameof(counts));
     }
+
+    public string NoDocument { get; }
+
+    public Func<string?, PageDocument, bool> Refuses { get; }
+
+    public Func<IReviewDump?> Dump { get; }
 
     public string RestartFirst { get; }
 
@@ -332,7 +348,7 @@ public sealed class CheckStart
 ///
 /// <b>A check holds a settings restart back</b> (owner decision 157A), as a remodel run does since
 /// 145A, and the hold is kept here for both owners. Once every refusal that needs no call is behind it,
-/// an owner's start is <see cref="RunCheck"/>, written once for both tabs in each one's words
+/// an owner's start is <see cref="StartCheck"/>, written once for both tabs in each one's words
 /// (<see cref="CheckStart"/>): it begins through the review host's gate (<see cref="BeginCheck"/>), and
 /// the hold lasts until the page's evaluation of the check has been answered - through the start, the
 /// hand-over of its run to the page (<see cref="HandOver"/>) and the evaluation the pane's proxy holds
@@ -429,6 +445,59 @@ public sealed class CheckPaneHost : IDisposable
     }
 
     /// <summary>
+    /// A check tab's start, the same on both tabs in <paramref name="start"/>'s words: every refusal that needs no
+    /// call first - the run root (owner decision 154A), no document, the add-in not attached, then the tab's own - and
+    /// then the run (<see cref="RunCheck"/>). Written once on the final reviews of 157A, as the run was on its reviews.
+    /// </summary>
+    public void StartCheck(string? id, CheckStart start)
+    {
+        // Owner decision 154A: first - the check's folder is made under the run root and handed to the backend, which
+        // refuses one on a share - in the tab's words, which its page shows whole. Read with 153A's record: none while a
+        // start of the backend under way would bring another into force. Read again once the gate is passed, since the
+        // gate can make a restart that moves it (owner decision 157A).
+        string? judged = start.RunRootForANewRun();
+        if (judged == null)
+        {
+            _actions.SendRunRootMoving(id, start.NothingChecked, start.PressAgain);
+            return;
+        }
+
+        if (_actions.RefusedRunRoot(
+                id, judged, start.Probe(), start.NothingChecked, RunRootRule.InSettingsOnTheReviewTab, start.PressAgain))
+        {
+            return;
+        }
+
+        PageDocument? document = _options.CurrentDocument();
+        if (document == null)
+        {
+            _actions.SendError(id, "NoDocument", start.NoDocument, retryable: true);
+            return;
+        }
+
+        IReviewDump? dump = start.Dump();
+        if (dump == null)
+        {
+            _actions.SendError(id, "NotAttached", NotAttachedMessage, retryable: true);
+            return;
+        }
+
+        if (start.Refuses(id, document))
+        {
+            return;
+        }
+
+        // Owner decision 157A: a check holds a settings restart back, as a remodel run does. After every refusal that
+        // needs no call, the check begins through the review host's gate and holds the restart until the page's
+        // evaluation of it has been answered.
+        RunCheck(id, judged, document, dump, start);
+    }
+
+    /// <summary>What a check pressed before the add-in is attached to a SOLIDWORKS session is refused with, `NotAttached`.</summary>
+    public const string NotAttachedMessage =
+        "the add-in is not attached to a SOLIDWORKS session, so nothing can be extracted.";
+
+    /// <summary>
     /// Owner decision 157A: a check's start once every refusal that needs no call is behind it, the same on both tabs
     /// in <paramref name="start"/>'s words (the reviews of 157A: written once). It begins through the review host's
     /// gate (<see cref="BeginCheck"/>); the run root and the document are read again once the gate is passed, since its
@@ -439,7 +508,7 @@ public sealed class CheckPaneHost : IDisposable
     /// because the dump writes into it, and registered before the reply, so an evaluation the page sends the instant it
     /// reads the reply resolves ids through the right folder. Every way out but the hand-over lets the hold go.
     /// </summary>
-    public void RunCheck(string? id, string judged, PageDocument document, IReviewDump dump, CheckStart start)
+    private void RunCheck(string? id, string judged, PageDocument document, IReviewDump dump, CheckStart start)
     {
         if (!BeginCheck(id, start.RestartFirst))
         {

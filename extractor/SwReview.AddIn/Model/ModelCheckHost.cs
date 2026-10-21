@@ -222,6 +222,10 @@ public sealed class ModelCheckHost : IDisposable
         // Owner decision 157A, the reviews: what is this tab's own in a check's start once its refusals are behind it;
         // the start itself is the check pane's, written once for both tabs.
         _start = new CheckStart(
+            noDocument: "open the part you want checked in SOLIDWORKS first: the feature tree is read "
+                + "from the active document.",
+            refuses: Refused,
+            dump: () => options.Dump,
             restartFirst: CheckAfterRestartMessage,
             documentChanged: DocumentChangedMessage,
             nothingChecked: NothingChecked,
@@ -298,68 +302,29 @@ public sealed class ModelCheckHost : IDisposable
     /// dump the open part into it with the reduced profile, register the folder as the pane's
     /// latest run, and tell the page where it is. The page does the rest.
     /// </summary>
-    private void StartCheck(string? id)
+    private void StartCheck(string? id) => _pane.StartCheck(id, _start);
+
+    /// <summary>
+    /// This tab's own refusal of the active document, after the shared ones (<see cref="CheckPaneHost.StartCheck"/>):
+    /// a document that is not a part. Answers whether it refused the press, having sent the refusal.
+    /// </summary>
+    private bool Refused(string? id, PageDocument document)
     {
-        PaneActions actions = _pane.Actions;
-
-        // Owner decision 154A: first - the check's folder is made under the run root and handed to the backend,
-        // which refuses one on a share - in this tab's words, which its page shows whole. Read with 153A's record:
-        // none while a start of the backend under way would bring another into force. Read again once the gate is
-        // passed, below, since the gate can make a restart that moves it (owner decision 157A).
-        string? judged = _options.RunRootForANewRun();
-        if (judged == null)
+        if (string.Equals(document.Kind, PartKind, StringComparison.Ordinal))
         {
-            actions.SendRunRootMoving(id, NothingChecked, PressAgain);
-            return;
+            return false;
         }
 
-        if (actions.RefusedRunRoot(
-                id, judged, _options.RunRootProbe, NothingChecked, RunRootRule.InSettingsOnTheReviewTab, PressAgain))
-        {
-            return;
-        }
-
-        PageDocument? document = _options.CurrentDocument();
-        if (document == null)
-        {
-            actions.SendError(
-                id,
-                "NoDocument",
-                "open the part you want checked in SOLIDWORKS first: the feature tree is read "
-                + "from the active document.",
-                retryable: true);
-            return;
-        }
-
-        IReviewDump? dump = _options.Dump;
-        if (dump == null)
-        {
-            actions.SendError(
-                id,
-                "NotAttached",
-                "the add-in is not attached to a SOLIDWORKS session, so nothing can be extracted.",
-                retryable: true);
-            return;
-        }
-
-        if (!string.Equals(document.Kind, PartKind, StringComparison.Ordinal))
-        {
-            // The rule family is written about a part's feature tree. An assembly answered with
-            // 34 unresolved rules would read as a bad design rather than as a scope this
-            // increment does not cover, so the refusal names the scope instead.
-            actions.SendError(
-                id,
-                "NotAPart",
-                "the Model check reads a part's feature tree, and the active document is "
-                + (document.Kind == null ? "not a SOLIDWORKS part" : "a " + document.Kind)
-                + ". Open the part on its own and press Model check again.",
-                retryable: true);
-            return;
-        }
-
-        // Owner decision 157A: a check holds a settings restart back, as a remodel run does. After every refusal that
-        // needs no call, the check begins through the review host's gate and holds the restart until the page's
-        // evaluation of it has been answered; the rest of the start is the check pane's, the same on both tabs.
-        _pane.RunCheck(id, judged, document, dump, _start);
+        // The rule family is written about a part's feature tree. An assembly answered with
+        // 34 unresolved rules would read as a bad design rather than as a scope this
+        // increment does not cover, so the refusal names the scope instead.
+        _pane.Actions.SendError(
+            id,
+            "NotAPart",
+            "the Model check reads a part's feature tree, and the active document is "
+            + (document.Kind == null ? "not a SOLIDWORKS part" : "a " + document.Kind)
+            + ". Open the part on its own and press Model check again.",
+            retryable: true);
+        return true;
     }
 }

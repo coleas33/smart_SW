@@ -234,6 +234,10 @@ public sealed class StandardsHost : IDisposable
         // Owner decision 157A, the reviews: what is this tab's own in a run's start once its refusals are behind it;
         // the start itself is the check pane's, written once for both tabs.
         _start = new CheckStart(
+            noDocument: "open the part, assembly or drawing you want graded in SOLIDWORKS first: the "
+                + "checks are read from the active document.",
+            refuses: Refused,
+            dump: () => options.Dump,
             restartFirst: CheckAfterRestartMessage,
             documentChanged: DocumentChangedMessage,
             nothingChecked: NothingChecked,
@@ -312,50 +316,16 @@ public sealed class StandardsHost : IDisposable
     /// the open document into it with the Standards profile, register the folder as the pane's
     /// latest run, and tell the page where it is. The page does the rest.
     /// </summary>
-    private void Start(string? id)
+    private void Start(string? id) => _pane.StartCheck(id, _start);
+
+    /// <summary>
+    /// This tab's own refusals of the active document, after the shared ones (<see cref="CheckPaneHost.StartCheck"/>):
+    /// one never saved, a kind not graded, and no profile to grade against. Answers whether it refused the press,
+    /// having sent the refusal.
+    /// </summary>
+    private bool Refused(string? id, PageDocument document)
     {
         PaneActions actions = _pane.Actions;
-
-        // Owner decision 154A: first - the run's folder is made under the run root and handed to the backend,
-        // which refuses one on a share - in this tab's words, which its page shows whole. Read with 153A's record:
-        // none while a start of the backend under way would bring another into force. Read again once the gate is
-        // passed, below, since the gate can make a restart that moves it (owner decision 157A).
-        string? judged = _options.RunRootForANewRun();
-        if (judged == null)
-        {
-            actions.SendRunRootMoving(id, NothingChecked, PressAgain);
-            return;
-        }
-
-        if (actions.RefusedRunRoot(
-                id, judged, _options.RunRootProbe, NothingChecked, RunRootRule.InSettingsOnTheReviewTab, PressAgain))
-        {
-            return;
-        }
-
-        PageDocument? document = _options.CurrentDocument();
-        if (document == null)
-        {
-            actions.SendError(
-                id,
-                "NoDocument",
-                "open the part, assembly or drawing you want graded in SOLIDWORKS first: the "
-                + "checks are read from the active document.",
-                retryable: true);
-            return;
-        }
-
-        IReviewDump? dump = _options.Dump;
-        if (dump == null)
-        {
-            actions.SendError(
-                id,
-                "NotAttached",
-                "the add-in is not attached to a SOLIDWORKS session, so nothing can be extracted.",
-                retryable: true);
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(document.Path))
         {
             // No path means no library prefix to match and no file name to match the
@@ -368,7 +338,7 @@ public sealed class StandardsHost : IDisposable
                 "this document has never been saved, so it has no file name or folder for the "
                 + "library and part-number checks to read. Save it and press Standards again.",
                 retryable: true);
-            return;
+            return true;
         }
 
         if (Array.IndexOf(GradableKinds, document.Kind) < 0)
@@ -385,7 +355,7 @@ public sealed class StandardsHost : IDisposable
                 // and a strange path must not turn a refusal into a crash.
                 + " ('" + RunFolders.DocumentName(document.Path) + "').",
                 retryable: true);
-            return;
+            return true;
         }
 
         // Before the run folder and before the dump: with no profile there is nothing to grade
@@ -395,13 +365,10 @@ public sealed class StandardsHost : IDisposable
         if (profileFailure != null)
         {
             actions.SendError(id, "NoProfile", profileFailure, retryable: true);
-            return;
+            return true;
         }
 
-        // Owner decision 157A: a check holds a settings restart back, as a remodel run does. After every refusal that
-        // needs no call, the run begins through the review host's gate and holds the restart until the page's
-        // evaluation of it has been answered; the rest of the start is the check pane's, the same on both tabs.
-        _pane.RunCheck(id, judged, document, dump, _start);
+        return false;
     }
 
     /// <summary>
