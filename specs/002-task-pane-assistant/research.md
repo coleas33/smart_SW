@@ -2474,13 +2474,13 @@ words for the strip.
     they run - so nothing is run or written on another configuration, a mesh or a capture file above
     all - and answer `configuration changed: this bridge answers about configuration 'Default' of
     <the document>, and 'Machined' is active now, so a live command would answer about another
-    configuration than the one extracted. Make 'Default' active again in SOLIDWORKS.`; `ping`,
-    `drawing.read` and the remodel family are not asked. The name is compared exactly, and a reading
-    that answers none is refused too. Each command asks, so a switch back lets the next one through.
-    It covers what no start can see: a switch after the session's start, in its own checks' seconds
-    or before a Send, a follow-up or an answer much later. The add-in's host serves each request in
-    one call on the application thread, where the engineer's switch is made too, so none lands
-    between the reading and the command's end.
+    configuration than the one extracted. Make 'Default' active again in SOLIDWORKS.` (its way on
+    reworded on review, N5, below); `ping`, `drawing.read` and the remodel family are not asked. The
+    name is compared exactly, and a reading that answers none is refused too. Each command asks, so
+    a switch back lets the next one through. It covers what no start can see: a switch after the
+    session's start, in its own checks' seconds or before a Send, a follow-up or an answer much
+    later. The add-in's host serves each request in one call on the application thread, where the
+    engineer's switch is made too, so none lands between the reading and the command's end.
   - *Why both*: the session's reading alone leaves every later live command open; the bridge's alone
     would make the session and run its checks with every live check refused - a review run half,
     with the engineer told only in its coverage.
@@ -2537,7 +2537,10 @@ words for the strip.
     With no hold to be had the session is given what is published, as before - none, or a bridge no
     service listening has, which is refused. A start refused for its bridge lets go before it asks
     the tool service to follow, which a hold still held would put off a poll (found reviewing this
-    fix).
+    fix). *Corrected 2026-10-21 (the review of these fixes, N7):* or until `POST /sessions` gives up
+    after the backend client's 30 seconds, when the hold is let go while the backend may still run
+    the review's checks over the bridge, and that session is never tracked (015 RK-10's orphan
+    path).
   - a page call that would start a turn (the proxy's `StartsATurn`), while it is out: the backend
     marks the turn running before it answers. A call the host refuses (143A) holds nothing; one with
     no hold to be had goes on, since its chat's bridge, given when the chat was made, serves the
@@ -2548,9 +2551,9 @@ words for the strip.
   attachment (T180), and Start runs on its session.
 - **What remains** (recorded, not changed): a chat whose bridge was taken down while nothing held it
   - the engineer moved on and the turn had ended - meets a closed pipe on its next turn; older than
-  152A, failed coverage, and no other document. A turn's end is still learnt only by asking. And
-  owner question 2 stands as asked: a hold the gate cannot give is the gate saying no service is
-  listening - a follow in flight among the reasons - and the session is given what is published.
+    152A, failed coverage, and no other document. A turn's end is still learnt only by asking. And
+    owner question 2 stands as asked: a hold the gate cannot give is the gate saying no service is
+    listening - a follow in flight among the reasons - and the session is given what is published.
 - **Owner questions** (recorded 2026-10-20, behaviour unchanged), besides question 1 as changed
   above:
   4. The console host's bridge (`swreview-extract serve`) compares no configuration: it runs out of
@@ -2559,7 +2562,9 @@ words for the strip.
   5. The reviewer's client takes a `configuration changed` refusal as any bridge failure - failed
      coverage carrying the sentence, counted toward its breaker, which opens after three for the
      rest of the run. Treat it as it treats a closed document instead, a definite answer that leaves
-     the count where it was, so live checks go on once the configuration is switched back?
+     the count where it was, so live checks go on once the configuration is switched back? *Settled
+     2026-10-21, decided on review for the owner, who may revert (The review of the Codex fixes,
+     below):* treated as a closed document is - not counted.
 - **Contracts**: 002 [`contracts/pane-host-messages.md`](contracts/pane-host-messages.md) and
   [`contracts/chat-api.md`](contracts/chat-api.md); the bridge's
   `extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md` (Errors that are not command failures);
@@ -2632,3 +2637,101 @@ words for the strip.
   committed while it ran. It passed alone, and in the run after. `ruff check` clean, and no broken
   link.
 - **Tests**: T174 and T176 in [tasks.md](tasks.md), each written first.
+
+**4. The review of the Codex fixes (2026-10-21).**
+
+- **What it was**: an independent adversarial review of the branch at `aac63df`, by Opus. It found
+  no must-fix, and confirmed that the bridge check's two reads go through the gate under names the
+  guard allows, that every hold is let go on every path with nothing waited for under the lock, that
+  the preserved attachment survives, and that the cases changed deliberately still pin what they
+  pinned. It found two should-fixes and four nits, settled test first by T179 to T183, and the
+  coordinator decided owner question 5 on it, for the owner, who may revert.
+- **S1 (should-fix): the read behind the bridge check had no test.**
+  `SwSessionConfiguration.ActiveConfigurationName` was pinned only by the host's source case: the
+  reviewer made it read the bound configuration, which would turn X1's bridge half off at the pilot,
+  and every related case stayed green; one that answered none would refuse every live command,
+  unseen too. A case on the interop stand-ins (`SwSessionActiveConfigurationTests`) attaches in
+  Default and switches the manager's active configuration: the active name follows the switch, the
+  bound one (`ConfigurationName`) still answers Default, both reads pass the gate's observer, and a
+  document that reports no active configuration answers none. Green on the code, red under both
+  mutations.
+- **S2 (should-fix): the reading after the extraction compared the document with the earlier
+  reading, not with what was extracted.** The dump attaches to whatever is active as it begins
+  (`SwReviewDump.Run`), and said nothing of it: switched after 149A's second reading - while the run
+  folder is made and the extracting status posted - and back during the extraction, it extracted the
+  other document, the reading once it ended saw the review's own again, and so did the bridge check,
+  so the session ran the review's live checks into the other document's package, under a review
+  recorded as the review's. Now the dump says what it attached to (`DumpSummary.Extracted`: the
+  document's path and the configuration the attach was bound to), and a new review is refused
+  `DocumentChanged` when that is not the review's, by the pane's one rule, in the same words and
+  leaving nothing half made; a dump that says nothing is not taken for the review's - the add-in's
+  always says. The double switch is pinned. The other consumers of a dump read nothing new and are
+  unchanged: the Model check and Standards tabs, the Terminal tab's extraction, and the context
+  preparation, which its own generation count already guards - every `document.changed` while it
+  runs expires it. The test doubles of a dump in the Review host's three suites now say what they
+  attached to, as the real one does.
+- **Q5 (decided on review for the owner, who may revert): a `configuration changed` refusal no
+  longer counts toward the reviewer's breaker.** Counted, three such refusals opened the circuit for
+  the rest of a review run, or of the general-chat terminal's session (`swreview.mcp.server`), even
+  after the configuration was switched back. The client now names the refusal
+  (`BridgeConfigurationChangedError`, matched at the start of the host's text, as `unauthorized` is)
+  and takes it as it takes a closed document: a definite answer from a healthy host, failed coverage
+  carrying the sentence, the count left where it was, so live calls go on once the configuration is
+  the review's again. Its marker is pinned against the host's `ConfigurationChangedPrefix`. Owner
+  question 5, settled; the client's `PROTOCOL.md` (N6) and `contracts/chat-api.md` say so.
+- **N4: a finishing run could let go of the next plan's hold.** A run ends on a thread of its own
+  and freed the host before it let go of its hold, so a plan pressed in between took a hold of its
+  own (the field's exchange let go of the run's), and the run's thread then let go of the plan's,
+  leaving the plan unheld. A plan or a run now lets go before it frees the host (`Execute`,
+  `FreeTheHost`), and letting go never throws, since it comes first: a hold that failed as it was
+  let go would otherwise keep the host busy, holding back every plan and every settings restart, or
+  reach a run's own thread, which no one waits on. The gate's own holds never fail.
+- **N5: the bridge's way on was impossible after a rename.** The bound configuration is copied once,
+  at the attach, and compared by name, so a configuration renamed since makes every live command
+  refused with "Make 'Default' active again", which can no longer be done. The way on now holds
+  either way: "Make the configuration you started with active again, or press Review to start a new
+  review." A renamed configuration still answers nothing until a new review re-attaches the bridge,
+  recorded.
+- **N6: the client's `PROTOCOL.md` named three refusals.** It names four, the new one with how the
+  breaker takes it.
+- **N7 (records): a hold is bounded only by its holder.** A review session's start holds the bridge
+  until its session is tracked - or until `POST /sessions` gives up after the backend client's 30
+  seconds, when the hold is let go while the backend may still be running the review's checks over
+  the bridge, and that session is never tracked (015 RK-10's orphan path), so a follow can take the
+  bridge down under those checks. Corrected above (Who holds). And nothing in the gate bounds a
+  hold: a plan's calls are bounded by the re-modeler's client (30 seconds each), a run by its twenty
+  minutes (`RemodelLimits`), a session start by those 30 seconds and a turn call by the proxy's 120;
+  a holder that never let go would keep the tool service on its document for good. Owner question 6.
+- **What remains** (recorded, not changed): the Model check and Standards tabs name the document
+  they read before their dumps, so a switch in the moment before a dump attaches labels a package of
+  another document; they hand the backend no bridge and run no live check, and their reply could
+  name what the dump says it extracted. Older than 152A.
+- **Owner questions** (recorded 2026-10-21, behaviour unchanged): 6. Bound a hold in the gate - let
+  go after a time whatever its holder does - or keep each holder's own bound, as now?
+- **Mutations**: each fix taken out once, by one exact replacement, the tree rebuilt for the C#
+  ones, the named cases run - `SwSessionActiveConfigurationTests`, `SwSessionReadOnlyOpenTests`,
+  `BridgeDispatcherTests` and `BridgeTessellateTests`, 161 cases, for the extractor's;
+  `DeferredRestartTests`, `ReviewHostTests`, `RemodelHostTests`, `EngineeringContextHostTests` and
+  `ToolServiceWiringTests`, 810 cases, for the add-in's; `test_bridge_client.py` and
+  `test_tools_bridge.py`, 108 cases, for the reviewer's - and the file restored byte for byte
+  (checked by its sha256): 11 mutations, 21 red results, every one red.
+
+  | Id | Taken out | Red |
+  |---|---|---|
+  | ZS1a | `ActiveConfigurationName`: reads the bound configuration | 1: S1's case |
+  | ZS1b | `ActiveConfigurationName`: never answers a configuration | 1: as ZS1a |
+  | ZS2a | `StartReview`: what the dump extracted not compared | 3: the double switch's two cases, and the dump that says nothing |
+  | ZS2b | `StartReview`: a dump that says nothing taken for the review's | 1: the dump that says nothing |
+  | ZN4a | `Execute`: the host freed before the hold is let go | 1: the order of letting go |
+  | ZN4b | `FreeTheHost`: the host freed before the hold is let go | 1: as ZN4a |
+  | ZN4c | `LetGoOfTheToolService`: a hold that fails as it is let go let through | 2: the failing hold, for a plan and for a run |
+  | ZN5 | the way on names the bound configuration again | 4: the refusal word for word, for each live command |
+  | ZQ5a | the client: the refusal not named | 3: the named failure, the circuit kept, and the count kept |
+  | ZQ5b | the client: the refusal counted toward the breaker | 2: the circuit kept, and the count kept |
+  | ZQ5c | the client: the marker matched anywhere in the text | 2: the two sentences that merely mention a change |
+- **Evidence** (2026-10-21, before main was merged): the C# build, `--no-incremental`, at zero
+  warnings; `SwReview.Extractor.Tests` 10,086 passed, from 10,085 - S1's case - and
+  `SwReview.AddIn.Tests` 3,133, from 3,126 - T179's seven. The reviewer's client and tool tests,
+  the records' readers and the words, fixture and pin tests, 1,090 cases, passed on 3.12 and on
+  3.11 (`--isolated`). `ruff check` clean, and no broken link.
+- **Tests**: T179 and T181 in [tasks.md](tasks.md), each written first.
