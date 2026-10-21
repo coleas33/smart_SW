@@ -119,12 +119,12 @@ tool service's record of its attach, which the bridge's `ping` answers - and han
 the review's document, by the rule above (the path ignoring case, the configuration exactly). One on
 another document, or one no tool service listening now has, is refused
 `error {error_class: "BridgeOnAnotherDocument", retryable: true}`, in words that name no path: no
-session is created, no status is posted - a Recheck posts `checking` only once its bridge is asked -
-and the host asks the tool service to follow the active document, which it does once no review turn
-or remodel holds the bridge, so that pressing again goes ahead. A new review is asked before its run
-folder is made, so nothing is extracted; every start is asked again at its session, which is given
-the very bridge asked about. With no bridge published - no tool service listening - the session is
-given none, as before. How the tool service follows is 004
+session is created and no status of an extraction or a check is posted - a Recheck posts `checking`
+only once its bridge is asked - and the host asks the tool service to follow the active document,
+which it does once no review turn or remodel holds the bridge, so that pressing again goes ahead. A
+new review is asked before its run folder is made, so nothing is extracted; every start is asked
+again at its session, which is given the very bridge asked about. With no bridge published - no
+tool service listening - the session is given none, as before. How the tool service follows is 004
 [`pane-remodel-messages.md`](../../004-resilient-remodeler/contracts/pane-remodel-messages.md),
 decision 22A's section.
 

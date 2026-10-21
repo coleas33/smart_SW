@@ -1720,12 +1720,12 @@ second question.
      the bridge is attached to the package's document - its `ping` names the document - and run no
      live check otherwise, recording why; or have the add-in make the tool service follow the
      review's document before the session is created, and wait for it; or leave it?
-     *Settled 2026-10-20 (owner decision 152A, "1A"):* every review session's start asks which
+     *Settled by decision 152A (2026-10-20, "1A"):* every review session's start asks which
      document and configuration the bridge it would hand over serves - the tool service's record
      of its attach, which its `ping` answers - and refuses one that is not the review's,
-     `BridgeOnAnotherDocument`, retryable, in plain words, making nothing; and the tool service,
-     which skipped a switch made while a turn or a remodel run held it, follows the active
-     document once that hold ends (152A, below).
+     `BridgeOnAnotherDocument`, retryable, in plain words, before anything is made where it can
+     be; and the tool service, which skipped a switch made while a turn or a remodel run held it,
+     follows the active document once that hold ends (152A, below).
 - **Review**: an independent adversarial review of the branch at `1f87be6` confirmed the second
   reading itself - on the right thread, nothing left half made, no false refusal, the fixtures and
   the pin right - and found one must-fix, two should-fixes and three nits, settled test first by
@@ -2085,6 +2085,16 @@ words for the strip.
   is attached to; the document already attached to, a drawing, or none, re-attaches nothing; the
   exact held copy of a waiting plan keeps its attachment (004 T180). Either way nothing more is
   owed, and no look is asked for again.
+- **What the busy question reads** (the 152A review's R1): the add-in's answer is the remodel run
+  first, which costs nothing, and then whether a turn may be running (`ReviewHost.TurnMayBeRunning`):
+  one seen running, or a chat the backend gives no usable answer about - not knowing whether a turn
+  runs is not knowing that none does, as the settings restart reads it (143A) - and none with no
+  backend process at all, which runs no turn. It was `AnyTurnRunning`, which reads no answer as
+  none, so a follow made as one request timed out tore the bridge down under a running turn; a
+  look asked every second for the length of a turn would meet that moment far more often than a
+  switch did. A save still asks `AnyTurnRunning`, so a backend that does not answer still lets the
+  engineer save. While the backend is up and does not answer, a follow now waits for its answer;
+  with no backend process the tool service follows the engineer as before.
 - **The trigger, weighed**:
   - *an explicit call from the hosts when a hold ends*: the Remodel host knows when a plan or a
     run ends (`FreeTheHost`, `Execute`'s `finally`), but the review host does not know when a turn
@@ -2098,17 +2108,21 @@ words for the strip.
     for both holds, inside the gate that already asks the busy question. It is as testable as an
     explicit call: the cases hand the gate a `later` that keeps each look until the case runs it,
     so every case decides by order, not by time; one case pins the gate's own `later`, a poll late
-    and on the pool. Its cost is the restart watcher's: the busy question - one `GET` per open chat
-    - once a second, off the application thread, and only while a follow is owed. A remodel's end
-    is followed within a poll.
+    and on the pool. Its cost is the restart watcher's: the busy question - the remodel run, then
+    one `GET` per review the host tracks until one does not rule a turn out - once a second, off
+    the application thread, and only while a follow is owed. A remodel's end is followed within a
+    poll.
 - **No race with a switch** (the decision's own words): a follow reads the active document only
   once it has its busy answer, and a start reads it again as it attaches, so a switch made while
   either asks is followed by it. A switch that lands while a start or a follow is in flight - after
   the start read the active document and before it is listening - was dropped until the next switch
   (`docs/review-backlog.md`'s finding against `FollowDocument`'s early return while a start is in
   flight); it is owed now, and looked at as soon as that work is over (`Settle`, and `StartCore`
-  once the new service is published). A reading clears what is owed (`FollowNow`, `StartCore`), so
-  a switch after it is owed afresh.
+  once the new service is published). What is owed is taken by a follow as it asks the busy
+  question and again as it reads the active document, and by a start as it reads it, so a switch
+  after any of these is owed afresh: one that lands just after a look's reading is looked at once
+  the look is over, and one made while the busy question is out is followed by that follow - or,
+  when the question throws, looked at once it has (the 152A review's R4 and N2).
 - **No second service**: a look never runs beside a start or a follow - it returns when
   `_starting` is held, and the work in flight looks again itself when it ends - and every entry
   claims `_starting` under the lock before anything that can start a service is scheduled, as
@@ -2119,20 +2133,28 @@ words for the strip.
   skipped and owed; the look once the plan ends finds the exact held copy active, keeps the plan's
   attachment, writes the T180 line, and asks no more. A switch to any other document is followed
   and loses the plan, as an ordinary switch does (22A).
-- **What is said**: the tool-service log's line for a skipped switch is written once, at the switch,
-  as before; a look writes nothing, since a line a second for the length of a turn would bury the
-  one the engineer is sent to read. A busy question that throws is reported and counts as busy, as
-  before, and is not owed: nothing says the next answer would come, and the next switch, or a
-  review's request (below), asks again.
-- **The configuration** - a follow made at a hold's end or at a review's request attaches to the
-  document as it is, its configuration included (`Serves`: the path canonically and ignoring case,
-  as the gate has always compared paths, and the configuration exactly). A configuration switch is
-  still the same document at the switch - the add-in fans it out as a follow of the same path -
-  and re-attaches nothing there, as 004 decision 22A records. Why it must be compared once a follow
-  is made: the scope is walked in the configuration the attach found active (`SwScope.Open`,
-  `ComponentTreeDumper.Traverse` over `session.ConfigurationName()`), and its component table is
-  what the live interference check maps its rows through; ids are allocated by that traversal, so
-  another configuration's rows can name other components.
+- **What is said**: the tool-service log's line for a skipped switch is written by the switch's own
+  follow when it finds the bridge held, as before; a look writes nothing, since a line a second for
+  the length of a turn would bury the one the engineer is sent to read, and a switch that lands while
+  a look or a follow is in flight is owed without a line and followed with the rest (the review's
+  N7). A busy question that throws is reported and counts as busy, as before, and owes nothing of
+  its own - not a look at once, nor one a poll later - since nothing says the next answer would come:
+  the next switch, or a review's request (below), asks again. A switch made while it was out is
+  still owed.
+- **The configuration**: a switch's follow - at the switch, owed while a start or a follow was in
+  flight, or made once a hold ends - is made as at the switch, by the path (`SameDocument`,
+  canonically and ignoring case, as the gate has always compared paths), so a configuration switch
+  re-attaches nothing wherever it lands, as 004 decision 22A records. It first did when it landed
+  while work was in flight, which the review found (N3). A review's request is made by the review's
+  own rule, the path ignoring case and the configuration exactly (`Serves` with `Owed.Configuration`,
+  through `PageDocument.IsSameDocument`), so that what the review refuses the gate follows: a
+  document the attach spelled otherwise - opened through `..`, say - was refused by the review and
+  called the same by the gate, and the refusal never cleared (the review's R3). A start attaches to
+  the document as it is. Why the configuration matters to a review: the scope is walked in the
+  configuration the attach found active (`SwScope.Open`, `ComponentTreeDumper.Traverse` over
+  `session.ConfigurationName()`), and its component table is what the live interference check maps
+  its rows through; ids are allocated by that traversal, so another configuration's rows can name
+  other components.
 
 **2. Every review session's start asks the bridge which document it serves.**
 
@@ -2151,7 +2173,9 @@ words for the strip.
   with a timeout, refuse a review because the bridge was busy, which is the false refusal the
   decision's adversarial review was asked to look for. A pipe name is minted for every start, so it
   names one attachment for its whole life: a session handed a bridge that served the review's
-  document when it was asked reaches that document or nothing.
+  document when it was asked reaches that document or nothing - in whatever configuration is active
+  when it calls, since a configuration switch after the session's start re-attaches nothing (the
+  review's R2; What is left).
 - **What is compared**: `PageDocument.IsSameDocument`, the pane's one rule (the path ignoring case,
   the configuration exactly), since `ping` gives both. Both paths are `GetPathName` of one open
   document (the attach's and `SwReviewAddIn.CurrentDocument`), and both configurations
@@ -2164,10 +2188,11 @@ words for the strip.
   not handed over unasked. The extraction takes minutes, in which the tool service can follow
   another document.
 - **The refusal**: `error {error_class: "BridgeOnAnotherDocument", retryable: true}`, in words that
-  name no path; nothing is made by the start, no status is posted - a Recheck says it checks only
-  once its bridge is asked - and the tool service is asked to follow the active document
-  (`ReviewHostOptions.FollowActiveDocument`, the gate's `FollowActiveDocument`), which every start
-  has checked is the review's. Two messages, each true where it is raised:
+  name no path; nothing is made by the start and no status of an extraction or a check is posted -
+  a Recheck says it checks only once its bridge is asked, and a settings restart the start made or
+  waited for first has said so, as 143A has it - and the tool service is asked to follow the
+  active document (`ReviewHostOptions.FollowActiveDocument`, the gate's `FollowActiveDocument`),
+  which every start has checked is the review's. Two messages, each true where it is raised:
   - before anything is made: "the SOLIDWORKS bridge this review would be given is not attached to
     the review's document and configuration, so nothing was extracted and no run folder was made.
     It follows the active document once no review turn or remodel holds it: wait a moment, then
@@ -2182,11 +2207,12 @@ words for the strip.
 - **Asking the tool service to follow** - an extension of the decision's words, by the
   implementer's choice, not the owner's decision, and put to the owner: without it a refusal after a
   configuration switch would never clear, since a configuration switch re-attaches nothing at the
-  switch (22A), and neither would one met while a plan's copy keeps the original's attachment after
-  the plan has ended, or after a busy question that threw. Asked, the gate follows the active
-  document - at once, or once the hold ends - keeping the planned copy's attachment as any follow
-  does. So "retryable" is true: pressed again once the bridge is on the review's document, every
-  start goes ahead with it (pinned for each).
+  switch (22A), and neither would one after a busy question that threw, or one for a document the
+  attach spelled otherwise. Asked, the gate follows the active document as the review compares it -
+  at once, or once the hold ends - keeping the planned copy's attachment as any follow does. So
+  "retryable" is true: pressed again once the bridge is on the review's document, every start goes
+  ahead with it (pinned for each). One refusal it does not clear: a review of a waiting plan's copy,
+  whose attachment the plan keeps (What is left).
 - **The class and its label**: the Review page shows a class's label first and the message in a
   fold, and every class the host sends has one (`ErrorLabelsCoverTheHostTests`). Weighed:
   - `NotAttached` ("The add-in is not attached to SOLIDWORKS yet. Wait a moment, then try
@@ -2239,21 +2265,157 @@ words for the strip.
     its live calls fail and are recorded as failed coverage. Older than 152A - every follow since the
     tool service follows switches has had it - and it reaches no other document. The follow now runs
     at a hold's end too, so it can meet a follow-up typed at once.
+  - A remodel Start pressed in the moment between a look's busy answer and its reading of the active
+    document: the look finds the plan's copy no longer planned, so T180 does not keep its attachment,
+    and the bridge is taken down under the run that is starting (the review's N1). 145A recorded the
+    moment; since 152A a look comes due within a second of a plan's end, when Start is often pressed.
+    The run's next bridge call meets a closing pipe, or a dispatcher with no session, answered
+    `target_mismatch` before any write (004 `contracts/bridge-remodel.md`), so the copy is not
+    changed: the run fails, and is pressed again.
   - A session made while the tool service is between two attachments is given no bridge, and its
     live checks are recorded as not run: a review pressed in the seconds a follow takes, now also at
     a hold's end. Older than 152A; no evidence of another document.
-  - A configuration switch is followed only once a follow is made for another reason - a hold's
-    end, a review's request, or a document switch - so the general-chat tools and Show in SOLIDWORKS
-    (`entity.show`, through the tool service's scope) keep the configuration attached to until then.
-    Older than 152A (004, decision 22A).
+  - A configuration switch is followed only when a review asks, or once a document switch
+    re-attaches, so the general-chat tools and Show in SOLIDWORKS (`entity.show`, through the tool
+    service's scope) keep the configuration attached to until then. And a session started before
+    such a switch keeps a live pipe bound to the configuration it was asked about: its later live
+    calls - the model's after Send, a follow-up's or an answer's, and its pre-run checks in the
+    seconds after `POST /sessions` - run in the configuration now active through the other's
+    component table (the review's R2). A Send, a follow-up and an answer reach the backend from the
+    page through the proxy, not through the host, so no session's start is asked again for them.
+    Older than 152A (004, decision 22A); owner question 1.
+  - A review of a waiting plan's copy, while the plan keeps its original's attachment (T180), is
+    refused until the plan is started or its copy discarded, or another document is made active: a
+    review's request keeps that attachment as any follow does, and the label's "wait a moment" does
+    not say so (the review's N6).
+  - With Start switched off (004 T172) - the shipped build - a plan closes its session before it
+    answers (004 T176), so no held copy keeps the attachment, and the look once the plan ends follows
+    whatever the plan's close left active: the original part, normally, which is the document
+    attached to and changes nothing; or the copy, when the close left it open and active, which the
+    tool service then follows, telling the plan lost (24A) in words that say SOLIDWORKS switched
+    documents (the review's R5). Before 152A that switch was skipped for good, and the next switch
+    told the plan lost. Both pinned (`RemodelHostTests`); owner question 3.
   - The same document closed and opened again leaves the attachment on the closed one, by path;
-    its commands answer "document no longer open". Older than 152A; no other document's evidence.
+    its commands fail with their own errors, since the presence check finds the reopened file by its
+    name (this record first said "document no longer open", which the review's N4 corrected). Older
+    than 152A; no other document's evidence.
+  - `LookAgain`'s guard lets go of `_starting` whatever escaped it. Nothing inside it throws - every
+    call catches its own failures - and a claim left held would stop the gate following for good,
+    the worse of the two (the review's N8).
 - **Owner questions** (recorded 2026-10-20, behaviour unchanged):
-  1. Follow a configuration switch at the switch, as a document switch is followed - the general
-     tools and Show then follow it too, and a plan made on the attachment is lost on a configuration
-     switch of its original part, which 22A keeps - or keep it followed only when a review asks, as
-     now?
+  1. Follow a configuration switch at the switch, as a document switch is followed? The general
+     tools and Show would follow it too, and a session started before the switch would have its pipe
+     closed, so its later live calls fail rather than run through the other configuration's table
+     (the review's R2); and a plan made on the attachment would be lost on a configuration switch of
+     its original part, which 22A keeps. Or keep it followed only when a review asks, as now?
   2. A review pressed while the tool service is between two attachments runs with no live checks,
      which its coverage says. Refuse it as `BridgeOnAnotherDocument` while a follow is in flight -
      the gate knows - or leave it?
-- **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first.
+  3. With Start switched off, should the look once a plan ends follow into the re-modeler's copy its
+     close left open, and should a plan whose session was closed at the plan be told lost when the
+     tool service re-attaches?
+- **Review**: an independent adversarial review of the branch at `cf67b69` found no must-fix - a
+  session is handed only a bridge that served its document when asked, and that pipe then serves
+  that document or nothing - and five should-fixes and nine nits, settled test first by T171 to T173:
+  - R1 (should-fix): a look's busy question read a chat the backend did not answer about as no turn,
+    and took the bridge down under a running turn - one timed-out request in a turn's polls was
+    enough (the reviewer's probe). Fixed: the gate asks `ReviewHost.TurnMayBeRunning`, the remodel
+    run first (What the busy question reads, above).
+  - R2 (should-fix, records): the configuration holds only at a session's start. The record said a
+    session's bridge reaches its document or nothing; it reaches it in whatever configuration is
+    active when it calls. Corrected above, What is left, and owner question 1.
+  - R3 (should-fix): two rules for "the same document" - the review's raw path and the gate's
+    canonical one - left a refusal that never cleared for a document the attach spelled otherwise.
+    Fixed: a review's request is made by the review's rule (The configuration, above).
+  - R4 (should-fix, tests): `Settle`'s look, a review's request made while work was in flight, and
+    "a busy question that throws owes nothing" had no failing case, and a follow's reading that left
+    what was owed crashed the test host. Five cases now - a switch just after a look's reading, a
+    request during a start, a throwing question at a switch and in a look, and a switch back while
+    the question is out - and a follow takes what is owed before it asks, so that mutation fails
+    cleanly.
+  - R5 (should-fix, records and tests): with Start switched off, the look follows what the plan's
+    close left active. Pinned both ways, recorded (What is left), owner question 3, and 004's notes.
+  - N1: a Start pressed between a look's busy answer and its reading - recorded (What is left).
+  - N2: a switch made while a busy question that then threw was out was dropped. Fixed: the follow
+    takes what is owed before it asks, and a throw settles, looking at what came meanwhile.
+  - N3: a configuration switch that landed while a start or a follow was in flight re-attached.
+    Fixed: a switch's follow is made by the path wherever it lands; pinned during a start and once a
+    hold ends.
+  - N4: a reopened document's commands do not answer "document no longer open" - corrected.
+  - N5: "making nothing" overstated a refusal at the session, after which a new review's run folder
+    stays - corrected in the dated note on 149A's question 5 and in Phase 16's purpose and checkpoint.
+  - N6: a review's request does not clear a refusal for a waiting plan's copy - corrected above, and
+    recorded.
+  - N7: the busy question's cost and the log's line. The add-in now reads the remodel run first; the
+    cost and the line are said truly above.
+  - N8: `LookAgain`'s guard - recorded (What is left).
+  - N9: the dated note's form - now "*Settled by decision 152A (2026-10-20, ...)*", as the file's
+    others.
+  - Existing cases changed deliberately: `TheAddInsGateRefreshesTheRemodelHostOnEveryPublishAndARunHoldsIt`
+    also pins the busy question's new reading (tightened). The reviewer's own probes stood in a
+    scratch copy and were not committed; T171's cases are their counterparts.
+- **Mutations**: each fix taken out once, by one exact replacement, the tree rebuilt, the named
+  classes run - `ToolServiceWiringTests`, `RemodelHostTests`, `DeferredRestartTests`,
+  `ErrorLabelsCoverTheHostTests` and `ReviewHostTests`, 728 cases; `ReviewPageSendGateTests` for
+  the pin; and for the words file the C# scan and the Python words and fixture tests - and the file
+  restored byte for byte (checked by its sha256): 33 mutations, 225 red results, every one red;
+  and for the review's fixes, 12 more (V1 to V12) over the same classes, 742 cases then, 20 red
+  results, every one red.
+
+  | Id | Taken out | Red |
+  |---|---|---|
+  | G1 | `FollowCore`: a follow skipped while work holds the bridge lets go and owes nothing | 9: the skipped switch followed, one look at a time, the look to another model, the copy kept and another document followed, the request through a hold, the gate's own look, and both Remodel cases |
+  | G2 | `Defer`: the owed follow is never asked again | 9: as G1 |
+  | G3 | `LookAgain`: a look runs beside a follow in flight | 1: the look due during a follow's busy question |
+  | G4 | `FollowDocument`: a switch during a start or a follow is dropped, as before | 1: the switch that lands during a start |
+  | G5 | `StartCore`: no look once the new service is published | 1: as G4 |
+  | G6 | `Serves`: the path alone | 2: the two requests' cases |
+  | G7 | `FollowNow`: re-attaches to the document already attached to | 2: the request with nothing changed, and the look back on the attached document |
+  | G8 | `FollowNow`: the planned copy not asked after | 4: T180's two cases through a switch, the look's copy kept, and the Remodel plan case |
+  | G9 | `FollowCore`: a look writes the busy line too | 2: one look at a time (one line per switch), and the request through a hold (none) |
+  | G10 | `FollowActiveDocument`: asks no look | 2: the two requests' cases |
+  | G11 | `DocumentServedBy`: answers for any pipe | 1: its case |
+  | G12 | `DocumentServedBy`: answers no configuration | 4: its case, the `ping` case, and the two requests' cases, which read it |
+  | G13 | the gate's own `later`: never looks | 1: the gate's own look |
+  | G14 | the gate's own `later`: looks at once | 1: as G13 - it looked within the poll |
+  | H1 | `ToolServiceHost.Configuration`: none recorded | 1: the `ping` case |
+  | R1 | `StartReview`: a new review not asked before anything is made | 8: the refusal's six new-review cases, which then extract and are refused at the session, and the two cases of a bridge that cannot be told |
+  | R2 | `CreateReviewSession`: no start asked at its session | 12: the refusal's eight context, context Retry and Recheck cases, pressed again for those three, and the bridge moved during the extraction |
+  | R3 | the session given the bridge published now, not the one asked about | 1: the bridge asked about |
+  | R4 | the configuration not compared | 11: the refusal's five cases of another configuration, and pressed again for all six starts |
+  | R5 | the path compared with its case | 9: the six cases of a path spelled otherwise, and `ReviewHostTests`' Recheck theory, three cases |
+  | R6 | not retryable | 15: the refusal's fourteen cases and the moved bridge |
+  | R7 | the tool service not asked to follow | 21: the refusal's fourteen, pressed again six, and the moved bridge |
+  | R8 | the class `DocumentChanged` | 24: as R7, the two that cannot be told, and the scan's list |
+  | R9 | the words: the document's path added | 17: the refusal's fourteen, the moved bridge, and the two that cannot be told |
+  | R10 | no bridge refused too | 42: every start with no bridge, in `DeferredRestartTests` and `ReviewHostTests` |
+  | R11 | an answer that throws not caught | 1: the answer that throws |
+  | R12 | a Recheck says it checks before its bridge is asked | 8: the refusal's three Recheck cases, and the five Recheck cases that count its statuses |
+  | R13 | the options' default vouches for a bridge | 2: the two that cannot be told, which read it first |
+  | A1 | the add-in does not wire `BridgeDocument` | 1: the add-in's source case |
+  | A2 | the add-in does not wire `FollowActiveDocument` | 1: as A1 |
+  | W1 | the label taken out of the words file | 8: `ErrorLabelsCoverTheHostTests`' words-file case; the sentence's pin; and the six pane fixture tests, the committed fixtures no longer a fresh generation |
+  | W2 | the pin left on the old `review-waiting.json` | 3: `ReviewPageSendGateTests`' cases that read it |
+  | V1 | `TurnMayBeRunning`: no answer read as no turn | 1: the no-answer case |
+  | V2 | `TurnMayBeRunning`: asks with no backend process | 1: the no-backend case |
+  | V3 | the add-in's busy question: `AnyTurnRunning` again | 1: the add-in's source case |
+  | V4 | a review's request: the path compared canonically | 1: the attach's other spelling |
+  | V5 | a switch's follow: the configuration compared too | 2: a configuration switch during a start and once a hold ends |
+  | V6 | `FollowCore`: a throwing question drops what was owed meanwhile | 1: the switch made while the question was out |
+  | V7 | `FollowCore`: a throwing question owed and asked again a poll later | 3: the two "owes nothing" cases and the switch meanwhile |
+  | V8 | `Settle`: never looks | 2: the switch just after a look's reading, and the switch while a throwing question was out |
+  | V9 | `FollowActiveDocument`: owed only when it can be looked at at once | 1: the request during a start |
+  | V10 | `FollowNow`: its reading leaves what was asked meanwhile owed | 1: the switch back while the question is out |
+  | V11 | `FollowCore`: takes nothing before it asks | 1: the look whose question throws |
+  | V12 | `KeepCopyAttachment`: a plan closed at the plan keeps its copy's attachment | 5: four of T180's - a plan closed at the plan, another attachment or none, and the cleanup's - and the Start-off look that follows the copy |
+- **Evidence** (2026-10-20; before at `bd07f29`, after on the branch with the review's fixes): the C#
+  build, `--no-incremental`, at zero warnings both times; `SwReview.Extractor.Tests` 10,059 passed
+  before and after, and `SwReview.AddIn.Tests` 3,003 before and 3,071 after - the 68 cases of T166,
+  T168 and T171 - with the restart and tool-service classes and the stub-children collection, 853
+  cases, green five times in a row. One full run made while both Python suites ran beside it failed
+  `ReviewPageNarrowLayoutTests`' two cases, a page's layout timed under load, which 152A does not
+  touch; they passed alone and in the full run after. Python, not live, with
+  `SWREVIEW_REQUIRE_TOKENIZER=1`: 18,089 passed and 5 skipped before, and 18,090 passed and 5
+  skipped after - the label's pin - on 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`) alike.
+  `ruff check` clean, and no broken link.
+- **Tests**: T166 and T168 in [tasks.md](tasks.md), each written first; and the review's, T171.
