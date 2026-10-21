@@ -331,6 +331,39 @@ internal sealed class DeferredRestart : IDisposable
     }
 
     /// <summary>
+    /// Owner decision 153A, found on review (C1): the add-in's first start of the backend, made
+    /// under the lock every restart holds for its whole length, so the first start and a restart
+    /// never overlap, and whichever comes second sees what the first did - a first start made after
+    /// a save's restart finds the backend that restart started. Nothing is read, decided or recorded
+    /// here: <paramref name="start"/> does that, under the lock. A restart that waits when the first
+    /// start is made goes on waiting, and is made with the settings saved then, as before.
+    /// </summary>
+    /// <param name="start">Starts the backend if it should, and answers whether it did. Run under the
+    /// restart's lock.</param>
+    /// <returns>What <paramref name="start"/> answers.</returns>
+    /// <exception cref="ObjectDisposedException">Disposed - the add-in unloading: nothing is started.</exception>
+    public bool First(Func<bool> start)
+    {
+        if (start == null)
+        {
+            throw new ArgumentNullException(nameof(start));
+        }
+
+        lock (_restarting)
+        {
+            lock (_state)
+            {
+                if (_disposed)
+                {
+                    throw new ObjectDisposedException(nameof(DeferredRestart), "the add-in is unloading, so the backend was not started.");
+                }
+            }
+
+            return start();
+        }
+    }
+
+    /// <summary>
     /// Makes the waiting restart now if nothing holds it back, or waits for the one another caller
     /// is making. Never throws: a failure is reported through the callback and answered as
     /// <see cref="Outcome.Failed"/>, with the exception in <paramref name="failure"/>.

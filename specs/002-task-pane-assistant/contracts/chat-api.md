@@ -284,7 +284,9 @@ A running turn owns process state that is not on disk, so:
   model and effort that backend was started with, not the saved ones, so no `POST /sessions` pairs
   one provider's settings with another's credentials; the pane says the saved settings are not in
   force yet, and that saving again retries (amended 2026-10-20, owner decision 153A;
-  `pane-host-messages.md`, `ready` and `settings.save`).
+  `pane-host-messages.md`, `ready` and `settings.save`). The add-in's first start is made the
+  same way, under the host's restart lock with the settings saved then, and is not made at all
+  once a save has restarted the backend (amended on the second 153A review, the same day).
 - On any shutdown signal the server finalizes every live chat before exiting: it writes
   `turn.ended {reason: "error"}` when a turn was mid-flight, then `session.ended` with an
   `ended_at`, and saves `session.json`. A session is never left without an ended time

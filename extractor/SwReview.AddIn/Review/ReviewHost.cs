@@ -418,12 +418,13 @@ public sealed class ReviewHost : IDisposable
     /// was started with, and a session takes its provider, model and effort from these, never from
     /// the saved ones (<see cref="_settings"/>): a restart that fails before it stops the old
     /// backend leaves it up with its environment, and a session of the saved provider on it paired
-    /// one provider's settings with another's credentials. The add-in starts the backend with the
-    /// settings this host loads, just after building it (`SwReviewAddIn.StartReviewHost`), and every
-    /// later start is a restart this host makes, which sets these once it has succeeded and never
-    /// when it fails (<see cref="RestartWith"/>). Meaningful only while a backend is up: with none,
-    /// nothing is in force. Written under the restart's own lock and read from the page pump, a
-    /// whole reference either way.
+    /// one provider's settings with another's credentials. Every start of the backend goes through
+    /// this host - the add-in's first (<see cref="FirstStart"/>, found on review) and every restart -
+    /// and records these once it has succeeded, and never when it fails (<see cref="StartWith"/>).
+    /// Taken from the settings loaded when the host is built, which the first start is made with
+    /// unless a save comes first; meaningful only while a backend is up: with none, nothing is in
+    /// force. Written under the restart's own lock and read from the page pump, a whole reference
+    /// either way.
     /// </summary>
     private volatile UserSettings _inForce;
 
@@ -1614,16 +1615,56 @@ public sealed class ReviewHost : IDisposable
     }
 
     /// <summary>
-    /// Every restart this host makes - a save's made at once, and one made after it waited: the
-    /// backend restarted with <paramref name="settings"/>, which are in force once it has been
-    /// (owner decision 153A, <see cref="_inForce"/>). Not before: whatever the restart throws - a
-    /// turn the backend's own check found, which changed nothing, or a failure, before the old
-    /// backend stopped or after - leaves the settings in force as they were, and with no backend
-    /// up nothing is in force whatever they say. Called under the restart's own lock.
+    /// Owner decision 153A, found on review (C1): the add-in's first start of the backend, made through
+    /// <paramref name="start"/> - the backend client's own start - under the lock every restart this host
+    /// makes holds (<see cref="DeferredRestart.First"/>), and by the transition every restart records the
+    /// settings in force by (<see cref="StartWith"/>): with the settings saved at that moment and the key
+    /// resolved from them then, recorded once the start has succeeded. The add-in queues it when it
+    /// loads, and a save on the page pump can come first. One whose restart has started the backend is
+    /// left as it is - the first start finds it up and starts nothing - since a second start, with the
+    /// settings loaded, would replace it while the saved ones stay recorded, and one with the saved
+    /// settings would end any review already running on it. One whose restart failed left no backend,
+    /// and the first start makes one with the settings saved then. Throws what the start throws, having
+    /// recorded nothing, and <see cref="ObjectDisposedException"/> once the host is disposed.
     /// </summary>
-    private void RestartWith(UserSettings settings, ResolvedApiKey key)
+    /// <returns>True when this started the backend; false when a restart had started it already.</returns>
+    public bool FirstStart(Action<UserSettings, ResolvedApiKey> start)
     {
-        _options.Backend.Restart(settings, key);
+        if (start == null)
+        {
+            throw new ArgumentNullException(nameof(start));
+        }
+
+        return _restart.First(() =>
+        {
+            if (_options.Backend.Endpoint != null)
+            {
+                return false;
+            }
+
+            UserSettings settings = _settings;
+            StartWith(settings, settings.ResolveApiKey(_options.Environment), start);
+            return true;
+        });
+    }
+
+    /// <summary>
+    /// Every restart this host makes - a save's made at once, and one made after it waited: the
+    /// backend restarted with <paramref name="settings"/> (<see cref="StartWith"/>).
+    /// </summary>
+    private void RestartWith(UserSettings settings, ResolvedApiKey key) => StartWith(settings, key, _options.Backend.Restart);
+
+    /// <summary>
+    /// Every start of the backend this host makes - the add-in's first, and every restart: the backend
+    /// started through <paramref name="start"/> with <paramref name="settings"/>, which are in force once
+    /// it has been (owner decision 153A, <see cref="_inForce"/>). Not before: whatever the start throws -
+    /// a turn the backend's own check found, which changed nothing, or a failure, before the old backend
+    /// stopped or after - leaves the settings in force as they were, and with no backend up nothing is in
+    /// force whatever they say. Called under the restart's own lock.
+    /// </summary>
+    private void StartWith(UserSettings settings, ResolvedApiKey key, Action<UserSettings, ResolvedApiKey> start)
+    {
+        start(settings, key);
         _inForce = settings;
     }
 

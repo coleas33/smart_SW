@@ -542,9 +542,9 @@ public class SwReviewAddIn : ISwAddin
         _toolService.EnsureStarted();
         FollowActiveConfiguration();
 
-        UserSettings settings = _reviewHost.Settings;
-        ResolvedApiKey key = settings.ResolveApiKey();
-        ThreadPool.QueueUserWorkItem(_ => StartBackend(settings, key));
+        // The settings are read when the start is made, by the review host, not now (owner
+        // decision 153A, found on review): a save can come first, on the page pump.
+        ThreadPool.QueueUserWorkItem(_ => StartBackend());
     }
 
     /// <summary>
@@ -1030,7 +1030,14 @@ public class SwReviewAddIn : ISwAddin
             afterStopped: _ => _remodelHost?.RefreshAvailability());
     }
 
-    private void StartBackend(UserSettings settings, ResolvedApiKey key)
+    /// <summary>
+    /// The add-in's first start of the backend, on a worker thread. Made through the review host
+    /// (owner decision 153A, found on review): under the lock every settings restart holds, with the
+    /// settings saved when it is made, which the host records as the settings in force - and not at
+    /// all once a save's restart has started the backend, which it would replace
+    /// (<see cref="ReviewHost.FirstStart"/>).
+    /// </summary>
+    private void StartBackend()
     {
         try
         {
@@ -1040,7 +1047,7 @@ public class SwReviewAddIn : ISwAddin
             // opened yet is not a problem: `PageChannel` asks for the view per post and drops
             // the message when there is none.
             PostStatusToPages("backend_starting", "Starting the review backend...");
-            _backend?.Start(settings, key);
+            _reviewHost?.FirstStart((settings, key) => _backend?.Start(settings, key));
             PostStatusToPages("ready", "Backend ready.");
         }
         catch (Exception failure)
