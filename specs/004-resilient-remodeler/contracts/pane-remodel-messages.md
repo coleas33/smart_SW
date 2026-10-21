@@ -155,7 +155,14 @@ and Start refuses the plan by name.**
   `RunRootChosenNotInForce`, `RunRootChanged`, or `BackendUnavailable` while a start of the backend
   would bring another in) takes none, whether or not one was to be had: 154A judges the run root
   before anything is asked or made under it, and the hold asks the tool service (corrected on 152A's
-  final reviews, N1).
+  final reviews, N1). *Amended 2026-10-21 (owner decision 158A; 002 `research.md`, 158A):* a hold
+  holds back a follow for an hour at most (`ToolServiceGate.HoldLimit`), measured from when it was
+  taken. One held longer is ignored, and said once in the tool-service log by its holder's kind - a
+  plan's or a run's is "a Remodel plan or run" - and how long it held, never with a path. Nothing is
+  stopped: the plan or the run goes on, and the look then asks the busy question, which reads a plan
+  or a run in progress (`RemodelHost.RunInProgress`) first, so a follow still waits for it. A run is
+  not exempt and needs no exemption: an hour is three times its own twenty minutes (`RemodelLimits`),
+  so a working run's hold never meets it.
 - Start pressed twice after a re-attach is refused twice, identically, and leaves the host free to
   plan; the new plan is made on the attachment listening now and starts. A refused plan tracks no
   run, so a Start naming its folder is `RunNotFound`, and it neither rescues nor invalidates an

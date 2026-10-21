@@ -1109,7 +1109,12 @@ Two operational rules, and a third added by the owner's decision 22A (2026-09-25
   the tool service attaches and a Start as a lost session (`contracts/pane-remodel-messages.md`).
   *Noted 2026-10-21 (002 `research.md`, 152A, the merge of `main` and its final reviews, N5):* since
   the merge with 154A a plan and a Start hold from just after the run root is judged again, which
-  follows the gate, so a press refused for its run root holds nothing.
+  follows the gate, so a press refused for its run root holds nothing. *Amended 2026-10-21 (owner
+  decision 158A; 002 `research.md`, 158A):* a hold holds back a follow for an hour at most - three
+  times a run's twenty minutes - and one held longer is ignored and said in the tool-service log by
+  its holder's kind and how long it held. A plan or a run is not exempt and needs no exemption: the
+  look past the limit asks the busy question, which still reads it in progress, so the bridge is not
+  taken down under it.
 
 ---
 

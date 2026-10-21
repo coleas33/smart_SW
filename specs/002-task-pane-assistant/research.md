@@ -2233,7 +2233,12 @@ T206, landed on `main` first; the commits that made them carry their first numbe
   at once, or once the hold ends - keeping the planned copy's attachment as any follow does. So
   "retryable" is true: pressed again once the bridge is on the review's document, every start goes
   ahead with it (pinned for each). One refusal it does not clear: a review of a waiting plan's copy,
-  whose attachment the plan keeps (What is left).
+  whose attachment the plan keeps (What is left). *Settled by decision 158A (2026-10-21, "2A"):* the
+  owner confirms the extension, asked as 152A's seventh question: a start refused
+  `BridgeOnAnotherDocument` asks the tool service to follow, having first let go of any hold it took.
+  Pinned, unchanged, by `DeferredRestartTests.AStartEndedAtItsSessionLetsGoOfItsHold` (its bridge
+  moved: the follow asked once, with no hold held) and by section 15's refusal cases, each of which
+  asks it once (158A, below).
 - **The class and its label**: the Review page shows a class's label first and the message in a
   fold, and every class the host sends has one (`ErrorLabelsCoverTheHostTests`). Weighed:
   - `NotAttached` ("The add-in is not attached to SOLIDWORKS yet. Wait a moment, then try
@@ -2346,7 +2351,11 @@ T206, landed on `main` first; the commits that made them carry their first numbe
      through the tool service's scope, walked in the configuration attached to) answer about the
      configuration now active, at the cost of a session's pipe closed under it and a plan made on its
      original part's attachment lost on such a switch (22A); or keep the attached configuration until
-     a review asks or a document switch re-attaches, as now.
+     a review asks or a document switch re-attaches, as now. *Settled by decision 158A (2026-10-21,
+     "2A"):* kept as now - a configuration switch is followed only when a review asks, or once a
+     document switch re-attaches; the add-in's one fan-out of a document or configuration change asks
+     the gate to follow by the path alone, and only the review host asks it to follow the active
+     configuration (158A, below).
   2. A review pressed while the tool service is between two attachments runs with no live checks,
      which its coverage says. Refuse it as `BridgeOnAnotherDocument` while a follow is in flight -
      the gate knows - or leave it?
@@ -2731,7 +2740,11 @@ T206, landed on `main` first; the commits that made them carry their first numbe
   another document; they hand the backend no bridge and run no live check, and their reply could
   name what the dump says it extracted. Older than 152A.
 - **Owner questions** (recorded 2026-10-21, behaviour unchanged): 6. Bound a hold in the gate - let
-  go after a time whatever its holder does - or keep each holder's own bound, as now?
+  go after a time whatever its holder does - or keep each holder's own bound, as now? *Settled by
+  decision 158A (2026-10-21, "2A"):* bounded in the gate - a hold held longer than an hour
+  (`ToolServiceGate.HoldLimit`) no longer holds back a follow, and is said once in the tool-service log
+  by its holder's kind and how long it held; its work goes on, and its holder letting it go later lets
+  go of nothing more (158A, below).
 - **Mutations**: each fix taken out once, by one exact replacement, the tree rebuilt for the C#
   ones, the named cases run - `SwSessionActiveConfigurationTests`, `SwSessionReadOnlyOpenTests`,
   `BridgeDispatcherTests` and `BridgeTessellateTests`, 161 cases, for the extractor's;
@@ -4448,3 +4461,210 @@ Windows' own words (`RunFolderFailed`). The probe's reading is unchanged and tru
 - **Question**: Other words in 002 still describe the hidden Terminal tab as shown, and a test's fictional Windows path has an invalid escape.
 - **Decision**: Add dated notes wherever the spec describes that tab, built and hidden since 2026-09-19, and fix invalid Python escapes without changing values or product behaviour.
 - **Change**: Annotated `spec.md` and settled 011's research R13.5 item 2; audited `reviewer/tests/` and `reviewer/src/` and made the affected test literal raw with the same value.
+
+### 158A. A hold on the tool service's attachment holds back a follow for an hour at most, and 152A's two follow rules stand (2026-10-21)
+
+- **Question**: 152A left three things with the owner (152A, above): the extension it made to its
+  decision's words, that a start refused for its bridge asks the tool service to follow (Asking the
+  tool service to follow, asked as 152A's seventh question); whether to bound a hold in the gate,
+  since nothing did and a holder that never let go would keep the tool service on its document for
+  good (owner question 6, from the review of the Codex fixes, N7); and whether to follow a
+  configuration switch at the switch (owner question 1).
+- **Decision** (owner decision 158A, "2A", 2026-10-21): "152A's bridge questions, test first, with
+  adversarial reviews: a start refused for its bridge asking the tool service to follow is
+  confirmed; a hold on the attachment gets a generous time limit, logged, so a holder that never lets
+  go cannot stop the follow for ever; and a configuration switch is still followed only when a review
+  asks."
+
+**1. A start refused for its bridge asks the tool service to follow: confirmed.**
+
+- **What stands**: 152A's extension, now the owner's (the dated note on Asking the tool service to
+  follow, above). A start refused `BridgeOnAnotherDocument` - a new review before its run folder is
+  made, or any start at its session - asks the gate to follow the active document
+  (`ReviewHostOptions.FollowActiveDocument`, the gate's `FollowActiveDocument`); at its session it
+  first lets go of the hold it took, which a hold still held would put off a poll.
+- **Pinned, unchanged**: `DeferredRestartTests.AStartEndedAtItsSessionLetsGoOfItsHold`, its case "its
+  bridge moved", asks the follow once with no hold held (152A's YV3), and section 15's refusal cases
+  each ask it once (152A's R7). Both mutations were run again on this branch (E1 and E2, below), red.
+- **Nothing changed**, in code or in words.
+
+**2. A hold holds back a follow for an hour at most.**
+
+- **How**: every hold carries its holder's kind and when it was taken, on the gate's clock
+  (`ToolServiceGate.HoldAttachment(ToolServiceHolder)`, and `_held`, a list of the holds, in place of
+  their count). A follow, as it notes the holds before its busy question, takes out every hold held
+  longer than `ToolServiceGate.HoldLimit` (`TakeHoldsPastTheLimit`), says each in the tool-service log
+  once its lock is let go, and decides by the holds left, as before: with none it asks the busy
+  question, and with one it is busy without asking. A follow owed while a hold holds is looked at
+  every second (152A), so a stuck hold is let past within a poll of the limit; with no follow owed
+  nothing reads the holds, and a stuck hold holds nothing back until a switch or a review's request
+  makes a follow.
+- **The limit, and why an hour**: each holder bounds its own hold, and the gate's limit must be well
+  past the longest.
+
+  | Holder | Its own bound |
+  |---|---|
+  | A remodel run | its executor's twenty minutes of wall clock (004, `RemodelLimits.MaxMinutes`), read before each change; the hold also covers the last change, the verifying dump and the session's close |
+  | A remodel plan | its calls, the re-modeler's client's 30 seconds each, and its dump of the copy |
+  | A review session's start | until `POST /sessions` gives up, the backend client's 30 seconds |
+  | A page call that starts a turn | the proxy's 120 seconds |
+
+  An hour is three times a run's twenty minutes, thirty times a turn call's bound and a hundred and
+  twenty times a session start's: a working hold never meets it, and a holder that never lets go
+  holds the follow back an hour and a poll, not for ever. Shorter - five minutes would still be more
+  than twice a turn call - would cut through a working run's hold, leaving the run to the busy
+  question alone, which it would survive (below), and would write the line for a healthy run, burying
+  the one that matters. Longer - a day - would keep the tool service on the old document that long
+  behind a hold that will never be let go, every review of another document refused
+  `BridgeOnAnotherDocument` meanwhile. `TheHoldLimitIsAnHourAndThreeTimesEveryHoldersOwnBound` reads
+  each bound from its own source - the clients' `CallTimeout`s and `RemodelLimits.Default` - so a
+  bound raised past a third of the limit fails there, for the limit to be weighed again.
+- **What expiry does not do**: it ends nothing. The gate has no handle on a holder's work and stops
+  none, and the hold stays its holder's to let go. It only stops the hold holding back a follow,
+  which then asks the busy question as for no hold - so a turn running, or a remodel plan or run in
+  progress, still keeps the bridge.
+- **A holder that lets go later**: its hold was taken out of the holds when it was ignored, so
+  letting it go lets go of nothing - of no other hold, which a count of holds would have let go of in
+  its place, the reason the count became a list - and says nothing, its line written when it was
+  ignored. Letting it go twice does nothing either, as before. A hold let go past the limit before any
+  follow found it was never ignored, and is said nowhere.
+- **A real remodel run: covered by the margin, not exempt.** A run holds through
+  `RemodelHostOptions.HoldToolService` from its Start until its session is closed, and is in progress
+  for as long (`RemodelHost.RunInProgress`, marked through `RemodelHostOptions.BeginRun`), which the
+  add-in's busy question reads first. Only a run three times its own bound could hold past the limit,
+  and even then its hold is ignored and said, and the look asks the busy question, which answers busy
+  for as long as the run runs: the bridge is not taken down under it, and the switch is followed once
+  it ends (`RemodelHostTests.ThroughTheGateARunHeldPastTheHoldLimitIsStillNotTakenDownUnder`).
+  The hold exists for the moment the busy question cannot see - a plan or a run that began while it
+  was out (152A's X2) - long past by then. An exemption would protect nothing the busy question does
+  not, and would leave one holder that could hold the follow back for ever, which the decision rules
+  out. A plan is the same: in progress through `BeginRun` until the host is free.
+- **No race with a new hold**: the limit is each hold's own, from when it was taken, so a hold taken
+  the moment another passes the limit holds the bridge - one taken before the follow notes the holds
+  is held then, and one taken while its busy question is out is a hold taken since it noted them,
+  which keeps the bridge (152A's X2, `FollowNow`, unchanged). Ignoring a hold changes neither the
+  count of holds taken nor that check.
+- **The clock**: a stopwatch of the gate's own, a clock that only goes forward, so a change of the
+  system's time neither ages a hold nor keeps one young; read under the gate's lock, where it waits
+  for nothing (145A's and 153A's lock rules, and 155A's lesson in 004 research R18: never wait on
+  the SOLIDWORKS application thread while holding a lock). Injectable (`clock`), as the poll's
+  `later` is, so the cases decide by the clock they move; and so is the limit (`holdLimit`), so that
+  one case can see the gate's own clock age a hold in a quarter of a second. The add-in passes
+  neither (pinned from its source).
+- **The line**: written to the tool-service log of the attachment the hold was on - the service the
+  follow is looking at, which no follow can have replaced while the hold held - beside the line a
+  skipped switch writes, since it is a fact about that attachment: `ignoring a hold by a review
+  session's start: held for 1:01:01, longer than the 1:00:00 limit, so it no longer holds back
+  following the active document; its work is not stopped`. The kind is one of three fixed phrases and
+  the times are the gate's own, so no path or document name can reach it; the hours run on past a
+  day. Once per hold, outside the lock, as the gate's other lines are. Not to the add-in log: nothing
+  failed, and the pane has nothing to show the engineer.
+- **The holder's kind**: three, one per host the add-in hands the hold to (`ToolServiceHolder`): a
+  review session's start (`ReviewSession`), a page call that starts a turn (`TurnCall`), and a Remodel
+  plan or run (`Remodel`) - the Remodel host takes its one hold, through one option, for either, and
+  the Remodel tab's own records say which was in flight. The add-in names each; the hosts are
+  unchanged.
+- **What is left** (recorded, not changed):
+  - The busy question is not bounded by this decision: a turn the backend says runs, or gives no
+    usable answer about (152A's R1), and a remodel plan or run in progress keep a follow owed for as
+    long as they do. Each is bounded where it runs - the backend's turn, the executor's twenty
+    minutes - and a remodel run whose poll never ended would keep `RunInProgress` with it. The
+    decision's words are about holds.
+  - A review session's start whose hold is ignored - possible only if `POST /sessions` outlived its
+    30 seconds by an hour - has its bridge taken down under its checks if the active document has
+    moved on, since its session is not yet tracked for the busy question to see: failed coverage, as
+    for any closed pipe, and no other document's evidence. That is the decision's trade: a holder that
+    never lets go does not keep the bridge for ever.
+  - While a stuck hold holds - an hour at most - a review of another document is refused
+    `BridgeOnAnotherDocument` and its request to follow waits; reloading the add-in clears it sooner.
+- **Owner questions** (recorded 2026-10-21, behaviour as decided):
+  1. The hour: kept, or another time? Its floor is a remodel run's twenty minutes with its tail, and
+     what it costs is how long a holder that never lets go keeps the tool service on the old document.
+  2. Name a remodel plan and a remodel run apart in the line? The Remodel host takes its one hold
+     through one option for either, so the add-in names both "a Remodel plan or run"; telling them
+     apart would give the host's hold option the kind, a change to the Remodel host.
+  3. Bound the busy question too - a turn the backend says runs, or a remodel run in progress, for
+     longer than some time - or leave each to its own bound, as now?
+  4. Say an ignored hold somewhere besides the tool-service log - the add-in log, or the pane?
+- **Existing cases changed deliberately**: every hold names its holder, so 152A's X2 cases in
+  `ToolServiceWiringTests`, `DeferredRestartTests`' three real-gate holds and the Remodel world's hold
+  name one, and `TheAddInsReviewSessionsRemodelRunsAndTurnCallsHoldTheBridgeThroughTheGate` pins the
+  kind each of the add-in's three wirings names (tightened). What each pinned is unchanged. 152A's
+  YG6 - a hold let go twice lets go twice - is an equivalent mutation now (below): a hold is taken
+  out of the holds by itself, which lets go once however often it is asked. The guard that makes a
+  second letting go do nothing (`Interlocked.Exchange` in `Hold.Dispose`) stays, and
+  `LettingAHoldGoTwiceLetsItGoOnce` still pins what it pinned.
+
+**3. A configuration switch is followed only when a review asks: confirmed.**
+
+- **What stands**: today's behaviour (152A's owner question 1, settled above). The add-in's one
+  fan-out of a document or a configuration change asks the gate to follow by the active document's
+  path (`FollowDocument`), and a configuration switch, the same path, re-attaches nothing - at the
+  switch, during a start or once a hold ends; the gate follows the active configuration only on a
+  review's request (`FollowActiveDocument`), which the review host makes when a start finds its bridge
+  on another document or configuration.
+- **Pinned**: the gate's half by 152A's `ToolServiceWiringTests.AReviewsRequestFollowsTheActiveConfigurationWhichASwitchAloneDoesNot`
+  and `AConfigurationSwitchReattachesNothingWhereverItLands`, and by
+  `RemodelHostTests.ThroughTheGateAConfigurationSwitchReattachesNothingAndTellsNothing`. The add-in's
+  half had none - a fan-out that asked the gate to follow the active configuration left every case
+  green - and has one now, read from its source:
+  `ToolServiceWiringTests.TheAddInFollowsAConfigurationSwitchOnlyWhenAReviewAsks`.
+
+**Tests**: T250 and T252 in [tasks.md](tasks.md), written first - but T250's case of every hold past
+the limit said at one look, written after and red under HB18 - and T253's named pins.
+
+**Mutations**: each taken out once, by one exact replacement, the tree rebuilt, the tool-service,
+restart, review, remodel, context and proxy classes run - `ToolServiceWiringTests`,
+`RemodelHostTests`, `DeferredRestartTests`, `ReviewHostTests`, `EngineeringContextHostTests` and
+`BackendProxyHandlerTests`, 1,051 cases, 1,052 once the case written after was added - and the file
+restored byte for byte (checked by its sha256): the fix's 18 (HB1 to HB18), 74 red results; the
+configuration rule's three (C1 to C3), 4; the extension's two, run again (E1, E2), 25; and 152A's
+holds, run again on the list that replaced their count (YG1r to YG6r) - every one red but YG6r,
+equivalent now (above). One full pass under HB6 also failed a restart case HB6 cannot reach - it
+changes a branch taken only when a hold was ignored, and no hold ages in that class - while other
+work loaded the machine; HB6 run again was red in its own five cases alone, and the restart case
+passed then and in every run after, the five below among them.
+
+| Id | Taken out | Red |
+|---|---|---|
+| HB1 | `TakeHoldsPastTheLimit`: no hold is ever past the limit | 11: the stuck hold, the hold at the limit, the line's three kinds, said once, let go after, the two races, the gate's own clock, and the run held past the limit |
+| HB2 | a hold that has held the limit exactly is past it too | 1: the hold at the limit |
+| HB3 | a hold's age read from the clock's zero, not from when it was taken | 4: the hold at the limit, let go after, and the two races - a hold taken late read as old |
+| HB4 | every hold taken out once one is past the limit | 2: let go after, and the race as the follow looks |
+| HB5 | an ignored hold left among the holds | 9: the stuck hold, the hold at the limit, the line's three kinds, said once, the two races, and the gate's own clock |
+| HB6 | past the limit, the follow made free without the busy question | 5: the stuck hold, the hold at the limit, said once, the race while the question is out, and the run held past the limit |
+| HB7 | the line not written | 8: the line's three kinds, said once, let go after, the two races, and the run held past the limit |
+| HB8 | the line names the document attached to | 3: the line's three kinds |
+| HB9 | the hours wrapped at a day | 1: said once, after 26 hours |
+| HB10 | letting go of an ignored hold lets go of another | 1: let go after |
+| HB11 | the gate's own clock stands still | 1: the gate's own clock |
+| HB12 | the gate's own limit not the hour | 9: the stuck hold, the hold at the limit, the line's three kinds, let go after, the two races, and the run held past the limit |
+| HB13 | the hour lowered to thirty minutes | 7: the stuck hold, the line's three kinds, let go after, the limit's value, and the run held past the limit |
+| HB14 | the add-in passes a limit of its own | 1: the add-in's gate |
+| HB15 | the add-in names a review session's hold as the Remodel host's | 1: the add-in's wiring |
+| HB16 | every hold taken at the clock's zero, not when it was taken | 4: the hold at the limit, let go after, and the two races |
+| HB17 | every hold named a review session's start, whatever holds | 5: the line's two other kinds, said once, let go after, and the run held past the limit |
+| HB18 | the hold after one taken out skipped, left for a later look | 1: every hold past the limit said at one look, written after |
+| C1 | the fan-out of a document or configuration change asks the gate to follow the active configuration | 1: the add-in's configuration case |
+| C2 | a configuration change also asks the gate to follow the active configuration | 1: as C1 |
+| C3 | a switch's follow compares the configuration too (152A's V5, again) | 2: a configuration switch during a start and once a hold ends |
+| E1 | a start refused for its bridge asks the follow while it holds (152A's YV3, again) | 1: its bridge moved, the follow asked with no hold held |
+| E2 | a start refused for its bridge asks the tool service to follow nothing (152A's R7, again) | 24: section 15's refusal cases and the same starts pressed again, the bridge moved during the extraction, the bridge no hold can be had on, the hold let go before the follow, and the add-in's configuration case, its one other caller gone |
+| YG1r | `HoldAttachment`: a hold taken is not among the holds (152A's YG1) | 16: 152A's held-follow cases, the session asked for as a re-attach ends, and 158A's |
+| YG4r | `FollowCore`: a hold held when a follow begins is not busy (YG4) | 15: as YG1r, but for the run held past the limit, whose run the busy question still reads |
+| YG5r | `LetGo`: a hold let go is still held (YG5) | 23: every case that follows once a hold is let go - 152A's gate cases, the two sessions, T180's four, the plan and run races and the Remodel looks - and 158A's |
+| YG6r | `Hold.Dispose`: a hold let go twice lets go twice (YG6) | none: equivalent now |
+
+**Evidence** (2026-10-21, on the branch from `5a58988`): the C# build, `--no-incremental`, at zero
+warnings before, after, and once every mutation was restored; `SwReview.Extractor.Tests` 10,086
+passed before and after, and `SwReview.AddIn.Tests` 3,540 before and 3,556 after - T250's fifteen
+cases and T252's one - `RemodelPageContractTests`, which reads 004's `pane-remodel-messages.md`,
+among them; the restart and tool-service classes with the stub-children collection and
+`RemodelHostTests` (`DeferredRestartTests`, `OtherTabsBackendRestartTests`,
+`ReviewPageBackendRestartTests`, `TabPagesBackendRestartTests`, `ToolServiceWiringTests`,
+`InProcPipeServerTests`, `BackendClientSessionBodyTests`, `BackendProcessTests`,
+`ProcessLifetimeTests` and `RemodelHostTests`), 1,071 cases, five times in a row. Python, the tests
+that read the changed records - `test_workstation_test_plan.py`, which reads every `tasks.md`, and
+`test_remodel_client.py`, which reads `bridge-remodel.md` - 308 passed on 3.12 (3.12.3) and on 3.11
+(3.11.16, `--isolated`, every extra), with `SWREVIEW_TOKENIZER_DIR` set; no Python changed, and
+`ruff check` clean. No broken link, and every changed file `i/lf`.
