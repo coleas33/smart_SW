@@ -427,7 +427,8 @@ public class SwReviewAddIn : ISwAddin
             // Owner decision 157A: a check page's evaluation holds its check's hold on a settings restart
             // while it is out. The folder it names is one check host's at most, and the other answers none.
             // Read through the fields: both hosts are built after this pane.
-            HoldCheckEvaluation = runDirectory => _modelCheckHost?.HoldEvaluation(runDirectory) ?? _standardsHost?.HoldEvaluation(runDirectory),
+            HoldCheckEvaluation = (runDirectory, token) =>
+                _modelCheckHost?.HoldEvaluation(runDirectory, token) ?? _standardsHost?.HoldEvaluation(runDirectory, token),
         });
 
         _panel = _pane.Actions;
@@ -679,7 +680,7 @@ public class SwReviewAddIn : ISwAddin
                 RestartAhead = () => _reviewHost?.RestartAhead == true,
 
                 // The reviews of 157A: the page's minute from when its reply reached it, and an evaluation
-                // held up past it taken back while the backend its check began on is still the one up.
+                // held up past it taken back while it carries the token of the backend up now.
                 AfterPosts = AfterPagePosts,
                 WhileNoRestartRuns = WhileNoRestartRuns,
             },

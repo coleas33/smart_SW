@@ -162,12 +162,12 @@ public sealed class TaskPaneOptions
 
     /// <summary>
     /// Owner decision 157A: the hold a Model check or a Standards check keeps on a settings restart, taken over for a
-    /// check page's evaluation of the check whose run is in the folder it names while the call is out
-    /// (<see cref="BackendProxyHandler"/>), or null when no check waits for that evaluation, and the call goes on as
-    /// before. The add-in answers it through the two check hosts, a callback for the reason <see cref="Backend"/> is
-    /// one: the pane is built before them. By default no check holds anything.
+    /// check page's evaluation of the check whose run is in the folder it names, asked with the bearer token the
+    /// evaluation carries, while the call is out (<see cref="BackendProxyHandler"/>), or null when no check waits for
+    /// that evaluation, and the call goes on as before. The add-in answers it through the two check hosts, a callback
+    /// for the reason <see cref="Backend"/> is one: the pane is built before them. By default no check holds anything.
     /// </summary>
-    public Func<string, IDisposable?> HoldCheckEvaluation { get; set; } = _ => null;
+    public Func<string, string?, IDisposable?> HoldCheckEvaluation { get; set; } = (_, __) => null;
 
     private static string DefaultWebFolder() =>
         Path.Combine(Path.GetDirectoryName(typeof(TaskPaneOptions).Assembly.Location) ?? ".", "web");
@@ -395,7 +395,7 @@ public sealed class TaskPaneControl : UserControl
             request => _options.ProxySend(request),
             () => _options.PageTurnRefusal(),
             () => _options.HoldToolService(),
-            runDirectory => _options.HoldCheckEvaluation(runDirectory));
+            (runDirectory, token) => _options.HoldCheckEvaluation(runDirectory, token));
         _files = new PageFileServer(_options.WebFolder);
 
         _reviewTab = NewTab("Review", ReviewPurpose, Note("Starting the review page..."));

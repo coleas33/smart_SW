@@ -2183,7 +2183,7 @@ public sealed class ToolServiceWiringTests
         // after the bridge's hold, which is pinned as before.
         string pane = Regex.Replace(File.ReadAllText(Path.Combine(addIn, "TaskPaneControl.cs")), @"\s+", " ");
         Assert.Contains(
-            "_proxy = new BackendProxyHandler( () => _options.Backend(), request => _options.ProxySend(request), () => _options.PageTurnRefusal(), () => _options.HoldToolService(), runDirectory => _options.HoldCheckEvaluation(runDirectory));",
+            "_proxy = new BackendProxyHandler( () => _options.Backend(), request => _options.ProxySend(request), () => _options.PageTurnRefusal(), () => _options.HoldToolService(), (runDirectory, token) => _options.HoldCheckEvaluation(runDirectory, token));",
             pane,
             StringComparison.Ordinal);
     }

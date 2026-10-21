@@ -594,7 +594,7 @@ public sealed class BackendProxyHandlerTests
             },
             () => null,
             () => null,
-            runDirectory =>
+            (runDirectory, _) =>
             {
                 asked.Add(runDirectory);
                 return holds.Take();
@@ -608,6 +608,50 @@ public sealed class BackendProxyHandlerTests
         Assert.Equal(1, heldWhileOut);
         Assert.Equal(0, holds.Held);
         Assert.Equal(body, sent);
+    }
+
+    /// <summary>
+    /// The final reviews of 157A: the evaluation is held asking with the bearer token it carries - the token of the
+    /// backend that gave its page its `init`, which only that backend takes - read from its `Authorization` header
+    /// whatever the case of the header's name and of its scheme; and with none when it carries none, or carries
+    /// another scheme or an empty token. The header reaches the backend as the page sent it.
+    /// </summary>
+    [Theory]
+    [InlineData("Authorization", "Bearer FICT-token-7", "FICT-token-7")]
+    [InlineData("authorization", "bearer FICT-token-7", "FICT-token-7")]
+    [InlineData("Authorization", "Basic FICT-token-7", null)]
+    [InlineData("Authorization", "Bearer ", null)]
+    [InlineData("", "", null)]
+    public void ACheckEvaluationIsHeldAskingWithTheTokenItCarries(string name, string value, string? expected)
+    {
+        var asked = new List<string?>();
+        string? authorization = "none sent";
+        var handler = new BackendProxyHandler(
+            () => Endpoint,
+            request =>
+            {
+                authorization = request.Headers
+                    .Where(header => string.Equals(header.Key, "Authorization", StringComparison.OrdinalIgnoreCase))
+                    .Select(header => header.Value)
+                    .FirstOrDefault();
+                return Json(201, "Created", "{}");
+            },
+            () => null,
+            () => null,
+            (_, token) =>
+            {
+                asked.Add(token);
+                return null;
+            });
+        var headers = name.Length == 0
+            ? new List<KeyValuePair<string, string>>()
+            : new List<KeyValuePair<string, string>> { new KeyValuePair<string, string>(name, value) };
+
+        handler.TryServe(
+            Prefix + "/checks/rms", "POST", headers, new MemoryStream(Encoding.UTF8.GetBytes("{\"run_dir\":\"FICT-run\"}")));
+
+        Assert.Equal(new[] { expected }, asked.ToArray());
+        Assert.Equal(name.Length == 0 ? null : value, authorization);
     }
 
     /// <summary>The check's hold is let go however its evaluation ends: answered, refused by the backend, unreachable, refused by this side, or with no backend.</summary>
@@ -638,7 +682,7 @@ public sealed class BackendProxyHandlerTests
             },
             () => null,
             () => null,
-            _ => holds.Take());
+            (_, __) => holds.Take());
 
         ProxiedResponse? response = handler.TryServe(
             Prefix + "/checks/standards", "POST", null, new MemoryStream(Encoding.UTF8.GetBytes("{\"run_dir\":\"FICT-run\"}")));
@@ -679,7 +723,7 @@ public sealed class BackendProxyHandlerTests
             },
             () => null,
             () => null,
-            _ =>
+            (_, __) =>
             {
                 asked++;
                 return new CountedHolds().Take();
@@ -714,7 +758,7 @@ public sealed class BackendProxyHandlerTests
             },
             () => null,
             () => null,
-            _ => why == "no hold to be had" ? null : throw new InvalidOperationException("FICT the host broke"));
+            (_, __) => why == "no hold to be had" ? null : throw new InvalidOperationException("FICT the host broke"));
 
         ProxiedResponse? response = handler.TryServe(
             Prefix + "/checks/rms", "POST", null, new MemoryStream(Encoding.UTF8.GetBytes("{\"run_dir\":\"FICT-run\"}")));
@@ -748,7 +792,7 @@ public sealed class BackendProxyHandlerTests
                 _ => Json(200, "OK", "{}"),
                 () => null,
                 () => null,
-                _ =>
+                (_, __) =>
                 {
                     asked++;
                     return null;

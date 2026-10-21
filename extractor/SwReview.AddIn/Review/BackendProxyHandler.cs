@@ -93,7 +93,7 @@ public sealed class BackendProxyHandler
     private readonly Func<ProxiedRequest, ProxiedResponse> _send;
     private readonly Func<BackendRequestException?> _turnRefusal;
     private readonly Func<IDisposable?> _holdTheBridge;
-    private readonly Func<string, IDisposable?> _holdTheCheck;
+    private readonly Func<string, string?, IDisposable?> _holdTheCheck;
 
     public BackendProxyHandler(Func<BackendEndpoint?> endpoint, Func<ProxiedRequest, ProxiedResponse> send)
         : this(endpoint, send, () => null)
@@ -125,7 +125,7 @@ public sealed class BackendProxyHandler
         Func<ProxiedRequest, ProxiedResponse> send,
         Func<BackendRequestException?> turnRefusal,
         Func<IDisposable?> holdTheBridge)
-        : this(endpoint, send, turnRefusal, holdTheBridge, _ => null)
+        : this(endpoint, send, turnRefusal, holdTheBridge, (_, __) => null)
     {
     }
 
@@ -134,16 +134,17 @@ public sealed class BackendProxyHandler
     /// <param name="turnRefusal">As above.</param>
     /// <param name="holdTheBridge">As above.</param>
     /// <param name="holdTheCheck">Owner decision 157A: asked, per evaluation of a check - `POST /checks/rms` or
-    /// `/checks/standards` - with the run folder its body names, for the hold that check keeps on a settings
-    /// restart, which is let go once the evaluation is answered, however it is. Null - no check waits for that
-    /// evaluation - sends it on unheld, as before; and so does a host that throws, since an evaluation refused
+    /// `/checks/standards` - with the run folder its body names and the bearer token it carries (the final reviews of
+    /// 157A: the backend that will answer it is the one whose token it is), for the hold that check keeps on a
+    /// settings restart, which is let go once the evaluation is answered, however it is. Null - no check waits for
+    /// that evaluation - sends it on unheld, as before; and so does a host that throws, since an evaluation refused
     /// would waste the very extraction the hold exists to keep.</param>
     public BackendProxyHandler(
         Func<BackendEndpoint?> endpoint,
         Func<ProxiedRequest, ProxiedResponse> send,
         Func<BackendRequestException?> turnRefusal,
         Func<IDisposable?> holdTheBridge,
-        Func<string, IDisposable?> holdTheCheck)
+        Func<string, string?, IDisposable?> holdTheCheck)
     {
         _endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
         _send = send ?? throw new ArgumentNullException(nameof(send));
@@ -221,7 +222,7 @@ public sealed class BackendProxyHandler
         IEnumerable<KeyValuePair<string, string>>? headers,
         byte[]? body)
     {
-        IDisposable? hold = HoldTheCheck(RunDirectoryOf(body));
+        IDisposable? hold = HoldTheCheck(RunDirectoryOf(body), BearerTokenOf(headers));
         try
         {
             return Forward(requestUri, method, headers, body);
@@ -233,11 +234,12 @@ public sealed class BackendProxyHandler
     }
 
     /// <summary>
-    /// The host's hold of the check whose run is in <paramref name="runDirectory"/>, or null: no folder named, no check
-    /// waiting for its evaluation, or a host that throws - which leaves the evaluation as it was before 157A, since an
-    /// evaluation refused would waste the very extraction the hold exists to keep.
+    /// The host's hold of the check whose run is in <paramref name="runDirectory"/>, asked with the bearer
+    /// <paramref name="token"/> the evaluation carries, or null: no folder named, no check waiting for its evaluation,
+    /// or a host that throws - which leaves the evaluation as it was before 157A, since an evaluation refused would
+    /// waste the very extraction the hold exists to keep.
     /// </summary>
-    private IDisposable? HoldTheCheck(string? runDirectory)
+    private IDisposable? HoldTheCheck(string? runDirectory, string? token)
     {
         if (runDirectory == null)
         {
@@ -246,12 +248,38 @@ public sealed class BackendProxyHandler
 
         try
         {
-            return _holdTheCheck(runDirectory);
+            return _holdTheCheck(runDirectory, token);
         }
         catch (Exception)
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// The final reviews of 157A: the bearer token a page's call carries in its `Authorization` header - the token of
+    /// the backend that gave the page its `init`, which only that backend takes - or null when it carries none.
+    /// </summary>
+    private static string? BearerTokenOf(IEnumerable<KeyValuePair<string, string>>? headers)
+    {
+        const string Scheme = "Bearer ";
+        if (headers == null)
+        {
+            return null;
+        }
+
+        foreach (KeyValuePair<string, string> header in headers)
+        {
+            if (string.Equals(header.Key, "Authorization", StringComparison.OrdinalIgnoreCase)
+                && header.Value != null
+                && header.Value.StartsWith(Scheme, StringComparison.OrdinalIgnoreCase))
+            {
+                string token = header.Value.Substring(Scheme.Length).Trim();
+                return token.Length == 0 ? null : token;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

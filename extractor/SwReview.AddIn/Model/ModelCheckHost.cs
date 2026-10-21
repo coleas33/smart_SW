@@ -291,7 +291,7 @@ public sealed class ModelCheckHost : IDisposable
     /// The pane's proxy takes over the hold of the check whose run it evaluates, while the evaluation is out (owner
     /// decision 157A, <see cref="CheckPaneHost.HoldEvaluation"/>); null when no check of this tab waits for it.
     /// </summary>
-    public IDisposable? HoldEvaluation(string runDirectory) => _pane.HoldEvaluation(runDirectory);
+    public IDisposable? HoldEvaluation(string runDirectory, string? token) => _pane.HoldEvaluation(runDirectory, token);
 
     public void Dispose() => _pane.Dispose();
 

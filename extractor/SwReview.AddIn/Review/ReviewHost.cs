@@ -2343,8 +2343,8 @@ public sealed class ReviewHost : IDisposable
     /// Owner decision 157A, the reviews: runs <paramref name="step"/> while no settings restart can begin or be made,
     /// making none, and answers its answer (<see cref="DeferredRestart.WhileNoneRuns"/>); false once the host is
     /// disposed. A check's evaluation takes back a hold whose time has passed in it, from the pane's proxy, if the
-    /// backend its check began on is still the one up - so a page held up past its minute is still held, unless a
-    /// restart was made meanwhile.
+    /// token it carries is the token of the backend up now - so a page held up past its minute is still held, unless
+    /// a restart was made meanwhile or the backend stopped.
     /// </summary>
     public bool WhileNoRestartRuns(Func<bool> step) => _restart.WhileNoneRuns(step);
 

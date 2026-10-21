@@ -182,6 +182,14 @@ public sealed class CheckHoldOptions
     public static readonly TimeSpan DefaultHandOverLimit = TimeSpan.FromSeconds(60);
 
     /// <summary>
+    /// The final reviews of 157A: the outer bound on a run handed to the page, an hour - how long its hold waits for
+    /// the reply to reach the page, and how long after the hand-over an evaluation held up past its minute can take
+    /// the hold back. Far past any delivery the application thread can hold up, so a mark of delivery that never
+    /// comes, its pane's window gone with it queued, holds no restart back for good.
+    /// </summary>
+    public static readonly TimeSpan DeliveryLimit = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// A clock that only goes forward, for the <see cref="HandOverLimit"/>: <see cref="MonotonicClock"/> by default,
     /// which no change of the wall clock moves, and which the add-in runs with. Injected so the limit is testable.
     /// </summary>
@@ -354,8 +362,10 @@ public sealed class CheckStart
 /// hand-over of its run to the page (<see cref="HandOver"/>) and the evaluation the pane's proxy holds
 /// it for while it is out (<see cref="HoldEvaluation"/>) - or until the start ends any other way
 /// (<see cref="EndCheck"/>), or, for a page that has gone, its minute passes with no evaluation, counted
-/// from when the reply reached it. One held up past its minute is taken back while the backend the
-/// check began on is still the one up (the reviews of 157A). The review host's restart reads
+/// from when the reply reached it. One held up past its minute is taken back while the token it carries
+/// is the token of the backend up now (the reviews of 157A, and the rule of their final reviews); and a
+/// hand-over whose reply never reaches the page holds for the delivery limit at most
+/// (<see cref="CheckHoldOptions.DeliveryLimit"/>). The review host's restart reads
 /// <see cref="CheckInProgress"/> under its own lock.
 ///
 /// Threading: <see cref="Receive"/> is not re-entrant and must not run on the SOLIDWORKS UI
@@ -592,17 +602,22 @@ public sealed class CheckPaneHost : IDisposable
                     + DumpSummary.UnexaminedClause(summary.Unexamined)
                     + start.Next);
 
-            // The hold now waits for the page's evaluation of this run, handed over before the page is told, so an
-            // evaluation sent the instant it reads this finds it; and the page's minute starts once it has the reply.
-            CheckHold? handedOver = HandOver(runDirectory);
-            _actions.Send(start.ExtractedType, id, new Dictionary<string, object?>
+            // The reply is made before the run is handed over (the final reviews of 157A): a tab's counts that throw
+            // end the start here, its hold let go below, and nothing but the post - which never throws - lies between
+            // the hand-over and the start of the page's minute.
+            var reply = new Dictionary<string, object?>
             {
                 { "run_dir", runDirectory },
                 { "document", document.Path },
                 { "configuration", document.Configuration },
                 { "counts", start.Counts(summary) },
                 { "gaps", summary.Gaps },
-            });
+            };
+
+            // The hold now waits for the page's evaluation of this run, handed over before the page is told, so an
+            // evaluation sent the instant it reads this finds it; and the page's minute starts once it has the reply.
+            CheckHold? handedOver = HandOver(runDirectory);
+            _actions.Send(start.ExtractedType, id, reply);
             StartTheMinuteOnDelivery(handedOver);
         }
         finally
@@ -670,6 +685,7 @@ public sealed class CheckPaneHost : IDisposable
             }
 
             hold.HandedOver = runDirectory;
+            hold.HandedOverAt = _options.Hold.Clock();
             _startHold = null;
             return hold;
         }
@@ -734,25 +750,29 @@ public sealed class CheckPaneHost : IDisposable
     /// Owner decision 157A: the pane's proxy takes over the hold of the check whose run was handed to the page in
     /// <paramref name="runDirectory"/> - the folder the page's evaluation names, compared ignoring letter case and a
     /// trailing separator - for as long as the evaluation is out, and lets it go, once, when the evaluation has been
-    /// answered. One that comes after the page's minute takes the hold back only while the backend its check began on
-    /// is still the one up (<see cref="TakeBackLate"/>, the reviews of 157A). Null when no check of this tab waits for
-    /// that evaluation: no hand-over of that folder, one already taken over, or one past its minute after a restart.
+    /// answered. One that comes after the page's minute takes the hold back only while the bearer
+    /// <paramref name="token"/> it carries is the token of the backend up now, the backend that will answer it
+    /// (<see cref="TakeBackLate"/>; the reviews of 157A, and their final reviews' rule). Null when no check of this
+    /// tab waits for that evaluation: no hand-over of that folder, one already taken over, one forgotten - the delivery
+    /// limit past its hand-over - or one past its minute whose evaluation carries another backend's token, or none.
     /// </summary>
-    public IDisposable? HoldEvaluation(string runDirectory)
+    public IDisposable? HoldEvaluation(string runDirectory, string? token)
     {
         CheckHold? late;
         lock (_holdLock)
         {
+            TimeSpan now = _options.Hold.Clock();
             CheckHold? hold = _holds.FirstOrDefault(candidate =>
                 candidate.HandedOver != null
                 && !candidate.TakenOver
+                && !Forgotten(candidate, now)
                 && SameFolder(candidate.HandedOver, runDirectory));
             if (hold == null)
             {
                 return null;
             }
 
-            if (Holds(hold, _options.Hold.Clock()))
+            if (Holds(hold, now))
             {
                 hold.TakenOver = true;
                 return new EvaluationHold(this, hold);
@@ -761,31 +781,42 @@ public sealed class CheckPaneHost : IDisposable
             late = hold;
         }
 
-        return TakeBackLate(late) ? new EvaluationHold(this, late) : null;
+        return TakeBackLate(late, token) ? new EvaluationHold(this, late) : null;
     }
 
     /// <summary>
     /// The reviews of 157A: an evaluation that reached the proxy after its page's minute - the page held up once it had
-    /// the reply, behind SOLIDWORKS' application thread - takes <paramref name="hold"/> back while the backend its check
-    /// began on is still the one up: no restart has been made since the gate, and the evaluation is held as it would
-    /// have been in its minute. Decided while no restart can begin or be made
-    /// (<see cref="CheckHoldOptions.WhileNoRestartRuns"/>), so none decides between the reading of the backend and the
-    /// marking, and the next restart reads what is marked; asked outside this tab's own lock, which is taken under the
-    /// restart's and never the other way. Not taken back once a restart has been made or the backend stopped - the
-    /// evaluation carries the token of a backend that has gone, which refuses it, and holding it would hold the next
-    /// restart back for nothing - nor when the restart cannot be asked: the evaluation then goes on unheld.
+    /// the reply, behind SOLIDWORKS' application thread - takes <paramref name="hold"/> back while the bearer
+    /// <paramref name="token"/> it carries is the token of the backend up now: the proxy sends every call to the
+    /// backend up, and that backend answers only its own token, so the evaluation will be answered, and is held as it
+    /// would have been in its minute (the final reviews of 157A, the race review's rule: the backend that will answer
+    /// it, where the backend at the check's gate was read before - which a check pressed with no backend up had none
+    /// of). Decided while no restart can begin or be made (<see cref="CheckHoldOptions.WhileNoRestartRuns"/>), so none
+    /// decides between the reading of the backend and the marking, and the next restart reads what is marked; asked
+    /// outside this tab's own lock, which is taken under the restart's and never the other way. Not taken back with
+    /// another backend's token - a restart has been made, or the backend stopped, and the evaluation is refused as any
+    /// call to a backend that stopped is, so holding it would hold the next restart back for nothing - nor with none,
+    /// nor when the restart cannot be asked: the evaluation then goes on unheld.
     /// </summary>
-    private bool TakeBackLate(CheckHold hold)
+    private bool TakeBackLate(CheckHold hold, string? token)
     {
+        if (token == null)
+        {
+            return false;
+        }
+
         try
         {
             return _options.Hold.WhileNoRestartRuns(() =>
             {
-                // Read while no restart runs, so it is the backend up until the step is done.
+                // Read while no restart runs, so it is the backend that will answer the evaluation.
                 BackendEndpoint? backend = _options.Backend();
                 lock (_holdLock)
                 {
-                    if (hold.TakenOver || !_holds.Contains(hold) || !SameBackend(hold.BackendAtGate, backend))
+                    if (hold.TakenOver
+                        || !_holds.Contains(hold)
+                        || backend == null
+                        || !string.Equals(backend.Token, token, StringComparison.Ordinal))
                     {
                         return false;
                     }
@@ -1017,40 +1048,47 @@ public sealed class CheckPaneHost : IDisposable
 
     /// <summary>
     /// Owner decision 157A: the gate's step - the check takes its hold, under the restart's own lock, so it is in
-    /// progress before any restart can look again, and notes the backend it begins on, which no restart changes
-    /// meanwhile. Takes only this tab's own lock. Holds that can never hold again - past their minute, and their
-    /// backend gone, so no late evaluation takes them back - are dropped here; for memory only, since neither the
-    /// restart's reading nor an evaluation counts them either way.
+    /// progress before any restart can look again. Takes only this tab's own lock. Holds forgotten - the delivery limit
+    /// past their hand-over, not held, and too late for an evaluation to take back - are dropped here; for memory only,
+    /// since neither the restart's reading nor an evaluation counts them either way.
     /// </summary>
     private void TakeTheHold()
     {
-        BackendEndpoint? backend = _options.Backend();
         lock (_holdLock)
         {
             TimeSpan now = _options.Hold.Clock();
-            _holds.RemoveAll(hold => !Holds(hold, now) && !SameBackend(hold.BackendAtGate, backend));
-            _startHold = new CheckHold(backend);
+            _holds.RemoveAll(hold => Forgotten(hold, now));
+            _startHold = new CheckHold();
             _holds.Add(_startHold);
         }
     }
 
     /// <summary>
     /// Whether <paramref name="hold"/> holds the restart back at <paramref name="now"/>: while the proxy holds its
-    /// evaluation, and until its reply has reached the page and the page's minute has passed (the reviews of 157A) -
-    /// so while its start runs, with no reply yet, it holds with no limit, whatever the clock reads. Called under
-    /// <see cref="_holdLock"/>.
+    /// evaluation; while its start runs, with no limit, whatever the clock reads; and once handed over, until its
+    /// reply has reached the page and the page's minute has passed (the reviews of 157A) - or, a reply that never
+    /// reaches it, until the delivery limit past the hand-over (<see cref="CheckHoldOptions.DeliveryLimit"/>, the
+    /// final reviews of 157A). Called under <see cref="_holdLock"/>.
     /// </summary>
-    private bool Holds(CheckHold hold, TimeSpan now) =>
-        hold.TakenOver
-        || hold.DeliveredAt == null
-        || now - hold.DeliveredAt < _options.Hold.HandOverLimit;
+    private bool Holds(CheckHold hold, TimeSpan now)
+    {
+        if (hold.TakenOver || hold.HandedOver == null)
+        {
+            return true;
+        }
 
-    /// <summary>The same backend process: both up, on the same port with the same token, which each start makes anew.</summary>
-    private static bool SameBackend(BackendEndpoint? atTheGate, BackendEndpoint? now) =>
-        atTheGate != null
-        && now != null
-        && atTheGate.Port == now.Port
-        && string.Equals(atTheGate.Token, now.Token, StringComparison.Ordinal);
+        return hold.DeliveredAt == null
+            ? now - hold.HandedOverAt < CheckHoldOptions.DeliveryLimit
+            : now - hold.DeliveredAt.Value < _options.Hold.HandOverLimit;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="hold"/> is forgotten at <paramref name="now"/>: holding nothing - so handed over, since
+    /// a start's hold always holds - and the delivery limit past its hand-over, so too late for an evaluation to take
+    /// back (the final reviews of 157A). Called under <see cref="_holdLock"/>.
+    /// </summary>
+    private bool Forgotten(CheckHold hold, TimeSpan now) =>
+        !Holds(hold, now) && now - hold.HandedOverAt >= CheckHoldOptions.DeliveryLimit;
 
     /// <summary>Lets <paramref name="hold"/> go, once its evaluation has been answered: that hold, and no other check's.</summary>
     private void LetGo(CheckHold hold)
@@ -1085,19 +1123,16 @@ public sealed class CheckPaneHost : IDisposable
             StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// One check's hold on a settings restart (owner decision 157A): taken by its gate's step, on the backend then up
-    /// (<see cref="BackendAtGate"/>); handed over with its run to the page (<see cref="HandedOver"/>, null while its
-    /// start runs), its minute from when the reply reached the page (<see cref="DeliveredAt"/>, null until then);
-    /// taken over by the pane's proxy while the evaluation is out (<see cref="TakenOver"/>). Guarded by
-    /// <see cref="_holdLock"/>.
+    /// One check's hold on a settings restart (owner decision 157A): taken by its gate's step; handed over with its run
+    /// to the page (<see cref="HandedOver"/>, null while its start runs, and <see cref="HandedOverAt"/>), its minute
+    /// from when the reply reached the page (<see cref="DeliveredAt"/>, null until then); taken over by the pane's
+    /// proxy while the evaluation is out (<see cref="TakenOver"/>). Guarded by <see cref="_holdLock"/>.
     /// </summary>
     private sealed class CheckHold
     {
-        public CheckHold(BackendEndpoint? backendAtGate) => BackendAtGate = backendAtGate;
-
-        public BackendEndpoint? BackendAtGate { get; }
-
         public string? HandedOver;
+
+        public TimeSpan HandedOverAt;
 
         public TimeSpan? DeliveredAt;
 

@@ -641,7 +641,7 @@ internal sealed class DeferredRestart : IDisposable
     /// restart's own lock, so one being made is waited for - making none and asking nothing, and answers the step's
     /// answer; false, the step not run, once stopping with the add-in. Whatever the step reads no restart changes while
     /// it runs, and whatever it marks a restart reads after it, under the same lock. A check's evaluation takes back a
-    /// hold whose time has passed in such a step, if the backend its check began on is still the one up.
+    /// hold whose time has passed in such a step, if the token it carries is the token of the backend up now.
     /// </summary>
     public bool WhileNoneRuns(Func<bool> step)
     {

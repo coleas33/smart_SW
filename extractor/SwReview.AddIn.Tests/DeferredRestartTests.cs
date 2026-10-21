@@ -7381,9 +7381,9 @@ public sealed class DeferredRestartTests
     /// <summary>
     /// The reviews of 157A: the add-in hands each check host the pane's queue behind its posts, so a run's minute starts
     /// once its reply has reached the page, and the review host's step that runs while no restart can begin or be made,
-    /// so an evaluation held up past its minute is taken back while the backend its check began on is up. Each is read
-    /// through its field per call - the pane is built before the hosts, the review host after - and with none, there is
-    /// nothing to wait behind, or no settings restart, and the action or the step runs at once.
+    /// so an evaluation held up past its minute is taken back while it carries the token of the backend up now. Each is
+    /// read through its field per call - the pane is built before the hosts, the review host after - and with none,
+    /// there is nothing to wait behind, or no settings restart, and the action or the step runs at once.
     /// </summary>
     [Theory]
     [InlineData("_modelCheckHost = new ModelCheckHost(new ModelCheckHostOptions(", "StartModelCheckPump();")]
@@ -7395,10 +7395,14 @@ public sealed class DeferredRestartTests
         Assert.Contains("AfterPosts = AfterPagePosts,", options, StringComparison.Ordinal);
         Assert.Contains("WhileNoRestartRuns = WhileNoRestartRuns,", options, StringComparison.Ordinal);
 
+        // The whole method, read as one: substrings of it let the condition turn over unseen (the final reviews of
+        // 157A, the mutation review's Z44), and the minute would start at the hand-over again, round one's bug.
         string delivery = OtherTabsBackendRestartTests.Between(source, "private void AfterPagePosts(Action action) {", "private ");
-        Assert.Contains("TaskPaneControl? pane = _pane;", delivery, StringComparison.Ordinal);
-        Assert.Contains("pane.AfterPosts(action); return;", delivery, StringComparison.Ordinal);
-        Assert.Contains("action(); }", delivery, StringComparison.Ordinal);
+        Assert.StartsWith(
+            "private void AfterPagePosts(Action action) { TaskPaneControl? pane = _pane; "
+                + "if (pane != null) { pane.AfterPosts(action); return; } action(); }",
+            delivery,
+            StringComparison.Ordinal);
 
         string step = OtherTabsBackendRestartTests.Between(source, "private bool WhileNoRestartRuns(Func<bool> step) {", "private ");
         Assert.Contains("ReviewHost? host = _reviewHost;", step, StringComparison.Ordinal);
@@ -7416,7 +7420,8 @@ public sealed class DeferredRestartTests
         string options = OtherTabsBackendRestartTests.Between(
             OtherTabsBackendRestartTests.AddInSource(), "_pane = new TaskPaneControl(new TaskPaneOptions(", "});");
         Assert.Contains(
-            "HoldCheckEvaluation = runDirectory => _modelCheckHost?.HoldEvaluation(runDirectory) ?? _standardsHost?.HoldEvaluation(runDirectory),",
+            "HoldCheckEvaluation = (runDirectory, token) => "
+                + "_modelCheckHost?.HoldEvaluation(runDirectory, token) ?? _standardsHost?.HoldEvaluation(runDirectory, token),",
             options,
             StringComparison.Ordinal);
 
@@ -7426,7 +7431,7 @@ public sealed class DeferredRestartTests
             @"\s+",
             " ");
         string proxy = OtherTabsBackendRestartTests.Between(pane, "_proxy = new BackendProxyHandler(", ");");
-        Assert.Contains("runDirectory => _options.HoldCheckEvaluation(runDirectory)", proxy, StringComparison.Ordinal);
+        Assert.Contains("(runDirectory, token) => _options.HoldCheckEvaluation(runDirectory, token)", proxy, StringComparison.Ordinal);
     }
 
     // ---- the restart itself, with no host ------------------------------------------------------
@@ -9715,8 +9720,8 @@ public sealed class DeferredRestartTests
 
         public bool CheckInProgress => _modelCheck?.CheckInProgress ?? _standards!.CheckInProgress;
 
-        public IDisposable? HoldEvaluation(string runDirectory) =>
-            _modelCheck != null ? _modelCheck.HoldEvaluation(runDirectory) : _standards!.HoldEvaluation(runDirectory);
+        public IDisposable? HoldEvaluation(string runDirectory, string? token) =>
+            _modelCheck != null ? _modelCheck.HoldEvaluation(runDirectory, token) : _standards!.HoldEvaluation(runDirectory, token);
 
         public void BackendRestarted()
         {
