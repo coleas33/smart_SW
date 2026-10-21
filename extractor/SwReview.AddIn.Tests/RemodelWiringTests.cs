@@ -256,6 +256,17 @@ public sealed class RemodelWiringTests
         throw new InvalidOperationException("the call at " + open + " never closes");
     }
 
+    /// <summary>
+    /// Owner decision 159A (004 T208): the add-in hands the Remodel host its own log, so the sentence a failure carried,
+    /// which the tab tells in its own words since it can name a path, reaches the log the tab's View log opens - and is
+    /// not lost: the host's log is nowhere by default, so no test writes into the engineer's.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsTheRemodelHostItsLog()
+    {
+        Assert.Contains("Log = AddInLog.Write,", StartRemodelHost(), StringComparison.Ordinal);
+    }
+
     private static string AddIn() =>
         Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
 

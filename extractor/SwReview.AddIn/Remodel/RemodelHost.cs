@@ -163,6 +163,14 @@ public sealed class RemodelHostOptions
     /// a link. Windows itself by default; injected so a test fakes each without making one.
     /// </summary>
     public IRunRootProbe RunRootProbe { get; set; } = Native.WindowsRunRootProbe.Instance;
+
+    /// <summary>
+    /// Owner decision 159A (004 research R19): where the host writes, for whoever debugs, what a failure said
+    /// where the tab told it in its own words - a refusal's class and sentence, an exception's whole text -
+    /// masked as everything the host sends is (FR-015). The add-in writes it to its own log (`addin.log`, in
+    /// the folder the tab's View log opens); nowhere by default, so no test writes into the engineer's log.
+    /// </summary>
+    public Action<string> Log { get; set; } = _ => { };
 }
 
 /// <summary>
@@ -400,6 +408,154 @@ public sealed class RemodelHost : IDisposable
         + "change log stays in the run folder. " + PartNotChanged + " Once the run has ended, press "
         + "Remodel a copy to plan again.";
 
+    // ---- owner decision 159A: the tab's words for a failure whose own sentence can name a path ----------
+    //
+    // Each is what the page prints in place of a failure's own sentence - a refusal the review backend
+    // answered, an exception, a restart's or a start's failure - which can name the part's, the run folder's,
+    // the log's or the bridge's pipe's full path (004 research R19). The failure's own sentence goes to the
+    // add-in's log (RemodelHostOptions.Log), which View log opens, and never to the tab.
+
+    /// <summary>How the tab's words send whoever needs the failure's own sentence to the log, by the button's label.</summary>
+    private const string PressViewLog = "Press View log to see why.";
+
+    /// <summary>
+    /// Owner decision 159A: a failure the add-in did not expect - an exception rather than a named refusal, in
+    /// a plan, a Start, a run or any other message - in place of its message, which can name a path (the
+    /// pipeline's refusal of a dump that read another document, a file the disk refused, SOLIDWORKS' refusal
+    /// of a drawing). The reply's class stays `HostError`.
+    /// </summary>
+    public const string UnexpectedFailureMessage =
+        "The add-in met a failure it did not expect, so what was asked was not done. " + PartNotChanged + " "
+        + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: `NotAPart` as the review backend answers it, from the bridge's probe or its reading
+    /// of the part again before the copy: the active document, which this host saw as a part, is not a part file
+    /// at the path SOLIDWORKS opened it from. The bridge's sentence names that path. This host's own `NotAPart`,
+    /// for an assembly or a drawing, keeps its words.
+    /// </summary>
+    public const string NotAPartOnDiskMessage =
+        "The active document is not a part file the re-modeler can find where SOLIDWORKS opened it from - it may "
+        + "have been moved, renamed or deleted since - so nothing was copied and no new plan was made. "
+        + PartNotChanged + " Save it as a part, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: `BridgeUnavailable` as the review backend answers it - the bridge did not answer one
+    /// of its routes, or its circuit is open - whose sentence carries the transport's, naming the bridge's pipe.
+    /// The add-in's own refusals of the class (<see cref="RunNotBoundMessage"/>, a tool service not listening yet)
+    /// keep their words.
+    /// </summary>
+    public const string BridgeNotAnsweringMessage =
+        "SOLIDWORKS did not answer the re-modeler, so it stopped. " + PartNotChanged
+        + " Wait a moment, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: `BackendUnavailable` as the add-in's client of the review backend answers it - the
+    /// backend is not running, or did not answer a call - whose sentence carries the transport's own.
+    /// </summary>
+    public const string BackendNotAnsweringMessage =
+        "The review backend did not answer, so the re-modeler stopped. " + PartNotChanged
+        + " Wait for the backend to be ready, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: every other refusal the review backend answers, whose sentence can name the part's or
+    /// the run folder's full path - `RunFolderFailed` (the bridge's `source_not_open`, the copy's own refusals,
+    /// every code with no row of its own, the open record and the waivers), `PackageMissing`, `NotModelCheck`,
+    /// `RunNotPlanned`, `ResumeRefused` and `RunInProgress` from `POST /remodel/runs`, `PackageAfterRefused`,
+    /// `InvalidRunDir`, and any class this build has no words for; and the backend's own word, in the run line,
+    /// that a run failed. True of every step it can stop - before any change to a copy, or during a run, whose
+    /// last word follows it.
+    /// </summary>
+    public const string BackendFailedMessage =
+        "The review backend could not do a step of this remodel, so it stopped. " + PartNotChanged
+        + " Press View log to see why, then press Remodel a copy to plan again.";
+
+    /// <summary>
+    /// Owner decision 159A: `RunFolderFailed` as this host raises it - the run folder could not be made under the
+    /// run root - where it named the run root and carried the disk's refusal, which names the folder too.
+    /// </summary>
+    public const string RunFolderNotMadeMessage =
+        "The run folder could not be made under the run root, so nothing was copied and no new plan was made. "
+        + PartNotChanged + " Press View log to see why; if the run root cannot be written to, choose a local folder "
+        + "for runs in Settings on the Review tab, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: `BridgeUnavailable` when the close of an earlier plan waiting for Start failed with no
+    /// named refusal (004 T173), where the sentence ended with the failure's own message.
+    /// </summary>
+    public const string EarlierPlanNotClosedMessage =
+        "SOLIDWORKS did not answer the close of the earlier plan, so that plan is left as it was and no new plan "
+        + "was made. " + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: the run's last word when the close of its session was not answered (004 T180), where it
+    /// ended with the failure's own message.
+    /// </summary>
+    public const string RunCloseNotAnsweredMessage =
+        "The run ended, but SOLIDWORKS did not answer its close, so the copy may still be open; the report and the "
+        + "saved artifacts are kept. " + PartNotChanged + " " + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: `OpenFailed` for Open copy - SOLIDWORKS would not open or activate the copy, or answered
+    /// with another document - where the seat's sentence named the copy's full path.
+    /// </summary>
+    public const string OpenCopyFailedMessage =
+        "SOLIDWORKS did not open the copy, so nothing was opened. " + PartNotChanged
+        + " Press View log to see why, then press Open copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: `DiscardFailed` when the copy could not be deleted - SOLIDWORKS has it open, most often -
+    /// where the disk's refusal named the copy's full path.
+    /// </summary>
+    public const string DiscardCopyFailedMessage =
+        "The copy could not be deleted, so it is still in the run folder; SOLIDWORKS may still have it open. "
+        + PartNotChanged + " Close the copy in SOLIDWORKS without saving, then press Discard copy again. "
+        + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: `DiscardFailed` when the copy was deleted and `plan.json` would not take its new state,
+    /// where the sentence ended with the disk's refusal, which names the file's full path.
+    /// </summary>
+    public const string DiscardStateNotWrittenMessage =
+        "The copy was deleted, but 'discarded' could not be written to plan.json, so this tab would go on reporting "
+        + "the state the run ended in. " + PartNotChanged + " " + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: the settings-restart gate's `BackendUnavailable`, retryable, for a plan or a Start - the
+    /// restart the press made or waited for failed, whose failure can end in the backend's log's path (decision
+    /// 150A), or the backend did not answer whether a turn runs - which leave the backend not restarted with the
+    /// saved settings. The gate's other refusals keep their words.
+    /// </summary>
+    public const string BackendNotRestartedMessage =
+        "The review backend has not restarted with the saved settings, so nothing was done. " + PartNotChanged
+        + " Save the settings again on the Review tab to restart it, then try again. " + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: the add-in's word that the backend did not start - a first start, or a settings restart
+    /// once the old backend had stopped - posted `status {stage: "error", lifecycle: true}`, where it carried the
+    /// failure, which can end in the backend's log's path (decision 150A). The Review tab shows the failure whole.
+    /// </summary>
+    public const string BackendDidNotStartMessage =
+        "The review backend did not start, so this tab cannot plan or run. The Review tab says why. "
+        + ReviewHost.StartItAgainOnTheReviewTab;
+
+    /// <summary>
+    /// Owner decision 159A: Show change's `entity.shown {ok: false}` when showing threw - SOLIDWORKS did not answer,
+    /// or refused to attach while a drawing was active - where it carried the failure, which can name the drawing's
+    /// full path.
+    /// </summary>
+    public const string ShowFailedMessage =
+        "SOLIDWORKS could not show this, so nothing was selected. " + PressViewLog;
+
+    /// <summary>Owner decision 159A: `OpenFailed` for Open report and Open run folder, where it carried Windows' refusal.</summary>
+    public const string NotOpenedMessage = "Windows could not open it, so nothing was opened. " + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: `OpenFailed` for View log, where it carried the refusal to make the log folder, which names
+    /// the folder: the log could not be written there either.
+    /// </summary>
+    public const string LogFolderNotOpenedMessage = "Windows could not open the log folder, so nothing was opened.";
+
     /// <summary>
     /// The reason both of 004 T159's refusals give: the copy could not be made the active document
     /// before a dump - SOLIDWORKS does not have it open, would not activate it, had another
@@ -564,6 +720,10 @@ public sealed class RemodelHost : IDisposable
             EntityResolver = options.EntityResolver,
             Opener = options.Opener,
             Secrets = options.Secrets,
+
+            // Owner decision 159A (004 research R19): a failure the shared rows caught - Windows that would not open
+            // a file or a folder, SOLIDWORKS that would not show a change - in this tab's words, its message logged.
+            FailureWords = SharedRowWords,
         });
     }
 
@@ -635,6 +795,7 @@ public sealed class RemodelHost : IDisposable
     public void Receive(string json)
     {
         string? id = null;
+        string? type = null;
         try
         {
             using (JsonDocument document = JsonDocument.Parse(json))
@@ -646,7 +807,7 @@ public sealed class RemodelHost : IDisposable
                 }
 
                 id = PagePayload.Text(root, "id");
-                string? type = PagePayload.Text(root, "type");
+                type = PagePayload.Text(root, "type");
                 if (string.IsNullOrEmpty(type))
                 {
                     throw new FormatException("a page message must carry a 'type'");
@@ -665,13 +826,16 @@ public sealed class RemodelHost : IDisposable
             // named travels out of them as an exception with its class attached. Answered as
             // `HostError` it would read to the engineer as a bug in the pane rather than as the
             // condition of the part it is (`contracts/pane-remodel-messages.md`, refusal classes).
-            SendRefusal(id, refusal);
+            SendRefusal(id, refusal, type ?? "a page message");
         }
         catch (Exception failure)
         {
             // An exception escaping into the `WebMessageReceived` handler would surface inside
-            // SOLIDWORKS.
-            _actions.SendError(id, "HostError", failure.Message, retryable: false);
+            // SOLIDWORKS. Owner decision 159A (004 research R19): its message can name a path - a
+            // file the disk refused, the pipeline's refusal of a dump that read another document - so
+            // it goes to the log, and the page is told in this tab's words.
+            Log(type ?? "a page message", failure);
+            _actions.SendError(id, "HostError", UnexpectedFailureMessage, retryable: false);
         }
     }
 
@@ -681,8 +845,23 @@ public sealed class RemodelHost : IDisposable
     /// <summary>Posts one `status`, with every secret masked out of it (FR-015).</summary>
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
 
-    /// <summary><see cref="PostStatus(string, string)"/>, marked as the add-in's own word on the backend when <paramref name="lifecycle"/> (owner decision 145A).</summary>
-    public void PostStatus(string stage, string message, bool lifecycle) => _actions.PostStatus(stage, message, lifecycle);
+    /// <summary>
+    /// <see cref="PostStatus(string, string)"/>, marked as the add-in's own word on the backend when <paramref name="lifecycle"/>
+    /// (owner decision 145A). Owner decision 159A (004 research R19): that word's `error` - the backend did not start, a
+    /// first start or a settings restart once the old backend had stopped - carries the failure, which can end in the
+    /// backend's log's path (decision 150A); this tab tells it in <see cref="BackendDidNotStartMessage"/>, the failure logged.
+    /// </summary>
+    public void PostStatus(string stage, string message, bool lifecycle)
+    {
+        if (lifecycle && string.Equals(stage, "error", StringComparison.Ordinal))
+        {
+            Log("the backend's start", message);
+            _actions.PostStatus(stage, BackendDidNotStartMessage, lifecycle);
+            return;
+        }
+
+        _actions.PostStatus(stage, message, lifecycle);
+    }
 
     /// <summary>
     /// Tells the page the backend was restarted with saved settings, so it asks `ready` again for
@@ -1353,12 +1532,11 @@ public sealed class RemodelHost : IDisposable
             }
             catch (Exception failure)
             {
-                PostStatus("error", failure.Message);
-                _actions.SendError(
-                    id,
-                    "RunFolderFailed",
-                    $"the run folder could not be created under '{runRoot}': " + failure.Message,
-                    retryable: false);
+                // Owner decision 159A (004 research R19): the run root, and the disk's refusal, named the
+                // folder; this tab says it in its own words, and the refusal goes to the log.
+                Log("remodel.plan", failure);
+                PostStatus("error", RunFolderNotMadeMessage);
+                _actions.SendError(id, "RunFolderFailed", RunFolderNotMadeMessage, retryable: false);
                 return;
             }
 
@@ -1512,16 +1690,14 @@ public sealed class RemodelHost : IDisposable
         {
             if (notAnswered is RemodelRefusal refusal)
             {
-                SendRefusal(id, refusal);
+                SendRefusal(id, refusal, "remodel.plan");
             }
             else
             {
-                _actions.SendError(
-                    id,
-                    BridgeUnavailableClass,
-                    "the SOLIDWORKS bridge did not answer the close of the earlier plan, so that plan "
-                    + "is left as it was and no new plan was made: " + notAnswered!.Message,
-                    retryable: true);
+                // Owner decision 159A (004 research R19): the close's failure, which ended this sentence, can
+                // name the bridge's pipe; it goes to the log.
+                Log("remodel.plan, the earlier plan's close", notAnswered!);
+                _actions.SendError(id, BridgeUnavailableClass, EarlierPlanNotClosedMessage, retryable: true);
             }
 
             return false;
@@ -1905,8 +2081,9 @@ public sealed class RemodelHost : IDisposable
         catch (Exception failure) when (started)
         {
             // The page was told the run began, and none is coming: it is told the run is over by
-            // the status a run's end posts, and the failure is answered as any failure is.
-            PostStatus("error", failure.Message);
+            // the status a run's end posts, and the failure is answered as any failure is - in this
+            // tab's words, its message logged (owner decision 159A).
+            PostStatus("error", PageWords(failure));
             throw;
         }
         finally
@@ -1958,16 +2135,18 @@ public sealed class RemodelHost : IDisposable
             HoldUntilTheHostIsFree(() =>
             {
                 PostStatus("error", PageWords(refusal));
-                SendRefusal(null, refusal);
+                SendRefusal(null, refusal, "the run");
             });
             outcome = new RemodelRunOutcome("failed", 0);
         }
         catch (Exception failure)
         {
+            // Owner decision 159A (004 research R19): in this tab's words, its message logged.
+            Log("the run", failure);
             HoldUntilTheHostIsFree(() =>
             {
-                PostStatus("error", failure.Message);
-                _actions.SendError(null, "HostError", failure.Message, retryable: false);
+                PostStatus("error", UnexpectedFailureMessage);
+                _actions.SendError(null, "HostError", UnexpectedFailureMessage, retryable: false);
             });
             outcome = new RemodelRunOutcome("failed", 0);
         }
@@ -1982,9 +2161,9 @@ public sealed class RemodelHost : IDisposable
                 }
                 else
                 {
-                    closeProblem = "The run ended, but the SOLIDWORKS bridge did not answer its close. "
-                        + "The copy may still be open; the report and saved artifacts are kept. "
-                        + notAnswered!.Message;
+                    // Owner decision 159A: the close's failure, which ended this sentence, goes to the log.
+                    Log("the run's close", notAnswered!);
+                    closeProblem = RunCloseNotAnsweredMessage;
                 }
             }
 
@@ -2297,12 +2476,15 @@ public sealed class RemodelHost : IDisposable
         {
             // A seat that refused by name keeps that name. `OpenFailed` is for the SOLIDWORKS
             // that would not open the file, which is a different thing to tell the engineer.
-            SendRefusal(id, refusal);
+            SendRefusal(id, refusal, "remodel.open_copy");
             return;
         }
         catch (Exception failure)
         {
-            _actions.SendError(id, "OpenFailed", failure.Message, retryable: true);
+            // Owner decision 159A (004 research R19): the seat's sentence names the copy's full path;
+            // it goes to the log.
+            Log("remodel.open_copy", failure);
+            _actions.SendError(id, "OpenFailed", OpenCopyFailedMessage, retryable: true);
             return;
         }
 
@@ -2343,7 +2525,10 @@ public sealed class RemodelHost : IDisposable
         }
         catch (Exception failure)
         {
-            _actions.SendError(id, "DiscardFailed", failure.Message, retryable: true);
+            // Owner decision 159A (004 research R19): the disk's refusal names the copy's full path; it goes
+            // to the log.
+            Log("remodel.discard_copy", failure);
+            _actions.SendError(id, "DiscardFailed", DiscardCopyFailedMessage, retryable: true);
             return;
         }
 
@@ -2362,12 +2547,10 @@ public sealed class RemodelHost : IDisposable
         }
         catch (Exception failure)
         {
-            _actions.SendError(
-                id,
-                "DiscardFailed",
-                "the copy was deleted, but 'discarded' could not be written to plan.json, so "
-                + "this tab would go on reporting the state the run ended in: " + failure.Message,
-                retryable: false);
+            // Owner decision 159A: the disk's refusal, which ended this sentence, names plan.json's full
+            // path; it goes to the log.
+            Log("remodel.discard_copy, plan.json", failure);
+            _actions.SendError(id, "DiscardFailed", DiscardStateNotWrittenMessage, retryable: false);
             return;
         }
 
@@ -2765,6 +2948,18 @@ public sealed class RemodelHost : IDisposable
             return true;
         }
 
+        // Owner decision 159A (004 research R19): the gate's `BackendUnavailable` that can be pressed again - the restart
+        // the press made or waited for failed, whose failure can end in the backend's log's path (decision 150A), or the
+        // backend did not answer whether a turn runs - leaves the backend not restarted with the saved settings, and is
+        // told in this tab's words, its own logged. The gate's other refusals - a turn, a run that cannot be read, the
+        // add-in unloading - keep the words the review host writes for this tab, which name no path.
+        if (string.Equals(held.ErrorClass, "BackendUnavailable", StringComparison.Ordinal) && held.Retryable)
+        {
+            Log("the restart gate", held.Message);
+            _actions.SendError(id, held.ErrorClass, BackendNotRestartedMessage, retryable: true);
+            return false;
+        }
+
         _actions.SendError(id, held.ErrorClass, held.Message, held.Retryable);
         return false;
     }
@@ -2896,10 +3091,19 @@ public sealed class RemodelHost : IDisposable
     /// One `error {error_class, message}` carrying the class whoever refused chose - the
     /// backend's reply body, or the pipeline's own pre-call refusal. One copy of it, because
     /// three handlers answer the same exception and three spellings of "pass the class through"
-    /// is three chances to drop it.
+    /// is three chances to drop it. Owner decision 159A: what the page is told in place of the
+    /// refusal's own sentence goes to the log, under <paramref name="what"/> was asked.
     /// </summary>
-    private void SendRefusal(string? id, RemodelRefusal refusal) =>
-        _actions.SendError(id, refusal.ErrorClass, PageWords(refusal), refusal.Retryable);
+    private void SendRefusal(string? id, RemodelRefusal refusal, string what)
+    {
+        string words = PageWords(refusal);
+        if (!string.Equals(words, refusal.Message, StringComparison.Ordinal))
+        {
+            Log(what, refusal);
+        }
+
+        _actions.SendError(id, refusal.ErrorClass, words, refusal.Retryable);
+    }
 
     /// <summary>
     /// Owner decision 155A (004 research R18): the classes whose words on this tab are the host's own,
@@ -2916,14 +3120,109 @@ public sealed class RemodelHost : IDisposable
         };
 
     /// <summary>
-    /// The words a failure reaches the page in, in a refusal and in the run line's `status {stage:
-    /// "error"}` alike: <see cref="TabWords"/>' sentence for a refusal of one of its classes, and the
-    /// failure's own message otherwise (owner decision 155A).
+    /// Owner decision 159A (004 research R19): the tab's words for a refusal the review backend answered, by its class,
+    /// where the backend's sentence can name a path - the part's, the run folder's, the bridge's pipe - and the class
+    /// says what the engineer can do. Every other class the backend answers is told in
+    /// <see cref="BackendFailedMessage"/>, but the ones it words plainly itself
+    /// (<see cref="ClassesTheBackendWordsPlainly"/>).
     /// </summary>
-    private static string PageWords(Exception failure) =>
-        failure is RemodelRefusal refusal && TabWords.TryGetValue(refusal.ErrorClass, out string? words)
-            ? words
-            : failure.Message;
+    private static readonly Dictionary<string, string> BackendWords =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            { "NotAPart", NotAPartOnDiskMessage },
+            { "BridgeUnavailable", BridgeNotAnsweringMessage },
+            { "BackendUnavailable", BackendNotAnsweringMessage },
+        };
+
+    /// <summary>
+    /// Owner decision 159A: the classes whose sentence the review backend writes in plain words that name no path, which
+    /// the tab prints as they are: `ScopeRefused`, one sentence for each of the bridge's two codes (owner decision 149A,
+    /// <c>SCOPE_REFUSAL_WORDS</c> in <c>chat/remodel.py</c>, pinned there word for word).
+    /// </summary>
+    private static readonly HashSet<string> ClassesTheBackendWordsPlainly =
+        new HashSet<string>(StringComparer.Ordinal) { "ScopeRefused" };
+
+    /// <summary>
+    /// The words a failure reaches the page in, in a refusal and in the run line's `status {stage:
+    /// "error"}` alike: <see cref="TabWords"/>' sentence for a refusal of one of its classes, whoever refused
+    /// (owner decision 155A); and owner decision 159A (004 research R19), since every other sentence a failure
+    /// carries can name a path: a refusal the review backend answered in <see cref="BackendWords"/>' words for
+    /// its class, or <see cref="BackendFailedMessage"/> - but in its own for a class the backend words plainly;
+    /// a refusal the add-in raised itself in its own words, which name no path; and any other failure in
+    /// <see cref="UnexpectedFailureMessage"/>. What a failure said goes to the log where it is answered.
+    /// </summary>
+    private static string PageWords(Exception failure)
+    {
+        if (!(failure is RemodelRefusal refusal))
+        {
+            return UnexpectedFailureMessage;
+        }
+
+        if (TabWords.TryGetValue(refusal.ErrorClass, out string? words))
+        {
+            return words;
+        }
+
+        if (!TheBackendAnswered(refusal) || ClassesTheBackendWordsPlainly.Contains(refusal.ErrorClass))
+        {
+            return refusal.Message;
+        }
+
+        return BackendWords.TryGetValue(refusal.ErrorClass, out string? backends) ? backends : BackendFailedMessage;
+    }
+
+    /// <summary>
+    /// Owner decision 159A: whether the review backend answered <paramref name="refusal"/> - the pipeline keeps the
+    /// backend's answer as the cause of the refusal it raises for it (<c>BackendRemodelPipeline.Refusal</c>, pinned by
+    /// <c>BackendRemodelPipelineTests</c>), and raises its own - no backend, no bridge, no copy to make active - with none.
+    /// </summary>
+    private static bool TheBackendAnswered(RemodelRefusal refusal) => refusal.InnerException is BackendRequestException;
+
+    /// <summary>
+    /// Owner decision 159A: the words a failure one of the shared rows caught reaches this tab in
+    /// (<see cref="PaneActionsOptions.FailureWords"/>), its own message logged: View log's, which no View log can
+    /// help; Show's; and Open report's and Open run folder's.
+    /// </summary>
+    private string SharedRowWords(string row, Exception failure)
+    {
+        Log(row, failure);
+        switch (row)
+        {
+            case "log.open":
+                return LogFolderNotOpenedMessage;
+
+            case "entity.show":
+                return ShowFailedMessage;
+
+            case "report.open":
+            case "folder.open":
+                return NotOpenedMessage;
+
+            default:
+                return UnexpectedFailureMessage;
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 research R19): writes, for whoever debugs, what was said where the tab told it in its
+    /// own words - <paramref name="said"/>, under <paramref name="what"/> was asked - on <see cref="RemodelHostOptions.Log"/>,
+    /// masked as everything this host sends is (FR-015). Never throws: a log that cannot be written changes no answer.
+    /// </summary>
+    private void Log(string what, string said)
+    {
+        try
+        {
+            _options.Log(_actions.Redact("Remodel tab, " + what + ": " + said));
+        }
+        catch (Exception)
+        {
+            // The log is gone or full; the page's answer is what matters now.
+        }
+    }
+
+    /// <summary>...a failure: a refusal's class and sentence, and the whole of anything else that threw.</summary>
+    private void Log(string what, Exception failure) =>
+        Log(what, failure is RemodelRefusal refusal ? refusal.ErrorClass + ": " + refusal.Message : failure.ToString());
 
     /// <summary>
     /// Owner decision 154A: a plan or a Start refuses a run root the run root rule refuses, in this tab's words,
@@ -3034,7 +3333,17 @@ public sealed class RemodelHost : IDisposable
         {
             if (EndsTheRunOnThePage(stage))
             {
-                _host.HoldUntilTheHostIsFree(() => _host.PostStatus(stage, message));
+                // Owner decision 159A (004 research R19): the pipeline's word that a run failed carries the
+                // backend's or the transport's sentence, which can name a path; told in the tab's words, its own
+                // logged, before the run's last word.
+                string words = message;
+                if (string.Equals(stage, "error", StringComparison.Ordinal))
+                {
+                    _host.Log("the run", message);
+                    words = BackendFailedMessage;
+                }
+
+                _host.HoldUntilTheHostIsFree(() => _host.PostStatus(stage, words));
                 return;
             }
 

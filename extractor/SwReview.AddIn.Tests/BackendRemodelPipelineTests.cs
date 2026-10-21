@@ -968,6 +968,49 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         Assert.Equal("ResumeRefused", refusal.ErrorClass);
     }
 
+    /// <summary>
+    /// Owner decision 159A (004 T208): a refusal the review backend answered keeps that answer as its cause, its class
+    /// and its sentence as the backend wrote them, on every route that turns one into a refusal - the open, a run's start
+    /// and its after-dump. The Remodel host reads the cause to know the backend answered, and tells the page the tab's own
+    /// words for the class in place of the backend's sentence, which can name the part's or the run folder's full path;
+    /// the sentence goes to the add-in's log. A guard: the pipeline has always kept it.
+    /// </summary>
+    [Theory]
+    [InlineData("open")]
+    [InlineData("start")]
+    [InlineData("package-after")]
+    public void ARefusalTheBackendAnsweredKeepsTheAnswerAsItsCause(string route)
+    {
+        var world = new World(this);
+        var answer = new BackendRequestException(
+            "RunFolderFailed", "FICT the backend refused in C:\\Fictional\\runs\\FICT-run.", retryable: false);
+        RemodelRefusal refusal;
+        if (route == "open")
+        {
+            world.Backend.OpenFailure = answer;
+            refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.OpenCopy(
+                new RemodelCopyRequest(world.RunFolder(), SourcePath, null), world.Reporter));
+        }
+        else
+        {
+            if (route == "start")
+            {
+                world.Backend.StartFailure = answer;
+            }
+            else
+            {
+                world.Backend.PackageAfterFailure = answer;
+                world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+            }
+
+            refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+        }
+
+        Assert.Same(answer, refusal.InnerException);
+        Assert.Equal("RunFolderFailed", refusal.ErrorClass);
+        Assert.Equal(answer.Message, refusal.Message);
+    }
+
     // ---- the source, after the copy ---------------------------------------------------------
 
     /// <summary>

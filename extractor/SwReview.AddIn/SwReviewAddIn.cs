@@ -916,6 +916,10 @@ public class SwReviewAddIn : ISwAddin
             // backend's own sentences to the page, and a `/remodel/*` failure is exactly the
             // kind of message that could quote the credential it was called with (FR-015).
             Secrets = () => KeysToMask().Concat(new[] { _toolService?.RemodelBridge?.Secret }),
+
+            // Owner decision 159A: what a failure said where the tab tells it in its own words - its
+            // sentence can name a path - masked by the host, into the add-in's log, which View log opens.
+            Log = AddInLog.Write,
         });
 
         StartRemodelPump();

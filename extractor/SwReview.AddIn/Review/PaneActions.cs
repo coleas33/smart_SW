@@ -128,6 +128,15 @@ public sealed class PaneActionsOptions
     /// under a live host (FR-015).
     /// </summary>
     public Func<IEnumerable<string?>> Secrets { get; set; } = () => new string?[0];
+
+    /// <summary>
+    /// Owner decision 159A (004 research R19): the words a failure one of these rows caught reaches the page in, given
+    /// the row that caught it - `log.open`, `report.open`, `folder.open`, or `entity.show` for a Show, whichever row
+    /// asked for it (<see cref="PaneActions.ShowPersistRef"/>) - and the failure. Its own message by default, as every
+    /// tab but the Remodel tab prints it; the Remodel host answers with its own words, since a failure's message can
+    /// name a path, and logs the failure.
+    /// </summary>
+    public Func<string, Exception, string> FailureWords { get; set; } = (row, failure) => failure.Message;
 }
 
 /// <summary>
@@ -296,7 +305,7 @@ public sealed class PaneActions
             // -1 is not a swPersistReferencedObjectStates_e value: SOLIDWORKS never answered
             // at all (a modal dialog on the application thread, a closed document, an open
             // circuit), which is a different thing from a reference that resolved to nothing.
-            outcome = EntityShowOutcome.NotShown(-1, failure.Message, null);
+            outcome = EntityShowOutcome.NotShown(-1, _options.FailureWords("entity.show", failure), null);
         }
 
         SendEntityShown(id, outcome);
@@ -364,7 +373,7 @@ public sealed class PaneActions
             return;
         }
 
-        Open(id, full);
+        Open(id, full, "report.open");
     }
 
     private void OpenRunFolder(string? id, JsonElement payload)
@@ -374,7 +383,7 @@ public sealed class PaneActions
             return;
         }
 
-        Shell(id, runDirectory, _options.RunRootsInForce());
+        Shell(id, runDirectory, _options.RunRootsInForce(), "folder.open");
     }
 
     private void OpenLogFolder(string? id)
@@ -388,11 +397,11 @@ public sealed class PaneActions
         }
         catch (Exception failure)
         {
-            SendError(id, "OpenFailed", failure.Message, retryable: false);
+            SendError(id, "OpenFailed", _options.FailureWords("log.open", failure), retryable: false);
             return;
         }
 
-        Shell(id, folder, new[] { folder });
+        Shell(id, folder, new[] { folder }, "log.open");
     }
 
     /// <summary>
@@ -435,11 +444,11 @@ public sealed class PaneActions
     /// it reaches `ShellExecute`") - every run root in force this session, so a run made under one
     /// a settings save has since moved still opens (owner decision 154A, the reviews' finding F6).
     /// </summary>
-    private void Shell(string? id, string path, IReadOnlyList<string> roots)
+    private void Shell(string? id, string path, IReadOnlyList<string> roots, string row)
     {
         if (TrySafePath(id, path, roots, out string full))
         {
-            Open(id, full);
+            Open(id, full, row);
         }
     }
 
@@ -474,7 +483,8 @@ public sealed class PaneActions
         return true;
     }
 
-    private void Open(string? id, string path)
+    /// <param name="row">The row that asked, which <see cref="PaneActionsOptions.FailureWords"/> is given.</param>
+    private void Open(string? id, string path, string row)
     {
         try
         {
@@ -482,7 +492,7 @@ public sealed class PaneActions
         }
         catch (Exception failure)
         {
-            SendError(id, "OpenFailed", failure.Message, retryable: false);
+            SendError(id, "OpenFailed", _options.FailureWords(row, failure), retryable: false);
             return;
         }
 

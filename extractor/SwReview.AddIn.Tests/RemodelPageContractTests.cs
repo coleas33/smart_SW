@@ -1016,6 +1016,45 @@ public sealed class RemodelPageContractTests
     }
 
     /// <summary>
+    /// Owner decision 159A (004 T208): the tab's words for a failure whose own sentence can name a path send whoever needs
+    /// that sentence to the log by the label of the button that opens it, and name the way on by its button's label, read
+    /// from the page itself.
+    /// </summary>
+    [Fact]
+    public void TheWordsForAFailureThatCanNameAPathNameTheirButtonsByTheirLabels()
+    {
+        string log = "Press " + ButtonLabel("open-log") + " to see why";
+        string plan = ButtonLabel("plan-run");
+
+        foreach (string sentence in new[]
+                 {
+                     RemodelHost.UnexpectedFailureMessage,
+                     RemodelHost.BackendFailedMessage,
+                     RemodelHost.RunFolderNotMadeMessage,
+                     RemodelHost.RunCloseNotAnsweredMessage,
+                     RemodelHost.OpenCopyFailedMessage,
+                     RemodelHost.DiscardCopyFailedMessage,
+                     RemodelHost.DiscardStateNotWrittenMessage,
+                     RemodelHost.BackendNotRestartedMessage,
+                     RemodelHost.ShowFailedMessage,
+                     RemodelHost.NotOpenedMessage,
+                 })
+        {
+            Assert.Contains(log, sentence, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("press " + plan + " to plan again.", RemodelHost.BackendFailedMessage, StringComparison.Ordinal);
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.NotAPartOnDiskMessage, StringComparison.Ordinal);
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.BridgeNotAnsweringMessage, StringComparison.Ordinal);
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.BackendNotAnsweringMessage, StringComparison.Ordinal);
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.RunFolderNotMadeMessage, StringComparison.Ordinal);
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.EarlierPlanNotClosedMessage, StringComparison.Ordinal);
+        Assert.Contains("then press " + ButtonLabel("open-copy") + " again.", RemodelHost.OpenCopyFailedMessage, StringComparison.Ordinal);
+        Assert.Contains("then press " + ButtonLabel("discard-copy") + " again.", RemodelHost.DiscardCopyFailedMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(ButtonLabel("open-log"), RemodelHost.LogFolderNotOpenedMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 004 T173 over the real transport: Plan pressed again while a plan is held. The host tells
     /// the page the held plan is lost - the notice for that folder, in the host's words - and
     /// then answers the new plan, which is on screen, not lost, and startable.
