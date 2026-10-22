@@ -237,7 +237,10 @@ page that never makes that call, reloaded or closed, a minute after the reply ha
 once when the start ends any other way. The reply waits on SOLIDWORKS' application thread, which another
 tab's extraction can hold for minutes, so the minute is counted from its delivery, and an evaluation that
 comes after the minute all the same is held again while the backend the check began on is still the one
-up (the reviews of 157A). A save made meanwhile is kept, and the Review tab says "the settings are saved; the
+up (the reviews of 157A). *Amended on their final reviews:* while the bearer token the evaluation carries
+is the token of the backend up now, the backend that will answer it; and a reply that never reaches the
+page holds the restart back an hour at most after the hand-over. A save made meanwhile is kept, and the
+Review tab says "the settings are saved; the
 backend restarts when the running check ends." A check holds the restart back only while a backend is
 up: with none, the restart is what brings back the backend its evaluation needs, and a save made then
 starts it at once. The page's re-read of a check and its Accept are not held: each is one short call

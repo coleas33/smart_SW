@@ -173,7 +173,9 @@ Decisions baked into the handler, each with a test:
   (`TaskPaneOptions.HoldCheckEvaluation`), so no restart is made under the evaluation; let go
   once it is answered, however it ends. With no check waiting for that evaluation, or a host
   that cannot be asked, it is sent on unheld, as before. A page that calls after its minute is
-  held again while the backend its check began on is still the one up (its reviews).
+  held again while the backend its check began on is still the one up (its reviews) - since
+  their final reviews, while the bearer token the evaluation carries, which the proxy reads from
+  its `Authorization` header and hands on with the folder, is the token of the backend up now.
 - **`HttpWebRequest`, not `HttpClient`** - matching `Review/BackendClient.cs`, whose comment
   gives the reason that matters here: it "can be told not to consult the corporate proxy
   for 127.0.0.1". `System.Net.Http` is also not referenced by this project.

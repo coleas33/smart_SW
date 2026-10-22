@@ -4525,7 +4525,8 @@ Windows' own words (`RunFolderFailed`). The probe's reading is unchanged and tru
   `init` and its evaluation all wait on SOLIDWORKS' application thread, which another tab's extraction holds for its
   whole length. The minute counts from the reply's delivery now (`CheckHoldOptions.HandOverLimit`, `AfterPosts`), and
   an evaluation that comes after it all the same is held again while the backend its check began on is still the one
-  up.
+  up. *Changed on the final reviews (section 9, items 1 and 3):* while the token it carries is the token of the backend
+  up now; and a reply that never reaches the page holds the restart back an hour at most.
 - Accepts and re-reads are not held: each is one short call, made when the engineer chooses; one that a restart cuts is
   answered as any failed call is, and pressed again on the new backend. An Accept whose exception was written before the
   cut is refused `AlreadyAccepted` when pressed again, so nothing doubles; and none of them wastes an extraction.
@@ -4690,7 +4691,8 @@ waited for.
      another tab's extraction holding SOLIDWORKS' application thread, through which the page's requests are served - is
      sent unheld, as before 157A. A longer limit would hold a gone page's restart back longer; a minute is the choice.
      *Corrected on the reviews (section 8, item 3):* the minute counts from the reply's delivery, and a page held up past
-     it is held again while the backend its check began on is up; what is left is in section 8's Not changed.
+     it is held again while the backend its check began on is up; what is left is in section 8's Not changed. *Changed
+     on the final reviews (section 9, item 1):* while the token it carries is the token of the backend up now.
   3. A restart's refusals still name what was found first: work is read before the turns, so while a check and a turn
      both hold the restart a new review is told of the check alone - as 145A's refusals named a remodel run before a
      turn. The save's promise names both.
@@ -4880,7 +4882,9 @@ waited for.
     between the reading and the marking. A restart that failed before it stopped the old backend leaves the endpoint,
     and the evaluation is held, since it will be answered; one made, or a backend stopped, leaves the evaluation unheld,
     its token gone. Holds past their minute stay to be taken back until their backend has gone, and only those are
-    pruned.
+    pruned. *Changed on the final reviews (section 9, items 1 and 3):* the evaluation's own token is compared with the
+    backend up now, and the gate notes no backend; a hold is kept until the delivery limit, an hour, has passed since
+    its hand-over.
   - The mutation review's option is not taken: the minute from delivery covers another check's extraction - which holds
     the restart itself - and what that option could not see, every other holder of SOLIDWORKS' thread.
   - Tests: unit cases on each tab (the minute from delivery; a late evaluation taken back, once, while no restart runs;
@@ -4927,11 +4931,15 @@ waited for.
     ignoring letter case names the same folder on Windows (RV30).
 - **Not changed, after the reviews**: section 1's last word on a page held up, and Not changed 2, as corrected there. A
   page held up more than a minute once its reply had reached it, by something that holds no restart - SOLIDWORKS' own
-  work, a review's extraction - while a save's restart waits for its check alone, is restarted under: its evaluation,
-  carrying a token that has gone, is refused, as before 157A. Closing that would need the page to say it is gone, which
-  no page says. And a mark of delivery queued on the pane's thread is lost if the pane's window is destroyed before it
-  runs - WinForms drops what is queued on a window that goes - which happens only as the add-in unloads, when every
-  hold is let go with its host.
+  work - while a save's restart waits for its check alone, is restarted under: its evaluation, carrying a token that
+  has gone, is refused, as before 157A. Closing that would need the page to say it is gone, which no page says. And a
+  mark of delivery queued on the pane's thread is lost if the pane's window is destroyed before it runs - WinForms
+  drops what is queued on a window that goes - which happens only as the add-in unloads, when every hold is let go
+  with its host. *Corrected on the final reviews (section 9, items 3 and 4):* this named a review's extraction too,
+  which is no such thing - `review.start` passes the restart's gate, refused while a check holds a waiting restart
+  back, and the Review tab's save waits behind it on the tab's one pump - and since them a review's preparation is
+  not either, given the same gate. That the window goes only as the add-in unloads was asserted, not shown; since
+  them a hold whose reply never reaches the page holds the restart back an hour at most, however its mark was lost.
 - **Existing cases changed deliberately**: `TheHandOverWaitsAsLongAsItsLimit` gains P1's assertion;
   `AHandOverNotTakenWithinItsLimitHoldsNothingMore` - its late evaluation, refused before, is refused now once a restart
   has been made, since one held up past its minute is held again while its backend is up;
@@ -4952,7 +4960,8 @@ waited for.
   suites, run since records the tests read changed (002's tasks, 004's contract), 18,111 passed and 5 skipped on 3.12
   and on 3.11 (`--isolated`), as before, no Python changed; `ruff check` clean; no label, fixture or pin changed.
 - **Mutations**: as before - each fix of the second round taken out once with one exact replacement, the tree rebuilt,
-  the named classes run (the first round's seven: 814 cases, 815 with T247's; `CheckHoldTests` alone for the hold's own
+  the named classes run (the first round's seven: 813 cases before T247's two, 815 at the tip - corrected on the final
+  reviews, where this said 814; `CheckHoldTests` alone for the hold's own
   lines, 79; `QueuedPaneCallbackTests` for the pane's queue, 7) and the file restored byte for byte (checked by sha256),
   in two streams, the worktree and a copy of it: each of the 30 turned at least one case red, 218 red results in all -
   Q16 once T247 had pinned it, and Q25 in place of RV2, which the minute from delivery had made equivalent. Before T239
@@ -4991,6 +5000,179 @@ waited for.
   | Q23 | `ReviewHost.StopRestarting` | the restart stopped | 1 |
   | Q24 | `SwReviewAddIn.DisconnectFromSW` | the restart stopped before the hosts that hold it back go | 1 |
   | Q25 | `CheckPaneHost.Holds` | a hold whose reply has not reached the page - a start's among them - holds with no limit (RV2) | 25 |
+
+**9. The final reviews (2026-10-21).**
+
+- **What they were**: two Opus reviews of the branch at `3847f04`, standing in for Codex at its usage limit: one led by
+  mutation, which ran 67 of its own (Z1 to Z68), 23 of them surviving all 3,766 cases, with seven pins and two
+  demonstrations ready to adopt; and one on races, with two probes. Neither found a must-fix. The coordinator's list -
+  three should-fix items, an owner question the owner decided, and nits - is settled test first by T249 and T293 to
+  T295. What they corrected above is marked where it stands.
+- **Item 1, should-fix: the late take-back was untested on what it compares and when it reads.** Five mutations
+  survived: only the port, or only the token, compared (Z1, Z2); a gate with no backend not checked for null (Z3), a
+  real failure - a check pressed with no backend up, past its minute once one had come up, made every later press on its
+  tab throw in the prune and answer `HostError` until SOLIDWORKS restarted; the backend read before the restart's lock
+  (Z7); and holds still holding pruned once their backend differed (Z13). Taken with the race review's rule, as the
+  coordinator asked: a late evaluation is held while the bearer token it carries - the token of the backend that gave
+  its page its `init`, read from its `Authorization` header as the backend reads it
+  (`BackendProxyHandler.BearerTokenOf`) - is the token of the backend up now, read while no restart runs
+  (`CheckPaneHost.TakeBackLate`). That backend is the one that will answer it: the proxy sends every call to the backend
+  up, and a backend answers only its own token. The gate notes no backend any more, so Z3's null cannot arise, and a
+  check pressed with no backend up - its page told the backend came up during the extraction, and evaluating with its
+  token - is held late too, which the backend at its gate could never allow. The port is not read: a restart on the same
+  port makes a new token. An evaluation carrying no token, or the token in other letters, is not held, since the backend
+  refuses both, and one with none waits for no restart in flight to be told so. The survivors are pinned against the new
+  rule: Z1 by the row "a restart was made on the same port"; Z2's port, read nowhere now, by a backend on another port
+  whose token the evaluation carries holding it
+  (`ALateEvaluationOfACheckBegunWithNoBackendIsHeldOnTheBackendThatCameUp`); Z3 by that case and
+  `ACheckBegunWithNoBackendDoesNotBreakTheTabsNextPress`; Z7 by `ALateEvaluationReadsTheBackendOnlyWhileNoRestartRuns`,
+  a handshake, not a sleep; Z13 by `AHoldInItsMinuteIsNotForgottenByTheTabsNextPress`. The mutation review's other
+  probes are adopted as pins too: Z4 (`TwoLateEvaluationsOfOneRunAreHeldOnce`), Z5
+  (`ALateEvaluationWhoseHoldWentMeanwhileIsNotHeld`), Z17 (`ASecondMarkOfDeliveryDoesNotStartTheMinuteAgain`), Z20
+  (`TheMarkOfDeliveryIsQueuedAfterTheReply`), Z22 (`AMovedRunRootIsJudgedByTheTabsOwnProbe`), Z34 and Z35
+  (`TheHoldsDefaultsDeliverAndRunTheStepAtOnce`) and Z63 (`AGateThatLetsAPressThroughWithoutItsStepHoldsNothing`)
+  (T249).
+- **Item 2, should-fix: the add-in's delivery wiring was pinned by substrings**, which Z44 - the condition turned over,
+  so the minute would start at the hand-over again, round one's bug - kept. `AfterPagePosts` is read whole now
+  (Pin_Z44); a behavioural test would need the add-in, which cannot be built without a live SOLIDWORKS (T249).
+- **Item 3, should-fix, both reviews: an undelivered hand-over had no bound.**
+  - (a) A throw between the hand-over and the mark - a tab's counts, made in the reply - left a hold handed over that
+    nothing ended: every restart held back, and every press refused `CheckRunning`, until SOLIDWORKS closed. Latent,
+    since neither tab's counts throw. The reply is made before the run is handed over now, so only the post, which never
+    throws, lies between them (`AStartWhoseReplyCannotBeMadeLetsItsHoldGo`, the demonstration's and the race probe's).
+  - (b) A mark queued on the pane's thread is lost with the pane's window
+    (`AMarkLostWithThePanesWindowHoldsNoLongerThanTheDeliveryLimit`, the demonstration's, on a real pane). A hand-over
+    whose reply has not reached the page holds the restart back for the delivery limit at most, an hour from the
+    hand-over (`CheckHoldOptions.DeliveryLimit`), as 158A bounds the tool service's hold: generous, far past any
+    delivery SOLIDWORKS' thread holds up, and a reply delivered just before it still has its whole minute. A hold that
+    holds nothing, the limit past its hand-over, is forgotten: not taken back late, and dropped by the tab's next
+    press - which forgets no evaluation still out (`AnEvaluationOutPastTheDeliveryLimitHoldsUntilItIsAnswered`). The
+    limit is measured from the hand-over on the clock the add-in runs with, pinned three hours in (T249).
+- **Item 4, the race review's owner question, decided: `review.prepare` passed no restart gate.** It is the first
+  message of every Review press and reads the whole component tree in one call on SOLIDWORKS' application thread, so a
+  check's reply and mark could land just before it and the page's minute run out behind it; the waiting restart was then
+  made under the check, and its late evaluation refused `401`, its extraction wasted - the race probe showed it on both
+  tabs. `ReviewHost.PrepareReview` passes the gate `review.start` passes (`RestartedForNewReview`), after its own
+  refusals and before the tree is read: refused while a restart waits that something holds back - `CheckRunning` for a
+  check - and reading nothing; a restart nothing holds back made first, as the start would make it. And, as after every
+  gate that can wait (owner decision 149A), the document is read again, and one that changed is refused
+  `DocumentChanged`, in the start's words. The probe, its answer turned, is
+  `AReviewsPreparationWhileASaveWaitsForACheckIsRefusedAndTheChecksEvaluationIsHeld`. Section 8's "a review's
+  extraction" is corrected there (T294).
+- **Nits**:
+  - DRY: the refusals before the gate, nearly line for line twice in the two hosts, are the check pane's `StartCheck`,
+    and each host's start is one line (T293).
+  - Each tab's words in its start, pinned word for word (Z26 to Z28, Z52 to Z54):
+    `EachTabsStartSaysWhatItReadsAndWhatComesNextInItsOwnWords` and `EachTabNamesTheFolderItCouldNotMakeInItsOwnWords`
+    (T295).
+  - The unload: `DisconnectFromSW` stops the restart first, before the pumps' joins - up to eight seconds, in which the
+    message a pump handles can still save the settings - and the tool service's disposal. `DeferredRestart.Now` read
+    nothing of the stopping; decided: it refuses once stopped, as `First` does, so no restart is made on a backend about
+    to be stopped, and the save is answered as one whose restart was not made, saying why
+    (`ASaveOnceTheRestartIsStoppedRestartsNothing`) (T295).
+  - Two misplaced doc comments in `DeferredRestartTests.cs` are back on their own case and class (T295).
+  - Records: section 8's count of the first round's seven classes read "814, 815 with T247's" where they count 813
+    before T247's two and 815 at the tip; its "only as the add-in unloads" was asserted, not shown, and item 3 makes it
+    moot; and `pane-host-messages.md`'s backend prefix names every case a late evaluation is not held in.
+  - Equivalent, and left: no pruning at all (Z14), since the pruning is for memory only; the pane's handle check before
+    it queues (Z50), since a queuing with no handle throws and the catch runs the mark at once, as the check does; and
+    the take-back's `backend == null` (E1), since a null read throws inside the step and is answered the same - kept,
+    since it says what it means. `Forgotten`'s clause that the hold was handed over went, since a start's hold always
+    holds. Not pinned: a queuing that throws once the handle has gone dropping the mark (Z49), which cannot be staged on
+    a real pane without a race - and which the delivery limit now bounds.
+  - Left as the coordinator asked: `ReviewPageScaleTests.AThousandFindings...WithinThreeSeconds`, which fails under
+    parallel load and is unrelated to 157A.
+- **Not changed, after the final reviews**: section 8's Not changed, as corrected there - a page held up past its minute
+  by SOLIDWORKS' own work, while a save's restart waits for its check alone, is still restarted under.
+- **Existing cases changed deliberately**: `AHandOversMinuteStartsOnceItsReplyHasReachedThePage` - its reply waits 59
+  minutes where it waited an hour, since an undelivered hand-over holds an hour at most; three renamed for the rule -
+  `AnEvaluationHeldUpPastItsMinuteIsHeldWhileItCarriesTheTokenOfTheBackendUpNow`,
+  `AnEvaluationPastItsMinuteIsNotHeldUnlessItCarriesTheTokenOfTheBackendUpNow`, with three rows more, and
+  `AHoldPastItsMinuteOutlivesTheTabsNextPress`; `WhileACheckHoldsTheRestartANewReviewOrATurnCallIsRefusedSayingSo`, two
+  rows for a review's preparation; `TheAddInStopsTheRestartBeforeTheHostsThatHoldItBackGo`, the stop first; the wiring
+  scans, the token handed on and `AfterPagePosts` read whole; and the proxy's check holds, asked with the token. None
+  was loosened.
+- **Tests**: T249, T294 and T295, against `1f14a98` - T293's, which changed no behaviour (707 host, hold and restart
+  cases before and after) - and stubs where a fix was to come: the add-in's suite grew from 3,766 cases to 3,813. Red
+  first: T249's ten against stubs that carried the token through and kept the old rule - the proxy's two token rows, a
+  late evaluation of a check begun with no backend (2), the token in other letters and no token (2), the delivery limit
+  (2) and on a real pane, and a start whose reply cannot be made; T294's seven; and T295's two, the stop first and a
+  save once stopped. Guards, passing as written: a check begun with no backend breaking nothing (2), which no mutation
+  of the new rule turns red, since it has no null left to miss, and an evaluation that carries no `Authorization`
+  header. Pins, each red under its mutation: the rest.
+- **Gates**: 2026-10-21, on the final reviews' tree: no broken link; C# 0 warnings on a `--no-incremental` build, 10,086
+  passed, and 3,812 of the add-in's 3,813 - the one,
+  `ReviewPageScaleTests.AThousandFindingsAndAThousandGroupedRowsAreRenderedIntoResultsWithinThreeSeconds`, rendered in
+  3,990 ms against its 3 s bound under the suite's load and passes alone, as the coordinator found, and is left as
+  asked; the restart classes (`DeferredRestartTests`, `OtherTabsBackendRestartTests`, `ReviewPageBackendRestartTests`,
+  `TabPagesBackendRestartTests`, 519 cases) and `CheckHoldTests` (113) passed five times in a row; Python, the full
+  suites, run since records changed, 18,111 passed and 5 skipped on 3.12 and on 3.11 (`--isolated`), as before, no
+  Python changed; `ruff check` clean; no label, fixture or pin changed.
+- **Mutations**: as before - each fix of the final reviews taken out once with one exact replacement (Q60 a move), the
+  tree rebuilt, the first round's seven classes run (850 cases for T249's, 862 for T294's and T295's) and the file
+  restored byte for byte (checked by sha256), in two streams, the worktree and a copy of it: each of the 44 turned at
+  least one case red, 96 red results in all; and the take-back's `backend == null` (E1), taken out, turned none, as an
+  equivalent should.
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | Q26 | `CheckPaneHost.TakeBackLate` | the evaluation's token compared with the backend's up now | 7 |
+  | Q27 | `CheckPaneHost.TakeBackLate` | the token compared exactly, not ignoring letter case | 1 |
+  | Q28 | `CheckPaneHost.TakeBackLate` | an evaluation with no token waits for no restart | 1 |
+  | Q29 | `CheckPaneHost.TakeBackLate` | the backend read while no restart runs (Z7) | 1 |
+  | Q30 | `CheckPaneHost.TakeBackLate` | a hold taken over meanwhile read again (Z4) | 2 |
+  | Q31 | `CheckPaneHost.TakeBackLate` | a hold gone meanwhile read again (Z5) | 2 |
+  | Q32 | `CheckPaneHost.TakeTheHold` | a hold past its minute kept until the delivery limit | 2 |
+  | Q33 | `CheckPaneHost.TakeTheHold` | a hold in its minute kept (Z13) | 6 |
+  | Q34 | `CheckPaneHost.Forgotten` | a hold past its minute forgotten only at the delivery limit | 9 |
+  | Q35 | `CheckPaneHost.Forgotten` | only a hold that holds nothing forgotten | 4 |
+  | Q36 | `CheckPaneHost.HoldEvaluation` | a forgotten hold not taken back | 2 |
+  | Q37 | `CheckPaneHost.Holds` | a hand-over whose reply never reaches the page bounded by the delivery limit | 3 |
+  | Q38 | `CheckHoldOptions.DeliveryLimit` | an hour | 2 |
+  | Q39 | `CheckPaneHost.HandOver` | the hand-over timed on the clock the add-in runs with | 2 |
+  | Q40 | `CheckPaneHost.Delivered` | the minute started once (Z17) | 2 |
+  | Q41 | `CheckPaneHost.StartTheMinuteOnDelivery` | no hold handed over, no mark (Z63) | 2 |
+  | Q42 | `CheckPaneHost.RunCheck` | the moved run root judged by the tab's own probe (Z22) | 2 |
+  | Q43 | `CheckHoldOptions.AfterPosts` | the default delivers at once (Z34) | 1 |
+  | Q44 | `CheckHoldOptions.WhileNoRestartRuns` | the default runs the step (Z35) | 1 |
+  | Q45 | `CheckPaneHost.RunCheck` | the mark queued after the reply (Z20) | 1 |
+  | Q46 | `CheckPaneHost.RunCheck` | the reply made before the run is handed over | 1 |
+  | Q47 | `SwReviewAddIn.AfterPagePosts` | with a pane, queued behind its posts (Z44) | 2 |
+  | Q48 | `BackendProxyHandler.ForwardHoldingTheCheck` | the evaluation's token asked with | 3 |
+  | Q49 | `BackendProxyHandler.BearerTokenOf` | the header's name in any letters | 1 |
+  | Q50 | `BackendProxyHandler.BearerTokenOf` | the scheme in any letters | 1 |
+  | Q51 | `BackendProxyHandler.BearerTokenOf` | only a bearer token read | 1 |
+  | Q52 | `BackendProxyHandler.BearerTokenOf` | an empty token read as none | 1 |
+  | Q53 | `SwReviewAddIn` | the token handed on to the check hosts | 1 |
+  | Q54 | `TaskPaneControl` | the token handed on by the pane's proxy | 2 |
+  | Q55 | `ModelCheckHost.HoldEvaluation` | the token handed on to its pane | 5 |
+  | Q56 | `StandardsHost.HoldEvaluation` | the token handed on to its pane | 4 |
+  | Q57 | `ReviewHost.PrepareReview` | the gate a review's start passes | 6 |
+  | Q58 | `ReviewHost.PrepareReview` | the document read again after the gate (149A) | 2 |
+  | Q59 | `DeferredRestart.Now` | no restart once stopped with the add-in | 1 |
+  | Q60 | `SwReviewAddIn.DisconnectFromSW` | the restart stopped first, before the pumps and the tool service | 1 |
+  | Q61 | `CheckPaneHost.RunCheck` | the status while the model is read in the tab's words (Z26) | 1 |
+  | Q62 | `CheckPaneHost.RunCheck` | the ready status's next step in the tab's words (Z27) | 2 |
+  | Q63 | `CheckPaneHost.RunCheck` | the folder that could not be made in the tab's words (Z28) | 2 |
+  | Q64 | `StandardsHost` | the reading words the Standards tab's own (Z52) | 1 |
+  | Q65 | `StandardsHost` | the next step the Standards tab's own (Z53) | 1 |
+  | Q66 | `StandardsHost` | the folder the Standards tab's own (Z54) | 1 |
+  | Q67 | `ModelCheckHost` | the reading words the Model check tab's own | 1 |
+  | Q68 | `ModelCheckHost` | the next step the Model check tab's own | 1 |
+  | Q69 | `ModelCheckHost` | the folder the Model check tab's own | 1 |
+  | E1 | `CheckPaneHost.TakeBackLate` | no backend up read as none - equivalent: a null read throws inside the step, and is answered the same | 0 |
+
+
+**Continuation, 2026-10-21.** The interrupted final-review records above were copied unchanged into
+`codex/resume-157a`, based on `a4cc6f0`; all five original documentation edits remain in their original
+worktree. No product code or test assertion changed. A fresh Windows build, `--no-incremental`, had
+zero warnings, and both complete C# suites passed: 10,086 extractor tests and 3,813 add-in tests. The
+scale test that failed under the earlier load passed in this full run, with its three-second bound
+unchanged. The copied relative links and task ids were checked, and Ruff passed. The complete Python non-live suites with the tokenizer required passed on Python 3.12.3 and
+3.11.16 (`--isolated --all-extras`): 18,111 passed and 5 skipped on each. The all-extras sync and
+tokenizer fetch passed. Changed Markdown has LF in the index; no live test ran and SOLIDWORKS was
+not started. This records T248; the final independent
+review, integration and PR remain pending, and decision 157A remains in progress.
 
 ### 158A. A hold on the tool service's attachment holds back a follow for an hour at most, and 152A's two follow rules stand (2026-10-21)
 
