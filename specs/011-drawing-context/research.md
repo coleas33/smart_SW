@@ -3446,3 +3446,14 @@ passed, from 10,114, the 11 new cases here, and `SwReview.AddIn.Tests` 3,640, fr
 18,112 passed and 5 skipped on 3.12 and the same on 3.11 (`--isolated`); `ruff check` clean; no broken link; every
 changed file LF in the index and CRLF in the working copy. `ffc5b76` on its own, built from scratch and run in a
 worktree of its own: zero warnings, 10,125 and 3,609 passed. SOLIDWORKS was not started.
+
+### R14.8 Final cleanup review: the Terminal's published lists (2026-10-21; T221 to T223)
+
+The three published tool-name lists had the same mutable-array exposure as the guard lists:
+`CliProfileWriter.EnabledTools`, `ToolListingCheck.CodexBuiltIns` and `GeminiBuiltIns`. Each new
+`TerminalListReadOnlyTests` row failed before implementation because its value was an array.
+`ReadOnlyToolList` now takes a private copy and exposes only `IReadOnlyList<string>` and enumeration,
+so callers can count, index and enumerate the same names in the same order without recovering a
+mutable collection. Both CLI checks retain the exact shared objects used by their profiles; no
+allowed name or guard key changed. This is the same small cleanup confirmed by decision 160A's
+final review; the Terminal tab remains hidden. Feature 002 research 160A and T299 record the gates.

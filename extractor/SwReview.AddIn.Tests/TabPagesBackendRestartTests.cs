@@ -747,6 +747,9 @@ public sealed class TabPagesBackendRestartTests
     /// <summary>What the strip says from the add-in's word that the backend did not start (owner decision 150A).</summary>
     private const string NotRunning = "Backend not running";
 
+    /// <summary>The way on the Model check, Standards and Remodel pages put on their banner after a failed start (owner decision 160A).</summary>
+    private const string OtherTabsWayOn = "The backend is not running. Save Settings on the Review tab to start it again.";
+
     /// <summary>
     /// Owner decision 160A: a page that loads, or loads again, after a failed start or restart - whose `status` it never
     /// saw - is told so by `init` (`backend_start_failed`) and says the backend is not running, with the way on the add-in
@@ -839,6 +842,37 @@ public sealed class TabPagesBackendRestartTests
         });
     }
 
+    /// <summary>
+    /// The final review of owner decision 160A: the ask once more after an `init` on its way - a `backend.restarted`, or
+    /// a `ready` status, met one - reads no check again, as the restart's own ask reads none: the check on screen is the
+    /// engineer's.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CheckTabs))]
+    public void TheAskOnceMoreReadsTheLatestCheckNoMore(string tab)
+    {
+        TabPageDriver.Run(tab, driver => driver.WithLatestResult = true, async driver =>
+        {
+            await driver.UntilTheLatestResultIsRead();
+            await driver.Settle();
+            int reads = await driver.LatestResultReads();
+            int readies = driver.Readies;
+
+            driver.HoldReady = true;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.HeldReady == 1, "asked after the restart");
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Settle();
+            await driver.ReleaseOneReady();
+            await driver.Until(() => driver.HeldReady == 1, "asked once more after the init on its way");
+            await driver.ReleaseReady();
+            await driver.Settle();
+
+            Assert.Equal(readies + 2, driver.Readies);
+            Assert.Equal(reads, await driver.LatestResultReads());
+        });
+    }
+
     /// <summary>...while one that loads before the first start has finished, which has not failed, still says it is starting.</summary>
     [Theory]
     [MemberData(nameof(Tabs))]
@@ -869,6 +903,106 @@ public sealed class TabPagesBackendRestartTests
             string banner = Assert.IsType<string>(await driver.Banner());
             Assert.Contains(TabPageDriver.NoRemodelSeat, banner, StringComparison.Ordinal);
             Assert.Contains("Save Settings on the Review tab to start it again.", banner, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>
+    /// The final review of owner decision 160A (item 1): every attach or detach of the tool service refreshes the Remodel
+    /// page's seat (`document.changed` with `remodel`), which this build has none of. After a failed start the banner
+    /// keeps the way on after the seat's word, as an `init` puts them, where the refresh wrote the seat's word alone
+    /// while the strip said the backend is not running.
+    /// </summary>
+    [Fact]
+    public void ASeatRefreshAfterAFailedStartKeepsTheWayOnAfterTheSeatsWord()
+    {
+        TabPageDriver.Run(TabPageDriver.Remodel, driver =>
+        {
+            driver.NoBackend = true;
+            driver.BackendStartFailed = true;
+            driver.RemodelAvailable = false;
+        }, async driver =>
+        {
+            Assert.Equal(TabPageDriver.NoRemodelSeat + " " + OtherTabsWayOn, await driver.Banner());
+
+            await driver.Post("document.changed", new
+            {
+                path = @"C:\Fictional\bracket.sldprt",
+                configuration = "Default",
+                kind = "part",
+                remodel = new { available = false, message = TabPageDriver.NoRemodelSeat },
+            });
+            await driver.Settle();
+
+            Assert.Equal((NotRunning, true), await driver.Strip());
+            Assert.Equal(TabPageDriver.NoRemodelSeat + " " + OtherTabsWayOn, await driver.Banner());
+        });
+    }
+
+    /// <summary>
+    /// A deferred restart can stop the backend the Remodel page already held and then fail. Its lifecycle status
+    /// makes that endpoint obsolete: a later seat refresh still keeps the way on after the seat's word.
+    /// </summary>
+    [Fact]
+    public void ASeatRefreshAfterADeferredRestartFailedKeepsTheWayOnAfterTheSeatsWord()
+    {
+        TabPageDriver.Run(TabPageDriver.Remodel, driver => driver.RemodelAvailable = false, async driver =>
+        {
+            Assert.Equal(("Backend ready", false), await driver.Strip());
+            Assert.Equal(TabPageDriver.NoRemodelSeat, await driver.Banner());
+
+            await driver.Post("status", new
+            {
+                stage = "error",
+                message = "FICT the backend did not restart. Save Settings on the Review tab to start it again.",
+                lifecycle = true,
+            });
+            await driver.Settle();
+            Assert.Equal((NotRunning, true), await driver.Strip());
+
+            await driver.Post("document.changed", new
+            {
+                path = @"C:\Fictional\bracket.sldprt",
+                configuration = "Default",
+                kind = "part",
+                remodel = new { available = false, message = TabPageDriver.NoRemodelSeat },
+            });
+            await driver.Settle();
+
+            Assert.Equal((NotRunning, true), await driver.Strip());
+            Assert.Equal(TabPageDriver.NoRemodelSeat + " " + OtherTabsWayOn, await driver.Banner());
+        });
+    }
+
+    /// <summary>
+    /// ...and an `init` the host read before a start failed - no backend, and no failed start yet - and delivered after
+    /// the add-in's word that it failed keeps the way on after the seat's word: the page's own mark says the backend is
+    /// not running, where the stale `init`'s flag put up the seat's word alone.
+    /// </summary>
+    [Fact]
+    public void AnInitReadBeforeAStartFailedKeepsTheWayOnAfterTheSeatsWord()
+    {
+        TabPageDriver.Run(TabPageDriver.Remodel, driver =>
+        {
+            driver.NoBackend = true;
+            driver.RemodelAvailable = false;
+        }, async driver =>
+        {
+            driver.HoldReady = true;
+            await driver.Post("status", new { stage = "ready", message = "Backend ready." });
+            await driver.Until(() => driver.HeldReady == 1, "asked for an init");
+            await driver.Post("status", new
+            {
+                stage = "error",
+                message = "FICT the backend did not start. Save Settings on the Review tab to start it again.",
+                lifecycle = true,
+            });
+            await driver.Settle();
+            Assert.Equal((NotRunning, true), await driver.Strip());
+
+            await driver.ReleaseReady();
+
+            Assert.Equal((NotRunning, true), await driver.Strip());
+            Assert.Equal(TabPageDriver.NoRemodelSeat + " " + OtherTabsWayOn, await driver.Banner());
         });
     }
 

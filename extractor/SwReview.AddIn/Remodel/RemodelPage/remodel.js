@@ -1008,6 +1008,8 @@
         // The add-in's word that the backend did not start: the strip says so until an `init`
         // names a backend (owner decision 150A).
         state.notRunning = true;
+        state.backend = null;
+        state.token = null;
         renderBackendState(NOT_RUNNING, true);
       }
       return;
@@ -1213,12 +1215,7 @@
     }
 
     if (!state.remodelAvailable) {
-      var availability = state.remodelAvailabilityMessage || NO_SEAT_MESSAGE;
-      // Both can be true on a page opened after a failed start: the seat's refusal stays visible,
-      // with the backend's way on, rather than covering it (owner decision 160A).
-      var failedStart = !state.backend && payload.backend_start_failed === true;
-      showBanner(availability + (failedStart ? ' ' + START_IT_AGAIN : ''));
-      state.lifecycleBanner = failedStart;
+      showRemodelUnavailable();
     }
 
     var latest = payload.latest_run;
@@ -1245,6 +1242,15 @@
     }
   }
 
+  function showRemodelUnavailable() {
+    // Both can be true after a failed start: keep the seat's refusal and the backend's way on,
+    // including a capability push or an init read before that failure (owner decision 160A).
+    var failedStart = state.notRunning && !state.backend;
+    var availability = state.remodelAvailabilityMessage || NO_SEAT_MESSAGE;
+    showBanner(availability + (failedStart ? ' ' + START_IT_AGAIN : ''));
+    state.lifecycleBanner = failedStart;
+  }
+
   function applyRemodelCapability(remodel) {
     // Older hosts omit this additive field. An explicit null means capability is still being
     // checked, so keep actions disabled until the tool service publishes its answer.
@@ -1260,7 +1266,7 @@
       : null;
 
     if (!state.remodelAvailable && state.remodelAvailabilityMessage) {
-      showBanner(state.remodelAvailabilityMessage);
+      showRemodelUnavailable();
     } else if (state.remodelAvailable
         && !wasAvailable
         && previousMessage

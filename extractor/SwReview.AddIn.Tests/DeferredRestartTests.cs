@@ -1693,6 +1693,86 @@ public sealed class DeferredRestartTests
         }
     }
 
+    /// <summary>
+    /// ...and the host is stopping from the first thing its disposal does, before the restart's own disposal, which
+    /// waits up to two seconds for the watcher: a restart that ends inside that wait says nothing either (the decision's
+    /// final review). The host is disposed on a thread of its own, and once the restart answers that none stands ahead
+    /// - its disposal has begun - the held start is let go, inside the wait.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARestartThatEndsWhileTheHostStopsSaysNothing(bool endedByTheUnload)
+    {
+        var hold = new ManualResetEventSlim(false);
+        var world = new RestartWorld();
+        try
+        {
+            world.Backend.Hold = hold;
+            world.Open();
+            world.Track("chat-1");
+            SaveAsATurnStarts(world, "save", Save(effort: "low"));
+            world.Backend.EndTurn("chat-1");
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the watcher never began the restart");
+            Assert.True(world.Host.RestartAhead);
+            int statuses = world.Posted("status").Length;
+            int restarted = world.Posted("backend.restarted").Length;
+            if (endedByTheUnload)
+            {
+                world.Backend.RestartFailure = new BackendStartException("the add-in is unloading, so the backend was not started.");
+            }
+
+            var disposing = new Caller<bool>(() =>
+            {
+                world.Host.Dispose();
+                return true;
+            });
+            Eventually(() => !world.Host.RestartAhead, "the restart's disposal to begin");
+            hold.Set();
+            Assert.Throws<ObjectDisposedException>(() => world.Host.FirstStart((_, __) => { }));
+            Assert.True(disposing.Finishes(TimeSpan.FromSeconds(10)), "the host's disposal never ended");
+            Assert.True(disposing.Result);
+
+            Assert.Equal(endedByTheUnload ? 0 : 1, world.Backend.Restarts.Length);
+            Assert.Empty(world.Posted("status").Skip(statuses));
+            Assert.Equal(restarted, world.Posted("backend.restarted").Length);
+            Assert.Empty(world.FailuresToldToTheOtherTabs);
+            Assert.Equal(0, world.OtherTabsTold);
+        }
+        finally
+        {
+            hold.Set();
+            world.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The decision's final review: each of the restart's three reports - made, failed, and the backend not answering -
+    /// is said through <c>ReportUnlessStopping</c>, read from the source as the add-in's other wiring is. The cases above
+    /// hold the first two; the third has none, since the watcher reads the restart's disposal before it is said and no
+    /// case can hold open the moment between the host's mark and that disposal.
+    /// </summary>
+    [Fact]
+    public void EachOfTheRestartsReportsIsSaidOnlyWhileTheHostIsNotStopping()
+    {
+        string source = System.Text.RegularExpressions.Regex.Replace(
+            File.ReadAllText(Path.Combine(
+                ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn", "Review", "ReviewHost.cs")),
+            @"\s+",
+            " ");
+        string made = OtherTabsBackendRestartTests.Between(source, "_restart = new DeferredRestart(", "options.RestartPoll);");
+
+        Assert.Contains(
+            "() => ReportUnlessStopping(() => { _actions.PostBackendRestarted(RestartSentences); TellTheOtherTabs(); })",
+            made,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "failure => ReportUnlessStopping(() => { PostRestartFailed(failure); TellTheOtherTabsTheRestartFailed(failure); })",
+            made,
+            StringComparison.Ordinal);
+        Assert.Contains("() => ReportUnlessStopping(() => PostStatus(\"error\", RestartNotAnswered))", made, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void APageThatReloadsWhileARestartWaitsLeavesItWaitingAndIsToldWhenItIsMade()
     {

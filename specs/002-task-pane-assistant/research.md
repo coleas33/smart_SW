@@ -5196,3 +5196,39 @@ that read the changed records - `test_workstation_test_plan.py`, which reads eve
     restart classes, 469 cases, passed five times in a row; Python, `pytest -m "not live"` with the tokenizer required,
     18,112 passed and 5 skipped on 3.12 and the same on 3.11 (`--isolated`); `ruff check` clean; every changed file LF
     in the index and CRLF in the working copy. SOLIDWORKS was not started.
+
+### Final cleanup review resumed (2026-10-21; T296 to T299)
+
+The interrupted session left six test files, before their fixes, in the cleanup worktree. They were
+copied into a separate worktree on `codex/resume-160a`, based on `8849e52`; the originals were kept.
+The four page regressions in T296 and the three Terminal-list rows in feature 011 T221 all failed
+before implementation: seven failures, no passes, on the focused run. The C# build had zero warnings.
+
+The Remodel page now keeps the backend's retry sentence alongside its unavailable-seat message
+when a capability push or an init read before the failure reaches it. Its retained not-running mark
+is the authority until init names a backend. The Review page treats the host's lifecycle error as
+a failed backend even while it holds an old endpoint, drops that endpoint, and clears a lifecycle
+banner once init names a backend. Ordinary review/settings errors retain their ordinary error strip.
+The existing settings-error test was extended deliberately through the host's repeated error after
+init, and the old theory's lifecycle row replaced by the explicit failed-endpoint case; assertions
+were not relaxed. Replacement identity survives dropping the endpoint so existing reviews do
+not reconnect to a later backend as if it held their chats. Two additional tests cover a live
+stream and a live waiting review across the next successful save; a third covers the Remodel
+capability update after a deferred restart fails with an endpoint already held. All three failed
+before their fixes. The unavailable-seat banner rule and the Review replacement mark each have
+one shared implementation.
+
+The recovered host-disposal, latest-check and refused-root tests pin existing behaviour; no host,
+run-root or guard implementation change was needed for those cases. The terminal list changes and
+their three failing tests are recorded in feature 011 research R14.8. Task ids T293 to T295 already
+belong to decision 157A on its separate branch, so this continuation starts at T296.
+
+Validation completed on 2026-10-21: `uv sync --all-extras` on Python 3.12, tokenizer fetch,
+and the complete non-live suite with the tokenizer required: 18,112 passed and 5 skipped on
+Python 3.12.3, and the same on Python 3.11.16 (`--isolated --all-extras`). Ruff passed. The
+Windows C# build with `--no-incremental` had zero warnings; the complete suites passed:
+10,125 extractor tests and 3,681 add-in tests. The initial focused run passed 561 cases;
+the later complete run includes all three additional review regressions. Changed Markdown
+relative links and task ids were checked, and the staged text has LF endings. SOLIDWORKS
+was not started, and no live test ran. The remaining branch and review work is
+listed in [the development handoff](../../docs/development-handoff-2026-10-21.md).

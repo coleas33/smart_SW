@@ -205,6 +205,19 @@ internal sealed class ReviewPageDriver
 
     public object? SendWhenCheckedSaveError { get; set; }
 
+    /// <summary>Holds each `settings.save` until <see cref="ReleaseSettingsSave"/>: a save whose restart is being made.</summary>
+    public bool HoldSettingsSave { get; set; }
+
+    private readonly Queue<string> _heldSettingsSaves = new Queue<string>();
+
+    /// <summary>Answers the oldest held `settings.save` as it would be answered now.</summary>
+    public async Task ReleaseSettingsSave()
+    {
+        Assert.NotEmpty(_heldSettingsSaves);
+        AnswerSettingsSave(_heldSettingsSaves.Dequeue());
+        await OffscreenReviewPage.Settled(Page);
+    }
+
     public bool HoldSendWhenCheckedSave { get; set; }
 
     private readonly Queue<(string Id, bool Value)> _heldBoxSaves = new Queue<(string, bool)>();
@@ -727,24 +740,30 @@ var h = {
                 return;
 
             case "settings.save":
-                if (SettingsSaveError != null)
-                {
-                    Reply("error", id, SettingsSaveError);
-                    return;
-                }
-
-                if (RunRootRefusal != null)
-                {
-                    Reply("settings.saved", id, new { settings = Settings(), key_source = "settings", run_root_refusal = RunRootRefusal });
-                    return;
-                }
-
-                Reply("settings.saved", id, new { settings = Settings(), key_source = "settings" });
+                if (HoldSettingsSave) _heldSettingsSaves.Enqueue(id);
+                else AnswerSettingsSave(id);
                 return;
 
             default:
                 return;
         }
+    }
+
+    private void AnswerSettingsSave(string id)
+    {
+        if (SettingsSaveError != null)
+        {
+            Reply("error", id, SettingsSaveError);
+            return;
+        }
+
+        if (RunRootRefusal != null)
+        {
+            Reply("settings.saved", id, new { settings = Settings(), key_source = "settings", run_root_refusal = RunRootRefusal });
+            return;
+        }
+
+        Reply("settings.saved", id, new { settings = Settings(), key_source = "settings" });
     }
 
     private void AnswerRecheck(string id, string chatId)

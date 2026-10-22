@@ -460,17 +460,20 @@ return JSON.stringify({
     /// The review of owner decision 160A (S3): only the backend's own word that it did not start or restart, marked
     /// `lifecycle`, marks it not running, and a save's `BackendNotRestarted`. Another `error` status while the page
     /// holds no backend - the host's word on the settings after every `init`, a stored key that cannot be read, say,
-    /// while the first start still runs - says "Error", as before 160A, and a `ready` after it says the backend is
-    /// ready.
+    /// while the first start still runs - says "Error", as before 160A. <i>Changed deliberately on the decision's final
+    /// review:</i> the host posts that word again after every `init` (<c>ReviewHost.ReportSettingsProblems</c>), the one
+    /// a `ready` asks for among them, so the strip ends on "Error" with the backend held, and is never "Backend not
+    /// running"; the case ended on the "Backend ready" that the host's next word takes away.
     /// </summary>
     [Fact]
     public void ASettingsProblemWhileTheFirstStartRunsIsNoFailedStart()
     {
+        const string Problem = "FICT the stored key could not be decrypted on this account.";
         ReviewPageDriver.Run(driver => driver.NoBackend = true, async driver =>
         {
             Assert.Equal("Backend starting", (await driver.Read(Strip)).GetProperty("text").GetString());
 
-            await driver.Post("status", new { stage = "error", message = "FICT the stored key could not be decrypted on this account." });
+            await driver.Post("status", new { stage = "error", message = Problem });
             await driver.Settle();
             Assert.Equal("Error", (await driver.Read(Strip)).GetProperty("text").GetString());
 
@@ -480,31 +483,101 @@ return JSON.stringify({
             await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for the backend named by ready");
             await driver.Settle();
             Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+
+            // ...and the host's word on the settings once more, after that `init`, as it posts it after every one.
+            await driver.Post("status", new { stage = "error", message = Problem });
+            await driver.Settle();
+            JsonElement strip = await driver.Read(Strip);
+            Assert.Equal("Error", strip.GetProperty("text").GetString());
+            Assert.Equal("badge bad", strip.GetProperty("className").GetString());
+            Assert.Equal(Problem, (await driver.Read(Banner)).GetProperty("text").GetString());
         });
     }
 
     /// <summary>
-    /// An error while a backend is up still says "Error", the add-in's own word on the backend or any other (the
-    /// review of owner decision 160A, S8): research 160A said so, and nothing held it.
+    /// An error while a backend is up still says "Error" (the review of owner decision 160A, S8): research 160A said so,
+    /// and nothing held it. <i>Changed deliberately on the decision's final review:</i> of any word but the backend's
+    /// own, which the host marks only once no backend is up, and which says the backend is not running whatever
+    /// endpoint the page held (below); the case held that word to "Error" too.
     /// </summary>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void AnErrorWhileABackendIsUpStillSaysError(bool backendsOwnWord)
+    [Fact]
+    public void AnErrorWhileABackendIsUpStillSaysError()
     {
         ReviewPageDriver.Run(null, async driver =>
         {
             Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
 
-            const string Failure = "FICT the review stopped part way through.";
-            await driver.Post("status", backendsOwnWord
-                ? (object)new { stage = "error", message = Failure, lifecycle = true }
-                : new { stage = "error", message = Failure });
+            await driver.Post("status", new { stage = "error", message = "FICT the review stopped part way through." });
             await driver.Settle();
 
             JsonElement strip = await driver.Read(Strip);
             Assert.Equal("Error", strip.GetProperty("text").GetString());
             Assert.Equal("badge bad", strip.GetProperty("className").GetString());
+        });
+    }
+
+    /// <summary>
+    /// The final review of owner decision 160A (item 2, decided on review; the owner may revert): the backend's own word
+    /// that it did not start or restart - which the host marks only once no backend is up: a restart that waited
+    /// stopped the old one and failed - says the backend is not running whatever endpoint the page held, as every other
+    /// tab says it, with the way on its words carry, and the page drops that endpoint, so a later `ready` status asks
+    /// for the backend again. The page said "Error", went on holding the dead endpoint, and asked for nothing.
+    /// </summary>
+    [Fact]
+    public void TheBackendsOwnWordSaysItIsNotRunningWhateverEndpointThePageHeld()
+    {
+        const string Failure =
+            "FICT the backend did not answer /health within 30 seconds. Save the settings again to retry the restart.";
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+
+            await driver.Post("status", new { stage = "error", message = Failure, lifecycle = true });
+            await driver.Settle();
+
+            JsonElement strip = await driver.Read(Strip);
+            Assert.Equal("Backend not running", strip.GetProperty("text").GetString());
+            Assert.Equal("badge bad", strip.GetProperty("className").GetString());
+            Assert.Equal(Failure, (await driver.Read(Banner)).GetProperty("text").GetString());
+
+            driver.NoBackend = true;
+            driver.BackendStartFailed = true;
+            int readies = driver.Posted("ready").Length;
+            await driver.Post("status", new { stage = "ready", message = "Context evidence extracted; no review tokens used." });
+            await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for the backend it no longer holds");
+            await driver.Settle();
+            Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// The final review of owner decision 160A: the add-in's word that the first start failed comes down once an
+    /// `init` names a backend, as every other page's does (`lifecycleBanner`). A Save pressed while the first start ran,
+    /// its restart made after the start had failed, leaves a backend up, and the page said "Backend ready" under the
+    /// failure, since it took down only the way on an `init` puts up (owner decision 150A).
+    /// </summary>
+    [Fact]
+    public void AFirstStartsFailureComesDownOnceTheSavesInitNamesABackend()
+    {
+        const string Failure = "FICT the backend did not start. Save Settings to start it again.";
+        ReviewPageDriver.Run(driver => driver.NoBackend = true, async driver =>
+        {
+            driver.HoldSettingsSave = true;
+            await driver.Click("save-settings");
+            await driver.Settle();
+
+            await driver.Post("status", new { stage = "error", message = Failure, lifecycle = true });
+            await driver.Settle();
+            Assert.Equal(Failure, (await driver.Read(Banner)).GetProperty("text").GetString());
+
+            driver.NoBackend = false;
+            int readies = driver.Posted("ready").Length;
+            await driver.ReleaseSettingsSave();
+            await driver.Until(() => driver.Posted("ready").Length == readies + 1, "asked for the backend the save started");
+            await driver.Settle();
+
+            Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+            Assert.True((await driver.Read(Banner)).GetProperty("hidden").GetBoolean());
         });
     }
 
@@ -789,6 +862,71 @@ return JSON.stringify({
             int reviews = (await driver.Calls()).Count(call => call.GetProperty("path").GetString() == fixture.ReviewPath);
 
             await SaveWhoseRestartFailsOnceTheOldBackendStopped(driver);
+            await SaveThatRestartsTheBackend(driver);
+
+            JsonElement state = await driver.Read(ReviewPageRecheckTests.ReadState);
+            Assert.True(state.GetProperty("readOnly").GetBoolean(), state.GetRawText());
+            Assert.Equal(
+                reviews + 1,
+                (await driver.Calls()).Count(call => call.GetProperty("path").GetString() == fixture.ReviewPath));
+        });
+    }
+
+    /// <summary>
+    /// A restart that waited can fail after stopping the old backend, announced by its own lifecycle status rather
+    /// than a save's reply. Dropping the dead endpoint must preserve that a replacement is due: a later save's new
+    /// backend does not hold the chat on screen, and the old stream must not be opened against it.
+    /// </summary>
+    [Fact]
+    public void AfterADeferredRestartsLifecycleFailureTheNextSaveAsksNothingOfTheOldChatsStream()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await driver.HoldTimers();
+            await driver.StartReview();
+            string chatId = Assert.Single(driver.Posted("events.open")).GetProperty("chat_id").GetString()!;
+            await driver.Push(chatId, 7, "text.delta", "{\"text\":\"FICT\"}");
+            await driver.Settle();
+
+            await driver.Post("status", new
+            {
+                stage = "error",
+                message = "FICT the backend did not restart. Save Settings to start it again.",
+                lifecycle = true,
+            });
+            await driver.Settle();
+            int opens = driver.Posted("events.open").Length;
+
+            await SaveThatRestartsTheBackend(driver);
+            await driver.RunHeldTimers();
+            await driver.RunHeldTimers();
+
+            Assert.Equal(opens, driver.Posted("events.open").Length);
+        });
+    }
+
+    /// <summary>
+    /// The same lifecycle failure with a live waiting review: the next save restores it from its folder, read-only
+    /// with Send offered, rather than keeping a live chat that the new backend does not hold (feature 015 FR-042).
+    /// </summary>
+    [Fact]
+    public void AfterADeferredRestartsLifecycleFailureTheNextSaveRestoresALiveWaitingReview()
+    {
+        RestoredReviewFixture fixture = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(driver => fixture.Configure(driver, refuseSend: true), async driver =>
+        {
+            await ReviewPageRecheckTests.PressSend(driver);
+            Assert.False((await driver.Read(ReviewPageRecheckTests.ReadState)).GetProperty("readOnly").GetBoolean());
+            await driver.Route("GET", "/sessions/" + fixture.RecheckedChat + "/snapshot", 404, ReviewPageRecheckTests.UnknownChat);
+            int reviews = (await driver.Calls()).Count(call => call.GetProperty("path").GetString() == fixture.ReviewPath);
+
+            await driver.Post("status", new
+            {
+                stage = "error",
+                message = "FICT the backend did not restart. Save Settings to start it again.",
+                lifecycle = true,
+            });
+            await driver.Settle();
             await SaveThatRestartsTheBackend(driver);
 
             JsonElement state = await driver.Read(ReviewPageRecheckTests.ReadState);

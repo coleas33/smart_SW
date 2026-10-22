@@ -211,6 +211,8 @@
     // A start or restart failed and no `init` has named a backend since (owner decisions 150A and
     // 160A): the strip says the backend is not running, not that it is starting.
     notRunning: false,
+    // The banner holds the host's word that a start failed, until an init names a backend.
+    lifecycleBanner: false,
     // The host's sentence while the backend that is up runs with settings other than the saved
     // ones - a restart failed before it stopped the old backend - as the last `init` carried it,
     // or null (owner decision 153A): what the banner says whenever it says nothing else.
@@ -2807,6 +2809,7 @@
   }
 
   function showBanner(text) {
+    state.lifecycleBanner = false;
     // While the saved settings are not in force, the host's sentence saying so is what the banner
     // says when it is given nothing else to say (owner decision 153A).
     var shown = text || state.notInForce || '';
@@ -2874,8 +2877,12 @@
       // is not running - with a save's `BackendNotRestarted` - not any `error` while the page holds
       // no backend: the host's word on the settings after every `init` comes while the first start
       // runs, too (the review of owner decision 160A, S3).
-      if (!state.backend && payload.lifecycle === true) {
+      state.lifecycleBanner = payload.lifecycle === true;
+      if (state.lifecycleBanner) {
+        expectBackendReplacement();
         state.notRunning = true;
+        state.backend = null;
+        state.token = null;
       }
       renderBackendState(state.notRunning ? NOT_RUNNING : 'Error', true);
       return;
@@ -2897,6 +2904,13 @@
     }
     renderBackendState(state.notRunning && !state.backend ? NOT_RUNNING : (message || stage || ''),
       state.notRunning && !state.backend);
+  }
+
+  function expectBackendReplacement() {
+    if (!state.backendReplaced) {
+      state.backendReplaced = true;
+      state.replacedToken = state.token;
+    }
   }
 
   function renderBackendState(text, bad) {
@@ -3102,10 +3116,7 @@
         // that names a backend would have none to compare its own with. Marked as `backend.restarted`
         // marks it, the first such `init` naming a token other than the one held now is believed to
         // be a new backend - the old one still up names this one (150A review, S1).
-        if (!state.backendReplaced) {
-          state.backendReplaced = true;
-          state.replacedToken = state.token;
-        }
+        expectBackendReplacement();
         requestInit(false);
       }
     }).then(function () {
@@ -3180,7 +3191,7 @@
       holdNotInForce(payload.settings_not_in_force, payload.settings_not_in_force_revision);
       if (state.backend) {
         state.notRunning = false;
-        if (ui.banner.textContent === START_IT_AGAIN) {
+        if (state.lifecycleBanner) {
           showBanner('');
         }
       } else if (payload.backend_start_failed === true) {
@@ -3188,6 +3199,7 @@
         state.notRunning = true;
         if (ui.banner.hidden) {
           showBanner(START_IT_AGAIN);
+          state.lifecycleBanner = true;
         }
       }
       renderBackendState(

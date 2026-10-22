@@ -147,10 +147,30 @@ public sealed class RunFoldersLongNamesTests : IDisposable
         Assert.Null(RunFolders.NewestCheckFolder(refused.RunRoot, RunFolders.CheckSuffix, refused.Probe));
         Assert.Null(RunFolders.FindNotSentReview(refused.RunRoot, Bracket, OpenWaitingHead, refused.Probe));
 
-        Assert.DoesNotContain(refused.Probe.Asked, call => call.StartsWith("LongPathOf", StringComparison.Ordinal));
-        Assert.DoesNotContain(refused.Probe.Asked, call => call.StartsWith("EntryOf", StringComparison.Ordinal));
+        Assert.All(refused.Probe.Asked, call => Assert.True(AboutTheDrive(call), "read of a refused root: " + call));
         Assert.Equal(2, refused.Probe.Asked.Count(call => call.StartsWith("DriveOf", StringComparison.Ordinal)));
     }
+
+    /// <summary>
+    /// The final review of owner decision 160A: a folder held to a root the rule refuses - the containment rule's second
+    /// look, made when the folder is not under the root as written - reads nothing of that root but its drive, no final
+    /// path, long name or part of it, as a search reads none.
+    /// </summary>
+    [Theory]
+    [InlineData("on a share")]
+    [InlineData("through a link")]
+    public void AContainmentCheckRefusesTheRootBeforeAnythingOfItIsRead(string kind)
+    {
+        var refused = FakeRunRootProbe.Refusing(kind, Path.Combine(_root, "runs"));
+
+        Assert.False(RunFolders.IsUnder(Path.Combine(_root, "elsewhere", "20261021-123456-bracket"), refused.RunRoot, refused.Probe));
+        Assert.NotEmpty(refused.Probe.Asked);
+        Assert.All(refused.Probe.Asked, call => Assert.True(AboutTheDrive(call), "read of a refused root: " + call));
+    }
+
+    /// <summary>Whether a question the probe was asked is about the drive alone: what it is, and what it stands for.</summary>
+    private static bool AboutTheDrive(string call) =>
+        call.StartsWith("DriveOf ", StringComparison.Ordinal) || call.StartsWith("SubstituteOf ", StringComparison.Ordinal);
 
     /// <summary>
     /// The review of owner decision 160A (S5): a root not made yet, below an existing folder spelled with 8.3 names, hands a
@@ -275,9 +295,29 @@ public sealed class RunFoldersLongNamesTests : IDisposable
             calls.Select(call => call.Substring(0, call.IndexOf('('))).OrderBy(call => call, StringComparer.Ordinal));
         Assert.All(
             calls.Where(call => !call.StartsWith("TaskPaneControl.cs CreateForTerminal(", StringComparison.Ordinal)),
-            call => Assert.Contains("RunRootProbe", call, StringComparison.Ordinal));
+            call => Assert.Contains(LastArgument(call), new[] { "_options.RunRootProbe", "_options.RunRootProbe()" }));
         Assert.Equal(5, options.Count);
-        Assert.All(options, made => Assert.Contains("RunRootProbe = ", made, StringComparison.Ordinal));
+        Assert.All(options, made => Assert.Matches(@"RunRootProbe = \(\) => _?options\.RunRootProbe(\(\))?,", made));
+    }
+
+    /// <summary>
+    /// The last argument of a call as the scan above writes it - "File.cs Name(arguments)" - by the commas outside any
+    /// bracket: the host's probe, exactly, and not another that names a probe too (the decision's final review).
+    /// </summary>
+    private static string LastArgument(string call)
+    {
+        string arguments = call.Substring(call.IndexOf('(') + 1, call.LastIndexOf(')') - call.IndexOf('(') - 1);
+        int depth = 0;
+        int last = 0;
+        for (int index = 0; index < arguments.Length; index++)
+        {
+            char character = arguments[index];
+            if (character == '(' || character == '{' || character == '[') depth++;
+            if (character == ')' || character == '}' || character == ']') depth--;
+            if (character == ',' && depth == 0) last = index + 1;
+        }
+
+        return arguments.Substring(last).Trim();
     }
 
     /// <summary>
