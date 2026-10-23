@@ -270,12 +270,13 @@ public sealed class RemodelScope
     /// <c>SaveAs*</c> - but this assertion is what the test suite pins and what the run report
     /// cites, so the property is checked rather than merely argued.
     ///
-    /// Only <paramref name="copyPath"/>, spelled exactly as this run created it, passes.
+    /// Only a path whose canonical form matches <paramref name="copyPath"/>'s exactly passes.
     /// Everything else is refused with the reason named: a path carrying <c>..</c> (refused
     /// before canonicalization, so a path that would canonicalize onto the copy is refused
     /// too), a path that is not a part file, the source, a path outside this run's folder -
-    /// another run's copy among them - and the copy path spelled in another case or as an 8.3
-    /// short name, because the final comparison is exact.
+    /// another run's copy among them - and canonical paths that differ, including in letter case.
+    /// Both paths are canonicalized with <see cref="Path.GetFullPath(string)"/> before that exact
+    /// comparison; no separate rule refuses an 8.3 short spelling that canonicalizes to the copy.
     /// </summary>
     public static void AssertSaveTarget(string path, string copyPath, string runDirectory, string sourcePath)
     {
@@ -316,8 +317,8 @@ public sealed class RemodelScope
 
         if (!string.Equals(fullCandidate, fullCopy, StringComparison.Ordinal))
         {
-            throw Refusal($"'{candidate}' is not this run's copy '{fullCopy}'. The comparison is "
-                + "exact, so another case or an 8.3 short name of the same file is refused.");
+            throw Refusal($"'{candidate}' is not this run's copy '{fullCopy}'. "
+                + "The canonical paths must match exactly, including letter case.");
         }
     }
 

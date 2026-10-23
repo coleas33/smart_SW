@@ -51,6 +51,9 @@ public sealed class ModelCheckHostOptions
     /// </summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
 
+    /// <summary>A failed start with no backend up, remembered by the Review host (owner decision 160A).</summary>
+    public Func<bool> BackendStartFailed { get; set; } = () => false;
+
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
 
@@ -166,7 +169,9 @@ public sealed class ModelCheckHost : IDisposable
         {
             RunRootsInForce = () => options.RunRootsInForce(),
             RunRootSaved = () => options.RunRootSaved(),
+            RunRootProbe = () => options.RunRootProbe,
             Backend = () => options.Backend(),
+            BackendStartFailed = () => options.BackendStartFailed(),
             CurrentDocument = () => options.CurrentDocument(),
 
             // What `init` reads the newest check back by after a restart, from the folder names
@@ -246,7 +251,7 @@ public sealed class ModelCheckHost : IDisposable
         }
 
         if (actions.RefusedRunRoot(
-                id, runRoot, _options.RunRootProbe, NothingChecked, RunRootRule.InSettingsOnTheReviewTab, PressAgain))
+                id, runRoot, NothingChecked, RunRootRule.InSettingsOnTheReviewTab, PressAgain))
         {
             return;
         }
@@ -292,7 +297,7 @@ public sealed class ModelCheckHost : IDisposable
         try
         {
             runDirectory = RunFolders.CreateForCheck(
-                runRoot, document.Path, _options.Now());
+                runRoot, document.Path, _options.Now(), _options.RunRootProbe);
         }
         catch (Exception failure)
         {

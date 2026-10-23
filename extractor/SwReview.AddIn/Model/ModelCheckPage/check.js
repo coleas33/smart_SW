@@ -57,6 +57,10 @@
     startCheck: startCheck,
     describeCounts: describeCounts,
 
+    // An Accept's notice has a place of its own beside the check's status, as on the Standards
+    // tab, and a failed check keeps the banner (decided on the review of owner decision 160A).
+    acceptNoticeId: 'accept-notice',
+
     // What a waiver binds to, in words. This family grades parts, so the label says "part";
     // the Standards tab grades parts, assemblies and drawings and says "document"
     // (contracts/model-check.md section 5).

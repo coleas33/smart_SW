@@ -1642,6 +1642,137 @@ public sealed class DeferredRestartTests
         }
     }
 
+    /// <summary>
+    /// The review of owner decision 160A (D1, the race review's probe): a restart that waited for a turn and is
+    /// being made when SOLIDWORKS unloads - the host disposed while the start runs - says nothing once it ends,
+    /// whether the backend client's disposal ends the start ("the add-in is unloading...") or the start returns
+    /// first: no `status` to the Review page, least of all one that says to save again, no `backend.restarted`, and
+    /// nothing to the other tabs. No page waits on an answer - the save was answered when it was made - the pages
+    /// go with the add-in, and the saved settings, on disk, are what its next start starts the backend with; a save
+    /// that meets the unload is answered `AddInStopping` (owner decision 160A, item 8), since its page waits on it.
+    /// The barrier is the restart's own lock, which the watcher holds until its report is made:
+    /// <see cref="ReviewHost.FirstStart"/> takes it, and is refused once the host is disposed.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARestartThatWaitedAndMeetsTheUnloadSaysNothing(bool endedByTheUnload)
+    {
+        var hold = new ManualResetEventSlim(false);
+        var world = new RestartWorld();
+        try
+        {
+            world.Backend.Hold = hold;
+            world.Open();
+            world.Track("chat-1");
+            SaveAsATurnStarts(world, "save", Save(effort: "low"));
+            world.Backend.EndTurn("chat-1");
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the watcher never began the restart");
+
+            world.Host.Dispose();
+            int statuses = world.Posted("status").Length;
+            int restarted = world.Posted("backend.restarted").Length;
+            if (endedByTheUnload)
+            {
+                world.Backend.RestartFailure = new BackendStartException("the add-in is unloading, so the backend was not started.");
+            }
+
+            hold.Set();
+            Assert.Throws<ObjectDisposedException>(() => world.Host.FirstStart((_, __) => { }));
+
+            Assert.Equal(endedByTheUnload ? 0 : 1, world.Backend.Restarts.Length);
+            Assert.Empty(world.Posted("status").Skip(statuses));
+            Assert.Equal(restarted, world.Posted("backend.restarted").Length);
+            Assert.Empty(world.FailuresToldToTheOtherTabs);
+            Assert.Equal(0, world.OtherTabsTold);
+        }
+        finally
+        {
+            hold.Set();
+            world.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// ...and the host is stopping from the first thing its disposal does, before the restart's own disposal, which
+    /// waits up to two seconds for the watcher: a restart that ends inside that wait says nothing either (the decision's
+    /// final review). The host is disposed on a thread of its own, and once the restart answers that none stands ahead
+    /// - its disposal has begun - the held start is let go, inside the wait.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARestartThatEndsWhileTheHostStopsSaysNothing(bool endedByTheUnload)
+    {
+        var hold = new ManualResetEventSlim(false);
+        var world = new RestartWorld();
+        try
+        {
+            world.Backend.Hold = hold;
+            world.Open();
+            world.Track("chat-1");
+            SaveAsATurnStarts(world, "save", Save(effort: "low"));
+            world.Backend.EndTurn("chat-1");
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the watcher never began the restart");
+            Assert.True(world.Host.RestartAhead);
+            int statuses = world.Posted("status").Length;
+            int restarted = world.Posted("backend.restarted").Length;
+            if (endedByTheUnload)
+            {
+                world.Backend.RestartFailure = new BackendStartException("the add-in is unloading, so the backend was not started.");
+            }
+
+            var disposing = new Caller<bool>(() =>
+            {
+                world.Host.Dispose();
+                return true;
+            });
+            Eventually(() => !world.Host.RestartAhead, "the restart's disposal to begin");
+            hold.Set();
+            Assert.Throws<ObjectDisposedException>(() => world.Host.FirstStart((_, __) => { }));
+            Assert.True(disposing.Finishes(TimeSpan.FromSeconds(10)), "the host's disposal never ended");
+            Assert.True(disposing.Result);
+
+            Assert.Equal(endedByTheUnload ? 0 : 1, world.Backend.Restarts.Length);
+            Assert.Empty(world.Posted("status").Skip(statuses));
+            Assert.Equal(restarted, world.Posted("backend.restarted").Length);
+            Assert.Empty(world.FailuresToldToTheOtherTabs);
+            Assert.Equal(0, world.OtherTabsTold);
+        }
+        finally
+        {
+            hold.Set();
+            world.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The decision's final review: each of the restart's three reports - made, failed, and the backend not answering -
+    /// is said through <c>ReportUnlessStopping</c>, read from the source as the add-in's other wiring is. The cases above
+    /// hold the first two; the third has none, since the watcher reads the restart's disposal before it is said and no
+    /// case can hold open the moment between the host's mark and that disposal.
+    /// </summary>
+    [Fact]
+    public void EachOfTheRestartsReportsIsSaidOnlyWhileTheHostIsNotStopping()
+    {
+        string source = System.Text.RegularExpressions.Regex.Replace(
+            File.ReadAllText(Path.Combine(
+                ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn", "Review", "ReviewHost.cs")),
+            @"\s+",
+            " ");
+        string made = OtherTabsBackendRestartTests.Between(source, "_restart = new DeferredRestart(", "options.RestartPoll);");
+
+        Assert.Contains(
+            "() => ReportUnlessStopping(() => { _actions.PostBackendRestarted(RestartSentences); TellTheOtherTabs(); })",
+            made,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "failure => ReportUnlessStopping(() => { PostRestartFailed(failure); TellTheOtherTabsTheRestartFailed(failure); })",
+            made,
+            StringComparison.Ordinal);
+        Assert.Contains("() => ReportUnlessStopping(() => PostStatus(\"error\", RestartNotAnswered))", made, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void APageThatReloadsWhileARestartWaitsLeavesItWaitingAndIsToldWhenItIsMade()
     {
@@ -2842,6 +2973,37 @@ public sealed class DeferredRestartTests
         Assert.Equal(1, world.OtherTabsTold);
     }
 
+    /// <summary>
+    /// The review of owner decision 160A (D3): a restart the backend's own check refuses, since a turn runs, is no
+    /// start made, and leaves the mark of the last start as it was - off when no start had failed, so a backend that
+    /// is gone later is not called one that did not start; on when the last start made had failed before it stopped
+    /// the old backend, which the refusal does not undo. The mark is read once no backend is up, where it counts.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ARestartRefusedForARunningTurnLeavesTheLastStartsMarkAsItWas(bool lastStartFailed)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        if (lastStartFailed)
+        {
+            world.Backend.EarlyRestartFailure = new BackendStartException("FICT the launcher could not be resolved.");
+            world.Receive("settings.save", "failed", Save(effort: "low"));
+            Assert.Equal("BackendNotRestarted", world.Reply("error", "failed").GetProperty("error_class").GetString());
+            world.Backend.EarlyRestartFailure = null;
+        }
+
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "refused", Save(effort: "medium"));
+        world.Reply("settings.saved", "refused");
+        Assert.True(world.Host.RestartAhead);
+        Assert.Equal(lastStartFailed ? 1 : 0, world.Backend.Attempts);
+
+        world.Backend.Down = true;
+        Assert.Equal(lastStartFailed, world.Host.BackendStartFailed);
+    }
+
     // ---- 12. a restart that waited and failed names the way on (150A review) ------------------
 
     /// <summary>
@@ -2853,7 +3015,10 @@ public sealed class DeferredRestartTests
     /// with the settings it was started with, which are in force until a restart succeeds, so its way
     /// on is the sentence saying the saved settings are not in force yet, which ends with them (owner
     /// decision 153A). The other tabs are handed the failure alone, and only once no backend is up:
-    /// the add-in adds their way on.
+    /// the add-in adds their way on. <i>Strengthened deliberately on the review of owner decision 160A
+    /// (S3):</i> the Review page's word is marked as the backend's own (`lifecycle`) exactly when the other
+    /// tabs are told - no backend is up - since that mark, and a save's `BackendNotRestarted`, are now all
+    /// that tell its strip the backend is not running.
     /// </summary>
     [Theory]
     [InlineData(
@@ -2890,6 +3055,9 @@ public sealed class DeferredRestartTests
         Assert.Equal("error", status.GetProperty("stage").GetString());
         Assert.Equal(said, status.GetProperty("message").GetString());
         Assert.Equal(when == "old backend stopped" ? new[] { failure } : new string[0], world.FailuresToldToTheOtherTabs);
+        Assert.Equal(
+            when == "old backend stopped",
+            status.TryGetProperty("lifecycle", out JsonElement lifecycle) && lifecycle.GetBoolean());
     }
 
     // ---- 13. until a restart succeeds, the settings the backend was started with are in force (153A)
@@ -4032,7 +4200,7 @@ public sealed class DeferredRestartTests
                     // As SwReviewAddIn.StartBackend tells it, once the second save's restart has begun: the
                     // Review page, then the log (Report, which masks through the review host).
                     Eventually(() => world.Backend.Attempts == attempts + 2, "the second save's restart");
-                    world.Host.PostStatus("error", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain));
+                    world.Host.PostStatus("error", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain), lifecycle: true);
                     logged = world.Host.Redact(failure.ToString());
                     return false;
                 }

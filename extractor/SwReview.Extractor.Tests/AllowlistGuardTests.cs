@@ -403,6 +403,9 @@ public class AllowlistGuardTests
     /// to which its own tests pin it - and its bare names have its own policy: the confirmed drawing's and the
     /// stage-1's are the read-only guard's answer, with no reads of their own, and the pane seat's are its five
     /// reads alone. What the tests read is a copy: nothing done to it changes what a guard allows.
+    /// <i>Changed deliberately with owner decision 160A (feature 011 research R14):</i> what they read is
+    /// now a read-only view, which implements no <see cref="ICollection{T}"/> at all, so a cast to one
+    /// fails rather than reaching an <c>Add</c> that throws - stronger than before, not looser.
     /// </summary>
     [Fact]
     public void EachGuardsKeysAndBareNamePolicyAreItsOwn()
@@ -423,8 +426,8 @@ public class AllowlistGuardTests
 
         foreach (AllowlistGuard guard in guards.Values)
         {
-            Assert.Throws<NotSupportedException>(() => ((ICollection<string>)guard.Keys).Add("IModelDoc2.EditDelete"));
-            Assert.Throws<NotSupportedException>(() => ((ICollection<string>)guard.Reads).Add("CloseDoc"));
+            Assert.False(guard.Keys is ICollection<string>, guard.GetType().Name + ".Keys can be cast to a mutable collection.");
+            Assert.False(guard.Reads is ICollection<string>, guard.GetType().Name + ".Reads can be cast to a mutable collection.");
             Assert.Throws<MutatingCallError>(() => guard.Assert("IModelDoc2.EditDelete"));
         }
     }

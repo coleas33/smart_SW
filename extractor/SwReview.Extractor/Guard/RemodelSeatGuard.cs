@@ -65,7 +65,7 @@ public sealed class RemodelSeatGuard : AllowlistGuard
     };
 
     /// <summary>The allowlist, for reading: the tests assert it as an exact set.</summary>
-    public static readonly IReadOnlyCollection<string> AllowedKeys = AllowedKeySet;
+    public static readonly IReadOnlyCollection<string> AllowedKeys = new ReadOnlySet<string>(AllowedKeySet);
 
     /// <summary>
     /// Decision 148A: the reads the seat makes, by the bare names every read call site of the product
@@ -82,7 +82,7 @@ public sealed class RemodelSeatGuard : AllowlistGuard
     };
 
     /// <summary>The reads the seat makes, for reading: the tests assert them as an exact set.</summary>
-    public static readonly IReadOnlyCollection<string> AllowedReads = AllowedReadSet;
+    public static readonly IReadOnlyCollection<string> AllowedReads = new ReadOnlySet<string>(AllowedReadSet);
 
     /// <summary>A closed allowlist: the seat's two keys and its five reads, and no other name.</summary>
     public RemodelSeatGuard()

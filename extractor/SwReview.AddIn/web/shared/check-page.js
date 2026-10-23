@@ -102,6 +102,10 @@
    *     a waiver is bound to - a part for one family, any graded document for the other.
    *   - `describeCounts(result)`: the one-line sentence about the counts, printed after a check
    *     and after an accept. The buckets it reads are the family's, so the family writes it.
+   *   - `acceptNoticeId`, optional: the element an Accept whose check is not shown again says so
+   *     in, kept apart from the banner a failed check uses (owner decision 160A). Both check pages
+   *     have one: the Standards page since the decision, its failed check clearing the rows, and
+   *     the Model check page since its review; without one the notice takes the banner.
    *
    * And two hooks, both optional, for the facts one family's `init` carries and the other's
    * does not. A page that defines neither behaves exactly as it did before they existed:
@@ -152,6 +156,12 @@
        * 145A).
        */
       initAgain: false,
+
+      /** A discarded first init must still load its latest check once fresh state arrives. */
+      initAgainLoadsLatest: false,
+
+      /** A lifecycle failure invalidates every init request already in flight (160A's final review). */
+      backendFailureRevision: 0,
 
       /**
        * A read of the latest check an `init` named failed - the backend refused the call or did
@@ -485,13 +495,34 @@
 
     /**
      * An Accept whose exception is written but whose check is not shown again: the exception, why
-     * it is not shown, and the way on, in the banner. Both the exception and why are said, because
-     * a page that said only why would invite a second acceptance of the same rule.
+     * it is not shown, and the way on, in the page's own place for it (`acceptNoticeId`) or in the
+     * banner. Both the exception and why are said, because a page that said only why would invite a
+     * second acceptance of the same rule.
      */
     function acceptedWithoutReRead(exceptionId, why) {
-      showBanner(
-        'Accepted as ' + (exceptionId || 'a new exception') + why
-          + ' Press the check again to see where it stands.');
+      var notice = 'Accepted as ' + (exceptionId || 'a new exception') + why
+        + ' Press the check again to see where it stands.';
+      // Its own place survives a failed check - which on the Standards tab clears every result
+      // row - and leaves the failure banner visible too (owner decision 160A, and its review).
+      if (ui.acceptNotice) {
+        dom.clear(ui.acceptNotice);
+        dom.write(ui.acceptNotice, notice);
+        ui.acceptNotice.hidden = false;
+      } else {
+        showBanner(notice);
+      }
+    }
+
+    /**
+     * Takes the Accept's notice down from its own place: a result shown says where the check stands,
+     * which the notice sent the engineer to see (decided on the review of owner decision 160A). Not
+     * for a check that failed, which shows no result, so the notice outlasts the failure.
+     */
+    function hideAcceptNotice() {
+      if (ui.acceptNotice) {
+        dom.clear(ui.acceptNotice);
+        ui.acceptNotice.hidden = true;
+      }
     }
 
     /** Points at the row that was just accepted, and names the exception that covers it. */
@@ -598,6 +629,9 @@
     function renderResult(result) {
       state.result = result || null;
       state.subjects = Object.create(null);
+      if (state.result) {
+        hideAcceptNotice();
+      }
 
       dom.clear(ui.header);
       page.renderHeader(state.result, ui.header, api);
@@ -1318,9 +1352,12 @@
         showBanner(payload.message || 'the check stopped');
         state.lifecycleBanner = payload.lifecycle === true;
         if (state.lifecycleBanner) {
+          state.backendFailureRevision++;
           // The add-in's word that the backend did not start: the strip says so until an `init`
           // names a backend (owner decision 150A).
           state.notRunning = true;
+          state.backend = null;
+          state.token = null;
           renderBackendState(NOT_RUNNING, true);
         }
         return;
@@ -1331,8 +1368,14 @@
         // holds is null and every check call would be refused for the life of the page. Ask
         // again, as `app.js` already does for the Review page. Guarded on `state.backend` so the
         // host's own end-of-extraction `status {stage: "ready"}` does not re-initialise the page
-        // in the middle of a check.
-        requestInit(false);
+        // in the middle of a check. An `init` already on its way may have been read before the
+        // backend was up: ask once more after it, as `backend.restarted` does (the review of owner
+        // decision 160A, D2).
+        if (state.initPending) {
+          state.initAgain = true;
+        } else {
+          requestInit(false);
+        }
       }
 
       setCheckState((payload && payload.message) || '');
@@ -1391,6 +1434,7 @@
       ui.documentName = byId('document-name');
       ui.backendState = byId('backend-state');
       ui.banner = byId('banner');
+      ui.acceptNotice = page.acceptNoticeId ? byId(page.acceptNoticeId) : null;
       ui.runCheck = byId('run-check');
       ui.openReport = byId('open-report');
       ui.openFolder = byId('open-folder');
@@ -1476,18 +1520,30 @@
       }
 
       state.initPending = true;
+      var failureRevision = state.backendFailureRevision;
       send('ready', {})
         .then(function (payload) {
+          if (failureRevision !== state.backendFailureRevision) {
+            return;
+          }
           applyInit(payload, loadLatest);
         })
         .catch(function (error) {
-          showBanner(error.message);
+          if (failureRevision === state.backendFailureRevision) {
+            showBanner(error.message);
+          }
         })
         .then(function () {
           state.initPending = false;
+          if (failureRevision !== state.backendFailureRevision) {
+            state.initAgain = true;
+            state.initAgainLoadsLatest = state.initAgainLoadsLatest || loadLatest;
+          }
           if (state.initAgain) {
+            var loadLatestAgain = state.initAgainLoadsLatest;
             state.initAgain = false;
-            requestInit(false);
+            state.initAgainLoadsLatest = false;
+            requestInit(loadLatestAgain);
             return;
           }
 
@@ -1511,6 +1567,13 @@
       renderBinding();
       if (state.backend) {
         state.notRunning = false;
+      } else if (payload.backend_start_failed === true) {
+        // A page opened after the failure missed its status (owner decision 160A).
+        state.notRunning = true;
+        if (ui.banner.hidden) {
+          showBanner('The backend is not running. Save Settings on the Review tab to start it again.');
+          state.lifecycleBanner = true;
+        }
       }
       renderBackendState(
         state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),

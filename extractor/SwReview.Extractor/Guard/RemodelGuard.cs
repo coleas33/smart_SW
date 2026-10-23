@@ -142,10 +142,10 @@ public sealed class RemodelGuard : AllowlistGuard
     };
 
     /// <summary>The stage-1 allowlist, for reading: the tests assert it as an exact table.</summary>
-    public static readonly IReadOnlyCollection<string> AllowedKeys = AllowedKeySet;
+    public static readonly IReadOnlyCollection<string> AllowedKeys = new ReadOnlySet<string>(AllowedKeySet);
 
     /// <summary>The members this guard refuses itself, for reading.</summary>
-    public static readonly IReadOnlyCollection<string> ExcludedMembers = ExcludedMemberSet;
+    public static readonly IReadOnlyCollection<string> ExcludedMembers = new ReadOnlySet<string>(ExcludedMemberSet);
 
     /// <summary>
     /// True when <paramref name="key"/> is one of the stage-1 write keys - the question

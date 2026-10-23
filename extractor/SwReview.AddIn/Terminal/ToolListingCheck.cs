@@ -354,11 +354,11 @@ public sealed class ToolListingCheck
     /// generated profile, which is precisely what this gate is for, so `shell` is deliberately
     /// not sanctioned here.
     /// </summary>
-    public static readonly IReadOnlyList<string> CodexBuiltIns = new[] { "apply_patch" };
+    public static readonly IReadOnlyList<string> CodexBuiltIns = new ReadOnlyToolList("apply_patch");
 
     /// <summary>Gemini's built-ins the policy file leaves allowed
     /// (`contracts/cli-profiles.md`: the two `decision = "allow"` rules beside the deny-all).</summary>
-    public static readonly IReadOnlyList<string> GeminiBuiltIns = new[] { "read_file", "list_directory" };
+    public static readonly IReadOnlyList<string> GeminiBuiltIns = new ReadOnlyToolList("read_file", "list_directory");
 
     private readonly string _displayName;
 

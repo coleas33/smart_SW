@@ -33,9 +33,11 @@ public sealed class RemodelProbeGuard : ICallGuard
     /// The creation members the throwaway part is built with (<see cref="RemodelProbePartRecipe.Default"/>
     /// and PROBE-8's analytic solids), matched as the bare names <c>SwRemodelProbeHost</c> gates them
     /// under, so an interface-qualified spelling of any of them is still refused. Each one is refused
-    /// by <see cref="ReadOnlyGuard"/>; the comment says by what.
+    /// by <see cref="ReadOnlyGuard"/>; the comment says by what. Matched ordinally since the review of
+    /// owner decision 160A, as the run-scoped members are: a case variant of one is the read-only
+    /// guard's answer, which refuses it.
     /// </summary>
-    private static readonly HashSet<string> ThrowawayPartCreationMemberSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> ThrowawayPartCreationMemberSet = new HashSet<string>(StringComparer.Ordinal)
     {
         // The box, and PROBE-8's box and cylinder: IFeatureManager.FeatureExtrusion3 (the
         // FeatureExtrusion* prefix).
@@ -68,9 +70,10 @@ public sealed class RemodelProbeGuard : ICallGuard
     /// The rest of the exemption: the throwaway part's creation and PROBE-5's move into a folder, one
     /// rebuild per recipe step, the part's save into the run folder and PROBE-12's reopen of it, the
     /// run-scoped system settings <see cref="RemodelSystemToggles"/> sets and restores in a
-    /// <c>finally</c> around the whole probe run, and PROBE-9's one suppression.
+    /// <c>finally</c> around the whole probe run, and PROBE-9's one suppression. Matched ordinally
+    /// since decision 160A, so a case variant cannot acquire a run-scoped exemption.
     /// </summary>
-    private static readonly HashSet<string> RunScopedMemberSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> RunScopedMemberSet = new HashSet<string>(StringComparer.Ordinal)
     {
         // Creating the throwaway part, and PROBE-8's and PROBE-21's own parts: ISldWorks.NewDocument.
         // Owner decision 144A (feature 011, 2026-10-19) has the read-only guard refuse it, since only
@@ -128,7 +131,7 @@ public sealed class RemodelProbeGuard : ICallGuard
     /// The throwaway part's creation members, for reading: the tests pin the set to the probe
     /// host's own calls and assert that no other gate exempts any of them (decision 21A).
     /// </summary>
-    public static readonly IReadOnlyCollection<string> ThrowawayPartCreationMembers = ThrowawayPartCreationMemberSet;
+    public static readonly IReadOnlyCollection<string> ThrowawayPartCreationMembers = new ReadOnlySet<string>(ThrowawayPartCreationMemberSet);
 
     /// <inheritdoc />
     public void Assert(string interopMemberName)
@@ -139,6 +142,17 @@ public sealed class RemodelProbeGuard : ICallGuard
             if (ThrowawayPartCreationMemberSet.Contains(member) || RunScopedMemberSet.Contains(member))
             {
                 return;
+            }
+
+            // The read-only guard allows the two system-setting members by name. A case typo in
+            // their keys must not pass through that fallback after missing the ordinal exemption.
+            foreach (string allowed in RunScopedMemberSet)
+            {
+                if (string.Equals(allowed, member, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new MutatingCallError(member,
+                        "A probe's run-scoped member must match its listed spelling exactly.");
+                }
             }
         }
 
