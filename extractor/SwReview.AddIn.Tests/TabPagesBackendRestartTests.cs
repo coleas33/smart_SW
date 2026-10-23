@@ -93,6 +93,83 @@ public sealed class TabPagesBackendRestartTests
         });
     }
 
+    /// <summary>Each tab with its first init on reload, or an ordinary restart's init, held back.</summary>
+    public static IEnumerable<object[]> TabsAndInitKinds =>
+        TabPageDriver.Kinds.SelectMany(kind => new[] { new object[] { kind, false }, new object[] { kind, true } });
+
+    /// <summary>
+    /// T300: an init overtaken by a lifecycle failure cannot revive the old backend, clear its failure, or
+    /// read a result with the obsolete endpoint. A replacement init retains the first load's latest-result
+    /// intent; an ordinary restart still leaves the result on screen without reading it again.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(TabsAndInitKinds))]
+    public void AnInitReadBeforeALifecycleFailureCannotReviveTheFailedBackend(string tab, bool firstInit)
+    {
+        TabPageDriver.Run(tab, driver => driver.WithLatestResult = true, async driver =>
+        {
+            await driver.UntilTheLatestResultIsRead();
+            driver.HoldReady = true;
+            if (firstInit)
+            {
+                await driver.Reload(holdInit: true);
+            }
+            else
+            {
+                await driver.Post("backend.restarted", Restarted);
+            }
+
+            await driver.Until(() => driver.HeldReady == 1, "held the init read before the failure");
+            await driver.ClearCalls();
+            int reads = await driver.LatestResultReads();
+            await driver.Post("status", new { stage = "error", message = BackendFailure, lifecycle = true });
+            await driver.ReleaseOneReady();
+
+            Assert.Equal((NotRunning, true), await driver.Strip());
+            Assert.Equal(BackendFailure, await driver.Banner());
+            Assert.Empty(await driver.Calls());
+            Assert.Equal(reads, await driver.LatestResultReads());
+            await driver.Until(() => driver.HeldReady == 1, "held the fresh init request");
+
+            driver.Token = RestartedToken;
+            await driver.ReleaseReady();
+            Assert.Equal(("Backend ready", false), await driver.Strip());
+            Assert.Null(await driver.Banner());
+            if (firstInit)
+            {
+                await driver.UntilReads(reads + 1, "read the latest result from the fresh init");
+            }
+
+            Assert.Equal(reads + (firstInit ? 1 : 0), await driver.LatestResultReads());
+            Assert.True(await driver.RowsShown() > 0);
+            Assert.DoesNotContain(await driver.Calls(), call =>
+                call.GetProperty("authorization").GetString() == "Bearer " + TabPageDriver.FirstToken);
+        });
+    }
+
+    /// <summary>A stale init refusal also leaves the newer lifecycle failure visible until fresh state arrives.</summary>
+    [Theory]
+    [MemberData(nameof(Tabs))]
+    public void ARefusedInitOvertakenByALifecycleFailureDoesNotReplaceTheFailure(string tab)
+    {
+        TabPageDriver.Run(tab, null, async driver =>
+        {
+            driver.HoldReady = true;
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.HeldReady == 1, "held the earlier init request");
+            await driver.Post("status", new { stage = "error", message = BackendFailure, lifecycle = true });
+            await driver.RefuseOneReady();
+
+            Assert.Equal(BackendFailure, await driver.Banner());
+            Assert.Equal((NotRunning, true), await driver.Strip());
+            await driver.Until(() => driver.HeldReady == 1, "held the fresh init request");
+            driver.Token = RestartedToken;
+            await driver.ReleaseReady();
+            Assert.Equal(("Backend ready", false), await driver.Strip());
+            Assert.Null(await driver.Banner());
+        });
+    }
+
     /// <summary>
     /// The page takes the restarted backend's token from that `init`: its next call - the check
     /// pressed again - carries it, and no call carries the old one, which the new backend refuses.
@@ -1388,12 +1465,12 @@ public sealed class TabPagesBackendRestartTests
         }
 
         /// <summary>Loads the page again, as the engineer's reload does, and answers its first `ready` with `init`.</summary>
-        public async Task Reload()
+        public async Task Reload(bool holdInit = false)
         {
             _booted = false;
             _bootReady = null;
             Page.Reload();
-            await BootAsync();
+            await BootAsync(holdInit);
         }
 
         /// <summary>The backend strip: its text, and whether it wears the warning colour.</summary>
@@ -1668,7 +1745,7 @@ public sealed class TabPagesBackendRestartTests
             }
         }
 
-        private async Task BootAsync()
+        private async Task BootAsync(bool holdInit = false)
         {
             for (int attempt = 0; attempt < 400 && _bootReady == null; attempt++)
             {
@@ -1685,7 +1762,15 @@ public sealed class TabPagesBackendRestartTests
             lock (_gate)
             {
                 _booted = true;
-                Reply("init", _bootReady!, Init());
+                if (holdInit)
+                {
+                    HoldReady = true;
+                    _heldReady.Enqueue(_bootReady!);
+                }
+                else
+                {
+                    Reply("init", _bootReady!, Init());
+                }
             }
 
             await Settle();

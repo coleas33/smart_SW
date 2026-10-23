@@ -26,9 +26,21 @@ uses LF. No paid/live test ran, and SOLIDWORKS was not started.
 
 ## Branches to resume
 
+Update on 2026-10-22: the continuation is published as draft PR #34. Its final adversarial
+review found a late init reply could restore a failed backend's old endpoint and hide its
+failure. Feature 002 T300 to T302 correct that order across Review, Model check, Standards and Remodel:
+fourteen new page regressions failed first. Every page discards init requests overtaken by a
+lifecycle failure and asks for fresh state, preserving the initial model/result loading and
+Review chat replacement. Ordinary restarts do not reread the displayed check. All fourteen
+focused cases pass; the Windows Release rebuild has zero warnings, and the complete C# gate
+passes with 10,125 extractor and 3,695 add-in tests. Independent final review approved the
+change with no material findings. Refreshed Python 3.12/3.11 tokenizer-required gates each
+passed 18,112 tests with 5 skipped; sync, tokenizer fetch and Ruff passed. T302 was closed
+on 2026-10-23 after recovering the completed gate results. PR #34 awaits CI on the final tip.
+
 | Decision | Branch and last earlier commit | State and next step |
 |---|---|---|
-| 160A | `codex/resume-160a`, parent `cleanups-160a` at `8849e52` | Use this continuation as the cleanup branch. Review the final diff, then open a PR against main. Do not merge until CI is green. |
+| 160A | `codex/resume-160a`, parent `cleanups-160a` at `8849e52` | PR #34 is open. Final independent review and all local gates passed through T302; require green CI on the final tip before merging. |
 | 157A | `codex/resume-157a`, `1652bcc`, based on `checkhold-157a` at `a4cc6f0` | Code through T295 and the interrupted final-review records are committed. The five original documentation edits remain preserved in their original worktree. Complete the final independent reviews, integrate the cleanup main, rerun the merged-tree gates and open the PR. |
 | 159A | `remodel2-159a`, `86a7c9c` | Code through 004 T256 is committed and the original branch was clean. The final reviews found additional issues listed below; the earlier R19.26 claim that no known defect remains needs a dated correction. |
 | 134A / 148A | `constitution-134a`, draft PR #4 | Still awaits the owner's explicit go. This continuation does not approve the amendment. |

@@ -636,11 +636,27 @@ var h = {
         await OffscreenReviewPage.Settled(Page);
     }
 
-    /// <summary>Answers the oldest held `ready` with the `init` the host would give now, and goes on holding the rest.</summary>
-    public async Task ReleaseOneReady()
+    /// <summary>
+    /// Answers the oldest held `ready`, and goes on holding the rest. Optional endpoint and token arguments
+    /// name a backend the host read before a lifecycle failure, as <see cref="ReleaseReady"/> does.
+    /// </summary>
+    public async Task ReleaseOneReady(bool backendUp = true, string? token = null)
     {
         Assert.NotEmpty(_heldReady);
-        Reply("init", _heldReady.Dequeue(), Init());
+        Reply("init", _heldReady.Dequeue(), Init(backendUp, token));
+        await OffscreenReviewPage.Settled(Page);
+    }
+
+    /// <summary>Refuses the oldest held init request while keeping any fresh request held separately.</summary>
+    public async Task RefuseOneReady()
+    {
+        Assert.NotEmpty(_heldReady);
+        Reply("error", _heldReady.Dequeue(), new
+        {
+            error_class = "HostError",
+            message = "FICT the host could not give its earlier init.",
+            retryable = false,
+        });
         await OffscreenReviewPage.Settled(Page);
     }
 

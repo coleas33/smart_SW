@@ -213,6 +213,9 @@
     notRunning: false,
     // The banner holds the host's word that a start failed, until an init names a backend.
     lifecycleBanner: false,
+    // A lifecycle failure invalidates every init already on its way, including one naming the old
+    // backend. Only a fresh request can clear the failure (the final review of owner decision 160A).
+    backendFailureRevision: 0,
     // The host's sentence while the backend that is up runs with settings other than the saved
     // ones - a restart failed before it stopped the old backend - as the last `init` carried it,
     // or null (owner decision 153A): what the banner says whenever it says nothing else.
@@ -2879,6 +2882,7 @@
       // runs, too (the review of owner decision 160A, S3).
       state.lifecycleBanner = payload.lifecycle === true;
       if (state.lifecycleBanner) {
+        state.backendFailureRevision++;
         expectBackendReplacement();
         state.notRunning = true;
         state.backend = null;
@@ -3160,7 +3164,13 @@
 
     state.initPending = true;
     var heldToken = state.token;
+    var failureRevision = state.backendFailureRevision;
     send('ready', {}).then(function (payload) {
+      // The host can read this init's endpoint before a watcher fails its restart, then deliver
+      // it after the failure's status. Nothing in that old reply can revive the failed backend.
+      if (failureRevision !== state.backendFailureRevision) {
+        return;
+      }
       // Another token is another backend (a Settings save, or a restart after it stopped): no
       // chat of the old one survives. A live waiting review on screen is restored from its folder
       // at once, read-only with Send offered (feature 015 FR-042, contracts/pane.md section 7).
@@ -3231,9 +3241,15 @@
       // them open - that review shown again (contracts/sessions.md sections 5 and 6).
       requestSessions(true);
     }).catch(function (error) {
-      showBanner(error.message);
+      if (failureRevision === state.backendFailureRevision) {
+        showBanner(error.message);
+      }
     }).then(function () {
       state.initPending = false;
+      if (failureRevision !== state.backendFailureRevision) {
+        state.initAgain = true;
+        state.initAgainLoadsModels = state.initAgainLoadsModels || loadModels;
+      }
       if (state.initAgain) {
         var loadModelsAgain = state.initAgainLoadsModels;
         state.initAgain = false;

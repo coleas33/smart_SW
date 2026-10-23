@@ -5232,3 +5232,47 @@ the later complete run includes all three additional review regressions. Changed
 relative links and task ids were checked, and the staged text has LF endings. SOLIDWORKS
 was not started, and no live test ran. The remaining branch and review work is
 listed in [the development handoff](../../docs/development-handoff-2026-10-21.md).
+
+### Final adversarial review: an init overtaken by a failed restart (2026-10-22; T300 to T302)
+
+The final read-only review found one remaining lifecycle race. `SendInit` reads its endpoint
+before reading the current document and sending the reply; meanwhile, the deferred restart's
+watcher can stop that backend and post its lifecycle failure. If the init naming the old backend
+arrives afterward, the page reinstated that dead endpoint, said "Backend ready", and took down
+the failure banner. The existing stale-init case named no endpoint and did not exercise this order.
+
+T300 added four cases before implementation in `ReviewPageBackendRestartTests`:
+`AnInitReadBeforeALifecycleFailureCannotReviveTheFailedBackend`, with and without an endpoint
+already held by the page; `AnInitReadBeforeALifecycleFailureCannotReopenTheOldChatsStream`;
+and `AnInitReadBeforeALifecycleFailureCannotRestoreAWaitingReviewWithTheOldToken`.
+`ReviewPageDriver.ReleaseOneReady` can now deliver a held init with a specified old token while
+holding the next request separately. All four cases failed against the unchanged page: the
+first two said "Backend ready" instead of "Backend not running"; the waiting case called
+`/labels` with the old token; and the streaming case opened the old chat's stream a second time.
+No existing assertion was loosened.
+
+The same order affected Model check, Standards and Remodel. T300 added six rows of
+`TabPagesBackendRestartTests.AnInitReadBeforeALifecycleFailureCannotReviveTheFailedBackend`: each
+tab's first init on reload and an ordinary restart init, with latest results present. Each row
+failed first by reviving the old backend. Four refusal rows, one per tab in
+`ARefusedInitOvertakenByALifecycleFailureDoesNotReplaceTheFailure`, failed first by replacing the
+newer lifecycle banner with the old request's error. The Review refusal was run with the old
+catch body restored, then its guard restored; the other tabs had no guard yet. Together with the
+original four regressions, fourteen cases demonstrated the failure before their fixes. The tab
+driver can now hold a reload's first init separately; its existing default boot is unchanged.
+
+T301 adds one page-local failure revision. Each init request captures it; a lifecycle failure
+increments it before dropping the endpoint. A response from a request made before that failure
+is discarded, including any refusal, and asks once more after it settles. That fresh request
+retains Review model-loading intent and each other tab's initial latest-result intent. An ordinary
+restart still does not reread the displayed result. The failure's replacement identity remains held
+so only the new backend restores a waiting review or retires an old stream. No native message
+or backend API changed. All fourteen focused cases passed. The final Windows `--no-incremental`
+Release build had zero warnings and zero errors; the complete solution suites passed with
+10,125 extractor tests and 3,695 add-in tests. Independent review of the final diff and its
+regressions found no material issues under Principles I through VI. No SOLIDWORKS session or
+live test was started. The refreshed tokenizer-required non-live suites completed on 2026-10-22:
+18,112 passed and 5 skipped on each of Python 3.12.3 and 3.11.16 (`--isolated --all-extras`).
+Sync, tokenizer fetch and Ruff passed. T302 was closed on 2026-10-23 after inspecting both
+JUnit reports (zero failures/errors), the independent approval and the final C# results.
+Decision 160A remains in progress until its PR passes CI and merges.

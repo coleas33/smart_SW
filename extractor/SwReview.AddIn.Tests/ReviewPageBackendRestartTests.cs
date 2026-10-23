@@ -937,6 +937,140 @@ return JSON.stringify({
         });
     }
 
+    /// <summary>
+    /// T300, the final review of decision 160A: an init read before a lifecycle failure cannot revive the
+    /// failed backend, whether the page already held its endpoint or was still waiting for its first one.
+    /// The stale reply must ask once more, and only that fresh reply may clear the failure. The first-endpoint
+    /// case also retains the original request's intent to load the model picker.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnInitReadBeforeALifecycleFailureCannotReviveTheFailedBackend(bool heldEndpoint)
+    {
+        const string Failure = "FICT the backend did not restart. Save Settings to start it again.";
+        ReviewPageDriver.Run(driver => driver.NoBackend = !heldEndpoint, async driver =>
+        {
+            driver.HoldReady = true;
+            int readies = driver.Posted("ready").Length;
+            int models = driver.Posted("models.list").Length;
+            if (heldEndpoint)
+            {
+                await driver.Click("save-settings");
+            }
+            else
+            {
+                await driver.Post("status", new { stage = "ready", message = "Backend ready." });
+            }
+
+            await driver.Until(() => driver.HeldReady == 1, "held the init read before the failure");
+            await driver.Post("status", new { stage = "error", message = Failure, lifecycle = true });
+            await driver.ClearCalls();
+            driver.NoBackend = false;
+            await driver.ReleaseOneReady(token: ReviewPageDriver.Token);
+
+            Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
+            Assert.Equal(Failure, (await driver.Read(Banner)).GetProperty("text").GetString());
+            Assert.Empty(await driver.Calls());
+            await driver.Until(() => driver.Posted("ready").Length == readies + 2, "asked once more after the stale init");
+            Assert.Equal(1, driver.HeldReady);
+
+            driver.NoBackend = false;
+            driver.BackendToken = RestartedToken;
+            await driver.ReleaseReady();
+            Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+            Assert.True((await driver.Read(Banner)).GetProperty("hidden").GetBoolean());
+            Assert.Equal(models + (heldEndpoint ? 0 : 1), driver.Posted("models.list").Length);
+            Assert.DoesNotContain(await driver.Calls(), call =>
+                call.GetProperty("authorization").GetString() == "Bearer " + ReviewPageDriver.Token);
+        });
+    }
+
+    /// <summary>The rejected init must not reopen a live chat's stream with the failed backend's token.</summary>
+    [Fact]
+    public void AnInitReadBeforeALifecycleFailureCannotReopenTheOldChatsStream()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await driver.HoldTimers();
+            await driver.StartReview();
+            int opens = driver.Posted("events.open").Length;
+            driver.HoldReady = true;
+            await driver.Click("save-settings");
+            await driver.Until(() => driver.HeldReady == 1, "held the init read before the failure");
+            await driver.Post("status", new
+            {
+                stage = "error",
+                message = "FICT the backend did not restart. Save Settings to start it again.",
+                lifecycle = true,
+            });
+            await driver.ReleaseOneReady(token: ReviewPageDriver.Token);
+            Assert.Equal(opens, driver.Posted("events.open").Length);
+            await driver.Until(() => driver.HeldReady == 1, "held the fresh init");
+
+            driver.BackendToken = RestartedToken;
+            await driver.ReleaseReady();
+            await driver.RunHeldTimers();
+            Assert.Equal(opens, driver.Posted("events.open").Length);
+        });
+    }
+
+    /// <summary>Only the fresh replacement backend may restore a waiting review from its saved evidence.</summary>
+    [Fact]
+    public void AnInitReadBeforeALifecycleFailureCannotRestoreAWaitingReviewWithTheOldToken()
+    {
+        RestoredReviewFixture fixture = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(driver => fixture.Configure(driver, refuseSend: true), async driver =>
+        {
+            await ReviewPageRecheckTests.PressSend(driver);
+            await driver.Route("GET", "/sessions/" + fixture.RecheckedChat + "/snapshot", 404, ReviewPageRecheckTests.UnknownChat);
+            driver.HoldReady = true;
+            await driver.Click("save-settings");
+            await driver.Until(() => driver.HeldReady == 1, "held the init read before the failure");
+            await driver.Post("status", new
+            {
+                stage = "error",
+                message = "FICT the backend did not restart. Save Settings to start it again.",
+                lifecycle = true,
+            });
+            await driver.ClearCalls();
+            await driver.ReleaseOneReady(token: ReviewPageDriver.Token);
+            Assert.Empty(await driver.Calls());
+            Assert.False((await driver.Read(ReviewPageRecheckTests.ReadState)).GetProperty("readOnly").GetBoolean());
+            await driver.Until(() => driver.HeldReady == 1, "held the fresh init");
+
+            driver.BackendToken = RestartedToken;
+            await driver.ReleaseReady();
+            JsonElement restore = Assert.Single(await driver.Calls(),
+                call => call.GetProperty("path").GetString() == fixture.ReviewPath);
+            Assert.Equal("Bearer " + RestartedToken, restore.GetProperty("authorization").GetString());
+            Assert.True((await driver.Read(ReviewPageRecheckTests.ReadState)).GetProperty("readOnly").GetBoolean());
+        });
+    }
+
+    /// <summary>A refusal of the overtaken init cannot replace the newer lifecycle failure's banner.</summary>
+    [Fact]
+    public void ARefusedInitOvertakenByALifecycleFailureDoesNotReplaceTheFailure()
+    {
+        const string Failure = "FICT the backend did not restart. Save Settings to start it again.";
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            driver.HoldReady = true;
+            await driver.Click("save-settings");
+            await driver.Until(() => driver.HeldReady == 1, "held the earlier init request");
+            await driver.Post("status", new { stage = "error", message = Failure, lifecycle = true });
+            await driver.RefuseOneReady();
+
+            Assert.Equal(Failure, (await driver.Read(Banner)).GetProperty("text").GetString());
+            Assert.Equal("Backend not running", (await driver.Read(Strip)).GetProperty("text").GetString());
+            await driver.Until(() => driver.HeldReady == 1, "held the fresh init request");
+            driver.BackendToken = RestartedToken;
+            await driver.ReleaseReady();
+            Assert.Equal("Backend ready", (await driver.Read(Strip)).GetProperty("text").GetString());
+            Assert.True((await driver.Read(Banner)).GetProperty("hidden").GetBoolean());
+        });
+    }
+
     /// <summary>A save answered `BackendNotRestarted`, and the `init` after it naming no backend: the old one stopped.</summary>
     private static async System.Threading.Tasks.Task SaveWhoseRestartFailsOnceTheOldBackendStopped(ReviewPageDriver driver)
     {

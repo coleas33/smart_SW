@@ -109,6 +109,12 @@
      */
     initAgain: false,
 
+    /** A discarded first init must still load its latest run once fresh state arrives. */
+    initAgainLoadsLatest: false,
+
+    /** A lifecycle failure invalidates every init request already in flight (160A's final review). */
+    backendFailureRevision: 0,
+
     /**
      * Whether the last banner put up is the add-in's word that the backend did not start - a
      * failed start or restart, `status {stage: "error", lifecycle: true}`. The next `init` that
@@ -1005,6 +1011,7 @@
       showBanner(payload.message || 'the run stopped');
       state.lifecycleBanner = payload.lifecycle === true;
       if (state.lifecycleBanner) {
+        state.backendFailureRevision++;
         // The add-in's word that the backend did not start: the strip says so until an `init`
         // names a backend (owner decision 150A).
         state.notRunning = true;
@@ -1166,18 +1173,30 @@
     }
 
     state.initPending = true;
+    var failureRevision = state.backendFailureRevision;
     send('ready', {})
       .then(function (payload) {
+        if (failureRevision !== state.backendFailureRevision) {
+          return;
+        }
         applyInit(payload, loadLatest);
       })
       .catch(function (error) {
-        showBanner(error.message);
+        if (failureRevision === state.backendFailureRevision) {
+          showBanner(error.message);
+        }
       })
       .then(function () {
         state.initPending = false;
+        if (failureRevision !== state.backendFailureRevision) {
+          state.initAgain = true;
+          state.initAgainLoadsLatest = state.initAgainLoadsLatest || loadLatest;
+        }
         if (state.initAgain) {
+          var loadLatestAgain = state.initAgainLoadsLatest;
           state.initAgain = false;
-          requestInit(false);
+          state.initAgainLoadsLatest = false;
+          requestInit(loadLatestAgain);
         }
       });
   }

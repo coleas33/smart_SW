@@ -157,6 +157,12 @@
        */
       initAgain: false,
 
+      /** A discarded first init must still load its latest check once fresh state arrives. */
+      initAgainLoadsLatest: false,
+
+      /** A lifecycle failure invalidates every init request already in flight (160A's final review). */
+      backendFailureRevision: 0,
+
       /**
        * A read of the latest check an `init` named failed - the backend refused the call or did
        * not answer, as the one a restart replaced does - and the latest check is still what the
@@ -1346,9 +1352,12 @@
         showBanner(payload.message || 'the check stopped');
         state.lifecycleBanner = payload.lifecycle === true;
         if (state.lifecycleBanner) {
+          state.backendFailureRevision++;
           // The add-in's word that the backend did not start: the strip says so until an `init`
           // names a backend (owner decision 150A).
           state.notRunning = true;
+          state.backend = null;
+          state.token = null;
           renderBackendState(NOT_RUNNING, true);
         }
         return;
@@ -1511,18 +1520,30 @@
       }
 
       state.initPending = true;
+      var failureRevision = state.backendFailureRevision;
       send('ready', {})
         .then(function (payload) {
+          if (failureRevision !== state.backendFailureRevision) {
+            return;
+          }
           applyInit(payload, loadLatest);
         })
         .catch(function (error) {
-          showBanner(error.message);
+          if (failureRevision === state.backendFailureRevision) {
+            showBanner(error.message);
+          }
         })
         .then(function () {
           state.initPending = false;
+          if (failureRevision !== state.backendFailureRevision) {
+            state.initAgain = true;
+            state.initAgainLoadsLatest = state.initAgainLoadsLatest || loadLatest;
+          }
           if (state.initAgain) {
+            var loadLatestAgain = state.initAgainLoadsLatest;
             state.initAgain = false;
-            requestInit(false);
+            state.initAgainLoadsLatest = false;
+            requestInit(loadLatestAgain);
             return;
           }
 

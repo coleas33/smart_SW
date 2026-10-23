@@ -10,6 +10,12 @@ byte-identical CSP meta tag, the `textContent`-only rule for every untrusted str
 `NavigationStarting` and `NewWindowRequested` cancelled for any URL outside
 `https://swreview.invalid/`.
 
+*Final review of feature 002 decision 160A, 2026-10-22 (T300 to T302):* the shared
+[failed-backend and pending-init ordering](../../002-task-pane-assistant/contracts/pane-host-messages.md#failed-backend-and-pending-init-ordering)
+also applies here. An init request overtaken by a lifecycle failure cannot restore the old
+endpoint or remove that failure; its reply or refusal is discarded and a fresh request
+retains the initial latest-run loading intent.
+
 **Two additions specific to this tab:**
 
 1. The Remodel WebView is created **lazily, on first activation of the tab**, not at add-in load.
