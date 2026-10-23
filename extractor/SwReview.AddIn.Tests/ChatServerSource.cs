@@ -46,17 +46,25 @@ internal static class ChatServerSource
     /// Every route the backend serves, by method and path, with whether its handler moves a chat
     /// to `RUNNING` - starts a turn, or resumes one.
     /// </summary>
-    public static IReadOnlyList<(string Method, string Path, bool StartsATurn)> Routes()
+    public static IReadOnlyList<(string Method, string Path, bool StartsATurn)> Routes() =>
+        RoutesWithHandlers()
+            .Select(route => (route.Method, route.Path, HandlerBody(route.Handler).Contains(".to(ChatState.RUNNING)")))
+            .ToList();
+
+    /// <summary>
+    /// Every route the backend serves, by method and path, with the name of the server's method that handles it
+    /// (owner decision 157A: the routes that grade a check's run, which the pane's proxy holds a check for).
+    /// </summary>
+    public static IReadOnlyList<(string Method, string Path, string Handler)> RoutesWithHandlers()
     {
         string text = string.Join("\n", Lines.Value);
-        var routes = new List<(string, string, bool)>();
+        var routes = new List<(string, string, string)>();
         foreach (Match route in Regex.Matches(
             text, @"Route\(\s*""(?<path>[^""]+)"",\s*server\.(?<handler>\w+),\s*methods=\[(?<methods>[^\]]+)\]"))
         {
-            bool turn = HandlerBody(route.Groups["handler"].Value).Contains(".to(ChatState.RUNNING)");
             foreach (Match method in Regex.Matches(route.Groups["methods"].Value, @"""(\w+)"""))
             {
-                routes.Add((method.Groups[1].Value, route.Groups["path"].Value, turn));
+                routes.Add((method.Groups[1].Value, route.Groups["path"].Value, route.Groups["handler"].Value));
             }
         }
 

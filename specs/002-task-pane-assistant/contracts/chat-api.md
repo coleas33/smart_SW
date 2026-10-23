@@ -328,7 +328,18 @@ A running turn owns process state that is not on disk, so:
   once a save has restarted the backend (amended on the second 153A review, the same day). While a
   start of the backend - the first or a restart - is under way, the host makes no session: one asked
   for then is refused as one asked for before the backend is up (amended on the third 153A review,
-  the same day, and worded on the fourth, 2026-10-21).
+  the same day, and worded on the fourth, 2026-10-21). A check is treated as a turn too, as a
+  remodel run is: a Model check or a Standards check holds the restart back from its gate until
+  the page's evaluation of it - `POST /checks/rms` or `/checks/standards` - has been answered, so a
+  save made meanwhile is kept the same way and its restart made once the check is over, never
+  under it - while a backend is up, since with none the restart is what brings back the backend
+  the check's evaluation needs; and a check begins only once no restart waits - the host makes a
+  waiting restart first, or waits for the one being made, or refuses the check saying what holds
+  the restart back.
+  The page's re-reads of a check and its Accepts are not held: each is one short call the engineer
+  makes at any time, and one cut by a restart is answered as any failed call is (amended
+  2026-10-21, owner decision 157A; `pane-host-messages.md`, `settings.save`, `check.start` and
+  `standards.start`).
 - On any shutdown signal the server finalizes every live chat before exiting: it writes
   `turn.ended {reason: "error"}` when a turn was mid-flight, then `session.ended` with an
   `ended_at`, and saves `session.json`. A session is never left without an ended time

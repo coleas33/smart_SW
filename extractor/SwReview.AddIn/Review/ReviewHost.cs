@@ -308,6 +308,18 @@ public sealed class ReviewHostOptions
     public Func<bool> BackendBusy { get; set; } = () => false;
 
     /// <summary>
+    /// Owner decision 157A: whether a Model check is in progress - from the gate it begins through
+    /// (<see cref="ReviewHost.BeginCheck"/>) until the page's evaluation of it has been answered - which a
+    /// restart would leave evaluated on a backend that restarted under it. Read with
+    /// <see cref="BackendBusy"/>, under the restart's own lock, so it must be quick and must not block, and only
+    /// while a backend is up. False when the caller has no Model check tab.
+    /// </summary>
+    public Func<bool> ModelCheckInProgress { get; set; } = () => false;
+
+    /// <summary>...whether a Standards check is in progress, read as <see cref="ModelCheckInProgress"/> is.</summary>
+    public Func<bool> StandardsCheckInProgress { get; set; } = () => false;
+
+    /// <summary>
     /// Tells every other tab that holds the backend's port and token - Model check, Standards and
     /// Remodel - that the backend was restarted with saved settings, so each asks for its `init`
     /// again (owner decision 145A). Called after every restart this host makes, a save's made at
@@ -366,7 +378,9 @@ public sealed class ReviewHostOptions
 /// for the restart rather than running on the old backend (owner decision 143A,
 /// <see cref="DeferredRestart"/>). A remodel run is treated as a turn (owner decision 145A): a
 /// save made during one is kept and its restart waits for the run, and a run begins only once no
-/// restart waits (<see cref="BeginRemodelRun"/>). The saved settings are in force once the backend
+/// restart waits (<see cref="BeginRemodelRun"/>). So is a check, a Model check or a Standards check,
+/// from its gate until the page's evaluation of it has been answered, while a backend is up (owner
+/// decision 157A, <see cref="BeginCheck"/>). The saved settings are in force once the backend
 /// has restarted with them, and not before (owner decision 153A): a restart that fails before it
 /// stops the old backend leaves that backend's settings in force, which every session takes, and
 /// `init` says so.
@@ -499,7 +513,8 @@ public sealed class ReviewHost : IDisposable
     private volatile bool _lastStartFailed;
 
     /// <summary>
-    /// Owner decision 160A: the add-in is unloading - set first thing in <see cref="Dispose"/>. A save that has
+    /// Owner decisions 157A and 160A: the add-in is unloading - set first thing in <see cref="StopRestarting"/>,
+    /// before the page pumps and other hosts stop, and as <see cref="Dispose"/> begins. A save that has
     /// written its settings reads it before its restart, in its catch and after a restart returns, and is
     /// answered `AddInStopping` rather than told to save again (<see cref="SendSavedWhileStopping"/>).
     /// </summary>
@@ -600,7 +615,7 @@ public sealed class ReviewHost : IDisposable
 
         _restart = new DeferredRestart(
             RestartHeldBack,
-            RemodelRunInProgress,
+            WorkInProgress,
             RestartWithSavedSettings,
             () => ReportUnlessStopping(() =>
             {
@@ -1100,9 +1115,9 @@ public sealed class ReviewHost : IDisposable
 
     public void Dispose()
     {
-        _stopping = true;
-        // First, so nothing asks the backend about a turn or restarts it once the host is going.
-        _restart.Dispose();
+        // First, so no save or deferred restart reports to tabs that are stopping, and nothing asks the backend
+        // about a turn or restarts it once the host is going. The add-in takes this step before the other hosts go.
+        StopRestarting();
         _events.Dispose();
         lock (_sessionsLock)
         {
@@ -1451,19 +1466,27 @@ public sealed class ReviewHost : IDisposable
         string? promise = null;
         try
         {
-            if (!_restart.Now(() => RestartWith(next, key), out DeferredRestart.Hold waitsFor))
+            if (!_restart.Now(
+                    () =>
+                    {
+                        RestartWith(next, key);
+
+                        // The Review page learns of a restart made now from the reply; the other tabs from this,
+                        // told under the restart's own lock as every other restart tells them (owner decision 157A,
+                        // the reviews): a check whose gate waited on that lock for this restart is told of it before
+                        // it begins, so before its page is handed a run to evaluate with the token of the backend
+                        // the restart replaced. Once the add-in starts unloading, no other tab is told (160A).
+                        if (!_stopping) TellTheOtherTabs();
+                    },
+                    out DeferredRestart.Hold waitsFor,
+                    out DeferredRestart.Work busyWith))
             {
-                // A turn started between the gate above and here, or a remodel run is in progress,
-                // which the restart would end. The settings are already written, so the honest
+                // A turn started between the gate above and here, or a remodel run or a check is in
+                // progress, which the restart would end. The settings are already written, so the honest
                 // answer is "saved, not yet in force" - and the restart waits for what holds it
-                // back rather than being dropped, and the sentence names it (owner decisions 143A
-                // and 145A).
-                promise = Promise(waitsFor);
-            }
-            else
-            {
-                // The Review page learns of it from the reply; the other tabs from this.
-                if (!_stopping) TellTheOtherTabs();
+                // back rather than being dropped, and the sentence names it (owner decisions 143A,
+                // 145A and 157A).
+                promise = Promise(waitsFor, busyWith);
             }
         }
         catch (Exception failure)
@@ -1644,46 +1667,122 @@ public sealed class ReviewHost : IDisposable
         PostStatus("error", string.Join(" ", problems.ToArray()));
     }
 
-    // ---- a restart for settings saved during a turn or a remodel run (143A, 145A) ----------
+    // ---- a restart for settings saved during a turn, a remodel run or a check (143A, 145A, 157A) --
 
     /// <summary>
-    /// The Review tab's sentence for a save a turn started during: the settings are written and saved
-    /// in the host, and the backend is restarted with them once nothing holds it back.
+    /// The Review tab's sentence for a save whose restart waits, naming what it waits for (owner decisions 143A,
+    /// 145A and 157A): the settings are written and saved in the host, and the backend is restarted with them once
+    /// nothing holds it back - "the settings are saved; the backend restarts when the running turn ends." for a turn
+    /// that started during the save, and so for a remodel run, a check, or any of them together.
     /// </summary>
-    private const string RestartPromise =
-        "the settings are saved; the backend restarts when the running turn ends.";
-
-    /// <summary>
-    /// ...for a save made while a remodel run is in progress, which the restart would end with its
-    /// copy half changed, so the restart waits for the run (owner decision 145A).
-    /// </summary>
-    private const string RemodelRunPromise =
-        "the settings are saved; the backend restarts when the remodel run ends.";
-
-    /// <summary>...for one made during a remodel run that a turn also started during, so it waits for both.</summary>
-    private const string TurnAndRemodelRunPromise =
-        "the settings are saved; the backend restarts when the running turn and the remodel run end.";
+    private static string PromiseFor(bool turn, DeferredRestart.Work work) =>
+        "the settings are saved; the backend restarts when " + EndsOf(WhatHoldsTheRestart(turn, work)) + ".";
 
     /// <summary>
     /// What the page is told when the watcher stops looking at a backend that does not answer
     /// (<see cref="DeferredRestart.UnansweredLooks"/>): the restart has not been made, it still
-    /// waits for the next review, follow-up or remodel run, and a save made now - which asks
+    /// waits for the next review, follow-up, remodel run or check, and a save made now - which asks
     /// whether a turn runs leniently - restarts the backend. "The saved settings", since owner
-    /// decision 145A: a save made during a remodel run was not made during a turn. Saving again is
-    /// still the way on, because the watcher reads a remodel run before the turns, so it says this
-    /// only once no run holds the restart, and no run can begin while the backend gives no answer.
+    /// decision 145A: a save made during a remodel run was not made during a turn; and a check since
+    /// owner decision 157A, which makes a check make the restart first too. Saving again is still the
+    /// way on, because the watcher reads work - a remodel run or a check - before the turns, so it says
+    /// this only once no work holds the restart, and no work can begin while the backend gives no answer.
     /// </summary>
     private const string RestartNotAnswered =
         "the review backend is not answering, so it has not been restarted with the saved settings yet. "
-        + "It will be before the next review, follow-up or remodel run, once it answers; to restart it "
+        + "It will be before the next review, follow-up, remodel run or check, once it answers; to restart it "
         + "now, save the settings again.";
 
     /// <summary>
     /// The host's sentences about a restart that waits, as `backend.restarted` carries them once it
     /// is made: the page takes whichever of them is on its banner off it, and nothing else there.
+    /// Every promise a save can make - a turn, a remodel run, one check or a check on each check tab,
+    /// alone or together (owner decision 157A) - then the watcher's word.
     /// </summary>
-    private static readonly string[] RestartSentences =
-        { RestartPromise, RemodelRunPromise, TurnAndRemodelRunPromise, RestartNotAnswered };
+    private static readonly string[] RestartSentences = EveryRestartSentence();
+
+    /// <summary>
+    /// <see cref="RestartSentences"/>: every promise, 145A's three first, in the order their parts are
+    /// counted - the checks, then the remodel run, then the turn - then <see cref="RestartNotAnswered"/>.
+    /// </summary>
+    private static string[] EveryRestartSentence()
+    {
+        var sentences = new List<string>();
+        foreach (DeferredRestart.Work checks in new[]
+                 {
+                     DeferredRestart.Work.None,
+                     DeferredRestart.Work.ModelCheck,
+                     DeferredRestart.Work.ModelCheck | DeferredRestart.Work.StandardsCheck,
+                 })
+        {
+            foreach (bool remodelRun in new[] { false, true })
+            {
+                foreach (bool turn in new[] { false, true })
+                {
+                    if (turn || remodelRun || checks != DeferredRestart.Work.None)
+                    {
+                        sentences.Add(PromiseFor(turn, remodelRun ? checks | DeferredRestart.Work.RemodelRun : checks));
+                    }
+                }
+            }
+        }
+
+        sentences.Add(RestartNotAnswered);
+        return sentences.ToArray();
+    }
+
+    /// <summary>
+    /// What a restart that waits waits for, named as the Review tab's sentences name it (owner decisions 143A, 145A
+    /// and 157A), in that order: "the running turn", "the remodel run", and "the running check" - or "the running
+    /// checks" for a check on each check tab. Work whose kind is not known is named as a remodel run, as 145A named a
+    /// reading that throws; and so is work with nothing named at all, which no caller gives.
+    /// </summary>
+    private static List<string> WhatHoldsTheRestart(bool turn, DeferredRestart.Work work)
+    {
+        var named = new List<string>();
+        if (turn)
+        {
+            named.Add("the running turn");
+        }
+
+        int checks = ChecksAmong(work);
+        if (RemodelRunAmong(work) || (named.Count == 0 && checks == 0))
+        {
+            named.Add("the remodel run");
+        }
+
+        if (checks == 1)
+        {
+            named.Add("the running check");
+        }
+        else if (checks > 1)
+        {
+            named.Add("the running checks");
+        }
+
+        return named;
+    }
+
+    /// <summary>
+    /// What holds the restart back, joined - "and" before the last - with the verb that agrees: "the running
+    /// check ends", "the running checks end", "the running turn, the remodel run and the running check end".
+    /// </summary>
+    private static string EndsOf(List<string> named)
+    {
+        string joined = named.Count == 1
+            ? named[0]
+            : string.Join(", ", named.Take(named.Count - 1)) + " and " + named[named.Count - 1];
+        bool one = named.Count == 1 && named[0] != "the running checks";
+        return joined + (one ? " ends" : " end");
+    }
+
+    /// <summary>Whether a remodel run is among the work - or work whose kind is not known, which is read as one.</summary>
+    private static bool RemodelRunAmong(DeferredRestart.Work work) =>
+        (work & (DeferredRestart.Work.RemodelRun | DeferredRestart.Work.Unknown)) != 0;
+
+    /// <summary>How many checks are among the work: none, one, or one on each check tab.</summary>
+    private static int ChecksAmong(DeferredRestart.Work work) =>
+        ((work & DeferredRestart.Work.ModelCheck) != 0 ? 1 : 0) + ((work & DeferredRestart.Work.StandardsCheck) != 0 ? 1 : 0);
 
     /// <summary>
     /// How the answer to a save whose restart failed begins, the reason after it (owner decision
@@ -1883,23 +1982,21 @@ public sealed class ReviewHost : IDisposable
     }
 
     /// <summary>
-    /// The sentence for a save whose restart waits, naming what it waits for (owner decision 145A):
-    /// a turn that started during the save, which the backend's own check found; a remodel run in
-    /// progress; or both - a remodel run, and a turn that started during the save, which is asked
-    /// of the backend now, since the run was read before the backend's own check could be reached.
-    /// A backend that gives no answer about a chat is no turn here: the sentence names the run, and
-    /// the watcher says, once the run is over, if the backend still does not answer.
+    /// The sentence for a save whose restart waits, naming what it waits for (owner decisions 145A and 157A):
+    /// a turn that started during the save, which the backend's own check found; or the work in progress the
+    /// restart read under its lock - a remodel run, a check, or both - and a turn that started during the save
+    /// as well, which is asked of the backend now, since the work was read before the backend's own check could
+    /// be reached. A backend that gives no answer about a chat is no turn here: the sentence names the work, and
+    /// the watcher says, once the work is over, if the backend still does not answer.
     /// </summary>
-    private string Promise(DeferredRestart.Hold waitsFor)
+    private string Promise(DeferredRestart.Hold waitsFor, DeferredRestart.Work work)
     {
-        if (waitsFor != DeferredRestart.Hold.RemodelRun)
+        if (waitsFor != DeferredRestart.Hold.Work)
         {
-            return RestartPromise;
+            return PromiseFor(turn: true, DeferredRestart.Work.None);
         }
 
-        return LookAtTheTurns(stopAtNoAnswer: true) == TurnsSeen.Running
-            ? TurnAndRemodelRunPromise
-            : RemodelRunPromise;
+        return PromiseFor(LookAtTheTurns(stopAtNoAnswer: true) == TurnsSeen.Running, work);
     }
 
     /// <summary>A new review, or a page call that would start a turn, while a turn holds the restart back.</summary>
@@ -1907,10 +2004,32 @@ public sealed class ReviewHost : IDisposable
         "the backend restarts with the saved settings when the running turn ends, and nothing new starts "
         + "before then. Wait for the turn to end, or press Stop, then try again.";
 
-    /// <summary>...while a remodel run holds it back.</summary>
-    private const string RemodelRunHoldsTheRestart =
-        "the backend restarts with the saved settings when the remodel run ends, and nothing new starts "
-        + "before then. Wait for the run to end, then try again.";
+    /// <summary>
+    /// ...while work the restart would end holds it back (owner decisions 145A and 157A), naming it: "the backend
+    /// restarts with the saved settings when the remodel run ends, and nothing new starts before then. Wait for
+    /// the run to end, then try again." for a remodel run, as 145A wrote it, and so for a check, the checks on both
+    /// check tabs, or a remodel run and a check together, which are waited for together.
+    /// </summary>
+    private static string WorkHoldsTheRestart(DeferredRestart.Work work)
+    {
+        List<string> named = WhatHoldsTheRestart(turn: false, work);
+        string waitFor = named.Count > 1 ? "them"
+            : RemodelRunAmong(work) ? "the run"
+            : ChecksAmong(work) == 1 ? "the check"
+            : "the checks";
+        return "the backend restarts with the saved settings when " + EndsOf(named)
+            + ", and nothing new starts before then. Wait for " + waitFor + " to end, then try again.";
+    }
+
+    /// <summary>
+    /// The refusal for work the restart would end that holds it back (owner decisions 145A and 157A): under
+    /// `RemodelRunning` when a remodel run is among the work - a remodel run is in progress, as that class's
+    /// sentence on the Review tab says - and `CheckRunning` when only checks are; in words that name all of it.
+    /// </summary>
+    private static BackendRequestException WorkHoldsIt(DeferredRestart.Work work, bool retryable) =>
+        RemodelRunAmong(work)
+            ? new BackendRequestException("RemodelRunning", WorkHoldsTheRestart(work), retryable)
+            : new BackendRequestException("CheckRunning", WorkHoldsTheRestart(work), retryable);
 
     /// <summary>...while the backend does not answer whether a turn runs.</summary>
     private const string NoAnswerHoldsTheRestart =
@@ -1919,31 +2038,65 @@ public sealed class ReviewHost : IDisposable
         + "it, then try again.";
 
     /// <summary>
-    /// A remodel run - a plan or a Start - refused while a turn holds the restart back (owner
-    /// decision 145A). On the Remodel tab, whose own Stop stops the run, so it names the Review
-    /// tab's, which stops the turn.
+    /// Work - a remodel run, a plan or a Start (owner decision 145A), or a check (owner decision 157A) - refused
+    /// while a turn holds the restart back. On the Remodel tab, whose own Stop stops the run, and on a check tab,
+    /// which has no Stop, so it names the Review tab's, which stops the turn: "...and no remodel run starts before
+    /// then. ...", or "...and no check starts before then. ...".
     /// </summary>
-    private const string TurnHoldsTheRemodelRun =
-        "the backend restarts with the saved settings when the running review turn ends, and no remodel run "
-        + "starts before then. Wait for the turn to end, or press Stop on the Review tab, then try again.";
+    private static string TurnHoldsTheWork(string work) =>
+        "the backend restarts with the saved settings when the running review turn ends, and no " + work
+        + " starts before then. Wait for the turn to end, or press Stop on the Review tab, then try again.";
 
     /// <summary>...while the backend does not answer whether a turn runs; the settings are saved on the Review tab.</summary>
-    private const string NoAnswerHoldsTheRemodelRun =
+    private static string NoAnswerHoldsTheWork(string work) =>
         "the review backend did not answer whether a turn is running, so it has not been restarted with the "
-        + "saved settings, and no remodel run starts before then. Save the settings again on the Review tab "
+        + "saved settings, and no " + work + " starts before then. Save the settings again on the Review tab "
         + "to restart it, then try again.";
 
     /// <summary>
-    /// Whether a remodel run is in progress (<see cref="ReviewHostOptions.BackendBusy"/>), which a
-    /// restart would end with its copy half changed. One reading for the restart's look and for its
-    /// check under its own lock (owner decision 145A). Not knowing whether a run is in progress is
-    /// not knowing that none is.
+    /// Which work the restart would end is in progress (owner decisions 145A and 157A): a remodel run
+    /// (<see cref="ReviewHostOptions.BackendBusy"/>), which a restart would end with its copy half changed; a
+    /// Model check and a Standards check (<see cref="ReviewHostOptions.ModelCheckInProgress"/>,
+    /// <see cref="ReviewHostOptions.StandardsCheckInProgress"/>), which a restart would leave evaluated on a
+    /// backend that restarted under it - and so only while a backend is up. With none, the restart is what brings
+    /// back the backend a check's evaluation needs, as 143A's look reads no backend: holding it would waste the very
+    /// extraction the check holds it for, since an extraction asks no backend and lasts minutes. A remodel run holds
+    /// it even then (145A), since every call it makes then fails and it cannot last. The restart's one reading,
+    /// before its look and under its own lock; the endpoint is read without a lock. Not knowing whether work is in
+    /// progress is not knowing that none is: a reading that throws is that work in progress.
     /// </summary>
-    private bool RemodelRunInProgress()
+    private DeferredRestart.Work WorkInProgress()
+    {
+        DeferredRestart.Work work = DeferredRestart.Work.None;
+        if (InProgress(_options.BackendBusy))
+        {
+            work |= DeferredRestart.Work.RemodelRun;
+        }
+
+        if (_options.Backend.Endpoint == null)
+        {
+            return work;
+        }
+
+        if (InProgress(_options.ModelCheckInProgress))
+        {
+            work |= DeferredRestart.Work.ModelCheck;
+        }
+
+        if (InProgress(_options.StandardsCheckInProgress))
+        {
+            work |= DeferredRestart.Work.StandardsCheck;
+        }
+
+        return work;
+    }
+
+    /// <summary>One reading of work in progress; a reading that throws is read as work in progress.</summary>
+    private static bool InProgress(Func<bool> reading)
     {
         try
         {
-            return _options.BackendBusy();
+            return reading();
         }
         catch (Exception)
         {
@@ -1952,25 +2105,21 @@ public sealed class ReviewHost : IDisposable
     }
 
     /// <summary>
-    /// What holds the restart back. Read in the order the add-in can know it: no backend process
-    /// at all holds nothing - the restart is what brings one back; then a remodel run in progress,
-    /// which the restart would end with its copy half changed, and which the add-in knows without
-    /// asking the backend; then the turns, asked of the backend: a turn running, or a backend that
-    /// gave no answer, since not knowing whether a turn runs is not knowing that none does. The
-    /// remodel run is read again under the restart's own lock, after this look (owner decision
-    /// 145A), so one still in progress holds the restart back even with no backend: it cannot
-    /// last, since every call it makes then fails.
+    /// What the backend says holds the restart back. Read in the order the add-in can know it: no backend
+    /// process at all holds nothing - the restart is what brings one back; then the turns, asked of the
+    /// backend: a turn running, or a backend that gave no answer, since not knowing whether a turn runs is not
+    /// knowing that none does. Work in progress - a remodel run, a check - is the restart's own reading
+    /// (<see cref="WorkInProgress"/>), which it reads before this look, since the add-in knows it without
+    /// asking the backend (owner decision 145A read the run here, and 157A moved it there, with the checks), and
+    /// again under its own lock, after it. A remodel run still in progress holds the restart back even with no
+    /// backend: it cannot last, since every call it makes then fails. A check does not: with no backend up it
+    /// holds nothing, since the restart is what brings back the backend its evaluation needs (157A, T236).
     /// </summary>
     private DeferredRestart.Hold RestartHeldBack()
     {
         if (_options.Backend.Endpoint == null)
         {
             return DeferredRestart.Hold.None;
-        }
-
-        if (RemodelRunInProgress())
-        {
-            return DeferredRestart.Hold.RemodelRun;
         }
 
         switch (LookAtTheTurns(stopAtNoAnswer: true))
@@ -2144,19 +2293,19 @@ public sealed class ReviewHost : IDisposable
     /// <summary>
     /// The refusal for what holds the restart back, or null when nothing does: the error class
     /// whose next step is true of it, the words for it, and the flag the backend gives a call it
-    /// refuses for such a reason - its `TurnRunning` is not retryable (chat/server.py), a remodel
-    /// run is answered as a turn is, and a backend that does not answer as the proxy answers one
-    /// that is not there.
+    /// refuses for such a reason - its `TurnRunning` is not retryable (chat/server.py), work - a
+    /// remodel run or a check (owner decision 157A), which <paramref name="work"/> names - is answered
+    /// as a turn is, and a backend that does not answer as the proxy answers one that is not there.
     /// </summary>
-    private static BackendRequestException? HeldBackBy(DeferredRestart.Outcome outcome)
+    private static BackendRequestException? HeldBackBy(DeferredRestart.Outcome outcome, DeferredRestart.Work work)
     {
         switch (outcome)
         {
             case DeferredRestart.Outcome.TurnRunning:
                 return new BackendRequestException("TurnRunning", TurnHoldsTheRestart, retryable: false);
 
-            case DeferredRestart.Outcome.RemodelRunning:
-                return new BackendRequestException("RemodelRunning", RemodelRunHoldsTheRestart, retryable: false);
+            case DeferredRestart.Outcome.WorkInProgress:
+                return WorkHoldsIt(work, retryable: false);
 
             case DeferredRestart.Outcome.NotAnswered:
                 return new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheRestart, retryable: true);
@@ -2178,8 +2327,8 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     private bool RestartedForNewReview(string? id)
     {
-        DeferredRestart.Outcome outcome = _restart.Apply(out Exception? failure);
-        BackendRequestException? held = HeldBackBy(outcome);
+        DeferredRestart.Outcome outcome = _restart.Apply(out Exception? failure, out DeferredRestart.Work busyWith);
+        BackendRequestException? held = HeldBackBy(outcome, busyWith);
         if (held != null)
         {
             // Retryable, as this host's other refusals of a review are: it can be pressed again
@@ -2220,8 +2369,8 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     public BackendRequestException? PageTurnRefusal()
     {
-        DeferredRestart.Outcome outcome = _restart.Apply(out Exception? failure);
-        BackendRequestException? held = HeldBackBy(outcome);
+        DeferredRestart.Outcome outcome = _restart.Apply(out Exception? failure, out DeferredRestart.Work busyWith);
+        BackendRequestException? held = HeldBackBy(outcome, busyWith);
         if (held != null)
         {
             return held;
@@ -2271,15 +2420,57 @@ public sealed class ReviewHost : IDisposable
     ///
     /// Null once <paramref name="begin"/> has run. Otherwise the refusal, and it has not run: while
     /// something holds the restart back, what - a turn (`TurnRunning`), a backend that does not
-    /// answer (`BackendUnavailable`), or a remodel run (`RemodelRunning`), which only a reading that
-    /// throws can give, since the Remodel host refuses a second run itself - in words for the
-    /// Remodel tab; the failure of the restart this call made or waited for (`BackendUnavailable`),
-    /// masked; or the add-in unloading. Retryable, as this host's refusals of a review are, except
-    /// the last. Throws only what <paramref name="begin"/> throws.
+    /// answer (`BackendUnavailable`), or work in progress: a check (`CheckRunning`, owner decision
+    /// 157A), or a remodel run (`RemodelRunning`), which only a reading that throws can give, since
+    /// the Remodel host refuses a second run itself - in words for the Remodel tab; the failure of the
+    /// restart this call made or waited for (`BackendUnavailable`), masked; or the add-in unloading.
+    /// Retryable, as this host's refusals of a review are, except the last. Throws only what
+    /// <paramref name="begin"/> throws.
     /// </summary>
-    public BackendRequestException? BeginRemodelRun(Action begin)
+    public BackendRequestException? BeginRemodelRun(Action begin) => BeginWork(begin, "remodel run");
+
+    /// <summary>
+    /// Owner decision 157A: the gate a check - a Model check or a Standards check - begins through, from its
+    /// tab's own pump, so that it is treated as a turn, as a remodel run is (<see cref="BeginRemodelRun"/>): a
+    /// settings restart that waits is made first, or the one being made is waited for, and then
+    /// <paramref name="begin"/>, which marks the check in progress, runs under the restart's own lock. No
+    /// restart can begin under the check, and none is under way when it begins, so the check's extraction is
+    /// never wasted on a backend that restarted under it, nor made for the old one with settings saved since.
+    /// Answered as <see cref="BeginRemodelRun"/> answers, in words for a check tab.
+    /// </summary>
+    public BackendRequestException? BeginCheck(Action begin) => BeginWork(begin, "check");
+
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="step"/> while no settings restart can begin or be made,
+    /// making none, and answers its answer (<see cref="DeferredRestart.WhileNoneRuns"/>); false once the host is
+    /// disposed. A check's evaluation takes back a hold whose time has passed in it, from the pane's proxy, if the
+    /// token it carries is the token of the backend up now - so a page held up past its minute is still held, unless
+    /// a restart was made meanwhile or the backend stopped.
+    /// </summary>
+    public bool WhileNoRestartRuns(Func<bool> step) => _restart.WhileNoneRuns(step);
+
+    /// <summary>
+    /// The race review of owner decision 157A: stops every settings restart that has not begun, and its watcher, as
+    /// disposing the host does first - for the add-in's unload, before the hosts whose work holds a restart back, a
+    /// remodel run or a check, let their holds go with them, so none is made in the moment before this host goes, on a
+    /// backend about to be stopped. The host is marked as stopping before the watcher is waited for (160A), so a
+    /// save or deferred completion in that wait, or while the other hosts stop, says only what is true of unloading.
+    /// Nothing begins through the gate after it. Doing it again, or disposing the host after it, does nothing more.
+    /// </summary>
+    public void StopRestarting()
     {
-        DeferredRestart.Outcome outcome = _restart.Begin(begin, out Exception? failure);
+        _stopping = true;
+        _restart.Dispose();
+    }
+
+    /// <summary>
+    /// The one gate work the restart would end begins through (owner decisions 145A and 157A): the
+    /// restart's <see cref="DeferredRestart.Begin(Action, out Exception?, out DeferredRestart.Work)"/>, its outcome
+    /// answered in words for the tab the <paramref name="work"/> - "remodel run" or "check" - is pressed on.
+    /// </summary>
+    private BackendRequestException? BeginWork(Action begin, string work)
+    {
+        DeferredRestart.Outcome outcome = _restart.Begin(begin, out Exception? failure, out DeferredRestart.Work busyWith);
         switch (outcome)
         {
             case DeferredRestart.Outcome.NotPending:
@@ -2288,13 +2479,13 @@ public sealed class ReviewHost : IDisposable
                 return null;
 
             case DeferredRestart.Outcome.TurnRunning:
-                return new BackendRequestException("TurnRunning", TurnHoldsTheRemodelRun, retryable: true);
+                return new BackendRequestException("TurnRunning", TurnHoldsTheWork(work), retryable: true);
 
-            case DeferredRestart.Outcome.RemodelRunning:
-                return new BackendRequestException("RemodelRunning", RemodelRunHoldsTheRestart, retryable: true);
+            case DeferredRestart.Outcome.WorkInProgress:
+                return WorkHoldsIt(busyWith, retryable: true);
 
             case DeferredRestart.Outcome.NotAnswered:
-                return new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheRemodelRun, retryable: true);
+                return new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheWork(work), retryable: true);
 
             case DeferredRestart.Outcome.Failed:
                 return RestartFailed(failure!);
@@ -2732,6 +2923,24 @@ public sealed class ReviewHost : IDisposable
             SendError(id, "TurnRunning", "Stop the running review before preparing another.", true);
             return;
         }
+
+        // The final reviews of 157A: the preparation reads the whole component tree on SOLIDWORKS' application thread,
+        // where a check's page waits to evaluate, so it passes the gate the review's start passes - refused while a
+        // restart waits that something holds back, a check's evaluation among them, which a read in front of it would
+        // hold up past its minute; and a restart nothing holds back made first, as the start would make it.
+        if (!RestartedForNewReview(id))
+        {
+            return;
+        }
+
+        // ...and, as after every gate that can wait (owner decision 149A), the document is read again before anything
+        // is read from it: always, and a review of another document than the one it was asked for is refused.
+        if (!document.IsSameDocument(_options.CurrentDocument()))
+        {
+            SendError(id, "DocumentChanged", DocumentChangedMessage, retryable: true);
+            return;
+        }
+
         PostStatus("preparing", "Reading component availability before the review...");
         ReviewPreparation preparation;
         try

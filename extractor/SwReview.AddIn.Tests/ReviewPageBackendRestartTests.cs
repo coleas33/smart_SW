@@ -31,10 +31,13 @@ public sealed class ReviewPageBackendRestartTests
     /// <summary>The host's sentence for a save a turn started during (ReviewHost, `settings.save`).</summary>
     private const string Promise = "the settings are saved; the backend restarts when the running turn ends.";
 
-    /// <summary>The host's sentence when its watcher stops looking at a backend that does not answer.</summary>
+    /// <summary>
+    /// The host's sentence when its watcher stops looking at a backend that does not answer: since owner decision
+    /// 157A it names a check among what makes the restart first (changed deliberately, as the host's words were).
+    /// </summary>
     private const string NotAnswering =
         "the review backend is not answering, so it has not been restarted with the saved settings yet. "
-        + "It will be before the next review, follow-up or remodel run, once it answers; to restart it "
+        + "It will be before the next review, follow-up, remodel run or check, once it answers; to restart it "
         + "now, save the settings again.";
 
     /// <summary>The host's sentence for a save made while a remodel run is in progress (owner decision 145A).</summary>
@@ -45,10 +48,35 @@ public sealed class ReviewPageBackendRestartTests
     private const string TurnAndRemodelRunPromise =
         "the settings are saved; the backend restarts when the running turn and the remodel run end.";
 
-    /// <summary>`backend.restarted` as the host posts it: every one of its sentences about the wait.</summary>
+    /// <summary>The host's sentence for a save made while a check is in progress (owner decision 157A).</summary>
+    private const string CheckPromise =
+        "the settings are saved; the backend restarts when the running check ends.";
+
+    /// <summary>...and for one made while a check on each check tab, a remodel run and a turn all held the restart back.</summary>
+    private const string EverythingPromise =
+        "the settings are saved; the backend restarts when the running turn, the remodel run and the running checks end.";
+
+    /// <summary>
+    /// `backend.restarted` as the host posts it: every one of its sentences about the wait - since owner decision
+    /// 157A the eight that name a check too (changed deliberately, as the host's are).
+    /// </summary>
     private static readonly object Restarted = new
     {
-        sentences = new[] { Promise, RemodelRunPromise, TurnAndRemodelRunPromise, NotAnswering },
+        sentences = new[]
+        {
+            Promise,
+            RemodelRunPromise,
+            TurnAndRemodelRunPromise,
+            CheckPromise,
+            "the settings are saved; the backend restarts when the running turn and the running check end.",
+            "the settings are saved; the backend restarts when the remodel run and the running check end.",
+            "the settings are saved; the backend restarts when the running turn, the remodel run and the running check end.",
+            "the settings are saved; the backend restarts when the running checks end.",
+            "the settings are saved; the backend restarts when the running turn and the running checks end.",
+            "the settings are saved; the backend restarts when the remodel run and the running checks end.",
+            EverythingPromise,
+            NotAnswering,
+        },
     };
 
     private const string RestartedToken = "FICT-restarted-backend-token";
@@ -119,6 +147,32 @@ public sealed class ReviewPageBackendRestartTests
     [InlineData(RemodelRunPromise)]
     [InlineData(TurnAndRemodelRunPromise)]
     public void ABackendRestartedTakesTheRemodelRunSentencesOffTheBanner(string sentence)
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await driver.Post("status", new { stage = "error", message = sentence });
+            Assert.Equal(sentence, (await driver.Read(Banner)).GetProperty("text").GetString());
+            int readies = driver.Posted("ready").Length;
+            driver.BackendToken = RestartedToken;
+
+            await driver.Post("backend.restarted", Restarted);
+            await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init again");
+            await driver.Settle();
+
+            JsonElement banner = await driver.Read(Banner);
+            Assert.True(banner.GetProperty("hidden").GetBoolean(), banner.GetRawText());
+        });
+    }
+
+    /// <summary>
+    /// Owner decision 157A: the host's sentences for a save whose restart waits for a check - one, or with everything
+    /// else that can hold it back - are done with too once the restart is made, and come off the banner as the
+    /// turn's does. The page needs nothing new for them: it takes off whichever of the host's sentences is there.
+    /// </summary>
+    [Theory]
+    [InlineData(CheckPromise)]
+    [InlineData(EverythingPromise)]
+    public void ABackendRestartedTakesTheCheckSentencesOffTheBanner(string sentence)
     {
         ReviewPageDriver.Run(null, async driver =>
         {

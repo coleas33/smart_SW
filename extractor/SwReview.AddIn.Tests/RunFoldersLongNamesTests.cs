@@ -259,12 +259,26 @@ public sealed class RunFoldersLongNamesTests : IDisposable
     public void EveryHostHandsTheRunFoldersItsRunRootProbe()
     {
         var calls = new List<string>();
+        var creators = new List<string>();
+        var delegated = new List<string>();
         var options = new List<string>();
         foreach ((string name, string source) in AddInSources().Where(file => file.Name != "RunFolders.cs"))
         {
             foreach (Match call in Regex.Matches(source, @"RunFolders\.(CreateFor\w+|NewestCheckFolder|FindNotSentReview|IsUnder)\("))
             {
                 calls.Add(name + " " + call.Groups[1].Value + Enclosed(source, call.Index + call.Length - 1, '(', ')'));
+            }
+
+            // Decisions 157A and 160A together: check creation is now shared. Pin each tab's creator and
+            // the owner probe passed by the shared start, replacing the former two direct-call assertions.
+            foreach (Match creator in Regex.Matches(source, @"createFolder:\s*(RunFolders\.CreateFor\w+)\s*,"))
+            {
+                creators.Add(name + " " + creator.Groups[1].Value);
+            }
+
+            foreach (Match call in Regex.Matches(source, @"start\.CreateFolder\("))
+            {
+                delegated.Add(name + " " + Enclosed(source, call.Index + call.Length - 1, '(', ')'));
             }
 
             foreach (Match made in Regex.Matches(source, @"new (PaneActionsOptions|CheckPaneHostOptions)\("))
@@ -280,7 +294,6 @@ public sealed class RunFoldersLongNamesTests : IDisposable
             new[]
             {
                 "CheckPaneHost.cs NewestCheckFolder",
-                "ModelCheckHost.cs CreateForCheck",
                 "PaneActions.cs IsUnder",
                 "PaneActions.cs IsUnder",
                 "RemodelHost.cs CreateForRemodel",
@@ -289,13 +302,17 @@ public sealed class RunFoldersLongNamesTests : IDisposable
                 "ReviewHost.cs CreateForDocument",
                 "ReviewHost.cs FindNotSentReview",
                 "ReviewHost.cs IsUnder",
-                "StandardsHost.cs CreateForStandards",
                 "TaskPaneControl.cs CreateForTerminal",
             },
             calls.Select(call => call.Substring(0, call.IndexOf('('))).OrderBy(call => call, StringComparer.Ordinal));
         Assert.All(
             calls.Where(call => !call.StartsWith("TaskPaneControl.cs CreateForTerminal(", StringComparison.Ordinal)),
             call => Assert.Contains(LastArgument(call), new[] { "_options.RunRootProbe", "_options.RunRootProbe()" }));
+        Assert.Equal(
+            new[] { "ModelCheckHost.cs RunFolders.CreateForCheck", "StandardsHost.cs RunFolders.CreateForStandards" },
+            creators.OrderBy(creator => creator, StringComparer.Ordinal));
+        Assert.StartsWith("CheckPaneHost.cs ", Assert.Single(delegated), StringComparison.Ordinal);
+        Assert.Equal("_options.RunRootProbe()", LastArgument(delegated[0]));
         Assert.Equal(5, options.Count);
         Assert.All(options, made => Assert.Matches(@"RunRootProbe = \(\) => _?options\.RunRootProbe(\(\))?,", made));
     }
@@ -348,7 +365,7 @@ public sealed class RunFoldersLongNamesTests : IDisposable
         }
 
         Assert.Equal(
-            new[] { "ModelCheckHost.cs", "RemodelHost.cs", "ReviewHost.cs", "StandardsHost.cs" },
+            new[] { "CheckPaneHost.cs", "RemodelHost.cs", "ReviewHost.cs" },
             calls.Select(call => call.Substring(0, call.IndexOf(' '))).OrderBy(name => name, StringComparer.Ordinal));
         Assert.All(calls, call => Assert.DoesNotContain("RunRootProbe", call, StringComparison.Ordinal));
         Assert.NotNull(refusal);

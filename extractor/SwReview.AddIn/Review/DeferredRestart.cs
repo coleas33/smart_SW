@@ -39,7 +39,11 @@ namespace SwReview.AddIn.Review;
 /// can answer without reading the run - and waits while a run is in progress. A run begins
 /// through <see cref="Begin"/>, which makes a waiting restart first, or waits for the one being
 /// made, and marks the run under that same lock, so a run begins only once no restart waits or is
-/// being made: a restart and a run never overlap.
+/// being made: a restart and a run never overlap. Owner decision 157A makes a check work too - a
+/// Model check or a Standards check, from its gate until the page's evaluation of it has been
+/// answered - and the reading says which work is in progress (<see cref="Work"/>), which every answer
+/// that names the work carries out; a restart that waits reads it before its look, too, since it is
+/// known without a round trip.
 ///
 /// <b>A backend that does not answer is watched, but not for ever.</b> Not knowing whether a turn
 /// runs is not knowing that none does, so a look the backend leaves without a usable answer
@@ -72,11 +76,40 @@ internal sealed class DeferredRestart : IDisposable
         /// <summary>A turn is running on the backend.</summary>
         Turn,
 
-        /// <summary>A remodel run is in progress, which the restart would end with its copy half changed.</summary>
-        RemodelRun,
+        /// <summary>
+        /// Work the restart would end is in progress, known without asking the backend: a remodel run (owner
+        /// decision 145A) or a check (owner decision 157A). Which work, the reading says (<see cref="Work"/>).
+        /// </summary>
+        Work,
 
         /// <summary>The backend gave no usable answer, so whether a turn runs is not known.</summary>
         NoAnswer,
+    }
+
+    /// <summary>
+    /// The work the restart would end that is in progress, known without asking the backend (owner decisions 145A
+    /// and 157A), as the busy reading finds it: none, or any of these together.
+    /// </summary>
+    [Flags]
+    internal enum Work
+    {
+        /// <summary>No work the restart would end is in progress.</summary>
+        None = 0,
+
+        /// <summary>A remodel run - a plan or a Start's run - which the restart would end with its copy half changed.</summary>
+        RemodelRun = 1,
+
+        /// <summary>A Model check, from its gate until the page's evaluation of it has been answered.</summary>
+        ModelCheck = 2,
+
+        /// <summary>A Standards check, from its gate until the page's evaluation of it has been answered.</summary>
+        StandardsCheck = 4,
+
+        /// <summary>
+        /// Work whose kind is not known: a reading that throws, or a look that names work the reading did not see.
+        /// Not knowing what work is in progress is not knowing that none is.
+        /// </summary>
+        Unknown = 8,
     }
 
     /// <summary>What one <see cref="Apply"/> did.</summary>
@@ -101,11 +134,11 @@ internal sealed class DeferredRestart : IDisposable
         TurnRunning,
 
         /// <summary>
-        /// A remodel run holds the restart back - the look found one, or the restart's own lock
-        /// found one the look did not read (owner decision 145A): nothing was changed, and it
-        /// still waits.
+        /// Work the restart would end holds it back - a remodel run (owner decision 145A) or a check (owner
+        /// decision 157A), read before the look and again under the restart's own lock, or named by the look:
+        /// nothing was changed, and it still waits. Which work, the call says.
         /// </summary>
-        RemodelRunning,
+        WorkInProgress,
 
         /// <summary>
         /// The backend gave no usable answer to whether a turn runs: nothing was changed, and it
@@ -139,7 +172,7 @@ internal sealed class DeferredRestart : IDisposable
     private static readonly TimeSpan ShortestPoll = TimeSpan.FromMilliseconds(1);
 
     private readonly Func<Hold> _heldBack;
-    private readonly Func<bool> _busy;
+    private readonly Func<Work> _busy;
     private readonly Action _restart;
     private readonly Action _restarted;
     private readonly Action<Exception> _failed;
@@ -188,12 +221,16 @@ internal sealed class DeferredRestart : IDisposable
     private bool _disposed;
     private Thread? _watcher;
 
-    /// <param name="heldBack">What holds the restart back - a turn running, a remodel run the
-    /// restart would end, or a backend that does not answer - or nothing; never throws.</param>
-    /// <param name="busy">Whether work the restart would end is in progress - a remodel run - known
-    /// without asking the backend (owner decision 145A). Every restart reads it under the restart's
-    /// own lock, and <see cref="Begin"/> marks such work under that lock, so the two never overlap;
-    /// a throw is read as busy. Read under the lock, so it must be quick and must not block.</param>
+    /// <param name="heldBack">What the backend says holds the restart back - a turn running, or a
+    /// backend that does not answer - or nothing; never throws. Work the restart would end is the
+    /// <paramref name="busy"/> reading's, read before this look; a look may still name work
+    /// (<see cref="Hold.Work"/>), and it is then work of a kind not known.</param>
+    /// <param name="busy">Which work the restart would end is in progress - a remodel run (owner decision
+    /// 145A), a Model check or a Standards check (owner decision 157A) - known without asking the backend,
+    /// or none. Every restart reads it under the restart's own lock, and <see cref="Begin"/> marks such work
+    /// under that lock, so the two never overlap; a restart that waits reads it before its look too. A
+    /// throw is read as work of a kind not known (<see cref="Work.Unknown"/>). Read under the lock, so it
+    /// must be quick and must not block.</param>
     /// <param name="restart">Restarts the backend with the settings saved when it is called.
     /// Throws <see cref="TurnRunningException"/> when the backend's own check finds a turn, and
     /// anything else when the restart fails.</param>
@@ -205,7 +242,7 @@ internal sealed class DeferredRestart : IDisposable
     /// <param name="poll">How often the watcher looks at what holds the restart back.</param>
     public DeferredRestart(
         Func<Hold> heldBack,
-        Func<bool> busy,
+        Func<Work> busy,
         Action restart,
         Action restarted,
         Action<Exception> failed,
@@ -271,7 +308,7 @@ internal sealed class DeferredRestart : IDisposable
     /// <exception cref="Exception">Whatever <paramref name="restart"/> throws other than
     /// <see cref="TurnRunningException"/>, unchanged: the save answers it as a save kept whose
     /// restart failed (owner decision 150A).</exception>
-    public bool Now(Action restart) => Now(restart, out _);
+    public bool Now(Action restart) => Now(restart, out _, out _);
 
     /// <summary>
     /// <see cref="Now(Action)"/>, saying what the restart waits for when it waits (owner decision
@@ -280,23 +317,49 @@ internal sealed class DeferredRestart : IDisposable
     /// changed - or a turn the backend's own check found.
     /// </summary>
     /// <param name="restart">The restart, with the settings just saved.</param>
-    /// <param name="heldBy"><see cref="Hold.RemodelRun"/> or <see cref="Hold.Turn"/> when the
+    /// <param name="heldBy"><see cref="Hold.Work"/> or <see cref="Hold.Turn"/> when the
     /// restart waits; <see cref="Hold.None"/> when the backend was restarted now.</param>
-    public bool Now(Action restart, out Hold heldBy)
+    public bool Now(Action restart, out Hold heldBy) => Now(restart, out heldBy, out _);
+
+    /// <summary>
+    /// <see cref="Now(Action, out Hold)"/>, saying which work the restart waits for when work holds it (owner
+    /// decision 157A), so the save can name it.
+    /// </summary>
+    /// <param name="restart">The restart, with the settings just saved.</param>
+    /// <param name="heldBy"><see cref="Hold.Work"/> or <see cref="Hold.Turn"/> when the restart waits;
+    /// <see cref="Hold.None"/> when the backend was restarted now.</param>
+    /// <param name="busyWith">The work the reading under the restart's lock found when it is
+    /// <see cref="Hold.Work"/>; <see cref="Work.None"/> otherwise.</param>
+    /// <exception cref="ObjectDisposedException">Disposed - the add-in unloading: nothing is restarted, as no first
+    /// start is (<see cref="First"/>), on a backend about to be stopped; the save answers it as a save kept whose
+    /// restart was not made (the final reviews of 157A). Its message is the words alone, since the save's answer shows
+    /// them.</exception>
+    public bool Now(Action restart, out Hold heldBy, out Work busyWith)
     {
         if (restart == null)
         {
             throw new ArgumentNullException(nameof(restart));
         }
 
+        busyWith = Work.None;
         lock (_restarting)
         {
-            if (Busy())
+            lock (_state)
             {
-                // Read under this lock, which a run takes to begin (Begin): none can begin between
-                // this reading and the restart, so a save never ends one.
+                if (_disposed)
+                {
+                    throw new ObjectDisposedException(null, "the add-in is unloading, so the backend was not restarted.");
+                }
+            }
+
+            Work work = Busy();
+            if (work != Work.None)
+            {
+                // Read under this lock, which work takes to begin (Begin): none can begin between
+                // this reading and the restart, so a save never ends a remodel run or a check.
                 Defer();
-                heldBy = Hold.RemodelRun;
+                heldBy = Hold.Work;
+                busyWith = work;
                 return false;
             }
 
@@ -368,13 +431,34 @@ internal sealed class DeferredRestart : IDisposable
     /// is making. Never throws: a failure is reported through the callback and answered as
     /// <see cref="Outcome.Failed"/>, with the exception in <paramref name="failure"/>.
     /// </summary>
-    public Outcome Apply(out Exception? failure)
+    public Outcome Apply(out Exception? failure) => Apply(out failure, out _);
+
+    /// <summary>
+    /// <see cref="Apply(out Exception?)"/>, saying which work holds the restart back when the answer is
+    /// <see cref="Outcome.WorkInProgress"/> (owner decision 157A), so a refusal can name it.
+    /// </summary>
+    /// <param name="failure">The failure when the answer is <see cref="Outcome.Failed"/>, else null.</param>
+    /// <param name="busyWith">The work that holds the restart back when the answer is
+    /// <see cref="Outcome.WorkInProgress"/>; <see cref="Work.None"/> otherwise.</param>
+    public Outcome Apply(out Exception? failure, out Work busyWith)
     {
         failure = null;
+        busyWith = Work.None;
         Outcome? settled = Settled(out long seen);
         if (settled.HasValue)
         {
             return settled.Value;
+        }
+
+        // Owner decisions 145A and 157A: work the restart would end - a remodel run, a check - is
+        // known without asking the backend, so it is read first, as 145A's look read a remodel run
+        // before the turns: while it holds the restart back no turn is asked about, and the watcher
+        // counts no backend that does not answer meanwhile. Read again under the lock, below.
+        Work work = Busy();
+        if (work != Work.None)
+        {
+            busyWith = work;
+            return Outcome.WorkInProgress;
         }
 
         // Asked before the lock is taken, because it is a round trip per chat and a save or a
@@ -396,8 +480,10 @@ internal sealed class DeferredRestart : IDisposable
             case Hold.Turn:
                 return Outcome.TurnRunning;
 
-            case Hold.RemodelRun:
-                return Outcome.RemodelRunning;
+            case Hold.Work:
+                // Work the reading just before did not see: of a kind not known.
+                busyWith = Work.Unknown;
+                return Outcome.WorkInProgress;
 
             case Hold.NoAnswer:
                 return Outcome.NotAnswered;
@@ -425,10 +511,14 @@ internal sealed class DeferredRestart : IDisposable
             // process at all, and a look that cannot be made counts as such an answer - so the run
             // is read here, under the lock a run begins under (Begin), and the restart never ends
             // one. Nothing was changed, so the restart still waits. (A run cannot begin after the
-            // look while a restart waits: Begin makes or waits for the restart first.)
-            if (Busy())
+            // look while a restart waits: Begin makes or waits for the restart first.) The reading
+            // before the look stands in for the look's own since owner decision 157A; this one, under
+            // the lock, is still the one that decides, for a check as for a remodel run.
+            work = Busy();
+            if (work != Work.None)
             {
-                return Outcome.RemodelRunning;
+                busyWith = work;
+                return Outcome.WorkInProgress;
             }
 
             try
@@ -478,9 +568,19 @@ internal sealed class DeferredRestart : IDisposable
     /// <returns><see cref="Outcome.NotPending"/>, <see cref="Outcome.Restarted"/> or
     /// <see cref="Outcome.RestartedMeanwhile"/> once <paramref name="begin"/> has run; otherwise
     /// what holds the restart back (<see cref="Outcome.TurnRunning"/>,
-    /// <see cref="Outcome.RemodelRunning"/>, <see cref="Outcome.NotAnswered"/>),
+    /// <see cref="Outcome.WorkInProgress"/>, <see cref="Outcome.NotAnswered"/>),
     /// <see cref="Outcome.Failed"/> or <see cref="Outcome.Stopped"/>, and it has not run.</returns>
-    public Outcome Begin(Action begin, out Exception? failure)
+    public Outcome Begin(Action begin, out Exception? failure) => Begin(begin, out failure, out _);
+
+    /// <summary>
+    /// <see cref="Begin(Action, out Exception?)"/>, saying which work holds the restart back when the answer is
+    /// <see cref="Outcome.WorkInProgress"/> (owner decision 157A), so the refusal can name it.
+    /// </summary>
+    /// <param name="begin">Marks the work in progress, as above.</param>
+    /// <param name="failure">The failure when the answer is <see cref="Outcome.Failed"/>, else null.</param>
+    /// <param name="busyWith">The work that holds the restart back when the answer is
+    /// <see cref="Outcome.WorkInProgress"/>; <see cref="Work.None"/> otherwise.</param>
+    public Outcome Begin(Action begin, out Exception? failure, out Work busyWith)
     {
         if (begin == null)
         {
@@ -490,6 +590,7 @@ internal sealed class DeferredRestart : IDisposable
         while (true)
         {
             failure = null;
+            busyWith = Work.None;
             Outcome? settled = Settled(out long seen);
             if (settled == Outcome.Stopped)
             {
@@ -500,7 +601,7 @@ internal sealed class DeferredRestart : IDisposable
             if (!settled.HasValue)
             {
                 // A restart waits: made first, or waited for, as a new review makes it.
-                outcome = Apply(out failure);
+                outcome = Apply(out failure, out busyWith);
                 if (outcome != Outcome.NotPending
                     && outcome != Outcome.Restarted
                     && outcome != Outcome.RestartedMeanwhile)
@@ -544,6 +645,34 @@ internal sealed class DeferredRestart : IDisposable
                 begin();
                 return outcome;
             }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="step"/> while no restart can begin or be made - under the
+    /// restart's own lock, so one being made is waited for - making none and asking nothing, and answers the step's
+    /// answer; false, the step not run, once stopping with the add-in. Whatever the step reads no restart changes while
+    /// it runs, and whatever it marks a restart reads after it, under the same lock. A check's evaluation takes back a
+    /// hold whose time has passed in such a step, if the token it carries is the token of the backend up now.
+    /// </summary>
+    public bool WhileNoneRuns(Func<bool> step)
+    {
+        if (step == null)
+        {
+            throw new ArgumentNullException(nameof(step));
+        }
+
+        lock (_restarting)
+        {
+            lock (_state)
+            {
+                if (_disposed)
+                {
+                    return false;
+                }
+            }
+
+            return step();
         }
     }
 
@@ -593,10 +722,11 @@ internal sealed class DeferredRestart : IDisposable
     }
 
     /// <summary>
-    /// Whether work the restart would end is in progress (owner decision 145A), read under the
-    /// restart's lock. Not knowing whether a run is in progress is not knowing that none is.
+    /// Which work the restart would end is in progress (owner decisions 145A and 157A), read under the
+    /// restart's lock, and before a look. Not knowing whether work is in progress is not knowing that
+    /// none is: a reading that throws is work of a kind not known.
     /// </summary>
-    private bool Busy()
+    private Work Busy()
     {
         try
         {
@@ -604,7 +734,7 @@ internal sealed class DeferredRestart : IDisposable
         }
         catch (Exception)
         {
-            return true;
+            return Work.Unknown;
         }
     }
 

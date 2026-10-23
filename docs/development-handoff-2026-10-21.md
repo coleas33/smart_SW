@@ -1,9 +1,10 @@
 # Development handoff, 2026-10-21
 
-Continue on branch `codex/resume-160a`, based on `cleanups-160a` at `8849e52`.
-Its parent already includes `main` at `4f40dae` (decision 158A, PR #33).
-This continuation completes the interrupted final cleanup review under decision 160A.
-The original worktrees and their uncommitted edits were preserved.
+Delivery update, 2026-10-23: decision 160A merged through [PR #34](https://github.com/coleas33/smart_SW/pull/34),
+with main at `6b0508c`. Decision 157A on `codex/resume-157a` now includes that actual main;
+its final independent review and all local gates passed, and its PR delivery is next.
+The separate 159A recovery candidate is still being gated. The original worktrees and their
+uncommitted edits were preserved. The earlier sections below retain the recovery history.
 
 ## Completed in this continuation
 
@@ -36,13 +37,14 @@ focused cases pass; the Windows Release rebuild has zero warnings, and the compl
 passes with 10,125 extractor and 3,695 add-in tests. Independent final review approved the
 change with no material findings. Refreshed Python 3.12/3.11 tokenizer-required gates each
 passed 18,112 tests with 5 skipped; sync, tokenizer fetch and Ruff passed. T302 was closed
-on 2026-10-23 after recovering the completed gate results. PR #34 awaits CI on the final tip.
+on 2026-10-23 after recovering the completed gate results. All four required checks then passed;
+PR #34 merged at `6b0508c` on 2026-10-23.
 
 | Decision | Branch and last earlier commit | State and next step |
 |---|---|---|
-| 160A | `codex/resume-160a`, parent `cleanups-160a` at `8849e52` | PR #34 is open. Final independent review and all local gates passed through T302; require green CI on the final tip before merging. |
-| 157A | `codex/resume-157a`, `1652bcc`, based on `checkhold-157a` at `a4cc6f0` | Code through T295 and the interrupted final-review records are committed. The five original documentation edits remain preserved in their original worktree. Complete the final independent reviews, integrate the cleanup main, rerun the merged-tree gates and open the PR. |
-| 159A | `remodel2-159a`, `86a7c9c` | Code through 004 T256 is committed and the original branch was clean. The final reviews found additional issues listed below; the earlier R19.26 claim that no known defect remains needs a dated correction. |
+| 160A | `codex/resume-160a`, parent `cleanups-160a` at `8849e52` | Merged through PR #34 at `6b0508c`, with all four CI checks green and local gates complete through T302. |
+| 157A | `codex/resume-157a`, `1652bcc`, based on `checkhold-157a` at `a4cc6f0` | The interrupted records and final actual-main integration are complete through T306. Independent review and all local gates passed; PR delivery is next. The five original documentation edits remain preserved. |
+| 159A | `remodel2-159a`, `86a7c9c` | Original code through 004 T256 is preserved. The separate `codex/159a-cleanup-recovery` candidate implements the failed-Plan and stopping-word fixes and the readiness correction; its C# gate passed, Python gates/delivery remain pending. Three Start blockers remain below. |
 | 134A / 148A | `constitution-134a`, draft PR #4 | Still awaits the owner's explicit go. This continuation does not approve the amendment. |
 
 The separate 157A records commit passed the full Windows C# gate with zero warnings:
@@ -50,11 +52,19 @@ The separate 157A records commit passed the full Windows C# gate with zero warni
 5 skipped with the tokenizer required; Ruff, the changed links, task ids and final tracked-file
 scan passed. Its earlier scale failure did not recur, and the three-second assertion is unchanged.
 
-The other branch tips above are local preservation points, not a claim that they have been
-published. Check the remote before pushing. Keep changes reaching main behind a PR and green CI.
+The final actual-main 157A integration passed the Windows build with zero warnings/errors:
+10,125 extractor and 3,948 add-in tests. Python 3.12 and 3.11 each passed 18,112 tests with
+5 skipped and the tokenizer required; sync, tokenizer fetch and Ruff passed. The refreshed
+tree matched the tested candidate exactly before recording those results.
+
+The branch tips above are preservation points; use their delivery state and check the remote. Check the remote before pushing. Keep changes reaching main behind a PR and green CI.
 The next unallocated owner-decision id in the register is 161A.
 
-## Decision 159A: findings to turn into failing tests
+## Decision 159A: findings from the original review
+
+Update on 2026-10-23: items 1 and 4 are implemented and independently reviewed in the
+separate recovery candidate, with full validation/delivery still pending. Items 2, 3 and 5
+remain known defects before Start is enabled.
 
 1. **Failed Plan cleanup can strand a session even with Start disabled.** If the bridge opened
    copy A, a later plan step failed, and the cleanup close was not answered, the host forgets A.
@@ -75,7 +85,7 @@ The next unallocated owner-decision id in the register is 161A.
    is refused as outside the new root before the bridge receives it; the next Plan retries the
    same refused cleanup. Resolve the cleanup/root policy before enabling Start.
 
-The second review was interrupted at the usage limit: its seven characterization probes
+That earlier second review was interrupted at the usage limit: its seven characterization probes
 reproduced the reported behaviours, but it supplied no final approval. Do not treat the
 previous reviews as approval of those unresolved cases. Local review artifacts are temporary;
 the findings above are the durable restart record.
@@ -94,7 +104,8 @@ Use the [workstation test plan](test-plan-2026-09-27/README.md) for the other se
 
 ## Integration order
 
-Finish and land the cleanup PR first, then merge its main into 157A and 159A rather than
+The cleanup PR is merged, and 157A is integrated and gated. Land its PR next, then refresh
+159A against that actual main rather than
 rebasing history referenced by the records. Preserve both branches' changes in the Review and
 Remodel hosts and the numbered research/task sections. Regenerate word/event fixtures through
 their existing generators if a merge changes the vocabulary; keep the byte-level fixture pins

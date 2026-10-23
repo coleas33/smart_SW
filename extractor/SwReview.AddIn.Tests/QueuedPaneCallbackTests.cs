@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -94,6 +96,86 @@ public sealed class QueuedPaneCallbackTests
 
             Assert.Null(await Queued(form, pane, "PostOnUiThread", selector, "{}"));
             Assert.Equal(0, selections);
+        });
+    }
+
+    /// <summary>
+    /// The reviews of owner decision 157A: what a check host queues behind the pane's posts runs on the pane's thread,
+    /// after what was queued there before it - so a run's minute starts once its reply has been delivered - and never
+    /// on the caller's thread while the pane can queue it.
+    /// </summary>
+    [Fact]
+    public void WhatIsQueuedBehindThePostsRunsOnThePanesThreadAfterThem()
+    {
+        StaHost.Run(async form =>
+        {
+            using (var pane = Pane())
+            {
+                form.Controls.Add(pane);
+                Assert.NotEqual(IntPtr.Zero, pane.Handle);
+                int paneThread = Thread.CurrentThread.ManagedThreadId;
+                var order = new List<string>();
+                var ran = new TaskCompletionSource<int>();
+                await Task.Run(() =>
+                {
+                    pane.BeginInvoke(new Action(() => order.Add("posted before")));
+                    pane.AfterPosts(() =>
+                    {
+                        order.Add("behind the posts");
+                        ran.SetResult(Thread.CurrentThread.ManagedThreadId);
+                    });
+                });
+
+                Assert.Equal(paneThread, await ran.Task);
+                Assert.Equal(new[] { "posted before", "behind the posts" }, order);
+            }
+        });
+    }
+
+    /// <summary>
+    /// A pane that cannot queue - closed - runs what is queued behind its posts at once, so a check's minute is never
+    /// left waiting for a delivery that will not come; and a failure inside it stays inside it.
+    /// </summary>
+    [Fact]
+    public void AClosedPaneRunsWhatIsQueuedBehindItsPostsAtOnce()
+    {
+        StaHost.Run(form =>
+        {
+            var pane = Pane();
+            form.Controls.Add(pane);
+            pane.Dispose();
+            int runs = 0;
+
+            pane.AfterPosts(() => runs++);
+            pane.AfterPosts(() => throw new InvalidOperationException("FICT the minute's mark failed"));
+
+            Assert.Equal(1, runs);
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>
+    /// A failure inside what is queued behind the posts stays inside it: SOLIDWORKS' thread carries on with the work
+    /// queued after it.
+    /// </summary>
+    [Fact]
+    public void AFailureBehindThePostsStaysInsideIt()
+    {
+        StaHost.Run(async form =>
+        {
+            using (var pane = Pane())
+            {
+                form.Controls.Add(pane);
+                Assert.NotEqual(IntPtr.Zero, pane.Handle);
+                var after = new TaskCompletionSource<bool>();
+                await Task.Run(() =>
+                {
+                    pane.AfterPosts(() => throw new InvalidOperationException("FICT the minute's mark failed"));
+                    pane.BeginInvoke(new Action(() => after.SetResult(true)));
+                });
+
+                Assert.True(await after.Task);
+            }
         });
     }
 

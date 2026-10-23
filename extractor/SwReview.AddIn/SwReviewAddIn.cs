@@ -259,6 +259,12 @@ public class SwReviewAddIn : ISwAddin
     /// </summary>
     public bool DisconnectFromSW()
     {
+        // The race review of owner decision 157A, and its final reviews: the settings restart stops first - before
+        // the pumps, each joined for seconds while the message it handles can still save the settings, and before
+        // the hosts whose work holds the restart back let their holds go with them - so none is made as the add-in
+        // unloads, on a backend about to be stopped.
+        _reviewHost?.StopRestarting();
+
         // Order matters: stop listening to the page, stop draining it, then stop the child.
         // The job object goes last, so a backend that ignored its shutdown still dies with the
         // handle (T050).
@@ -418,6 +424,12 @@ public class SwReviewAddIn : ISwAddin
             // built after this pane. Owner decision 158A: named, for the gate's line about a hold it
             // ignores past its limit.
             HoldToolService = () => _toolService?.HoldAttachment(ToolServiceHolder.TurnCall),
+
+            // Owner decision 157A: a check page's evaluation holds its check's hold on a settings restart
+            // while it is out. The folder it names is one check host's at most, and the other answers none.
+            // Read through the fields: both hosts are built after this pane.
+            HoldCheckEvaluation = (runDirectory, token) =>
+                _modelCheckHost?.HoldEvaluation(runDirectory, token) ?? _standardsHost?.HoldEvaluation(runDirectory, token),
         });
 
         _panel = _pane.Actions;
@@ -473,6 +485,12 @@ public class SwReviewAddIn : ISwAddin
             // run too, which it would end. Read through the field: the Remodel host is built
             // after these options, and one that has gone runs nothing.
             BackendBusy = () => _remodelHost?.RunInProgress == true,
+
+            // Owner decision 157A: ...and, while a backend is up, for a Model check or a Standards check,
+            // from its gate until the page's evaluation of it has been answered. Read through the fields,
+            // for the same reason.
+            ModelCheckInProgress = () => _modelCheckHost?.CheckInProgress == true,
+            StandardsCheckInProgress = () => _standardsHost?.CheckInProgress == true,
 
             // Owner decision 145A: every other tab that holds the backend's port and token is told
             // after each restart the review host makes, and asks for its `init` again; and told of
@@ -653,6 +671,21 @@ public class SwReviewAddIn : ISwAddin
             // handed the backend's start-up failures too, and a key-resolution failure is
             // exactly the kind of message that carries one (FR-015).
             Secrets = KeysToMask,
+
+            // Owner decision 157A: a check begins as a remodel run does - once no settings restart waits,
+            // the review host making a waiting one first - and holds that restart back until the page's
+            // evaluation of it has been answered. The page is told first when a restart stands before the
+            // press, read through the field per call.
+            Hold =
+            {
+                BeginCheck = BeginCheck,
+                RestartAhead = () => _reviewHost?.RestartAhead == true,
+
+                // The reviews of 157A: the page's minute from when its reply reached it, and an evaluation
+                // held up past it taken back while it carries the token of the backend up now.
+                AfterPosts = AfterPagePosts,
+                WhileNoRestartRuns = WhileNoRestartRuns,
+            },
         });
 
         StartModelCheckPump();
@@ -764,6 +797,15 @@ public class SwReviewAddIn : ISwAddin
             // The same secrets the Review host masks out of its own messages: this host is handed
             // the backend's start-up failures too (FR-015).
             Secrets = KeysToMask,
+
+            // Owner decision 157A: as the Model check tab's.
+            Hold =
+            {
+                BeginCheck = BeginCheck,
+                RestartAhead = () => _reviewHost?.RestartAhead == true,
+                AfterPosts = AfterPagePosts,
+                WhileNoRestartRuns = WhileNoRestartRuns,
+            },
         });
 
         StartStandardsPump();
@@ -954,6 +996,56 @@ public class SwReviewAddIn : ISwAddin
 
         begin();
         return null;
+    }
+
+    /// <summary>
+    /// Owner decision 157A: the gate a Model check or a Standards check begins through, which reaches the review host's
+    /// settings restart from the check tab's own pump, as <see cref="BeginRemodelRun"/> does from the Remodel tab's.
+    /// <see cref="ReviewHost.BeginCheck"/> makes a restart that waits first, or waits for the one being made, then marks
+    /// the check in progress under the restart's lock - or refuses the check, saying what holds the restart back. The
+    /// review host is read through its field per call; with none, there is no settings restart to wait for, and the
+    /// check is marked and begins.
+    /// </summary>
+    private BackendRequestException? BeginCheck(Action begin)
+    {
+        ReviewHost? host = _reviewHost;
+        if (host != null)
+        {
+            return host.BeginCheck(begin);
+        }
+
+        begin();
+        return null;
+    }
+
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="action"/> behind every message posted to the pane's
+    /// pages so far, once they have been delivered on SOLIDWORKS' application thread
+    /// (<see cref="TaskPaneControl.AfterPosts"/>), so a check's minute starts when its page has its reply. The pane is
+    /// read through its field per call; with none there is nothing to wait behind, and the action runs at once.
+    /// </summary>
+    private void AfterPagePosts(Action action)
+    {
+        TaskPaneControl? pane = _pane;
+        if (pane != null)
+        {
+            pane.AfterPosts(action);
+            return;
+        }
+
+        action();
+    }
+
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="step"/> while no settings restart can begin or be made
+    /// (<see cref="ReviewHost.WhileNoRestartRuns"/>), for a check's evaluation held up past its page's minute. The
+    /// review host is read through its field per call; with none there is no settings restart, and the step runs at
+    /// once.
+    /// </summary>
+    private bool WhileNoRestartRuns(Func<bool> step)
+    {
+        ReviewHost? host = _reviewHost;
+        return host != null ? host.WhileNoRestartRuns(step) : step();
     }
 
     /// <summary>

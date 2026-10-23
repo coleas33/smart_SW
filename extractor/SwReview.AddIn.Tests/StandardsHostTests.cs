@@ -874,16 +874,21 @@ public sealed class StandardsHostTests
     /// ...and a Standards check reads the run root once to judge it and make its folder (feature 002 T201): the
     /// one it judges is the one its folder is made under, even when the run root in force moves between. Changed
     /// deliberately for the reviews of 154A's merge, N6: the run root is read a second time once the extraction is
-    /// over, so the move is now answered there, `RunRootChanged`, where the run was handed on.
+    /// over, so the move is now answered there, `RunRootChanged`, where the run was handed on. Changed deliberately for owner decision 157A: the
+    /// run root is read once more, once the check's gate is passed - a restart the gate makes can move it, and a moved
+    /// one is judged again (`CheckHoldTests`) - so the move this case makes between the folder and the end of the
+    /// extraction comes at the third reading. Renamed deliberately on the reviews of 157A, from
+    /// `AStandardsCheckJudgesAndMakesItsFolderUnderOneReadingOfTheRunRoot`: it reads the run root three times now,
+    /// and what it pins is that the folder is made under the run root judged.
     /// </summary>
     [Fact]
-    public void AStandardsCheckJudgesAndMakesItsFolderUnderOneReadingOfTheRunRoot()
+    public void AStandardsCheckMakesItsFolderUnderTheRunRootItJudged()
     {
         using (var world = new StandardsWorld())
         {
             string moved = Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "moved", "runs");
             int readings = 0;
-            world.RunRootSource = () => ++readings == 1 ? world.RunRoot : moved;
+            world.RunRootSource = () => ++readings <= 2 ? world.RunRoot : moved;
             world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
             world.WriteProfile();
             world.Open();
@@ -893,7 +898,7 @@ public sealed class StandardsHostTests
             Assert.Equal("RunRootChanged", world.Reply("error", "s1").GetProperty("error_class").GetString());
             Assert.Equal(world.RunRoot, Path.GetDirectoryName(Assert.Single(world.RunFolders())));
             Assert.False(Directory.Exists(moved), "the run's folder was made under a run root it did not judge");
-            Assert.Equal(2, readings);
+            Assert.Equal(3, readings);
         }
     }
 
@@ -956,7 +961,10 @@ public sealed class StandardsHostTests
     /// is over: a run whose folder is no longer under the run root in force is answered `RunRootChanged`, not
     /// retryable, in words the page prints whole, and while a start that would bring another in is still under way
     /// it is answered as a start is then (`BackendUnavailable`); either way the folder is left as the evidence, and
-    /// it is neither registered nor handed to the page.
+    /// it is neither registered nor handed to the page. Changed deliberately for owner decision 157A: the run root is
+    /// read once more, once the check's gate is passed, so the move made while the model is read comes at the third
+    /// reading; and since a check holds every settings restart back while a backend is up, only a start that brings a
+    /// backend up where there was none can make it.
     /// </summary>
     [Theory]
     [InlineData("another run root in force")]
@@ -967,7 +975,7 @@ public sealed class StandardsHostTests
         {
             string moved = Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "moved", "runs");
             int readings = 0;
-            world.RunRootForANewRun = () => ++readings == 1
+            world.RunRootForANewRun = () => ++readings <= 2
                 ? world.RunRoot
                 : after == "another run root in force" ? moved : null;
             world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
@@ -994,7 +1002,7 @@ public sealed class StandardsHostTests
                     error.GetProperty("message").GetString());
             }
 
-            Assert.Equal(2, readings);
+            Assert.Equal(3, readings);
             Assert.Equal(1, world.Dump.Runs);
             Assert.Single(world.RunFolders());
             Assert.Empty(world.Registered);

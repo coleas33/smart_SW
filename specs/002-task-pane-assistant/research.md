@@ -1094,6 +1094,12 @@ hid the tab and is not amended here.
     during it fails the close, and Discard deletes `copy/` anyway, as it does when the bridge does
     not answer. A check (Model check, Standards) is not a turn to the restart either: its call in
     flight when the backend restarts fails as any call to a backend that stopped does.
+    *Changed 2026-10-21 by owner decision 157A:* a check is a turn to the restart now - while a backend is
+    up, a Model check or a Standards check holds a settings restart back from its gate until the page's
+    evaluation of it has been answered, and one started while a restart waits makes the restart first, as
+    a remodel run does;
+    its later calls, an Accept or a re-read, are still not held (see
+    [157A](#157a-a-model-check-or-a-standards-check-holds-a-settings-restart-back-until-its-evaluation-is-answered-2026-10-21)).
   - No host posts `backend.stopped`, which every page's contract names and every page handles: a
     failed restart is told as a failed first start is (above). Its sentence on every page, "The
     backend stopped. Reopen the pane to start it again.", names a way that starts no backend -
@@ -4029,6 +4035,8 @@ of one went on - 004's T173 guard broken. Decided and done:
   The words file's sentence: "This run's folder is under a run root that is no longer in force, and runs go
   on only under the one in force. Start the run again."
 - Left to the owner, recorded below: a Model check or a Standards run whose extraction spans the save.
+  *Settled 2026-10-21 by owner decision 157A:* while a backend is up, a check holds the save's restart back until its
+  evaluation has been answered (157A, below).
 
 **F7. A relative folder typed in the field is not saved.** A folder chosen for runs must be written as a full
 path - a drive letter and a separator, or two separators, which the rule then refuses as a share or a device
@@ -4153,7 +4161,11 @@ engineering context's, the Model check's, the Standards', the Remodel host's and
   1. A Model check or a Standards run whose extraction spans a save: its folder is under the old run root,
      and the page's `POST /checks/...` reaches the restarted backend and is refused after minutes of
      extraction. Whether a check run holds the restart back, as decision 145A made a remodel run, is the
-     owner's to say.
+     owner's to say. *Settled 2026-10-21 by owner decision 157A* ("1A"): it does while a backend is up, from its
+     gate until the page's evaluation of it has been answered, so a save made during the extraction restarts the
+     backend only once the evaluation is over; the reading of the run root after the extraction now guards only the
+     starts that bring a backend up where there was none - a save's made with no backend up, or the add-in's first
+     start - which nothing holds back (157A, below).
   2. A prepared context, and a plan waiting for Start, across a run-root change: each is refused when it is
      used - `context.review` and `remodel.start` answer `RunRootChanged` - and the engineer extracts or plans
      again; the plan's bridge session is ended by the next plan, as before.
@@ -4273,6 +4285,9 @@ The words file merged clean: 153A changed no labels. Both pane fixture generator
 - **Not changed**, put to the owner with the reviews' first item: a start begun just after a run start has read the
   run root is not seen, as one begun while the run is made is not (a Model check or Standards run whose extraction
   spans a save). And the run roots in force are appended before the record, an order no test can observe.
+  *Narrowed 2026-10-21 by owner decision 157A:* no settings restart begins while a check holds it, so of the starts
+  that can begin then only those that bring a backend up where there was none remain - a save's made with no backend
+  up, or the add-in's first start (157A, below).
 
 - **Tests**: T201, written first against stubs on the merged code - `RunRootForANewRun` answering the run root in
   force, `MovingRefusal` empty, the three hosts' option present and unread - 21 of the 26 new cases failed. The 5
@@ -4396,7 +4411,10 @@ checked. Press Model check (Standards check) again." - and one while a start tha
 registered nor handed to the page. **Left, put to the owner as before:** a restart after that reading, before the
 backend reads the folder - one round trip, the page's first call - and one during the backend's grading, which ends that
 backend as any restart ends work in flight on it. Whether a check run holds a restart back, as decision 145A made a
-remodel run, is the owner's to say.
+remodel run, is the owner's to say. *Settled 2026-10-21 by owner decision 157A:* a check holds every settings restart
+back until the page's evaluation of it has been answered while a backend is up, so neither of the two can be a save's
+restart then; the reading after the extraction, and `RunRootChanged` there, stay for the starts that bring a backend up
+where there was none, which nothing holds back (157A, below).
 
 **N8. A folder name longer than 255 characters** was reported as a root that could not be checked: Windows answers the
 open of such a name as an invalid name (`ERROR_INVALID_NAME`, 123; measured here, where a missing 255-character name
@@ -4475,6 +4493,765 @@ Windows' own words (`RunFolderFailed`). The probe's reading is unchanged and tru
 - **Question**: Other words in 002 still describe the hidden Terminal tab as shown, and a test's fictional Windows path has an invalid escape.
 - **Decision**: Add dated notes wherever the spec describes that tab, built and hidden since 2026-09-19, and fix invalid Python escapes without changing values or product behaviour.
 - **Change**: Annotated `spec.md` and settled 011's research R13.5 item 2; audited `reviewer/tests/` and `reviewer/src/` and made the affected test literal raw with the same value.
+
+### 157A. A Model check or a Standards check holds a settings restart back until its evaluation is answered (2026-10-21)
+
+- **Question**: 154A's reviews left one thing for the owner (154A, the reviews of the merge, N6, and the reviews' Not
+  changed item 1): a Model check or a Standards run reads the run root, extracts for minutes, and hands its run folder
+  to the page, which calls `POST /checks/rms` or `/checks/standards` itself - and a settings save's restart on the
+  Review tab, which no check held back, could land in between. 145A had recorded that a check is not a turn to the
+  restart: "its call in flight when the backend restarts fails as any call to a backend that stopped does" (145A, Not
+  changed). N6 narrowed the run root's half - the run root is read again once the extraction is over - and left the
+  rest: a restart after that reading, before the backend reads the folder, and one during the backend's grading. Beyond
+  the run root, an evaluation made with the old token after a restart is refused by the new backend, and one in flight
+  when the backend stops fails; either way the minutes of extraction are wasted.
+- **Decision** (owner decision 157A, "1A", 2026-10-21): "A Model check or Standards run holds back a settings restart,
+  as a remodel run does since 145A (154A's owner question), test first, with adversarial reviews: a save made during a
+  check waits for it, and a check started while a restart waits makes the restart first, so no check's extraction is
+  wasted on a backend that restarted under it."
+
+**1. Where the hold starts and ends.**
+
+- The span the decision preferred is the whole: from the press until the page's last call for that check has answered.
+  It cannot be bounded. After the evaluation the page's calls for a check are the engineer's to make - an Accept
+  (`POST /checks/{check_id}/exceptions/{finding_id}`) and its re-read (`GET /checks/{check_id}`), and the latest check
+  read again by a later `init` - at any time, or never, and the page never says it is done with a check. A restart held
+  on that would keep the saved settings out of force, and every new review, turn call and remodel run refused, for as
+  long as a result stays on screen.
+- So the span chosen is the one that removes the wasted extraction and the failed call: from the check's gate - once
+  every refusal that needs no call is behind it - through the extraction and the reply that hands the run to the page
+  (`check.extracted`, `standards.extracted`), until the page's evaluation of that run has been answered. The extraction
+  and the evaluation are the check; they are the calls a restart wastes it by cutting.
+- The page's half is held by the pane's proxy, which sees the evaluation: `POST /checks/rms` and `/checks/standards`
+  name the run folder in their body (`run_dir`, as the host's reply gave it), and the proxy asks the check hosts for
+  that run's hold while the call is out (`TaskPaneOptions.HoldCheckEvaluation`, `ModelCheckHost.HoldEvaluation`,
+  `StandardsHost.HoldEvaluation`, `CheckPaneHost.HoldEvaluation`) and lets it go once the call is answered, however it
+  is - answered, refused by the backend, unreachable, refused by this side, or with no backend. Nothing on the page
+  changed: the host sees its own reply's folder come back. The routes held are exactly the backend's two that grade a
+  run, read from `chat/server.py` by a case, as 143A's turn routes are.
+- The gap between the reply and the call is bounded: the hold, handed over with the run (`CheckPaneHost.HandOver`),
+  waits for that evaluation a minute at most (`CheckPaneHostOptions.HandOverLimit`, on a clock no change of the wall
+  clock moves). A page that has gone - loaded again, or closed, after the reply - never calls, and the restart waits no
+  longer than that for it. A page that is there calls as soon as it reads the reply, once any `init` on its way is
+  answered on the tab's own pump, which is free once the reply is sent: milliseconds. Once the proxy has taken the hold
+  over, the evaluation's own timeouts bound it: the proxy gives the backend two minutes to answer, and each read of its
+  answer two more. *Corrected on the reviews (section 8, item 3):* not milliseconds - the reply's delivery, the page's
+  `init` and its evaluation all wait on SOLIDWORKS' application thread, which another tab's extraction holds for its
+  whole length. The minute counts from the reply's delivery now (`CheckHoldOptions.HandOverLimit`, `AfterPosts`), and
+  an evaluation that comes after it all the same is held again while the backend its check began on is still the one
+  up. *Changed on the final reviews (section 9, items 1 and 3):* while the token it carries is the token of the backend
+  up now; and a reply that never reaches the page holds the restart back an hour at most.
+- Accepts and re-reads are not held: each is one short call, made when the engineer chooses; one that a restart cuts is
+  answered as any failed call is, and pressed again on the new backend. An Accept whose exception was written before the
+  cut is refused `AlreadyAccepted` when pressed again, so nothing doubles; and none of them wastes an extraction.
+
+**2. How a check holds the restart.**
+
+- Through 145A's mechanism. `DeferredRestart`'s busy reading says which work is in progress (`DeferredRestart.Work`: a
+  remodel run, a Model check, a Standards check, or work of a kind not known): the review host reads `BackendBusy`, as
+  before, and two new readings, `ReviewHostOptions.ModelCheckInProgress` and `StandardsCheckInProgress`, which the
+  add-in answers through each host's `CheckInProgress`, read through the field. 145A's `Hold.RemodelRun` and
+  `Outcome.RemodelRunning` are `Hold.Work` and `Outcome.WorkInProgress`, and `Now`, `Apply` and `Begin` carry the work
+  they found out, so every sentence and refusal names it.
+- A save made during a check: `Now` reads the work under the restart's lock before it asks the backend anything, and
+  defers. The save is kept, answered `settings.saved`, and its status says what the restart waits for (section 3). The
+  watcher makes the restart once no work and no turn holds it back.
+- A check started while a restart waits: after every refusal that needs no call, `CheckPaneHost.BeginCheck` asks the
+  review host's gate (`ReviewHost.BeginCheck`, through `CheckPaneHostOptions.BeginCheck` and `SwReviewAddIn.BeginCheck`,
+  read through the field per call as `BeginRemodelRun` is): a waiting restart is made first, or the one being made is
+  waited for, and the check takes its hold under the restart's own lock (`TakeTheHold`); or the press is refused saying
+  what holds the restart back, or with the failure of the restart it made or waited for, and nothing is made.
+  `BeginRemodelRun` and `BeginCheck` are one gate (`ReviewHost.BeginWork`), each answering in its tab's words.
+  *Since the reviews (section 8, item 4):* the start once the refusals are behind it is `CheckPaneHost.RunCheck`, written
+  once for both tabs, and the hold's options - the gate among them - are `CheckHoldOptions`, declared once.
+- What the gate's wait can move is read again once it is passed: the run root (`PaneActions.RunRootToUse`, which the
+  Remodel host's N8 reading now goes through too), judged again when it moved; and the active document - a check whose
+  document changed while the gate waited is refused `DocumentChanged`, retryable, in words with no path, as 145A's
+  second review made a plan read its document again.
+- The page is told first when a restart stands before the press: `status {stage: "backend_starting"}`, "Waiting for the
+  review backend to restart with the saved settings, then reading the feature tree..." on the Model check tab and
+  "...then reading the document..." on the Standards tab - 145A's Remodel tab words, their beginning now written once
+  (`PaneActions.WaitingForTheRestart`). The check page writes any status but `error` in its check line, and its catch
+  empties that line when the press is refused.
+- Every way out of the start once the gate is passed, but the hand-over, lets the hold go (`EndCheck`, in a `finally`):
+  a run root moved and refused, a document changed, the run folder not made, the extraction failed, the run root moved
+  while the model was read, a throw. A gate that throws leaves nothing held, whether or not it ran its step, and so does
+  one that refuses after running it, which the review host's never does.
+- A check refused on the spot - its run root, no document, not attached, not a part, a document never saved, a kind not
+  graded, no profile - asks no gate, and so makes no restart.
+- A check holds the restart back only while a backend is up (`ReviewHost.WorkInProgress` reads the checks only then).
+  With none - the first start failed, or the backend stopped - there is no backend to restart under the check, and the
+  restart is what brings back the backend its evaluation needs: 143A's rule for the look, "no backend process at all
+  holds nothing". 145A kept a remodel run holding the restart even then, because every call a run makes fails with no
+  backend, so "it cannot last". A check's extraction asks no backend and lasts minutes, and its page, holding no
+  backend, never even makes the evaluation the hand-over waits for: holding the restart would waste the very extraction
+  the check holds it for, and keep the backend the save asked for down a minute longer. So a save made during a check
+  with no backend up starts the backend at once, and a restart that waits for a check is made once its backend has
+  stopped; the check's page is told the backend restarted, and its evaluation, made after its `init`, goes to the new
+  backend.
+
+**3. What a restart waits for, said.**
+
+- The promise is composed from what holds the restart, in one order - a turn that started during the save, the remodel
+  run, the checks - with "and" before the last and the verb agreeing: "the settings are saved; the backend restarts when
+  the running check ends.", "...when the running checks end." for a check on each check tab, and so on up to "...when
+  the running turn, the remodel run and the running checks end.". 145A's three are the rows with no check, word for
+  word. `backend.restarted` carries all twelve sentences - eleven promises and the watcher's word - and the Review page,
+  which takes whichever is on its banner off it, needed nothing new.
+- A refusal names the work as well: "the backend restarts with the saved settings when the running check ends, and
+  nothing new starts before then. Wait for the check to end, then try again.", "the running checks" and "the checks" for
+  one on each check tab, and "them" for a remodel run and a check together. Its class is `CheckRunning` for checks
+  alone - new, with a sentence of its own in the words file: "A Model check or Standards check is in progress. Wait for
+  it to finish, then try again." - and `RemodelRunning` whenever a remodel run is among the work, since one is then in
+  progress, as that class's sentence says. The proxy answers `CheckRunning` 409, as `TurnRunning` and `RemodelRunning`.
+- A check tab's refusals for a turn and for a backend that does not answer are 145A's Remodel tab's, naming a check:
+  "the backend restarts with the saved settings when the running review turn ends, and no check starts before then. Wait
+  for the turn to end, or press Stop on the Review tab, then try again."; written once for both tabs
+  (`TurnHoldsTheWork`, `NoAnswerHoldsTheWork`).
+- The watcher's word for a backend that does not answer names a check among what makes the restart first: "the review
+  backend is not answering, so it has not been restarted with the saved settings yet. It will be before the next review,
+  follow-up, remodel run or check, once it answers; to restart it now, save the settings again."
+
+**4. The other tabs.** A check holds back only restarts. With no restart waiting, two checks, a check and a remodel run,
+and a check and a turn overlap as before: `Begin` reads no work when nothing waits. While a restart waits for a check,
+nothing new starts on the old backend - a check on the other tab, a remodel run, a new review, a turn call - each
+refused saying what holds the restart back, as while it waits for a turn or a remodel run: this is what the restart
+logic needs, since work begun then would put the restart off again, the saved settings out of force meanwhile. A page
+loaded again can press again while its predecessor's evaluation is out: the tab keeps both holds, and lets each go on
+its own.
+
+**5. Work read before the look.** 145A's look read a remodel run before the turns, so a restart a run held back asked
+the backend nothing, and the watcher counted no backend that does not answer meanwhile. With the checks among the work,
+that reading moved from the review host's look into `DeferredRestart.Apply`, which reads the work before it looks and
+again under its lock, as it did; the look asks only about the turns, and a look that still names work is work of a kind
+not known. 145A's cases - a remodel run named before a backend that does not answer, a run with no backend at all - pass
+as they were.
+
+**6. 154A's reading after the extraction.** While a backend is up no restart can move the run root during a check's
+extraction, nor before its evaluation is answered, so the `RunRootChanged` answer after an extraction is unreachable
+then. It is kept for the starts that bring a backend up where there was none, which nothing holds back, since there is
+no backend for them to restart under the check: a save that chose another folder for runs, made with no backend up,
+starts the backend with it at once; and the add-in's first start, after a save that chose one and whose restart failed,
+starts it with the settings saved. Either way that folder comes into force during the extraction, and the check, made
+under the run root loaded, would meet the backend's refusal at its evaluation. Cases pin both, through the real review
+host. The reading before the gate (`RunRootForANewRun` none while a start under way would bring another run root in)
+stays for the same reason.
+
+**7. No deadlock.** The gate's step takes the tab's own hold lock and sets a field, nothing more; the restart reads
+`CheckInProgress` under its lock, and the hold lock is a leaf - nothing is called, waited on or asked of SOLIDWORKS
+while it is held, and nothing holding it takes another lock. 145A's order stands: the restart's lock, then its state
+lock or a tab's hold lock. The extraction and the document's readings, which go through SOLIDWORKS' application thread
+(004 R18.4's lesson), run on the tab's pump under no lock. A restart a check's gate makes runs on that pump and posts
+`backend.restarted` to every tab, which never blocks; the tab's own page then asks `ready` again, answered behind the
+start on the same pump, and its evaluation waits for that `init` (`call`, `initSettled`) and carries the new token.
+*Since the reviews (section 8):* a save's restart tells the tabs under the restart's lock too, as every restart does
+(item 2) - a post never waits; a late evaluation's step takes the restart's lock on the proxy's pool thread, then the
+tab's hold lock, in 145A's order (item 3); and the mark of a reply's delivery is queued on the pane's thread and never
+waited for.
+
+- **Edge cases**, each decided and tested (T230, T232, T235):
+  - End to end, on each tab, through the real review host, the real check host and the real proxy: a save while the
+    model is read waits until the evaluation is answered, by the backend the check began on, and then the backend
+    restarts once; so does one made between the reply and the evaluation, however long the evaluation is out; a check
+    started while a restart waits makes it first, is told so before the gate in its tab's words, is told the backend
+    restarted before its reply, and is evaluated on the restarted backend; one started while a turn holds the restart is
+    refused in its tab's words, making nothing, and a press refused on the spot makes no restart; one whose gate's
+    restart fails, before the old backend stopped or once it had, is refused with the failure, masked, and holds
+    nothing - the next save restarts at once; a restart that waited for a check and failed is told, the check's answer
+    standing; a page that never evaluates holds the restart a moment short of the limit, and not at it; and a start that
+    brings a backend up during an extraction - a save's with no backend up, or the first start - is still answered
+    `RunRootChanged`.
+  - Through the review host: a save's sentence for every combination of a turn, a remodel run and one or two checks; a
+    new review and a turn call refused `CheckRunning`, plural for two checks, and the proxy's 409; a remodel run refused
+    while a check holds the restart, and begun once it is over; a remodel run and a check named together, under
+    `RemodelRunning`; a check begun at once beside other work with nothing waiting; begun the moment the turn ends on
+    the restarted backend; refused while a turn, a backend that does not answer, a remodel run or the other tab's check
+    holds the restart; waiting for a restart being made, the watcher's or a save's; refused with a restart's failure,
+    its own or a save's; refused once the host is disposed; a check named before a backend that does not answer, the
+    watcher asking nothing; and with no backend at all a check holding nothing - a save starts the backend at once, and
+    a restart that waits for a check is made once its backend has stopped.
+  - In the restart itself: the work a save defers by, and that a waiting restart and work that would begin are held back
+    by, carried out whole for six combinations; work read before the look, which is then never asked; work only the
+    reading under the lock found named by that reading; work a look names, or a reading that throws, of a kind not
+    known; and work begun beside work in progress with nothing waiting, nothing read.
+  - In the check hosts, on each tab: one gate, before anything is made, after every refusal that needs no call; the
+    gate's refusal answered and nothing made; a gate that throws, or refuses after its step, holding nothing; the page
+    told before the gate only with a restart ahead; the run root read again once the gate is passed and a move judged
+    again; a document changed while the gate waited refused, the same document spelled otherwise checked; the hold from
+    the gate through the extraction, the reply and the evaluation out, past the limit; every other way out letting it
+    go; only the evaluation of the run handed over held, once, however its folder is spelled; the limit, its own option,
+    measured from the hand-over; two checks of one tab each let go on its own; and every hold let go with the host.
+  - In the proxy: the evaluation held while it is out, by the folder its body names, the body sent on as received; let
+    go however the call ends; nothing else held - a re-read, an Accept, a turn call, a `GET`, a body naming no folder or
+    not JSON, a route that only looks like an evaluation's; with no hold to be had, or a host that throws, the
+    evaluation sent unheld; and the routes held exactly the backend's two that grade a run.
+- **Evidence** (at `5a58988`):
+  - A check held nothing: `ModelCheckHost.StartCheck` read the run root (`ModelCheckHost.cs:241`), dumped (`:315`), read
+    the run root again (`:337`) and replied (`:351`) with no gate; `StandardsHost.Start` likewise
+    (`StandardsHost.cs:252`, `:353`, `:377`, `:391`). The page then called the route itself (`check.js:100`), once any
+    `init` on its way was answered (`check-page.js:292`, `:299`).
+  - The restart's busy reading was the remodel run alone: `ReviewHostOptions.BackendBusy`, set to
+    `_remodelHost?.RunInProgress` (`SwReviewAddIn.cs:474`), read by `ReviewHost.RemodelRunInProgress`
+    (`ReviewHost.cs:1858`) for `DeferredRestart`'s `busy` (`DeferredRestart.cs:599`) and by the look
+    (`ReviewHost.cs:1880`); a save deferred only for it (`ReviewHost.cs:1404`). The only gate was `BeginRemodelRun`
+    (`ReviewHost.cs:2180`).
+  - The proxy held nothing but a turn's bridge (`BackendProxyHandler.cs:132`, `:262`), with a call timeout of two
+    minutes (`:84`).
+  - The backend's evaluation routes grade synchronously, with no chat (`chat/server.py:1661`, `:1687`); an Accept writes
+    its exception, then grades again (`:1729`), and refuses a rule already covered (`AlreadyAccepted`, `:2093`).
+- **Not changed**, put to the owner:
+  1. An Accept and a re-read are not held (section 1); one a restart cuts is answered as any failed call is.
+  2. A page whose evaluation reaches the proxy after the hand-over's limit - a page held up for a minute, such as by
+     another tab's extraction holding SOLIDWORKS' application thread, through which the page's requests are served - is
+     sent unheld, as before 157A. A longer limit would hold a gone page's restart back longer; a minute is the choice.
+     *Corrected on the reviews (section 8, item 3):* the minute counts from the reply's delivery, and a page held up past
+     it is held again while the backend its check began on is up; what is left is in section 8's Not changed. *Changed
+     on the final reviews (section 9, item 1):* while the token it carries is the token of the backend up now.
+  3. A restart's refusals still name what was found first: work is read before the turns, so while a check and a turn
+     both hold the restart a new review is told of the check alone - as 145A's refusals named a remodel run before a
+     turn. The save's promise names both.
+  4. With no backend up a check holds nothing, where 145A has a remodel run hold the restart even then: decided, for the
+     reasons in section 2; a remodel run's rule is unchanged.
+  5. A start that brings a backend up where there was none - a save's with no backend up, or the add-in's first - can
+     still land between the reading after the extraction and the evaluation, and move the run root; nothing holds it
+     back, and with no backend the check could not be evaluated without it.
+  6. 154A's run root read before the gate refuses a start under way at the press; one that begins after the gate is
+     passed is caught by the reading after the extraction, as before.
+  7. While a hand-over waits for a page that has gone, the tab's next `check.start` - from the page loaded again - takes
+     a hold of its own beside it when no restart waits; when a save's restart waits for the check that was handed over,
+     the press is refused `CheckRunning`, as any work is then, for at most the rest of that check's minute.
+- **Existing cases changed deliberately**, each with its reason: `DeferredRestartTests` - the renames `Hold.Work` and
+  `Outcome.WorkInProgress` in six cases, the helper's remodel-run reading taken as the work reading's `RemodelRun`, the
+  watcher's not-answering word naming a check (eight cases read it), and `backend.restarted`'s twelve sentences (three
+  cases); `ReviewPageBackendRestartTests` - the same two constants, as data, the page unchanged; `ModelCheckHostTests`
+  and `StandardsHostTests` - the four cases that count the run root's readings, since it is read once more, after the
+  gate, the move they stage now at the third reading; `ToolServiceWiringTests` - the pin of the proxy's construction,
+  which gains the check hosts' holds after the bridge's; `ErrorLabelsCoverTheHostTests` - the classes the host makes
+  gain `CheckRunning`; `BackendProxyHandlerTests` - a `CheckRunning` row; `test_review_words.py` - `CheckRunning`'s
+  sentence among the restart holds. None was loosened.
+- **Tests**: T230 and T232, written first against stubs - `DeferredRestart`'s work reading present and answering none,
+  the review host's two readings unread and `BeginCheck` running its step, the check hosts' options unread and their
+  hold answering nothing, the proxy's and the pane's option unread: 110 of the 145 new cases in the six classes the hold
+  touches failed. The 35 that passed are guards, pinning what held already: a press refused on the spot asks no gate
+  (11), work begins beside work with nothing waiting (9), 145A's three sentences (3), a document spelled otherwise (2),
+  calls that are not evaluations (8), and an evaluation with no hold to be had (2). The Review page's two new cases, the
+  check sentences taken off its banner, pass as written: the page takes off whichever sentence `backend.restarted`
+  lists. Eighteen existing cases went red with them, the deliberate changes above. T234's `test_review_words.py` row was
+  red against the words file before its sentence. T235, once the implementation was in: the rule for no backend up was
+  first written the other way, mirroring 145A's remodel run - a check holding the restart with no backend at all, pinned
+  by one case - and a second reading of the design, during the first pass of the mutations, reversed it (section 2). The
+  cases of the rule as decided - a save made during a check starting the backend at once, on each tab, and a restart
+  that waited for a check made once its backend stopped - were red against the code as it was, 3 of 3, and took the
+  first rule's case's place; T232's case for 154A's reading after the extraction gained the save's two rows beside the
+  first start's. Added with them, each red under its mutation: work found only under the lock (D4), a check named before
+  a backend that does not answer (D2, H1, H2), a gate that refuses after its step (C4), a folder spelled otherwise (C9,
+  C10), the limit measured from a hand-over made at a later clock (C7), three routes that only look like an evaluation's
+  (X3, X4, X5), and the proxy's answer to `CheckRunning` (X8), 503 until it was given its class's 409. The add-in's
+  suite grew from 3,540 cases to 3,704: 147 from T230 and T232, and 17 from T235.
+- **Gates**: 2026-10-21, on the records' tree: no broken link; C# 0 warnings on a `--no-incremental` build, 10,086 and
+  3,704 passed, from 10,086 and 3,540; the restart classes (`DeferredRestartTests`, `OtherTabsBackendRestartTests`,
+  `ReviewPageBackendRestartTests`, `TabPagesBackendRestartTests`, 499 cases) and `CheckHoldTests` (57) passed five times
+  in a row; Python, the full suites, 18,111 passed and 5 skipped on 3.12 and on 3.11 (`--isolated`), as at `5a58988`,
+  since the words test's new row is in a case that was there; `ruff check` clean; the pane fixtures as both generators
+  write them (T234).
+- **Mutations**: as before - each fix taken out once with one exact replacement, the tree rebuilt, the named classes run
+  (`DeferredRestartTests`, `CheckHoldTests`, `BackendProxyHandlerTests`, `ModelCheckHostTests`, `StandardsHostTests`,
+  `ErrorLabelsCoverTheHostTests` and `ToolServiceWiringTests`: 758 cases; with `RemodelHostTests` for P1 to P3 and R1,
+  1,108, and with `ReviewPageBackendRestartTests` for H18, 785) and the file restored byte for byte (checked by sha256):
+  each of the 76 mutations of the add-in's code turned at least one case red, 620 red results in all. Of the words file,
+  the fixture and the pin, 3 more, below the first table's rows: W1 and F2 ran the words and fixture tests
+  (`test_review_words.py`, `test_pane_waiting_fixtures.py`, 139 cases), W1 the label scan, and F1 and F2
+  `ReviewPageSendGateTests` (57).
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | D1 | `DeferredRestart.Now` | the work a save deferred by carried out | 28 |
+  | D2 | `DeferredRestart.Apply` | work read before the look | 6 |
+  | D3 | `DeferredRestart.Apply` | the work read before the look carried out | 21 |
+  | D4 | `DeferredRestart.Apply` | the work read under the lock carried out | 1 |
+  | D5 | `DeferredRestart.Apply` | a look that names work: work of a kind not known | 1 |
+  | D6 | `DeferredRestart.Busy` | a reading that throws: work of a kind not known, not none | 2 |
+  | D7 | `DeferredRestart.Begin` | the work its `Apply` found carried out | 10 |
+  | H1 | `ReviewHost.WorkInProgress` | a Model check read | 19 |
+  | H2 | `ReviewHost.WorkInProgress` | a Standards check read | 17 |
+  | H3 | `ReviewHost.InProgress` | a reading that throws: work in progress | 1 |
+  | H4 | `ReviewHost.Promise` | the work the save deferred by named | 18 |
+  | H5 | `ReviewHost.Promise` | a turn that started during the save named with the work | 7 |
+  | H6 | `ReviewHost.EndsOf` | "and" before the last | 14 |
+  | H7 | `ReviewHost.EndsOf` | the verb agreeing with "the running checks" | 7 |
+  | H8 | `ReviewHost.WhatHoldsTheRestart` | a check on each check tab named as two | 10 |
+  | H9 | `ReviewHost.EveryRestartSentence` | the promises that name a check among `backend.restarted`'s sentences | 4 |
+  | H10 | `ReviewHost.WorkHoldsIt` | the class, `CheckRunning` | 10 |
+  | H11 | `ReviewHost.WorkHoldsTheRestart` | "them" for work held together | 1 |
+  | H12 | `ReviewHost.RestartedForNewReview` | the work that holds a new review back named | 7 |
+  | H13 | `ReviewHost.PageTurnRefusal` | the work that holds a turn call back named | 3 |
+  | H14 | `ReviewHost.BeginWork` | the work that holds work back named | 4 |
+  | H15 | `ReviewHost.BeginCheck` | a check tab's words, "no check starts" | 4 |
+  | H16 | `ReviewHost.BeginCheck` | a check begins through the restart gate | 16 |
+  | H17 | `ReviewHost.Save` | the work the save deferred by handed to its sentence | 18 |
+  | H18 | `ReviewHost.RestartNotAnswered` | a check among what makes the restart first | 11 |
+  | H19 | `ReviewHost.WorkInProgress` | the checks read only while a backend is up | 7 |
+  | C1 | `CheckPaneHost.BeginCheck` | the page told first when a restart stands before the press | 4 |
+  | C2 | `CheckPaneHost.BeginCheck` | the gate's step takes the hold | 37 |
+  | C3 | `CheckPaneHost.BeginCheck` | a gate that throws lets the hold go | 1 |
+  | C4 | `CheckPaneHost.BeginCheck` | a refusal lets the hold go | 2 |
+  | C5 | `CheckPaneHost.Holds` | the hand-over's limit | 6 |
+  | C6 | `CheckPaneHost.Holds` | an evaluation out holds past the limit | 2 |
+  | C7 | `CheckPaneHost.HandOver` | the limit measured from the hand-over | 2 |
+  | C8 | `CheckPaneHost.HoldEvaluation` | only the folder handed over held | 2 |
+  | C9 | `CheckPaneHost.SameFolder` | letter case ignored | 3 |
+  | C10 | `CheckPaneHost.SameFolder` | a trailing separator ignored | 2 |
+  | C11 | `CheckPaneHost.HoldEvaluation` | an evaluation held once | 2 |
+  | C12 | `CheckPaneHost.HoldEvaluation` | a hand-over past its limit not taken over | 2 |
+  | C13 | `CheckPaneHost.LetGo` | only its own check let go | 2 |
+  | C14 | `CheckPaneHost.Dispose` | every hold let go with the host | 2 |
+  | C15 | `CheckPaneHost.EndCheck` | the start's hold let go | 25 |
+  | C16 | `CheckPaneHost.HandOver` | the run handed over with its folder | 23 |
+  | M1 | `ModelCheckHost.StartCheck` | begun through the gate | 30 |
+  | M2 | `ModelCheckHost.StartCheck` | the run root read again once the gate is passed | 7 |
+  | M3 | `ModelCheckHost.StartCheck` | the document read again once the gate is passed | 2 |
+  | M4 | `ModelCheckHost.StartCheck` | the run handed over with its folder | 12 |
+  | M5 | `ModelCheckHost.StartCheck` | every other way out lets the hold go | 11 |
+  | M6 | `ModelCheckHost.StartCheck` | the gate after every refusal that needs no call | 27 |
+  | S1 | `StandardsHost.Start` | begun through the gate | 28 |
+  | S2 | `StandardsHost.Start` | the run root read again once the gate is passed | 7 |
+  | S3 | `StandardsHost.Start` | the document read again once the gate is passed | 2 |
+  | S4 | `StandardsHost.Start` | the run handed over with its folder | 11 |
+  | S5 | `StandardsHost.Start` | every other way out lets the hold go | 11 |
+  | S6 | `StandardsHost.Start` | the gate after every refusal that needs no call | 27 |
+  | P1 | `PaneActions.RunRootToUse` | a moved run root judged again | 6 |
+  | P2 | `PaneActions.RunRootToUse` | a start under way answered | 4 |
+  | P3 | `PaneActions.WaitingForTheRestart` | the words written once | 6 |
+  | X1 | `BackendProxyHandler.ForwardHoldingTheCheck` | the check's hold taken while its evaluation is out | 14 |
+  | X2 | `BackendProxyHandler.ForwardHoldingTheCheck` | the hold let go once answered | 13 |
+  | X3 | `BackendProxyHandler.EvaluatesACheck` | two segments exactly | 1 |
+  | X4 | `BackendProxyHandler.EvaluatesACheck` | the two evaluation routes by name | 1 |
+  | X5 | `BackendProxyHandler.EvaluatesACheck` | under `/checks` | 1 |
+  | X6 | `BackendProxyHandler.RunDirectoryOf` | the body's `run_dir` read | 14 |
+  | X7 | `BackendProxyHandler.HoldTheCheck` | a host that throws leaves the evaluation sent | 1 |
+  | X8 | `BackendProxyHandler.RefuseTurn` | `CheckRunning` answered 409, as a turn's | 2 |
+  | A1 | `SwReviewAddIn` | the review host told whether a Model check is in progress | 1 |
+  | A2 | `SwReviewAddIn` | the review host told whether a Standards check is in progress | 1 |
+  | A3 | `SwReviewAddIn` | the Model check host handed the review host's gate | 1 |
+  | A4 | `SwReviewAddIn` | the Standards host handed the review host's gate | 1 |
+  | A5 | `SwReviewAddIn` | the Model check host handed the word on a restart ahead | 1 |
+  | A6 | `SwReviewAddIn` | the pane handed the check hosts' holds of an evaluation | 1 |
+  | A7 | `SwReviewAddIn.BeginCheck` | the review host's gate asked | 2 |
+  | A8 | `TaskPaneControl` | the proxy handed the pane's option | 2 |
+  | A9 | `SwReviewAddIn` | the Standards host handed the word on a restart ahead | 1 |
+  | A10 | `SwReviewAddIn` | the pane handed the Standards host's hold of an evaluation | 1 |
+  | R1 | `RemodelHost.RunRootToUse` | the run root for a new run read once the gate is passed, through the shared reading | 6 |
+  | W1 | `review_words_v1.yaml` | `CheckRunning`'s sentence | 5 Python, 1 C# |
+  | F1 | `review-send-failure-events.json` | the pin moved to the regenerated fixture | 3 |
+  | F2 | `review-waiting.json` | the fixture regenerated with `CheckRunning`'s sentence | 1 Python, 3 C# |
+
+**8. The reviews (2026-10-21).**
+
+- **What they were**: three independent reviews of the branch at `c633d75` - Opus led by mutation, which ran 30 of its
+  own (RV1 to RV30); Opus on races; and Codex. The race review and Codex found the same two ordering races on their own,
+  and Codex rated both medium ("do not ship yet"); the mutation review found one must-fix test gap. The coordinator's
+  list - five items and eight nits - is settled test first by T238 to T248, after a merge of `main` at `4f40dae` (158A,
+  PR #33): 002's research and tasks kept 157A before 158A, and the pane's tool service hold took 158A's named holder
+  beside 157A's evaluation hold (`78873ea`). What they corrected above is marked where it stands.
+- **Item 1, must-fix: the hold's timing was never tested on the clock the add-in runs with.** The add-in passes no
+  clock, so each check host's default, a stopwatch started with the add-in, is what runs - and both test clocks started
+  at zero. Four mutations passed all 3,704 cases: a start's hold measured against the limit from clock zero (RV2), which
+  a minute after load holds nothing while the model is read; and a clock that never moves, in the stopwatch or either
+  host's default (RV11, RV14, RV17), which lets a page that never evaluates hold every restart back until SOLIDWORKS
+  closes. The mutation review's probes are adopted: `TheHandOverWaitsAsLongAsItsLimit`, which presses three hours in,
+  asserts the check holds while its model is read (P1); `TheClockTheAddInRunsWithMovesAndIsEachCheckHostsDefault` checks
+  the stopwatch, and each host's default and the pane's, move over 50 ms (P2). Each mutation is red under them (T238).
+- **Item 2, the race review and Codex: a save told the check tabs of its restart only after the restart's lock was let
+  go.** `ReviewHost.Save` called `TellTheOtherTabs` once `DeferredRestart.Now` had returned, where every other restart
+  tells them under `_restarting` (the reporter `Apply` runs). A check whose gate waited on that lock for the save's
+  restart could take it, extract and reply before the telling reached its page; told after the reply, the page evaluates
+  with the token of the backend the restart replaced, is refused, and the extraction is wasted. Option (a), as both
+  reviews recommended: the save's restart tells the other tabs in the step `Now` runs under the lock. Posting to a tab
+  queues and never waits (155A's rule for `IPageChannel`), so nothing waits under the lock that did not before; the race
+  reviewer had run the four restart classes so, all passing. The end-to-end page now keeps its own token - from the
+  `init` it asked for as it loaded, and again once told the backend restarted before the reply that handed it its run -
+  where it took the backend's of the moment, which hid the race; the fake backend refuses any other token.
+  `ACheckThatWaitedForASavesRestartIsToldOfItBeforeItsExtractionIsAnswered`, the race review's, was red on both tabs
+  before the fix (T240, T241). A save's restart that fails still tells the tabs of it after the lock: a waiting check
+  then finds the backend the failure left - the old one, its token standing, or none, in which case it holds nothing and
+  its evaluation cannot be made - so the order changes nothing it does.
+- **Item 3, both race reviews and the mutation review: the hand-over's minute was spent before the page could act.** The
+  minute started on the check's pump as the reply was posted; the reply's delivery, the page's `init` and its evaluation
+  all wait on SOLIDWORKS' application thread, which another tab's extraction holds in one `Invoke` for its whole length
+  (`SwReviewDump`). Two checks back to back left the first's evaluation unheld and a pending save free to restart under
+  it; and a save waiting for one check could restart the backend while the reply still waited to be delivered,
+  `backend.restarted` queued behind `check.extracted`. Three ways were offered - the minute from the actual delivery
+  (Codex); a lapsed hold taken back if no restart had begun or ended since the gate, decided under `_restarting` by a
+  step that never makes the restart (the race review); no hand-over expiring while either tab holds a start hold (the
+  mutation review). Two are combined, since each covers what the other cannot:
+  - **The minute starts once the reply has reached the page** (`CheckHoldOptions.AfterPosts`): a mark queued behind the
+    posts on the pane's thread (`TaskPaneControl.AfterPosts`, queued and never waited for, run at once when it cannot be
+    queued so no hold waits for good on a mark that never comes), so the page has its whole minute however long the
+    reply waited, whatever held the thread - another tab's extraction, a review's, or SOLIDWORKS' own work.
+  - **An evaluation that comes after its minute anyway is held again while the backend its check began on is still the
+    one up** (`CheckPaneHost.TakeBackLate`): its page had the reply, and was held up once it had it. "No restart since
+    the gate" is read as the backend's endpoint: the gate's step notes it under the restart's lock, and the late step
+    compares it under that lock again (`CheckHoldOptions.WhileNoRestartRuns`, `ReviewHost.WhileNoRestartRuns`,
+    `DeferredRestart.WhileNoneRuns`, which makes no restart and runs no step once stopping), so no restart decides
+    between the reading and the marking. A restart that failed before it stopped the old backend leaves the endpoint,
+    and the evaluation is held, since it will be answered; one made, or a backend stopped, leaves the evaluation unheld,
+    its token gone. Holds past their minute stay to be taken back until their backend has gone, and only those are
+    pruned. *Changed on the final reviews (section 9, items 1 and 3):* the evaluation's own token is compared with the
+    backend up now, and the gate notes no backend; a hold is kept until the delivery limit, an hour, has passed since
+    its hand-over.
+  - The mutation review's option is not taken: the minute from delivery covers another check's extraction - which holds
+    the restart itself - and what that option could not see, every other holder of SOLIDWORKS' thread.
+  - Tests: unit cases on each tab (the minute from delivery; a late evaluation taken back, once, while no restart runs;
+    refused once its backend has gone, a restart made or the backend stopped, stopping, or the restart not to be asked;
+    a hold past its minute outliving the tab's next press), the pane's queue on a real pane, and end to end a reply held
+    up on a busy application thread, two checks back to back with their replies held up (Codex's regression) and an
+    evaluation held up behind another check's extraction (the race review's) - each red against stubs (T242, T243).
+- **Item 4, DRY: the start a check makes once its refusals are behind it was near line for line twice**, in
+  `ModelCheckHost.StartCheck` and `StandardsHost.Start`, and the hold's four options were declared three times.
+  `CheckPaneHost.RunCheck` is that start once - the gate, the run root and the document read again, the folder, the
+  dump, the run root read once more, the registration, the hand-over and the reply - in a tab's words and with its
+  folder, profile and reply given by a `CheckStart` each host builds once. The four options are `CheckHoldOptions`, one
+  object a tab's options hold (`Hold`) and hand on whole to its pane's. The `handedOver` flag went, since ending a start
+  does nothing once its hold is handed over (RV13). No behaviour changed: every case passed before and after (T239), and
+  item 3's fix was made once.
+- **Item 5: 004 `pane-remodel-messages.md` lacked `CheckRunning`**, which `remodel.plan` and `remodel.start` are refused
+  with while a check holds a waiting restart back (`ARemodelRunWhileACheckHoldsTheRestartIsRefusedSayingSo`); 145A had
+  put its rows there. Added (T245).
+- **Nits** (T244, T245, T246):
+  - `ReviewHost.RestartHeldBack`'s comment said work holds the restart even with no backend; since T236 a check does
+    not.
+  - `model-check.md` and `standards-check.md` named only the other tab's check as refusing a press `CheckRunning`; this
+    tab's own earlier one, its run still waiting for its evaluation after a reload, does too (Not changed 7).
+  - Two presses on one tab (RV4, RV5): the mutation review's probe P3 is
+    `AHandOverWaitingForItsPageOutlivesTheTabsNextPress`.
+  - The hand-over before the reply (RV12, RV16): its probe P4 is `AnEvaluationSentTheInstantThePageIsToldFindsItsHold`.
+  - Equivalent code: the `handedOver` flag went with item 4 (RV13); `EvaluationHold`'s once-only guard went, since
+    letting go twice lets go once (RV10); `EndCheck` still clears the start's field and says why (RV7); `TakeTheHold`'s
+    pruning says it is for memory only (RV3).
+  - `docs/pane-backend-proxy.md` lists the two holds the proxy takes while a call is out: 152A's on the tool service and
+    157A's on a check.
+  - Renamed deliberately, since each reads the run root three times now and pins that the folder is made under the run
+    root judged: `ACheckJudgesAndMakesItsFolderUnderOneReadingOfTheRunRoot` is
+    `ACheckMakesItsFolderUnderTheRunRootItJudged`, and its Standards twin
+    `AStandardsCheckMakesItsFolderUnderTheRunRootItJudged`.
+  - The race review's unload note: `DisconnectFromSW` disposed the Model check, Remodel and Standards hosts, letting
+    their holds go, before the review host stopped its restart, so a restart could be made in that moment on a backend
+    about to be stopped - 145A's pattern for a remodel run too. The fix is small and safe: `ReviewHost.StopRestarting`
+    stops the restart first, as the host's own disposal does, and its two cases were red before it (T246).
+  - Two more of the mutation review's survivors, pinned: a reading of whether a restart stands ahead that throws tells
+    the page nothing (RV6, `ARestartAheadThatCannotBeReadTellsThePageNothing`), and a route that is an evaluation's in
+    other letters holds nothing (RV27). The rest it listed are equivalent: work of a kind not known is named a remodel
+    run twice over, by its reading and by the fallback for nothing named (RV21, RV23), and a run root compared again
+    ignoring letter case names the same folder on Windows (RV30).
+- **Not changed, after the reviews**: section 1's last word on a page held up, and Not changed 2, as corrected there. A
+  page held up more than a minute once its reply had reached it, by something that holds no restart - SOLIDWORKS' own
+  work - while a save's restart waits for its check alone, is restarted under: its evaluation, carrying a token that
+  has gone, is refused, as before 157A. Closing that would need the page to say it is gone, which no page says. And a
+  mark of delivery queued on the pane's thread is lost if the pane's window is destroyed before it runs - WinForms
+  drops what is queued on a window that goes - which happens only as the add-in unloads, when every hold is let go
+  with its host. *Corrected on the final reviews (section 9, items 3 and 4):* this named a review's extraction too,
+  which is no such thing - `review.start` passes the restart's gate, refused while a check holds a waiting restart
+  back, and the Review tab's save waits behind it on the tab's one pump - and since them a review's preparation is
+  not either, given the same gate. That the window goes only as the add-in unloads was asserted, not shown; since
+  them a hold whose reply never reaches the page holds the restart back an hour at most, however its mark was lost.
+- **Existing cases changed deliberately**: `TheHandOverWaitsAsLongAsItsLimit` gains P1's assertion;
+  `AHandOverNotTakenWithinItsLimitHoldsNothingMore` - its late evaluation, refused before, is refused now once a restart
+  has been made, since one held up past its minute is held again while its backend is up;
+  `ACheckWhosePageNeverEvaluatesItHoldsTheRestartNoLongerThanTheLimit` - its late evaluation, told of the restart only
+  after its reply, is refused now, the page's token its own; the hold's options set through `Hold` in `CheckHoldTests`
+  and `DeferredRestartTests`, the same values; and the two renames above. None was loosened.
+- **Tests**: T238 to T247, against `78873ea` - the merge of `main` - and stubs where a fix was to come: the add-in's
+  suite grew from 3,728 cases to 3,766. Red first: the race review's case for a save's telling (2), the hand-over's
+  minute - six of `CheckHoldTests`' fifteen new cases, the minute from delivery, a late evaluation taken back and a hold
+  that outlives the tab's next press, and all four end to end - and the unload's two. Guards, passing as written: the
+  minute running out once delivered (4) and a late evaluation refused once its backend has gone (5). Pins, each red
+  under its mutation: the clock's (P1's assertion and P2), the wiring's two scans and the pane's three queue cases, the
+  probes P3 and P4 and the pins for RV6 and RV27 (7), and T247's two.
+- **Gates**: 2026-10-21, on the reviews' tree: no broken link; C# 0 warnings on a `--no-incremental` build, 10,086 and
+  3,766 passed, from 10,086 and 3,728 after the merge of `main` (3,704 at `c633d75`); the restart classes
+  (`DeferredRestartTests`, `OtherTabsBackendRestartTests`, `ReviewPageBackendRestartTests`,
+  `TabPagesBackendRestartTests`, 511 cases) and `CheckHoldTests` (79) passed five times in a row; Python, the full
+  suites, run since records the tests read changed (002's tasks, 004's contract), 18,111 passed and 5 skipped on 3.12
+  and on 3.11 (`--isolated`), as before, no Python changed; `ruff check` clean; no label, fixture or pin changed.
+- **Mutations**: as before - each fix of the second round taken out once with one exact replacement, the tree rebuilt,
+  the named classes run (the first round's seven: 813 cases before T247's two, 815 at the tip - corrected on the final
+  reviews, where this said 814; `CheckHoldTests` alone for the hold's own
+  lines, 79; `QueuedPaneCallbackTests` for the pane's queue, 7) and the file restored byte for byte (checked by sha256),
+  in two streams, the worktree and a copy of it: each of the 30 turned at least one case red, 218 red results in all -
+  Q16 once T247 had pinned it, and Q25 in place of RV2, which the minute from delivery had made equivalent. Before T239
+  moved the clock's defaults into one, RV2, RV11, RV14, RV17 and Q1 were red under T238's cases in 2, 1, 1, 1 and 1 of
+  `CheckHoldTests`' 58.
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | Q1 | `CheckHoldOptions.Clock` | each check host's default clock the add-in's | 1 |
+  | RV11 | `CheckHoldOptions.MonotonicClock` | the add-in's clock moves | 1 |
+  | Q2 | `CheckPaneHost.RunCheck` | begun through the gate | 76 |
+  | Q3 | `CheckPaneHost.RunCheck` | the run root read again once the gate is passed | 14 |
+  | Q4 | `CheckPaneHost.RunCheck` | the document read again once the gate is passed | 4 |
+  | Q5 | `CheckPaneHost.RunCheck` | every other way out lets the hold go | 24 |
+  | Q6 | `CheckPaneHost.RunCheck` | the run handed over before the page is told (RV12, RV16) | 2 |
+  | Q7 | `ReviewHost.Save` | the other tabs told under the restart's lock | 2 |
+  | Q8 | `CheckPaneHost.StartTheMinuteOnDelivery` | the minute from the reply's delivery | 5 |
+  | Q9 | `CheckPaneHost.StartTheMinuteOnDelivery` | a delivery that cannot be queued starts the minute now | 2 |
+  | Q10 | `CheckPaneHost.HoldEvaluation` | a late evaluation taken back | 5 |
+  | Q11 | `CheckPaneHost.TakeBackLate` | only while the backend the check began on is up | 5 |
+  | Q12 | `CheckPaneHost.TakeBackLate` | decided while no restart runs | 4 |
+  | Q13 | `CheckPaneHost.TakeTheHold` | a hold past its minute kept while its backend is up | 2 |
+  | Q14 | `DeferredRestart.WhileNoneRuns` | the step under the restart's own lock | 1 |
+  | Q15 | `DeferredRestart.WhileNoneRuns` | no step once stopping with the add-in | 1 |
+  | Q16 | `ReviewHost.WhileNoRestartRuns` | the restart's step asked | 1 |
+  | Q17 | `SwReviewAddIn` | the Model check host handed the pane's delivery | 1 |
+  | Q18 | `SwReviewAddIn` | the Standards host handed the restart's step | 1 |
+  | Q19 | `SwReviewAddIn.AfterPagePosts` | with no pane, the action run at once | 2 |
+  | Q20 | `TaskPaneControl.AfterPosts` | queued behind the posts on the pane's thread | 1 |
+  | Q21 | `TaskPaneControl.AfterPosts` | run at once when it cannot be queued | 1 |
+  | Q22 | `TaskPaneControl.RunAfterPosts` | a failure inside it stays inside it | 1 |
+  | RV4 | `CheckPaneHost.TakeTheHold` | a new press drops no hand-over that still waits | 4 |
+  | RV5 | `CheckPaneHost.HandOver` | the start's field let go at the hand-over | 27 |
+  | RV6 | `CheckPaneHost.RestartAhead` | a reading that throws read as none | 2 |
+  | RV27 | `BackendProxyHandler.EvaluatesACheck` | `/checks` by its letters | 1 |
+  | Q23 | `ReviewHost.StopRestarting` | the restart stopped | 1 |
+  | Q24 | `SwReviewAddIn.DisconnectFromSW` | the restart stopped before the hosts that hold it back go | 1 |
+  | Q25 | `CheckPaneHost.Holds` | a hold whose reply has not reached the page - a start's among them - holds with no limit (RV2) | 25 |
+
+**9. The final reviews (2026-10-21).**
+
+- **What they were**: two Opus reviews of the branch at `3847f04`, standing in for Codex at its usage limit: one led by
+  mutation, which ran 67 of its own (Z1 to Z68), 23 of them surviving all 3,766 cases, with seven pins and two
+  demonstrations ready to adopt; and one on races, with two probes. Neither found a must-fix. The coordinator's list -
+  three should-fix items, an owner question the owner decided, and nits - is settled test first by T249 and T293 to
+  T295. What they corrected above is marked where it stands.
+- **Item 1, should-fix: the late take-back was untested on what it compares and when it reads.** Five mutations
+  survived: only the port, or only the token, compared (Z1, Z2); a gate with no backend not checked for null (Z3), a
+  real failure - a check pressed with no backend up, past its minute once one had come up, made every later press on its
+  tab throw in the prune and answer `HostError` until SOLIDWORKS restarted; the backend read before the restart's lock
+  (Z7); and holds still holding pruned once their backend differed (Z13). Taken with the race review's rule, as the
+  coordinator asked: a late evaluation is held while the bearer token it carries - the token of the backend that gave
+  its page its `init`, read from its `Authorization` header as the backend reads it
+  (`BackendProxyHandler.BearerTokenOf`) - is the token of the backend up now, read while no restart runs
+  (`CheckPaneHost.TakeBackLate`). That backend is the one that will answer it: the proxy sends every call to the backend
+  up, and a backend answers only its own token. The gate notes no backend any more, so Z3's null cannot arise, and a
+  check pressed with no backend up - its page told the backend came up during the extraction, and evaluating with its
+  token - is held late too, which the backend at its gate could never allow. The port is not read: a restart on the same
+  port makes a new token. An evaluation carrying no token, or the token in other letters, is not held, since the backend
+  refuses both, and one with none waits for no restart in flight to be told so. The survivors are pinned against the new
+  rule: Z1 by the row "a restart was made on the same port"; Z2's port, read nowhere now, by a backend on another port
+  whose token the evaluation carries holding it
+  (`ALateEvaluationOfACheckBegunWithNoBackendIsHeldOnTheBackendThatCameUp`); Z3 by that case and
+  `ACheckBegunWithNoBackendDoesNotBreakTheTabsNextPress`; Z7 by `ALateEvaluationReadsTheBackendOnlyWhileNoRestartRuns`,
+  a handshake, not a sleep; Z13 by `AHoldInItsMinuteIsNotForgottenByTheTabsNextPress`. The mutation review's other
+  probes are adopted as pins too: Z4 (`TwoLateEvaluationsOfOneRunAreHeldOnce`), Z5
+  (`ALateEvaluationWhoseHoldWentMeanwhileIsNotHeld`), Z17 (`ASecondMarkOfDeliveryDoesNotStartTheMinuteAgain`), Z20
+  (`TheMarkOfDeliveryIsQueuedAfterTheReply`), Z22 (`AMovedRunRootIsJudgedByTheTabsOwnProbe`), Z34 and Z35
+  (`TheHoldsDefaultsDeliverAndRunTheStepAtOnce`) and Z63 (`AGateThatLetsAPressThroughWithoutItsStepHoldsNothing`)
+  (T249).
+- **Item 2, should-fix: the add-in's delivery wiring was pinned by substrings**, which Z44 - the condition turned over,
+  so the minute would start at the hand-over again, round one's bug - kept. `AfterPagePosts` is read whole now
+  (Pin_Z44); a behavioural test would need the add-in, which cannot be built without a live SOLIDWORKS (T249).
+- **Item 3, should-fix, both reviews: an undelivered hand-over had no bound.**
+  - (a) A throw between the hand-over and the mark - a tab's counts, made in the reply - left a hold handed over that
+    nothing ended: every restart held back, and every press refused `CheckRunning`, until SOLIDWORKS closed. Latent,
+    since neither tab's counts throw. The reply is made before the run is handed over now, so only the post, which never
+    throws, lies between them (`AStartWhoseReplyCannotBeMadeLetsItsHoldGo`, the demonstration's and the race probe's).
+  - (b) A mark queued on the pane's thread is lost with the pane's window
+    (`AMarkLostWithThePanesWindowHoldsNoLongerThanTheDeliveryLimit`, the demonstration's, on a real pane). A hand-over
+    whose reply has not reached the page holds the restart back for the delivery limit at most, an hour from the
+    hand-over (`CheckHoldOptions.DeliveryLimit`), as 158A bounds the tool service's hold: generous, far past any
+    delivery SOLIDWORKS' thread holds up, and a reply delivered just before it still has its whole minute. A hold that
+    holds nothing, the limit past its hand-over, is forgotten: not taken back late, and dropped by the tab's next
+    press - which forgets no evaluation still out (`AnEvaluationOutPastTheDeliveryLimitHoldsUntilItIsAnswered`). The
+    limit is measured from the hand-over on the clock the add-in runs with, pinned three hours in (T249).
+- **Item 4, the race review's owner question, decided: `review.prepare` passed no restart gate.** It is the first
+  message of every Review press and reads the whole component tree in one call on SOLIDWORKS' application thread, so a
+  check's reply and mark could land just before it and the page's minute run out behind it; the waiting restart was then
+  made under the check, and its late evaluation refused `401`, its extraction wasted - the race probe showed it on both
+  tabs. `ReviewHost.PrepareReview` passes the gate `review.start` passes (`RestartedForNewReview`), after its own
+  refusals and before the tree is read: refused while a restart waits that something holds back - `CheckRunning` for a
+  check - and reading nothing; a restart nothing holds back made first, as the start would make it. And, as after every
+  gate that can wait (owner decision 149A), the document is read again, and one that changed is refused
+  `DocumentChanged`, in the start's words. The probe, its answer turned, is
+  `AReviewsPreparationWhileASaveWaitsForACheckIsRefusedAndTheChecksEvaluationIsHeld`. Section 8's "a review's
+  extraction" is corrected there (T294).
+- **Nits**:
+  - DRY: the refusals before the gate, nearly line for line twice in the two hosts, are the check pane's `StartCheck`,
+    and each host's start is one line (T293).
+  - Each tab's words in its start, pinned word for word (Z26 to Z28, Z52 to Z54):
+    `EachTabsStartSaysWhatItReadsAndWhatComesNextInItsOwnWords` and `EachTabNamesTheFolderItCouldNotMakeInItsOwnWords`
+    (T295).
+  - The unload: `DisconnectFromSW` stops the restart first, before the pumps' joins - up to eight seconds, in which the
+    message a pump handles can still save the settings - and the tool service's disposal. `DeferredRestart.Now` read
+    nothing of the stopping; decided: it refuses once stopped, as `First` does, so no restart is made on a backend about
+    to be stopped, and the save is answered as one whose restart was not made, saying why
+    (`ASaveOnceTheRestartIsStoppedRestartsNothing`) (T295).
+  - Two misplaced doc comments in `DeferredRestartTests.cs` are back on their own case and class (T295).
+  - Records: section 8's count of the first round's seven classes read "814, 815 with T247's" where they count 813
+    before T247's two and 815 at the tip; its "only as the add-in unloads" was asserted, not shown, and item 3 makes it
+    moot; and `pane-host-messages.md`'s backend prefix names every case a late evaluation is not held in.
+  - Equivalent, and left: no pruning at all (Z14), since the pruning is for memory only; the pane's handle check before
+    it queues (Z50), since a queuing with no handle throws and the catch runs the mark at once, as the check does; and
+    the take-back's `backend == null` (E1), since a null read throws inside the step and is answered the same - kept,
+    since it says what it means. `Forgotten`'s clause that the hold was handed over went, since a start's hold always
+    holds. Not pinned: a queuing that throws once the handle has gone dropping the mark (Z49), which cannot be staged on
+    a real pane without a race - and which the delivery limit now bounds.
+  - Left as the coordinator asked: `ReviewPageScaleTests.AThousandFindings...WithinThreeSeconds`, which fails under
+    parallel load and is unrelated to 157A.
+- **Not changed, after the final reviews**: section 8's Not changed, as corrected there - a page held up past its minute
+  by SOLIDWORKS' own work, while a save's restart waits for its check alone, is still restarted under.
+- **Existing cases changed deliberately**: `AHandOversMinuteStartsOnceItsReplyHasReachedThePage` - its reply waits 59
+  minutes where it waited an hour, since an undelivered hand-over holds an hour at most; three renamed for the rule -
+  `AnEvaluationHeldUpPastItsMinuteIsHeldWhileItCarriesTheTokenOfTheBackendUpNow`,
+  `AnEvaluationPastItsMinuteIsNotHeldUnlessItCarriesTheTokenOfTheBackendUpNow`, with three rows more, and
+  `AHoldPastItsMinuteOutlivesTheTabsNextPress`; `WhileACheckHoldsTheRestartANewReviewOrATurnCallIsRefusedSayingSo`, two
+  rows for a review's preparation; `TheAddInStopsTheRestartBeforeTheHostsThatHoldItBackGo`, the stop first; the wiring
+  scans, the token handed on and `AfterPagePosts` read whole; and the proxy's check holds, asked with the token. None
+  was loosened.
+- **Tests**: T249, T294 and T295, against `1f14a98` - T293's, which changed no behaviour (707 host, hold and restart
+  cases before and after) - and stubs where a fix was to come: the add-in's suite grew from 3,766 cases to 3,813. Red
+  first: T249's ten against stubs that carried the token through and kept the old rule - the proxy's two token rows, a
+  late evaluation of a check begun with no backend (2), the token in other letters and no token (2), the delivery limit
+  (2) and on a real pane, and a start whose reply cannot be made; T294's seven; and T295's two, the stop first and a
+  save once stopped. Guards, passing as written: a check begun with no backend breaking nothing (2), which no mutation
+  of the new rule turns red, since it has no null left to miss, and an evaluation that carries no `Authorization`
+  header. Pins, each red under its mutation: the rest.
+- **Gates**: 2026-10-21, on the final reviews' tree: no broken link; C# 0 warnings on a `--no-incremental` build, 10,086
+  passed, and 3,812 of the add-in's 3,813 - the one,
+  `ReviewPageScaleTests.AThousandFindingsAndAThousandGroupedRowsAreRenderedIntoResultsWithinThreeSeconds`, rendered in
+  3,990 ms against its 3 s bound under the suite's load and passes alone, as the coordinator found, and is left as
+  asked; the restart classes (`DeferredRestartTests`, `OtherTabsBackendRestartTests`, `ReviewPageBackendRestartTests`,
+  `TabPagesBackendRestartTests`, 519 cases) and `CheckHoldTests` (113) passed five times in a row; Python, the full
+  suites, run since records changed, 18,111 passed and 5 skipped on 3.12 and on 3.11 (`--isolated`), as before, no
+  Python changed; `ruff check` clean; no label, fixture or pin changed.
+- **Mutations**: as before - each fix of the final reviews taken out once with one exact replacement (Q60 a move), the
+  tree rebuilt, the first round's seven classes run (850 cases for T249's, 862 for T294's and T295's) and the file
+  restored byte for byte (checked by sha256), in two streams, the worktree and a copy of it: each of the 44 turned at
+  least one case red, 96 red results in all; and the take-back's `backend == null` (E1), taken out, turned none, as an
+  equivalent should.
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | Q26 | `CheckPaneHost.TakeBackLate` | the evaluation's token compared with the backend's up now | 7 |
+  | Q27 | `CheckPaneHost.TakeBackLate` | the token compared exactly, not ignoring letter case | 1 |
+  | Q28 | `CheckPaneHost.TakeBackLate` | an evaluation with no token waits for no restart | 1 |
+  | Q29 | `CheckPaneHost.TakeBackLate` | the backend read while no restart runs (Z7) | 1 |
+  | Q30 | `CheckPaneHost.TakeBackLate` | a hold taken over meanwhile read again (Z4) | 2 |
+  | Q31 | `CheckPaneHost.TakeBackLate` | a hold gone meanwhile read again (Z5) | 2 |
+  | Q32 | `CheckPaneHost.TakeTheHold` | a hold past its minute kept until the delivery limit | 2 |
+  | Q33 | `CheckPaneHost.TakeTheHold` | a hold in its minute kept (Z13) | 6 |
+  | Q34 | `CheckPaneHost.Forgotten` | a hold past its minute forgotten only at the delivery limit | 9 |
+  | Q35 | `CheckPaneHost.Forgotten` | only a hold that holds nothing forgotten | 4 |
+  | Q36 | `CheckPaneHost.HoldEvaluation` | a forgotten hold not taken back | 2 |
+  | Q37 | `CheckPaneHost.Holds` | a hand-over whose reply never reaches the page bounded by the delivery limit | 3 |
+  | Q38 | `CheckHoldOptions.DeliveryLimit` | an hour | 2 |
+  | Q39 | `CheckPaneHost.HandOver` | the hand-over timed on the clock the add-in runs with | 2 |
+  | Q40 | `CheckPaneHost.Delivered` | the minute started once (Z17) | 2 |
+  | Q41 | `CheckPaneHost.StartTheMinuteOnDelivery` | no hold handed over, no mark (Z63) | 2 |
+  | Q42 | `CheckPaneHost.RunCheck` | the moved run root judged by the tab's own probe (Z22) | 2 |
+  | Q43 | `CheckHoldOptions.AfterPosts` | the default delivers at once (Z34) | 1 |
+  | Q44 | `CheckHoldOptions.WhileNoRestartRuns` | the default runs the step (Z35) | 1 |
+  | Q45 | `CheckPaneHost.RunCheck` | the mark queued after the reply (Z20) | 1 |
+  | Q46 | `CheckPaneHost.RunCheck` | the reply made before the run is handed over | 1 |
+  | Q47 | `SwReviewAddIn.AfterPagePosts` | with a pane, queued behind its posts (Z44) | 2 |
+  | Q48 | `BackendProxyHandler.ForwardHoldingTheCheck` | the evaluation's token asked with | 3 |
+  | Q49 | `BackendProxyHandler.BearerTokenOf` | the header's name in any letters | 1 |
+  | Q50 | `BackendProxyHandler.BearerTokenOf` | the scheme in any letters | 1 |
+  | Q51 | `BackendProxyHandler.BearerTokenOf` | only a bearer token read | 1 |
+  | Q52 | `BackendProxyHandler.BearerTokenOf` | an empty token read as none | 1 |
+  | Q53 | `SwReviewAddIn` | the token handed on to the check hosts | 1 |
+  | Q54 | `TaskPaneControl` | the token handed on by the pane's proxy | 2 |
+  | Q55 | `ModelCheckHost.HoldEvaluation` | the token handed on to its pane | 5 |
+  | Q56 | `StandardsHost.HoldEvaluation` | the token handed on to its pane | 4 |
+  | Q57 | `ReviewHost.PrepareReview` | the gate a review's start passes | 6 |
+  | Q58 | `ReviewHost.PrepareReview` | the document read again after the gate (149A) | 2 |
+  | Q59 | `DeferredRestart.Now` | no restart once stopped with the add-in | 1 |
+  | Q60 | `SwReviewAddIn.DisconnectFromSW` | the restart stopped first, before the pumps and the tool service | 1 |
+  | Q61 | `CheckPaneHost.RunCheck` | the status while the model is read in the tab's words (Z26) | 1 |
+  | Q62 | `CheckPaneHost.RunCheck` | the ready status's next step in the tab's words (Z27) | 2 |
+  | Q63 | `CheckPaneHost.RunCheck` | the folder that could not be made in the tab's words (Z28) | 2 |
+  | Q64 | `StandardsHost` | the reading words the Standards tab's own (Z52) | 1 |
+  | Q65 | `StandardsHost` | the next step the Standards tab's own (Z53) | 1 |
+  | Q66 | `StandardsHost` | the folder the Standards tab's own (Z54) | 1 |
+  | Q67 | `ModelCheckHost` | the reading words the Model check tab's own | 1 |
+  | Q68 | `ModelCheckHost` | the next step the Model check tab's own | 1 |
+  | Q69 | `ModelCheckHost` | the folder the Model check tab's own | 1 |
+  | E1 | `CheckPaneHost.TakeBackLate` | no backend up read as none - equivalent: a null read throws inside the step, and is answered the same | 0 |
+
+
+**Continuation, 2026-10-21.** The interrupted final-review records above were copied unchanged into
+`codex/resume-157a`, based on `a4cc6f0`; all five original documentation edits remain in their original
+worktree. No product code or test assertion changed. A fresh Windows build, `--no-incremental`, had
+zero warnings, and both complete C# suites passed: 10,086 extractor tests and 3,813 add-in tests. The
+scale test that failed under the earlier load passed in this full run, with its three-second bound
+unchanged. The copied relative links and task ids were checked, and Ruff passed. The complete Python non-live suites with the tokenizer required passed on Python 3.12.3 and
+3.11.16 (`--isolated --all-extras`): 18,111 passed and 5 skipped on each. The all-extras sync and
+tokenizer fetch passed. Changed Markdown has LF in the index; no live test ran and SOLIDWORKS was
+not started. This records T248; the final independent
+review, integration and PR remain pending, and decision 157A remains in progress.
+
+**Integration continuation, 2026-10-23 (T303 to T306).** An independent final Codex review of
+`1652bcc` against `4f40dae` found no material finding and checked Principles I through VI. The
+documented limitation remains: unrelated SOLIDWORKS work may delay a page beyond its delivered
+reply's minute, allowing a waiting settings restart before its evaluation reaches the proxy.
+This continuation does not claim to close that case.
+
+The provisional integration with decision 160A preserves the shared check start and its gate,
+hand-over and late-evaluation holds, while using 160A's one owner probe for every run-root refusal
+and folder creation. `CheckStart` no longer carries a second probe callback: its four-argument
+creator receives the check pane's own probe. Each tab still supplies its own creator, words,
+profile and counts. The standalone check test world uses that same option. The source assertions
+were deliberately relocated from Model/Standards' former direct calls to both creator assignments
+and the shared creation/refusal; the assertions still require the owner probe.
+
+The integration exposed the interval between 157A's early `StopRestarting` and 160A's later host
+`Dispose`: a save there said to retry the restart, and a deferred restart finishing there could
+still notify tabs being stopped. `StopRestarting` now marks the host as stopping before it waits
+for the restart watcher, and `Dispose` takes that same first step. The save's other-tab notification
+stays under the restart lock and is suppressed once stopping begins. A save already written in
+this interval is answered `AddInStopping`, and deferred completions post no status or tab callback.
+No document guard, numerical result or engineering acceptance changes.
+
+**Test-first evidence, run 2026-10-22:** T303 deliberately strengthens
+`ASaveOnceTheRestartIsStoppedRestartsNothing` from `BackendNotRestarted` to `AddInStopping`, adding
+persistence and no-callback assertions. Two new deferred-completion theories cover success and
+failure after the early stop returns and inside its watcher join, before host disposal. All five
+cases failed before the shared unload mark, then passed. The final focused run of the restart,
+check-hold, host, page, run-folder and Send classes passed 959 cases; both provisional Release
+rebuilds had zero warnings and zero errors. Both pane fixture generators ran with the combined
+`CheckRunning` and `AddInStopping` vocabulary; the captured Send-event pin names the generated
+Windows/CRLF bytes. No timing assertion was loosened, no live test ran, and SOLIDWORKS was not
+started.
+
+An independent scoped review on 2026-10-23 approved the three contract unions and the relocated
+owner-probe source assertions with no finding; it made no edits and ran no tests.
+
+This is provisional integration evidence, not a final-tree gate. The final 160A late-init fixes,
+its green PR #34 and the resulting `main` must be integrated first; complete Windows C#, Python
+3.12/3.11 with the tokenizer required, Ruff and the record checks remain T306. Decision 157A stays
+in progress until its own PR lands with green CI.
+
+**Final integration gates, 2026-10-23 (T306).** PR #34 landed after all four CI checks passed.
+Its merge, `6b0508c303900a0de333705e592cd721cddee61f`, has the same tree as the final 160A tip,
+`0bbef373a11a4a879d87e3465c74634b2fde87c8`. The pending integration was recreated by merging that
+actual `origin/main`, resolving both branches' changes, and regenerating both pane fixture families.
+Before these final record updates, its entire staged tree was exactly
+`01805bce78ef0fadbf6cad1802ddbf57d286f412`, the tree tested below: no production or test blob changed
+when the provisional parent was replaced with the actual main merge. The captured Send-event pin was
+also checked against the generated Windows/CRLF bytes.
+
+The complete Windows Release rebuild had zero warnings and zero errors; 10,125 extractor tests and
+3,948 add-in tests passed, with none skipped. The complete non-live Python suites, with the tokenizer
+required, each passed 18,112 tests and skipped 5 on Python 3.12 and on Python 3.11. The all-extras sync,
+tokenizer fetch and Ruff passed. The changed Markdown's 163 relative file links were valid, both changed
+task files had unique task ids, staged whitespace was clean, and all 67 changed tracked files had LF
+or no-newline index content. Final record and identifier checks are repeated after the decision-register
+and handoff updates, before committing. No live test ran and SOLIDWORKS was not started.
+
+Independent final review of the branch and independent review of the refreshed integration found no
+material finding; the latter's approval was conditional on these complete gates. The earlier scoped
+review also approved the merged contracts and relocated probe assertions. The documented minute-expiry
+limitation remains. Decision 160A is now landed; decision 157A remains in progress until its own PR
+lands with green CI. Remodel Start remains disabled, and the separate 159A Stop, after-dump and
+changed-root cleanup defects, T180 and the seat prerequisites remain open.
 
 ### 158A. A hold on the tool service's attachment holds back a follow for an hour at most, and 152A's two follow rules stand (2026-10-21)
 
@@ -5275,4 +6052,6 @@ live test was started. The refreshed tokenizer-required non-live suites complete
 18,112 passed and 5 skipped on each of Python 3.12.3 and 3.11.16 (`--isolated --all-extras`).
 Sync, tokenizer fetch and Ruff passed. T302 was closed on 2026-10-23 after inspecting both
 JUnit reports (zero failures/errors), the independent approval and the final C# results.
-Decision 160A remains in progress until its PR passes CI and merges.
+At the T302 record, decision 160A remained in progress pending CI and delivery.
+Delivery update, 2026-10-23: PR #34 passed all four required checks and merged at `6b0508c`;
+the decision register now records 160A as done.
