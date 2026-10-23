@@ -190,6 +190,14 @@ decision 154A's reviews, finding F6):* of any run root in force in this SOLIDWOR
 force, or one a settings save has since moved from - on every tab that opens a run, so a run made
 before the move still opens.
 
+*Amended 2026-10-21 (feature 004, owner decision 159A; 004 `research.md` R19.3):* a failure these
+shared rows catch - Windows that would not open a file or a folder, SOLIDWORKS that would not show an
+entity - is answered with its own message on every tab but the Remodel tab, whose host answers in its own
+plain words (`PaneActionsOptions.FailureWords`), since the message can name a path, and writes the message
+to the add-in's log. The Remodel tab tells the add-in's word that the backend did not start in its own words
+as well, `RemodelHost.BackendDidNotStartMessage`, with this section's way on; the Review tab shows the
+failure whole.
+
 The page talks to the backend directly for messages, evidence answers and dispositions, using
 the token and origin from `init`. **The event stream is the exception**: the host reads
 `GET /sessions/{chat_id}/events` itself and pushes each frame over this channel. That route

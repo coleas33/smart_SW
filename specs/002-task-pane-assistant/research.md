@@ -1685,6 +1685,9 @@ no broken link.
     R18.1):* `DocumentDirty` and `ExternalReferences` - the add-in's own sentences now, whoever
     refused - the add-in's `RunNotFound` and its word on a copy gone during a run speak plain words
     and name no path. The rest of this list stands, recorded again in 004 research R18.7.
+    *Settled 2026-10-21 by owner decision 159A ("3A"; 004 research R19.3; 004 T208, T209):* the rest
+    of the list too - every failure the Remodel tab can print reaches it in plain words with no path,
+    and the failure's own sentence goes to the add-in's log.
 
 **3. Kept recorded.** Both questions stand as recorded, behaviour unchanged, each with a dated
 note where it is recorded: 146A's owner question 1, above, and 011 `research.md` R9.5 item 1's
@@ -2344,7 +2347,9 @@ T206, landed on `main` first; the commits that made them carry their first numbe
     attached to and changes nothing; or the copy, when the close left it open and active, which the
     tool service then follows, telling the plan lost (24A) in words that say SOLIDWORKS switched
     documents (the review's R5). Before 152A that switch was skipped for good, and the next switch
-    told the plan lost. Both pinned (`RemodelHostTests`); owner question 3.
+    told the plan lost. Both pinned (`RemodelHostTests`); owner question 3. *Settled 2026-10-21 by
+    owner decision 159A (question 3, below):* the follow is kept, and the plan is no longer told
+    lost.
   - The same document closed and opened again leaves the attachment on the closed one, by path;
     its commands fail with their own errors, since the presence check finds the reopened file by its
     name (this record first said "document no longer open", which the review's N4 corrected). Older
@@ -2378,6 +2383,13 @@ T206, landed on `main` first; the commits that made them carry their first numbe
   3. With Start switched off, should the look once a plan ends follow into the re-modeler's copy its
      close left open, and should a plan whose session was closed at the plan be told lost when the
      tool service re-attaches?
+     *Settled 2026-10-21 by owner decision 159A ("3A"; 004 research R19.5; 004 T212, T213):* the look
+     follows into the copy, as the tool service follows the document SOLIDWORKS has active; and a plan
+     closed at the plan is not told lost by a re-attach or a teardown, which take nothing from it - in
+     this build Start answers it `StartNotValidated` either way. Restoring the engineer's part as the
+     active document would take a handle to it, which the re-modeler's exception rules out, and
+     skipping the copy would leave the bridge on another document than the active one, the state 152A
+     ends.
 - **Review**: an independent adversarial review of the branch at `cf67b69` found no must-fix - a
   session is handed only a bridge that served its document when asked, and that pipe then serves
   that document or nothing - and five should-fixes and nine nits, settled test first by T212 to T214:

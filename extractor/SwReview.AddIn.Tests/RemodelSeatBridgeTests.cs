@@ -108,18 +108,18 @@ public sealed class RemodelSeatBridgeTests : IDisposable
         Assert.Equal(RunId, _solidworks.Tag);
         AssertIdleAfter(1);
 
-        var snapshot = Ok<RemodelSnapshotResult>(dispatcher.Dispatch(Request(RemodelCommands.Snapshot, new { })));
+        var snapshot = Ok<RemodelSnapshotResult>(dispatcher.Dispatch(Request(RemodelCommands.Snapshot, new { run_id = RunId })));
         Assert.Equal(new[] { PersistRefCodec.Encode(StandInSolidworks.BossRef), PersistRefCodec.Encode(StandInSolidworks.CutRef) }, snapshot.Order);
         Assert.Equal("Boss-Extrude1", snapshot.Names[PersistRefCodec.Encode(StandInSolidworks.BossRef)]);
         Assert.Equal("\"w\" = 120", Assert.Single(snapshot.Equations).Text);
 
         var rename = Ok<RemodelRenameResult>(dispatcher.Dispatch(Request(
-            RemodelCommands.Rename, new { persist_ref = PersistRefCodec.Encode(StandInSolidworks.CutRef), new_name = "Cut-Pocket1" })));
+            RemodelCommands.Rename, new { run_id = RunId, persist_ref = PersistRefCodec.Encode(StandInSolidworks.CutRef), new_name = "Cut-Pocket1" })));
         Assert.Equal("Cut-Extrude1", rename.PreviousName);
         Assert.Equal(new object?[] { "Cut-Pocket1" }, Assert.Single(_solidworks.Cut.Calls, call => call.Member == "set_Name").Arguments);
         AssertIdleAfter(2);
 
-        var geometry = Ok<GeometryReading>(dispatcher.Dispatch(Request(RemodelCommands.Geometry, new { })));
+        var geometry = Ok<GeometryReading>(dispatcher.Dispatch(Request(RemodelCommands.Geometry, new { run_id = RunId })));
         Assert.Equal(RemodelGeometry.StatusOk, geometry.Status);
         Assert.Equal(0.000125, geometry.VolumeM3);
         Assert.Equal("6061-T6", geometry.MaterialName);
@@ -128,12 +128,12 @@ public sealed class RemodelSeatBridgeTests : IDisposable
             _solidworks.MassPropertyOverrides.Members);
         AssertIdleAfter(2);
 
-        var rebuild = Ok<RemodelRebuildResult>(dispatcher.Dispatch(Request(RemodelCommands.Rebuild, new { force = false })));
+        var rebuild = Ok<RemodelRebuildResult>(dispatcher.Dispatch(Request(RemodelCommands.Rebuild, new { run_id = RunId, force = false })));
         Assert.Equal(0, rebuild.RebuildErrors);
         Assert.Equal(2, rebuild.FeatureErrors.Count);
         AssertIdleAfter(3);
 
-        var close = Ok<RemodelCloseResult>(dispatcher.Dispatch(Request(RemodelCommands.Close, new { discard_copy = false })));
+        var close = Ok<RemodelCloseResult>(dispatcher.Dispatch(Request(RemodelCommands.Close, new { run_id = RunId, discard_copy = false })));
         Assert.True(close.Closed);
         Assert.False(close.CopyDeleted);
 
@@ -215,7 +215,7 @@ public sealed class RemodelSeatBridgeTests : IDisposable
     {
         SwBridgeDispatcher dispatcher = PlanOnTheSeat();
 
-        var close = Ok<RemodelCloseResult>(dispatcher.Dispatch(Request(RemodelCommands.Close, new { discard_copy = false })));
+        var close = Ok<RemodelCloseResult>(dispatcher.Dispatch(Request(RemodelCommands.Close, new { run_id = RunId, discard_copy = false })));
 
         Assert.True(close.Closed);
         List<(string Member, object?[] Arguments)> calls = _solidworks.Application.Calls.Select(call => (call.Member, call.Arguments)).ToList();
@@ -237,7 +237,7 @@ public sealed class RemodelSeatBridgeTests : IDisposable
         SwBridgeDispatcher dispatcher = PlanOnTheSeat();
         _solidworks.Application.Handle("CloseDoc", arguments => null);
 
-        BridgeResponse response = dispatcher.Dispatch(Request(RemodelCommands.Close, new { discard_copy = false }));
+        BridgeResponse response = dispatcher.Dispatch(Request(RemodelCommands.Close, new { run_id = RunId, discard_copy = false }));
 
         Assert.Equal(RemodelErrorCodes.CloseIncomplete, Assert.IsType<RemodelErrorResult>(response.Result).ErrorCode);
         Assert.Contains("SOLIDWORKS still has the copy open", response.Error, StringComparison.Ordinal);

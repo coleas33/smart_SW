@@ -68,23 +68,38 @@ and indices change on every reorder.
 **Every key in a command's `Params` cell is always present on the wire**, with `null` for a value
 this call has none of and `[]` for an absent list; `bridge/remodel_client.py` composes the whole
 object for every command, so a handler reads a fixed set of keys and never has to tell "absent"
-from "null". `remodel.snapshot` and `remodel.geometry` send `params: {}`, which is the whole
+from "null". `remodel.snapshot` and `remodel.geometry` send `params: {run_id}`, which is the whole
 shape and not an abbreviation of one.
+
+**Every command after `remodel.open` names its run.** *Added 2026-10-21 (owner decision 159A, on
+Codex's review of the merge, defence in depth; protocol 1.5; `research.md` R19.15):* `run_id`, first
+in its `Params`, is the id `remodel.open` was given - the run folder's own name, which the open tags
+the copy with and the session keeps. The bridge reads it as it reads the open's, trimmed of any
+space around it, then compares it exactly - case and all - with its session's before anything is
+read or written: no session is `target_mismatch`, as before, whatever run the command
+names; a command naming no run, or one that is not a non-empty string, is `bad_request`; and one
+naming another run is `session_mismatch`, the session it reached left as it was. Until then a
+command after the open named no run, and the bridge carried it out on whatever session it held: a
+run's worker that outlived its session - the add-in took a status poll the backend did not answer
+for the run's end, closed the session and was free, and the next plan opened its copy on the same
+bridge - had its next change carried out on the next run's copy, which passes every check
+`VerifyTarget` makes because it is that run's own. `run_id` names a run, not a document: no path is
+added to any command, and the property below is unchanged.
 
 | Command | Params | Result on `ok` |
 |---------|--------|----------------|
 | `remodel.probe_scope` | `{source_path}` | `{probe_id, source_path, scope_signals}` |
 | `remodel.open` | `{source_path, copy_path, run_id, probe_id}` | `{document_path, tag, feature_count, scope_signals, configurations[], document_length_unit, source_attestation}` |
-| `remodel.snapshot` | `{}` | `{order[], names{}, descriptions{}, equations[], unreadable_equation_indexes[], rebuild_errors, feature_count}` |
-| `remodel.rename` | `{persist_ref, new_name}` | `{previous_name, new_name}` |
-| `remodel.reorder` | `{feature_persist_ref, anchor_persist_ref, location}` | `{previous_anchor_persist_ref, previous_location, previous_index, new_index}` |
-| `remodel.folder` | `{op, name, member_persist_refs[], folder_persist_ref}` | `{folder_persist_ref, name, member_persist_refs[]}` |
-| `remodel.describe` | `{persist_ref, text}` | `{previous_text}` |
-| `remodel.equation` | `{op, index, text, which_configs}` | `{index, count_before, count_after, previous_text, round_trip_text, helper_path}` |
-| `remodel.rebuild` | `{force}` | `{rebuild_errors, whats_wrong[], elapsed_ms, feature_errors[]}` |
-| `remodel.geometry` | `{}` | `GeometryReading` |
-| `remodel.save` | `{verdict}` | `{path, errors, warnings, save_flag_after}` |
-| `remodel.close` | `{discard_copy}` | `{closed, copy_deleted}` |
+| `remodel.snapshot` | `{run_id}` | `{order[], names{}, descriptions{}, equations[], unreadable_equation_indexes[], rebuild_errors, feature_count}` |
+| `remodel.rename` | `{run_id, persist_ref, new_name}` | `{previous_name, new_name}` |
+| `remodel.reorder` | `{run_id, feature_persist_ref, anchor_persist_ref, location}` | `{previous_anchor_persist_ref, previous_location, previous_index, new_index}` |
+| `remodel.folder` | `{run_id, op, name, member_persist_refs[], folder_persist_ref}` | `{folder_persist_ref, name, member_persist_refs[]}` |
+| `remodel.describe` | `{run_id, persist_ref, text}` | `{previous_text}` |
+| `remodel.equation` | `{run_id, op, index, text, which_configs}` | `{index, count_before, count_after, previous_text, round_trip_text, helper_path}` |
+| `remodel.rebuild` | `{run_id, force}` | `{rebuild_errors, whats_wrong[], elapsed_ms, feature_errors[]}` |
+| `remodel.geometry` | `{run_id}` | `GeometryReading` |
+| `remodel.save` | `{run_id, verdict}` | `{path, errors, warnings, save_flag_after}` |
+| `remodel.close` | `{run_id, discard_copy}` | `{closed, copy_deleted}` |
 
 ### `remodel.probe_scope`
 
@@ -627,7 +642,11 @@ answers `remodel.start` with `SessionLost` when it is not the one listening now,
 is the backstop for the one window the pane cannot close - a re-attach that lands between the
 pane's check and the backend's first bridge call: every command after `remodel.open` reaches a
 dispatcher with no session and is answered `target_mismatch` ("remodel.open has not returned in
-this bridge session") before any write, so the run changes nothing either way.
+this bridge session") before any write, so the run changes nothing either way. *Amended 2026-10-21
+(owner decision 159A, on Codex's review; `research.md` R19.15):* and on the attachment it was made
+on, a session another run holds answers this run's commands `session_mismatch`, before any read or
+write ("The commands", above), so a run's worker that outlived its session cannot reach the next
+run's copy there either.
 
 What the discarded session leaves on the seat - the system toggles `remodel.open` set, and the
 copy still open in SOLIDWORKS, since neither the dispatcher nor `ToolServiceHost.Dispose` ends a
@@ -758,6 +777,7 @@ stays unknown and is never guessed into the nearest class.
 | `tag_failed` | The session tag did not write or did not read back | `RemodelTargetError` | Run aborts; the copy is deleted |
 | `preexisting_rebuild_errors` | The part was already broken at baseline | `RemodelPreflightError` | Refused **after** the copy exists, because the reading needs a rollback and a rebuild; the handler deletes the copy and closes the document before it answers |
 | `target_mismatch` | One of `VerifyTarget`'s four checks failed | `RemodelTargetError` | Run aborts with the change log intact |
+| `session_mismatch` | A command after `remodel.open` names another run than the one whose session the bridge holds ("The commands"; owner decision 159A, protocol 1.5) | `RemodelTargetError` | Refused before any read or write, the session it reached left as it was; the run that sent it aborts with its change log intact |
 | `guard_refused` | The member is not on the stage-1 allowlist | `RemodelGuardError` | Run aborts; this is a bug, not a condition |
 | `persist_ref_unresolved` | `GetObjectByPersistReference3` returned an error code | `RemodelAddressError` | The change fails and the run stops |
 | `reorder_refused` | `ReorderFeature` returned `false` | `RemodelContractError` | Contract violation: stop, discard the copy |
@@ -830,10 +850,17 @@ the transport. Every other method is named for its command.
 - **`error_code` becomes a class, unchanged.** `ERROR_CLASSES` is the table above, token for
   token, and the exception carries `error_code` and `detail` as the host sent them.
 - **An open circuit is a value, not an exception** (see "Error codes" above).
+- **It acts for one run** (owner decision 159A, protocol 1.5). `RemodelClient(run_id=...)`, the run
+  folder's own name; every route of `backend-remodel.md` but the probe builds its client for the run
+  in its `run_dir`. It opens that run and no other, and adds `run_id` to every command after the
+  open, first; a client given no run sends nothing after the open. The run is the client's and not
+  a method's argument, so a plan's change `params` and an inverse's stay the method's arguments.
 
 The client declares `REMODEL_PROTOCOL_VERSION = "1.1"`. `PROTOCOL_VERSION` in `client.py` stays
 `"1.0"`: the review client needs only the 1.0 envelope, and 1.1 is additive, so it keeps working
-against a host serving this family.
+against a host serving this family. *Amended 2026-10-21 (owner decision 159A):* both are `"1.5"`
+now: the family needs a host that refuses another run's command, and the review client's commands
+are unchanged.
 
 ## Logging
 

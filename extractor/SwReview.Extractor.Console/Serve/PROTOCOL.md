@@ -1,6 +1,6 @@
 # Bridge protocol (`swreview-extract serve`)
 
-Protocol version **1.4**. This file is the contract the Python client in
+Protocol version **1.5**. This file is the contract the Python client in
 `reviewer/src/swreview/bridge/client.py` (T073) is written against; the agent-facing tool
 names and arguments are in
 `specs/001-agentic-design-review/contracts/agent-tools.md`.
@@ -27,6 +27,14 @@ written against 1.0, 1.1 or 1.2 works against a 1.3 host without an edit.
 exactly one member to the `ping` answer, `drawing_read`, described under "`ping`" below. No command
 is added. A client written against 1.0 to 1.3 works against a 1.4 host without an edit and ignores
 the member; the backend reads it (`specs/013-engineer-first-review/contracts/drawing-capability.md`).
+
+**1.5 changes the `remodel.*` family only** (feature 004, owner decision 159A). Every `remodel.*`
+command after `remodel.open` names its run, `params.run_id`, and is refused - before anything is read
+or written - when it names none (`bad_request`) or another run than the one whose session the host
+holds (`session_mismatch`, a new token); described under "The `remodel.*` family" below. It is not
+additive for that family: a remodel client written before 1.5 is refused after its open. The six
+other commands are untouched, so a client written against 1.0 to 1.4 that sends none of the family
+works against a 1.5 host without an edit.
 
 `ping` reports the host's own `SwBridgeDispatcher.ProtocolVersion`, which is what a client
 compares against.
@@ -143,7 +151,7 @@ an `Interference` that travels over the bridge is byte-identical to one written 
 ```
 
 ```json
-{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.4","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17,"drawing_read":"open_only"},"error":null,"elapsed_ms":1}
+{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.5","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17,"drawing_read":"open_only"},"error":null,"elapsed_ms":1}
 ```
 
 `document` and `component_count` are how a client checks that the component ids in its
@@ -387,6 +395,13 @@ and it is three things:
    reference and reaches the one document the run's scope holds. The Python end of this
    family is `reviewer/src/swreview/bridge/remodel_client.py`, whose own command allowlist
    is `ping` plus these twelve — `COMMANDS` in `client.py` is unchanged.
+4. **Every command after `remodel.open` names its run** (1.5, owner decision 159A). `params.run_id`
+   is the id the open was given - the run folder's own name, which it tags the copy with - and the
+   host reads it as it reads the open's, trimmed of any space around it, then compares it exactly
+   with its session's before anything is read or written: none is
+   `bad_request`, another run's is `session_mismatch`, and with no session the answer is
+   `target_mismatch` as before. A run's command can then never be carried out on another run's
+   copy, which passes every check the scope makes because it is that run's own.
 
 Those that write - all but `remodel.probe_scope`, `remodel.snapshot` and `remodel.geometry`,
 which `RemodelCommandTable` marks as writing nothing - make their writes through the

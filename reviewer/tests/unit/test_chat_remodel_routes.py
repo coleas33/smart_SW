@@ -44,6 +44,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -51,7 +52,12 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from swreview.agent import providers
-from swreview.bridge.remodel_client import CircuitOpen, RemodelError, RemodelPreflightError
+from swreview.bridge.remodel_client import (
+    CircuitOpen,
+    RemodelClient,
+    RemodelError,
+    RemodelPreflightError,
+)
 from swreview.chat import remodel as remodel_routes
 from swreview.chat.server import ChatError, create_app
 from swreview.exceptions import EXCEPTIONS_FILE_NAME
@@ -83,6 +89,8 @@ PIPE = "swreview-remodel-abc123"
 SECRET = "the-remodel-bridge-secret-nobody-echoes"
 
 RUN_ID = "20260916-142201-bracket-remodel"
+JOB_ID = "0123456789abcdef0123456789abcdef"
+"""A job id the add-in chose for its Start (owner decision 159A, on the final review: S3)."""
 PROBE_ID = "probe:1"
 UNIT = "mm"
 AT = datetime(2026, 9, 16, 14, 22, 1, tzinfo=UTC)
@@ -759,6 +767,59 @@ class TestTheRefusalMapping:
         bridge.probe_returns = CircuitOpen(command="remodel.probe_scope", last_error=None)
 
         assert probe(client, source).json()["error_class"] == "BridgeUnavailable"
+
+    @pytest.mark.parametrize("route", ["probe", "open"])
+    def test_an_unsaved_part_is_retryable_on_every_route(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        route: str,
+    ) -> None:
+        """Owner decision 159A (004 research R18.7 item 2): `DocumentDirty` is retryable throughout.
+
+        The add-in's own reading of the probe's signals answers it retryable, and this mapping did
+        not, so one class carried two flags. Retryable is the true one: saving the part, or closing
+        it unsaved and opening it again, makes the same press succeed. The bridge refuses it at the
+        probe and again at the open, as it reads the part again before the copy.
+        """
+        sentence = "'C:\\Fictional\\FICT-bracket.SLDPRT' has unsaved changes."
+        if route == "probe":
+            bridge.probe_raises = RemodelPreflightError(sentence, "source_dirty", {})
+            response = probe(client, source)
+        else:
+            bridge.open_raises = RemodelError(sentence, "source_dirty", {})
+            response = open_copy(client, run_dir, source)
+
+        assert response.status_code == 400, response.text
+        body = response.json()
+        assert body["error_class"] == "DocumentDirty"
+        assert body["retryable"] is True
+
+    @pytest.mark.parametrize("route", ["probe", "open"])
+    def test_a_part_that_references_other_files_stays_not_retryable(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        route: str,
+    ) -> None:
+        """Owner decision 159A: the other class the add-in words itself is unchanged, and false on
+        every route: pressing again changes nothing, and breaking the references is a change to the
+        part."""
+        sentence = "'C:\\Fictional\\FICT-bracket.SLDPRT' has 2 external file reference(s)."
+        if route == "probe":
+            bridge.probe_raises = RemodelPreflightError(sentence, "external_refs", {})
+            response = probe(client, source)
+        else:
+            bridge.open_raises = RemodelError(sentence, "external_refs", {})
+            response = open_copy(client, run_dir, source)
+
+        assert response.status_code == 400, response.text
+        assert response.json()["error_class"] == "ExternalReferences"
+        assert response.json()["retryable"] is False
 
 
 class TestAScopeRefusalInPlainWords:
@@ -1574,6 +1635,31 @@ class TestThePackageAfterRendezvous:
         assert read_changes(run_dir / CHANGES_FILE_NAME), "the changes applied are kept"
         assert state["plan_state"] == "failed"
 
+    def test_a_stop_while_the_run_waits_for_its_after_dump_ends_the_run(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        app: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Owner decision 159A, on the final review (S1): the wait listened for the dump alone,
+        so a Stop asked for while the run waited for a dump that was never coming changed
+        nothing for the wait's whole bound, ten minutes. It ends the wait now: the run fails
+        saying it was stopped, its plan `failed` and its change log intact."""
+        calibrated(monkeypatch)
+        app.state.remodel.package_after_timeout = WAIT_S * 10
+        planned(client, run_dir, source)
+        job_id = str(start(client, run_dir).json()["job_id"])
+        wait_for(client, job_id, lambda state: state["awaiting"] == "package_after")
+
+        assert client.post(f"/remodel/runs/{job_id}/stop", json={}).json() == {"stopping": True}
+
+        state = wait_for(client, job_id, lambda state: state["state"] == "failed")
+        assert "stopped" in (state["error"] or "")
+        assert state["plan_state"] == "failed"
+        assert read_changes(run_dir / CHANGES_FILE_NAME), "the changes applied are kept"
+
 
 class TestStop:
     def test_stop_is_idempotent_and_sets_the_runs_flag(
@@ -1696,6 +1782,135 @@ class TestClose:
         bridge.close_document = refuse  # type: ignore[method-assign]
 
         assert close(client, run_dir).json() == {"closed": True}
+
+
+BRIDGE_METHODS = (
+    "probe_scope",
+    "open",
+    "snapshot",
+    "rename",
+    "reorder",
+    "folder",
+    "describe",
+    "equation",
+    "rebuild",
+    "geometry",
+    "save",
+    "close_document",
+)
+"""Every `RemodelClient` method that sends a `remodel.*` command."""
+
+
+def runs_named(bridge: ProbingBridge, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
+    """Each command the bridge is sent, with the run its client acted for as it was sent."""
+    named: list[tuple[str, Any]] = []
+    for method in BRIDGE_METHODS:
+        sent = getattr(bridge, method)
+
+        def recorded(*args: Any, _method: str = method, _sent: Any = sent, **kwargs: Any) -> Any:
+            named.append((_method, getattr(bridge, "run_id", "no run bound")))
+            return _sent(*args, **kwargs)
+
+        monkeypatch.setattr(bridge, method, recorded)
+    return named
+
+
+class TestEachRouteNamesItsRun:
+    """Owner decision 159A, on Codex's review of the merge (C1, defence in depth; 004 T240): a
+    route that acts on a run's session builds its client for that run - the run folder's own name,
+    the `run_id` `remodel.open` is given - so every command after the open names it, and the bridge
+    refuses a command of another run. The probe runs before any session and acts for none."""
+
+    def test_the_probe_acts_for_no_run(
+        self,
+        client: TestClient,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        named = runs_named(bridge, monkeypatch)
+
+        assert probe(client, source).status_code == 200
+
+        assert named == [("probe_scope", None)]
+
+    def test_the_open_and_its_baseline_name_the_run_they_open(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        named = runs_named(bridge, monkeypatch)
+
+        assert open_copy(client, run_dir, source).status_code == 200
+
+        assert named == [("open", RUN_ID), ("geometry", RUN_ID)]
+        assert bridge.calls[0][1]["run_id"] == RUN_ID
+
+    def test_the_close_after_a_failed_open_names_the_run_it_opened(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _break_after_the_open(bridge, "attestation")
+        named = runs_named(bridge, monkeypatch)
+
+        assert open_copy(client, run_dir, source).json()["error_class"] == "RunFolderFailed"
+
+        assert named == [("open", RUN_ID), ("close_document", RUN_ID)]
+
+    def test_every_command_a_run_sends_names_its_run(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calibrated(monkeypatch)
+        named = runs_named(bridge, monkeypatch)
+
+        run_to_completion(client, run_dir, source)
+
+        assert named[0] == ("probe_scope", None)
+        sent = {method for method, _ in named[1:]}
+        assert {"open", "reorder", "folder", "rebuild", "geometry", "save"} <= sent, sent
+        assert {run for _, run in named[1:]} == {RUN_ID}
+
+    def test_the_close_names_the_run_it_closes(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        assert open_copy(client, run_dir, source).status_code == 200
+        named = runs_named(bridge, monkeypatch)
+
+        assert close(client, run_dir).json() == {"closed": True}
+
+        assert named == [("close_document", RUN_ID)]
+
+    def test_with_no_factory_the_route_builds_the_client_for_its_run(self, run_root: Path) -> None:
+        server = remodel_routes.RemodelServer(
+            run_root=run_root,
+            redact=lambda text: text,
+            settings=lambda body: pytest.fail("building a client constructs no provider"),
+        )
+
+        built = server._client({"bridge": BRIDGE}, RUN_ID)
+        unbound = server._client({"bridge": BRIDGE})
+
+        assert isinstance(built, RemodelClient)
+        assert built.run_id == RUN_ID
+        assert isinstance(unbound, RemodelClient)
+        assert unbound.run_id is None
 
 
 # --- 8. the door, and no language model ---------------------------------------------------
@@ -1943,6 +2158,223 @@ def test_a_poll_spanning_finalization_never_pairs_terminal_state_with_old_plan(
         assert "package-after" in terminal["error"].lower()
     else:
         assert terminal["error"] is None
+
+
+def _waiting(job: remodel_routes.RemodelJob) -> tuple[threading.Thread, dict[str, Any]]:
+    """The job's wait for its after-dump, on a thread of its own, and what it ended with."""
+    ended: dict[str, Any] = {}
+
+    def wait() -> None:
+        began = time.monotonic()
+        try:
+            ended["package"] = job.wait_for_package_after()
+        except Exception as exc:  # the end is what the tests read
+            ended["raised"] = exc
+        ended["waited_s"] = time.monotonic() - began
+
+    thread = threading.Thread(target=wait, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + WAIT_S
+    while job.state != remodel_routes.JOB_AWAITING and time.monotonic() < deadline:
+        time.sleep(POLL_S)
+    assert job.state == remodel_routes.JOB_AWAITING, "the job never began to wait"
+    return thread, ended
+
+
+def test_a_stop_asked_for_while_the_job_waits_for_its_after_dump_ends_the_wait(
+    tmp_path: Path,
+) -> None:
+    """Owner decision 159A, on the final review (S1): `wait_for_package_after` waited on the
+    dump's arrival alone, so a Stop asked for meanwhile ended nothing before the wait's bound."""
+    job = remodel_routes.RemodelJob(job_id="fict-stop", run_dir=tmp_path, timeout_s=WAIT_S * 10)
+    thread, ended = _waiting(job)
+
+    job.request_stop()
+    thread.join(WAIT_S)
+
+    assert not thread.is_alive(), "the wait outlived the Stop"
+    assert isinstance(ended.get("raised"), remodel_routes.PackageAfterStopped)
+    assert "stopped" in str(ended["raised"])
+    assert ended["waited_s"] < WAIT_S
+
+
+def test_a_stop_the_apply_loop_already_honoured_does_not_end_the_wait(tmp_path: Path) -> None:
+    """A Stop asked for before the wait began was the apply loop's to honour, between changes: that
+    run is verified and saved as truncated, so its wait goes on and takes the dump as it arrives."""
+    job = remodel_routes.RemodelJob(
+        job_id="fict-stopped-before", run_dir=tmp_path, timeout_s=WAIT_S * 10
+    )
+    job.request_stop()
+    thread, ended = _waiting(job)
+
+    time.sleep(remodel_routes.STOP_LOOK_S * 5)
+    assert thread.is_alive(), "a Stop the apply loop honoured ended the wait"
+    job.deliver(PACKAGE)
+    thread.join(WAIT_S)
+
+    assert ended.get("package") is PACKAGE
+
+
+def test_the_stop_route_asks_through_the_job(
+    app: Any, client: TestClient, run_dir: Path, source: Path
+) -> None:
+    """The route asks for the Stop the way the wait counts one, not by setting the flag alone."""
+    planned(client, run_dir, source)
+    job_id = str(start(client, run_dir).json()["job_id"])
+    job = app.state.remodel.jobs[job_id]
+    asked = job.stops
+
+    client.post(f"/remodel/runs/{job_id}/stop", json={})
+
+    assert job.stops == asked + 1
+    assert job.stop.is_set()
+    deliver_package_after(client, job_id, run_dir)
+
+
+class TestTheStartNamesItsJob:
+    """Owner decision 159A, on the final review (S3; older than 159A): a Start whose answer was lost
+    may still have started its job, so the add-in names the job it starts and asks the same Start
+    again until one is answered. The same Start asked again is the same job - whatever it has done
+    since - and never a second run."""
+
+    def test_a_start_that_names_its_job_is_that_job(
+        self, client: TestClient, run_dir: Path, source: Path, app: Any
+    ) -> None:
+        planned(client, run_dir, source)
+
+        started = start(client, run_dir, job_id=JOB_ID)
+
+        assert started.status_code == 201, started.text
+        assert started.json() == {"job_id": JOB_ID, "chat_id": JOB_ID}
+        assert list(app.state.remodel.jobs) == [JOB_ID]
+        deliver_package_after(client, JOB_ID, run_dir)
+
+    def test_the_same_start_asked_again_is_the_same_job_and_no_second_run(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        app: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        submitted: list[str] = []
+        submit = app.state.remodel._submit
+
+        def counted(job: Any, action: Any) -> None:
+            submitted.append(job.job_id)
+            submit(job, action)
+
+        monkeypatch.setattr(app.state.remodel, "_submit", counted)
+        planned(client, run_dir, source)
+
+        first = start(client, run_dir, job_id=JOB_ID)
+        again = start(client, run_dir, job_id=JOB_ID)
+
+        assert (first.status_code, again.status_code) == (201, 201), again.text
+        assert again.json() == {"job_id": JOB_ID, "chat_id": JOB_ID}
+        assert submitted == [JOB_ID]
+        deliver_package_after(client, JOB_ID, run_dir)
+
+    def test_the_same_start_asked_again_after_its_job_ended_is_still_that_job(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        app: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The plan is past `planned` and the folder holds a change log, which refuse any other
+        Start: the answer that was lost is still this job's."""
+        calibrated(monkeypatch)
+        app.state.remodel.package_after_timeout = 0.05
+        planned(client, run_dir, source)
+        assert start(client, run_dir, job_id=JOB_ID).status_code == 201
+        wait_for(client, JOB_ID, lambda state: state["state"] == "failed")
+
+        again = start(client, run_dir, job_id=JOB_ID)
+
+        assert again.status_code == 201, again.text
+        assert again.json() == {"job_id": JOB_ID, "chat_id": JOB_ID}
+
+    def test_a_job_id_another_folder_holds_is_refused(
+        self, client: TestClient, run_dir: Path, source: Path, run_root: Path
+    ) -> None:
+        planned(client, run_dir, source)
+        assert start(client, run_dir, job_id=JOB_ID).status_code == 201
+        other = run_root / "20260916-142305-bracket-remodel"
+        other.mkdir()
+
+        refused = start(client, other, job_id=JOB_ID)
+
+        assert refused.status_code == 400
+        assert refused.json()["error_class"] == "InvalidRequest"
+        deliver_package_after(client, JOB_ID, run_dir)
+
+    @pytest.mark.parametrize("job_id", ["not-a-job", "0123456789ABCDEF0123456789ABCDEF", 7, ""])
+    def test_a_job_id_that_is_not_one_is_refused_and_nothing_starts(
+        self, client: TestClient, run_dir: Path, source: Path, app: Any, job_id: Any
+    ) -> None:
+        planned(client, run_dir, source)
+
+        refused = start(client, run_dir, job_id=job_id)
+
+        assert refused.status_code == 400
+        assert refused.json()["error_class"] == "InvalidRequest"
+        assert app.state.remodel.jobs == {}
+
+    def test_two_starts_of_one_job_at_once_start_one_run(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        app: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A Start whose answer was lost and the same Start asked again can be in the backend at
+        once; one is answered with the job the other made."""
+        planned(client, run_dir, source)
+        server = app.state.remodel
+        submitted: list[str] = []
+        monkeypatch.setattr(server, "_submit", lambda job, action: submitted.append(job.job_id))
+        facts = remodel_routes._plan_facts
+
+        def slow(folder: Path) -> tuple[str | None, int]:
+            time.sleep(0.3)
+            return facts(folder)
+
+        monkeypatch.setattr(remodel_routes, "_plan_facts", slow)
+        jobs: list[Any] = []
+
+        def one() -> None:
+            jobs.append(server._start(run_dir, object(), SimpleNamespace(effort=None), JOB_ID))
+
+        threads = [threading.Thread(target=one) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(WAIT_S)
+
+        assert submitted == [JOB_ID]
+        assert len(jobs) == 2
+        assert jobs[0] is jobs[1]
+
+
+def test_a_status_poll_that_meets_a_torn_last_line_answers(
+    client: TestClient, run_dir: Path, source: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Owner decision 159A, on the final review (its probe P-B): the change log was read whole with
+    strict UTF-8, so a poll that landed while a line holding a character of more than one byte was
+    half written answered 500 - which the add-in reads as a backend not answering, and a log that
+    stayed so would hold the run forever. A torn last line is a poll that came mid-write."""
+    calibrated(monkeypatch)
+    job_id, ended = run_to_completion(client, run_dir, source)
+    with (run_dir / CHANGES_FILE_NAME).open("ab") as log:
+        log.write('{"seq": 99, "kind": "rename", "subject": {"name": "\u00d8'.encode()[:-1])
+
+    polled = client.get(f"/remodel/runs/{job_id}")
+
+    assert polled.status_code == 200, polled.text
+    assert polled.json()["changes_applied"] == ended["changes_applied"]
 
 
 def test_failed_job_publishes_its_reason_before_the_terminal_state() -> None:

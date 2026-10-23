@@ -266,7 +266,8 @@ public sealed class RemodelPlanEndToEndTests
                     return null;
                 });
                 int rebuilds = world.Solidworks.Copy.Document.Calls.Count(call => call.Member == "ForceRebuild3");
-                PipeReply command = world.Remodel(RemodelCommands.Rebuild, new { force = false });
+                PipeReply command = world.Remodel(
+                    RemodelCommands.Rebuild, new { run_id = world.Backend.OpenedRunId, force = false });
                 Assert.Equal(BridgeStatus.Error, command.Status);
                 Assert.Equal(rebuilds + 1, world.Solidworks.Copy.Document.Calls.Count(call => call.Member == "ForceRebuild3"));
                 Assert.True(world.Solidworks.CopyOpen);
@@ -296,11 +297,13 @@ public sealed class RemodelPlanEndToEndTests
     /// <summary>
     /// T167 and decision 24A in this build (004 T176): a plan waiting for Start holds no session, so
     /// when the tool service stops - a re-attach or an unload - its teardown finds nothing to end and
-    /// makes no SOLIDWORKS call, and the page hears only that the plan is lost, never a teardown's
-    /// failure after it.
+    /// makes no SOLIDWORKS call, and the page hears nothing of it: no teardown's failure, and - owner
+    /// decision 159A (004 research R19) - no lost plan, since the plan's session was closed at the plan
+    /// and the stop took nothing from it. *Changed deliberately 2026-10-21 (159A):* the page heard the
+    /// plan was lost, and this case was named for it; what else it pins is as it was.
     /// </summary>
     [Fact]
-    public void AToolServiceThatStopsWhileAPlanWaitsFindsNoSessionAndThePageHearsOnlyThatThePlanIsLost()
+    public void AToolServiceThatStopsWhileAPlanWaitsFindsNoSessionAndThePageHearsNothingOfIt()
     {
         using (var world = new PlanWorld())
         {
@@ -312,11 +315,37 @@ public sealed class RemodelPlanEndToEndTests
             world.Gate.Dispose();
 
             List<JsonElement> told = world.PostedSince(before);
-            JsonElement lost = Assert.Single(told, message => message.GetProperty("type").GetString() == "remodel.plan_lost");
-            Assert.Equal(RemodelHost.PlanLostMessage, lost.GetProperty("payload").GetProperty("message").GetString());
+            Assert.DoesNotContain(told, message => message.GetProperty("type").GetString() == "remodel.plan_lost");
             Assert.Empty(world.StatusErrors(before));
             Assert.Equal(calls, world.Solidworks.Application.Calls.Count);
             Assert.False(world.Solidworks.CopyOpen);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's M1 - a guard). In the real chain a plan's own close
+    /// at the plan, while Start is switched off, is told as every session's ending is (T167), so the host marks the plan's
+    /// session ended as well as closed at the plan. Only the rule that an ended session loses no plan closed at the plan
+    /// (<c>RemodelHost.IsLostPlan</c>) keeps such a plan from being told lost the moment it is made: the page hears nothing
+    /// of a lost plan, and `init` says none is. The host's own tests close no session this way - their close reports no
+    /// ending - so this case is that rule's pin.
+    /// </summary>
+    [Fact]
+    public void AStartOffPlansOwnCloseInTheRealChainNeverTellsItLost()
+    {
+        using (var world = new PlanWorld())
+        {
+            world.Receive("remodel.plan", "p1");
+            world.Reply("remodel.planned", "p1");
+
+            Assert.True(world.Host!.LatestRun!.SessionClosedAtPlan);
+            Assert.True(world.Host.LatestRun.SessionEnded);
+            Assert.DoesNotContain(
+                world.PostedSince(0), message => message.GetProperty("type").GetString() == "remodel.plan_lost");
+            world.Receive("ready", "r1");
+            Assert.Equal(
+                JsonValueKind.Null,
+                world.Reply("init", "r1").GetProperty("latest_run").GetProperty("plan_lost").ValueKind);
         }
     }
 
@@ -589,6 +618,12 @@ public sealed class RemodelPlanEndToEndTests
 
         public Action? BeforeClose { get; set; }
 
+        /// <summary>
+        /// The run the last open was for: the run folder's own name, which every command after the
+        /// open names (owner decision 159A, protocol 1.5).
+        /// </summary>
+        public string? OpenedRunId { get; private set; }
+
         public RemodelProbeReply Probe(RemodelProbeRequest request)
         {
             _log.Add("backend:probe");
@@ -602,6 +637,7 @@ public sealed class RemodelPlanEndToEndTests
         {
             _log.Add("backend:open");
             string copyPath = RemodelCopy.CopyPathFor(request.RunDirectory, request.SourcePath);
+            OpenedRunId = Path.GetFileName(request.RunDirectory);
             Answered(
                 request.Bridge,
                 RemodelCommands.Open,
@@ -609,12 +645,12 @@ public sealed class RemodelPlanEndToEndTests
                 {
                     source_path = request.SourcePath,
                     copy_path = copyPath,
-                    run_id = Path.GetFileName(request.RunDirectory),
+                    run_id = OpenedRunId,
                     probe_id = request.ProbeId,
                 });
 
             _log.Add("backend:geometry");
-            Answered(request.Bridge, RemodelCommands.Geometry, new { });
+            Answered(request.Bridge, RemodelCommands.Geometry, new { run_id = OpenedRunId });
             return new RemodelOpenReply(copyPath, 0, copyPresent: true);
         }
 
@@ -646,7 +682,10 @@ public sealed class RemodelPlanEndToEndTests
         {
             BeforeClose?.Invoke();
             _log.Add("backend:close");
-            Answered(request.Bridge, RemodelCommands.Close, new { discard_copy = request.DiscardCopy });
+            Answered(
+                request.Bridge,
+                RemodelCommands.Close,
+                new { run_id = Path.GetFileName(request.RunDirectory), discard_copy = request.DiscardCopy });
         }
 
         private static JsonElement Answered(BridgeConfig bridge, string command, object parameters)

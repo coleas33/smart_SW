@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -212,7 +212,81 @@ public sealed class RemodelHostTests
 
             world.Receive("ready", "r2", new { });
 
-            Assert.False(world.Reply("init", "r2").GetProperty("latest_run").GetProperty("running").GetBoolean());
+            JsonElement latest = world.Reply("init", "r2").GetProperty("latest_run");
+            Assert.False(latest.GetProperty("running").GetBoolean());
+
+            // Edited deliberately by owner decision 159A, on the final review (004 T251): nor does it carry a word.
+            Assert.Equal(JsonValueKind.Null, latest.GetProperty("status").ValueKind);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T251; research R19.22; its nit): a page that loads again
+    /// while its run runs showed "Running..." where the page that never loaded again shows the run's last word - the
+    /// backend not answering above all, which is told once. <c>init.latest_run.status</c> carries that word while the run
+    /// is in flight: the host's own first one, then the last the pipeline posted.
+    /// </summary>
+    [Fact]
+    public void AnInitAnsweredWhileTheRunIsInFlightCarriesTheRunsLastWord()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+            {
+                world.Receive("ready", "r2", new { });
+                reporter.Status("applying", BackendRemodelPipeline.BackendNotAnsweringMidRunMessage);
+                world.Receive("ready", "r3", new { });
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement first = world.Reply("init", "r2").GetProperty("latest_run").GetProperty("status");
+            Assert.Equal("judging", first.GetProperty("stage").GetString());
+            Assert.Equal(RemodelHost.RunningThePlanMessage, first.GetProperty("message").GetString());
+            JsonElement last = world.Reply("init", "r3").GetProperty("latest_run").GetProperty("status");
+            Assert.Equal("applying", last.GetProperty("stage").GetString());
+            Assert.Equal(BackendRemodelPipeline.BackendNotAnsweringMidRunMessage, last.GetProperty("message").GetString());
+        }
+    }
+
+    // ---- 004 T259: the host's stopping words survive a page reload -------------------------
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnInitWhileStoppingKeepsTheHostsLatestWord(bool copyGone)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+            {
+                reporter.Status("verifying", "FICT checking the copy.");
+                if (copyGone)
+                {
+                    File.Delete(world.ExpectedCopyPath);
+                    world.Host.DocumentChanged();
+                }
+                else
+                {
+                    world.Receive("remodel.stop", "x1", new { });
+                }
+
+                Assert.True(reporter.StopRequested);
+                world.Receive("ready", "r2", new { });
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement latest = world.Reply("init", "r2").GetProperty("latest_run");
+            Assert.True(latest.GetProperty("running").GetBoolean());
+            JsonElement status = latest.GetProperty("status");
+            Assert.Equal("applying", status.GetProperty("stage").GetString());
+            Assert.Equal(copyGone ? RemodelHost.CopyGoneMessage : RemodelHost.StoppingMessage,
+                status.GetProperty("message").GetString());
         }
     }
 
@@ -414,6 +488,45 @@ public sealed class RemodelHostTests
 
             Assert.Equal("DocumentDirty", world.ErrorClass("p1"));
             world.AssertNothingWasCopied();
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T210; research R18.7 item 2): an unsaved part is refused retryable whoever refuses it -
+    /// saving it, or closing it unsaved and opening it again, makes the same press succeed. This host's own reading of the
+    /// probe's signals has always said so; the backend's mapping of the bridge's `source_dirty`, on the probe and the open,
+    /// did not and does now (<c>test_chat_remodel_routes.py</c>), and the flag of a refusal the backend answered reaches the
+    /// page as the backend gave it. A guard of this host's route, and of the flag passed on.
+    /// </summary>
+    [Theory]
+    [InlineData("signal")]
+    [InlineData("probe")]
+    [InlineData("open")]
+    public void AnUnsavedPartIsRefusedRetryableOnEveryRoute(string route)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            const string said = "'C:\\Fictional\\FICT-bracket.SLDPRT' has unsaved changes.";
+            if (route == "signal")
+            {
+                world.Pipeline.Signals.SaveFlagDirty = true;
+            }
+            else if (route == "probe")
+            {
+                world.Pipeline.ProbeFailure = TheBackends("DocumentDirty", said, retryable: true);
+            }
+            else
+            {
+                world.Pipeline.CopyFailure = TheBackends("DocumentDirty", said, retryable: true);
+            }
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("DocumentDirty", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.DocumentDirtyMessage, error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
         }
     }
 
@@ -2634,12 +2747,17 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
-    /// The 152A review's R5, pinned as it stands and put to the owner. With Start switched off - the
+    /// The 152A review's R5, put to the owner as 152A's question 3. With Start switched off - the
     /// shipped build - a plan closes its session before it answers (004 T176), so no held copy keeps
     /// the attachment (T180), and the look once the plan ends follows whatever the plan's close left
     /// active: the original part, normally, which is the document attached to, so nothing changes; or
     /// the copy, when the close left it open and active, which the tool service then follows - a
-    /// re-attach, which tells the plan lost (24A). Before 152A that switch was skipped for good.
+    /// re-attach. Before 152A that switch was skipped for good. *Changed deliberately 2026-10-21 (owner
+    /// decision 159A, 004 research R19):* the follow is kept - the tool service follows the document
+    /// SOLIDWORKS has active - and the re-attach no longer tells the plan lost, where it did in words
+    /// that said SOLIDWORKS switched documents: a plan the host closed at the plan holds no session a
+    /// re-attach could take, and no Start can use it in this build either way. The follow itself is now
+    /// pinned too.
     /// </summary>
     [Theory]
     [InlineData(false)]
@@ -2665,9 +2783,126 @@ public sealed class RemodelHostTests
                 world.RunLooks();
 
                 Assert.Equal(copyLeftActive, ((FakeToolService)original).Disposed);
-                Assert.Equal(copyLeftActive ? 1 : 0, world.AllPosted("remodel.plan_lost").Length);
+                Assert.Equal(copyLeftActive ? world.ExpectedCopyPath : SourcePath, gate.DocumentPath);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
                 Assert.Equal(0, world.LooksWaiting);
             }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T212; 002 research 152A's owner question 3): with Start switched off, the
+    /// look once a plan ends follows the copy the plan's close left open and active - the tool service follows the
+    /// document SOLIDWORKS has active, as 152A made it - and the plan is not told lost: its session was closed at the
+    /// plan (004 T176), so the re-attach took nothing from it, and `init` says nothing is lost either. The run line
+    /// keeps the plan; Start answers what it answers every plan in this build, `StartNotValidated`. Once the engineer
+    /// closes the copy, as the teardown's words ask, the tool service follows their part again, and nothing is told.
+    /// </summary>
+    [Fact]
+    public void WithStartSwitchedOffAPlanIsNotToldLostWhenTheToolServiceFollowsTheCopyItsCloseLeftActive()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.StartValidated = false;
+            world.Open();
+            using (ToolServiceGate gate = world.AttachLifecycleGate())
+            {
+                gate.EnsureStarted();
+                world.Pipeline.DuringPlan = () => world.SwitchTo(gate, world.ExpectedCopyPath);
+
+                world.Receive("remodel.plan", "p1", new { });
+                world.RunLooks();
+
+                Assert.Equal(world.ExpectedCopyPath, gate.DocumentPath);
+                Assert.True(world.Host.LatestRun!.SessionClosedAtPlan);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+                world.Receive("ready", "r1", new { });
+                Assert.Equal(JsonValueKind.Null, world.Reply("init", "r1").GetProperty("latest_run").GetProperty("plan_lost").ValueKind);
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                Assert.Equal("StartNotValidated", world.ErrorClass("s1"));
+
+                world.SwitchTo(gate, SourcePath);
+
+                Assert.Equal(SourcePath, gate.DocumentPath);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T212): the same rule for any re-attach, the engineer's own switch to another
+    /// part included - a re-attach loses a plan by taking the session it holds, and a plan the host closed at the plan
+    /// holds none, so nothing is told and `init` says nothing is lost.
+    /// </summary>
+    [Fact]
+    public void WithStartSwitchedOffAReattachTellsNothingOfAPlanTheHostClosedAtThePlan()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            ToolServiceGate gate = world.AttachGate();
+            gate.EnsureStarted();
+            world.Receive("remodel.plan", "p1", new { });
+            string? planned = gate.Attachment;
+
+            world.SwitchTo(gate, @"C:\parts\frame.SLDPRT");
+
+            Assert.NotEqual(planned, gate.Attachment);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            world.Receive("ready", "r1", new { });
+            Assert.Equal(JsonValueKind.Null, world.Reply("init", "r1").GetProperty("latest_run").GetProperty("plan_lost").ValueKind);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T212): a guard of what the rule leaves. With Start switched off, a plan whose close the
+    /// bridge could not answer keeps its session (004 T176), and a re-attach takes it: that plan is told lost, as before.
+    /// So is one planning again set aside (004 T173), whose notice says so in its own words.
+    /// </summary>
+    [Fact]
+    public void WithStartSwitchedOffAPlanStillHoldingItsSessionIsToldLostOnAReattach()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            ToolServiceGate gate = world.AttachGate();
+            gate.EnsureStarted();
+            world.Pipeline.CloseFailure = new RemodelRefusal(
+                "BridgeUnavailable", "FICT the bridge did not answer remodel.close.", retryable: true);
+            world.Receive("remodel.plan", "p1", new { });
+            Assert.False(world.Host.LatestRun!.SessionClosedAtPlan);
+            world.Pipeline.CloseFailure = null;
+
+            world.SwitchTo(gate, @"C:\parts\frame.SLDPRT");
+
+            JsonElement lost = Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(RemodelHost.PlanLostMessage, lost.GetProperty("message").GetString());
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's RF1 - a guard): a plan closed at the plan, while Start
+    /// is switched off, is not lost to a re-attach (T213), but planning again sets it aside whatever its session (T173) - and
+    /// `init` says so while it is still the latest run: here the new plan was refused before it was recorded.
+    /// </summary>
+    [Fact]
+    public void WithStartSwitchedOffAPlanPlanningAgainSetAsideIsToldLostByInitWhileItIsTheLatestRun()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            Assert.True(world.Host.LatestRun!.SessionClosedAtPlan);
+            world.Pipeline.ProbeFailure = TheBackends("RunFolderFailed", "FICT the backend refused the probe.");
+
+            world.Receive("remodel.plan", "p2", new { });
+            world.Reply("error", "p2");
+            world.Receive("ready", "r1", new { });
+
+            JsonElement latest = world.Reply("init", "r1").GetProperty("latest_run");
+            Assert.Equal(first, latest.GetProperty("run_dir").GetString());
+            Assert.Equal(RemodelHost.PlanClosedMessage, latest.GetProperty("plan_lost").GetString());
         }
     }
 
@@ -3341,7 +3576,7 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
-    /// T168 (decision 22A): `remodel.close` names no run, so a close is sent only through the
+    /// T168 (decision 22A): `remodel.close` named no run until owner decision 159A, so a close is sent only through the
     /// attachment the run's plan was made on. After a re-attach the run's session went with
     /// its attachment and there is nothing of it to close; the discard still deletes the copy
     /// and still writes `discarded`, so the run reads as the engineer left it.
@@ -3884,7 +4119,10 @@ public sealed class RemodelHostTests
     /// closes that session once, after the failure and before it answers, through the pipeline's
     /// close (unsaved: the copy and the folder stay as the evidence); the page gets the plan's own
     /// refusal unchanged; no run is tracked; and the next plan is not refused `RunInProgress` by a
-    /// bridge still holding the failed one's session.
+    /// bridge still holding the failed one's session. *Changed deliberately 2026-10-21 (owner decision
+    /// 159A, 004 research R19):* a failure that is no named refusal - a dump that names no document - is
+    /// answered in the tab's own words, its message, which can name a path, in the host's log; its class
+    /// and everything else pinned here are as they were.
     /// </summary>
     [Theory]
     [MemberData(nameof(PlanStepFailures))]
@@ -3908,7 +4146,14 @@ public sealed class RemodelHostTests
 
             JsonElement error = world.Reply("error", "p1");
             Assert.Equal(kind, error.GetProperty("error_class").GetString());
-            Assert.Equal(failure.Message, error.GetProperty("message").GetString());
+            Assert.Equal(
+                kind == "HostError" ? RemodelHost.UnexpectedFailureMessage : failure.Message,
+                error.GetProperty("message").GetString());
+            if (kind == "HostError")
+            {
+                Assert.Contains(world.Logged, line => line.Contains(failure.Message));
+            }
+
             Assert.True(File.Exists(world.ExpectedCopyPath), "a failed plan's close deletes nothing");
             Assert.True(Directory.Exists(world.ExpectedRunDirectory));
             Assert.Null(world.Host.LatestRun);
@@ -4179,11 +4424,35 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 159A, on review (004 T223; the mutation review's M6): closes that never reached the bridge's
+    /// end-of-session routine, or whose answer says nothing of it, as the add-in's pipeline raises them - the client's
+    /// <c>BackendUnavailable</c> when the backend does not answer within its 30 seconds, while the backend waits 60 for the
+    /// bridge, or when it is not running; its <c>HttpError</c> and <c>BadResponse</c>; the backend's refusals of the request
+    /// before the bridge is asked (<c>InvalidRunDir</c>, <c>InvalidRequest</c>); and the pipeline's own refusal when no
+    /// backend runs to carry the close. The bridge may still hold the session after each.
+    /// </summary>
+    public static IEnumerable<object[]> ClosesThatNeverReachedTheBridge => new[]
+    {
+        new object[] { TheBackends("BackendUnavailable", "the review backend did not answer: The operation has timed out", retryable: true) },
+        new object[] { TheBackends("BackendUnavailable", "the review backend is not running.", retryable: true) },
+        new object[] { TheBackends("HttpError", "the backend answered 500.", retryable: true) },
+        new object[] { TheBackends("BadResponse", "the backend's answer was not JSON.") },
+        new object[] { TheBackends("InvalidRunDir", "FICT run_dir is not under the run root.") },
+        new object[] { TheBackends("InvalidRequest", "FICT the bridge settings did not read.") },
+        new object[] { new RemodelRefusal("BackendUnavailable", "the review backend is not running, so the close was not sent.", retryable: true) },
+    };
+
+    /// <summary>
+    /// Every close that may have left the session held: the bridge's own <c>BridgeUnavailable</c>, a failure with no named
+    /// refusal at all, and those that never reached the bridge (<see cref="ClosesThatNeverReachedTheBridge"/>, owner decision
+    /// 159A on review).
+    /// </summary>
     public static IEnumerable<object[]> UnansweredCloses => new[]
     {
         new object[] { new RemodelRefusal("BridgeUnavailable", "the SOLIDWORKS bridge did not answer remodel.close.", retryable: true) },
         new object[] { new IOException("the backend did not answer") },
-    };
+    }.Concat(ClosesThatNeverReachedTheBridge);
 
     /// <summary>
     /// A close the bridge could not answer may have left the session held, so the plan keeps it:
@@ -4234,6 +4503,73 @@ public sealed class RemodelHostTests
             world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
             world.Reply("ok", "d1");
             Assert.Equal(1, world.Pipeline.Count("close"));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T223; research R19.9; the mutation review's M6, older than 159A): a
+    /// run's close that never reached the bridge is not taken for its answer. Every named refusal but the bridge's own
+    /// `BridgeUnavailable` counted as the end-of-session routine's answer with what it left, so a close the add-in's client
+    /// gave up on - after its 30 seconds, while the backend waited 60 for the bridge - was recorded as done: the run ended
+    /// "The run ended 'saved'. ..." with the copy perhaps still open and the engineer's four settings still changed, and
+    /// nothing would close it. The run ends in the words of a close that was not answered, keeps its session for Discard,
+    /// planning again, a re-attach or an unload to end, and what the close said is in the host's log.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ClosesThatNeverReachedTheBridge))]
+    public void ARunsCloseThatNeverReachedTheBridgeIsNotTakenForAnAnswer(Exception closeFailure)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.CloseFailure = closeFailure;
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement end = world.LastPosted("status");
+            Assert.Equal("error", end.GetProperty("stage").GetString());
+            Assert.Equal(RemodelHost.RunCloseNotAnsweredMessage, end.GetProperty("message").GetString());
+            Assert.False(world.Host.LatestRun!.SessionEnded);
+            Assert.Contains(world.Logged, line => line.Contains(closeFailure.Message));
+
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("ok", "d1");
+            Assert.Equal(2, world.Pipeline.Count("close"));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T223, T225; research R19.9; the mutation review's M3 and M6): an
+    /// earlier plan's close that never reached the bridge leaves that plan as it was and refuses the new one, as a close the
+    /// bridge did not answer does and in its words, the class the close was refused with kept and what it said in the host's
+    /// log. It was taken for an answer: the earlier plan was marked lost and its session believed ended, and the new plan
+    /// went on to open its copy beside it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ClosesThatNeverReachedTheBridge))]
+    public void AnEarlierPlansCloseThatNeverReachedTheBridgeLeavesItAsItWas(Exception closeFailure)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.CloseFailure = closeFailure;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement refused = world.Reply("error", "p2");
+            Assert.Equal(((RemodelRefusal)closeFailure).ErrorClass, refused.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.EarlierPlanNotClosedMessage, refused.GetProperty("message").GetString());
+            Assert.True(refused.GetProperty("retryable").GetBoolean());
+            Assert.Contains(world.Logged, line => line.Contains(closeFailure.Message));
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(1, world.Pipeline.Count("probe"));
+
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("remodel.started", "s1");
         }
     }
 
@@ -5219,6 +5555,12 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// A close that failed with no named refusal counts as unanswered: the new plan is refused
+    /// `BridgeUnavailable` and the earlier plan stays as it was. *Changed deliberately 2026-10-21 (owner
+    /// decision 159A, 004 research R19):* the refusal is in the tab's own words, where it ended with the
+    /// close's own message, which can name the bridge's pipe and is now in the host's log.
+    /// </summary>
     [Fact]
     public void ACloseThatFailedWithoutANamedRefusalCountsAsUnanswered()
     {
@@ -5232,7 +5574,8 @@ public sealed class RemodelHostTests
 
             JsonElement error = world.Reply("error", "p2");
             Assert.Equal("BridgeUnavailable", error.GetProperty("error_class").GetString());
-            Assert.Contains("the loopback socket closed", error.GetProperty("message").GetString(), StringComparison.Ordinal);
+            Assert.Equal(RemodelHost.EarlierPlanNotClosedMessage, error.GetProperty("message").GetString());
+            Assert.Contains(world.Logged, line => line.Contains("the loopback socket closed"));
             Assert.Empty(world.AllPosted("remodel.plan_lost"));
 
             world.Pipeline.CloseFailure = null;
@@ -5294,8 +5637,8 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
-    /// T168's hazard, the other way round: `remodel.close` names no run, and the bridge closes
-    /// whatever session it holds - after planning again, that is the new plan's. A plan planning
+    /// T168's hazard, the other way round: `remodel.close` named no run until owner decision 159A,
+    /// and the bridge closed whatever session it held - after planning again, that is the new plan's. A plan planning
     /// again closed has no session left anywhere, so discarding it sends no close, on its own
     /// attachment or any other, and still deletes its copy and writes `discarded`; the new plan
     /// is untouched and starts.
@@ -5755,9 +6098,325 @@ public sealed class RemodelHostTests
             Assert.True(File.Exists(world.ExpectedCopyPath));
             if (!answered)
             {
-                Assert.Contains(world.AllPosted("status"), status => status.GetProperty("message").GetString()!.Contains("did not answer"));
+                // *Changed deliberately 2026-10-21 (owner decision 159A, on review; 004 T223, research R19.9):* the words
+                // of a close that was not answered, exactly, where it looked for "did not answer" in them - which they
+                // no longer say, since a close that never reached the bridge is not answered either.
+                Assert.Contains(
+                    world.AllPosted("status"),
+                    status => status.GetProperty("message").GetString() == RemodelHost.RunCloseNotAnsweredMessage);
             }
         }
+    }
+
+    // ---- owner decision 159A, on the final review: a session a run's unanswered close left on the bridge ------------
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T249; research R19.21; its S2): a run whose close was not
+    /// answered - its backend gone mid-run, so the close was never sent - leaves its session on the bridge, and since
+    /// protocol 1.5 a close names its run, so no other run's close ends it. The next plan's open was refused
+    /// <c>run_in_progress</c>, the failed plan's clean-up close named the new run and was refused as another run's, and every
+    /// later press did the same, the page saying neither what held the bridge nor the way out. The host closes the session
+    /// its finished run may still hold before the next plan copies anything, naming that run.
+    /// </summary>
+    [Fact]
+    public void ARunWhoseCloseWasNotAnsweredIsClosedBeforeTheNextPlanCopiesAnything()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.DuringRun = _ => world.WriteRunArtifacts();
+            world.Pipeline.RunState = "failed";
+            world.Pipeline.CloseFailure = new RemodelRefusal(
+                "BackendUnavailable", "FICT the review backend is not running, so the close was not sent.", retryable: true);
+            world.Receive("remodel.start", "s1", new { run_dir = first });
+            Assert.True(world.Pipeline.SessionOpen, "the run's close was not answered, so its session is still on the bridge");
+            world.Pipeline.CloseFailure = null;
+            int copies = world.Pipeline.Count("copy");
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.Equal(copies + 1, world.Pipeline.Count("copy"));
+            Assert.True(world.Pipeline.Calls.LastIndexOf("close") < world.Pipeline.Calls.LastIndexOf("copy"));
+            Assert.True(world.Host.LatestRun!.RunDirectory != first);
+
+            // Its session ended, the earlier run sends no close again: discarding its copy deletes the copy alone.
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = first });
+            world.Reply("ok", "d1");
+            Assert.Equal(2, world.Pipeline.Closed.Count(folder => folder == first));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T249; its S2): a close of that session that is still not answered
+    /// refuses the next plan before anything is copied - retryable, in plain words, the close's class kept and its
+    /// failure in the log - and pressing again asks the close again, as planning again does for an earlier plan's.
+    /// </summary>
+    [Fact]
+    public void ARunWhoseCloseIsStillNotAnsweredRefusesTheNextPlanRetryableAndCopiesNothing()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.DuringRun = _ => world.WriteRunArtifacts();
+            world.Pipeline.RunState = "failed";
+            world.Pipeline.CloseFailure = new RemodelRefusal(
+                "BackendUnavailable", "FICT the review backend is not running, so the close was not sent.", retryable: true);
+            world.Receive("remodel.start", "s1", new { run_dir = first });
+            int copies = world.Pipeline.Count("copy");
+            int probes = world.Pipeline.Count("probe");
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement refused = world.Reply("error", "p2");
+            Assert.Equal("BackendUnavailable", refused.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.EarlierRunNotClosedMessage, refused.GetProperty("message").GetString());
+            Assert.True(refused.GetProperty("retryable").GetBoolean());
+            Assert.Equal(copies, world.Pipeline.Count("copy"));
+            Assert.Equal(probes, world.Pipeline.Count("probe"));
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.True(world.Pipeline.SessionOpen);
+
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.plan", "p3", new { });
+
+            world.Reply("remodel.planned", "p3");
+            Assert.Equal(new[] { first, first, first }, world.Pipeline.Closed);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T249 - a guard; its S2): a finished run whose close was answered holds
+    /// no session, and the next plan sends no close for it.
+    /// </summary>
+    [Fact]
+    public void ARunWhoseCloseWasAnsweredIsNotClosedAgainByTheNextPlan()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.DuringRun = _ => world.WriteRunArtifacts();
+            world.Receive("remodel.start", "s1", new { run_dir = first });
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(new[] { first }, world.Pipeline.Closed);
+        }
+    }
+
+    // ---- 004 T257: a failed plan's unanswered cleanup keeps its own identity ----------------
+
+    private const string FailedPlanCleanupWords =
+        "Closing the copy from the earlier attempt was not confirmed, so no new plan was made. "
+        + "Your part was not changed. Wait a moment, then press Remodel a copy again.";
+
+    [Theory]
+    [InlineData("before-open")]
+    [InlineData("after-open")]
+    [InlineData("plan")]
+    public void AFailedPlansUnansweredCloseIsRetriedForItsOwnRunBeforeAnotherProbe(string failedAt)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            if (failedAt == "plan") world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+            else world.Pipeline.CopyFailure = new IOException("FICT opening failed.");
+            world.Pipeline.CopyFailureLeavesTheSessionOpen = failedAt == "after-open";
+            world.Pipeline.CloseFailure = new IOException("FICT cleanup did not answer.");
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            Assert.Equal("HostError", world.ErrorClass("p1"));
+            Assert.Null(world.Host.LatestRun);
+            Assert.Empty(world.Host.Runs);
+            Assert.Empty(world.Registered);
+            Assert.True(Directory.Exists(first));
+            world.Pipeline.CopyFailure = null;
+            world.Pipeline.PlanFailure = null;
+            world.Pipeline.CloseFailure = null;
+            int calls = world.Pipeline.Calls.Count;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.Equal(new[] { "close", "probe", "copy", "plan" }, world.Pipeline.Calls.Skip(calls));
+            Assert.NotEqual(first, world.Host.LatestRun!.RunDirectory);
+        }
+    }
+
+    [Theory]
+    [InlineData("BridgeUnavailable")]
+    [InlineData("BackendUnavailable")]
+    [InlineData("HttpError")]
+    [InlineData("BadResponse")]
+    [InlineData("InvalidRunDir")]
+    [InlineData("InvalidRequest")]
+    [InlineData("exception")]
+    public void AFailedPlansStillUnansweredCloseRefusesRetryablyAndKeepsItsIdentity(string failureClass)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+            world.Pipeline.CloseFailure = failureClass == "exception"
+                ? new IOException("FICT cleanup could not reach 0FAKEtoken.")
+                : new RemodelRefusal(failureClass, "FICT cleanup could not reach 0FAKEtoken.", retryable: false);
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            int calls = world.Pipeline.Calls.Count;
+            world.Pipeline.PlanFailure = null;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement error = world.Reply("error", "p2");
+            Assert.Equal(failureClass == "exception" ? "BridgeUnavailable" : failureClass,
+                error.GetProperty("error_class").GetString());
+            Assert.Equal(FailedPlanCleanupWords, error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            AssertPlainWords(error.GetProperty("message").GetString()!);
+            Assert.Equal(new[] { "close" }, world.Pipeline.Calls.Skip(calls));
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.True(world.Pipeline.SessionOpen);
+            Assert.Single(Directory.GetDirectories(world.RunRoot));
+            Assert.Contains(world.Logged, line => line.Contains("FICT cleanup could not reach"));
+            Assert.DoesNotContain(world.Logged, line => line.Contains("0FAKEtoken"));
+
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.plan", "p3", new { });
+            world.Reply("remodel.planned", "p3");
+            Assert.Equal(new[] { first, first, first }, world.Pipeline.Closed);
+        }
+    }
+
+    [Theory]
+    [InlineData("closed")]
+    [InlineData("CloseIncomplete")]
+    [InlineData("RunFolderFailed")]
+    public void AFailedPlansAnsweredCloseIsNotSentAgain(string answer)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+            world.Pipeline.CloseFailure = answer == "closed" ? null
+                : new RemodelRefusal(answer, "FICT the close answered.", retryable: false);
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.PlanFailure = null;
+            world.Pipeline.CloseFailure = null;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(new[] { first }, world.Pipeline.Closed);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AFailedPlansPendingCloseNeverReachesAReplacementAttachment(bool withdrawn)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+            world.Pipeline.CloseFailure = new IOException("FICT cleanup did not answer.");
+            world.Receive("remodel.plan", "p1", new { });
+            var replacement = new FakePipeline { HoldsTheBridgeSession = true };
+            world.Options.Pipeline = replacement;
+            world.Attachment = withdrawn ? null : SecondAttachment;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Empty(replacement.Closed);
+            Assert.Single(world.Pipeline.Closed);
+            Assert.True(replacement.SessionOpen);
+        }
+    }
+
+    [Fact]
+    public void AFailedPlansInitialCleanupNeverReachesAReplacementAttachment()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.DuringPlan = () => world.Attachment = SecondAttachment;
+            world.Pipeline.PlanFailure = new IOException("FICT planning failed after replacement.");
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal("HostError", world.ErrorClass("p1"));
+            Assert.Empty(world.Pipeline.Closed);
+        }
+    }
+
+    [Fact]
+    public void AFailedPlansCleanupKeepsTheOldRunWhenTheRunRootMovesAndTheBackendRefusesIt()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+            world.Pipeline.CloseFailure = new RemodelRefusal("BackendUnavailable", "FICT the backend stopped.", true);
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.PlanFailure = null;
+            world.RunRootSpelling = Path.Combine(world.RunRoot, "later");
+            world.Pipeline.CloseFailure = new RemodelRefusal("InvalidRunDir", "FICT the old run is outside the root.", false);
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement error = world.Reply("error", "p2");
+            Assert.Equal("InvalidRunDir", error.GetProperty("error_class").GetString());
+            Assert.Equal(FailedPlanCleanupWords, error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.Equal(1, world.Pipeline.Count("probe"));
+            Assert.Equal(1, world.Pipeline.Count("copy"));
+            world.RunRootSpelling = null;
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.plan", "p3", new { });
+            world.Reply("remodel.planned", "p3");
+            Assert.Equal(new[] { first, first, first }, world.Pipeline.Closed);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T249; its S2): the fake bridge keeps protocol 1.5's rule, so the cases
+    /// above are the product's: a close names its run, and one naming another run than the session's is refused, the
+    /// session left as it was - as the backend answers the bridge's <c>session_mismatch</c>, <c>RunFolderFailed</c>.
+    /// </summary>
+    [Fact]
+    public void TheFakeBridgeRefusesAnotherRunsCloseAndLeavesItsSession()
+    {
+        var pipeline = new FakePipeline { HoldsTheBridgeSession = true };
+        var reporter = new NullReporter();
+        pipeline.OpenCopy(new RemodelCopyRequest(Path.Combine(Path.GetTempPath(), "FICT-run-a"), @"C:\FICT\a.SLDPRT", null), reporter);
+
+        RemodelRefusal refused = Assert.Throws<RemodelRefusal>(() => pipeline.CloseCopy(Path.Combine(Path.GetTempPath(), "FICT-run-b")));
+
+        Assert.Equal("RunFolderFailed", refused.ErrorClass);
+        Assert.True(pipeline.SessionOpen);
+        pipeline.CloseCopy(Path.Combine(Path.GetTempPath(), "FICT-run-a"));
+        Assert.False(pipeline.SessionOpen);
     }
 
     // ---- owner decision 155A: a run's ending reaches the page once the host is free ------------
@@ -5799,7 +6458,10 @@ public sealed class RemodelHostTests
     /// pipeline, by `Execute` as it caught the failure, or as T167's words while the close was answered -
     /// before `Execute` had closed the run's session and freed the host, so a press in that window was refused
     /// `RunInProgress`. Every status that ends the page's running state is now posted once the host is free,
-    /// in the order the ending made them, the run's own last word last.
+    /// in the order the ending made them, the run's own last word last. *Changed deliberately 2026-10-21 (owner
+    /// decision 159A, 004 research R19):* a failure with no named refusal, and the pipeline's own error, are told in
+    /// the tab's own words, where each carried its own sentence, which can name a path; the order and the moment
+    /// pinned here are as they were.
     /// </summary>
     [Theory]
     [MemberData(nameof(RunEndings))]
@@ -5844,8 +6506,8 @@ public sealed class RemodelHostTests
             string[] expected = ending switch
             {
                 "refused" => new[] { "FICT this run was not planned, so nothing was started.", "The run ended without saving the copy. The report says why." },
-                "failed" => new[] { "FICT the backend stopped answering.", "The run ended without saving the copy. The report says why." },
-                "pipeline" => new[] { "FICT the run failed in the backend.", "The run ended without saving the copy. The report says why." },
+                "failed" => new[] { RemodelHost.UnexpectedFailureMessage, "The run ended without saving the copy. The report says why." },
+                "pipeline" => new[] { RemodelHost.BackendFailedMessage, "The run ended without saving the copy. The report says why." },
                 "left" => new[] { LeftBehind, "The run ended 'saved'. Open the report for the change list, the grade and the geometry comparison." },
                 _ => new[] { "The run ended 'saved'. Open the report for the change list, the grade and the geometry comparison." },
             };
@@ -6142,6 +6804,1154 @@ public sealed class RemodelHostTests
         }
     }
 
+    // ---- owner decision 159A: a Stop and the run's end, decided under one lock ---------------------
+
+    /// <summary>What the host tells the page as the engineer's Stop reaches a run.</summary>
+    private const string StoppingWords = RemodelHost.StoppingMessage;
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T204; research R18.7 item 4): every `remodel.stop` is answered once - at the end
+    /// of the run it reached, with that run's count, or at once when no run is in flight. Stop stays pressable until the run
+    /// ends, so it can be pressed twice; the second press replaced the first's id, and the first was never answered. Neither
+    /// outlives the run: the next run, which no one stops, ends answering no Stop.
+    /// </summary>
+    [Fact]
+    public void EveryStopThatReachesARunIsAnsweredOnceAtItsEndAndNotAtTheNextRunsEnd()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+            {
+                world.Receive("remodel.stop", "x1", new { });
+                world.Receive("remodel.stop", "x2", new { });
+                world.Pipeline.ChangesApplied = 2;
+                world.Pipeline.RunState = "truncated";
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal(2, world.Reply("remodel.stopped", "x1").GetProperty("changes_applied").GetInt32());
+            Assert.Equal(2, world.Reply("remodel.stopped", "x2").GetProperty("changes_applied").GetInt32());
+            Assert.Equal(2, world.AllPosted("remodel.stopped").Length);
+
+            world.Pipeline.DuringRun = null;
+            world.Pipeline.RunState = "saved";
+            world.Receive("remodel.plan", "p2", new { });
+            string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            int before = world.Posted.Count;
+            world.Receive("remodel.start", "s2", new { run_dir = second });
+
+            world.Reply("remodel.started", "s2");
+            Assert.DoesNotContain("remodel.stopped", world.TypesPostedSince(before));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T204; research R18.7 item 4): a Stop and the end of its run are decided under
+    /// the one lock that frees the host, so a Stop either reaches the run - its word told before the run's end, its id
+    /// answered at that end - or finds no run in flight and is answered at once, storing nothing. Here the Stop's word is
+    /// held in its post, on the page's thread, while the run reaches its end on a thread of its own: the run's end waits for
+    /// it. Read and stored outside that lock, the Stop's "Stopping" was told after the run's last word, as the line the
+    /// page ends on, of a run that had ended; and a Stop that read the run just before the host was freed, and stored its id
+    /// just after the end had taken the ids, left its id for the next run's end to answer.
+    /// </summary>
+    [Fact]
+    public void AStopTheRunsEndMeetsIsToldBeforeThatEndAndAnsweredAtIt()
+    {
+        using (var world = new RemodelWorld())
+        {
+            (List<JsonElement> posted, bool closed) = AStopsWordHeldAsTheRunEnds(
+                world, StoppingWords, () => world.Receive("remodel.stop", "x1", new { }));
+
+            Assert.True(closed, "the run never reached its close while the Stop's word was held");
+            int started = posted.FindIndex(message => message.GetProperty("type").GetString() == "remodel.started");
+            int stopping = posted.FindIndex(message => message.GetProperty("type").GetString() == "status"
+                && message.GetProperty("payload").GetProperty("message").GetString() == StoppingWords);
+            int ended = posted.FindIndex(started + 1, EndsTheRunOnThePage);
+            int answered = posted.FindIndex(message => message.GetProperty("type").GetString() == "remodel.stopped");
+            Assert.True(started >= 0 && stopping > started && ended > stopping, "the Stop's word was told after the run's end");
+            Assert.True(answered > ended, "the Stop was answered before the run's last word");
+            JsonElement stopped = Assert.Single(posted, message => message.GetProperty("type").GetString() == "remodel.stopped");
+            Assert.Equal("x1", stopped.GetProperty("id").GetString());
+            Assert.Equal(1, stopped.GetProperty("payload").GetProperty("changes_applied").GetInt32());
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T204): the stop when the copy is gone is decided under the same lock, so its word
+    /// is told before the run's end or not at all. Here the copy goes away mid-run and the stop's word is held in its post, on
+    /// SOLIDWORKS' thread, while the run reaches its end on a thread of its own: the run's end waits for it. Decided outside
+    /// the lock, "the run is stopping" was told after the run's last word.
+    /// </summary>
+    [Fact]
+    public void TheStopWhenTheCopyIsGoneThatTheRunsEndMeetsIsToldBeforeThatEnd()
+    {
+        using (var world = new RemodelWorld())
+        {
+            (List<JsonElement> posted, bool closed) = AStopsWordHeldAsTheRunEnds(world, RemodelHost.CopyGoneMessage, () =>
+            {
+                File.Delete(world.ExpectedCopyPath);
+                world.Document = null;
+                world.Host.DocumentChanged();
+            });
+
+            Assert.True(closed, "the run never reached its close while the stop's word was held");
+            int started = posted.FindIndex(message => message.GetProperty("type").GetString() == "remodel.started");
+            int gone = posted.FindIndex(message => message.GetProperty("type").GetString() == "status"
+                && message.GetProperty("payload").GetProperty("message").GetString() == RemodelHost.CopyGoneMessage);
+            int ended = posted.FindIndex(started + 1, EndsTheRunOnThePage);
+            Assert.True(started >= 0 && gone > started && ended > gone, "the copy-gone stop was told after the run's end");
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T204): a Stop that arrives once its run has ended - pressed the moment the run's last word
+    /// reaches the page - is answered at once, as one with no run in flight is, and stores nothing: the next run, which no one
+    /// stops, ends answering no Stop. A guard, true before the decision and after it.
+    /// </summary>
+    [Fact]
+    public void AStopThatArrivesOnceItsRunHasEndedIsAnsweredAtOnceAndStoresNothing()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            bool pressed = false;
+            world.WhenPosted = root =>
+            {
+                if (!pressed && EndsTheRunOnThePage(root))
+                {
+                    pressed = true;
+                    world.Receive("remodel.stop", "x1", new { });
+                }
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.True(pressed);
+            Assert.Equal("RunNotFound", world.ErrorClass("x1"));
+            world.WhenPosted = null;
+            world.Receive("remodel.plan", "p2", new { });
+            string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            world.Receive("remodel.start", "s2", new { run_dir = second });
+            world.Reply("remodel.started", "s2");
+            Assert.Empty(world.AllPosted("remodel.stopped"));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T215; research R19.9; the race review's finding R1, the host's half - a guard).
+    /// Every Stop that reached the run is answered at its end, under its own id, to whichever page the pane shows then: a
+    /// page that has since loaded again included. The ids here are the ones the page used before T216, numbered from `m1`
+    /// at every load: the first load's Stop was its sixth request, and the load after it asks for the result as its sixth
+    /// once the run's last word reaches it - so the answer to the earlier Stop and the result's own reply carry one id, and
+    /// only the page can tell them apart (<c>RemodelPageContractTests.AnEarlierLoadsAnswerToStopIsNeverTakenForTheResultOfThePageThatLoadedAgain</c>).
+    /// </summary>
+    [Fact]
+    public void EveryStopIsAnsweredUnderItsOwnIdThoughThePageLoadedAgain()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("ready", "m1", new { });
+            world.Receive("remodel.plan", "m2", new { });
+            string runDir = world.Reply("remodel.planned", "m2").GetProperty("run_dir").GetString()!;
+            world.Receive("remodel.result", "m3", new { run_dir = runDir });
+            int reloaded = -1;
+            world.Pipeline.DuringRun = reporter =>
+            {
+                world.Receive("remodel.result", "m5", new { run_dir = runDir });
+                world.Receive("remodel.stop", "m6", new { });
+
+                // The page loads again mid-run: the load after it, which numbered its requests from m1 again.
+                reloaded = world.Posted.Count;
+                world.Receive("ready", "m1", new { });
+                world.Receive("remodel.result", "m2", new { run_dir = runDir });
+                world.Receive("remodel.stop", "m3", new { });
+                world.Receive("report.open", "m4", new { run_dir = runDir });
+                world.Receive("folder.open", "m5", new { run_dir = runDir });
+                world.Pipeline.ChangesApplied = 2;
+                world.Pipeline.RunState = "truncated";
+            };
+
+            world.Receive("remodel.start", "m4", new { run_dir = runDir });
+            world.Receive("remodel.result", "m6", new { run_dir = runDir });
+
+            List<JsonElement> toTheLoadAfter = world.Posted.Skip(reloaded)
+                .Select(json => JsonDocument.Parse(json).RootElement.Clone()).ToList();
+            Assert.Equal("init", toTheLoadAfter[0].GetProperty("type").GetString());
+            Assert.True(toTheLoadAfter[0].GetProperty("payload").GetProperty("latest_run").GetProperty("running").GetBoolean());
+            string[] underM6 = toTheLoadAfter
+                .Where(message => message.TryGetProperty("id", out JsonElement id)
+                    && id.ValueKind == JsonValueKind.String && id.GetString() == "m6")
+                .Select(message => message.GetProperty("type").GetString()!)
+                .ToArray();
+            Assert.Equal(new[] { "remodel.stopped", "remodel.result" }, underM6);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T219; research R19.9; the race review's finding R3). A Start whose run
+    /// cannot be handed to its scheduler posted its `error` - the run's last word on the page - and only then, in its
+    /// <c>finally</c>, let go of the run, outside the lock that frees the host. The copy-gone stop, decided under that lock
+    /// on SOLIDWORKS' thread, could land between: it found the run in flight, set its stop flag and told the page the run
+    /// was stopping, after the run's last word; and the flag stayed on the plan, which stays startable, so the next Start's
+    /// run was stopped before it began and answered `remodel.stopped` unasked. Here the copy goes away, and SOLIDWORKS says
+    /// so, as that last word is posted - or, earlier, as `remodel.started` is, while the run is in flight: the stop is
+    /// told then, before the last word, and taken back with the run, so the plan carries none into its next run.
+    /// </summary>
+    [Theory]
+    [InlineData("error")]
+    [InlineData("remodel.started")]
+    public void AFailedHandOverLetsGoOfItsRunBeforeItsLastWordAndLeavesNoStopOnThePlan(string goneAs)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string runDir = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            Action<Action> schedule = world.Options.Schedule;
+            world.Options.Schedule = work => throw new InvalidOperationException("FICT the run could not be handed on");
+            string aside = world.ExpectedCopyPath + ".aside";
+            bool gone = false;
+            world.WhenPosted = root =>
+            {
+                bool now = goneAs == "error"
+                    ? EndsTheRunOnThePage(root)
+                    : root.GetProperty("type").GetString() == goneAs;
+                if (!gone && now)
+                {
+                    gone = true;
+                    File.Move(world.ExpectedCopyPath, aside);
+                    world.Host.DocumentChanged();
+                }
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = runDir });
+
+            int started = world.IndexOf("remodel.started");
+            int ended = world.Posted.FindIndex(started + 1, json => EndsTheRunOnThePage(JsonDocument.Parse(json).RootElement));
+            int stopping = world.Posted.FindIndex(json => Unescaped(json).Contains(RemodelHost.CopyGoneMessage));
+            string sequence = string.Join(" | ", world.TypesPostedSince(started));
+            bool flagLeft = world.Host.LatestRun!.StopRequested;
+
+            world.WhenPosted = null;
+            File.Move(aside, world.ExpectedCopyPath);
+            world.Options.Schedule = schedule;
+            bool stoppedBeforeItBegan = false;
+            world.Pipeline.DuringRun = reporter => stoppedBeforeItBegan = reporter.StopRequested;
+            int before = world.Posted.Count;
+            world.Receive("remodel.start", "s2", new { run_dir = runDir });
+
+            Assert.True(gone, "the failed hand-over posted no last word");
+            Assert.True(ended >= 0, "the failed hand-over's last word was not posted after remodel.started");
+            bool toldAfter = stopping > ended;
+            bool answeredUnasked = world.TypesPostedSince(before).Contains("remodel.stopped");
+            Assert.True(
+                !toldAfter && !flagLeft && !stoppedBeforeItBegan && !answeredUnasked,
+                $"told after the run's last word: {toldAfter} ({sequence}); flag left on the plan: {flagLeft}; "
+                + $"next run stopped before it began: {stoppedBeforeItBegan}; answered remodel.stopped unasked: {answeredUnasked}");
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's RS8 - a guard): a run stopped only because its copy
+    /// went away is answered unasked at its end, `remodel.stopped` with no id and the run's count, after its last word; no
+    /// Stop reached it to be answered.
+    /// </summary>
+    [Fact]
+    public void ARunStoppedOnlyBecauseItsCopyWentAwayIsAnsweredUnaskedAtItsEnd()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string aside = world.ExpectedCopyPath + ".aside";
+            world.Pipeline.DuringRun = reporter =>
+            {
+                File.Move(world.ExpectedCopyPath, aside);
+                world.Host.DocumentChanged();
+                world.Pipeline.ChangesApplied = 3;
+                world.Pipeline.RunState = "truncated";
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement stopped = Assert.Single(world.AllPosted("remodel.stopped"));
+            int answered = world.IndexOf("remodel.stopped");
+            int ended = world.Posted.FindLastIndex(json => EndsTheRunOnThePage(JsonDocument.Parse(json).RootElement));
+            Assert.Equal(JsonValueKind.Null, JsonDocument.Parse(world.Posted[answered]).RootElement.GetProperty("id").ValueKind);
+            Assert.Equal(3, stopped.GetProperty("changes_applied").GetInt32());
+            Assert.True(answered > ended, "the unasked answer came before the run's last word");
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's RS10 - a guard): the stop when the copy goes away is
+    /// decided once. Every later change of the active document while the run goes on to its end finds the stop already
+    /// asked for, and tells the page nothing more.
+    /// </summary>
+    [Fact]
+    public void TheStopWhenTheCopyIsGoneIsToldOnceHoweverOftenTheDocumentChanges()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string aside = world.ExpectedCopyPath + ".aside";
+            world.Pipeline.DuringRun = reporter =>
+            {
+                File.Move(world.ExpectedCopyPath, aside);
+                world.Host.DocumentChanged();
+                world.Host.DocumentChanged();
+                world.Host.DocumentChanged();
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Single(world.Posted, json => Unescaped(json).Contains(RemodelHost.CopyGoneMessage));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A: what the page receives when a stop's word - a post carrying <paramref name="held"/> - is held in
+    /// its post, on the thread <paramref name="stop"/> runs on, while the run reaches its end on a thread of its own. The run,
+    /// once stopped, finishes and closes its session; the held post is let go once the run's last word has been posted, or
+    /// half a second after the close if it has not - when the run's end waits on the stop's word. Every wait is bounded, so a
+    /// regression fails rather than hangs. Also answers whether the run reached its close while the word was held.
+    /// </summary>
+    private static (List<JsonElement> Posted, bool Closed) AStopsWordHeldAsTheRunEnds(RemodelWorld world, string held, Action stop)
+    {
+        using (var running = new ManualResetEventSlim())
+        using (var closing = new ManualResetEventSlim())
+        {
+            Thread? run = null;
+            bool closed = false;
+            world.Channel = new PausingChannel(world.Posted, json =>
+            {
+                // A failed assertion here would be swallowed by the post it is in, so the wait is recorded and asserted after.
+                if (Unescaped(json).Contains(held))
+                {
+                    closed = closing.Wait(TimeSpan.FromSeconds(10));
+                    SpinWait.SpinUntil(() => TheRunsLastWordIsPosted(world), TimeSpan.FromMilliseconds(500));
+                }
+            });
+            world.Scheduler = work =>
+            {
+                run = new Thread(() => work()) { IsBackground = true, Name = "fict-remodel-run" };
+                run.Start();
+            };
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+            {
+                running.Set();
+                SpinWait.SpinUntil(() => reporter.StopRequested, TimeSpan.FromSeconds(10));
+                world.Pipeline.ChangesApplied = 1;
+                world.Pipeline.RunState = "truncated";
+            };
+            world.Pipeline.DuringClose = () => closing.Set();
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.True(running.Wait(TimeSpan.FromSeconds(10)), "the run never began");
+            stop();
+            Assert.True(run != null && run.Join(TimeSpan.FromSeconds(10)), "the run never ended");
+
+            lock (world.Posted)
+            {
+                return (world.Posted.Select(json => JsonDocument.Parse(json).RootElement.Clone()).ToList(), closed);
+            }
+        }
+    }
+
+    // ---- owner decision 159A: the tab's words for a failure whose own sentence can name a path ----------
+
+    /// <summary>A fictional run folder, as the backend's and the disk's sentences name one.</summary>
+    private const string FictionalRun = @"C:\Fictional\runs\20260101-000000-FICT-remodel";
+
+    /// <summary>A fictional pipe, as the reviewer's bridge client names the one it could not reach.</summary>
+    private const string FictionalPipe = @"\\.\pipe\FICT-swreview-remodel";
+
+    /// <summary>A fictional backend log, as a failed start or restart ends (decision 150A).</summary>
+    private const string FictionalLog = @"C:\Fictional\FICT-logs\backend.log";
+
+    /// <summary>
+    /// A refusal the review backend answered, as <c>BackendRemodelPipeline</c> hands it on: the backend's class and
+    /// sentence, with its answer as the refusal's cause (<c>BackendRemodelPipelineTests</c> pins that the pipeline
+    /// keeps it).
+    /// </summary>
+    private static RemodelRefusal TheBackends(string errorClass, string sentence, bool retryable = false) =>
+        new RemodelRefusal(
+            errorClass, sentence, retryable, new BackendRequestException(errorClass, sentence, retryable, null, 400));
+
+    /// <summary>
+    /// Owner decision 159A: whether <paramref name="text"/> names a path - a drive letter's root, or the two separators a
+    /// share or a device path (a pipe) begins with.
+    /// </summary>
+    private static bool NamesAPath(string text) =>
+        Regex.IsMatch(text, @"[A-Za-z]:[\\/]") || text.Contains(@"\\") || text.Contains("//");
+
+    /// <summary>
+    /// Owner decision 159A: every sentence the Remodel page can print out of what the host posted from
+    /// <paramref name="from"/> on - an `error`'s message, a `status`'s, Show's `entity.shown`, a lost plan's notice and
+    /// `init`'s, and the capability's - with the type it came in. Not the fields the page shows as the run's data: the run
+    /// folder and the active document in its header (`init`, `document.changed`, `remodel.planned`), and what
+    /// `remodel.result`, `remodel.change` and `remodel.progress` read out of the run folder.
+    /// </summary>
+    private static List<(string Type, string Sentence)> PrintedSentences(RemodelWorld world, int from = 0)
+    {
+        var printed = new List<(string Type, string Sentence)>();
+        List<string> posted;
+        lock (world.Posted)
+        {
+            posted = world.Posted.Skip(from).ToList();
+        }
+
+        foreach (string json in posted)
+        {
+            JsonElement root = JsonDocument.Parse(json).RootElement;
+            string type = root.GetProperty("type").GetString()!;
+            JsonElement payload = root.GetProperty("payload");
+            void Take(JsonElement element, string name)
+            {
+                if (element.ValueKind == JsonValueKind.Object
+                    && element.TryGetProperty(name, out JsonElement value)
+                    && value.ValueKind == JsonValueKind.String)
+                {
+                    printed.Add((type, value.GetString()!));
+                }
+            }
+
+            switch (type)
+            {
+                case "error":
+                case "status":
+                case "entity.shown":
+                case "remodel.plan_lost":
+                    Take(payload, "message");
+                    break;
+                case "init":
+                    Take(payload.GetProperty("remodel"), "message");
+                    if (payload.GetProperty("latest_run").ValueKind == JsonValueKind.Object)
+                    {
+                        Take(payload.GetProperty("latest_run"), "plan_lost");
+                    }
+
+                    break;
+                case "document.changed":
+                    if (payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("remodel", out JsonElement remodel))
+                    {
+                        Take(remodel, "message");
+                    }
+
+                    break;
+            }
+        }
+
+        return printed;
+    }
+
+    /// <summary>Owner decision 159A: no sentence the page can print, posted from <paramref name="from"/> on, names a path.</summary>
+    private static void AssertNothingPrintedNamesAPath(RemodelWorld world, int from = 0)
+    {
+        foreach ((string type, string sentence) in PrintedSentences(world, from))
+        {
+            Assert.False(NamesAPath(sentence), $"a '{type}' the page prints names a path: {sentence}");
+        }
+    }
+
+    /// <summary>
+    /// The routes by which a failure whose own sentence can name a path reached the Remodel page (004 research R18.1's
+    /// list, R18.7 item 1): the bridge's `not_a_part` and `source_not_open`, its refusals of the copy, the backend's
+    /// `RunFolderFailed` and `PackageMissing`, `POST /remodel/runs`, the run's own failure, `OpenFailed` and `DiscardFailed`,
+    /// the restart gate's `BackendUnavailable` and the add-in's word that the backend did not start, Show's
+    /// `entity.shown`, and the host's own failures beside them.
+    /// </summary>
+    public static IEnumerable<object[]> FailuresThatCanNameAPath => new[]
+    {
+        new object[] { "the probe: the bridge's not_a_part" },
+        new object[] { "the probe: the bridge's source_not_open" },
+        new object[] { "the probe: SOLIDWORKS not answering" },
+        new object[] { "the open: a refusal of the copy" },
+        new object[] { "the open: the backend not answering" },
+        new object[] { "the plan: the backend's PackageMissing" },
+        new object[] { "the plan: a failure of the add-in's own" },
+        new object[] { "the plan: the run folder not made" },
+        new object[] { "the plan: the earlier plan's close not answered" },
+        new object[] { "the plan: the earlier plan's close refused by the backend" },
+        new object[] { "Start: POST /remodel/runs refused" },
+        new object[] { "the run: the backend's failure in the run line" },
+        new object[] { "the run: a failure of the add-in's own" },
+        new object[] { "the run: its close not answered" },
+        new object[] { "the run: its close not answered by the review backend" },
+        new object[] { "Open copy: SOLIDWORKS would not open it" },
+        new object[] { "Discard copy: the copy could not be deleted" },
+        new object[] { "Discard copy: discarded not written" },
+        new object[] { "Show change: SOLIDWORKS could not show it" },
+        new object[] { "Open report: Windows could not open it" },
+        new object[] { "Open run folder: Windows could not open it" },
+        new object[] { "View log: the log folder could not be made" },
+        new object[] { "View log: Windows could not open it" },
+        new object[] { "the restart gate: the restart failed" },
+        new object[] { "the add-in: the backend did not start" },
+    };
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T208; research R18.7 item 1): every failure whose own sentence can name a path
+    /// reaches the Remodel tab in the tab's own plain words, where the sentence a test of each route carries names a
+    /// fictional drive-letter path, run folder, pipe or log; no sentence the page can print names a path; and the failure's
+    /// own sentence is in the host's log, for whoever debugs. Before, each reached the page as it was raised. *Changed
+    /// deliberately 2026-10-21 (owner decision 159A, on review; 004 T230, research R19.9):* but for the add-in's word that the
+    /// backend did not start, whose words send the engineer to the Review tab, which shows the failure whole, and which the
+    /// add-in's own report of a first start logs: the host logs nothing more, where it logged it a second time.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FailuresThatCanNameAPath))]
+    public void AFailureThatCanNameAPathReachesTheTabInItsOwnWordsAndItsSentenceGoesToTheLog(string route)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            string said;
+            string words;
+            switch (route)
+            {
+                case "the probe: the bridge's not_a_part":
+                    said = $"'{BridgePart}' is not an existing .SLDPRT file. The re-modeler works on parts, and only on parts, in stage 1.";
+                    world.Pipeline.ProbeFailure = TheBackends("NotAPart", said);
+                    words = RemodelHost.NotAPartOnDiskMessage;
+                    APlanIsRefusedInTheTabsWords(world, "NotAPart", words);
+                    break;
+                case "the probe: the bridge's source_not_open":
+                    said = $"SOLIDWORKS does not have '{BridgePart}' open. The probe reads the document the engineer already has open.";
+                    world.Pipeline.ProbeFailure = TheBackends("RunFolderFailed", said);
+                    words = RemodelHost.BackendFailedMessage;
+                    APlanIsRefusedInTheTabsWords(world, "RunFolderFailed", words);
+                    break;
+                case "the probe: SOLIDWORKS not answering":
+                    said = $"the SOLIDWORKS bridge did not answer remodel.probe_scope: the bridge on {FictionalPipe} could not be reached: [WinError 2]";
+                    world.Pipeline.ProbeFailure = TheBackends("BridgeUnavailable", said, retryable: true);
+                    words = RemodelHost.BridgeNotAnsweringMessage;
+                    APlanIsRefusedInTheTabsWords(world, "BridgeUnavailable", words);
+                    break;
+                case "the open: a refusal of the copy":
+                    said = $"the copy target '{FictionalRun}\\copy\\FICT-bracket-RMS.SLDPRT' already exists, and the re-modeler never writes over a file.";
+                    world.Pipeline.CopyFailure = TheBackends("RunFolderFailed", said);
+                    words = RemodelHost.BackendFailedMessage;
+                    APlanIsRefusedInTheTabsWords(world, "RunFolderFailed", words);
+                    break;
+                case "the open: the backend not answering":
+                    said = "the review backend did not answer: Unable to connect to the remote server";
+                    world.Pipeline.CopyFailure = TheBackends("BackendUnavailable", said, retryable: true);
+                    words = RemodelHost.BackendNotAnsweringMessage;
+                    APlanIsRefusedInTheTabsWords(world, "BackendUnavailable", words);
+                    break;
+                case "the plan: the backend's PackageMissing":
+                    said = $"package-before.json is not in {FictionalRun}; the dump has not been written";
+                    world.Pipeline.PlanFailure = TheBackends("PackageMissing", said);
+                    words = RemodelHost.BackendFailedMessage;
+                    APlanIsRefusedInTheTabsWords(world, "PackageMissing", words);
+                    break;
+                case "the plan: a failure of the add-in's own":
+                    said = $"'{FictionalRun}\\package.json' records the 'full' profile, so it cannot be used as 'package-before.json'.";
+                    world.Pipeline.PlanFailure = new InvalidOperationException(said);
+                    words = RemodelHost.UnexpectedFailureMessage;
+                    APlanIsRefusedInTheTabsWords(world, "HostError", words);
+                    break;
+                case "the plan: the run folder not made":
+                    string file = Path.Combine(world.Root, "FICT-not-a-folder");
+                    File.WriteAllText(file, "a file where the run root would be");
+                    world.RunRootSpelling = Path.Combine(file, "runs");
+                    said = file;
+                    words = RemodelHost.RunFolderNotMadeMessage;
+                    APlanIsRefusedInTheTabsWords(world, "RunFolderFailed", words);
+                    break;
+                case "the plan: the earlier plan's close not answered":
+                    world.Receive("remodel.plan", "p0", new { });
+                    said = $"the pipe {FictionalPipe} was closed before the close was answered";
+                    world.Pipeline.CloseFailure = new IOException(said);
+                    words = RemodelHost.EarlierPlanNotClosedMessage;
+                    world.Receive("remodel.plan", "p1", new { });
+                    JsonElement refused = world.Reply("error", "p1");
+                    Assert.Equal("BridgeUnavailable", refused.GetProperty("error_class").GetString());
+                    Assert.Equal(words, refused.GetProperty("message").GetString());
+                    break;
+                case "the plan: the earlier plan's close refused by the backend":
+                    // Owner decision 159A, on review (004 T225; the mutation review's M3): the backend's own
+                    // `BridgeUnavailable`, whose sentence names the bridge's pipe (`chat/remodel.py`, `_unavailable`).
+                    world.Receive("remodel.plan", "p0", new { });
+                    said = $"the SOLIDWORKS bridge did not answer remodel.close: the bridge on {FictionalPipe} could not be reached";
+                    world.Pipeline.CloseFailure = TheBackends("BridgeUnavailable", said, retryable: true);
+                    words = RemodelHost.EarlierPlanNotClosedMessage;
+                    world.Receive("remodel.plan", "p1", new { });
+                    AnAnswerIs(world, "p1", "BridgeUnavailable", words);
+                    Assert.True(world.Reply("error", "p1").GetProperty("retryable").GetBoolean());
+                    Assert.Empty(world.AllPosted("remodel.plan_lost"));
+                    break;
+                case "Start: POST /remodel/runs refused":
+                    world.Receive("remodel.plan", "p1", new { });
+                    said = $"{FictionalRun} holds no plan; press Remodel to plan this part before starting a run";
+                    world.Pipeline.RunFailure = TheBackends("RunNotPlanned", said);
+                    words = RemodelHost.BackendFailedMessage;
+                    world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                    JsonElement unasked = Assert.Single(world.AllPosted("error"));
+                    Assert.Equal("RunNotPlanned", unasked.GetProperty("error_class").GetString());
+                    Assert.Equal(words, unasked.GetProperty("message").GetString());
+                    Assert.Contains(world.AllPosted("status"), status => status.GetProperty("message").GetString() == words);
+                    break;
+                case "the run: the backend's failure in the run line":
+                    world.Receive("remodel.plan", "p1", new { });
+                    said = $"OSError: [Errno 13] Permission denied: '{FictionalRun}\\plan.json'";
+                    world.Pipeline.RunState = "failed";
+                    world.Pipeline.DuringRun = reporter => reporter.Status("error", said);
+                    words = RemodelHost.BackendFailedMessage;
+                    world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                    Assert.Contains(world.AllPosted("status"), status => status.GetProperty("stage").GetString() == "error"
+                        && status.GetProperty("message").GetString() == words);
+                    break;
+                case "the run: a failure of the add-in's own":
+                    world.Receive("remodel.plan", "p1", new { });
+                    said = $"Access to the path '{FictionalRun}\\package-after.json' is denied.";
+                    world.Pipeline.RunFailure = new IOException(said);
+                    words = RemodelHost.UnexpectedFailureMessage;
+                    world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                    JsonElement failed = Assert.Single(world.AllPosted("error"));
+                    Assert.Equal("HostError", failed.GetProperty("error_class").GetString());
+                    Assert.Equal(words, failed.GetProperty("message").GetString());
+                    Assert.Contains(world.AllPosted("status"), status => status.GetProperty("message").GetString() == words);
+                    break;
+                case "the run: its close not answered":
+                    world.Receive("remodel.plan", "p1", new { });
+                    said = $"the pipe {FictionalPipe} was closed before the close was answered";
+                    world.Pipeline.CloseFailure = new IOException(said);
+                    words = RemodelHost.RunCloseNotAnsweredMessage;
+                    world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                    Assert.Equal(words, world.LastPosted("status").GetProperty("message").GetString());
+                    break;
+                case "the run: its close not answered by the review backend":
+                    // Owner decision 159A, on review (004 T223; the mutation review's M6): the add-in's client gives up after
+                    // 30 seconds, while the backend waits 60 for the bridge.
+                    world.Receive("remodel.plan", "p1", new { });
+                    said = $"the review backend did not answer: The operation has timed out (FICT {FictionalRun})";
+                    world.Pipeline.CloseFailure = TheBackends("BackendUnavailable", said, retryable: true);
+                    words = RemodelHost.RunCloseNotAnsweredMessage;
+                    world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                    Assert.Equal(words, world.LastPosted("status").GetProperty("message").GetString());
+                    Assert.False(world.Host.LatestRun!.SessionEnded);
+                    break;
+                case "Open copy: SOLIDWORKS would not open it":
+                    world.Receive("remodel.plan", "p1", new { });
+                    said = $"SOLIDWORKS would not open the copy at '{FictionalRun}\\copy\\FICT-bracket-RMS.SLDPRT': file not found.";
+                    world.Pipeline.ActivateFailure = new InvalidOperationException(said);
+                    words = RemodelHost.OpenCopyFailedMessage;
+                    world.Receive("remodel.open_copy", "o1", new { run_dir = world.ExpectedRunDirectory });
+                    AnAnswerIs(world, "o1", "OpenFailed", words);
+                    break;
+                case "Discard copy: the copy could not be deleted":
+                    world.Receive("remodel.plan", "p1", new { });
+                    words = RemodelHost.DiscardCopyFailedMessage;
+                    said = Path.GetFileName(world.ExpectedCopyPath);
+                    using (new FileStream(world.ExpectedCopyPath, FileMode.Open, FileAccess.Read, FileShare.None))
+                    {
+                        world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+                    }
+
+                    AnAnswerIs(world, "d1", "DiscardFailed", words);
+                    break;
+                case "Discard copy: discarded not written":
+                    world.Receive("remodel.plan", "p1", new { });
+                    string plan = Path.Combine(world.ExpectedRunDirectory, "plan.json");
+                    words = RemodelHost.DiscardStateNotWrittenMessage;
+                    said = plan;
+                    File.SetAttributes(plan, FileAttributes.ReadOnly);
+                    try
+                    {
+                        world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+                    }
+                    finally
+                    {
+                        File.SetAttributes(plan, FileAttributes.Normal);
+                    }
+
+                    AnAnswerIs(world, "d1", "DiscardFailed", words);
+                    break;
+                case "Show change: SOLIDWORKS could not show it":
+                    world.Receive("remodel.plan", "p1", new { });
+                    world.WriteRunArtifacts();
+                    said = "'C:\\Fictional\\FICT-sheet.SLDDRW' is a drawing, which has no configuration to bind a session to.";
+                    world.Resolver.Failure = new InvalidOperationException(said);
+                    words = RemodelHost.ShowFailedMessage;
+                    world.Receive("remodel.show_change", "c1", new { run_dir = world.ExpectedRunDirectory, change_seq = 17 });
+                    JsonElement shown = world.Reply("entity.shown", "c1");
+                    Assert.False(shown.GetProperty("ok").GetBoolean());
+                    Assert.Equal(words, shown.GetProperty("message").GetString());
+                    break;
+                case "Open report: Windows could not open it":
+                case "Open run folder: Windows could not open it":
+                    world.Receive("remodel.plan", "p1", new { });
+                    world.WriteRunArtifacts();
+                    said = $"no application is associated with '{FictionalRun}\\report.md'";
+                    world.Opener.Failure = new System.ComponentModel.Win32Exception(said);
+                    words = RemodelHost.NotOpenedMessage;
+                    world.Receive(route.StartsWith("Open report", StringComparison.Ordinal) ? "report.open" : "folder.open", "r1", new { run_dir = world.ExpectedRunDirectory });
+                    AnAnswerIs(world, "r1", "OpenFailed", words);
+                    break;
+                case "View log: the log folder could not be made":
+                    string blocker = Path.Combine(world.Root, "FICT-log-file");
+                    File.WriteAllText(blocker, "a file where the log folder would be");
+                    world.LogFolder = Path.Combine(blocker, "logs");
+                    said = blocker;
+                    words = RemodelHost.LogFolderNotOpenedMessage;
+                    world.Receive("log.open", "l1", new { });
+                    AnAnswerIs(world, "l1", "OpenFailed", words);
+                    break;
+                case "View log: Windows could not open it":
+                    said = $"no application is associated with '{world.LogFolder}'";
+                    world.Opener.Failure = new System.ComponentModel.Win32Exception(said);
+                    words = RemodelHost.LogFolderNotOpenedMessage;
+                    world.Receive("log.open", "l1", new { });
+                    AnAnswerIs(world, "l1", "OpenFailed", words);
+                    break;
+                case "the restart gate: the restart failed":
+                    said = $"the backend could not be started: the job refused it (log: {FictionalLog})";
+                    world.Options.BeginRun = begin => new BackendRequestException("BackendUnavailable", said, retryable: true);
+                    words = RemodelHost.BackendNotRestartedMessage;
+                    world.Receive("remodel.plan", "p1", new { });
+                    AnAnswerIs(world, "p1", "BackendUnavailable", words);
+                    Assert.True(world.Reply("error", "p1").GetProperty("retryable").GetBoolean());
+                    break;
+                case "the add-in: the backend did not start":
+                    said = $"the backend did not answer /health within 30 seconds. See the log at {FictionalLog}.";
+                    words = RemodelHost.BackendDidNotStartMessage;
+                    world.Host.PostStatus("error", ReviewHost.WithTheWayOn(said, ReviewHost.StartItAgainOnTheReviewTab), lifecycle: true);
+                    JsonElement told = world.LastPosted("status");
+                    Assert.Equal("error", told.GetProperty("stage").GetString());
+                    Assert.Equal(words, told.GetProperty("message").GetString());
+                    Assert.True(told.GetProperty("lifecycle").GetBoolean());
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(route), route, "no such route");
+            }
+
+            AssertNothingPrintedNamesAPath(world);
+            List<string> logged;
+            lock (world.Logged)
+            {
+                logged = world.Logged.ToList();
+            }
+
+            if (route == "the add-in: the backend did not start")
+            {
+                Assert.DoesNotContain(logged, line => line.Contains(said));
+            }
+            else
+            {
+                Assert.Contains(logged, line => line.Contains(said));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T208): the host's log keeps what a failure said masked, as everything this host sends is
+    /// (FR-015): a failure's sentence that quotes the backend's token reaches neither the page nor the log unmasked, and the
+    /// rest of the sentence is kept.
+    /// </summary>
+    [Fact]
+    public void WhatTheLogKeepsIsMasked()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.ProbeFailure = TheBackends("RunFolderFailed", "FICT the backend refused it, quoting 0FAKEtoken.");
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            List<string> logged;
+            lock (world.Logged)
+            {
+                logged = world.Logged.ToList();
+            }
+
+            Assert.Contains(logged, line => line.Contains("FICT the backend refused it, quoting"));
+            Assert.All(logged, line => Assert.DoesNotContain("0FAKEtoken", line, StringComparison.Ordinal));
+            Assert.All(
+                world.Posted.Where(json => !json.Contains("\"type\":\"init\"")),
+                json => Assert.DoesNotContain("0FAKEtoken", json, StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T217; research R19.9; the race review's finding R2): the sentence the
+    /// tab sends the engineer to View log to read reaches <c>addin.log</c> though another append holds the file as Open copy
+    /// fails - its handle open as an append's is, writing and sharing the file for reading only. The add-in appends there
+    /// from several threads at once; the sentence was lost. The host logs through the append <c>AddInLog.Write</c> makes,
+    /// on a file of this case's own (<see cref="AddInLogTests"/>).
+    /// </summary>
+    [Fact]
+    public void AFailuresSentenceReachesTheAddInsLogThoughAnotherAppendHoldsTheFile()
+    {
+        using (var world = new RemodelWorld())
+        {
+            string log = Path.Combine(world.Root, "FICT-addin.log");
+            File.WriteAllText(log, string.Empty);
+            world.Open();
+            world.Options.Log = line => AddInLog.Append(log, line);
+            world.Receive("remodel.plan", "p1", new { });
+            const string Sentence = "FICT SOLIDWORKS would not open the copy";
+            world.Pipeline.ActivateFailure = new InvalidOperationException(Sentence);
+
+            using (new FileStream(log, FileMode.Append, FileAccess.Write, FileShare.Read))
+            {
+                world.Receive("remodel.open_copy", "o1", new { run_dir = world.ExpectedRunDirectory });
+            }
+
+            AnAnswerIs(world, "o1", "OpenFailed", RemodelHost.OpenCopyFailedMessage);
+            AddInLog.Append(log, "FICT a later line");
+            string written = File.ReadAllText(log);
+            Assert.Contains("FICT a later line", written, StringComparison.Ordinal);
+            Assert.Contains(Sentence, written, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T235 - a guard; asked as 158A was merged): a line the add-in's log keeps while
+    /// something else holds the file is the line the host masked, so the key a failure quoted reaches neither the kept
+    /// line nor the file once it is written. The host masks a line before it hands it on (FR-015;
+    /// <see cref="WhatTheLogKeepsIsMasked"/>), and <c>AddInLog</c> keeps only what it is handed.
+    /// </summary>
+    [Fact]
+    public void ALineKeptWhileTheLogIsHeldIsTheMaskedLine()
+    {
+        using (var world = new RemodelWorld())
+        {
+            string log = Path.Combine(world.Root, "FICT-addin.log");
+            File.WriteAllText(log, string.Empty);
+            world.Open();
+            world.Options.Log = line => AddInLog.Append(log, line);
+            world.Pipeline.ProbeFailure = TheBackends("RunFolderFailed", "FICT the backend refused it, quoting 0FAKEtoken.");
+
+            using (new FileStream(log, FileMode.Append, FileAccess.Write, FileShare.Read))
+            {
+                world.Receive("remodel.plan", "p1", new { });
+            }
+
+            AddInLog.Append(log, "FICT a later line");
+            string written = File.ReadAllText(log);
+            Assert.Contains("FICT the backend refused it, quoting", written, StringComparison.Ordinal);
+            Assert.DoesNotContain("0FAKEtoken", written, StringComparison.Ordinal);
+            Assert.Contains("FICT a later line", written, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229 - a guard): the line the host's log keeps, in the shape research R19.3 and
+    /// `run-artifacts.md` give it - `Remodel tab, &lt;what was asked&gt;: &lt;class&gt;: &lt;sentence&gt;` for a refusal,
+    /// and for any other failure the whole of it: its type, its message and where it was thrown.
+    /// </summary>
+    [Fact]
+    public void TheLogKeepsWhatWasAskedAndWhatTheFailureSaid()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.ProbeFailure = TheBackends("RunFolderFailed", "FICT the backend refused the probe.");
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.ProbeFailure = new InvalidOperationException("FICT the add-in failed the probe.");
+            world.Receive("remodel.plan", "p2", new { });
+
+            List<string> logged;
+            lock (world.Logged)
+            {
+                logged = world.Logged.ToList();
+            }
+
+            Assert.Equal(2, logged.Count);
+            Assert.Equal("Remodel tab, remodel.plan: RunFolderFailed: FICT the backend refused the probe.", logged[0]);
+            Assert.StartsWith(
+                "Remodel tab, remodel.plan: System.InvalidOperationException: FICT the add-in failed the probe.",
+                logged[1],
+                StringComparison.Ordinal);
+            Assert.Contains(" at ", logged[1], StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's RW5 - a guard): a log that throws - its folder gone,
+    /// its disk full - costs nothing but its line. The page is answered all the same, and a run whose ending holds a refusal
+    /// to tell still tells it, with the run's last word after it: a throw from the log inside a held post would have left
+    /// <c>Execute</c> before that last word.
+    /// </summary>
+    [Fact]
+    public void ALogThatThrowsCostsNothingButItsLine()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Options.Log = line => throw new IOException("FICT the log's disk is full");
+            world.Pipeline.ProbeFailure = TheBackends("RunFolderFailed", "FICT the backend refused the probe.");
+            world.Receive("remodel.plan", "p1", new { });
+            AnAnswerIs(world, "p1", "RunFolderFailed", RemodelHost.BackendFailedMessage);
+
+            world.Pipeline.ProbeFailure = null;
+            world.Receive("remodel.plan", "p2", new { });
+            world.Pipeline.RunFailure = TheBackends("PackageMissing", "FICT package-after.json is not there.");
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Contains(
+                world.AllPosted("error"), error => error.GetProperty("error_class").GetString() == "PackageMissing");
+            Assert.Equal(
+                "The run ended without saving the copy. The report says why.",
+                world.LastPosted("status").GetProperty("message").GetString());
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's M2 - a guard): only the add-in's `error` on the
+    /// backend is told in this tab's words. Its other words on the backend - `backend_starting` and `ready`, which every
+    /// start of the add-in posts (<c>SwReviewAddIn.StartBackend</c>) - reach the page as the add-in gave them, still marked
+    /// as its own, and nothing of them is logged.
+    /// </summary>
+    [Theory]
+    [InlineData("backend_starting", "Starting the review backend...")]
+    [InlineData("ready", "Backend ready.")]
+    public void TheAddInsOtherWordsOnTheBackendReachTheTabAsTheyAre(string stage, string message)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+
+            world.Host.PostStatus(stage, message, lifecycle: true);
+
+            JsonElement told = world.LastPosted("status");
+            Assert.Equal(stage, told.GetProperty("stage").GetString());
+            Assert.Equal(message, told.GetProperty("message").GetString());
+            Assert.True(told.GetProperty("lifecycle").GetBoolean());
+            Assert.Empty(world.Logged);
+        }
+    }
+
+    /// <summary>A plan refused with <paramref name="errorClass"/> in <paramref name="words"/>, in the refusal and in the run line's `error` beside it.</summary>
+    private static void APlanIsRefusedInTheTabsWords(RemodelWorld world, string errorClass, string words)
+    {
+        world.Receive("remodel.plan", "p1", new { });
+        AnAnswerIs(world, "p1", errorClass, words);
+        Assert.All(
+            world.AllPosted("status").Where(status => status.GetProperty("stage").GetString() == "error"),
+            status => Assert.Equal(words, status.GetProperty("message").GetString()));
+    }
+
+    /// <summary>The `error` answering <paramref name="id"/>, of <paramref name="errorClass"/>, in <paramref name="words"/>.</summary>
+    private static void AnAnswerIs(RemodelWorld world, string id, string errorClass, string words)
+    {
+        JsonElement error = world.Reply("error", id);
+        Assert.Equal(errorClass, error.GetProperty("error_class").GetString());
+        Assert.Equal(words, error.GetProperty("message").GetString());
+    }
+
+    /// <summary>
+    /// The classes the review backend answers on the remodel routes, as its contract's error table lists them
+    /// (<c>backend-remodel.md</c>), with the two it shares with every route (<c>InvalidRunDir</c>, <c>InvalidRequest</c>) and the
+    /// three the add-in's client of it raises (<c>BackendUnavailable</c>, <c>HttpError</c>, <c>BadResponse</c>).
+    /// </summary>
+    public static IEnumerable<object[]> TheBackendsClasses()
+    {
+        string contract = File.ReadAllText(Path.Combine(
+            ErrorLabelsCoverTheHostTests.RepositoryRoot(), "specs", "004-resilient-remodeler", "contracts", "backend-remodel.md"));
+        int table = contract.IndexOf("## Error classes", StringComparison.Ordinal);
+        int end = contract.IndexOf("\n## ", table + 1, StringComparison.Ordinal);
+        var classes = Regex.Matches(contract.Substring(table, end - table), @"^\| `(?<class>[A-Za-z]+)` \|", RegexOptions.Multiline)
+            .Cast<Match>()
+            .Select(match => match.Groups["class"].Value)
+            .Concat(new[] { "InvalidRunDir", "InvalidRequest", "BackendUnavailable", "HttpError", "BadResponse" })
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return classes.Select(errorClass => new object[] { errorClass });
+    }
+
+    /// <summary>Owner decision 159A (004 T208): the contract's error table is read whole, so no class it lists goes unworded.</summary>
+    [Fact]
+    public void TheBackendsErrorTableIsReadWhole()
+    {
+        string[] classes = TheBackendsClasses().Select(row => (string)row[0]).ToArray();
+
+        foreach (string errorClass in new[]
+                 {
+                     "NotAPart", "DocumentDirty", "ExternalReferences", "ScopeRefused", "RunFolderFailed", "BridgeUnavailable",
+                     "PackageMissing", "NotModelCheck", "RunNotPlanned", "ResumeRefused", "RunInProgress", "UnknownJob",
+                     "PackageAfterRefused",
+                 })
+        {
+            Assert.Contains(errorClass, classes);
+        }
+    }
+
+    /// <summary>
+    /// What the review backend's body says for `ScopeRefused`, the one class it words plainly itself (owner decision 149A,
+    /// `SCOPE_REFUSAL_WORDS`, pinned word for word in <c>test_chat_remodel_routes.py</c>): the tab prints it as it is.
+    /// </summary>
+    private const string BackendsScopeWords =
+        "The part to be copied is not one this remodel checked, so nothing was copied and no new plan was made. Your part "
+        + "was not changed. Make your part the active document and press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T208): every class the review backend can answer reaches the tab in words that
+    /// name no path - the tab's own for the class, or for every class it has no sentence of its own for - where its sentence
+    /// names the part's full path and a run folder, as the backend's do; `ScopeRefused` in the backend's own plain words.
+    /// The sentence is in the host's log.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(TheBackendsClasses))]
+    public void EveryClassTheBackendAnswersReachesTheTabInWordsThatNameNoPath(string errorClass)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            string said = errorClass == "ScopeRefused"
+                ? BackendsScopeWords
+                : $"the backend refused '{BridgePart}' with {errorClass} in {FictionalRun}.";
+            world.Pipeline.ProbeFailure = TheBackends(errorClass, said);
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            string expected = errorClass switch
+            {
+                "DocumentDirty" => RemodelHost.DocumentDirtyMessage,
+                "ExternalReferences" => RemodelHost.ExternalReferencesMessage,
+                "ScopeRefused" => BackendsScopeWords,
+                "NotAPart" => RemodelHost.NotAPartOnDiskMessage,
+                "BridgeUnavailable" => RemodelHost.BridgeNotAnsweringMessage,
+                "BackendUnavailable" => RemodelHost.BackendNotAnsweringMessage,
+                _ => RemodelHost.BackendFailedMessage,
+            };
+            AnAnswerIs(world, "p1", errorClass, expected);
+            AssertNothingPrintedNamesAPath(world);
+            if (errorClass != "ScopeRefused")
+            {
+                Assert.Contains(world.Logged, line => line.Contains(said));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T208): the sentences of the tab's own for a failure that can name a path, word for word.
+    /// Each says what was not done and that the engineer's part was not changed - but the word that the backend did not
+    /// start, which reports no press, and the two of Windows not opening a file or a folder - and the way on, by the
+    /// button's label where there is one; and each names no path, no command and none of the build's plumbing. *Changed
+    /// deliberately 2026-10-21 (owner decision 159A, on review; 004 T223, research R19.9):* the two words of a close that
+    /// was not answered no longer say SOLIDWORKS did not answer it - a close the review backend did not carry, or refused
+    /// before the bridge was asked, is not answered either (the mutation review's M6) - but what is known: that closing the
+    /// copy was not confirmed.
+    /// </summary>
+    [Fact]
+    public void TheTabsWordsForAFailureThatCanNameAPathArePlain()
+    {
+        var expected = new Dictionary<string, string>
+        {
+            {
+                RemodelHost.UnexpectedFailureMessage,
+                "The add-in met a failure it did not expect, so what was asked was not done. Your part was not changed. "
+                    + "Press View log to see why."
+            },
+            {
+                RemodelHost.NotAPartOnDiskMessage,
+                "The active document is not a part file the re-modeler can find where SOLIDWORKS opened it from - it may have "
+                    + "been moved, renamed or deleted since - so nothing was copied and no new plan was made. Your part was not "
+                    + "changed. Save it as a part, then press Remodel a copy again."
+            },
+            {
+                RemodelHost.BridgeNotAnsweringMessage,
+                "SOLIDWORKS did not answer the re-modeler, so it stopped. Your part was not changed. Wait a moment, then press "
+                    + "Remodel a copy again."
+            },
+            {
+                RemodelHost.BackendNotAnsweringMessage,
+                "The review backend did not answer, so the re-modeler stopped. Your part was not changed. Wait for the backend "
+                    + "to be ready, then press Remodel a copy again."
+            },
+            {
+                RemodelHost.BackendFailedMessage,
+                "The review backend could not do a step of this remodel, so it stopped. Your part was not changed. Press View "
+                    + "log to see why, then press Remodel a copy to plan again."
+            },
+            {
+                RemodelHost.RunFolderNotMadeMessage,
+                "The run folder could not be made under the run root, so nothing was copied and no new plan was made. Your part "
+                    + "was not changed. Press View log to see why; if the run root cannot be written to, choose a local folder "
+                    + "for runs in Settings on the Review tab, then press Remodel a copy again."
+            },
+            {
+                RemodelHost.EarlierPlanNotClosedMessage,
+                "Closing the earlier plan's copy was not confirmed, so that plan is left as it was and no new plan was made. "
+                    + "Your part was not changed. Wait a moment, then press Remodel a copy again."
+            },
+            {
+                RemodelHost.RunCloseNotAnsweredMessage,
+                "The run ended, but closing its copy was not confirmed, so the copy may still be open in SOLIDWORKS; the "
+                    + "report and the saved artifacts are kept. Your part was not changed. Press View log to see why."
+            },
+            {
+                RemodelHost.OpenCopyFailedMessage,
+                "SOLIDWORKS did not open the copy, so nothing was opened. Your part was not changed. Press View log to see why, "
+                    + "then press Open copy again."
+            },
+            {
+                RemodelHost.DiscardCopyFailedMessage,
+                "The copy could not be deleted, so it is still in the run folder; SOLIDWORKS may still have it open. Your part "
+                    + "was not changed. Close the copy in SOLIDWORKS without saving, then press Discard copy again. Press View "
+                    + "log to see why."
+            },
+            {
+                RemodelHost.DiscardStateNotWrittenMessage,
+                "The copy was deleted, but 'discarded' could not be written to plan.json, so this tab would go on reporting the "
+                    + "state the run ended in. Your part was not changed. Press View log to see why."
+            },
+            {
+                RemodelHost.BackendNotRestartedMessage,
+                "The review backend has not restarted with the saved settings, so nothing was done. Your part was not changed. "
+                    + "Save the settings again on the Review tab to restart it, then try again. Press View log to see why."
+            },
+            {
+                RemodelHost.BackendDidNotStartMessage,
+                "The review backend did not start, so this tab cannot plan or run. The Review tab says why. Save Settings on the "
+                    + "Review tab to start it again."
+            },
+            {
+                RemodelHost.ShowFailedMessage,
+                "SOLIDWORKS could not show this, so nothing was selected. Press View log to see why."
+            },
+            {
+                RemodelHost.NotOpenedMessage,
+                "Windows could not open it, so nothing was opened. Press View log to see why."
+            },
+            {
+                RemodelHost.LogFolderNotOpenedMessage,
+                "Windows could not open the log folder, so nothing was opened."
+            },
+        };
+
+        foreach (KeyValuePair<string, string> sentence in expected)
+        {
+            Assert.Equal(sentence.Value, sentence.Key);
+            AssertPlainWords(sentence.Key);
+            Assert.False(NamesAPath(sentence.Key), sentence.Key);
+            Assert.DoesNotContain("/", sentence.Key, StringComparison.Ordinal);
+            Assert.DoesNotContain("run_dir", sentence.Key, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Whether a `status` that ends the run on the page has been posted since `remodel.started`, read under the posts' lock.</summary>
+    private static bool TheRunsLastWordIsPosted(RemodelWorld world)
+    {
+        lock (world.Posted)
+        {
+            List<JsonElement> posted = world.Posted.Select(json => JsonDocument.Parse(json).RootElement.Clone()).ToList();
+            int started = posted.FindIndex(message => message.GetProperty("type").GetString() == "remodel.started");
+            return started >= 0 && posted.FindIndex(started + 1, EndsTheRunOnThePage) >= 0;
+        }
+    }
+
     // ---- a settings restart and a plan or a run (owner decision 145A) ---------------------------
 
     /// <summary>
@@ -6280,7 +8090,9 @@ public sealed class RemodelHostTests
     /// <summary>
     /// A Start the gate refuses is answered with the gate's refusal and the run never starts: no
     /// `remodel.started`, no run call, the plan still planned and startable once nothing holds the
-    /// restart back.
+    /// restart back. *Changed deliberately 2026-10-21 (owner decision 159A, 004 research R19):* the gate's
+    /// `BackendUnavailable` that can be pressed again is in the tab's own words, where it carried the
+    /// gate's own - a restart's failure can end in the backend's log's path - which is now in the host's log.
     /// </summary>
     [Fact]
     public void AStartTheRestartGateRefusesIsAnsweredWithItsRefusalAndTheRunNeverStarts()
@@ -6298,7 +8110,9 @@ public sealed class RemodelHostTests
 
             JsonElement error = world.Reply("error", "s1");
             Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
-            Assert.Equal("FICT the backend does not answer.", error.GetProperty("message").GetString());
+            Assert.Equal(RemodelHost.BackendNotRestartedMessage, error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Contains(world.Logged, line => line.Contains("FICT the backend does not answer."));
             Assert.Empty(world.AllPosted("remodel.started"));
             Assert.Equal(0, world.Pipeline.Count("run"));
             Assert.Equal(RemodelRunPhase.Planned, world.Host.LatestRun!.Phase);
@@ -6308,6 +8122,34 @@ public sealed class RemodelHostTests
             world.Receive("remodel.start", "s2", new { run_dir = runDir });
             world.Reply("remodel.started", "s2");
             Assert.Equal(1, world.Pipeline.Count("run"));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T208, a guard): only the gate's `BackendUnavailable` that can be pressed again - the
+    /// restart failed, or the backend did not answer whether a turn runs - is told in the tab's own words. The gate's other
+    /// refusals keep the words the review host writes for this tab, which name no path, with their class and flag: a remodel
+    /// run in flight, and the add-in unloading, whose `BackendUnavailable` cannot be pressed again. A turn's is pinned by
+    /// <see cref="APlanTheRestartGateRefusesIsAnsweredWithItsRefusalAndNothingHappens"/>.
+    /// </summary>
+    [Theory]
+    [InlineData("RemodelRunning", true)]
+    [InlineData("BackendUnavailable", false)]
+    public void AGateRefusalThatIsNotTheRestartsKeepsTheReviewHostsWords(string errorClass, bool retryable)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            string words = $"FICT the review host's words for {errorClass}.";
+            world.Options.BeginRun = begin => new BackendRequestException(errorClass, words, retryable);
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal(errorClass, error.GetProperty("error_class").GetString());
+            Assert.Equal(words, error.GetProperty("message").GetString());
+            Assert.Equal(retryable, error.GetProperty("retryable").GetBoolean());
+            Assert.Empty(world.Pipeline.Calls);
         }
     }
 
@@ -6404,6 +8246,8 @@ public sealed class RemodelHostTests
     /// back every settings restart, and every new review with it (owner decision 145A, found on
     /// review). The plan stays planned and startable, nothing is left in flight for Stop, and a page
     /// already told `remodel.started` is told the run is over, by the status that ends a run.
+    /// *Changed deliberately 2026-10-21 (owner decision 159A, 004 research R19):* that status is in the
+    /// tab's own words, where it carried the failure's message, which is now in the host's log.
     /// </summary>
     [Theory]
     [InlineData("the attachment read")]
@@ -6443,7 +8287,8 @@ public sealed class RemodelHostTests
                 world.Reply("remodel.started", "s1");
                 Assert.Contains(world.AllPosted("status"), status =>
                     status.GetProperty("stage").GetString() == "error"
-                    && (status.GetProperty("message").GetString() ?? string.Empty).Contains(Failure));
+                    && status.GetProperty("message").GetString() == RemodelHost.UnexpectedFailureMessage);
+                Assert.Contains(world.Logged, line => line.Contains(Failure));
             }
             else
             {
@@ -7152,6 +8997,9 @@ public sealed class RemodelHostTests
             Directory.CreateDirectory(LogFolder);
         }
 
+        /// <summary>The world's own folder, for a case that needs a file of its own beside the run root.</summary>
+        public string Root => _root;
+
         public string RunRoot { get; }
 
         /// <summary>The run root as the setting spells it, when not <see cref="RunRoot"/> (owner decision 154A).</summary>
@@ -7164,7 +9012,14 @@ public sealed class RemodelHostTests
         /// </summary>
         public IRunRootProbe? Probe { get; set; }
 
-        public string LogFolder { get; }
+        /// <summary>What `log.open` opens; settable so a case can name one that cannot be made (owner decision 159A).</summary>
+        public string LogFolder { get; set; }
+
+        /// <summary>
+        /// Owner decision 159A: every line the host wrote to its log (<see cref="RemodelHostOptions.Log"/>), in order -
+        /// what a failure said where the tab told it in its own words.
+        /// </summary>
+        public List<string> Logged { get; } = new List<string>();
 
         public PageDocument? Document { get; set; } = new PageDocument(SourcePath, "Default");
 
@@ -7262,6 +9117,15 @@ public sealed class RemodelHostTests
                 // Owner decision 152A, on the Codex review (X2): the gate's hold once one is
                 // attached, as the add-in wires it, and nothing to hold before.
                 HoldToolService = () => Hold != null ? Hold() : _gate != null ? _gate.HoldAttachment(ToolServiceHolder.Remodel) : ToolServiceHold.Nothing,
+
+                // Owner decision 159A: the host's log, collected, where the add-in writes it to its own.
+                Log = line =>
+                {
+                    lock (Logged)
+                    {
+                        Logged.Add(line);
+                    }
+                },
             };
             _options.RunRootProbe = Probe ?? FakeRunRootProbe.Local();
 
@@ -7739,6 +9603,13 @@ public sealed class RemodelHostTests
         public bool SessionOpen { get; private set; }
 
         /// <summary>
+        /// The run folder whose open opened the session (owner decision 159A, protocol 1.5): a close names its run, and the
+        /// bridge refuses one naming another - <c>session_mismatch</c>, which the backend answers as <c>RunFolderFailed</c> -
+        /// leaving the session as it was.
+        /// </summary>
+        public string? SessionRun { get; private set; }
+
+        /// <summary>
         /// 004 T175: whether <see cref="CopyFailure"/> is thrown after the bridge's open answered -
         /// the backend's own steps after it failed, or its reply was lost - so the session is open
         /// although the open failed.
@@ -7760,11 +9631,13 @@ public sealed class RemodelHostTests
             if (CopyFailure != null)
             {
                 SessionOpen = HoldsTheBridgeSession && CopyFailureLeavesTheSessionOpen;
+                SessionRun = SessionOpen ? request.RunDirectory : null;
                 throw CopyFailure;
             }
 
             // The bridge closed the document itself on `preexisting_rebuild_errors`.
             SessionOpen = HoldsTheBridgeSession && CopyPresent;
+            SessionRun = SessionOpen ? request.RunDirectory : null;
 
             string folder = Path.Combine(request.RunDirectory, "copy");
             CopyPath = Path.Combine(
@@ -7805,12 +9678,31 @@ public sealed class RemodelHostTests
 
             // A close the bridge answered ends the session whatever it left - `close_incomplete`
             // included - and one it could not answer (`BridgeUnavailable`, or no named refusal)
-            // leaves it as it was.
+            // leaves it as it was; so does one the backend could not send (`BackendUnavailable`;
+            // owner decision 159A, on the final review). Since protocol 1.5 the bridge compares the
+            // run a close names with its session's exactly, and refuses another run's.
             bool answered = CloseFailure == null
-                || (CloseFailure is RemodelRefusal refusal && refusal.ErrorClass != "BridgeUnavailable");
+                || (CloseFailure is RemodelRefusal refusal
+                    && refusal.ErrorClass != "BridgeUnavailable"
+                    && refusal.ErrorClass != "BackendUnavailable"
+                    && refusal.ErrorClass != "HttpError"
+                    && refusal.ErrorClass != "BadResponse"
+                    && refusal.ErrorClass != "InvalidRunDir"
+                    && refusal.ErrorClass != "InvalidRequest");
+            if (answered
+                && SessionOpen
+                && !string.Equals(SessionRun, runDirectory, StringComparison.Ordinal))
+            {
+                throw new RemodelRefusal(
+                    "RunFolderFailed",
+                    "FICT 'remodel.close' was sent for another run than the one whose copy is open on this bridge.",
+                    retryable: false);
+            }
+
             if (answered)
             {
                 SessionOpen = false;
+                SessionRun = null;
             }
 
             if (CloseFailure != null)
@@ -7863,15 +9755,41 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>A reporter that keeps nothing, for a fake asked directly.</summary>
+    private sealed class NullReporter : IRemodelRunReporter
+    {
+        public bool StopRequested => false;
+
+        public void Status(string stage, string message)
+        {
+        }
+
+        public void Progress(int applied, int total, int seq, string kind, string? subjectName)
+        {
+        }
+
+        public void Change(string changeRecordJson)
+        {
+        }
+    }
+
     private sealed class FakeResolver : IEntityResolver
     {
         public List<EntityShowRequest> Requests { get; } = new List<EntityShowRequest>();
 
         public EntityShowOutcome Outcome { get; set; } = EntityShowOutcome.Shown(null);
 
+        /// <summary>What <see cref="Show"/> throws, if anything: SOLIDWORKS that did not answer, or would not attach (owner decision 159A).</summary>
+        public Exception? Failure { get; set; }
+
         public EntityShowOutcome Show(EntityShowRequest request)
         {
             Requests.Add(request);
+            if (Failure != null)
+            {
+                throw Failure;
+            }
+
             return Outcome;
         }
     }
@@ -7880,6 +9798,17 @@ public sealed class RemodelHostTests
     {
         public List<string> Opened { get; } = new List<string>();
 
-        public void Open(string path) => Opened.Add(path);
+        /// <summary>What <see cref="Open"/> throws, if anything: Windows that would not open it (owner decision 159A).</summary>
+        public Exception? Failure { get; set; }
+
+        public void Open(string path)
+        {
+            if (Failure != null)
+            {
+                throw Failure;
+            }
+
+            Opened.Add(path);
+        }
     }
 }

@@ -3423,7 +3423,7 @@ public sealed class ToolServiceWiringTests
             world.Copy.DuringCall = inside;
             world.Copy.MassProperty!.DuringCall = inside;
 
-            Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Geometry, new { }).Status);
+            Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Geometry, new { run_id = world.RunId }).Status);
 
             Assert.NotEmpty(seen);
             Assert.All(seen, entry => Assert.Contains("command=remodel.geometry stage=before ", entry));
@@ -3846,7 +3846,7 @@ public sealed class ToolServiceWiringTests
         {
             world.PlanOnTheSeat();
 
-            PipeReply closed = world.Remodel(RemodelCommands.Close, new { discard_copy = false });
+            PipeReply closed = world.Remodel(RemodelCommands.Close, new { run_id = world.RunId, discard_copy = false });
 
             Assert.Equal(BridgeStatus.Ok, closed.Status);
             SeatedHostWorld.Ending ending = Assert.Single(world.Told);
@@ -3888,7 +3888,7 @@ public sealed class ToolServiceWiringTests
 
             world.Host.BindRemodelRun(world.RunDirectory);
             Assert.Equal(BridgeStatus.Ok, world.Open(probeId).Status);
-            Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Close, new { discard_copy = true }).Status);
+            Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Close, new { run_id = world.RunId, discard_copy = true }).Status);
 
             // The run root went with the first open: the next run is refused until it is bound.
             PipeReply again = world.Open(world.Probe());
@@ -4136,7 +4136,7 @@ public sealed class ToolServiceWiringTests
             Seat.SetUserPreferenceToggle(RemodelSystemToggles.WarnSaveUpdateErrors, true);
             Seat.ToggleWrites.Clear();
             Seat.FailingWrites.Add("329=True");
-            PipeReply rebuild = Remodel(RemodelCommands.Rebuild, new { force = false });
+            PipeReply rebuild = Remodel(RemodelCommands.Rebuild, new { run_id = RunId, force = false });
             Assert.Equal(BridgeStatus.Error, rebuild.Status);
             Assert.Contains(nameof(RemodelFakes.FakeRemodelDocument.ForceRebuild), Copy.Members);
             Assert.False(Seat.GetUserPreferenceToggle(RemodelSystemToggles.WarnSaveUpdateErrors));
@@ -4153,7 +4153,13 @@ public sealed class ToolServiceWiringTests
 
         public PipeReply Open(string probeId) => Remodel(
             RemodelCommands.Open,
-            new { source_path = SourcePath, copy_path = CopyPath, run_id = Path.GetFileName(RunDirectory), probe_id = probeId });
+            new { source_path = SourcePath, copy_path = CopyPath, run_id = RunId, probe_id = probeId });
+
+        /// <summary>
+        /// The run the open is for, the run folder's own name, which every command after the open
+        /// names (owner decision 159A, protocol 1.5).
+        /// </summary>
+        public string RunId => Path.GetFileName(RunDirectory);
 
         /// <summary>
         /// One <c>remodel.*</c> line with the remodel secret, written to the host's own pipe and

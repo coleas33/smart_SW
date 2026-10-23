@@ -28,6 +28,7 @@ once below. The authoritative statement of what a feature does is its spec packa
 | [`llm-efficiency-options.md`](llm-efficiency-options.md) | The language-model efficiency options of feature 005 and the results ledger the benchmark commands render. |
 | [`engineering-context-foundation.md`](engineering-context-foundation.md) | The design draft behind feature 016 (engineering context), including structures beyond its first slice. |
 | [`review-backlog.md`](review-backlog.md) | Should-fix findings from the adversarial review rounds, left unapplied, with their later resolutions. |
+| [`development-handoff-2026-10-23.md`](development-handoff-2026-10-23.md) | Delivery, validation and remaining offline work after the interrupted continuation. |
 | [`development-handoff-2026-10-21.md`](development-handoff-2026-10-21.md) | Restart record for the interrupted decisions 157A, 159A and 160A: recovered cleanup work, branch preservation points, review findings and the remaining gates. |
 
 ## Organisations forking the repository

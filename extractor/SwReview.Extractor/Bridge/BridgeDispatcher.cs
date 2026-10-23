@@ -407,11 +407,14 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// again: everything 1.1 speaks is unchanged and it adds one command, <c>tessellate</c>. 1.3
     /// (feature 011) adds one more, <c>drawing.read</c>, and changes nothing else. 1.4 (feature 013)
     /// adds one member to the <c>ping</c> answer, <c>drawing_read</c>, and changes nothing else.
+    /// 1.5 (owner decision 159A) has every <c>remodel.*</c> command after <c>remodel.open</c> name
+    /// its run, <c>run_id</c>, and refuses one that names another run or none; the other commands
+    /// are unchanged.
     /// <c>ping</c> reports this value and a client compares against it
     /// (<c>PROTOCOL_VERSION</c> in <c>reviewer/src/swreview/bridge/client.py</c>), so it is
     /// what the document says it is or the two ends have already come apart.
     /// </summary>
-    public const string ProtocolVersion = "1.4";
+    public const string ProtocolVersion = "1.5";
 
     /// <summary>
     /// The whole of what a refused request is told (T045). One word, the same for a wrong
@@ -986,7 +989,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 return BridgeResponse.Ok(request.Id, Open(request));
 
             case RemodelCommands.Snapshot:
-                return BridgeResponse.Ok(request.Id, Snapshot(Session()));
+                return BridgeResponse.Ok(request.Id, Snapshot(Session(request)));
 
             case RemodelCommands.Rename:
                 return BridgeResponse.Ok(request.Id, Rename(request));
@@ -1007,7 +1010,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 return BridgeResponse.Ok(request.Id, Rebuild(request));
 
             case RemodelCommands.Geometry:
-                return BridgeResponse.Ok(request.Id, Geometry(Session()));
+                return BridgeResponse.Ok(request.Id, Geometry(Session(request)));
 
             case RemodelCommands.Save:
                 return BridgeResponse.Ok(request.Id, Save(request));
@@ -1491,7 +1494,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelRenameResult Rename(BridgeRequest request)
     {
         RemodelRenameParams parameters = RemodelRenameParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             ResolvedFeature target = session.Resolve(parameters.PersistRef);
@@ -1517,7 +1520,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelReorderResult Reorder(BridgeRequest request)
     {
         RemodelReorderParams parameters = RemodelReorderParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             // The tree walk comes first, and the whole of it: it is one GetFeaturesInOrder plus one
@@ -1603,7 +1606,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 + "copied.");
         }
 
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             return string.Equals(parameters.Op, RemodelFolderOps.Rename, StringComparison.Ordinal)
@@ -1794,7 +1797,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelDescribeResult Describe(BridgeRequest request)
     {
         RemodelDescribeParams parameters = RemodelDescribeParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             ResolvedFeature target = session.Resolve(parameters.PersistRef);
@@ -1826,7 +1829,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelEquationResult EquationChange(BridgeRequest request)
     {
         RemodelEquationParams parameters = RemodelEquationParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             IEquationTarget equations = session.Gate.Call(EquationManagerMember, () => session.Document.Equations);
@@ -2000,7 +2003,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelRebuildResult Rebuild(BridgeRequest request)
     {
         RemodelRebuildParams parameters = RemodelRebuildParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             IRemodelDocument document = session.Document;
@@ -2116,7 +2119,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelSaveResult Save(BridgeRequest request)
     {
         RemodelSaveParams parameters = RemodelSaveParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         if (!string.Equals(parameters.Verdict, RemodelGateVerdicts.Pass, StringComparison.Ordinal)
             || session.GeometryReadings < RemodelGateVerdicts.ReadingsAVerdictNeeds)
         {
@@ -2244,7 +2247,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelCloseResult Close(BridgeRequest request)
     {
         RemodelCloseParams parameters = RemodelCloseParams.Read(request);
-        string copy = Session().Scope.CopyPath;
+        string copy = Session(request).Scope.CopyPath;
 
         RemodelSessionEnd outcome = EndRemodelSession(RemodelSessionEnd.ReasonClose);
 
@@ -2680,17 +2683,38 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             + "SOLIDWORKS.");
 
     /// <summary>
-    /// The run, or the refusal every command after <c>remodel.open</c> answers with when there
-    /// is no run. It is reported as <c>target_mismatch</c> - the degenerate case of
-    /// <c>VerifyTarget</c>, where there is no target at all - because the caller is a client
-    /// that skipped <c>remodel.open</c>, and that is a bug in the caller rather than a
-    /// condition of the part.
+    /// The run <paramref name="request"/> is for, or the refusal every command after
+    /// <c>remodel.open</c> answers with when there is no run. It is reported as
+    /// <c>target_mismatch</c> - the degenerate case of <c>VerifyTarget</c>, where there is no
+    /// target at all - because the caller is a client that skipped <c>remodel.open</c>, and that
+    /// is a bug in the caller rather than a condition of the part.
+    ///
+    /// Owner decision 159A, on Codex's review of the merge (C1, defence in depth): the request
+    /// names its run, <c>run_id</c>, and the session is its only when the open was given that
+    /// id: compared exactly, as <c>VerifyTarget</c> compares the copy's tag. One that names none
+    /// is <c>bad_request</c>, and one that names another run is <c>session_mismatch</c>, before
+    /// anything is read or written - so a run's worker that outlived its session cannot have its
+    /// next change carried out on the next run's copy, which passes every check
+    /// <c>VerifyTarget</c> makes because it is that run's own.
     /// </summary>
-    private RemodelSession Session() =>
-        _session ?? throw new RemodelCommandError(
+    private RemodelSession Session(BridgeRequest request)
+    {
+        RemodelSession session = _session ?? throw new RemodelCommandError(
             RemodelErrorCodes.TargetMismatch,
             "remodel.open has not returned in this bridge session, so there is no copy for this "
             + "command to act on.");
+        string runId = BridgeParams.RequiredString(request, RemodelCommandTable.RunParameter);
+        if (!string.Equals(runId, session.Scope.RunId, StringComparison.Ordinal))
+        {
+            throw new RemodelCommandError(
+                RemodelErrorCodes.SessionMismatch,
+                $"'{request.Command}' was sent for run '{runId}', and the copy open on this bridge "
+                + $"belongs to run '{session.Scope.RunId}'. One run's command is never carried out "
+                + "on another run's copy, so nothing was read or written.");
+        }
+
+        return session;
+    }
 
     /// <summary>
     /// Deletes the copy on a refusal that happens after it exists. A copy that will not delete

@@ -1,5 +1,8 @@
 # Development handoff, 2026-10-21
 
+Updated restart status: see the [October 23 handoff](development-handoff-2026-10-23.md).
+This file preserves the earlier continuation record.
+
 Delivery update, 2026-10-23: decision 160A merged through [PR #34](https://github.com/coleas33/smart_SW/pull/34),
 with main at `6b0508c`. Decision 157A on `codex/resume-157a` now includes that actual main;
 its final independent review and all local gates passed, and its PR delivery is next.

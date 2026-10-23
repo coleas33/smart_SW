@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using SwReview.AddIn.Remodel;
@@ -297,7 +299,7 @@ public sealed class BackendRemodelPipelineTests : IDisposable
     {
         var world = new World(this);
         string runDirectory = world.RunFolder();
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 1, 1) : Finished("saved", 1);
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("applying", 1, 1) : Finished("saved", 1);
 
         world.Pipeline.ProbeScope();
         Assert.Empty(world.Bound);
@@ -466,7 +468,7 @@ public sealed class BackendRemodelPipelineTests : IDisposable
     {
         var world = new World(this);
         string runDirectory = world.RunFolder();
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("applying", 3, 3) : Finished("saved", 3);
 
         world.Pipeline.Run(runDirectory, world.Reporter);
 
@@ -529,7 +531,9 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         var world = new World(this);
         string runDirectory = world.RunFolder();
         Exception? cause = world.Seat.Fail(how, runDirectory);
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+        // Edited deliberately by owner decision 159A (004 T242): the job never got its after-dump, so it fails once it
+        // stops waiting for it; the run waits for that end (T239), and a job that finished had its dump.
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("applying", 3, 3) : WithoutItsDump(3);
 
         RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
             () => world.Pipeline.Run(runDirectory, world.Reporter));
@@ -596,7 +600,9 @@ public sealed class BackendRemodelPipelineTests : IDisposable
     {
         var world = new World(this);
         string runDirectory = world.RunFolder(withCopy: false);
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+        // Edited deliberately by owner decision 159A (004 T242): the job never got its after-dump, so it fails once it
+        // stops waiting for it; the run waits for that end (T239), and a job that finished had its dump.
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("applying", 3, 3) : WithoutItsDump(3);
 
         RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
             () => world.Pipeline.Run(runDirectory, world.Reporter));
@@ -775,7 +781,7 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         {
             if (poll <= 1)
             {
-                return Awaiting("verifying", 3, 3);
+                return Awaiting("applying", 3, 3);
             }
 
             return Finished("saved", 3);
@@ -807,8 +813,9 @@ public sealed class BackendRemodelPipelineTests : IDisposable
             retryable: false);
 
         // Terminal after the rendezvous, so a build that let the refusal through would fail
-        // this test rather than poll forever.
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+        // this test rather than poll forever. Edited deliberately by owner decision 159A (004 T242):
+        // the backend refused the dump, so its job fails once it stops waiting for one; it never finishes.
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("applying", 3, 3) : WithoutItsDump(3);
 
         RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
             () => world.Pipeline.Run(world.RunFolder(), world.Reporter));
@@ -828,7 +835,9 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         var world = new World(this);
         string runDirectory = world.RunFolder();
         world.Dump.DocumentPath = SourcePath;
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+        // Edited deliberately by owner decision 159A (004 T242): the job never got its after-dump, so it fails once it
+        // stops waiting for it; the run waits for that end (T239), and a job that finished had its dump.
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("applying", 3, 3) : WithoutItsDump(3);
 
         Exception failure = Assert.ThrowsAny<Exception>(
             () => world.Pipeline.Run(runDirectory, world.Reporter));
@@ -852,7 +861,7 @@ public sealed class BackendRemodelPipelineTests : IDisposable
                 case 1: return Running("judging", 3, 0);
                 case 2: return Running("applying", 3, 1);
                 case 3: return Running("verifying", 3, 3);
-                case 4: return Awaiting("verifying", 3, 3);
+                case 4: return Awaiting("applying", 3, 3);
                 case 5: return Running("saved", 3, 3);
                 default: return Finished("saved", 3);
             }
@@ -933,8 +942,20 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         Assert.Contains(world.Reporter.Statuses, status => status.Key == "error");
     }
 
-    [Fact]
-    public void ABackendThatVanishesMidRunEndsTheRunFailedAfterAnErrorStatus()
+    /// <summary>
+    /// A backend that vanishes mid-run ends the run `failed`, after an error status. *Changed deliberately 2026-10-21 (owner
+    /// decision 159A, on Codex's review; 004 T238, research R19.14):* vanished means the backend process that ran the job
+    /// is gone - none is running, or another runs in its place - and its worker with it; a poll that merely went
+    /// unanswered is no longer the run's end (<see cref="ARunWhoseStatusPollIsNotAnsweredWaitsForItsJobToEnd"/>). The poll
+    /// answers a finished run if it is asked again, so a build that waited on a gone backend fails this case rather than
+    /// hanging.
+    /// </summary>
+    [Theory]
+    [InlineData("none running")]
+    [InlineData("another in its place")]
+    [InlineData("another port, the same token")]
+    [InlineData("the same port, another token")]
+    public void ABackendThatVanishesMidRunEndsTheRunFailedAfterAnErrorStatus(string how)
     {
         var world = new World(this);
         world.Backend.StatusAt = poll =>
@@ -944,6 +965,16 @@ public sealed class BackendRemodelPipelineTests : IDisposable
                 return Running("applying", 4, 2);
             }
 
+            if (poll >= 3)
+            {
+                return Finished("saved", 4);
+            }
+
+            // Owner decision 159A, on the final review (A2, A3): the port and the token each tell another backend.
+            world.Endpoint = how == "none running" ? null
+                : how == "another port, the same token" ? new BackendEndpoint(8124, "a-token")
+                : how == "the same port, another token" ? new BackendEndpoint(8123, "another-token")
+                : new BackendEndpoint(8124, "another-token");
             throw new BackendRequestException(
                 "BackendUnavailable", "the review backend did not answer.", retryable: true);
         };
@@ -953,6 +984,635 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         Assert.Equal("failed", outcome.State);
         Assert.Equal(2, outcome.ChangesApplied);
         Assert.Equal("error", world.Reporter.Statuses.Last().Key);
+    }
+
+    // ---- owner decision 159A, on Codex's review: a run is not over until its job is ------------------
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review of the merge, test first (004 T238; research R19.14; its C1, older than
+    /// 159A): a status poll the backend did not answer is not the run's end. The run ended `failed` at the first poll
+    /// that failed - a transient one, a backend busy past the client's 30 seconds - while the backend's worker went on
+    /// applying changes; the host then closed the run's session and was free, a plan made then opened its copy on the
+    /// same bridge, and the earlier run's next rename or equation, whose bridge command names no run, landed on that
+    /// copy. The run now waits for its job: the page is told once that the backend is not answering, the poll is asked
+    /// again, backing off, the page is told where the run stands once it answers, and the run ends as its job ends.
+    /// </summary>
+    [Fact]
+    public void ARunWhoseStatusPollIsNotAnsweredWaitsForItsJobToEnd()
+    {
+        var world = new World(this);
+        world.Backend.StatusAt = poll =>
+        {
+            switch (poll)
+            {
+                case 0:
+                    return Running("applying", 4, 1);
+                case 1:
+                case 2:
+                    throw new BackendRequestException(
+                        "BackendUnavailable", "the review backend did not answer: The operation has timed out", retryable: true);
+                case 3:
+                    return Running("applying", 4, 3);
+                default:
+                    return Finished("saved", 4);
+            }
+        };
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("saved", outcome.State);
+        Assert.Equal(4, outcome.ChangesApplied);
+        Assert.Equal(5, world.Backend.Calls.Count(call => call.Route == "status"));
+        Assert.DoesNotContain(world.Reporter.Statuses, status => status.Key == "error");
+        int waiting = Assert.Single(
+            world.Reporter.Statuses.Select((status, index) => (status, index)),
+            pair => pair.status.Value == BackendRemodelPipeline.BackendNotAnsweringMidRunMessage).index;
+        Assert.Equal("applying", world.Reporter.Statuses[waiting].Key);
+        Assert.Contains(world.Reporter.Statuses.Skip(waiting + 1), status => status.Key == "applying");
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (004 T238; its C1): the wait after a poll the backend did not answer doubles,
+    /// from the poll delay, up to eight seconds, so a backend busy for a moment is asked again soon and one that stays
+    /// silent is not asked twice a second for as long as it does; a poll delay of none, as these tests run with, stays none.
+    /// </summary>
+    [Fact]
+    public void TheWaitAfterAnUnansweredPollDoublesUpToItsBound()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(1), BackendRemodelPipeline.Longer(TimeSpan.FromMilliseconds(500)));
+        Assert.Equal(TimeSpan.FromSeconds(8), BackendRemodelPipeline.Longer(TimeSpan.FromSeconds(4)));
+        Assert.Equal(TimeSpan.FromSeconds(8), BackendRemodelPipeline.Longer(TimeSpan.FromSeconds(8)));
+        Assert.Equal(TimeSpan.Zero, BackendRemodelPipeline.Longer(TimeSpan.Zero));
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (004 T238; its C1): Stop works while the backend does not answer. The stop the
+    /// engineer asked for is tried on every poll until it lands - each fails while the backend does not answer - and the run
+    /// ends as its job, stopped, ends. Before T239 the first poll that failed ended the run `failed`, with the job never told
+    /// to stop.
+    /// </summary>
+    [Fact]
+    public void AStopAskedForWhileTheBackendDoesNotAnswerReachesTheJobOnceItAnswers()
+    {
+        var world = new World(this);
+        world.Reporter.StopRequested = true;
+        world.Backend.StopFailures = 2;
+        world.Backend.StatusAt = poll =>
+        {
+            switch (poll)
+            {
+                case 0:
+                case 1:
+                    throw new BackendRequestException(
+                        "BackendUnavailable", "the review backend did not answer.", retryable: true);
+                case 2:
+                    return Running("applying", 4, 2);
+                default:
+                    return Finished("truncated", 2);
+            }
+        };
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("truncated", outcome.State);
+        Assert.Equal(3, world.Backend.Calls.Count(call => call.Route == "stop"));
+        Assert.Equal(0, world.Backend.StopFailures);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (004 T238 - a guard; its C1): a run the backend no longer knows has no worker
+    /// on it - the backend's runs live in its memory - so it is over: `failed`, after an error status. Asked again, the poll
+    /// would answer a finished run, so a build that waited on such a run fails this case rather than hanging.
+    /// </summary>
+    [Fact]
+    public void ARunTheBackendNoLongerKnowsEndsFailed()
+    {
+        var world = new World(this);
+        world.Backend.StatusAt = poll =>
+        {
+            if (poll == 0)
+            {
+                return Running("applying", 4, 2);
+            }
+
+            if (poll >= 3)
+            {
+                return Finished("saved", 4);
+            }
+
+            throw new BackendRequestException("UnknownJob", "no run 'job-42' on this backend", retryable: false);
+        };
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("failed", outcome.State);
+        Assert.Equal("error", world.Reporter.Statuses.Last().Key);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review, test first (004 T238; its C1): an after-dump that fails does not end the run
+    /// while its job is live. The job waits for its package, then goes on to its end; the run waits for that end, and only
+    /// then answers with the failure, as before. It answered at once, freeing the host for a plan while the job could still
+    /// act on the copy once its wait ran out. *Edited deliberately by T242:* the page is told, as the dump fails, that the
+    /// run ends when the backend has finished with the dump or stopped waiting for it.
+    /// </summary>
+    [Fact]
+    public void AnAfterDumpThatFailsLeavesTheRunToTheEndOfItsJob()
+    {
+        var world = new World(this);
+        world.Backend.PackageAfterFailure = new BackendRequestException(
+            "PackageAfterRefused", "the package the add-in named is not this run's package-after.json.", retryable: false);
+        world.Backend.StatusAt = poll => poll <= 2 ? Awaiting("applying", 3, 3) : WithoutItsDump(3);
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+
+        Assert.Equal("PackageAfterRefused", refusal.ErrorClass);
+        Assert.Equal(4, world.Backend.Calls.Count(call => call.Route == "status"));
+        Assert.Single(world.Backend.Calls, call => call.Route == "package-after");
+        KeyValuePair<string, string> told = Assert.Single(
+            world.Reporter.Statuses, status => status.Value == BackendRemodelPipeline.AfterDumpNotConfirmedMessage);
+        Assert.Equal("verifying", told.Key);
+    }
+
+    // ---- owner decision 159A, on the final review: what the page holds, and Stop, while a job waits for its dump ----
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T247; research R19.20; its S1): while a job waits for its
+    /// after-dump, the backend's plan still reads `applying` - it records `verifying` once the dump has arrived - so the
+    /// poll after the dump failed mapped the stage back and wrote "Applying the plan to the copy..." over
+    /// <see cref="BackendRemodelPipeline.AfterDumpNotConfirmedMessage"/>, for as long as the job waited. The line keeps
+    /// what it said of the dump while the job waits for it.
+    /// </summary>
+    [Fact]
+    public void TheAfterDumpsWordsAreWhatTheLineHoldsWhileTheJobWaitsForTheDump()
+    {
+        var world = new World(this);
+        world.Backend.PackageAfterFailure = new BackendRequestException(
+            "PackageAfterRefused", "FICT the package is not this run's.", retryable: false);
+        world.Backend.StatusAt = poll => poll <= 4 ? Awaiting("applying", 3, 3) : WithoutItsDump(3);
+
+        Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+
+        int told = world.Reporter.Statuses.FindIndex(
+            status => status.Value == BackendRemodelPipeline.AfterDumpNotConfirmedMessage);
+        Assert.True(told >= 0, "the page was never told the dump was not confirmed handed over");
+        Assert.Equal("verifying", world.Reporter.Statuses[told].Key);
+        Assert.Empty(world.Reporter.Statuses.Skip(told + 1));
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T247; found while recording its S1): a poll not answered
+    /// while the job waits for its after-dump tells the page so; and once the backend answered again the line kept that,
+    /// since what the line holds while the job waits is what was said last - so it said the backend was not answering for
+    /// as long as the job waited, and never again that Stop ends the wait. Once the backend answers again, the line says
+    /// again what it said of the dump.
+    /// </summary>
+    [Fact]
+    public void OnceTheBackendAnswersAgainWhileTheJobWaitsForItsDumpTheLineSaysAgainWhatItSaidOfTheDump()
+    {
+        var world = new World(this);
+        world.Backend.PackageAfterFailure = new BackendRequestException(
+            "PackageAfterRefused", "FICT the package is not this run's.", retryable: false);
+        world.Backend.StatusAt = poll =>
+        {
+            switch (poll)
+            {
+                case 0:
+                case 2:
+                case 3:
+                    return Awaiting("applying", 3, 3);
+                case 1:
+                    throw new BackendRequestException(
+                        "BackendUnavailable", "FICT the review backend did not answer.", retryable: true);
+                default:
+                    return WithoutItsDump(3);
+            }
+        };
+
+        Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+
+        Assert.Equal(
+            new[]
+            {
+                "verifying: " + BackendRemodelPipeline.AfterDumpNotConfirmedMessage,
+                "verifying: " + BackendRemodelPipeline.BackendNotAnsweringMidRunMessage,
+                "verifying: " + BackendRemodelPipeline.AfterDumpNotConfirmedMessage,
+            },
+            world.Reporter.Statuses
+                .SkipWhile(status => status.Value != BackendRemodelPipeline.AfterDumpNotConfirmedMessage)
+                .Select(status => status.Key + ": " + status.Value)
+                .ToArray());
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T247; its S1): a Stop asked for before the after-dump
+    /// failed has landed and been honoured by the apply loop, and a Stop ends the job's wait for its dump only when it is
+    /// asked for during that wait. So once the dump fails, a Stop the engineer asked for is asked again, and the wait for a
+    /// dump that will not come ends on it rather than at its bound.
+    /// </summary>
+    [Fact]
+    public void AStopAskedForBeforeTheAfterDumpFailedIsAskedAgainSoTheJobsWaitEnds()
+    {
+        var world = new World(this);
+        world.Reporter.StopRequested = true;
+        world.Backend.PackageAfterFailure = new BackendRequestException(
+            "PackageAfterRefused", "FICT the package is not this run's.", retryable: false);
+        world.Backend.StatusAt = poll =>
+        {
+            switch (poll)
+            {
+                case 0:
+                    return Running("applying", 3, 2);
+                case 1:
+                case 2:
+                    return Awaiting("applying", 3, 2);
+                default:
+                    return new RemodelRunStatus(
+                        RemodelRunStatus.FailedState, "failed", 3, 2, null, null,
+                        "PackageAfterStopped: package-after.json never arrived: the engineer stopped the run while it waited");
+            }
+        };
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+
+        Assert.Equal("PackageAfterRefused", refusal.ErrorClass);
+        Assert.Equal(2, world.Backend.Calls.Count(call => call.Route == "stop"));
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T247; its S4, the review's probe PR2): an after-dump whose
+    /// answer was lost may have reached its job, and a job that then failed elsewhere - its copy saved, its report not
+    /// written - was answered with the lost answer: "backend not answering", and the host's "ended without saving the
+    /// copy", while the job's own error reached neither the page nor the log. The job's own end decides now.
+    /// </summary>
+    [Fact]
+    public void ALostAfterDumpAnswerThenAJobThatFailedElsewhereEndsWithTheJobsOwnWords()
+    {
+        var world = new World(this);
+        world.Backend.PackageAfterFailure = new BackendRequestException(
+            "BackendUnavailable", "FICT the review backend did not answer: The operation has timed out", retryable: true);
+        world.Backend.StatusAt = poll => poll <= 1
+            ? Awaiting("applying", 3, 3)
+            : new RemodelRunStatus(
+                RemodelRunStatus.FailedState, "saved", 3, 3, null, null, "OSError: FICT the report could not be written");
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("saved", outcome.State);
+        Assert.Equal(3, outcome.ChangesApplied);
+        Assert.Contains(
+            new KeyValuePair<string, string>("error", "OSError: FICT the report could not be written"),
+            world.Reporter.Statuses);
+    }
+
+    // ---- owner decision 159A, on the final review: a Start whose answer was lost ------------------------------------
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T247; its S3, older than 159A): a Start whose answer did
+    /// not come back was read as a refusal, so the host closed the run's session and was free while the job the Start had
+    /// made could still run. The pipeline names the job it starts and asks the same Start again - the backend answers it
+    /// with the job it made, or makes it now - so the run waits for its job; the page is told once meanwhile.
+    /// </summary>
+    [Fact]
+    public void AStartWhoseAnswerDidNotComeBackIsAskedAgainAndTheRunWaitsForItsJob()
+    {
+        var world = new World(this);
+        world.Backend.StartFailuresFirst.Enqueue(new BackendRequestException(
+            "BackendUnavailable", "FICT the review backend did not answer: The operation has timed out", retryable: true));
+        world.Backend.StatusAt = poll => Finished("saved", 2);
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("saved", outcome.State);
+        RemodelRunRequest[] starts = world.Backend.Calls
+            .Where(call => call.Route == "runs").Select(call => (RemodelRunRequest)call.Request!).ToArray();
+        Assert.Equal(2, starts.Length);
+        Assert.Matches("^[0-9a-f]{32}$", starts[0].JobId);
+        Assert.Equal(starts[0].JobId, starts[1].JobId);
+        KeyValuePair<string, string> told = Assert.Single(
+            world.Reporter.Statuses, status => status.Value == BackendRemodelPipeline.BackendNotAnsweringMidRunMessage);
+        Assert.Equal("judging", told.Key);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T247 - a guard; its S3): a Start whose answer failed as it was read -
+    /// the connection reset mid-answer, not the client's refusal - is asked again too.
+    /// </summary>
+    [Fact]
+    public void AStartWhoseAnswerFailedAsItWasReadIsAskedAgain()
+    {
+        var world = new World(this);
+        world.Backend.StartFailuresFirst.Enqueue(new IOException("FICT the connection was reset as the answer was read."));
+        world.Backend.StatusAt = poll => Finished("saved", 2);
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("saved", outcome.State);
+        Assert.Equal(2, world.Backend.Calls.Count(call => call.Route == "runs"));
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T247; found while recording its S3): a Start answered with
+    /// a body the client could not read - <c>BadResponse</c>, which only an answer of success is, since the backend answers
+    /// a Start it refuses with an error class of its own - was read as a refusal, freeing the host while the job the
+    /// backend had made ran. The backend took the Start, and its job is the one the pipeline named: the run waits for it,
+    /// and the Start is not asked again.
+    /// </summary>
+    [Fact]
+    public void AStartAnsweredSoTheClientCouldNotReadItRunsTheJobItNamed()
+    {
+        var world = new World(this);
+        world.Backend.StartFailuresFirst.Enqueue(new BackendRequestException(
+            "BadResponse", "FICT the backend's answer was not JSON.", retryable: false));
+        world.Backend.StatusAt = poll => Finished("saved", 2);
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("saved", outcome.State);
+        var start = (RemodelRunRequest)Assert.Single(world.Backend.Calls, call => call.Route == "runs").Request!;
+        string[] polled = world.Backend.Calls
+            .Where(call => call.Route == "status").Select(call => (string)call.Request!).ToArray();
+        Assert.NotEmpty(polled);
+        Assert.All(polled, job => Assert.Equal(start.JobId, job));
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T247; its S3): a Start not answered by a backend that is then gone is
+    /// refused - the job, if the Start made one, went with the backend - and asked no further. The fake answers a Start
+    /// asked too often with a failure of its own, so a build that kept asking fails rather than hangs.
+    /// </summary>
+    [Fact]
+    public void AStartNotAnsweredByABackendThatIsThenGoneIsRefused()
+    {
+        var world = new World(this);
+        world.Backend.StartFailuresFirst.Enqueue(new BackendRequestException(
+            "BackendUnavailable", "FICT the review backend did not answer.", retryable: true));
+        world.Backend.DuringStart = () => world.Endpoint = null;
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+
+        Assert.Equal("BackendUnavailable", refusal.ErrorClass);
+        Assert.Single(world.Backend.Calls, call => call.Route == "runs");
+        Assert.DoesNotContain(world.Backend.Calls, call => call.Route == "status");
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T247; its S3): a Start whose answer failed as it was read, from a backend
+    /// that is then gone, is refused as a backend not answering - the job, if the Start made one, went with the backend.
+    /// </summary>
+    [Fact]
+    public void AStartWhoseAnswerFailedAsItWasReadByABackendThenGoneIsRefused()
+    {
+        var world = new World(this);
+        world.Backend.StartFailuresFirst.Enqueue(new IOException("FICT the connection was reset as the answer was read."));
+        world.Backend.DuringStart = () => world.Endpoint = null;
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+
+        Assert.Equal("BackendUnavailable", refusal.ErrorClass);
+        Assert.IsType<IOException>(refusal.InnerException);
+        Assert.Single(world.Backend.Calls, call => call.Route == "runs");
+    }
+
+    // ---- owner decision 159A, on the final review: what the review's mutations found unpinned ------------------------
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T247 - a guard; its A1): a poll that fails other than as the client's
+    /// refusal - the connection reset while the answer was read - is a poll not answered, and asked again; the run ends as
+    /// its job does.
+    /// </summary>
+    [Fact]
+    public void APollThatFailsOtherThanAsTheClientsRefusalIsAskedAgain()
+    {
+        var world = new World(this);
+        world.Backend.StatusAt = poll =>
+        {
+            if (poll == 1)
+            {
+                throw new IOException("FICT the connection was reset as the answer was read.");
+            }
+
+            return poll == 0 ? Running("applying", 4, 1) : Finished("saved", 4);
+        };
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("saved", outcome.State);
+        Assert.Equal(3, world.Backend.Calls.Count(call => call.Route == "status"));
+        Assert.Single(world.Reporter.Statuses, status => status.Value == BackendRemodelPipeline.BackendNotAnsweringMidRunMessage);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T247 - a guard; its A12): a change log this side may not read ends
+    /// nothing: the run is over only when its job is, and the lines are there to read on a later poll.
+    /// </summary>
+    [Fact]
+    public void AChangeLogThisSideMayNotReadDoesNotEndTheRun()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        string log = Path.Combine(runDirectory, "changes.jsonl");
+        File.WriteAllText(log, "{\"seq\":1}\n");
+        world.Backend.StatusAt = poll => poll == 0 ? Running("applying", 2, 1) : Finished("saved", 2);
+        var deny = new FileSystemAccessRule(
+            WindowsIdentity.GetCurrent().User!, FileSystemRights.ReadData, AccessControlType.Deny);
+        FileSecurity security = File.GetAccessControl(log);
+        security.AddAccessRule(deny);
+        File.SetAccessControl(log, security);
+        try
+        {
+            RemodelRunOutcome outcome = world.Pipeline.Run(runDirectory, world.Reporter);
+
+            Assert.Equal("saved", outcome.State);
+            Assert.Empty(world.Reporter.Changes);
+        }
+        finally
+        {
+            security.RemoveAccessRule(deny);
+            File.SetAccessControl(log, security);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T247 - a guard; its A13): a Stop that fails other than as the client's
+    /// refusal is a Stop not yet posted, and posted again at the next poll.
+    /// </summary>
+    [Fact]
+    public void AStopThatFailsOtherThanAsTheClientsRefusalIsAskedAgain()
+    {
+        var world = new World(this);
+        world.Reporter.StopRequested = true;
+        world.Backend.StopFailures = 1;
+        world.Backend.StopFailure = new IOException("FICT the connection was reset as the stop was sent.");
+        world.Backend.StatusAt = poll => poll <= 1 ? Running("applying", 4, poll + 1) : Finished("truncated", 2);
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("truncated", outcome.State);
+        Assert.Equal(2, world.Backend.Calls.Count(call => call.Route == "stop"));
+        Assert.Equal(0, world.Backend.StopFailures);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T247 - a guard; its A6): an after-dump that never reached its job, and
+    /// then a backend gone - so no job is left to say how the run ended - is answered with the dump's failure, which is why
+    /// the run could not be completed, not with the transport's words.
+    /// </summary>
+    [Fact]
+    public void AnAfterDumpFailureIsTheRunsAnswerWhenItsBackendIsThenGone()
+    {
+        var world = new World(this);
+        world.Backend.PackageAfterFailure = new BackendRequestException(
+            "PackageAfterRefused", "FICT the package is not this run's.", retryable: false);
+        world.Backend.StatusAt = poll =>
+        {
+            if (poll == 0)
+            {
+                return Awaiting("applying", 3, 3);
+            }
+
+            if (poll >= 3)
+            {
+                return WithoutItsDump(3);
+            }
+
+            world.Endpoint = null;
+            throw new BackendRequestException("BackendUnavailable", "the review backend is not running.", retryable: true);
+        };
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+
+        Assert.Equal("PackageAfterRefused", refusal.ErrorClass);
+        Assert.Equal(2, world.Backend.Calls.Count(call => call.Route == "status"));
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T247 - a guard; its A10): the backend not answering is told once for
+    /// each time it stops answering, and where the run stands once for each time it answers again.
+    /// </summary>
+    [Fact]
+    public void EachTimeTheBackendStopsAnsweringIsToldOnce()
+    {
+        var world = new World(this);
+        world.Backend.StatusAt = poll =>
+        {
+            switch (poll)
+            {
+                case 1:
+                case 2:
+                case 4:
+                    throw new BackendRequestException("BackendUnavailable", "FICT the review backend did not answer.", retryable: true);
+                case 0:
+                case 3:
+                    return Running("applying", 4, poll);
+                default:
+                    return Finished("saved", 4);
+            }
+        };
+
+        world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal(
+            new[] { "applying", "not answering", "applying", "not answering" },
+            world.Reporter.Statuses
+                .Where(status => status.Key == "applying")
+                .Select(status => status.Value == BackendRemodelPipeline.BackendNotAnsweringMidRunMessage ? "not answering" : "applying")
+                .ToArray());
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T247 - a guard; its A8 and A9): the waits after polls the backend did
+    /// not answer double from the poll delay, and come back to it once the backend answers - read through the pipeline's
+    /// own waits, which the tests' poll delay of half a second hands to a recorder rather than to the clock.
+    /// </summary>
+    [Fact]
+    public void TheWaitsAfterUnansweredPollsDoubleAndComeBackToThePollDelayOnceAnswered()
+    {
+        var world = new World(this);
+        world.Backend.StatusAt = poll =>
+        {
+            switch (poll)
+            {
+                case 0:
+                case 1:
+                case 2:
+                case 4:
+                    throw new BackendRequestException("BackendUnavailable", "FICT the review backend did not answer.", retryable: true);
+                case 3:
+                    return Running("applying", 4, 2);
+                default:
+                    return Finished("saved", 4);
+            }
+        };
+
+        world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal(
+            new[] { 500, 1000, 2000, 500, 500 },
+            world.Pauses.Select(wait => (int)wait.TotalMilliseconds).ToArray());
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T247 - a guard; its A15): a first poll not answered, before the run
+    /// has a stage, is told in `judging` - a stage of a running run, where `ready` or `error` would end it on the page.
+    /// </summary>
+    [Fact]
+    public void AFirstPollNotAnsweredIsToldInJudging()
+    {
+        var world = new World(this);
+        world.Backend.StatusAt = poll => poll == 0
+            ? throw new BackendRequestException("BackendUnavailable", "FICT the review backend did not answer.", retryable: true)
+            : Finished("saved", 1);
+
+        world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        KeyValuePair<string, string> told = Assert.Single(
+            world.Reporter.Statuses, status => status.Value == BackendRemodelPipeline.BackendNotAnsweringMidRunMessage);
+        Assert.Equal("judging", told.Key);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review, test first (004 T242; its C1): an after-dump whose answer did not come back -
+    /// the backend took it, and its answer was lost - is not the run's failure once the job finishes. A job finishes only
+    /// once its after-dump has arrived, so the run ends as its job did; T239 answered it with the lost answer, telling a run
+    /// that saved its copy as one that failed.
+    /// </summary>
+    [Fact]
+    public void AnAfterDumpWhoseAnswerWasLostEndsAsItsJobDidOnceTheJobFinishes()
+    {
+        var world = new World(this);
+        world.Backend.PackageAfterFailure = new BackendRequestException(
+            "BackendUnavailable", "FICT the review backend did not answer: The operation has timed out", retryable: true);
+        world.Backend.StatusAt = poll => poll <= 1 ? Awaiting("applying", 3, 3) : Finished("saved", 3);
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("saved", outcome.State);
+        Assert.Equal(3, outcome.ChangesApplied);
+        Assert.Single(world.Backend.Calls, call => call.Route == "package-after");
+        Assert.Single(world.Reporter.Statuses, status => status.Value == BackendRemodelPipeline.AfterDumpNotConfirmedMessage);
+        Assert.DoesNotContain(world.Reporter.Statuses, status => status.Key == "error");
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on Codex's review (004 T242 - a guard; its C1): an after-dump this side could not write - the
+    /// extractor wrote another profile's package - was never handed over, so the job fails once it stops waiting for it,
+    /// and the run is answered with the dump's own failure then: not before, while the job is live, and not lost.
+    /// </summary>
+    [Fact]
+    public void AnAfterDumpThisSideCouldNotWriteIsAnsweredOnceItsJobFails()
+    {
+        var world = new World(this);
+        world.Dump.Profile = "full";
+        world.Backend.StatusAt = poll => poll <= 1 ? Awaiting("applying", 3, 3) : WithoutItsDump(3);
+
+        InvalidOperationException failure = Assert.Throws<InvalidOperationException>(
+            () => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+
+        Assert.Contains("'full' profile", failure.Message, StringComparison.Ordinal);
+        Assert.Equal(3, world.Backend.Calls.Count(call => call.Route == "status"));
+        Assert.DoesNotContain(world.Backend.Calls, call => call.Route == "package-after");
+        Assert.Single(world.Reporter.Statuses, status => status.Value == BackendRemodelPipeline.AfterDumpNotConfirmedMessage);
     }
 
     [Fact]
@@ -968,6 +1628,52 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         Assert.Equal("ResumeRefused", refusal.ErrorClass);
     }
 
+    /// <summary>
+    /// Owner decision 159A (004 T208): a refusal the review backend answered keeps that answer as its cause, its class
+    /// and its sentence as the backend wrote them, on every route that turns one into a refusal - the open, a run's start
+    /// and its after-dump. The Remodel host reads the cause to know the backend answered, and tells the page the tab's own
+    /// words for the class in place of the backend's sentence, which can name the part's or the run folder's full path;
+    /// the sentence goes to the add-in's log. A guard: the pipeline has always kept it.
+    /// </summary>
+    [Theory]
+    [InlineData("open")]
+    [InlineData("start")]
+    [InlineData("package-after")]
+    public void ARefusalTheBackendAnsweredKeepsTheAnswerAsItsCause(string route)
+    {
+        var world = new World(this);
+        var answer = new BackendRequestException(
+            "RunFolderFailed", "FICT the backend refused in C:\\Fictional\\runs\\FICT-run.", retryable: false);
+        RemodelRefusal refusal;
+        if (route == "open")
+        {
+            world.Backend.OpenFailure = answer;
+            refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.OpenCopy(
+                new RemodelCopyRequest(world.RunFolder(), SourcePath, null), world.Reporter));
+        }
+        else
+        {
+            if (route == "start")
+            {
+                world.Backend.StartFailure = answer;
+            }
+            else
+            {
+                // Edited deliberately by owner decision 159A (004 T242): a refused after-dump's job fails once it
+                // stops waiting for the dump, as the backend's run does; it never finishes, and a job that
+                // finished had its dump and is answered as it ended.
+                world.Backend.PackageAfterFailure = answer;
+                world.Backend.StatusAt = poll => poll == 0 ? Awaiting("applying", 3, 3) : WithoutItsDump(3);
+            }
+
+            refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+        }
+
+        Assert.Same(answer, refusal.InnerException);
+        Assert.Equal("RunFolderFailed", refusal.ErrorClass);
+        Assert.Equal(answer.Message, refusal.Message);
+    }
+
     // ---- the source, after the copy ---------------------------------------------------------
 
     /// <summary>
@@ -980,7 +1686,7 @@ public sealed class BackendRemodelPipelineTests : IDisposable
     {
         var world = new World(this);
         string runDirectory = world.RunFolder();
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 1, 1) : Finished("saved", 1);
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("applying", 1, 1) : Finished("saved", 1);
 
         world.Pipeline.ProbeScope();
         world.Pipeline.OpenCopy(
@@ -1071,21 +1777,41 @@ public sealed class BackendRemodelPipelineTests : IDisposable
     }
 
     /// <summary>
-    /// The host calls this on its way to deleting `copy/`, including on paths where the backend
-    /// never started. The folder is what the engineer asked to be rid of; a close that cannot be
-    /// made must not stop it.
+    /// With no tool service listening there is no bridge to hold a session - its teardown ended any - so a close is a
+    /// quiet no-op. *Changed deliberately 2026-10-21 (owner decision 159A, on review; 004 T223, research R19.9):* this case
+    /// pinned a backend that is not running as a quiet no-op too, and the host then took the close for done although the
+    /// bridge may still hold the session; that half is <see cref="CloseCopyWithNoBackendRunningIsRefusedAsNotSent"/>. The
+    /// host's way to deleting `copy/` goes on either way: it deletes whatever the close answers.
     /// </summary>
     [Fact]
-    public void CloseCopyWithNoBackendOrNoBridgeIsAQuietNoOp()
+    public void CloseCopyWithNoBridgeIsAQuietNoOp()
     {
-        var world = new World(this) { Endpoint = null };
+        var world = new World(this) { Bridge = null };
         world.Pipeline.CloseCopy(world.RunFolder());
 
-        var second = new World(this) { Bridge = null };
-        second.Pipeline.CloseCopy(second.RunFolder());
+        var neither = new World(this) { Bridge = null, Endpoint = null };
+        neither.Pipeline.CloseCopy(neither.RunFolder());
 
         Assert.Empty(world.Backend.Calls);
-        Assert.Empty(second.Backend.Calls);
+        Assert.Empty(neither.Backend.Calls);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T223; research R19.9; the mutation review's M6): a backend that is
+    /// not running cannot carry a close, and the bridge may still hold the session the run or the plan opened - a backend
+    /// that stopped after the open leaves it so. The close is refused, `BackendUnavailable` and retryable, sending nothing,
+    /// so the host reads it as a close that was not answered, where it was a quiet no-op it took for done.
+    /// </summary>
+    [Fact]
+    public void CloseCopyWithNoBackendRunningIsRefusedAsNotSent()
+    {
+        var world = new World(this) { Endpoint = null };
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.CloseCopy(world.RunFolder()));
+
+        Assert.Equal("BackendUnavailable", refusal.ErrorClass);
+        Assert.True(refusal.Retryable);
+        Assert.Empty(world.Backend.Calls);
     }
 
     // ---- native open-copy identity and SOLIDWORKS lock files -------------------------------
@@ -1118,7 +1844,7 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         string runDirectory = world.RunFolder();
         File.WriteAllText(Path.Combine(runDirectory, "copy", "~$bracket-RMS.SLDPRT"), "lock");
         WriteOpenRecord(runDirectory, World.CopyOf(runDirectory));
-        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 0, 0) : Finished("saved", 0);
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("applying", 0, 0) : Finished("saved", 0);
 
         RemodelRunOutcome outcome = world.Pipeline.Run(runDirectory, world.Reporter);
 
@@ -1272,6 +1998,14 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         new RemodelRunStatus(
             RemodelRunStatus.FinishedState, planState, applied, applied, null, null, null);
 
+    /// <summary>
+    /// How a job ends that never got its after-dump: it fails once it stops waiting for it, as the backend's run does
+    /// (`test_a_dump_that_never_arrives_fails_the_run_with_the_log_intact`). It never finishes.
+    /// </summary>
+    private static RemodelRunStatus WithoutItsDump(int applied) =>
+        new RemodelRunStatus(
+            RemodelRunStatus.FailedState, "failed", applied, applied, null, null, "package-after.json never arrived");
+
     private static void Append(string runDirectory, params string[] lines)
     {
         File.AppendAllText(
@@ -1345,6 +2079,16 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
         public BackendRequestException? StartFailure { get; set; }
 
+        /// <summary>
+        /// What the first Starts throw, one each, before a Start is answered (owner decision 159A, on the final review:
+        /// S3). A Start asked more than ten times answers a failure of its own, so a build that kept asking fails a case
+        /// rather than hanging it.
+        /// </summary>
+        public Queue<Exception> StartFailuresFirst { get; } = new Queue<Exception>();
+
+        /// <summary>Runs inside every Start, before it answers.</summary>
+        public Action? DuringStart { get; set; }
+
         public string PlanSummary { get; set; } = @"{""moves"":0}";
 
         public Func<int, RemodelRunStatus> StatusAt { get; set; } =
@@ -1361,6 +2105,9 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         /// idempotent, so a stop that could not be posted is a stop that has not happened yet.
         /// </summary>
         public int StopFailures { get; set; }
+
+        /// <summary>What a Stop that fails throws: the client's refusal by default (owner decision 159A, on the final review: A13).</summary>
+        public Exception? StopFailure { get; set; }
 
         RemodelProbeReply IRemodelBackend.Probe(RemodelProbeRequest request)
         {
@@ -1388,9 +2135,20 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         string IRemodelBackend.StartRun(RemodelRunRequest request)
         {
             Record(new RecordedCall("runs", request));
+            DuringStart?.Invoke();
             if (StartFailure != null)
             {
                 throw StartFailure;
+            }
+
+            if (StartFailuresFirst.Count > 0)
+            {
+                throw StartFailuresFirst.Dequeue();
+            }
+
+            if (Calls.Count(call => call.Route == "runs") > 10)
+            {
+                throw new InvalidOperationException("FICT the Start was asked more than ten times.");
             }
 
             return "job-42";
@@ -1425,7 +2183,7 @@ public sealed class BackendRemodelPipelineTests : IDisposable
             if (StopFailures > 0)
             {
                 StopFailures--;
-                throw new BackendRequestException(
+                throw StopFailure ?? new BackendRequestException(
                     "BackendUnavailable", "the review backend did not answer.", retryable: true);
             }
         }
@@ -1558,8 +2316,15 @@ public sealed class BackendRemodelPipelineTests : IDisposable
                 Dump,
                 Seat,
                 Backend,
-                TimeSpan.Zero);
+                TimeSpan.FromMilliseconds(500),
+                wait => Pauses.Add(wait));
         }
+
+        /// <summary>
+        /// Every wait the pipeline made, in order, and none of them slept (owner decision 159A, on the final review: A8, A9):
+        /// the poll delay of half a second is the product's, so the backoff after a poll not answered can be read.
+        /// </summary>
+        public List<TimeSpan> Pauses { get; } = new List<TimeSpan>();
 
         public BackendEndpoint? Endpoint { get; set; } = new BackendEndpoint(8123, "a-token");
 

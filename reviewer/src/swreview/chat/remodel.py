@@ -41,7 +41,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
+import time
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -101,6 +103,7 @@ __all__ = [
     "NotAPart",
     "NotModelCheck",
     "PackageAfterRefused",
+    "PackageAfterStopped",
     "PackageAfterTimeout",
     "PackageMissing",
     "RemodelJob",
@@ -156,6 +159,15 @@ Ten minutes, because the dump is another process's thread doing real work on a l
 and a run that waited forever would hold a worker thread and a document open with nobody
 left to answer it. Injectable so a test can drive the expiry without waiting."""
 
+STOP_LOOK_S = 0.1
+"""How often a wait for the after-dump looks for a Stop asked for while it waits (owner decision
+159A, on the final review: S1). The arrival of the dump ends the wait at once either way."""
+
+JOB_ID = re.compile(r"[0-9a-f]{32}")
+"""A job id the add-in names for its Start: 32 lowercase hexadecimal characters, as a minted one
+is (`uuid4().hex`) and as the add-in's `Guid` writes one (owner decision 159A, on the final
+review: S3)."""
+
 JOB_RUNNING = "running"
 JOB_AWAITING = "awaiting_package_after"
 JOB_FINISHED = "finished"
@@ -172,9 +184,15 @@ class NotAPart(ChatError):
 
 
 class DocumentDirty(ChatError):
-    """`source_dirty`. The source is never saved by this feature, so the engineer saves it."""
+    """`source_dirty`. The source is never saved by this feature, so the engineer saves it.
+
+    Retryable (owner decision 159A, 004 research R19): saving the part, or closing it unsaved and
+    opening it again, makes the same press succeed, as the add-in's own reading of the probe's
+    signals has always said; the class carried two flags until then.
+    """
 
     error_class = "DocumentDirty"
+    retryable = True
 
 
 class ExternalReferences(ChatError):
@@ -270,6 +288,16 @@ class PackageAfterTimeout(RuntimeError):
     Not a `ChatError`: nobody is waiting on an HTTP reply for it. It is raised inside the
     run, on the worker thread, and `run_remodel` turns it into a reported error, a
     `PlanCoverage` row and a `failed` run whose change log is untouched.
+    """
+
+
+class PackageAfterStopped(RuntimeError):
+    """The engineer stopped the run while it waited for the add-in's after-dump.
+
+    Owner decision 159A, on the final review (S1): the wait listened for the dump alone, so a
+    Stop asked for while it waited for a dump that was never coming ended nothing before the
+    wait's bound. Raised and reported as `PackageAfterTimeout` is: the run was never verified
+    or saved, and every change it applied is in the change log.
     """
 
 
@@ -400,7 +428,13 @@ class RemodelJob:
     """The live fan-out, fed as an `EventSink` listener; the file is the run's own."""
 
     stop: threading.Event = field(default_factory=threading.Event)
-    """Set by `POST .../stop`; read by `apply_changes` **between** changes."""
+    """Set by `POST .../stop` (`request_stop`); read by `apply_changes` **between** changes."""
+
+    stops: int = 0
+    """How many Stops `POST .../stop` has asked for (owner decision 159A, on the final review:
+    S1). One asked for while the job waits for its after-dump ends that wait; one the apply loop
+    honoured before the wait began does not. Written by the route's handler alone, on the event
+    loop, and read by the worker."""
 
     arrived: threading.Event = field(default_factory=threading.Event)
     """Set when the add-in's after-dump has been handed over, or abandoned at shutdown."""
@@ -423,12 +457,28 @@ class RemodelJob:
         This is `run_remodel`'s `dump_after`. The run is between phase C and the grade, the
         copy is open and every change is recorded, so the only two honest outcomes are the
         package or an exception: returning a stale or empty one would grade the wrong tree.
+
+        Owner decision 159A, on the final review (S1): a Stop asked for while it waits ends the
+        wait, since the dump it waits for may never come - the add-in could not write it, or the
+        backend refused it - and the run then held the host for the wait's whole bound. A Stop
+        asked for before the wait began is the apply loop's, honoured between changes: that run is
+        verified and saved as truncated, so its wait goes on. The dump's arrival outranks a Stop.
         """
         self.state = JOB_AWAITING
+        asked = self.stops
         try:
-            arrived = self.arrived.wait(self.timeout_s)
+            deadline = time.monotonic() + self.timeout_s
+            while not self.arrived.is_set():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or self.arrived.wait(min(remaining, STOP_LOOK_S)):
+                    break
+                if self.stops > asked:
+                    raise PackageAfterStopped(
+                        f"{PACKAGE_AFTER} never arrived: the engineer stopped the run while it "
+                        "waited for the dump of the copy after the last change"
+                    )
             package = self.package
-            if not arrived or package is None:
+            if not self.arrived.is_set() or package is None:
                 raise PackageAfterTimeout(
                     f"{PACKAGE_AFTER} never arrived: the add-in had "
                     f"{self.timeout_s:g}s to dump the copy after the last change and the "
@@ -442,6 +492,12 @@ class RemodelJob:
     def deliver(self, package: EvidencePackage) -> None:
         self.package = package
         self.arrived.set()
+
+    def request_stop(self) -> None:
+        """The engineer's Stop, as `POST .../stop` asks for it: the flag the apply loop reads
+        between changes, and the end of a wait for the after-dump under way as it is asked."""
+        self.stops += 1
+        self.stop.set()
 
     def abandon(self) -> None:
         """Release a waiting run at shutdown: the wait ends and the run fails honestly."""
@@ -481,8 +537,16 @@ def _changes(run_dir: Path) -> tuple[ChangeRecord, ...]:
     if not path.is_file():
         return ()
     records: list[ChangeRecord] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        text = line.strip()
+    for raw in path.read_bytes().splitlines():
+        # Owner decision 159A, on the final review (its probe P-B): the file was read whole with
+        # strict UTF-8, so a poll that came while a line holding a character of more than one
+        # byte was half written answered 500, which the add-in reads as a backend not answering.
+        # Each line is decoded on its own, and one that will not decode is skipped as one that
+        # will not validate is: a torn line is the next poll's.
+        try:
+            text = raw.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            continue
         if not text:
             continue
         try:
@@ -647,6 +711,7 @@ class RemodelServer:
         self.package_after_timeout = package_after_timeout
         self.jobs: dict[str, RemodelJob] = {}
         self._workers: dict[str, ThreadPoolExecutor] = {}
+        self._starting = threading.Lock()
 
     # --- endpoints ------------------------------------------------------------------
 
@@ -671,7 +736,7 @@ class RemodelServer:
         source_path = _text(body.get("source_path"), "source_path")
         probe_id = _text(body.get("probe_id"), "probe_id")
         configuration = body.get("configuration")
-        client = self._client(body)
+        client = self._client(body, run_dir.name)
         return JSONResponse(
             await run_in_threadpool(
                 partial(
@@ -699,9 +764,10 @@ class RemodelServer:
         """
         body = await _json(request)
         run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
+        job_id = _job_id(body.get("job_id"))
         settings = self.settings(body)
-        client = self._client(body)
-        job = await run_in_threadpool(partial(self._start, run_dir, client, settings))
+        client = self._client(body, run_dir.name)
+        job = await run_in_threadpool(partial(self._start, run_dir, client, settings, job_id))
         return JSONResponse({"job_id": job.job_id, "chat_id": job.job_id}, status_code=201)
 
     async def run_state(self, request: Request) -> Response:
@@ -743,7 +809,7 @@ class RemodelServer:
         and a run that has already finished is not turned into a failure by one.
         """
         job = self._job(request)
-        job.stop.set()
+        job.request_stop()
         return JSONResponse({"stopping": True})
 
     async def close_copy(self, request: Request) -> Response:
@@ -751,7 +817,7 @@ class RemodelServer:
         body = await _json(request)
         run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
         discard = bool(body.get("discard_copy"))
-        client = self._client(body)
+        client = self._client(body, run_dir.name)
         return JSONResponse(
             await run_in_threadpool(partial(self._close, client, discard, run_dir))
         )
@@ -954,8 +1020,29 @@ class RemodelServer:
         return {"plan_summary": plan_summary_row(plan, document, load_table())}
 
     def _start(
-        self, run_dir: Path, client: Any, settings: ProviderSettings
+        self, run_dir: Path, client: Any, settings: ProviderSettings, job_id: str | None = None
     ) -> RemodelJob:
+        """One Start, or the job it already made.
+
+        Owner decision 159A, on the final review (S3; older than 159A): a Start whose answer was
+        lost may still have made its job, so the add-in names the job it starts and asks the same
+        Start again until one is answered. The same Start asked again is answered with the job it
+        made, whatever that job has done since, and starts no second run; under one lock, so a
+        Start and the same Start asked again cannot both make one.
+        """
+        with self._starting:
+            return self._start_once(run_dir, client, settings, job_id)
+
+    def _start_once(
+        self, run_dir: Path, client: Any, settings: ProviderSettings, job_id: str | None
+    ) -> RemodelJob:
+        made = None if job_id is None else self.jobs.get(job_id)
+        if made is not None:
+            if made.run_dir != run_dir:
+                raise ChatError(
+                    f"job {job_id} is another run folder's; a Start names a job of its own"
+                )
+            return made
         # The live job is read first, because it is the most specific fact and it explains
         # the other two: a run past its first few milliseconds has moved its own plan off
         # `planned` (`judge` records `judging`) and opened its own change log, so both of
@@ -992,7 +1079,7 @@ class RemodelServer:
             plan_path(run_dir).read_text(encoding="utf-8")
         )
         job = RemodelJob(
-            job_id=uuid4().hex,
+            job_id=job_id or uuid4().hex,
             run_dir=run_dir,
             timeout_s=self.package_after_timeout,
         )
@@ -1115,11 +1202,16 @@ class RemodelServer:
 
     # --- the bridge, the job and the worker ------------------------------------------
 
-    def _client(self, body: Mapping[str, Any]) -> Any:
-        """The `remodel.*` client this request's bridge config names.
+    def _client(self, body: Mapping[str, Any], run_id: str | None = None) -> Any:
+        """The `remodel.*` client this request's bridge config names, acting for `run_id`.
 
         The secret travels from the pane to the client and stops there: it is never written
         to the run folder, never echoed in a reply and never in an error body.
+
+        `run_id` is the run folder's own name, the id `remodel.open` is given (owner decision
+        159A, protocol 1.5): every command the client sends after the open names it, so the
+        bridge refuses this run's command once another run's session holds it. The probe acts for
+        no run; every other route acts for the run in its `run_dir`.
         """
         bridge = body.get("bridge")
         if not isinstance(bridge, Mapping):
@@ -1129,9 +1221,13 @@ class RemodelServer:
             )
         pipe = str(bridge.get("pipe") or DEFAULT_PIPE_NAME)
         secret = str(bridge.get("secret") or "") or None
-        if self.bridge_factory is not None:
-            return self.bridge_factory(pipe, secret)
-        return RemodelClient(pipe, secret)
+        client = (
+            self.bridge_factory(pipe, secret)
+            if self.bridge_factory is not None
+            else RemodelClient(pipe, secret)
+        )
+        client.run_id = run_id
+        return client
 
     def _job(self, request: Request) -> RemodelJob:
         job_id = str(request.path_params["job_id"])
@@ -1186,6 +1282,19 @@ class RemodelServer:
         for worker in self._workers.values():
             worker.shutdown(wait=False)
         self._workers.clear()
+
+
+def _job_id(raw: Any) -> str | None:
+    """The job id a Start names, or `None` for one that names none and gets a minted one.
+
+    Owner decision 159A, on the final review (S3): 32 lowercase hexadecimal characters
+    (`JOB_ID`); anything else is refused before anything starts.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or JOB_ID.fullmatch(raw) is None:
+        raise ChatError("job_id names a job as 32 lowercase hexadecimal characters")
+    return raw
 
 
 def _field(reply: Any, name: str) -> Any:

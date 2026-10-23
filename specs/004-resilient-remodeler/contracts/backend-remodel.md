@@ -18,6 +18,13 @@ mirroring `bridge_factory`. Every `bridge` body field is `{pipe, secret}`, exact
 `POST /sessions` takes it, and **no route ever echoes the secret**: it reaches the client and
 nothing else.
 
+*Amended 2026-10-21 (owner decision 159A, on Codex's review; `research.md` R19.15):* every route
+that acts on a run's session - `POST /remodel/open`, `POST /remodel/runs` and `POST /remodel/close` -
+builds its client for the run in its `run_dir`, the folder's own name, the `run_id` `remodel.open`
+is given, and sets it on a client the factory built; `POST /remodel/probe` builds one for no run.
+Every command the client sends after the open names that run, and the bridge refuses one of another
+run's (`bridge-remodel.md`, protocol 1.5).
+
 ## Routes
 
 | Route | Body | Does | Reply |
@@ -25,12 +32,12 @@ nothing else.
 | `POST /remodel/probe` | `{source_path, configuration, bridge}` | `client.probe_scope(source_path)`, then the pure gate of `remodel/scope.py` over the signals it read. The verdict is never the bridge's | `200 {probe_id, signals, refusals}`, `refusals` a list of sentences. **An empty `refusals` is the only ok** |
 | `POST /remodel/open` | `{run_dir, source_path, configuration, probe_id, bridge}` | `client.open(source_path, copy_path, run_id, probe_id)` with the copy path derived from the run folder; on ok writes `source-attestation.json` and `open.json` | `200 {copy_path, rebuild_error_count, copy_present}` |
 | `POST /remodel/plan` | `{run_dir}` | Carries forward `exceptions.json`, then `remodel/runner.py::plan_run` over `package-before.json`, and records the copy's identity on the plan | `200 {plan_summary}`, the per-part row `swreview remodel plan --json` prints |
-| `POST /remodel/runs` | `{run_dir, bridge, provider, model, effort}` | Creates a `RemodelJob` and submits `run_remodel` to its worker thread: phases B, C and D, to completion | `201 {job_id, chat_id}` |
-| `GET /remodel/runs/{job_id}` | | Reads the job and its run folder; nothing is evaluated | `200 {state, plan_state, changes_total, changes_applied, current, awaiting, error}` |
+| `POST /remodel/runs` | `{run_dir, bridge, provider, model, effort, job_id}` | Creates a `RemodelJob` and submits `run_remodel` to its worker thread: phases B, C and D, to completion. *Amended 2026-10-21 (owner decision 159A, on the final review; `research.md` R19.20):* `job_id`, 32 lowercase hexadecimal characters, names the job the Start makes, and is minted when absent; anything else is `InvalidRequest`. The same Start asked again - the add-in asks again when it was not answered, since it may have made its job - is answered with the job it made, whatever that job has done since, and starts no second run; a job id another run folder's job holds is `InvalidRequest`. One Start at a time is decided, under one lock | `201 {job_id, chat_id}` |
+| `GET /remodel/runs/{job_id}` | | Reads the job and its run folder; nothing is evaluated. *Amended 2026-10-21 (owner decision 159A, on Codex's review; `research.md` R19.14):* the add-in polls it until the job is `finished` or `failed`, or answered `UnknownJob`, or the backend that runs it is gone - none running, or another in its place. A poll not answered while that backend runs is asked again, the wait doubling from the poll delay up to eight seconds, and a Stop asked for meanwhile is posted at every poll until it lands; the run, its session and the host stay held until then, because the run's worker may still be applying changes. An after-dump that failed - not written, refused, or its answer lost - is answered once the job ends: with that failure when the job failed, as the job ended when it finished, since a job finishes only once its dump has arrived | `200 {state, plan_state, changes_total, changes_applied, current, awaiting, error}` |
 | `GET /remodel/runs/{job_id}/events` | | `replay_events(<run_dir>/events.jsonl, after)`, with `after` a query parameter | `200 {events, next}` |
 | `POST /remodel/runs/{job_id}/package-after` | `{path}` | Hands the run the dump the add-in just wrote, ending the `dump_after` rendezvous | `200 {ok}` |
-| `POST /remodel/runs/{job_id}/stop` | `{}` | Sets the run's stop flag. Idempotent | `200 {stopping}` |
-| `POST /remodel/close` | `{run_dir, bridge, discard_copy}` | `client.close_document(discard_copy)`. A copy that is not open is a no-op. *Amended 2026-09-28 (U26, T186):* then, unless a run is in flight for that folder, re-checks a source attestation nothing has re-checked yet and files the verdict | `200 {closed}` |
+| `POST /remodel/runs/{job_id}/stop` | `{}` | Sets the run's stop flag. Idempotent. *Amended 2026-10-21 (owner decision 159A, on the final review; `research.md` R19.20):* a Stop asked for while the run waits for its after-dump ends that wait - the run fails as stopped, never verified or saved, its change log intact - where the wait listened for the dump alone; one the apply loop honoured before the wait began does not, so that run is verified and saved as truncated | `200 {stopping}` |
+| `POST /remodel/close` | `{run_dir, bridge, discard_copy}` | `client.close_document(discard_copy)`. A copy that is not open is a no-op. *Amended 2026-09-28 (U26, T186):* then, unless a run is in flight for that folder, re-checks a source attestation nothing has re-checked yet and files the verdict. *Amended 2026-10-21 (owner decision 159A, on review; `research.md` R19.9):* the add-in reads a close refused `BridgeUnavailable`, `BackendUnavailable`, `HttpError`, `BadResponse`, `InvalidRunDir` or `InvalidRequest` as not answered - the bridge may still hold the session - and any other class as the end-of-session routine's answer with what it left; and with no backend running it sends no close, and reads it as not answered | `200 {closed}` |
 
 Before phase B starts, the worker performs a deterministic run-entry preflight. The plan must
 still be `planned`, its scope verdict must be `ok`, and it must carry the attested copy tuple
@@ -155,7 +162,7 @@ refusal is still a refusal and is never guessed into a nearer class.
 | `error_class` | Status | Raised when |
 |---|---|---|
 | `NotAPart` | 400 | `not_a_part`: the source is not an existing `.SLDPRT` |
-| `DocumentDirty` | 400 | `source_dirty`: the open source has unsaved changes. This feature never saves the source. *Amended 2026-10-20 (owner decision 155A):* the message is still the host's sentence, which names the source's full path; the Remodel tab prints the add-in's own sentence for the class in its place, whoever refused (`RemodelHost.DocumentDirtyMessage`, [`pane-remodel-messages.md`](pane-remodel-messages.md)), and the tool-service log keeps the host's sentence on the refused request's line |
+| `DocumentDirty` | 400 | `source_dirty`: the open source has unsaved changes. This feature never saves the source. *Amended 2026-10-20 (owner decision 155A):* the message is still the host's sentence, which names the source's full path; the Remodel tab prints the add-in's own sentence for the class in its place, whoever refused (`RemodelHost.DocumentDirtyMessage`, [`pane-remodel-messages.md`](pane-remodel-messages.md)), and the tool-service log keeps the host's sentence on the refused request's line. *Amended 2026-10-21 (owner decision 159A; `research.md` R19.4):* retryable - saving the part makes the same press succeed - as the add-in's own check of the probe's signals has it; it was not |
 | `ExternalReferences` | 400 | `external_refs`: `ListExternalFileReferencesCount2() != 0`. *Amended 2026-10-20 (owner decision 155A):* as `DocumentDirty`: the tab prints `RemodelHost.ExternalReferencesMessage` in place of this message |
 | `ScopeRefused` | 400 | `scope_not_probed` or `scope_changed`. Also the pure gate's own refusal, which names **every** failing signal. *Amended 2026-10-20 (feature 002, owner decision 149A):* for the two codes the message is plain words that name no path, one sentence for each code (`SCOPE_REFUSAL_WORDS` in `chat/remodel.py`), where it was the host's sentence, which can name the probe and the part's full path - both paths, for a probe minted for another file; the host's sentence is logged instead |
 | `RunFolderFailed` | 400 | `copy_failed`, `copy_exists`, `tag_failed`, every `error_code` this build has no row for, an `ok` reply this build cannot read, and a run folder that could not be prepared - including a carry-forward candidate that exists and will not parse (FR-029) |
@@ -174,6 +181,12 @@ routes is called - `SessionLost` (decision 22A, 2026-09-25) before `POST /remode
 tool service re-attached after the plan, so no job is created and nothing here learns of it;
 `PreexistingRebuildErrors` is the host's too and is reached from the ok reply above rather than
 from an error body. `InvalidRunDir` is `chat-api.md`'s and is unchanged here.
+
+*Amended 2026-10-21 (owner decision 159A; `research.md` R19.3):* the Remodel tab prints none of these
+messages as it comes, since each can name the part's or the run folder's full path, or the bridge's pipe: the
+add-in tells each class in the tab's own words, naming no path, and writes the message to its log - every class
+but `ScopeRefused`, whose two sentences this module writes plainly itself (decision 149A). The bodies keep
+their sentences, for that log ([`pane-remodel-messages.md`](pane-remodel-messages.md), Refusal classes).
 
 ## Tests
 

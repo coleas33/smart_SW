@@ -1,7 +1,7 @@
 # Bridge protocol (Python side)
 
 **The authoritative protocol is
-`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.4). That
+`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.5). That
 file describes what `SwReview.Extractor.Console.exe serve --pipe <name>` speaks;
 `swreview.bridge.client` is written against it, and
 `reviewer/tests/unit/test_bridge_client.py` is the executable copy of what this client
@@ -101,6 +101,16 @@ secret) read as `none`, and the method never raises. A failed ping is an ordinar
 breaker below - it counts once - and is not asked again. The backend offers the candidate question
 only on `opens_closed`, and asks for the mode only when a custom or unclear document has a
 candidate, so a review without one never pings.
+
+## The `remodel.*` family's run (1.5)
+
+`swreview.bridge.remodel_client.RemodelClient` speaks the `remodel.*` family
+(`specs/004-resilient-remodeler/contracts/bridge-remodel.md`), not `COMMANDS`. Since protocol 1.5
+(owner decision 159A) it acts for one run, `run_id`, the run folder's own name: it opens that run and
+no other, and every command it sends after `remodel.open` carries `run_id`, first, so the host
+carries the command out only on that run's session and refuses another run's as `session_mismatch`
+(`RemodelTargetError`). A client given no run sends nothing after the open. The backend's routes
+build their clients for the run in their `run_dir` (`chat/remodel.py`); the probe acts for none.
 
 ## Circuit breaker
 

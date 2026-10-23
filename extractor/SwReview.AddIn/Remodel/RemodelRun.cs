@@ -68,6 +68,7 @@ public sealed class RemodelRun
     private bool _closedByPlanAgain;
     private bool _sessionClosedAtPlan;
     private bool _sessionEnded;
+    private Tuple<string, string>? _lastStatus;
 
     internal RemodelRun(
         string runDirectory, string copyPath, DateTime at, string? toolServiceAttachment)
@@ -121,8 +122,9 @@ public sealed class RemodelRun
     /// ended this plan's bridge session as soon as the plan was made, because Start is switched off
     /// in this build and no Start could use it, and the bridge answered that close. A plan marked
     /// so holds no session: no close is sent for it again - not by Discard, not by planning again -
-    /// and it is <b>not</b> lost, since nothing it needs went away. Set once, by the host that
-    /// planned it, and never cleared. Volatile for the reason <see cref="ClosedByPlanAgain"/> is.
+    /// and it is <b>not</b> lost, since nothing it needs went away; nor, owner decision 159A, by a
+    /// re-attach or a teardown later, which have no session of it to take. Set once, by the host
+    /// that planned it, and never cleared. Volatile for the reason <see cref="ClosedByPlanAgain"/> is.
     /// </summary>
     public bool SessionClosedAtPlan => Volatile.Read(ref _sessionClosedAtPlan);
 
@@ -135,6 +137,17 @@ public sealed class RemodelRun
     public bool SessionEnded => Volatile.Read(ref _sessionEnded);
 
     internal void MarkSessionEnded() => Volatile.Write(ref _sessionEnded, true);
+
+    /// <summary>
+    /// Owner decision 159A, on the final review: the stage and the words of the last status posted for this run while it
+    /// ran - what a page that never loaded again shows, the backend not answering, told once, among them - so a page that
+    /// loads again mid-run is told them too (<c>init.latest_run.status</c>). Null until the run posts one. Volatile, since
+    /// the run's thread writes it and the message thread reads it.
+    /// </summary>
+    public Tuple<string, string>? LastStatus => Volatile.Read(ref _lastStatus);
+
+    internal void RememberStatus(string stage, string message) =>
+        Volatile.Write(ref _lastStatus, Tuple.Create(stage, message));
 
 
     /// <summary>
@@ -150,6 +163,13 @@ public sealed class RemodelRun
     public bool StopRequested => Interlocked.CompareExchange(ref _stop, 0, 0) != 0;
 
     internal void RequestStop() => Interlocked.Exchange(ref _stop, 1);
+
+    /// <summary>
+    /// Owner decision 159A, on review: takes back a stop asked for while a Start whose run was never handed to its
+    /// scheduler held the run - the copy going away as it failed - so the plan, which stays startable, carries no stop
+    /// into its next run (<c>RemodelHost.LetGoOfARunNeverHandedOn</c>).
+    /// </summary>
+    internal void WithdrawStop() => Interlocked.Exchange(ref _stop, 0);
 
     /// <summary>
     /// Claims the one `remodel.plan_lost` this run's plan is told with (decision 24A): true the

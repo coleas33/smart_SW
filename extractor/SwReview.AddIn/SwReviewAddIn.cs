@@ -355,6 +355,10 @@ public class SwReviewAddIn : ISwAddin
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
+
+        // Owner decision 159A, on the final review: last, so a line kept while something held addin.log - another
+        // SOLIDWORKS session's append, a reader that locks it - is written rather than lost with the process.
+        AddInLog.Flush();
         return true;
     }
 
@@ -963,6 +967,10 @@ public class SwReviewAddIn : ISwAddin
             // backend's own sentences to the page, and a `/remodel/*` failure is exactly the
             // kind of message that could quote the credential it was called with (FR-015).
             Secrets = () => KeysToMask().Concat(new[] { _toolService?.RemodelBridge?.Secret }),
+
+            // Owner decision 159A: what a failure said where the tab tells it in its own words - its
+            // sentence can name a path - masked by the host, into the add-in's log, which View log opens.
+            Log = AddInLog.Write,
         });
 
         StartRemodelPump();

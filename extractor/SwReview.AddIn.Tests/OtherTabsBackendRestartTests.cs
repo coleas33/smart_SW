@@ -169,7 +169,10 @@ public sealed class OtherTabsBackendRestartTests
     /// Each other tab's host marks the add-in's own word on the backend - its start, or a restart
     /// that failed - as such, `lifecycle: true`, when the add-in says so, and nothing else it posts:
     /// the page takes down a banner it put up for that word once a later `init` names a backend,
-    /// and only that banner (owner decision 145A, third review).
+    /// and only that banner (owner decision 145A, third review). *Changed deliberately 2026-10-21
+    /// (owner decision 159A, 004 research R19):* the Remodel tab tells that word's `error` in its own
+    /// plain words, `RemodelHost.BackendDidNotStartMessage`, since the failure it carries can end in
+    /// the backend's log's path; the mark is as it was, and the other tabs' words are unchanged.
     /// </summary>
     [Theory]
     [MemberData(nameof(Tabs))]
@@ -184,7 +187,9 @@ public sealed class OtherTabsBackendRestartTests
         Assert.Equal(2, posted.Count);
         JsonElement backends = JsonDocument.Parse(posted[0]).RootElement.GetProperty("payload");
         Assert.Equal("error", backends.GetProperty("stage").GetString());
-        Assert.Equal("FICT the review backend did not start.", backends.GetProperty("message").GetString());
+        Assert.Equal(
+            tab == "remodel" ? RemodelHost.BackendDidNotStartMessage : "FICT the review backend did not start.",
+            backends.GetProperty("message").GetString());
         Assert.True(backends.GetProperty("lifecycle").GetBoolean());
         JsonElement other = JsonDocument.Parse(posted[1]).RootElement.GetProperty("payload");
         Assert.False(other.TryGetProperty("lifecycle", out _), "only the backend's own word is marked: " + other.GetRawText());
