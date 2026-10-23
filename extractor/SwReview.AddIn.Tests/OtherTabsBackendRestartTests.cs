@@ -118,6 +118,9 @@ public sealed class OtherTabsBackendRestartTests
     /// A first start that failed is told to every page with the way on (150A review, O2: until then
     /// each banner carried the bare failure): the Review page is sent to its own Save, and every
     /// other tab, through the call a restart that failed is told to them with, to the Review tab's.
+    /// <i>Changed deliberately on the review of owner decision 160A (S3):</i> the Review page's word is
+    /// marked as the backend's own (`lifecycle`), as every other page's is, since only that word, and a
+    /// save's `BackendNotRestarted`, now tells its strip the backend is not running.
     /// </summary>
     [Fact]
     public void AFailedFirstStartTellsEveryPageTheWayOn()
@@ -134,7 +137,7 @@ public sealed class OtherTabsBackendRestartTests
         string failed = start.Substring(caught);
 
         Assert.Contains(
-            "_reviewHost?.PostStatus(\"error\", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain));",
+            "_reviewHost?.PostStatus(\"error\", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain), lifecycle: true);",
             failed,
             StringComparison.Ordinal);
         Assert.Contains("TellTheOtherTabsTheBackendDidNotStart(failure.Message);", failed, StringComparison.Ordinal);
@@ -190,6 +193,90 @@ public sealed class OtherTabsBackendRestartTests
         Assert.True(backends.GetProperty("lifecycle").GetBoolean());
         JsonElement other = JsonDocument.Parse(posted[1]).RootElement.GetProperty("payload");
         Assert.False(other.TryGetProperty("lifecycle", out _), "only the backend's own word is marked: " + other.GetRawText());
+    }
+
+    /// <summary>
+    /// Owner decision 160A, found on review by mutation: each other tab's `init` says whether the last start or restart of
+    /// the backend failed with none up - the review host's word, which the add-in hands each host - so its page, loaded or
+    /// loaded again after the failure's `status`, says the backend is not running and how to start it, not "Backend
+    /// starting". Only while no backend is up: an `init` that names one never calls it failed, whatever the word says.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(TabsAndStarts))]
+    public void EachOtherTabsInitSaysWhetherTheLastStartFailedWithNoBackendUp(string tab, bool failed, bool backendUp, bool said)
+    {
+        var posted = new List<string>();
+        BackendEndpoint? endpoint = backendUp ? new BackendEndpoint(51234, "FICT-token") : null;
+        using (IDisposable host = InitHost(tab, posted, () => endpoint, () => failed, out Action<string> receive))
+        {
+            receive(JsonSerializer.Serialize(new { type = "ready", id = "r1", payload = new { } }));
+        }
+
+        JsonElement init = posted
+            .Select(message => JsonDocument.Parse(message).RootElement)
+            .Single(root => root.GetProperty("type").GetString() == "init")
+            .GetProperty("payload");
+        Assert.Equal(backendUp ? JsonValueKind.Object : JsonValueKind.Null, init.GetProperty("backend").ValueKind);
+        Assert.Equal(said, init.GetProperty("backend_start_failed").GetBoolean());
+    }
+
+    /// <summary>
+    /// Each other tab, with what the review host's word can meet: no failure; a failure with no backend up; and a failure
+    /// while one is up, which the word itself never says (<c>ReviewHost.BackendStartFailed</c>), held here by the host too.
+    /// </summary>
+    public static IEnumerable<object[]> TabsAndStarts =>
+        from tab in new[] { "model-check", "standards", "remodel" }
+        from start in new[]
+        {
+            new[] { false, false, false },
+            new[] { true, false, true },
+            new[] { true, true, false },
+        }
+        select new object[] { tab, start[0], start[1], start[2] };
+
+    /// <summary>
+    /// ...and the add-in hands each of the three the review host's word, read at each `init`, as it hands them the review
+    /// host's run roots (found on review by mutation). The add-in cannot be built here, so its source is read.
+    /// </summary>
+    [Theory]
+    [InlineData("_modelCheckHost = new ModelCheckHost(new ModelCheckHostOptions(")]
+    [InlineData("_standardsHost = new StandardsHost(new StandardsHostOptions(")]
+    [InlineData("_remodelHost = new RemodelHost(new RemodelHostOptions(")]
+    public void TheAddInHandsEachOtherTabTheReviewHostsWordOnAFailedStart(string built)
+    {
+        string options = Between(AddInSource(), built, "});");
+        Assert.Contains("BackendStartFailed = () => _reviewHost?.BackendStartFailed == true,", options, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The host of <paramref name="tab"/> over a channel that collects what it posts, with its backend and the review
+    /// host's word on a failed start, and its <c>Receive</c>, which takes a page's message.
+    /// </summary>
+    private static IDisposable InitHost(
+        string tab, List<string> posted, Func<BackendEndpoint?> backend, Func<bool> failed, out Action<string> receive)
+    {
+        var channel = new CollectingChannel(posted);
+        Func<string> runRoot = () => Path.Combine(Path.GetTempPath(), "SwReview.OtherTabs.Tests");
+        switch (tab)
+        {
+            case "model-check":
+                var check = new ModelCheckHost(new ModelCheckHostOptions(channel, runRoot) { Backend = backend, BackendStartFailed = failed });
+                receive = check.Receive;
+                return check;
+
+            case "standards":
+                var standards = new StandardsHost(new StandardsHostOptions(channel, runRoot) { Backend = backend, BackendStartFailed = failed });
+                receive = standards.Receive;
+                return standards;
+
+            case "remodel":
+                var remodel = new RemodelHost(new RemodelHostOptions(channel, runRoot) { Backend = backend, BackendStartFailed = failed });
+                receive = remodel.Receive;
+                return remodel;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(tab), tab, "no tab of that name");
+        }
     }
 
     /// <summary>The host of <paramref name="tab"/> over a channel that collects what it posts, and its <c>PostStatus</c>.</summary>

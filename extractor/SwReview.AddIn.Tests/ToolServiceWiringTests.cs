@@ -2179,9 +2179,11 @@ public sealed class ToolServiceWiringTests
         Assert.Contains(Held + "Remodel),", between("private void StartRemodelHost(", "StartRemodelPump();"), StringComparison.Ordinal);
         Assert.Equal(3, Regex.Matches(source, Regex.Escape(Held)).Count);
 
+        // Changed deliberately for owner decision 157A: the proxy is handed the check hosts' holds of an evaluation
+        // after the bridge's hold, which is pinned as before.
         string pane = Regex.Replace(File.ReadAllText(Path.Combine(addIn, "TaskPaneControl.cs")), @"\s+", " ");
         Assert.Contains(
-            "_proxy = new BackendProxyHandler( () => _options.Backend(), request => _options.ProxySend(request), () => _options.PageTurnRefusal(), () => _options.HoldToolService());",
+            "_proxy = new BackendProxyHandler( () => _options.Backend(), request => _options.ProxySend(request), () => _options.PageTurnRefusal(), () => _options.HoldToolService(), (runDirectory, token) => _options.HoldCheckEvaluation(runDirectory, token));",
             pane,
             StringComparison.Ordinal);
     }

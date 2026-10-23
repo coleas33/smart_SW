@@ -471,6 +471,32 @@ public sealed class ModelCheckHostTests
         }
     }
 
+    /// <summary>
+    /// The review of owner decision 160A (S7): a run root the rule passes - not made yet - whose final path cannot be read
+    /// once it is made is answered `RunFolderFailed`, and nothing is extracted, rather than the run named under the root as
+    /// the setting spells it. The host hands the run folder its own probe, so the probe here answers both.
+    /// </summary>
+    [Fact]
+    public void ARunRootWhoseFinalPathCannotBeReadOnceMadeIsAnsweredRunFolderFailed()
+    {
+        using (var world = new CheckWorld())
+        {
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDPRT", "Default");
+            string root = Path.GetFullPath(world.RunRoot);
+            FakeRunRootProbe probe = FakeRunRootProbe.ExistingDownTo(Path.GetDirectoryName(root)!);
+            probe.FinalPaths[root] = null;
+            world.Probe = probe;
+            world.Open();
+
+            world.Receive("check.start", "c1", new { scope = "part" });
+
+            Assert.Equal(
+                "RunFolderFailed", world.Reply("error", "c1").GetProperty("error_class").GetString());
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.RunFolders());
+        }
+    }
+
     // ---- the envelope -------------------------------------------------------------------
 
     [Fact]
@@ -629,16 +655,21 @@ public sealed class ModelCheckHostTests
     /// tab's thread that ends meanwhile. It read the run root to judge it and again to make the folder, and so
     /// could make a check's folder under a run root it never judged. Changed deliberately for the reviews of 154A's
     /// merge, N6: the run root is read a second time once the extraction is over, so the move is now answered
-    /// there, `RunRootChanged`, where the check was handed on.
+    /// there, `RunRootChanged`, where the check was handed on. Changed deliberately for owner decision 157A: the
+    /// run root is read once more, once the check's gate is passed - a restart the gate makes can move it, and a moved
+    /// one is judged again (`CheckHoldTests`) - so the move this case makes between the folder and the end of the
+    /// extraction comes at the third reading. Renamed deliberately on the reviews of 157A, from
+    /// `ACheckJudgesAndMakesItsFolderUnderOneReadingOfTheRunRoot`: it reads the run root three times now, and what it
+    /// pins is that the folder is made under the run root judged.
     /// </summary>
     [Fact]
-    public void ACheckJudgesAndMakesItsFolderUnderOneReadingOfTheRunRoot()
+    public void ACheckMakesItsFolderUnderTheRunRootItJudged()
     {
         using (var world = new CheckWorld())
         {
             string moved = Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "moved", "runs");
             int readings = 0;
-            world.RunRootSource = () => ++readings == 1 ? world.RunRoot : moved;
+            world.RunRootSource = () => ++readings <= 2 ? world.RunRoot : moved;
             world.Document = new PageDocument(@"C:\parts\bracket.SLDPRT", "Default");
             world.Open();
 
@@ -647,7 +678,7 @@ public sealed class ModelCheckHostTests
             Assert.Equal("RunRootChanged", world.Reply("error", "c1").GetProperty("error_class").GetString());
             Assert.Equal(world.RunRoot, Path.GetDirectoryName(Assert.Single(world.RunFolders())));
             Assert.False(Directory.Exists(moved), "the check's folder was made under a run root it did not judge");
-            Assert.Equal(2, readings);
+            Assert.Equal(3, readings);
         }
     }
 
@@ -709,7 +740,10 @@ public sealed class ModelCheckHostTests
     /// is over: a run whose folder is no longer under the run root in force is answered `RunRootChanged`, not
     /// retryable, in words the page prints whole, and while a start that would bring another in is still under way
     /// it is answered as a start is then (`BackendUnavailable`); either way the folder is left as the evidence, and
-    /// it is neither registered nor handed to the page.
+    /// it is neither registered nor handed to the page. Changed deliberately for owner decision 157A: the run root is
+    /// read once more, once the check's gate is passed, so the move made while the model is read comes at the third
+    /// reading; and since a check holds every settings restart back while a backend is up, only a start that brings a
+    /// backend up where there was none can make it.
     /// </summary>
     [Theory]
     [InlineData("another run root in force")]
@@ -720,7 +754,7 @@ public sealed class ModelCheckHostTests
         {
             string moved = Path.Combine(Path.GetDirectoryName(world.RunRoot)!, "moved", "runs");
             int readings = 0;
-            world.RunRootForANewRun = () => ++readings == 1
+            world.RunRootForANewRun = () => ++readings <= 2
                 ? world.RunRoot
                 : after == "another run root in force" ? moved : null;
             world.Document = new PageDocument(@"C:\parts\bracket.SLDPRT", "Default");
@@ -746,7 +780,7 @@ public sealed class ModelCheckHostTests
                     error.GetProperty("message").GetString());
             }
 
-            Assert.Equal(2, readings);
+            Assert.Equal(3, readings);
             Assert.Equal(1, world.Dump.Runs);
             Assert.Single(world.RunFolders());
             Assert.Empty(world.Registered);

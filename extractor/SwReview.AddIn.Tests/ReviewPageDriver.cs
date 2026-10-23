@@ -182,6 +182,15 @@ internal sealed class ReviewPageDriver
 
     public string KeySource { get; set; } = "settings";
 
+    /// <summary>Whether every `init` names no backend and no token, as the host's does while none is up.</summary>
+    public bool NoBackend { get; set; }
+
+    /// <summary>
+    /// What `init` carries as `backend_start_failed`: whether the last start or restart failed with no backend
+    /// up (owner decision 160A).
+    /// </summary>
+    public bool BackendStartFailed { get; set; }
+
     /// <summary>
     /// What `init` carries as `settings_not_in_force`: the host's sentence while the backend that is
     /// up runs with settings other than the saved ones (owner decision 153A), or null.
@@ -195,6 +204,19 @@ internal sealed class ReviewPageDriver
     public long? SettingsNotInForceRevision { get; set; }
 
     public object? SendWhenCheckedSaveError { get; set; }
+
+    /// <summary>Holds each `settings.save` until <see cref="ReleaseSettingsSave"/>: a save whose restart is being made.</summary>
+    public bool HoldSettingsSave { get; set; }
+
+    private readonly Queue<string> _heldSettingsSaves = new Queue<string>();
+
+    /// <summary>Answers the oldest held `settings.save` as it would be answered now.</summary>
+    public async Task ReleaseSettingsSave()
+    {
+        Assert.NotEmpty(_heldSettingsSaves);
+        AnswerSettingsSave(_heldSettingsSaves.Dequeue());
+        await OffscreenReviewPage.Settled(Page);
+    }
 
     public bool HoldSendWhenCheckedSave { get; set; }
 
@@ -614,6 +636,30 @@ var h = {
         await OffscreenReviewPage.Settled(Page);
     }
 
+    /// <summary>
+    /// Answers the oldest held `ready`, and goes on holding the rest. Optional endpoint and token arguments
+    /// name a backend the host read before a lifecycle failure, as <see cref="ReleaseReady"/> does.
+    /// </summary>
+    public async Task ReleaseOneReady(bool backendUp = true, string? token = null)
+    {
+        Assert.NotEmpty(_heldReady);
+        Reply("init", _heldReady.Dequeue(), Init(backendUp, token));
+        await OffscreenReviewPage.Settled(Page);
+    }
+
+    /// <summary>Refuses the oldest held init request while keeping any fresh request held separately.</summary>
+    public async Task RefuseOneReady()
+    {
+        Assert.NotEmpty(_heldReady);
+        Reply("error", _heldReady.Dequeue(), new
+        {
+            error_class = "HostError",
+            message = "FICT the host could not give its earlier init.",
+            retryable = false,
+        });
+        await OffscreenReviewPage.Settled(Page);
+    }
+
     private void Answer(string type, string id, JsonElement payload)
     {
         switch (type)
@@ -710,24 +756,30 @@ var h = {
                 return;
 
             case "settings.save":
-                if (SettingsSaveError != null)
-                {
-                    Reply("error", id, SettingsSaveError);
-                    return;
-                }
-
-                if (RunRootRefusal != null)
-                {
-                    Reply("settings.saved", id, new { settings = Settings(), key_source = "settings", run_root_refusal = RunRootRefusal });
-                    return;
-                }
-
-                Reply("settings.saved", id, new { settings = Settings(), key_source = "settings" });
+                if (HoldSettingsSave) _heldSettingsSaves.Enqueue(id);
+                else AnswerSettingsSave(id);
                 return;
 
             default:
                 return;
         }
+    }
+
+    private void AnswerSettingsSave(string id)
+    {
+        if (SettingsSaveError != null)
+        {
+            Reply("error", id, SettingsSaveError);
+            return;
+        }
+
+        if (RunRootRefusal != null)
+        {
+            Reply("settings.saved", id, new { settings = Settings(), key_source = "settings", run_root_refusal = RunRootRefusal });
+            return;
+        }
+
+        Reply("settings.saved", id, new { settings = Settings(), key_source = "settings" });
     }
 
     private void AnswerRecheck(string id, string chatId)
@@ -782,8 +834,9 @@ var h = {
     /// </summary>
     private object Init(bool backendUp = true, string? token = null) => new
     {
-        backend = backendUp ? new { port = 51999, origin = Origin } : null,
-        token = backendUp ? token ?? BackendToken : null,
+        backend = backendUp && !NoBackend ? new { port = 51999, origin = Origin } : null,
+        token = backendUp && !NoBackend ? token ?? BackendToken : null,
+        backend_start_failed = BackendStartFailed,
         settings = Settings(),
         key_source = KeySource,
         engineering_context = ContextPrepared != null,

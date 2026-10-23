@@ -36,6 +36,206 @@ public sealed class PageMessageTests
 
     // ---- ready / init -------------------------------------------------------------------
 
+    /// <summary>
+    /// Owner decision 160A: `init` says whether the last start or restart failed with no backend up, so a page that
+    /// loads, or loads again, after the failure's `status` says the backend is not running rather than "Backend
+    /// starting": false before any start, true after a first start or a save's restart that failed, and false again
+    /// while the next start is under way and once it has succeeded - also when that backend is gone later, since the
+    /// mark is taken off as each start begins (the mark's reset, found on review by mutation). <i>Rows added on the
+    /// review of owner decision 160A (S6):</i> whatever the start throws - a <see cref="BackendStartException"/>, or a
+    /// failure outside that wrapper, such as the new backend's log not opened.
+    /// </summary>
+    [Theory]
+    [InlineData("first", false)]
+    [InlineData("save", false)]
+    [InlineData("first", true)]
+    [InlineData("save", true)]
+    public void InitRemembersAFailedStartWithNoBackendAcrossPageReloads(string start, bool outsideTheWrapper)
+    {
+        using var world = new HostWorld();
+        world.Backend.Endpoint = null;
+        world.Open();
+        world.Receive("ready", "before", new { });
+        Assert.False(world.Reply("init", "before").GetProperty("backend_start_failed").GetBoolean());
+
+        Exception failure = outsideTheWrapper
+            ? new IOException("FICT the new backend's log could not be opened.")
+            : new BackendStartException("FICT the backend did not start.");
+        if (start == "first")
+        {
+            Assert.Same(failure, Assert.ThrowsAny<Exception>(() => world.Host.FirstStart((_, __) => throw failure)));
+        }
+        else
+        {
+            world.Backend.RestartFailure = failure;
+            world.Receive("settings.save", "save", Save());
+        }
+
+        foreach (string id in new[] { "loaded", "reloaded" })
+        {
+            world.Receive("ready", id, new { });
+            JsonElement init = world.Reply("init", id);
+            Assert.Equal(JsonValueKind.Null, init.GetProperty("backend").ValueKind);
+            Assert.True(init.GetProperty("backend_start_failed").GetBoolean());
+        }
+
+        world.Host.FirstStart((_, __) =>
+        {
+            world.Receive("ready", "starting", new { });
+            Assert.False(world.Reply("init", "starting").GetProperty("backend_start_failed").GetBoolean());
+            world.Backend.Endpoint = new BackendEndpoint(51235, "FICT-new-token");
+        });
+        world.Receive("ready", "started", new { });
+        Assert.False(world.Reply("init", "started").GetProperty("backend_start_failed").GetBoolean());
+
+        world.Backend.Endpoint = null;
+        world.Receive("ready", "gone", new { });
+        Assert.False(world.Reply("init", "gone").GetProperty("backend_start_failed").GetBoolean());
+    }
+
+    /// <summary>
+    /// The review of owner decision 160A (S3): the review host marks the add-in's own word on the backend as such,
+    /// `lifecycle: true`, when the add-in says so, as the other tabs' hosts do, and nothing else it posts: the
+    /// Review page's strip says the backend is not running from that word alone, and from a save's
+    /// `BackendNotRestarted`.
+    /// </summary>
+    [Fact]
+    public void TheReviewHostMarksTheBackendsOwnWordAndNothingElse()
+    {
+        using var world = new HostWorld();
+        world.Open();
+
+        world.Host.PostStatus("error", "FICT the review backend did not start.", lifecycle: true);
+        world.Host.PostStatus("error", "FICT the stored key could not be read.");
+
+        JsonElement[] statuses = Posted(world, "status");
+        Assert.Equal(2, statuses.Length);
+        Assert.True(statuses[0].GetProperty("lifecycle").GetBoolean());
+        Assert.False(statuses[1].TryGetProperty("lifecycle", out _), "only the backend's own word is marked: " + statuses[1].GetRawText());
+    }
+
+    /// <summary>
+    /// ...and a restart that failed before it stopped the old backend leaves that backend up, which is no failed start:
+    /// neither `init` nor the host's word the add-in hands the other tabs (`BackendStartFailed`) calls it one.
+    /// </summary>
+    [Fact]
+    public void InitDoesNotCallARestartFailedWhileTheOldBackendIsUpANonRunningBackend()
+    {
+        using var world = new HostWorld();
+        world.Open();
+        world.Backend.RestartFailure = new InvalidOperationException("FICT failed before stopping the old backend.");
+        world.Receive("settings.save", "save", Save());
+        world.Receive("ready", "ready", new { });
+        JsonElement init = world.Reply("init", "ready");
+        Assert.Equal(JsonValueKind.Object, init.GetProperty("backend").ValueKind);
+        Assert.False(init.GetProperty("backend_start_failed").GetBoolean());
+        Assert.False(world.Host.BackendStartFailed);
+    }
+
+    /// <summary>
+    /// Owner decision 160A: a save written while the add-in unloads is answered `AddInStopping`, not retryable - the
+    /// settings are saved, and nothing else needs doing - not `BackendNotRestarted`, whose sentence says to save again
+    /// (150A, Not changed). Whenever the unload is seen: before the restart, which is then not made (the first row, found
+    /// on review by mutation), during a restart that fails, and during one that returns; the other tabs are not told of
+    /// a restart made as the add-in goes.
+    /// </summary>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public void ASaveDuringUnloadSaysTheSettingsAreSavedAndTheAddInIsStopping(bool startInFlight, bool restartFails)
+    {
+        using var world = new HostWorld();
+        world.Open();
+        if (startInFlight)
+        {
+            world.Backend.BeforeRestart = () => world.Host.Dispose();
+        }
+        else
+        {
+            world.Host.Dispose();
+        }
+        if (restartFails)
+        {
+            world.Backend.RestartFailure = new BackendStartException("FICT the start was stopped by unload.");
+        }
+
+        world.Receive("settings.save", "save", Save(effort: "low"));
+
+        JsonElement answer = world.Reply("error", "save");
+        Assert.Equal("AddInStopping", answer.GetProperty("error_class").GetString());
+        Assert.False(answer.GetProperty("retryable").GetBoolean());
+        Assert.Equal("The settings are saved. The add-in is stopping; nothing else needs doing.",
+            answer.GetProperty("message").GetString());
+        Assert.Equal("low", UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.Effort);
+        Assert.Equal("low", world.Host.Settings.Effort);
+        Assert.Empty(Posted(world, "settings.saved"));
+        Assert.Empty(Posted(world, "backend.restarted"));
+        Assert.Equal(0, world.OtherTabsRestarted);
+        Assert.Equal(startInFlight && !restartFails ? 1 : 0, world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// ...and it still says what it says of the run root, as every save that was written does (154A): a folder chosen
+    /// that the rule refuses is the one field not saved, said in `run_root_refusal` beside the class (found on review
+    /// by mutation).
+    /// </summary>
+    [Fact]
+    public void ASaveDuringUnloadStillSaysWhatItSaysOfTheRunRoot()
+    {
+        using var world = new HostWorld();
+        world.Probe = FakeRunRootProbe.Local();
+        world.Open();
+        string previous = world.Host.Settings.RunRoot;
+        world.Host.Dispose();
+        Dictionary<string, object?> payload = Save(effort: "low");
+        payload["run_root"] = "C:\\Fictional\\runs\"";
+
+        world.Receive("settings.save", "save", payload);
+
+        JsonElement answer = world.Reply("error", "save");
+        Assert.Equal("AddInStopping", answer.GetProperty("error_class").GetString());
+        JsonElement refusal = answer.GetProperty("run_root_refusal");
+        Assert.Equal("RunRootRefused", refusal.GetProperty("error_class").GetString());
+        Assert.Contains("the run root was not changed", refusal.GetProperty("message").GetString()!, StringComparison.Ordinal);
+        Assert.Equal(previous, UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.RunRoot);
+        Assert.Equal(0, world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// Owner decision 160A: a folder chosen that no folder can be made under - a character no folder can have, a lone
+    /// trailing quote among them, or a name longer than 255 characters - is the one field not saved, in plain words with
+    /// no path, and the other settings are saved and restarted with, as for 154A's other refusals.
+    /// </summary>
+    [Theory]
+    [InlineData("quote")]
+    [InlineData("long")]
+    public void AChosenFolderNoFolderCanBeMadeUnderIsTheOneFieldNotSaved(string kind)
+    {
+        using var world = new HostWorld();
+        world.Probe = FakeRunRootProbe.Local();
+        world.Open();
+        string previous = world.Host.Settings.RunRoot;
+        string chosen = @"C:\Fictional\" + (kind == "quote" ? "runs\"" : new string('x', 256));
+        Dictionary<string, object?> payload = Save(effort: "low");
+        payload["run_root"] = chosen;
+
+        world.Receive("settings.save", "save", payload);
+
+        JsonElement saved = world.Reply("settings.saved", "save");
+        JsonElement refusal = saved.GetProperty("run_root_refusal");
+        Assert.Equal("RunRootRefused", refusal.GetProperty("error_class").GetString());
+        Assert.False(refusal.GetProperty("retryable").GetBoolean());
+        Assert.DoesNotContain(chosen, refusal.GetProperty("message").GetString()!);
+        Assert.Contains("the run root was not changed", refusal.GetProperty("message").GetString()!);
+        UserSettings stored = UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings;
+        Assert.Equal(previous, stored.RunRoot);
+        Assert.Equal(previous, saved.GetProperty("settings").GetProperty("run_root").GetString());
+        Assert.Equal("low", stored.Effort);
+        Assert.Equal(previous, world.Backend.RestartedWith!.RunRoot);
+    }
+
     [Fact]
     public void ReadyIsAnsweredWithInitCarryingTheBackendOriginAndNoKey()
     {
@@ -1275,6 +1475,8 @@ public sealed class PageMessageTests
 
         public List<string> Posted { get; } = new List<string>();
 
+        public int OtherTabsRestarted { get; private set; }
+
         public ReviewHost Host => _host ?? throw new InvalidOperationException("call Open() first");
 
         /// <summary>Writes the settings file if the test has not, then builds the host.</summary>
@@ -1291,6 +1493,7 @@ public sealed class PageMessageTests
                 LogFolder = Path.Combine(_root, "logs"),
                 CurrentDocument = () => Document,
                 Environment = name => Environment.TryGetValue(name, out string? value) ? value : null,
+                BackendRestarted = () => OtherTabsRestarted++,
             };
             options.RunRootProbe = Probe ?? FakeRunRootProbe.Local();
 
@@ -1416,8 +1619,11 @@ public sealed class PageMessageTests
         /// <summary>What a restart throws, when set: a backend that did not start (owner decision 154A, follow-up).</summary>
         public Exception? RestartFailure { get; set; }
 
+        public Action? BeforeRestart { get; set; }
+
         public void Restart(UserSettings settings, ResolvedApiKey key)
         {
+            BeforeRestart?.Invoke();
             if (RestartFailure != null)
             {
                 throw RestartFailure;

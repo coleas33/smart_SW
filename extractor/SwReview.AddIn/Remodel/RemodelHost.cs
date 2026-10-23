@@ -53,6 +53,9 @@ public sealed class RemodelHostOptions
     /// <summary>The backend's endpoint, or null before it is listening.</summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
 
+    /// <summary>A failed start with no backend up, remembered by the Review host (owner decision 160A).</summary>
+    public Func<bool> BackendStartFailed { get; set; } = () => false;
+
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
 
@@ -306,23 +309,15 @@ public sealed class RemodelHost : IDisposable
         + "and press Remodel a copy again.";
 
     /// <summary>
-    /// How the run status line's word on a settings restart before a press begins: true whether the
-    /// gate makes the restart, waits for one being made, or finds a turn or a backend that does not
-    /// answer holding it back and refuses the press - a look that can take a round trip's timeout
-    /// per chat (owner decision 145A, third review: the words said the backend was restarting).
-    /// </summary>
-    private const string WaitingForTheRestart =
-        "Waiting for the review backend to restart with the saved settings, then ";
-
-    /// <summary>
     /// What the page's run status line is told before a plan whose gate meets a settings restart
     /// that waits or is being made (owner decision 145A, found on review). Posted as
-    /// `status {stage: "backend_starting"}`.
+    /// `status {stage: "backend_starting"}`. Its beginning, <see cref="PaneActions.WaitingForTheRestart"/>, is
+    /// the check tabs' too since owner decision 157A, and written once there.
     /// </summary>
-    public const string PlanAfterRestartMessage = WaitingForTheRestart + "reading the part...";
+    public const string PlanAfterRestartMessage = PaneActions.WaitingForTheRestart + "reading the part...";
 
     /// <summary>...before a Start's run.</summary>
-    public const string StartAfterRestartMessage = WaitingForTheRestart + "starting the run...";
+    public const string StartAfterRestartMessage = PaneActions.WaitingForTheRestart + "starting the run...";
 
     /// <summary>
     /// The full no-change reassurance for refusals before any copy change. Loss and cleanup
@@ -487,6 +482,11 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     public const string EarlierPlanNotClosedMessage =
         "Closing the earlier plan's copy was not confirmed, so that plan is left as it was and no new plan was made. "
+        + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
+
+    /// <summary>004 T258: a failed plan's cleanup still unanswered, before a new probe or copy.</summary>
+    public const string FailedPlanNotClosedMessage =
+        "Closing the copy from the earlier attempt was not confirmed, so no new plan was made. "
         + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
 
     /// <summary>The run's first word, as Start hands the run to the pipeline.</summary>
@@ -658,6 +658,13 @@ public sealed class RemodelHost : IDisposable
     private readonly List<RemodelRun> _runs = new List<RemodelRun>();
     private readonly object _runsLock = new object();
 
+    /// <summary>
+    /// 004 T258: the run folder and original attachment of an unsuccessful plan whose cleanup was
+    /// not answered. It is not a planned run and must not replace the page's latest successful plan.
+    /// Only Plan reads and writes this record, while it holds the host and the tool service.
+    /// </summary>
+    private Tuple<string, string?>? _failedPlanToClose;
+
     /// <summary>A plan or a run is in flight. One per host.</summary>
     private volatile bool _busy;
 
@@ -731,6 +738,7 @@ public sealed class RemodelHost : IDisposable
         {
             RunRootsInForce = () => options.RunRootsInForce(),
             RunRootSaved = () => options.RunRootSaved(),
+            RunRootProbe = () => options.RunRootProbe,
             LogFolder = options.LogFolder,
             EntityResolver = options.EntityResolver,
             Opener = options.Opener,
@@ -955,6 +963,7 @@ public sealed class RemodelHost : IDisposable
             // told as the engineer's own Stop is told, in a stage the page shows in its run line while the
             // run goes on to its end, not in one that ends the page's running state while the run still
             // finishes the change in flight and holds the host.
+            run.RememberStatus("applying", CopyGoneMessage);
             PostStatus("applying", CopyGoneMessage);
         }
     }
@@ -1319,6 +1328,7 @@ public sealed class RemodelHost : IDisposable
                     }
             },
             { "token", endpoint?.Token },
+            { "backend_start_failed", endpoint == null && _options.BackendStartFailed() },
             { "run_root", _options.RunRoot() },
             { "document", DocumentPayload(_options.CurrentDocument()) },
             {
@@ -1529,7 +1539,8 @@ public sealed class RemodelHost : IDisposable
             // 004 T173: an earlier plan waiting for Start is ended - its session closed, the plan
             // marked lost and the page told - after every refusal that needs no call and before
             // this plan's first one, so a Plan refused on the spot costs it nothing.
-            if (!EndTheWaitingPlan(id, pipeline, attachment))
+            if (!EndTheFailedPlan(id, pipeline, attachment)
+                || !EndTheWaitingPlan(id, pipeline, attachment))
             {
                 return;
             }
@@ -1553,7 +1564,7 @@ public sealed class RemodelHost : IDisposable
             string runDirectory;
             try
             {
-                runDirectory = RunFolders.CreateForRemodel(runRoot, document.Path, _options.Now());
+                runDirectory = RunFolders.CreateForRemodel(runRoot, document.Path, _options.Now(), _options.RunRootProbe);
             }
             catch (Exception failure)
             {
@@ -1582,7 +1593,7 @@ public sealed class RemodelHost : IDisposable
                 // The run folder is left behind on purpose: whatever it holds is the evidence
                 // for why the run stopped (constitution Principle I).
                 PostStatus("error", PageWords(failure));
-                EndTheSessionOfAFailedPlan(pipeline, runDirectory);
+                EndTheSessionOfAFailedPlan(pipeline, runDirectory, attachment);
                 throw;
             }
 
@@ -1653,7 +1664,7 @@ public sealed class RemodelHost : IDisposable
             catch (Exception failure)
             {
                 PostStatus("error", PageWords(failure));
-                EndTheSessionOfAFailedPlan(pipeline, runDirectory);
+                EndTheSessionOfAFailedPlan(pipeline, runDirectory, attachment);
                 throw;
             }
 
@@ -1849,10 +1860,61 @@ public sealed class RemodelHost : IDisposable
     /// one nothing else this host sends will end - planning again closed the waiting plan's first
     /// (004 T173), and in this build no run has started - and a close with no session is answered
     /// with no SOLIDWORKS call. Whatever the close does, the page is told the
-    /// plan's own failure: a close that fails is not this plan's answer.
+    /// plan's own failure: a close that fails is not this plan's answer. Since 004 T258, an
+    /// unanswered close keeps its run folder and attachment for the next plan to retry before
+    /// probing or copying anything, without inventing a successful RemodelRun.
     /// </summary>
-    private static void EndTheSessionOfAFailedPlan(IRemodelPipeline pipeline, string runDirectory) =>
-        CloseSession(pipeline, runDirectory, out _);
+    private void EndTheSessionOfAFailedPlan(IRemodelPipeline pipeline, string runDirectory, string? attachment)
+    {
+        // The service hold prevents ordinary replacement during Plan, but never send this run's
+        // cleanup to a different dispatcher if an explicit detach still replaced the attachment.
+        if (!SameAttachment(attachment, _options.ToolServiceAttachment()))
+        {
+            return;
+        }
+
+        _failedPlanToClose = Tuple.Create(runDirectory, attachment);
+        if (CloseSession(pipeline, runDirectory, out Exception? notAnswered) == CloseAnswer.NotAnswered)
+        {
+            Log("remodel.plan, the failed plan's close", notAnswered!);
+        }
+        else
+        {
+            _failedPlanToClose = null;
+        }
+    }
+
+    /// <summary>
+    /// 004 T258: retry an unanswered failed-plan cleanup before a new probe, naming exactly its
+    /// original run. A replacement attachment has no session of that attempt to close. Backend
+    /// availability and run-root validation remain the pipeline's: a close refused before reaching
+    /// the bridge leaves the identity for another attempt and refuses the new plan retryably.
+    /// </summary>
+    private bool EndTheFailedPlan(string? id, IRemodelPipeline pipeline, string? attachment)
+    {
+        Tuple<string, string?>? failed = _failedPlanToClose;
+        if (failed == null)
+        {
+            return true;
+        }
+
+        if (!SameAttachment(failed.Item2, attachment))
+        {
+            _failedPlanToClose = null;
+            return true;
+        }
+
+        if (CloseSession(pipeline, failed.Item1, out Exception? notAnswered) == CloseAnswer.NotAnswered)
+        {
+            Log("remodel.plan, the failed plan's close", notAnswered!);
+            string errorClass = notAnswered is RemodelRefusal refusal ? refusal.ErrorClass : BridgeUnavailableClass;
+            _actions.SendError(id, errorClass, FailedPlanNotClosedMessage, retryable: true);
+            return false;
+        }
+
+        _failedPlanToClose = null;
+        return true;
+    }
 
     /// <summary>
     /// 004 T176 (default taken 2026-09-27, the owner may revise; research R14.2): while Start is
@@ -2117,7 +2179,7 @@ public sealed class RemodelHost : IDisposable
                 return;
             }
 
-            if (!RunFolders.IsUnder(run.RunDirectory, runRoot))
+            if (!RunFolders.IsUnder(run.RunDirectory, runRoot, _options.RunRootProbe))
             {
                 _actions.SendError(id, "RunRootChanged", StartRunRootChangedMessage, retryable: false);
                 return;
@@ -2459,6 +2521,7 @@ public sealed class RemodelHost : IDisposable
             {
                 _pendingStops.Add(id);
                 run.RequestStop();
+                run.RememberStatus("applying", StoppingMessage);
                 PostStatus("applying", StoppingMessage);
                 return;
             }
@@ -3344,8 +3407,7 @@ public sealed class RemodelHost : IDisposable
     /// anything else.
     /// </summary>
     private bool RunRootRefused(string? id, string runRoot, string notDone) =>
-        _actions.RefusedRunRoot(
-            id, runRoot, _options.RunRootProbe, notDone, RunRootRule.InSettingsOnTheReviewTab, PressAgain);
+        _actions.RefusedRunRoot(id, runRoot, notDone, RunRootRule.InSettingsOnTheReviewTab, PressAgain);
 
     /// <summary>What a plan or a Start refused for its run root says to do once the cause is gone (owner decision 154A).</summary>
     private const string PressAgain = "press Remodel a copy again";
@@ -3356,23 +3418,17 @@ public sealed class RemodelHost : IDisposable
     /// once the press is answered with the refusal. Read once, with 153A's record of the settings in force: the gate
     /// holds back every settings restart, but not the add-in's first start of the backend, and while one that would
     /// bring another run root into force is under way there is none to go on under, and the press is refused.
+    /// Written once for every start that passes a gate since owner decision 157A, the check tabs' too
+    /// (<see cref="PaneActions.RunRootToUse"/>).
     /// </summary>
-    private string? RunRootToUse(string? id, string judged, string notDone)
-    {
-        string? inForce = _options.RunRootForANewRun();
-        if (inForce == null)
-        {
-            _actions.SendRunRootMoving(id, notDone, PressAgain);
-            return null;
-        }
-
-        if (string.Equals(inForce, judged, StringComparison.Ordinal))
-        {
-            return inForce;
-        }
-
-        return RunRootRefused(id, inForce, notDone) ? null : inForce;
-    }
+    private string? RunRootToUse(string? id, string judged, string notDone) =>
+        _actions.RunRootToUse(
+            id,
+            judged,
+            _options.RunRootForANewRun(),
+            notDone,
+            RunRootRule.InSettingsOnTheReviewTab,
+            PressAgain);
 
     /// <summary>
     /// What a Start answers, <c>RunRootChanged</c>, when its plan's run folder is under a run root a settings save

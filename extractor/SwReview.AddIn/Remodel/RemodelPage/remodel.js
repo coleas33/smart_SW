@@ -73,6 +73,7 @@
    * names a backend (owner decision 150A).
    */
   var NOT_RUNNING = 'Backend not running';
+  var START_IT_AGAIN = 'The backend is not running. Save Settings on the Review tab to start it again.';
 
   /**
    * Where a change that did not hold says to read why, by the button's label (owner decision 159A,
@@ -124,6 +125,12 @@
      * the host may have read that `init` before the new backend was up (owner decision 145A).
      */
     initAgain: false,
+
+    /** A discarded first init must still load its latest run once fresh state arrives. */
+    initAgainLoadsLatest: false,
+
+    /** A lifecycle failure invalidates every init request already in flight (160A's final review). */
+    backendFailureRevision: 0,
 
     /**
      * Whether the last banner put up is the add-in's word that the backend did not start - a
@@ -1052,9 +1059,12 @@
       showBanner(payload.message || 'the run stopped');
       state.lifecycleBanner = payload.lifecycle === true;
       if (state.lifecycleBanner) {
+        state.backendFailureRevision++;
         // The add-in's word that the backend did not start: the strip says so until an `init`
         // names a backend (owner decision 150A).
         state.notRunning = true;
+        state.backend = null;
+        state.token = null;
         renderBackendState(NOT_RUNNING, true);
       }
       return;
@@ -1064,8 +1074,13 @@
       // The backend finished starting after this page was given its `init`, so the endpoint it
       // holds is null. Ask again, as the other pages do. Guarded on `state.backend` so the
       // host's own end-of-phase `status {stage: "ready"}` does not re-initialise the page in
-      // the middle of a run.
-      requestInit(true);
+      // the middle of a run. One more ask after an `init` already on its way, which may have been
+      // read before the backend was up (the review of owner decision 160A, D2).
+      if (state.initPending) {
+        state.initAgain = true;
+      } else {
+        requestInit(true);
+      }
     }
 
     setRunStatus((payload && payload.message) || '');
@@ -1206,18 +1221,30 @@
     }
 
     state.initPending = true;
+    var failureRevision = state.backendFailureRevision;
     send('ready', {})
       .then(function (payload) {
+        if (failureRevision !== state.backendFailureRevision) {
+          return;
+        }
         applyInit(payload, loadLatest);
       })
       .catch(function (error) {
-        showBanner(error.message);
+        if (failureRevision === state.backendFailureRevision) {
+          showBanner(error.message);
+        }
       })
       .then(function () {
         state.initPending = false;
+        if (failureRevision !== state.backendFailureRevision) {
+          state.initAgain = true;
+          state.initAgainLoadsLatest = state.initAgainLoadsLatest || loadLatest;
+        }
         if (state.initAgain) {
+          var loadLatestAgain = state.initAgainLoadsLatest;
           state.initAgain = false;
-          requestInit(false);
+          state.initAgainLoadsLatest = false;
+          requestInit(loadLatestAgain);
         }
       });
   }
@@ -1238,6 +1265,13 @@
     renderLimits();
     if (state.backend) {
       state.notRunning = false;
+    } else if (payload.backend_start_failed === true) {
+      // A page opened after the failure missed its status (owner decision 160A).
+      state.notRunning = true;
+      if (ui.banner.hidden) {
+        showBanner(START_IT_AGAIN);
+        state.lifecycleBanner = true;
+      }
     }
     renderBackendState(
       state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),
@@ -1248,7 +1282,7 @@
     }
 
     if (!state.remodelAvailable) {
-      showBanner(state.remodelAvailabilityMessage || NO_SEAT_MESSAGE);
+      showRemodelUnavailable();
     }
 
     var latest = payload.latest_run;
@@ -1277,6 +1311,15 @@
     }
   }
 
+  function showRemodelUnavailable() {
+    // Both can be true after a failed start: keep the seat's refusal and the backend's way on,
+    // including a capability push or an init read before that failure (owner decision 160A).
+    var failedStart = state.notRunning && !state.backend;
+    var availability = state.remodelAvailabilityMessage || NO_SEAT_MESSAGE;
+    showBanner(availability + (failedStart ? ' ' + START_IT_AGAIN : ''));
+    state.lifecycleBanner = failedStart;
+  }
+
   function applyRemodelCapability(remodel) {
     // Older hosts omit this additive field. An explicit null means capability is still being
     // checked, so keep actions disabled until the tool service publishes its answer.
@@ -1292,14 +1335,20 @@
       : null;
 
     if (!state.remodelAvailable && state.remodelAvailabilityMessage) {
-      showBanner(state.remodelAvailabilityMessage);
+      showRemodelUnavailable();
     } else if (state.remodelAvailable
         && !wasAvailable
         && previousMessage
-        && ui.banner.textContent === previousMessage) {
+        && (ui.banner.textContent === previousMessage
+          || ui.banner.textContent === previousMessage + ' ' + START_IT_AGAIN)) {
       // Clear only the banner this capability check created; an unrelated error that arrived
       // while the seat was attaching remains visible for the engineer.
-      hideBanner();
+      if (state.notRunning && !state.backend) {
+        showBanner(START_IT_AGAIN);
+        state.lifecycleBanner = true;
+      } else {
+        hideBanner();
+      }
     }
     renderControls();
   }

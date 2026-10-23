@@ -160,6 +160,15 @@ public sealed class TaskPaneOptions
     /// </summary>
     public Func<IDisposable?> HoldToolService { get; set; } = () => ToolServiceHold.Nothing;
 
+    /// <summary>
+    /// Owner decision 157A: the hold a Model check or a Standards check keeps on a settings restart, taken over for a
+    /// check page's evaluation of the check whose run is in the folder it names, asked with the bearer token the
+    /// evaluation carries, while the call is out (<see cref="BackendProxyHandler"/>), or null when no check waits for
+    /// that evaluation, and the call goes on as before. The add-in answers it through the two check hosts, a callback
+    /// for the reason <see cref="Backend"/> is one: the pane is built before them. By default no check holds anything.
+    /// </summary>
+    public Func<string, string?, IDisposable?> HoldCheckEvaluation { get; set; } = (_, __) => null;
+
     private static string DefaultWebFolder() =>
         Path.Combine(Path.GetDirectoryName(typeof(TaskPaneOptions).Assembly.Location) ?? ".", "web");
 }
@@ -385,7 +394,8 @@ public sealed class TaskPaneControl : UserControl
             () => _options.Backend(),
             request => _options.ProxySend(request),
             () => _options.PageTurnRefusal(),
-            () => _options.HoldToolService());
+            () => _options.HoldToolService(),
+            (runDirectory, token) => _options.HoldCheckEvaluation(runDirectory, token));
         _files = new PageFileServer(_options.WebFolder);
 
         _reviewTab = NewTab("Review", ReviewPurpose, Note("Starting the review page..."));
@@ -1300,6 +1310,48 @@ public sealed class TaskPaneControl : UserControl
         catch (Exception)
         {
             // The pane closed between the check and the call. There is nobody left to tell.
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="action"/> on this pane's thread - SOLIDWORKS' application
+    /// thread - behind every message posted to a page before it, so it runs once those have been delivered, however
+    /// long another tab's extraction holds the thread meanwhile. Queued and never waited for, as a post is. Run at once
+    /// when it cannot be queued - the pane closed, or never shown - so what waits for it never waits for good; and a
+    /// failure inside it stays inside it, on SOLIDWORKS' thread.
+    /// </summary>
+    public void AfterPosts(Action action)
+    {
+        if (action == null)
+        {
+            throw new ArgumentNullException(nameof(action));
+        }
+
+        try
+        {
+            if (!IsDisposed && IsHandleCreated)
+            {
+                BeginInvoke(new Action(() => RunAfterPosts(action)));
+                return;
+            }
+        }
+        catch (Exception)
+        {
+            // The pane closed between the check and the call: nothing is left to deliver behind.
+        }
+
+        RunAfterPosts(action);
+    }
+
+    private static void RunAfterPosts(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception)
+        {
+            // Never out of a callback on SOLIDWORKS' application thread.
         }
     }
 

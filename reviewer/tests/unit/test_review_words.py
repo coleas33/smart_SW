@@ -667,6 +667,9 @@ def test_the_five_send_errors_are_exact_contract_sentences() -> None:
 RESTART_HOLDS = {
     "TurnRunning": "A review turn is still running. Wait for it to finish, or press Stop.",
     "RemodelRunning": "A remodel run is in progress. Wait for it to finish, then try again.",
+    "CheckRunning": (
+        "A Model check or Standards check is in progress. Wait for it to finish, then try again."
+    ),
     "BackendUnavailable": (
         "The review backend is not running or not answering. Save Settings to start it again, "
         "then retry."
@@ -674,9 +677,9 @@ RESTART_HOLDS = {
 }
 """The classes the add-in refuses a new review or a turn call with while the backend waits to be
 restarted with settings saved during a turn (owner decision 143A): one for each thing that can
-hold that restart back - a turn, a remodel run, a backend that does not answer - so the sentence
-the page shows is true of what holds it. `RemodelRunning` is the add-in's own class; the backend
-never sends it."""
+hold that restart back - a turn, a remodel run, a check (owner decision 157A), a backend that does
+not answer - so the sentence the page shows is true of what holds it. `RemodelRunning` and
+`CheckRunning` are the add-in's own classes; the backend never sends them."""
 
 
 def test_each_thing_that_holds_a_restart_back_has_a_true_sentence() -> None:
@@ -701,6 +704,12 @@ it."""
 def test_a_save_whose_restart_failed_says_the_settings_are_saved() -> None:
     errors = load_words().labels.errors
     assert {key: errors.get(key) for key in SAVE_NOT_RESTARTED} == SAVE_NOT_RESTARTED
+
+
+def test_a_save_during_unload_says_saved_and_stopping_without_a_retry() -> None:
+    assert load_words().labels.errors.get("AddInStopping") == (
+        "The settings are saved. The add-in is stopping; nothing else needs doing."
+    )
 
 
 RUN_DIR_REFUSALS = {
@@ -780,8 +789,10 @@ def test_a_review_whose_bridge_is_on_another_document_says_so_and_what_to_do() -
 RUN_ROOT_REFUSED = {
     "RunRootRefused": (
         "Runs are made only in a local folder reached by its own path - not on a network share, "
-        "not through a link, and with no folder name ending in a space or a period - and the "
-        "add-in must be able to check that it is one. Choose a local folder for runs in Settings."
+        "not through a link, and with folder names Windows can use: none longer than 255 "
+        'characters, none with \\ / : * ? " < > | or a control character, none ending in a space '
+        "or a period - and the add-in must be able to check that it is one. Choose a local folder "
+        "for runs in Settings."
     ),
 }
 """The class the add-in refuses every run start with when the run root is not a local folder
@@ -796,7 +807,10 @@ of a save alike, so it says nothing of what was or was not saved. The add-in's o
 backend never sends it. No path: the message in the fold says which of the four it is. Since the
 reviews of 154A's merge (F1), a fifth: a folder name ending in a space or a period, which Windows
 reads both with and without it, so the add-in's run folders and the backend's run root were two
-folders; the sentence names it."""
+folders; the sentence names it. Since the review of owner decision 160A, a sixth, which 160A refuses
+too: a name Windows cannot use for a folder - longer than 255 characters, or with a character no
+name can have - which the sentence names, with those characters, so that the words the engineer sees
+say what to take out."""
 
 
 def test_a_run_root_on_a_share_or_through_a_link_is_refused_with_the_way_on() -> None:

@@ -247,7 +247,7 @@ public sealed class CliProfileWriter
     /// listing against this, so a profile and a check that disagreed would be a gate that
     /// passes on a CLI the profile never restricted.
     /// </summary>
-    public static readonly IReadOnlyList<string> EnabledTools = new[]
+    public static readonly IReadOnlyList<string> EnabledTools = new ReadOnlyToolList(new[]
     {
         "get_package_summary",
         "list_components",
@@ -271,7 +271,7 @@ public sealed class CliProfileWriter
         "request_capture",
         "bridge_capture",
         "bridge_measure",
-    };
+    });
 
     private static readonly Lazy<string> Instructions = new Lazy<string>(ReadInstructions);
 

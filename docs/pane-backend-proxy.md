@@ -163,6 +163,19 @@ Decisions baked into the handler, each with a test:
   review host answers it (`TaskPaneOptions.PageTurnRefusal`), in the pages' own shape, with the
   status and `retryable` flag the backend gives that class and the host's own words, which say
   why. Stop and every other call are sent as before (amended 2026-10-19, owner decision 143A).
+- **A call that would start a turn holds the tool service while it is out** - owner decision
+  152A, on the Codex review: through the gate (`TaskPaneOptions.HoldToolService`, named a turn
+  call since 158A), so the bridge is not taken down to follow another document under the turn
+  it starts. The hold is let go once the call is answered, however it ends.
+- **A check page's evaluation holds its check's hold on a settings restart while it is out** -
+  owner decision 157A: `POST /checks/rms` and `/checks/standards`, the backend's two routes
+  that grade a run, asked of the check hosts by the run folder the body names
+  (`TaskPaneOptions.HoldCheckEvaluation`), so no restart is made under the evaluation; let go
+  once it is answered, however it ends. With no check waiting for that evaluation, or a host
+  that cannot be asked, it is sent on unheld, as before. A page that calls after its minute is
+  held again while the backend its check began on is still the one up (its reviews) - since
+  their final reviews, while the bearer token the evaluation carries, which the proxy reads from
+  its `Authorization` header and hands on with the folder, is the token of the backend up now.
 - **`HttpWebRequest`, not `HttpClient`** - matching `Review/BackendClient.cs`, whose comment
   gives the reason that matters here: it "can be told not to consult the corporate proxy
   for 127.0.0.1". `System.Net.Http` is also not referenced by this project.

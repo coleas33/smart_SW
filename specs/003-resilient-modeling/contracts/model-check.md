@@ -162,8 +162,8 @@ Six points the shape exists to enforce:
 
 | type | payload | host action |
 |------|---------|-------------|
-| `ready` | `{}` | Reply `init` `{backend: {port, origin}, token, run_root, standards_profile: str \| null, document: {path, configuration, kind} \| null, latest_check: {run_dir, at} \| null}`. `standards_profile` (feature 013 T150) is the configured `StandardsProfilePath` - the Review tab's own setting, read fresh - or null when it is blank: a path, never a value; the page relays it on `POST /checks/rms` (section 1) and prints the body's `bought_parts` verbatim above the ranked rows. |
-| `check.start` | `{scope: "part"}` | Refuse with `error {error_class: "NoDocument"}`, `"NotAttached"`, or `"NotAPart"` as applicable. Otherwise create the check run folder, run the `ModelCheck` profile dump in process, register the folder as the pane's latest run, and reply `check.extracted {run_dir, document, configuration, counts: {documents, features, equations}, gaps}`. Progress via `status`. The host stops here: the page calls `POST /checks/rms` itself. *Amended 2026-10-20 (feature 002, owner decision 154A):* refused first, before every other refusal, `RunRootRefused`, not retryable, when the run root is on a network share, reached through a link or written as a device path, or could not be checked, in words the page prints whole - what the root is, that nothing was checked, and the way on, a local folder chosen for runs in the Review tab's Settings, and Model check pressed again - with no path; no check folder is made and nothing is extracted (002 `pane-host-messages.md`, "The run root rule"). *Amended 2026-10-21 (feature 002, owner decision 154A, with 153A's record of the settings in force):* refused first, before the run root is judged, `BackendUnavailable`, retryable, while a start of the backend under way would bring another run root into force, in words the page prints whole - the review backend is being started with another folder for runs, nothing was checked, and Model check pressed again in a moment - with nothing made; the run root is read once, so the one judged is the one the check folder is made under (002 `pane-host-messages.md`, "The run root rule"). *Amended on the reviews of owner decision 154A's merge (feature 002), 2026-10-21:* the run root is read again once the extraction is over, and a check whose folder it no longer holds is answered `RunRootChanged`, not retryable, in words the page prints whole - the run root changed while the feature tree was read, nothing was checked, Model check pressed again - or, while a start that would bring another in is under way, `BackendUnavailable`, retryable, rather than `check.extracted`; the folder is left and not registered (N6). A start refused for the run root in force while another folder chosen for runs is not in force is `RunRootChosenNotInForce`, whose way on is to save the settings again on the Review tab to retry the restart (N4; 002 `pane-host-messages.md`, "The run root rule"). |
+| `ready` | `{}` | Reply `init` `{backend: {port, origin}, token, backend_start_failed: boolean, run_root, standards_profile: str \| null, document: {path, configuration, kind} \| null, latest_check: {run_dir, at} \| null}`. `standards_profile` (feature 013 T150) is the configured `StandardsProfilePath` - the Review tab's own setting, read fresh - or null when it is blank: a path, never a value; the page relays it on `POST /checks/rms` (section 1) and prints the body's `bought_parts` verbatim above the ranked rows. *Amended 2026-10-21 (feature 002, owner decision 160A):* `init` also carries `backend_start_failed: boolean`, true only while no backend is up and none is being started, after the last start or restart - the add-in's first or a save's - failed: false before the first start, while one is under way, and while a backend is up - the old one, too, when a restart failed before it stopped it. It is the review host's word, handed to this host by the add-in, and an `init` that names a backend never says it. A page that loads, or loads again, after the failure's `status`, which it never saw, and is told `true` says "Backend not running" on its strip, where it said "Backend starting", and, when its banner says nothing else, "The backend is not running. Save Settings on the Review tab to start it again." as the add-in's word on the backend (`lifecycle`), which an `init` that names a backend takes down; one that names none and says `false` leaves the page as it was told. |
+| `check.start` | `{scope: "part"}` | Refuse with `error {error_class: "NoDocument"}`, `"NotAttached"`, or `"NotAPart"` as applicable. Otherwise create the check run folder, run the `ModelCheck` profile dump in process, register the folder as the pane's latest run, and reply `check.extracted {run_dir, document, configuration, counts: {documents, features, equations}, gaps}`. Progress via `status`. The host stops here: the page calls `POST /checks/rms` itself. *Amended 2026-10-20 (feature 002, owner decision 154A):* refused first, before every other refusal, `RunRootRefused`, not retryable, when the run root is on a network share, reached through a link or written as a device path, or could not be checked, in words the page prints whole - what the root is, that nothing was checked, and the way on, a local folder chosen for runs in the Review tab's Settings, and Model check pressed again - with no path; no check folder is made and nothing is extracted (002 `pane-host-messages.md`, "The run root rule"). *Amended 2026-10-21 (feature 002, owner decision 154A, with 153A's record of the settings in force):* refused first, before the run root is judged, `BackendUnavailable`, retryable, while a start of the backend under way would bring another run root into force, in words the page prints whole - the review backend is being started with another folder for runs, nothing was checked, and Model check pressed again in a moment - with nothing made; the run root is read once, so the one judged is the one the check folder is made under (002 `pane-host-messages.md`, "The run root rule"). *Amended on the reviews of owner decision 154A's merge (feature 002), 2026-10-21:* the run root is read again once the extraction is over, and a check whose folder it no longer holds is answered `RunRootChanged`, not retryable, in words the page prints whole - the run root changed while the feature tree was read, nothing was checked, Model check pressed again - or, while a start that would bring another in is under way, `BackendUnavailable`, retryable, rather than `check.extracted`; the folder is left and not registered (N6). A start refused for the run root in force while another folder chosen for runs is not in force is `RunRootChosenNotInForce`, whose way on is to save the settings again on the Review tab to retry the restart (N4; 002 `pane-host-messages.md`, "The run root rule"). *Amended 2026-10-21 (feature 002, owner decision 157A):* begun through the review host's restart gate once every refusal that needs no call is behind it, and refused there, retryable, saying what holds a settings restart back, or with that restart's failure; the run root and the document read again once the gate is passed, a document that changed refused `DocumentChanged`; and the check holds the restart back until the page's `POST /checks/rms` has been answered (below). |
 | `entity.show` | `{persist_ref, persist_ref_scope, component_id}` | **Identical to the Review page's row**, delegated to `PaneActions`; reply `entity.shown {ok, state_code, message, full_path \| null}`. |
 | `report.open` | `{run_id}` | Delegated to `PaneActions`; the path comes from the host's own record, never from the page. |
 | `folder.open` | `{run_id}` | Delegated to `PaneActions`. |
@@ -212,6 +212,42 @@ while the backend was starting was given a null endpoint in `init`, so `status {
 is its cue to re-send `ready` and take the endpoint from the fresh `init`; the page re-asks only
 while it holds no endpoint, so the host's own end-of-extraction `ready` does not re-initialise
 it in the middle of a check.
+
+*Amended 2026-10-21 (feature 002, owner decision 157A):* a check holds a settings restart back, as a
+remodel run does, from its gate until the page's evaluation of it has been answered, so no check's
+extraction is wasted on a backend that restarted under it. `check.start` begins, once every refusal that
+needs no call is behind it, through the review host's restart gate: a restart that waits is made first,
+or the one being made is waited for, and the check is marked in progress under the restart's own lock;
+or the press is refused, retryable, saying what holds the restart back - a turn (`TurnRunning`, "the
+backend restarts with the saved settings when the running review turn ends, and no check starts before
+then. Wait for the turn to end, or press Stop on the Review tab, then try again."), a backend that does
+not answer (`BackendUnavailable`), a remodel run (`RemodelRunning`) or a check (`CheckRunning`) - one on the
+Standards tab, or this tab's own earlier one whose run still waits for its evaluation, as when a page loaded
+again presses again - or with the failure of the restart it made or waited for, masked, and nothing is made.
+While a restart stands before the press the page is told first, `status {stage: "backend_starting",
+message: "Waiting for the review backend to restart with the saved settings, then reading the feature
+tree..."}`, which it writes in its check line. Once the gate is passed the run root is read again, and one
+that moved is judged again before the folder is made; and the active document is read again, and one that
+changed while the gate waited is refused `DocumentChanged`, retryable: "The active document or its
+configuration changed after Model check was pressed, so nothing was checked. Make the part you want
+checked the active document and press Model check again." The hold lasts through the extraction and the
+reply, and while the page's `POST /checks/rms` for that run folder is out - the pane's proxy holds it
+(feature 002 `pane-host-messages.md`, the backend prefix) - and ends once it has been answered; for a
+page that never makes that call, reloaded or closed, a minute after the reply has reached the page; and at
+once when the start ends any other way. The reply waits on SOLIDWORKS' application thread, which another
+tab's extraction can hold for minutes, so the minute is counted from its delivery, and an evaluation that
+comes after the minute all the same is held again while the backend the check began on is still the one
+up (the reviews of 157A). *Amended on their final reviews:* while the bearer token the evaluation carries
+is the token of the backend up now, the backend that will answer it; and a reply that never reaches the
+page holds the restart back an hour at most after the hand-over. A save made meanwhile is kept, and the
+Review tab says "the settings are saved; the
+backend restarts when the running check ends." A check holds the restart back only while a backend is
+up: with none, the restart is what brings back the backend its evaluation needs, and a save made then
+starts it at once. The page's re-read of a check and its Accept are not held: each is one short call
+the engineer makes at any time, and one cut by a restart is answered as any failed
+call is - an Accept whose exception was written before the cut is refused `AlreadyAccepted` when pressed
+again, so nothing doubles. Two checks, a check and a remodel run, and a check and a turn overlap as
+before while no restart waits; while one waits for a check, nothing new starts.
 
 ## 4. The run folder rule
 
@@ -280,3 +316,17 @@ per-feature line.
 | Placement | On the rule row, not on the subject line | The binding is the rule and the part; putting the control on the subject line would state a granularity the store does not have. |
 | After acceptance | The rule renders as checked within scope carrying the exception id and the note | Never hidden, per Principle VI. |
 | A changed fingerprint | The finding stands and is labelled as needing re-review, naming the exception | Already the behavior of the store; the page surfaces it rather than re-deciding it. |
+
+*Amended 2026-10-21 (feature 002, owner decision 160A):* `check.start` refuses a run root no folder can be made
+under - a character no folder can have, or a folder name longer than 255 characters - as it refuses every run root
+the rule refuses, before anything is made or extracted; and the check's run folder is made, and the newest check
+found, under the run root's long-name form (002 [pane-host-messages.md](../../002-task-pane-assistant/contracts/pane-host-messages.md),
+"The run root rule").
+
+*Amended on the review of owner decision 160A, 2026-10-21 (decided on review; the owner may revert):* an Accept
+whose check is not shown again - its re-read failed, or a newer check was pressed first - says so in a place of its
+own beside the check's status, as on the Standards page, where it shared the banner with a check that fails. This
+page keeps its result when a check fails, so a failure that lands before the Accept's re-read leaves the result the
+re-read is shown on - the rule marked accepted on its row and in the check's line, beside the failure - and no notice
+is made; a notice made before a failed check outlasts the press and the failure, which keeps the banner. The notice
+comes down once a result is shown (002 [research.md](../../002-task-pane-assistant/research.md), 160A).

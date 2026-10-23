@@ -62,10 +62,11 @@
   var DOT = ' · ';
 
   /**
-   * What the strip says after a save whose restart failed, until an `init` names a backend (owner
-   * decision 150A), as the check pages' and the Remodel page's strips say it.
+   * What the strip says after a failed start or restart, until an `init` names a backend (owner
+   * decisions 150A and 160A), as the check pages' and the Remodel page's strips say it.
    */
   var NOT_RUNNING = 'Backend not running';
+  var START_IT_AGAIN = 'The backend is not running. Save Settings to start it again.';
 
   var pending = Object.create(null);
   var nextId = 0;
@@ -196,16 +197,25 @@
     reconnectTimer: null,
     reconnectDelay: RECONNECT_MIN,
     initPending: false,
-    // A `backend.restarted` arrived while an `init` was on its way: ask once more after it.
+    // A `backend.restarted`, or a `ready` status, arrived while an `init` was on its way: ask once
+    // more after it.
     initAgain: false,
+    // ...and that ask loads the models, as the `ready` status's own would have (the review of owner
+    // decision 160A, D2).
+    initAgainLoadsModels: false,
     // A `backend.restarted` arrived and no `init` has named the new backend yet.
     backendReplaced: false,
     // The token the page held when `backend.restarted` arrived: an `init` that names it was read
     // before the restart, and is not the new backend.
     replacedToken: null,
-    // A save's restart failed and no `init` has named a backend since (owner decision 150A): the
-    // strip says the backend is not running, not that it is starting.
+    // A start or restart failed and no `init` has named a backend since (owner decisions 150A and
+    // 160A): the strip says the backend is not running, not that it is starting.
     notRunning: false,
+    // The banner holds the host's word that a start failed, until an init names a backend.
+    lifecycleBanner: false,
+    // A lifecycle failure invalidates every init already on its way, including one naming the old
+    // backend. Only a fresh request can clear the failure (the final review of owner decision 160A).
+    backendFailureRevision: 0,
     // The host's sentence while the backend that is up runs with settings other than the saved
     // ones - a restart failed before it stopped the old backend - as the last `init` carried it,
     // or null (owner decision 153A): what the banner says whenever it says nothing else.
@@ -2802,6 +2812,7 @@
   }
 
   function showBanner(text) {
+    state.lifecycleBanner = false;
     // While the saved settings are not in force, the host's sentence saying so is what the banner
     // says when it is given nothing else to say (owner decision 153A).
     var shown = text || state.notInForce || '';
@@ -2865,18 +2876,45 @@
     }
     if (stage === 'error') {
       showBanner(message);
-      renderBackendState('Error', true);
+      // Only the backend's own word that it did not start or restart, marked `lifecycle`, says it
+      // is not running - with a save's `BackendNotRestarted` - not any `error` while the page holds
+      // no backend: the host's word on the settings after every `init` comes while the first start
+      // runs, too (the review of owner decision 160A, S3).
+      state.lifecycleBanner = payload.lifecycle === true;
+      if (state.lifecycleBanner) {
+        state.backendFailureRevision++;
+        expectBackendReplacement();
+        state.notRunning = true;
+        state.backend = null;
+        state.token = null;
+      }
+      renderBackendState(state.notRunning ? NOT_RUNNING : 'Error', true);
       return;
     }
     if (stage === 'ready') {
       showBanner('');
       if (!state.backend) {
         // The backend finished starting after this page loaded, so the `init` it was given
-        // carried no endpoint. Ask again rather than leaving Review unusable until a reload.
-        requestInit(true);
+        // carried no endpoint. Ask again rather than leaving Review unusable until a reload -
+        // once more after an `init` already on its way, which may have been read before the
+        // backend was up (the review of owner decision 160A, D2).
+        if (state.initPending) {
+          state.initAgain = true;
+          state.initAgainLoadsModels = true;
+        } else {
+          requestInit(true);
+        }
       }
     }
-    renderBackendState(message || stage || '', false);
+    renderBackendState(state.notRunning && !state.backend ? NOT_RUNNING : (message || stage || ''),
+      state.notRunning && !state.backend);
+  }
+
+  function expectBackendReplacement() {
+    if (!state.backendReplaced) {
+      state.backendReplaced = true;
+      state.replacedToken = state.token;
+    }
   }
 
   function renderBackendState(text, bad) {
@@ -3069,6 +3107,7 @@
       var notRestarted = error.errorClass === 'BackendNotRestarted';
       ui.saveState.className = 'note bad';
       errorInto(ui.saveState, error, error.errorClass === 'TurnRunning' || notRestarted
+        || error.errorClass === 'AddInStopping'
         ? error.message
         : (error.errorClass + ': ' + error.message));
       if (notRestarted) {
@@ -3081,10 +3120,7 @@
         // that names a backend would have none to compare its own with. Marked as `backend.restarted`
         // marks it, the first such `init` naming a token other than the one held now is believed to
         // be a new backend - the old one still up names this one (150A review, S1).
-        if (!state.backendReplaced) {
-          state.backendReplaced = true;
-          state.replacedToken = state.token;
-        }
+        expectBackendReplacement();
         requestInit(false);
       }
     }).then(function () {
@@ -3128,7 +3164,13 @@
 
     state.initPending = true;
     var heldToken = state.token;
+    var failureRevision = state.backendFailureRevision;
     send('ready', {}).then(function (payload) {
+      // The host can read this init's endpoint before a watcher fails its restart, then deliver
+      // it after the failure's status. Nothing in that old reply can revive the failed backend.
+      if (failureRevision !== state.backendFailureRevision) {
+        return;
+      }
       // Another token is another backend (a Settings save, or a restart after it stopped): no
       // chat of the old one survives. A live waiting review on screen is restored from its folder
       // at once, read-only with Send offered (feature 015 FR-042, contracts/pane.md section 7).
@@ -3154,15 +3196,25 @@
       renderSettings(payload.settings, payload.key_source);
       renderDocument();
       renderBinding();
+      // Read this before the failed-start notice: no backend means no settings are in force, and
+      // removing the old sentence must leave room for the way on (owner decision 160A).
+      holdNotInForce(payload.settings_not_in_force, payload.settings_not_in_force_revision);
       if (state.backend) {
         state.notRunning = false;
+        if (state.lifecycleBanner) {
+          showBanner('');
+        }
+      } else if (payload.backend_start_failed === true) {
+        // A page opened after the failure missed its status (owner decision 160A).
+        state.notRunning = true;
+        if (ui.banner.hidden) {
+          showBanner(START_IT_AGAIN);
+          state.lifecycleBanner = true;
+        }
       }
       renderBackendState(
         state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),
         state.notRunning);
-      // Owner decision 153A: every `init` says whether the saved settings are in force, so a page
-      // that loads again is told too.
-      holdNotInForce(payload.settings_not_in_force, payload.settings_not_in_force_revision);
       if (loadModels && state.backend) {
         refreshModels();
       }
@@ -3189,12 +3241,20 @@
       // them open - that review shown again (contracts/sessions.md sections 5 and 6).
       requestSessions(true);
     }).catch(function (error) {
-      showBanner(error.message);
+      if (failureRevision === state.backendFailureRevision) {
+        showBanner(error.message);
+      }
     }).then(function () {
       state.initPending = false;
+      if (failureRevision !== state.backendFailureRevision) {
+        state.initAgain = true;
+        state.initAgainLoadsModels = state.initAgainLoadsModels || loadModels;
+      }
       if (state.initAgain) {
+        var loadModelsAgain = state.initAgainLoadsModels;
         state.initAgain = false;
-        requestInit(false);
+        state.initAgainLoadsModels = false;
+        requestInit(loadModelsAgain);
       }
     });
   }

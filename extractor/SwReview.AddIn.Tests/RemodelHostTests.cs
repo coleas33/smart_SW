@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -248,6 +248,45 @@ public sealed class RemodelHostTests
             JsonElement last = world.Reply("init", "r3").GetProperty("latest_run").GetProperty("status");
             Assert.Equal("applying", last.GetProperty("stage").GetString());
             Assert.Equal(BackendRemodelPipeline.BackendNotAnsweringMidRunMessage, last.GetProperty("message").GetString());
+        }
+    }
+
+    // ---- 004 T259: the host's stopping words survive a page reload -------------------------
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnInitWhileStoppingKeepsTheHostsLatestWord(bool copyGone)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+            {
+                reporter.Status("verifying", "FICT checking the copy.");
+                if (copyGone)
+                {
+                    File.Delete(world.ExpectedCopyPath);
+                    world.Host.DocumentChanged();
+                }
+                else
+                {
+                    world.Receive("remodel.stop", "x1", new { });
+                }
+
+                Assert.True(reporter.StopRequested);
+                world.Receive("ready", "r2", new { });
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement latest = world.Reply("init", "r2").GetProperty("latest_run");
+            Assert.True(latest.GetProperty("running").GetBoolean());
+            JsonElement status = latest.GetProperty("status");
+            Assert.Equal("applying", status.GetProperty("stage").GetString());
+            Assert.Equal(copyGone ? RemodelHost.CopyGoneMessage : RemodelHost.StoppingMessage,
+                status.GetProperty("message").GetString());
         }
     }
 
@@ -6176,6 +6215,190 @@ public sealed class RemodelHostTests
         }
     }
 
+    // ---- 004 T257: a failed plan's unanswered cleanup keeps its own identity ----------------
+
+    private const string FailedPlanCleanupWords =
+        "Closing the copy from the earlier attempt was not confirmed, so no new plan was made. "
+        + "Your part was not changed. Wait a moment, then press Remodel a copy again.";
+
+    [Theory]
+    [InlineData("before-open")]
+    [InlineData("after-open")]
+    [InlineData("plan")]
+    public void AFailedPlansUnansweredCloseIsRetriedForItsOwnRunBeforeAnotherProbe(string failedAt)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            if (failedAt == "plan") world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+            else world.Pipeline.CopyFailure = new IOException("FICT opening failed.");
+            world.Pipeline.CopyFailureLeavesTheSessionOpen = failedAt == "after-open";
+            world.Pipeline.CloseFailure = new IOException("FICT cleanup did not answer.");
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            Assert.Equal("HostError", world.ErrorClass("p1"));
+            Assert.Null(world.Host.LatestRun);
+            Assert.Empty(world.Host.Runs);
+            Assert.Empty(world.Registered);
+            Assert.True(Directory.Exists(first));
+            world.Pipeline.CopyFailure = null;
+            world.Pipeline.PlanFailure = null;
+            world.Pipeline.CloseFailure = null;
+            int calls = world.Pipeline.Calls.Count;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.Equal(new[] { "close", "probe", "copy", "plan" }, world.Pipeline.Calls.Skip(calls));
+            Assert.NotEqual(first, world.Host.LatestRun!.RunDirectory);
+        }
+    }
+
+    [Theory]
+    [InlineData("BridgeUnavailable")]
+    [InlineData("BackendUnavailable")]
+    [InlineData("HttpError")]
+    [InlineData("BadResponse")]
+    [InlineData("InvalidRunDir")]
+    [InlineData("InvalidRequest")]
+    [InlineData("exception")]
+    public void AFailedPlansStillUnansweredCloseRefusesRetryablyAndKeepsItsIdentity(string failureClass)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+            world.Pipeline.CloseFailure = failureClass == "exception"
+                ? new IOException("FICT cleanup could not reach 0FAKEtoken.")
+                : new RemodelRefusal(failureClass, "FICT cleanup could not reach 0FAKEtoken.", retryable: false);
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            int calls = world.Pipeline.Calls.Count;
+            world.Pipeline.PlanFailure = null;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement error = world.Reply("error", "p2");
+            Assert.Equal(failureClass == "exception" ? "BridgeUnavailable" : failureClass,
+                error.GetProperty("error_class").GetString());
+            Assert.Equal(FailedPlanCleanupWords, error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            AssertPlainWords(error.GetProperty("message").GetString()!);
+            Assert.Equal(new[] { "close" }, world.Pipeline.Calls.Skip(calls));
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.True(world.Pipeline.SessionOpen);
+            Assert.Single(Directory.GetDirectories(world.RunRoot));
+            Assert.Contains(world.Logged, line => line.Contains("FICT cleanup could not reach"));
+            Assert.DoesNotContain(world.Logged, line => line.Contains("0FAKEtoken"));
+
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.plan", "p3", new { });
+            world.Reply("remodel.planned", "p3");
+            Assert.Equal(new[] { first, first, first }, world.Pipeline.Closed);
+        }
+    }
+
+    [Theory]
+    [InlineData("closed")]
+    [InlineData("CloseIncomplete")]
+    [InlineData("RunFolderFailed")]
+    public void AFailedPlansAnsweredCloseIsNotSentAgain(string answer)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+            world.Pipeline.CloseFailure = answer == "closed" ? null
+                : new RemodelRefusal(answer, "FICT the close answered.", retryable: false);
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.PlanFailure = null;
+            world.Pipeline.CloseFailure = null;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(new[] { first }, world.Pipeline.Closed);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AFailedPlansPendingCloseNeverReachesAReplacementAttachment(bool withdrawn)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+            world.Pipeline.CloseFailure = new IOException("FICT cleanup did not answer.");
+            world.Receive("remodel.plan", "p1", new { });
+            var replacement = new FakePipeline { HoldsTheBridgeSession = true };
+            world.Options.Pipeline = replacement;
+            world.Attachment = withdrawn ? null : SecondAttachment;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Empty(replacement.Closed);
+            Assert.Single(world.Pipeline.Closed);
+            Assert.True(replacement.SessionOpen);
+        }
+    }
+
+    [Fact]
+    public void AFailedPlansInitialCleanupNeverReachesAReplacementAttachment()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.DuringPlan = () => world.Attachment = SecondAttachment;
+            world.Pipeline.PlanFailure = new IOException("FICT planning failed after replacement.");
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal("HostError", world.ErrorClass("p1"));
+            Assert.Empty(world.Pipeline.Closed);
+        }
+    }
+
+    [Fact]
+    public void AFailedPlansCleanupKeepsTheOldRunWhenTheRunRootMovesAndTheBackendRefusesIt()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+            world.Pipeline.CloseFailure = new RemodelRefusal("BackendUnavailable", "FICT the backend stopped.", true);
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.PlanFailure = null;
+            world.RunRootSpelling = Path.Combine(world.RunRoot, "later");
+            world.Pipeline.CloseFailure = new RemodelRefusal("InvalidRunDir", "FICT the old run is outside the root.", false);
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement error = world.Reply("error", "p2");
+            Assert.Equal("InvalidRunDir", error.GetProperty("error_class").GetString());
+            Assert.Equal(FailedPlanCleanupWords, error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.Equal(1, world.Pipeline.Count("probe"));
+            Assert.Equal(1, world.Pipeline.Count("copy"));
+            world.RunRootSpelling = null;
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.plan", "p3", new { });
+            world.Reply("remodel.planned", "p3");
+            Assert.Equal(new[] { first, first, first }, world.Pipeline.Closed);
+        }
+    }
+
     /// <summary>
     /// Owner decision 159A, on the final review (004 T249; its S2): the fake bridge keeps protocol 1.5's rule, so the cases
     /// above are the product's: a close names its run, and one naming another run than the session's is refused, the
@@ -9461,7 +9684,11 @@ public sealed class RemodelHostTests
             bool answered = CloseFailure == null
                 || (CloseFailure is RemodelRefusal refusal
                     && refusal.ErrorClass != "BridgeUnavailable"
-                    && refusal.ErrorClass != "BackendUnavailable");
+                    && refusal.ErrorClass != "BackendUnavailable"
+                    && refusal.ErrorClass != "HttpError"
+                    && refusal.ErrorClass != "BadResponse"
+                    && refusal.ErrorClass != "InvalidRunDir"
+                    && refusal.ErrorClass != "InvalidRequest");
             if (answered
                 && SessionOpen
                 && !string.Equals(SessionRun, runDirectory, StringComparison.Ordinal))

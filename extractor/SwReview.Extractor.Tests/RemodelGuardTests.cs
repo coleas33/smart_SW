@@ -638,7 +638,7 @@ public class RemodelSaveTargetTests
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.slddrw")]
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS")]
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.png")]
-    // The copy path spelled differently: another case, or an 8.3 short name.
+    // Another case, or a fictional short spelling whose folder does not exist to expand it.
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\BRACKET-RMS.SLDPRT")]
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.sldprt")]
     [InlineData(@"C:\runs\202609~1\copy\bracket-RMS.SLDPRT")]
@@ -651,6 +651,66 @@ public class RemodelSaveTargetTests
         Assert.Equal("Save3", refusal.MemberName);
         Assert.False(string.IsNullOrWhiteSpace(refusal.Message));
     }
+
+    [Fact]
+    public void AssertSaveTarget_TheRefusalDescribesTheCanonicalPathComparison()
+    {
+        const string candidate = @"C:\runs\20260916-142201-bracket-remodel\copy\other-RMS.SLDPRT";
+        MutatingCallError refusal = Assert.Throws<MutatingCallError>(
+            () => RemodelScope.AssertSaveTarget(candidate, CopyPath, RunDirectory, SourcePath));
+
+        Assert.Contains("The canonical paths must match exactly, including letter case.", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("8.3", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the refusal's words and 004's contract say of an 8.3 spelling (owner decision 160A, on its review),
+    /// tested on the real disk: a copy that exists, spelled with the short names Windows gave its folders, is
+    /// canonicalized to the copy by <c>Path.GetFullPath</c> and passes, while the same short spelling of a copy
+    /// not there - nothing on the disk to expand it - is refused. On a volume that makes no 8.3 names,
+    /// <c>GetShortPathName</c> answers the long path, and the case checks only that the copy passes as spelled.
+    /// </summary>
+    [Fact]
+    public void AssertSaveTarget_AnExistingCopySpeltWithItsShortNames_Passes()
+    {
+        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SwReview.SaveTarget.Tests", Guid.NewGuid().ToString("N"));
+        string runDirectory = System.IO.Path.Combine(root, "20260916-142201-bracket-remodel");
+        string copyFolder = System.IO.Path.Combine(runDirectory, "copy");
+        string copyPath = System.IO.Path.Combine(copyFolder, "bracket-RMS.SLDPRT");
+        System.IO.Directory.CreateDirectory(copyFolder);
+        System.IO.File.WriteAllText(copyPath, string.Empty);
+        try
+        {
+            string shortCopy = System.IO.Path.Combine(ShortPathOf(copyFolder), "bracket-RMS.SLDPRT");
+            RemodelScope.AssertSaveTarget(shortCopy, copyPath, runDirectory, SourcePath);
+
+            if (shortCopy.IndexOf('~') >= 0)
+            {
+                System.IO.Directory.Delete(runDirectory, recursive: true);
+                Assert.Throws<MutatingCallError>(
+                    () => RemodelScope.AssertSaveTarget(shortCopy, copyPath, runDirectory, SourcePath));
+            }
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(root))
+            {
+                System.IO.Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>The path as Windows spells it with each folder's 8.3 short name, where the volume makes them.</summary>
+    private static string ShortPathOf(string path)
+    {
+        var buffer = new System.Text.StringBuilder(1024);
+        uint length = GetShortPathName(path, buffer, (uint)buffer.Capacity);
+        Assert.True(length > 0 && length < buffer.Capacity, "GetShortPathName failed: " + System.Runtime.InteropServices.Marshal.GetLastWin32Error());
+        return buffer.ToString();
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetShortPathName(string longPath, System.Text.StringBuilder shortPath, uint size);
 
     [Fact]
     public void AssertSaveTarget_TheSource_IsRefusedByName()

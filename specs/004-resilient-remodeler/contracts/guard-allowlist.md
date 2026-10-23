@@ -407,6 +407,17 @@ qualified key, which its host gates now - the key the stage-1 list gives `remode
 copy - since feature 011's table refuses the bare `OpenDoc7`; the guard matches it ignoring case, as it
 matches the toggles' keys (`011-drawing-context/research.md` R12.2).
 
+*Amended 2026-10-21 (owner decision 160A; 011 `research.md` R14.1 and R14.2):* the probe's run-scoped
+members, `ISldWorks.OpenDoc7` and the toggles' keys among them, are matched ordinally now, and a case
+variant of one is refused before the read-only guard is asked, since that guard allows the two
+system-setting members by name; the creation exemption is matched ignoring case, and every other name is
+the read-only guard's answer, as before. Every list a guard publishes - this guard's keys and its
+exclusions among them - is a read-only view that no cast turns into a collection that can be added to.
+*Amended on the decision's review, 2026-10-21 (011 `research.md` R14.7):* that held of the allowlist guards'
+lists only until the review, which put the read-only guard's own two, `DeniedMembers` and `DeniedPrefixes`, behind
+the same view - each could be cast back and a denial taken out - so it holds of every list now; and the creation
+exemption is matched ordinally too, a case variant of one the read-only guard's answer, which refuses it.
+
 **What decision 21A does not close.** The grammar is the creation family of the four interfaces.
 Their other writers - edits, suppression and visibility writers, saves and rebuilds - are not in its
 scope, and neither is creation on other interfaces (`ISketchManager`, `IAssemblyDoc`'s components
@@ -552,6 +563,12 @@ what the test suite pins and what the report cites.
 Refuses, each with its own test: a path outside this run's folder; a path containing `..` before
 canonicalization; a path equal to the source; another run's copy; a path that is not `.SLDPRT`; a
 path with no extension; a `.sldasm` or `.slddrw`. Only this run's copy path passes.
+*Amended 2026-10-21 (owner decision 160A; 011 `research.md` R14.3):* both paths are canonicalized with
+`Path.GetFullPath` and then compared exactly, letter case included, and the refusal says so; an 8.3
+spelling of the copy whose folder exists canonicalizes to the copy and passes. Nothing it accepts or
+refuses changed. *Tested on the decision's review, 2026-10-21 (011 `research.md` R14.7):* on the real disk,
+the copy spelled with the short names Windows gave its folders passes, and the same spelling of a copy not
+there is refused; on a volume that makes no 8.3 names the case checks only that the copy passes as spelled.
 
 ## `AssertFolderSelection()`
 

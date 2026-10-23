@@ -218,6 +218,11 @@ failed with no backend up comes into force with the add-in's first start of the 
 with the settings saved by then. *Amended on the reviews of 154A's merge (F1):* the pane refuses a run root
 with a folder name ending in a space or a period too, which this rule keeps as written while .NET's legacy
 path handling trims it, so the pane's run folders would lie outside the run root the backend was given.
+*Amended 2026-10-21 (owner decision 160A):* the rule is unchanged. The pane refuses a run root no folder can be
+made under - a character no folder can have, or a folder name longer than 255 characters - before any request
+names a folder under it, and names its run folders under the run root's long-name form, which is the form this
+rule's `Path.resolve()` gives a run root spelled with an 8.3 short name (`pane-host-messages.md`, "The run root
+rule").
 
 `check_id` is the check run folder's *name*, so a check is addressable after a restart
 without any server-side registry. It is caller-supplied too and goes through the same
@@ -310,6 +315,8 @@ A running turn owns process state that is not on disk, so:
   2026-10-19, owner decision 145A). A save whose own restart fails is kept as well - the settings
   are written before the backend is restarted - and is answered `BackendNotRestarted`, retryable,
   saying so (amended 2026-10-20, owner decision 150A; `pane-host-messages.md`, `settings.save`).
+  A save written while the add-in unloads is answered `AddInStopping`, not retryable, saying the
+  settings are saved and nothing else needs doing (amended 2026-10-21, owner decision 160A).
   The saved settings are in force once the backend has restarted with them, and not before: a
   restart that fails before it stops the old backend leaves it up with the environment it was
   started with, and until a restart succeeds the host creates every session with the provider,
@@ -321,7 +328,18 @@ A running turn owns process state that is not on disk, so:
   once a save has restarted the backend (amended on the second 153A review, the same day). While a
   start of the backend - the first or a restart - is under way, the host makes no session: one asked
   for then is refused as one asked for before the backend is up (amended on the third 153A review,
-  the same day, and worded on the fourth, 2026-10-21).
+  the same day, and worded on the fourth, 2026-10-21). A check is treated as a turn too, as a
+  remodel run is: a Model check or a Standards check holds the restart back from its gate until
+  the page's evaluation of it - `POST /checks/rms` or `/checks/standards` - has been answered, so a
+  save made meanwhile is kept the same way and its restart made once the check is over, never
+  under it - while a backend is up, since with none the restart is what brings back the backend
+  the check's evaluation needs; and a check begins only once no restart waits - the host makes a
+  waiting restart first, or waits for the one being made, or refuses the check saying what holds
+  the restart back.
+  The page's re-reads of a check and its Accepts are not held: each is one short call the engineer
+  makes at any time, and one cut by a restart is answered as any failed call is (amended
+  2026-10-21, owner decision 157A; `pane-host-messages.md`, `settings.save`, `check.start` and
+  `standards.start`).
 - On any shutdown signal the server finalizes every live chat before exiting: it writes
   `turn.ended {reason: "error"}` when a turn was mid-flight, then `session.ended` with an
   `ended_at`, and saves `session.json`. A session is never left without an ended time

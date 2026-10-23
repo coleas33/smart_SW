@@ -3206,6 +3206,9 @@ well, which this section dropped - it is still open and marked as blocking it. A
 reached another way: T175's clean-up close after a failed open named its own run while a finished run's session was
 still on the bridge (R19.21).
 
+*Corrected 2026-10-22 (R19.29):* later review found the known defects recorded there; the no-known-defect
+claim below describes that earlier review's conclusion, not the current Start prerequisites.
+
 **T172's switch waits on no known defect.** C1 is closed both ways: the host lets a run go only once its job is over
 or its backend is gone (R19.14), and the bridge carries a command out only on its own run's session (R19.15). C2 is
 fixed (R19.16). The switch still waits, as it always has, on what only the seat can give and no fake can: step 5.6's
@@ -3470,7 +3473,13 @@ can: step 5.6's verdicts on the blocking probes, PROBE-1, 2, 3, 4 and 12, and a 
 source's hash unchanged; set in a commit of its own that cites the ledger's verdicts. This round adds no prerequisite:
 what it found needed only small fixes, made here.
 
-Open, and the owner's; none of it blocks the switch:
+*Corrected 2026-10-22 (R19.29):* that no-known-defect conclusion was premature. T257 to T260 address
+failed-plan cleanup and stopping-word reload recovery; Stop retries, late Stop/after-dump ordering and
+cleanup after a run-root change remain known defects which block Start readiness, alongside T180 and
+the seat prerequisites. The two owner-dependent items recorded below did not themselves block the
+switch; that earlier assessment does not apply to these newly recorded defects.
+
+At that review, the following owner-dependent items were open; these items themselves did not block the switch:
 
 1. **A backend that stays silent while it runs** (R19.14) holds the run, its session and the host until it answers or
    stops; a Start it does not answer now does the same, asked again until it is answered. The page says so, and that
@@ -3503,3 +3512,102 @@ tool-service classes, 3,205 cases, green five times in a row. The Python suite: 
 18,140 - T245's 25 - on 3.12 (3.12.3) and on 3.11 (3.11.16, `--isolated`); ruff clean; the record readers
 (`test_workstation_test_plan.py`) again once this record was written. No broken link, and every file changed is
 `i/lf`.
+
+## R19 continuation - 2026-10-22
+
+### R19.27 A failed plan's unanswered cleanup (T257, T258)
+
+The cleanup of an unsuccessful Plan discarded `CloseAnswer.NotAnswered` before a `RemodelRun` was
+recorded. An open could already have left a session, or its answer could have been lost; the copy dump
+or planner could fail after it. After an unanswered cleanup the next Plan probed and tried to open a
+new run, which the bridge refused because the previous run still held its session. The new attempt's
+cleanup named the new run, which protocol 1.5 correctly refused as another run's. The host had forgotten
+the only identity that could safely close the session.
+
+The host now retains just the failed attempt's run directory and its original tool-service attachment,
+separate from successful runs. It retries the exact close before the next probe or copy. If the close is
+still unanswered, the new Plan is refused retryably in `FailedPlanNotClosedMessage`, the failure's class
+kept (unclassified exceptions use `BridgeUnavailable`), and masked details logged. An answered close
+clears the record, including a named refusal which confirms this run has no session. A replacement or
+withdrawn attachment clears it without sending anything to the replacement. The initial cleanup also
+checks the original attachment before sending. No successful run is invented, registered or shown for a
+failed attempt; the evidence folder stays on disk and the original Plan failure remains its answer.
+
+This changes no guard or backend validation. If the backend is stopped the close remains pending; once
+it can answer on the same attachment, the original run is retried. If the run root moves and the backend
+refuses the old run as `InvalidRunDir`, the identity stays the old run and Plan refuses before probing or
+copying. Returning to a backend serving the original root can complete the close. Supporting cleanup
+across a root change without that recovery remains separate work; this patch does not bypass it.
+
+**Test first:** T257 names six new tests, 17 cases. Before product changes 12 failed: the next attempt
+still reached `RunInProgress`, omitted the old-run close, or sent a close after attachment replacement;
+five answered-close/replacement guards passed. The fake bridge was deliberately made to preserve its
+session for all six close-not-answered classes, matching production rather than just its prior two.
+With the implementation all 17 pass. No SOLIDWORKS process or paid API was used.
+
+### R19.28 The stopping word after a page reload (T259, T260)
+
+`RunReporter.Status` remembered a run's latest word, but the host's own Stop and vanished-copy stop only
+posted theirs. A page reloaded while the run was stopping therefore showed the previous pipeline status,
+such as checking the copy. Both host paths now remember their `applying` stopping word under the same
+ending lock that sets the stop flag and posts it. `init.latest_run.status` then carries the latest word
+while the run remains in flight. This changes neither the stop request protocol nor terminal ordering.
+
+**Test first:** `AnInitWhileStoppingKeepsTheHostsLatestWord` failed in both rows before the implementation:
+`verifying` instead of `applying`. Both pass after it; combined with T257 the focused run is 19 passed,
+0 failed. The test reads the host's real init while its fake pipeline is still inside the run.
+
+### R19.29 What Start still waits on
+
+The claims in T172 and R19.19/R19.26 that Start waited on no known defect were too strong. Further offline
+review found two defects addressed here, and three remaining areas which this small continuation does
+not implement:
+
+- Stop retries must be idempotent. The C# pipeline retries a lost Stop reply, but the backend counts each
+  retry as another Stop: a Stop accepted during apply whose reply is lost can cancel a healthy truncated
+  run when its retry arrives while the job waits for the after-dump.
+- Late Stop and after-dump handover need consistent ordering. After a poll reports that the job awaits
+  its dump, Stop can abort the job while the healthy dump is being made; handing over the package can
+  then succeed even though the job has already failed unsaved. The backend's timed wait and subsequent
+  Stop check can also miss an arrival between those two steps.
+- Cleanup recovery after the configured run root changes must preserve the old run's identity while using
+  an authorized path to the original session. T258 retains the identity but deliberately keeps current
+  backend run-root validation. A settings restart to another root can therefore leave an old session
+  on the same bridge whose close is refused before it reaches that bridge; each new Plan retries it.
+
+These are known defects to resolve before enabling Start. T180 also remains open and blocking, and the
+seat prerequisites remain the blocking probe verdicts and a real Plan whose source hash is unchanged.
+Start stays disabled. This work launches no SOLIDWORKS process and runs no paid live test.
+
+**Gates:** the 19 focused cases are green. The combined-tree gates and actual-main integration
+are recorded below in R19.30.
+
+
+### R19.30 Final integration, review and gates (T261; 2026-10-23)
+
+The continuation preserves the original 159A history at `86a7c9c` and merges actual main at
+`931e4b0`, after PR #34 (160A) and PR #35 (157A) passed all four required CI checks and merged.
+The three pane-contract conflicts were resolved additively: failed-init authority, latest-run
+status and the existing error/terminal rules all remain. The recovery cases and production
+changes are unchanged from T257 to T260; integration introduced no additional behavior change.
+All extractor/reviewer blobs match the independently approved, fully gated combined candidate
+(`a54cd700`, with record updates in `757e5f59`). The captured-event pin still matches the actual
+Windows/CRLF waiting fixture. The refresh changes only provenance and upstream delivery records.
+
+The Windows Release rebuild with `--no-incremental` completed with zero warnings and zero
+errors. The complete solution suites passed: 10,169 extractor tests and 4,114 add-in tests,
+none failed or skipped. All 19 recovery cases passed explicitly on the integrated code;
+320 focused wiring, check-hold and run-root cases also passed. Python 3.12.3 and Python
+3.11.16 (`--isolated --all-extras`) each passed 18,166 non-live tests with 5 skipped and the
+tokenizer required; both JUnit reports contain zero failures and errors. Sync, tokenizer
+fetch and Ruff passed. Final record updates receive the tracked-file identifier scan,
+record-reader and changed-link/task-id/LF checks before committing.
+
+Independent final integration review approved the preserved guard surface, run/session
+identity, unload ordering, single owner probe, all 19 cases and the contract unions, with
+no material findings. The final source comparison satisfies that approval's unchanged-code
+condition; the full gates satisfy its validation condition. The new development handoff
+records the source/test pointers and policy questions for the remaining three defects.
+Decision 159A remains in progress: R19.29's Stop and changed-root cleanup work, T180 and the
+pilot-workstation prerequisites still block Start. Start remains disabled. No SOLIDWORKS
+process or paid/live test was started.
