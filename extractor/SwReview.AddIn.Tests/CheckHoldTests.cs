@@ -1741,6 +1741,7 @@ public sealed class CheckHoldTests
             Options = new CheckPaneHostOptions(new CollectingChannel(Posted, Record), () => _runRoot, "check.start", _ => { })
             {
                 Backend = () => new BackendEndpoint(52000, "FICT-token-0"),
+                RunRootProbe = () => FakeRunRootProbe.Local(),
                 CurrentDocument = () => document,
                 Now = () => Stamp.AddSeconds(_stamp++),
             };
@@ -1769,7 +1770,6 @@ public sealed class CheckHoldTests
             nothingChecked: "nothing was checked",
             pressAgain: "press Model check again",
             runRootForANewRun: () => _runRoot,
-            probe: () => FakeRunRootProbe.Local(),
             createFolder: RunFolders.CreateForCheck,
             folder: "the check folder",
             reading: document => "Reading " + document,

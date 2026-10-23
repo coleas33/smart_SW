@@ -2007,17 +2007,27 @@ words for the strip.
     sentence, not its message, and those words go out as `BackendUnavailable`, whose sentence says
     to save too. It needs a class of its own, so it is not small; and the pane goes with the add-in,
     so the answer is seldom seen.
+    *Settled by decision 160A (2026-10-21)*: such a save is answered `AddInStopping`, not
+    retryable - the settings are saved, and nothing else needs doing (160A, below).
   - No host posts `backend.stopped`, and its handlers keep no mark for the strip: a page told it
     and then given an `init` naming no backend says "Backend starting".
   - A page that loads, or loads again, while no backend is up after a failed start or restart says
     "Backend starting": its `init` names no backend and nothing tells it why. Whether `init` should
     say why is the owner's.
+    *Settled by decision 160A (2026-10-21)*: `init` says so (`backend_start_failed`), and such a
+    page says the backend is not running, with the way on (160A, below).
   - The Review page's strip after a failed first start says "Error", from its `status` handling,
     which 145A left as it is; its new mark is set by a save's `BackendNotRestarted` alone.
+    *Settled by decision 160A (2026-10-21)*: the add-in's word that the first start failed sets
+    the same mark, so the strip says "Backend not running" until an `init` names a backend (160A,
+    below).
   - A check tab keeps the port and token of a backend that stopped with a failed restart, and its
     calls fail as calls to a stopped backend do (145A).
   - On the Standards page a check that fails and an Accept's notice share one banner, and whichever
     lands last stays, as the failed re-read's notice and a check's failure did before 150A.
+    *Settled by decision 160A (2026-10-21)*: the Accept's notice has a place of its own beside the
+    check's status, so the failure's banner and the notice are both in view; the Model check page's
+    is held for the owner (160A, below).
 - **Mutations**: each fix taken out once with one exact replacement, the tree rebuilt, the named
   cases run and the file restored byte for byte (checked by sha256) - 28 mutations, 96 red
   results in all, and every mutation turned at least one case red; and for the review, 10
@@ -4164,6 +4174,8 @@ engineering context's, the Model check's, the Standards', the Remodel host's and
      resolution spells them in long names: the re-modeler's comparison of run folders at the copy's open
      (step 4) can refuse such a copy, as it did a root through a link (011 [research.md](../011-drawing-context/research.md)
      R12.9 item 2, corrected). Making `RunFolders` spell a run folder in long names would close it.
+     *Settled by decision 160A (2026-10-21)*: `RunFolders` makes and finds every run folder under the
+     run root's long-name form, read once the root exists, outside any lock (160A, below).
   4. `GetDriveType`'s "cannot be determined" (0) is read as a local drive, whose parts are then read one by
      one.
   5. A run root past MAX_PATH is judged, but under the legacy path handling its run folder is refused when
@@ -4414,6 +4426,8 @@ Windows' own words (`RunFolderFailed`). The probe's reading is unchanged and tru
   folder can have, a trailing quote alone among them, or a name longer than 255 characters - as it did before, and every
   run is then answered `RunFolderFailed`; refusing it at the save, as a folder not written in full is, would be one more
   note.
+  *Settled by decision 160A (2026-10-21)*: the rule refuses such a folder on its text - at the save it
+  is the one field not written, and every run start refuses one already in force (160A, below).
 - **Tests**: T204, written first against stubs - the new verdict, the two new sentences and the hosts' run root saved
   present and unread - 45 of the 63 new and changed cases failed. The 18 that passed: the dot segments and names with a
   space or a period inside (5) and a saved run root in another letter case (2), guards; N3's pins (9), red under V11; a
@@ -5174,6 +5188,71 @@ tokenizer fetch passed. Changed Markdown has LF in the index; no live test ran a
 not started. This records T248; the final independent
 review, integration and PR remain pending, and decision 157A remains in progress.
 
+**Integration continuation, 2026-10-23 (T303 to T306).** An independent final Codex review of
+`1652bcc` against `4f40dae` found no material finding and checked Principles I through VI. The
+documented limitation remains: unrelated SOLIDWORKS work may delay a page beyond its delivered
+reply's minute, allowing a waiting settings restart before its evaluation reaches the proxy.
+This continuation does not claim to close that case.
+
+The provisional integration with decision 160A preserves the shared check start and its gate,
+hand-over and late-evaluation holds, while using 160A's one owner probe for every run-root refusal
+and folder creation. `CheckStart` no longer carries a second probe callback: its four-argument
+creator receives the check pane's own probe. Each tab still supplies its own creator, words,
+profile and counts. The standalone check test world uses that same option. The source assertions
+were deliberately relocated from Model/Standards' former direct calls to both creator assignments
+and the shared creation/refusal; the assertions still require the owner probe.
+
+The integration exposed the interval between 157A's early `StopRestarting` and 160A's later host
+`Dispose`: a save there said to retry the restart, and a deferred restart finishing there could
+still notify tabs being stopped. `StopRestarting` now marks the host as stopping before it waits
+for the restart watcher, and `Dispose` takes that same first step. The save's other-tab notification
+stays under the restart lock and is suppressed once stopping begins. A save already written in
+this interval is answered `AddInStopping`, and deferred completions post no status or tab callback.
+No document guard, numerical result or engineering acceptance changes.
+
+**Test-first evidence, run 2026-10-22:** T303 deliberately strengthens
+`ASaveOnceTheRestartIsStoppedRestartsNothing` from `BackendNotRestarted` to `AddInStopping`, adding
+persistence and no-callback assertions. Two new deferred-completion theories cover success and
+failure after the early stop returns and inside its watcher join, before host disposal. All five
+cases failed before the shared unload mark, then passed. The final focused run of the restart,
+check-hold, host, page, run-folder and Send classes passed 959 cases; both provisional Release
+rebuilds had zero warnings and zero errors. Both pane fixture generators ran with the combined
+`CheckRunning` and `AddInStopping` vocabulary; the captured Send-event pin names the generated
+Windows/CRLF bytes. No timing assertion was loosened, no live test ran, and SOLIDWORKS was not
+started.
+
+An independent scoped review on 2026-10-23 approved the three contract unions and the relocated
+owner-probe source assertions with no finding; it made no edits and ran no tests.
+
+This is provisional integration evidence, not a final-tree gate. The final 160A late-init fixes,
+its green PR #34 and the resulting `main` must be integrated first; complete Windows C#, Python
+3.12/3.11 with the tokenizer required, Ruff and the record checks remain T306. Decision 157A stays
+in progress until its own PR lands with green CI.
+
+**Final integration gates, 2026-10-23 (T306).** PR #34 landed after all four CI checks passed.
+Its merge, `6b0508c303900a0de333705e592cd721cddee61f`, has the same tree as the final 160A tip,
+`0bbef373a11a4a879d87e3465c74634b2fde87c8`. The pending integration was recreated by merging that
+actual `origin/main`, resolving both branches' changes, and regenerating both pane fixture families.
+Before these final record updates, its entire staged tree was exactly
+`01805bce78ef0fadbf6cad1802ddbf57d286f412`, the tree tested below: no production or test blob changed
+when the provisional parent was replaced with the actual main merge. The captured Send-event pin was
+also checked against the generated Windows/CRLF bytes.
+
+The complete Windows Release rebuild had zero warnings and zero errors; 10,125 extractor tests and
+3,948 add-in tests passed, with none skipped. The complete non-live Python suites, with the tokenizer
+required, each passed 18,112 tests and skipped 5 on Python 3.12 and on Python 3.11. The all-extras sync,
+tokenizer fetch and Ruff passed. The changed Markdown's 163 relative file links were valid, both changed
+task files had unique task ids, staged whitespace was clean, and all 67 changed tracked files had LF
+or no-newline index content. Final record and identifier checks are repeated after the decision-register
+and handoff updates, before committing. No live test ran and SOLIDWORKS was not started.
+
+Independent final review of the branch and independent review of the refreshed integration found no
+material finding; the latter's approval was conditional on these complete gates. The earlier scoped
+review also approved the merged contracts and relocated probe assertions. The documented minute-expiry
+limitation remains. Decision 160A is now landed; decision 157A remains in progress until its own PR
+lands with green CI. Remodel Start remains disabled, and the separate 159A Stop, after-dump and
+changed-root cleanup defects, T180 and the seat prerequisites remain open.
+
 ### 158A. A hold on the tool service's attachment holds back a follow for an hour at most, and 152A's two follow rules stand (2026-10-21)
 
 - **Question**: 152A left three things with the owner (152A, above): the extension it made to its
@@ -5517,3 +5596,462 @@ that read the changed records - `test_workstation_test_plan.py`, which reads eve
   and on 3.11 (3.11.16, `--isolated`, every extra); no Python changed. The C# cases that read 002's
   `pane-host-messages.md` and 004's `pane-remodel-messages.md` ran in the full suite. No broken link,
   and every changed file `i/lf`.
+
+### 160A. What 150A and 154A left for the owner: the strip and `init` after a failed start, the Standards notice, a save during unload, and run roots (2026-10-21)
+
+- **Decision**: owner decision 160A, "4A", 2026-10-21 (the register's row 160A): "A bundle of small cleanups, test
+  first, done by Codex and reviewed". Items 1 to 4 are feature 011's (011 [research.md](../011-drawing-context/research.md),
+  R14); items 5 to 10 settle what 150A and 154A left for the owner (above) and are recorded here and in Phase 21 of
+  [tasks.md](tasks.md) (T270 to T283). Codex implemented them, its tests first; Claude reviewed them, showed the tests'
+  red by mutation, ran the gates and committed. Nothing started SOLIDWORKS or a live provider.
+- **5. The Review strip after a failed first start** (150A, Not changed): the add-in's word that the first start
+  failed, `status {stage: "error"}` while the page holds no backend, now sets the page's not-running mark, which a
+  save's `BackendNotRestarted` alone set (150A), so the strip says "Backend not running", as the other tabs' strips
+  do, where it said "Error"; and a `status` that is not an error - "Backend ready." from a start made since, say - leaves it so
+  while no `init` has named a backend. An `init` that names one takes the mark off, and an error while a backend is up
+  still says "Error" (T270, T271). *Narrowed on the decision's review, 2026-10-21 (S3, below): only such an `error`
+  marked as the backend's own word (`lifecycle`) sets the mark, not every `error` while the page holds no backend.*
+- **6. `init` says why no backend is up** (150A, Not changed): every page's `init` carries `backend_start_failed`, true
+  only while no backend is up and none is being started, after the last start or restart failed. A page that loads, or
+  loads again, after the failure's `status`, which it never saw, says "Backend not running" with the way on the add-in
+  already gives for a failed start (150A's review): "The backend is not running. Save Settings to start it again." on
+  the Review page, and "The backend is not running. Save Settings on the Review tab to start it again." on the other
+  three, where it said "Backend starting". A boolean rather than the failure's words: a page that loads later has no failure
+  to quote, and the way on is the same. The review host remembers the outcome of every start it makes
+  (`ReviewHost.StartWith`: the mark taken off as each start begins, set when one throws) and says it only while no
+  backend is up and none is being started (`BackendStartFailed`), so a restart that failed before it stopped the old
+  backend, which is still up, is no failed start. The add-in hands that word to the Model check, Standards and Remodel
+  hosts, and each `init` says it only with no endpoint. On the page the way on takes the banner only when the banner
+  says nothing else: the Remodel page's word that the seat is unavailable keeps its place, with the way on after it,
+  and the Review page weighs 153A's sentence first, so an `init` that takes that down leaves room for the way on. An
+  `init` that names a backend takes the way on down (T270, T271). *Amended on the decision's review, 2026-10-21 (D2
+  and D3, below): a restart refused for a running turn leaves the mark as it was, and a `ready` that arrives while an
+  `init` is on its way is asked about once more after it.*
+- **7. The Standards page's notice** (150A, Not changed): an Accept whose check is not shown again - its re-read
+  failed, or a newer check was pressed first - says so in a place of its own beside the check's status,
+  `accept-notice`, where it shared the banner with a check that fails, and whichever came last stayed. A failed check
+  on this page clears the result's rows (`standards.js`), so a note on the accepted row, the brief's example, would go
+  with them; the place beside the status outlasts the failure, and the failure keeps the banner, in either order (T272,
+  T273). Decided on review, for the owner, who may revert either:
+  - The place is the page's to declare (`acceptNoticeId`, as `headerId` is). Codex's shared script looked it up by a
+    literal id, which the Model check page, sharing the script, does not have:
+    `ModelCheckPageTests.EveryElementIdTheScriptLooksUpExistsInTheHtml` was red on the first run of the suite. A page
+    that declares none says the notice in its banner, as before (T273).
+  - The notice comes down once a result is shown - a check pressed again, an Accept whose re-read is shown, the latest
+    check read back - which says where the check stands, what the notice sent the engineer to see; and not for a check
+    that failed, which shows none, so the notice outlasts the failure. Codex's place had no way down: the banner it
+    replaced came down at the next press, while the notice stayed up for the life of the page, over a result that
+    showed the rule accepted (T282, T283).
+  - **Held for the owner: the Model check page.** The review's first answer was to give the Model check page the same
+    place, since it has Accept and the same helper, provided its failed check clears the rows and uses the banner as
+    the Standards page's does. It does not clear them: `check.js` shows the failure and keeps the result. Measured on
+    the real pages, a failed Model check pressed before the Accept's re-read lands leaves its result on screen, so the
+    re-read is shown and marked on its row, "Accepted as ..." in the check's line beside the failure, and no notice is
+    made; a notice before a failed check is taken down by the press, as before 160A, and the failure takes the banner,
+    while the rows still show the result from before the Accept and nothing says the exception was saved. So the place
+    would serve Model check in the second order only. Not changed, as the owner asked should that condition not hold;
+    it is one line in `check.js` (`acceptNoticeId`), one element in its `index.html`, and the case's second order run
+    over both check tabs. *Decided on the decision's review, 2026-10-21, as recommended (below): the Model check page
+    has the place too; the owner may revert it.*
+- **8. A save during unload** (150A, Not changed): a save written while the add-in unloads is answered
+  `AddInStopping`, not retryable - "The settings are saved. The add-in is stopping; nothing else needs doing." - where it
+  was `BackendNotRestarted`, whose sentence says to save again. The host marks itself stopping first thing in `Dispose`,
+  and a save that has written its settings reads the mark before its restart, which is then not made, in its catch, and
+  after a restart that returns, which then tells the other tabs nothing; the answer carries the save's run-root note, as
+  every written save's does (154A). The class has its sentence in the words file, and the Review page shows it on the
+  Save line, or the message whole with no labels, and asks for no `init`. *Amended on the decision's review,
+  2026-10-21 (D1, below): a restart that waited, and meets the unload while it is made, says nothing either.* Both pane fixture families were regenerated
+  by their generators, each snapshot gaining the sentence, and the send-failure events' pin moved to the regenerated
+  `review-waiting.json`, its SHA-256 with CRLF endings; the captured apply-failure fixture is unchanged (T274, T275).
+- **9. Run folders under an 8.3-spelled root** (154A, Not changed, item 3): every run folder is made, and found, under
+  the run root's long-name form. `RunFolders.Create` makes the root, reads its long name once it exists
+  (`IRunRootProbe.LongPathOf`, `GetLongPathNameW` in the product), outside any lock - every caller was read for one -
+  and names the run under it, so the add-in's spelling of a run folder is the backend's, and the re-modeler's
+  comparison of run folders at the copy's open (step 4) takes the copy. The searches - a check's newest run, a waiting
+  review - judge the root by the run root rule before anything is read of it, so nothing is read over a share or
+  through a link, and look under the long form the rule's own final-path reading verified, read once
+  (`RunRootRule.Judge`'s `existingLongRoot`). `RunFolders.IsUnder` keeps its lexical answer and, only when that says
+  no, compares with the root's verified long form as well, so a long-named run is still under its short-spelled root.
+  The tests fake the short name through the probe seam, since a drive need not make 8.3 names (T276, T277).
+  *Changed on the decision's review, 2026-10-21 (below): the run is named, and a short-spelled root searched, under
+  the root's final path - its long names in the disk's own letter case - so the two spellings agree letter for
+  letter.*
+- **10. A folder no folder can be made under** (154A's reviews, N8, Not changed): a name with a character no folder can
+  have - a lone trailing quote among them - or longer than 255 characters is refused by the rule on its text, before
+  anything is read (`RunRootVerdict.InvalidFolderName`), where it was left to the run folder. At the save it is the one
+  field not saved, in plain words with no path - "The folder chosen for runs has a name Windows cannot use for a
+  folder, so the run root was not changed; the other settings were saved. Use folder names of at most 255 characters,
+  with no invalid characters, then save again." - and the other settings are saved and restarted with. One pair of
+  quotes around the whole still comes off (154A's reviews, F2). **Implementation decision** (Codex's, kept on review):
+  a run start refuses such a root already in force too, as it refuses every root the rule refuses, since an older or
+  hand-written settings file can name one, and every run would otherwise do its work and fail at the run folder; its
+  words say what the root is and the way on, without the rule on where runs are made, which does not explain it. The
+  backend's own path rule is unchanged (T278, T279). *Amended on the decision's review, 2026-10-21 (below): the save's
+  words name the characters a name cannot have, and the `RunRootRefused` sentence names such a name.*
+- **Tests first, and their red shown by mutation**: Codex wrote each test before its change, and none was run then;
+  the waiting fixtures were regenerated on review. The tests' red was shown afterwards, on review, by mutation: each
+  change taken out once by exact replacement, the solution built, the item's test classes run, and the file restored
+  byte for byte, checked so by its SHA-256. The classes: the Review page's restart cases for 5, and for the Review
+  page's half of 6 and 8; the other tabs' restart cases for their half of 6, and with the two check pages' own for 7;
+  the hosts', the wiring scans and the label scan for the hosts' half of 6 and 8; the label scan, the send gate's and
+  the Python words and fixture tests for W1 and F1; and the run-folder, run-root and hosts' for 9 and 10. Of the 53 mutations every one turned at least one
+  case red but 6c, an equivalent mutant, 205 red results in C# and 7 in Python; thirteen of them were red only once
+  T282's tests closed the gaps they showed (below). The counts are against the final tests.
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | 5a | `app.js` `showStatus` | a failed start's `error`, with no backend, marks the strip not running | 2 |
+  | 5b | `app.js` `showStatus` | other progress leaves the mark while no backend is held | 1 |
+  | 6a | `ReviewHost.StartWith` | a start that throws remembered | 2 |
+  | 6b | `ReviewHost.StartWith` | the mark taken off as each start begins | 2, a gap |
+  | 6c | `ReviewHost.BackendStartFailed` | not while a start is under way | 0, equivalent |
+  | 6d | `ReviewHost.BackendStartFailed` | not while a backend is up | 1, a gap |
+  | 6e | `ReviewHost` `init` | the field | 2 |
+  | 6f | `CheckPaneHost` `init` | the field | 2, a gap |
+  | 6g | `RemodelHost` `init` | the field | 1, a gap |
+  | 6h | `ModelCheckHost` | the word handed to its check pane | 1, a gap |
+  | 6i | `StandardsHost` | the word handed to its check pane | 1, a gap |
+  | 6j | `CheckPaneHost` `init` | said only with no endpoint | 2, a gap |
+  | 6k | `RemodelHost` `init` | said only with no endpoint | 1, a gap |
+  | 6l | `SwReviewAddIn` | the word handed to the Model check host | 1, a gap |
+  | 6m | `SwReviewAddIn` | the word handed to the Standards host | 1, a gap |
+  | 6n | `SwReviewAddIn` | the word handed to the Remodel host | 1, a gap |
+  | 6o | `app.js` `applyInit` | the flag read | 3 |
+  | 6p | `app.js` `applyInit` | the way on taken down by an `init` that names a backend | 2 |
+  | 6q | `app.js` `applyInit` | 153A's sentence weighed before the way on | 1 |
+  | 6r | `check-page.js` `applyInit` | the flag read | 2 |
+  | 6s | `check-page.js` `applyInit` | the way on marked as the backend's own word, which a named backend takes down | 2 |
+  | 6t | `remodel.js` `applyInit` | the flag read | 3 |
+  | 6u | `remodel.js` `applyInit` | the seat's word kept, with the way on after it | 1 |
+  | 6v | `remodel.js` `applyRemodelCapability` | a seat answered while not running leaves the way on | 1 |
+  | 7a | `check-page.js` `acceptedWithoutReRead` | the notice in its own place | 6 |
+  | 7b | `standards.js` | the place declared | 6 |
+  | 7c | the Standards page's `index.html` | the place | 6 |
+  | 7d | `check-page.js` `renderResult` | the notice taken down once a result is shown | 2 |
+  | 8a | `ReviewHost.Dispose` | the stopping mark set | 5 |
+  | 8b | `ReviewHost`'s save | the mark read before the restart | 2, a gap |
+  | 8c | `ReviewHost`'s save | the mark read in the catch | 1 |
+  | 8d | `ReviewHost`'s save | the mark read after a restart returns | 1 |
+  | 8e | `ReviewHost`'s save | the other tabs not told of a restart made as the add-in goes | 1 |
+  | 8f | `app.js` | the class's sentence, or the message whole | 1 |
+  | 8g | `ReviewHost.SendSavedWhileStopping` | not retryable | 4 |
+  | 8h | `ReviewHost.SendSavedWhileStopping` | the save's run-root note | 1, a gap |
+  | W1 | `review_words_v1.yaml` | `AddInStopping`'s sentence | 1 C#, 7 Python |
+  | F1 | `review-send-failure-events.json` | the pin moved to the regenerated fixture | 3 |
+  | 9a | `RunFolders.Create` | the run named under the root's long name | 5 |
+  | 9b | `RunFolders.NewestCheckFolder` | the root judged first, and searched under its long form | 3 |
+  | 9c | `RunFolders.FindNotSentReview` | the root judged first, and searched under its long form | 3 |
+  | 9d | `RunFolders.IsUnder` | the long form, on a lexical mismatch | 1 |
+  | 9e | `RunRootRule.Judge` | the long form handed on, for an 8.3-spelled root | 3 |
+  | 9f | `RunRootRule.Judge` | the final path handed on | 41 |
+  | 9g | `RunRootRule.Judge` | handed on for the whole root only, not a parent the walk stopped at | 12 |
+  | 10a | `RunRootRule.Judge` | a name no folder can have refused | 21 |
+  | 10b | `RunRootRule.NamesNoFolderCanHave` | the characters | 18 |
+  | 10c | `RunRootRule.NamesNoFolderCanHave` | a name longer than 255 characters | 3 |
+  | 10d | `ReviewHost.ChooseRunRoot` | refused at the save, a folder chosen | 4 |
+  | 10e | `PaneActions.RefusedRunRoot` | refused at every run start | 5 |
+  | 10f | `ReviewHost.ChooseRunRoot` | refused at the save, the run root kept | 1 |
+  | 10g | `RunRootRule.ChosenRefusal` | the folder chosen's own words | 8 |
+  | 10h | `RunRootRule.RuleFor` | the rule on where runs are made left out | 1 |
+
+  6c drops `_starting == null` from `BackendStartFailed`: the mark is taken off two statements after a start is marked
+  under way, and set only in its catch, so no point a page or a test can reach tells the two apart. It is kept, since it
+  says what the word is.
+- **Gaps found and closed** (T282): thirteen mutations stayed green against the tests as Codex left them, each a gap,
+  closed by a test written first and shown red under it. The other tabs' `init` (6f to 6k): their page tests stand in
+  for the host, so no case read the hosts' field, now `OtherTabsBackendRestartTests.EachOtherTabsInitSaysWhetherTheLastStartFailedWithNoBackendUp`;
+  the add-in's wiring (6l to 6n), now read from its source, as the other wiring cases read it
+  (`TheAddInHandsEachOtherTabTheReviewHostsWordOnAFailedStart`); the mark's reset (6b), now a backend gone after a
+  start that succeeded, and the word with the old backend up (6d), now asked of the host as well as of `init`; the
+  unload seen before the restart (8b): the case disposed the host before a restart that would fail, which the catch
+  answers the same way, and a restart that would succeed is made then, as the add-in goes - now a fourth row; and the
+  run-root note (8h), now `ASaveDuringUnloadStillSaysWhatItSaysOfTheRunRoot`.
+- **Changed deliberately** (Codex's, kept on review): in `RunRootRuleTests`, `AFolderNameLongerThanWindowsAllowsIsLeftToTheRunFolder`
+  and `ARealRootWithAFolderNameLongerThanWindowsAllowsIsLeftToTheRunFolder` are now `...IsRefusedBeforeAnythingIsAsked`
+  and `...IsRefused`, and the two invalid-character rows leave `ARootTheRuleCannotReadIsLeftToTheRunFolder` for
+  `AnInvalidFolderNameIsRefusedBeforeAnythingIsAsked`, since the decision refuses what they accepted;
+  `FakeRunRootProbe.RefusedKinds` gains the kind, so every host's refusal case runs once more; the Standards rows of
+  the two Accept cases read the notice in its place; and the label scan's classes and `test_review_words.py`'s pins
+  name the new class.
+- **Gates**: 2026-10-21, on the decision's final tree (`aaca774`, with its records): no broken link; C# 0 warnings on a
+  `--no-incremental` build, 10,114 and 3,609 passed, from 10,086 and 3,540 on `main` (`5a58988`); the restart classes
+  (`DeferredRestartTests`, `OtherTabsBackendRestartTests`, `ReviewPageBackendRestartTests`,
+  `TabPagesBackendRestartTests`, 448 cases) passed five times in a row; Python, `pytest -m "not live"` with the
+  tokenizer required, 18,112 passed and 5 skipped on 3.12 and the same on 3.11 (`--isolated`); `ruff check` clean;
+  every changed file LF in the index and CRLF in the working copy. Each code commit built and run on its own, in a
+  worktree of its own: `3fa50ec` (011 T210 to T215), zero warnings, 10,114 and 3,540 passed; `4c7c80c` (T270 to
+  T279), zero warnings, 10,114 and 3,593 passed, and the Python words, fixture, pin and task-list tests, 596, on 3.12
+  and on 3.11; `aaca774` (T282, T283) is the final tree. SOLIDWORKS was not started.
+
+- **The decision's review** (2026-10-21): two independent reviews of the decision, by Opus and by Codex, found nothing
+  that must be fixed, and one more round was asked for on what they found, test first. Claude did it (T284 to T290;
+  feature 011's share is its research R14.7), each test before its change and each shown red by mutation. Decided on
+  review, for the owner, who may revert any: the Model check page's notice, D1's silence, D3's mark, the review host's
+  mark on a failed restart (S3), the pass-through of the probe, and the `RunRootRefused` label's words.
+  - **The Model check page's notice** (item 7's held part, decided as recommended): the Model check page declares
+    the place too - one line in `check.js` (`acceptNoticeId`) and the element in its `index.html`. A notice made before
+    a failed check outlasts the press and the failure, which keeps the banner, as on the Standards page; a failure that
+    lands before the Accept's re-read leaves the result this page keeps, so the re-read is shown and the rule marked
+    accepted on its row and in the check's line, beside the failure, and no notice is made. The two-tab cases:
+    `ACheckFailureAndAnAcceptNoticeBothStayVisible` (both orders) and `AnAcceptsNoticeComesDownOnceAResultIsShownAgain`,
+    each over both check tabs, renamed from their Standards-only forms; `ASecondAcceptsNoticeTakesThePlaceOfTheFirst`;
+    and the Model check rows of the two Accept cases read the notice in its place (T284, T285).
+  - **D1. A restart that waited and meets the unload says nothing.** The callbacks the review host hands
+    `DeferredRestart` read no stopping mark: a save deferred by a turn, the turn ended and the watcher's restart begun,
+    then SOLIDWORKS unloads - `Dispose` marks the host stopping, the restart's disposal waits two seconds and gives up,
+    and the backend client's disposal ends the start - and the restart's failure told the Review page "... Save the
+    settings again to retry the restart." and the other tabs, the advice item 8 took out of the save's own answer; one
+    that returned first posted `backend.restarted` and told the other tabs. While the host is stopping, every report of
+    the restart - made, failed, or the backend not answering - now says nothing to the Review page or to the other
+    tabs (`ReportUnlessStopping`). Nothing, rather than item 8's sentence: no page waits on an answer, since the save was
+    answered when it was made, while a save that meets the unload is answered `AddInStopping` because its page waits on
+    it; the pages go with the add-in; and the saved settings are on disk, which the add-in's next start starts the
+    backend with, so neither "save again" nor "the backend restarted" is true of what comes next. The race review's
+    probe is the case, both rows (`ARestartThatWaitedAndMeetsTheUnloadSaysNothing`). The report that the backend is not
+    answering, whose sentence says to save again too, is silenced by the same guard and not pinned by a case of its
+    own: the watcher makes it under the restart's lock only after reading that the restart is not disposed, and the
+    moment between the host's stopping mark and the restart's disposal cannot be held open from a test (T286, T287).
+  - **D2. A `ready` while an `init` is on its way.** Every page dropped the ask a `ready` status makes while an `init`
+    was on its way (`requestInit` returns while one is pending), and that `init` can have been read before the backend
+    was up - a check or Remodel host reads the failed-start flag before `CurrentDocument()`, a synchronous
+    `Control.Invoke`, and the first start's `ready` can be queued ahead of the `init`. The page then said "Backend not
+    running" and the way on, with the backend up - before 160A, "Backend starting", stuck. On such a `ready` each page
+    now sets `initAgain`, as `backend.restarted` does, and asks once more after the `init` on its way; on the Review
+    page that ask loads the models, as the `ready`'s own would have, since `init` loads them only with a backend named
+    (`initAgainLoadsModels`). The Remodel page's change is the one `if`, apart from 159A's edits to the same file.
+    `AReadyStatusWhileAnInitIsOnItsWayIsAskedAboutOnceMoreAfterIt` on each page, the Review page's with its models
+    (T284, T285).
+  - **D3. A restart refused for a running turn is no failed start.** `StartWith`'s bare `catch` marked a restart the
+    backend's own check refused (`TurnRunningException`) as a failed start - the race review's R22, which survived.
+    Refused is not failed, and changes nothing: such a refusal leaves the mark as it was before the restart was
+    asked - off when no start had failed, so a backend gone later is not said to have failed to start; on when the
+    last start made had failed before it stopped the old backend, which the refusal does not undo. Every other throw is a start
+    made that failed, and marks it. `ARestartRefusedForARunningTurnLeavesTheLastStartsMarkAsItWas`, both (T286, T287).
+  - **S3. Only the backend's own word marks the Review strip not running.** The host posts `status {stage: "error"}`
+    for a settings or key problem after every `init` (`ReportSettingsProblems`), and the Review page took any `error`
+    while it held no backend for a failed start: a page loaded during the first start, with a stored key that cannot be
+    decrypted, said "Backend not running" while the backend started, and through `ready`. The add-in marks its word
+    that the first start failed `lifecycle: true`, as it marks every other page's (`ReviewHost.PostStatus(stage,
+    message, lifecycle)`), and the page sets its mark only from such an `error`, with no backend held, and from a save's
+    `BackendNotRestarted`; any other `error` says "Error", and a `ready` after it says the backend is ready
+    (`ASettingsProblemWhileTheFirstStartRunsIsNoFailedStart`, the mutation review's own case). *Found on the way,
+    decided on review*: the review host's word that a restart which waited has failed (`PostRestartFailed`) is marked
+    too, exactly when the other tabs are told - no backend is up - so a Review page that holds no backend then, one
+    loaded while the restart was being made, still says the backend is not running, as it did before S3; one that holds
+    a backend says "Error", as before (T284 to T287).
+  - **The test gaps, closed** - each a mutation that survived the add-in suite, each now red: **S4** (R43, R44)
+    `ASearchRefusesTheRootBeforeAnyLongNameOrFolderIsRead` never made its root, so a search that read a refused root
+    anyway found nothing either way; it makes it now, with a check and a waiting review in it. **S5** (R30) a root not
+    made yet below an existing folder spelled with 8.3 names hands a search nothing of that folder
+    (`ARootNotYetMadeBelowAShortSpelledFolderHandsASearchNothingOfThatFolder`). **S6** (R5) a failed start is marked
+    whatever it throws: `InitRemembersAFailedStartWithNoBackendAcrossPageReloads` gains a failure outside the
+    `BackendStartException` wrapper, the new backend's log not opened. **S7** (R6) a run root whose final path cannot
+    be read once it is made fails the run folder, rather than naming the run as the setting spells it
+    (`ARootWhoseFinalPathCannotBeReadOnceMadeFailsTheRunFolder`, and through a host,
+    `ModelCheckHostTests.ARunRootWhoseFinalPathCannotBeReadOnceMadeIsAnsweredRunFolderFailed`). **S8** (R10) an error
+    while a backend is up still says "Error", the add-in's own word or any other (`AnErrorWhileABackendIsUpStillSaysError`).
+  - **The nits.** *Letter case*, in code, not the records: `RunFolders.Create` names the run under the run root's
+    final path (`IRunRootProbe.FinalPathOf`), where it read the long-name form, which keeps the letter case a long name
+    is written in, and the rule hands a search the final path for a root spelled with 8.3 names too, where it handed
+    the long-name form, checked equal to it but for case. So a folder made and the same folder found are spelled
+    alike, letter for letter, in the disk's own case, which is the backend's own resolution's too: `RunFolders`' "spelled
+    one way" and the contracts' "the backend's own spelling" hold without "up to case"
+    (`AFolderMadeAndTheSameFolderFoundAreSpelledAlikeInTheDisksOwnCase`, on the real disk, and
+    `AShortSpelledRootIsSearchedUnderItsFinalPathInTheDisksOwnCase`). *The comment*: `Create` said every caller has
+    judged the root; the hidden Terminal tab's judges nothing, which it says now. *The probe*, passed through: every
+    host hands the run folders its own probe - the Model check, Standards, Remodel and Review hosts' calls, and the
+    check pane's newest-check search and each pane's actions through `CheckPaneHostOptions.RunRootProbe` and
+    `PaneActionsOptions.RunRootProbe` (Windows' own by default) - so a host test's fake answers the rule and the run
+    folders alike; the Terminal tab's, which judges no run root and holds no probe, is the one left.
+    `EveryHostHandsTheRunFoldersItsRunRootProbe` reads every call, and both options, from the source.
+    `PaneActions.RefusedRunRoot` still takes the same probe as an argument from each host; folding it into the options
+    is left, a repetition flagged. *Done after the merge of `main`, 2026-10-21 (T291, below).* *Pinned*: R7 (a row of `ARunStartUnderARefusedRunRootWhileAnotherIsChosenSaysToRetryTheRestart`),
+    R11 to R13 (`AFailedStartsWayOnLeavesAnotherWordOnTheBanner`, each page), R14
+    (`ASecondAcceptsNoticeTakesThePlaceOfTheFirst`) and R32 (the Review strip's warning colour in
+    `AReadyStatusAfterAFailedFirstStartKeepsTheStripNotRunningUntilItsInitNamesABackend`). *The enum*: the three
+    `Assert.Equal("InvalidFolderName", verdict.ToString())` compare the verdict itself. *Item 10's words* name the
+    characters: "... Use folder names of at most 255 characters, with none of \ / : * ? " < > | and no control
+    characters in them, then save again." *Found on the way, decided on review*: the `RunRootRefused` sentence - which
+    the Review page shows in place of the message, one press from it - said nothing of a name Windows cannot use, which
+    160A refuses with that class; it names one now, with the characters: "Runs are made only in a local folder reached
+    by its own path - not on a network share, not through a link, and with folder names Windows can use: none longer
+    than 255 characters, none with \ / : * ? " < > | or a control character, none ending in a space or a period - and
+    the add-in must be able to check that it is one. Choose a local folder for runs in Settings." Both pane fixture
+    families were regenerated by their generators, four snapshots gaining the sentence, and the send-failure events'
+    pin moved to the regenerated `review-waiting.json`, its SHA-256 with CRLF endings (T288, T289). *Left for the owner*:
+    a run root whose full path is longer than 260 characters is still accepted - 154A's open item 5. *Closed*: round
+    one's note that host tests may fail under a `%TEMP%` spelled with 8.3 names - the mutation review ran the add-in
+    suite with TMP and TEMP so spelled and all 3,609 passed, since .NET Framework 4.8's `Path.GetTempPath` expands them.
+  - **Changed deliberately**, each named in its case: `OtherTabsBackendRestartTests.AFailedFirstStartTellsEveryPageTheWayOn`
+    and its mirror in `DeferredRestartTests` read the add-in's call with `lifecycle: true`; the Review page's two
+    failed-start cases post their `error` so marked, and the second reads the strip's warning colour; the Standards
+    notice cases run over both check tabs, renamed, and the driver reads the notice in its place on both;
+    `ARestartThatWaitedAndFailedSaysSavingAgainRetriesIt` reads the mark; `InitRemembersAFailedStartWithNoBackendAcrossPageReloads`
+    has two rows more; `EveryCreatedRunIsNamedUnderTheRootsLongNameReadOnceAfterTheRootExists` is
+    `...UnderTheRootsFinalPathReadOnceAfterTheRootExists`, its probe counting the final path's reads;
+    `ASearchRefusesTheRootBeforeAnyLongNameOrFolderIsRead` makes its root; `AnInvalidFolderNameIsRefusedBeforeAnythingIsAsked`
+    reads item 10's new words; and `LabelsSample` and `test_review_words.py` read the label's. Each stronger or
+    following a change decided here; none loosened.
+  - **Red, and by mutation**: against round one's code 34 cases were red in C# - 16 of the pages and the hosts, the
+    Model check rows of the two Accept cases among them, and 18 of the run folders and the rule - and the words
+    file's pin in Python; the rest hold what round one's code already did, the gaps above. Each change was then taken
+    out once by mutation, as in round one, the classes it touches run - the pages', the hosts', the run folders' and
+    the rule's, and for W3 the Python words and fixture tests - and the file restored byte for byte, checked by its
+    SHA-256; ids R5 to R44 are the mutation review's own survivors, made again on the changed code. All 37 turned at
+    least one case red, 71 red results in C# and 7 in Python:
+
+  | id | where | taken out | red |
+  |---|---|---|---|
+  | MCa | `check.js` | the Model check page's place declared | 6 |
+  | MCb | the Model check page's `index.html` | the place | 6 |
+  | D1a | `ReviewHost.ReportUnlessStopping` | nothing said while stopping | 2 |
+  | D1b | `ReviewHost`'s restart callbacks | the made restart's report guarded | 1 |
+  | D1c | `ReviewHost`'s restart callbacks | the failed restart's report guarded | 1 |
+  | D2a | `check-page.js` `showStatus` | a `ready` asked about once more | 2 |
+  | D2b | `remodel.js` `showStatus` | a `ready` asked about once more | 1 |
+  | D2c | `app.js` `showStatus` | a `ready` asked about once more | 1 |
+  | D2d | `app.js` `requestInit` | the ask once more loads the models | 1 |
+  | D3a | `ReviewHost.StartWith` | a refusal leaves the mark (marks it again) | 1 |
+  | D3b | `ReviewHost.StartWith` | a refusal leaves the mark (takes it off) | 1 |
+  | R5 | `ReviewHost.StartWith` | a failure outside the wrapper marks it | 2 |
+  | S3a | `app.js` `showStatus` | the mark from the backend's own word only | 1 |
+  | R10 | `app.js` `showStatus` | the mark not with a backend held | 1 |
+  | S3b | `SwReviewAddIn` | the first start's failure marked | 1 |
+  | S3c | `ReviewHost.PostStatus` | the mark passed on | 1 |
+  | S3d | `ReviewHost.PostRestartFailed` | marked with no backend up | 1 |
+  | S3e | `ReviewHost.PostRestartFailed` | marked only with no backend up | 1 |
+  | R11 | `check-page.js` `applyInit` | the way on only on an empty banner | 2 |
+  | R12 | `remodel.js` `applyInit` | the way on only on an empty banner | 1 |
+  | R13 | `app.js` `requestInit` | the way on only on an empty banner | 1 |
+  | R14 | `check-page.js` `acceptedWithoutReRead` | a second notice replaces the first | 2 |
+  | R32 | `app.js` `showStatus` | the strip's warning after a failed start | 1 |
+  | C1 | `RunFolders.Create` | the run named under the final path | 8 |
+  | C2 | `RunRootRule.Judge` | a short-spelled root's final path handed on | 1 |
+  | R30 | `RunRootRule.Judge` | handed on for the whole root only, a short spelling | 1 |
+  | R43 | `RunFolders.NewestCheckFolder` | nothing read of a refused root | 2 |
+  | R44 | `RunFolders.FindNotSentReview` | nothing read of a refused root | 2 |
+  | R6 | `RunFolders.Create` | an unreadable final path fails the run folder | 2 |
+  | R7 | `RunRootRule.ChosenNotInForceRefusal` | no locality rule for an invalid name | 1 |
+  | W2 | `RunRootRule.ChosenRefusal` | item 10's words name the characters | 8 |
+  | P1 | `ModelCheckHost` | its probe handed to the run folder | 2 |
+  | P2 | `ReviewHost` | its probe handed to the waiting-review search | 1 |
+  | P3 | `ReviewHost` | its probe handed to its pane actions | 1 |
+  | P4 | `CheckPaneHost` | its probe handed to the newest-check search | 1 |
+  | W3 | `review_words_v1.yaml` | `RunRootRefused` names an invalid name | 7 Python |
+  | F2 | `review-send-failure-events.json` | the pin moved to the regenerated fixture | 3 |
+
+  - **Gates**: 2026-10-21, on the round's final tree (`15db42b`, with its records): no broken link; C# 0 warnings on a
+    `--no-incremental` build, and 10,125 and 3,640 passed, from 10,114 and 3,609 after round one. The first full runs, of
+    this tree and of two code commits at once, failed only cases timed against the clock - `ReviewPageDocumentBindingTests`'
+    shared page past its 90 seconds, `ReviewPageSessionsTests`' once, and `ReviewPageScaleTests`' thousand findings past
+    three seconds - and a run of this tree alone, with other work on the machine, the scale case alone (3,873 ms); it
+    passed alone three times, and each tree's next full run passed whole. The restart classes (`DeferredRestartTests`,
+    `OtherTabsBackendRestartTests`, `ReviewPageBackendRestartTests`, `TabPagesBackendRestartTests`, 469 cases, from 448)
+    passed five times in a row. Python, `pytest -m "not live"` with the tokenizer required, 18,112 passed and 5 skipped on
+    3.12 and the same on 3.11 (`--isolated`); `ruff check` clean; every changed file LF in the index and CRLF in the
+    working copy. Each code commit built from scratch and run on its own, in a worktree of its own: `ffc5b76` (011 T218,
+    T219), zero warnings, 10,125 and 3,609 passed; `d5497b3` (T284, T285), 10,125 and 3,626; `c007b0c` (T286, T287),
+    10,125 and 3,633; `15db42b` (T288, T289) is the final code tree. SOLIDWORKS was not started.
+
+- **After the merge of `main`** (2026-10-21): `main` at `4f40dae`, with owner decision 158A (PR #33), was merged into
+  the branch (`1e5b966`), not rebased. Two records met: this research, whose 158A and 160A entries both followed 156A,
+  and the task list, whose Phase 20 and Phase 21 both followed Phase 18; each kept both sides, in order of id - 158A,
+  then 160A - and of phase (157A's are not on `main` yet). Everything else merged by itself: 158A's `HoldAttachment`
+  with its holder, its lines in `SwReviewAddIn` and `DeferredRestartTests`, and its dated notes in 002's
+  `pane-host-messages.md` and 004's records; no fixture or label was touched, so neither generator was run and the
+  pin stands.
+  - **T291, one way in for the run root rule's probe** (the coordinator's follow-up; the repetition flagged above):
+    `PaneActions.RefusedRunRoot` reads `PaneActionsOptions.RunRootProbe` and takes no probe, where each host handed it
+    its own as an argument beside the option the review added; the four hosts' calls pass none.
+    `RunFoldersLongNamesTests.ARunStartIsRefusedThroughThePaneActionsOwnProbe` pins it from the source, as the
+    pass-through is pinned - no call passes a probe, the refusal takes none and judges the root with the option - red
+    before the change, its four calls each passing one; the source walk the two scans share is one helper. Every
+    host's refusal case, a refusing probe each, now reads the option: with the refusal judging the root with Windows'
+    own probe, 38 cases went red (T291a), and with the review host's option unset, 19 (T291b).
+  - **Gates**: 2026-10-21, on the merged tree with T291 (`7836b7f`, with these records): no broken link; C# 0 warnings
+    on a `--no-incremental` build, 10,125 and 3,665 passed - 3,640 before the merge, 158A's 24 and T291's one; the
+    restart classes, 469 cases, passed five times in a row; Python, `pytest -m "not live"` with the tokenizer required,
+    18,112 passed and 5 skipped on 3.12 and the same on 3.11 (`--isolated`); `ruff check` clean; every changed file LF
+    in the index and CRLF in the working copy. SOLIDWORKS was not started.
+
+### Final cleanup review resumed (2026-10-21; T296 to T299)
+
+The interrupted session left six test files, before their fixes, in the cleanup worktree. They were
+copied into a separate worktree on `codex/resume-160a`, based on `8849e52`; the originals were kept.
+The four page regressions in T296 and the three Terminal-list rows in feature 011 T221 all failed
+before implementation: seven failures, no passes, on the focused run. The C# build had zero warnings.
+
+The Remodel page now keeps the backend's retry sentence alongside its unavailable-seat message
+when a capability push or an init read before the failure reaches it. Its retained not-running mark
+is the authority until init names a backend. The Review page treats the host's lifecycle error as
+a failed backend even while it holds an old endpoint, drops that endpoint, and clears a lifecycle
+banner once init names a backend. Ordinary review/settings errors retain their ordinary error strip.
+The existing settings-error test was extended deliberately through the host's repeated error after
+init, and the old theory's lifecycle row replaced by the explicit failed-endpoint case; assertions
+were not relaxed. Replacement identity survives dropping the endpoint so existing reviews do
+not reconnect to a later backend as if it held their chats. Two additional tests cover a live
+stream and a live waiting review across the next successful save; a third covers the Remodel
+capability update after a deferred restart fails with an endpoint already held. All three failed
+before their fixes. The unavailable-seat banner rule and the Review replacement mark each have
+one shared implementation.
+
+The recovered host-disposal, latest-check and refused-root tests pin existing behaviour; no host,
+run-root or guard implementation change was needed for those cases. The terminal list changes and
+their three failing tests are recorded in feature 011 research R14.8. Task ids T293 to T295 already
+belong to decision 157A on its separate branch, so this continuation starts at T296.
+
+Validation completed on 2026-10-21: `uv sync --all-extras` on Python 3.12, tokenizer fetch,
+and the complete non-live suite with the tokenizer required: 18,112 passed and 5 skipped on
+Python 3.12.3, and the same on Python 3.11.16 (`--isolated --all-extras`). Ruff passed. The
+Windows C# build with `--no-incremental` had zero warnings; the complete suites passed:
+10,125 extractor tests and 3,681 add-in tests. The initial focused run passed 561 cases;
+the later complete run includes all three additional review regressions. Changed Markdown
+relative links and task ids were checked, and the staged text has LF endings. SOLIDWORKS
+was not started, and no live test ran. The remaining branch and review work is
+listed in [the development handoff](../../docs/development-handoff-2026-10-21.md).
+
+### Final adversarial review: an init overtaken by a failed restart (2026-10-22; T300 to T302)
+
+The final read-only review found one remaining lifecycle race. `SendInit` reads its endpoint
+before reading the current document and sending the reply; meanwhile, the deferred restart's
+watcher can stop that backend and post its lifecycle failure. If the init naming the old backend
+arrives afterward, the page reinstated that dead endpoint, said "Backend ready", and took down
+the failure banner. The existing stale-init case named no endpoint and did not exercise this order.
+
+T300 added four cases before implementation in `ReviewPageBackendRestartTests`:
+`AnInitReadBeforeALifecycleFailureCannotReviveTheFailedBackend`, with and without an endpoint
+already held by the page; `AnInitReadBeforeALifecycleFailureCannotReopenTheOldChatsStream`;
+and `AnInitReadBeforeALifecycleFailureCannotRestoreAWaitingReviewWithTheOldToken`.
+`ReviewPageDriver.ReleaseOneReady` can now deliver a held init with a specified old token while
+holding the next request separately. All four cases failed against the unchanged page: the
+first two said "Backend ready" instead of "Backend not running"; the waiting case called
+`/labels` with the old token; and the streaming case opened the old chat's stream a second time.
+No existing assertion was loosened.
+
+The same order affected Model check, Standards and Remodel. T300 added six rows of
+`TabPagesBackendRestartTests.AnInitReadBeforeALifecycleFailureCannotReviveTheFailedBackend`: each
+tab's first init on reload and an ordinary restart init, with latest results present. Each row
+failed first by reviving the old backend. Four refusal rows, one per tab in
+`ARefusedInitOvertakenByALifecycleFailureDoesNotReplaceTheFailure`, failed first by replacing the
+newer lifecycle banner with the old request's error. The Review refusal was run with the old
+catch body restored, then its guard restored; the other tabs had no guard yet. Together with the
+original four regressions, fourteen cases demonstrated the failure before their fixes. The tab
+driver can now hold a reload's first init separately; its existing default boot is unchanged.
+
+T301 adds one page-local failure revision. Each init request captures it; a lifecycle failure
+increments it before dropping the endpoint. A response from a request made before that failure
+is discarded, including any refusal, and asks once more after it settles. That fresh request
+retains Review model-loading intent and each other tab's initial latest-result intent. An ordinary
+restart still does not reread the displayed result. The failure's replacement identity remains held
+so only the new backend restores a waiting review or retires an old stream. No native message
+or backend API changed. All fourteen focused cases passed. The final Windows `--no-incremental`
+Release build had zero warnings and zero errors; the complete solution suites passed with
+10,125 extractor tests and 3,695 add-in tests. Independent review of the final diff and its
+regressions found no material issues under Principles I through VI. No SOLIDWORKS session or
+live test was started. The refreshed tokenizer-required non-live suites completed on 2026-10-22:
+18,112 passed and 5 skipped on each of Python 3.12.3 and 3.11.16 (`--isolated --all-extras`).
+Sync, tokenizer fetch and Ruff passed. T302 was closed on 2026-10-23 after inspecting both
+JUnit reports (zero failures/errors), the independent approval and the final C# results.
+At the T302 record, decision 160A remained in progress pending CI and delivery.
+Delivery update, 2026-10-23: PR #34 passed all four required checks and merged at `6b0508c`;
+the decision register now records 160A as done.

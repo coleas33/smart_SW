@@ -53,6 +53,9 @@ public sealed class StandardsHostOptions
     /// </summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
 
+    /// <summary>A failed start with no backend up, remembered by the Review host (owner decision 160A).</summary>
+    public Func<bool> BackendStartFailed { get; set; } = () => false;
+
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
 
@@ -205,7 +208,9 @@ public sealed class StandardsHost : IDisposable
         {
             RunRootsInForce = () => options.RunRootsInForce(),
             RunRootSaved = () => options.RunRootSaved(),
+            RunRootProbe = () => options.RunRootProbe,
             Backend = () => options.Backend(),
+            BackendStartFailed = () => options.BackendStartFailed(),
             CurrentDocument = () => options.CurrentDocument(),
 
             // What `init` reads the newest run back by after a restart, from the folder names
@@ -243,7 +248,6 @@ public sealed class StandardsHost : IDisposable
             nothingChecked: NothingChecked,
             pressAgain: PressAgain,
             runRootForANewRun: () => options.RunRootForANewRun(),
-            probe: () => options.RunRootProbe,
             createFolder: RunFolders.CreateForStandards,
             folder: "the standards run folder",
             reading: document => $"Reading {document}...",

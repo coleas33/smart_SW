@@ -505,6 +505,30 @@ public sealed class ReviewHost : IDisposable
     private volatile UserSettings? _starting;
 
     /// <summary>
+    /// Owner decision 160A: whether the last start of the backend this host made - the add-in's first or a
+    /// restart - threw. Taken off as each start begins and set when one throws, both by <see cref="StartWith"/>
+    /// alone, under the restart's own lock; read from any thread. Remembered for a page that loads, or loads
+    /// again, after the failure's `status` was posted (<see cref="BackendStartFailed"/>).
+    /// </summary>
+    private volatile bool _lastStartFailed;
+
+    /// <summary>
+    /// Owner decisions 157A and 160A: the add-in is unloading - set first thing in <see cref="StopRestarting"/>,
+    /// before the page pumps and other hosts stop, and as <see cref="Dispose"/> begins. A save that has
+    /// written its settings reads it before its restart, in its catch and after a restart returns, and is
+    /// answered `AddInStopping` rather than told to save again (<see cref="SendSavedWhileStopping"/>).
+    /// </summary>
+    private volatile bool _stopping;
+
+    /// <summary>
+    /// Owner decision 160A: whether the last start or restart failed with no backend up and none being started -
+    /// what every tab's `init` says as `backend_start_failed`, this host's and, handed on by the add-in, the
+    /// Model check, Standards and Remodel hosts'. False while a backend is up, an old one a restart that failed
+    /// before it stopped it left among them.
+    /// </summary>
+    public bool BackendStartFailed => _starting == null && _lastStartFailed && _options.Backend.Endpoint == null;
+
+    /// <summary>
     /// Owner decision 153A, found on the fourth review (S1): every key a start of the backend has been made
     /// with since the host was built - the first start's and every restart's, made or failed - each once,
     /// in the order made. A start's failure is told once the start is no longer under way: a restart that
@@ -565,6 +589,7 @@ public sealed class ReviewHost : IDisposable
         {
             RunRootsInForce = () => RunRootsInForce,
             RunRootSaved = () => _settings.RunRoot,
+            RunRootProbe = () => _options.RunRootProbe,
             LogFolder = () => _options.LogFolder,
             EntityResolver = () => _options.EntityResolver,
             Opener = () => _options.Opener,
@@ -592,18 +617,36 @@ public sealed class ReviewHost : IDisposable
             RestartHeldBack,
             WorkInProgress,
             RestartWithSavedSettings,
-            () =>
+            () => ReportUnlessStopping(() =>
             {
                 _actions.PostBackendRestarted(RestartSentences);
                 TellTheOtherTabs();
-            },
-            failure =>
+            }),
+            failure => ReportUnlessStopping(() =>
             {
                 PostRestartFailed(failure);
                 TellTheOtherTabsTheRestartFailed(failure);
-            },
-            () => PostStatus("error", RestartNotAnswered),
+            }),
+            () => ReportUnlessStopping(() => PostStatus("error", RestartNotAnswered)),
             options.RestartPoll);
+    }
+
+    /// <summary>
+    /// The review of owner decision 160A (D1): what a restart that waited says once it has been made, has failed,
+    /// or has met a backend that does not answer - said only while the add-in is not unloading. One that ends as
+    /// SOLIDWORKS unloads the add-in - the backend client's disposal ends the start, or the start returns first -
+    /// is told to nobody, neither the Review page nor the other tabs: no page waits on an answer, since the save was
+    /// answered when it was made; the pages go with the add-in; and the saved settings are on disk, which the
+    /// add-in's next start starts the backend with, so neither "save the settings again" nor "the backend
+    /// restarted" is true of what comes next. A save that meets the unload is answered `AddInStopping` (owner
+    /// decision 160A, item 8), since its page waits on it.
+    /// </summary>
+    private void ReportUnlessStopping(Action report)
+    {
+        if (!_stopping)
+        {
+            report();
+        }
     }
 
     /// <summary>
@@ -1072,8 +1115,9 @@ public sealed class ReviewHost : IDisposable
 
     public void Dispose()
     {
-        // First, so nothing asks the backend about a turn or restarts it once the host is going.
-        _restart.Dispose();
+        // First, so no save or deferred restart reports to tabs that are stopping, and nothing asks the backend
+        // about a turn or restarts it once the host is going. The add-in takes this step before the other hosts go.
+        StopRestarting();
         _events.Dispose();
         lock (_sessionsLock)
         {
@@ -1197,6 +1241,7 @@ public sealed class ReviewHost : IDisposable
                     }
             },
             { "token", endpoint?.Token },
+            { "backend_start_failed", endpoint == null && BackendStartFailed },
             { "settings", View(_settings) },
             { "key_source", key.Source },
             { "run_root", RunRoot },
@@ -1411,6 +1456,12 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
+        if (_stopping)
+        {
+            SendSavedWhileStopping(id, runRootNote);
+            return;
+        }
+
         ResolvedApiKey key = next.ResolveApiKey(_options.Environment);
         string? promise = null;
         try
@@ -1424,8 +1475,8 @@ public sealed class ReviewHost : IDisposable
                         // told under the restart's own lock as every other restart tells them (owner decision 157A,
                         // the reviews): a check whose gate waited on that lock for this restart is told of it before
                         // it begins, so before its page is handed a run to evaluate with the token of the backend
-                        // the restart replaced.
-                        TellTheOtherTabs();
+                        // the restart replaced. Once the add-in starts unloading, no other tab is told (160A).
+                        if (!_stopping) TellTheOtherTabs();
                     },
                     out DeferredRestart.Hold waitsFor,
                     out DeferredRestart.Work busyWith))
@@ -1440,6 +1491,12 @@ public sealed class ReviewHost : IDisposable
         }
         catch (Exception failure)
         {
+            if (_stopping)
+            {
+                SendSavedWhileStopping(id, runRootNote);
+                return;
+            }
+
             // Whatever the restart threw - a BackendStartException, or anything outside that
             // wrapper, such as the new backend's log not opened - the settings are written and
             // saved here, and only the restart failed: the save says so, with the reason, masked,
@@ -1457,12 +1514,31 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
+        if (_stopping)
+        {
+            SendSavedWhileStopping(id, runRootNote);
+            return;
+        }
+
         SendSettings("settings.saved", id, runRootNote);
 
         if (promise != null)
         {
             PostStatus("error", promise);
         }
+    }
+
+    /// <summary>
+    /// Owner decision 160A: the answer to a save whose settings were written while the add-in unloads -
+    /// `AddInStopping`, not retryable: the settings are saved, and nothing else needs doing, where
+    /// `BackendNotRestarted` would say to save again. It still says what the save says of the run root.
+    /// </summary>
+    private void SendSavedWhileStopping(string? id, Dictionary<string, object?>? runRootNote)
+    {
+        Dictionary<string, object?> stopping = _actions.ErrorPayload(
+            "AddInStopping", "The settings are saved. The add-in is stopping; nothing else needs doing.", retryable: false);
+        AddRunRootNote(stopping, runRootNote);
+        Send("error", id, stopping);
     }
 
     private void SaveSendWhenChecked(string? id, JsonElement payload)
@@ -1522,7 +1598,7 @@ public sealed class ReviewHost : IDisposable
     /// default run root, as a blank run root in the settings file is. Null when the save names none - absent,
     /// null or not text - which leaves the run root as it is. The reviews of 154A's merge, F2: Explorer's
     /// "Copy as path" puts a path in double quotes, so one pair around the whole is taken off, and what it held
-    /// trimmed again; a quote on one side alone is left, and is no full path.
+    /// trimmed again; a quote on one side alone is left for the full-path and folder-name checks.
     /// </summary>
     private static string? ChosenRunRoot(JsonElement payload)
     {
@@ -1853,7 +1929,11 @@ public sealed class ReviewHost : IDisposable
     /// sentence that says so, which ends with that way on. Found on review of 153A: this is the one
     /// word after which the settings in force can differ from the saved ones with no `init` to say
     /// so, so it carries `settings_not_in_force` as `init` does - the sentence, or null - and the
-    /// page holds it from here. Called under the restart's lock.
+    /// page holds it from here. Called under the restart's lock. Marked as the backend's own word
+    /// (`lifecycle`) when no backend is up - exactly when the other tabs are told
+    /// (<see cref="TellTheOtherTabsTheRestartFailed"/>) - since that mark, and a save's
+    /// `BackendNotRestarted`, are what tell the page's strip the backend is not running (the review of
+    /// owner decision 160A, S3).
     /// </summary>
     private void PostRestartFailed(Exception failure)
     {
@@ -1862,6 +1942,11 @@ public sealed class ReviewHost : IDisposable
             _actions.StatusPayload("error", WithTheWayOn(failure.Message, notInForce ?? RetryTheRestart));
         payload["settings_not_in_force"] = notInForce;
         payload["settings_not_in_force_revision"] = revision;
+        if (_options.Backend.Endpoint == null)
+        {
+            payload["lifecycle"] = true;
+        }
+
         Send("status", null, payload);
     }
 
@@ -2129,6 +2214,8 @@ public sealed class ReviewHost : IDisposable
         // The mark comes off only once the settings are recorded, or the start has thrown, never before:
         // a reader that finds no start under way finds the settings of the backend up recorded.
         _starting = settings;
+        bool lastStartFailed = _lastStartFailed;
+        _lastStartFailed = false;
         try
         {
             start(settings, key);
@@ -2141,6 +2228,20 @@ public sealed class ReviewHost : IDisposable
             }
 
             _inForce = settings;
+        }
+        catch (TurnRunningException)
+        {
+            // Refused, not failed (the review of owner decision 160A, D3): the backend's own check found a turn
+            // and changed nothing, so the backend up is the one that was, and the last start made is the one that
+            // was - failed or not, as it was marked.
+            _lastStartFailed = lastStartFailed;
+            throw;
+        }
+        catch
+        {
+            // Made, and failed, whatever it threw: a BackendStartException, or anything outside that wrapper.
+            _lastStartFailed = true;
+            throw;
         }
         finally
         {
@@ -2352,10 +2453,15 @@ public sealed class ReviewHost : IDisposable
     /// The race review of owner decision 157A: stops every settings restart that has not begun, and its watcher, as
     /// disposing the host does first - for the add-in's unload, before the hosts whose work holds a restart back, a
     /// remodel run or a check, let their holds go with them, so none is made in the moment before this host goes, on a
-    /// backend about to be stopped. Nothing begins through the gate after it. Doing it again, or disposing the host
-    /// after it, does nothing more.
+    /// backend about to be stopped. The host is marked as stopping before the watcher is waited for (160A), so a
+    /// save or deferred completion in that wait, or while the other hosts stop, says only what is true of unloading.
+    /// Nothing begins through the gate after it. Doing it again, or disposing the host after it, does nothing more.
     /// </summary>
-    public void StopRestarting() => _restart.Dispose();
+    public void StopRestarting()
+    {
+        _stopping = true;
+        _restart.Dispose();
+    }
 
     /// <summary>
     /// The one gate work the restart would end begins through (owner decisions 145A and 157A): the
@@ -2467,7 +2573,7 @@ public sealed class ReviewHost : IDisposable
         if (document == null || !document.IsAttachable) return;
         if (Reviews().Any(record => document.IsSameDocument(record.Document))) return;
 
-        SessionRecord? found = RunFolders.FindNotSentReview(RunRoot, document, _options.OpenSessionHead);
+        SessionRecord? found = RunFolders.FindNotSentReview(RunRoot, document, _options.OpenSessionHead, _options.RunRootProbe);
         if (found == null) return;
         lock (_sessionsLock)
         {
@@ -2675,7 +2781,7 @@ public sealed class ReviewHost : IDisposable
         if (runRoot == null) return;
         try
         {
-            string directory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now());
+            string directory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now(), _options.RunRootProbe);
             PostStatus("extracting", "Extracting saved evidence for engineering context; no review tokens used.");
             DumpSummary summary = _options.Dump.Run(directory, message => PostStatus("extracting", message));
             if (!SameDocument(_options.CurrentDocument(), document)
@@ -2969,7 +3075,7 @@ public sealed class ReviewHost : IDisposable
         string runDirectory;
         try
         {
-            runDirectory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now());
+            runDirectory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now(), _options.RunRootProbe);
         }
         catch (Exception failure)
         {
@@ -3087,7 +3193,7 @@ public sealed class ReviewHost : IDisposable
     /// tab.
     /// </summary>
     private bool RunRootRefused(string? id, string runRoot) =>
-        _actions.RefusedRunRoot(id, runRoot, _options.RunRootProbe, "nothing was started", RunRootRule.InSettings, "try again");
+        _actions.RefusedRunRoot(id, runRoot, "nothing was started", RunRootRule.InSettings, "try again");
 
     /// <summary>
     /// The run root a start goes on under once the backend is ready (the reviews of decision 154A, N8): the run
@@ -3366,7 +3472,7 @@ public sealed class ReviewHost : IDisposable
             return false;
         }
 
-        if (!RunFolders.IsUnder(runDirectory, runRoot))
+        if (!RunFolders.IsUnder(runDirectory, runRoot, _options.RunRootProbe))
         {
             SendError(id, "RunRootChanged", runRootChangedWords, retryable: false);
             return false;
@@ -3485,6 +3591,14 @@ public sealed class ReviewHost : IDisposable
     /// call site has to remember (FR-015).
     /// </summary>
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
+
+    /// <summary>
+    /// <see cref="PostStatus(string, string)"/>, marked `lifecycle: true` when <paramref name="lifecycle"/>: the
+    /// add-in's own word that the backend did not start, as every other tab's host marks it. That word, and a save's
+    /// `BackendNotRestarted`, are what tell the Review page's strip the backend is not running; no other `error` does
+    /// (the review of owner decision 160A, S3).
+    /// </summary>
+    public void PostStatus(string stage, string message, bool lifecycle) => _actions.PostStatus(stage, message, lifecycle);
 
     /// <summary>
     /// The ready status a review posts once the dump and the chat session both exist: the

@@ -53,6 +53,9 @@ public sealed class RemodelHostOptions
     /// <summary>The backend's endpoint, or null before it is listening.</summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
 
+    /// <summary>A failed start with no backend up, remembered by the Review host (owner decision 160A).</summary>
+    public Func<bool> BackendStartFailed { get; set; } = () => false;
+
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
 
@@ -544,6 +547,7 @@ public sealed class RemodelHost : IDisposable
         {
             RunRootsInForce = () => options.RunRootsInForce(),
             RunRootSaved = () => options.RunRootSaved(),
+            RunRootProbe = () => options.RunRootProbe,
             LogFolder = options.LogFolder,
             EntityResolver = options.EntityResolver,
             Opener = options.Opener,
@@ -1100,6 +1104,7 @@ public sealed class RemodelHost : IDisposable
                     }
             },
             { "token", endpoint?.Token },
+            { "backend_start_failed", endpoint == null && _options.BackendStartFailed() },
             { "run_root", _options.RunRoot() },
             { "document", DocumentPayload(_options.CurrentDocument()) },
             {
@@ -1326,7 +1331,7 @@ public sealed class RemodelHost : IDisposable
             string runDirectory;
             try
             {
-                runDirectory = RunFolders.CreateForRemodel(runRoot, document.Path, _options.Now());
+                runDirectory = RunFolders.CreateForRemodel(runRoot, document.Path, _options.Now(), _options.RunRootProbe);
             }
             catch (Exception failure)
             {
@@ -1836,7 +1841,7 @@ public sealed class RemodelHost : IDisposable
                 return;
             }
 
-            if (!RunFolders.IsUnder(run.RunDirectory, runRoot))
+            if (!RunFolders.IsUnder(run.RunDirectory, runRoot, _options.RunRootProbe))
             {
                 _actions.SendError(id, "RunRootChanged", StartRunRootChangedMessage, retryable: false);
                 return;
@@ -2881,8 +2886,7 @@ public sealed class RemodelHost : IDisposable
     /// anything else.
     /// </summary>
     private bool RunRootRefused(string? id, string runRoot, string notDone) =>
-        _actions.RefusedRunRoot(
-            id, runRoot, _options.RunRootProbe, notDone, RunRootRule.InSettingsOnTheReviewTab, PressAgain);
+        _actions.RefusedRunRoot(id, runRoot, notDone, RunRootRule.InSettingsOnTheReviewTab, PressAgain);
 
     /// <summary>What a plan or a Start refused for its run root says to do once the cause is gone (owner decision 154A).</summary>
     private const string PressAgain = "press Remodel a copy again";
@@ -2901,7 +2905,6 @@ public sealed class RemodelHost : IDisposable
             id,
             judged,
             _options.RunRootForANewRun(),
-            _options.RunRootProbe,
             notDone,
             RunRootRule.InSettingsOnTheReviewTab,
             PressAgain);

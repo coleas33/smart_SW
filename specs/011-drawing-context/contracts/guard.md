@@ -441,7 +441,25 @@ the product files that build it but for two named lines that build nothing
 reads a guard's keys whole in are the files its gate is built in.
 `RemodelProbeGuard` and `SuppressTestGuard` are exemptions over the read-only guard, not allowlists -
 they pass a name on their lists matched ignoring case and hand every other, qualified or bare, to the
-read-only guard - so they are not built on it: it would answer otherwise for them.
+read-only guard - so they are not built on it: it would answer otherwise for them. *Amended 2026-10-21
+(owner decision 160A; research R14.1):* the probe's run-scoped members are matched ordinally, and a case
+variant of one is refused before the read-only guard is asked, which allows the two system-setting
+members by name; the probe's creation exemption and `SuppressTestGuard`'s list are matched ignoring case,
+as before.
+
+*Added 2026-10-21 (owner decision 160A; research R14.2):* every list a guard publishes - the six statics
+(`DrawingOpenGuard.AllowedKeys`, `RemodelSeatGuard.AllowedKeys` and `AllowedReads`,
+`RemodelGuard.AllowedKeys` and `ExcludedMembers`, `RemodelProbeGuard.ThrowawayPartCreationMembers`) and
+the base's `Keys` and `Reads` - is a read-only view over the guard's own set (`ReadOnlySet`), which
+implements no `ICollection<string>` or `ISet<string>`: it counts and enumerates as before, and no cast
+reaches the set a guard matches, the one `RemodelGuard.IsAllowlisted` reads among them.
+
+*Amended on the decision's review, 2026-10-21 (research R14.7):* the read-only guard's own two lists,
+`ReadOnlyGuard.DeniedMembers` and `DeniedPrefixes` - its denials and its prefixes, which until then could be cast
+back to the set and the array and edited, widening the guard itself - are the same view, and no list a guard
+publishes implements the non-generic `IList` or `ICollection` either; so every list a guard publishes is read-only,
+as the paragraph above says of the allowlist guards' alone. And the probe's creation exemption is matched ordinally too, a case variant of one the
+read-only guard's answer, which refuses it; `SuppressTestGuard`'s list is still matched ignoring case.
 
 The tests read each guard's keys and bare-name policy through the rule (`Keys`, `BareNames`,
 `Reads`): the read audit's `Judged`, which judges a key of an allowlist guard whole only in a file

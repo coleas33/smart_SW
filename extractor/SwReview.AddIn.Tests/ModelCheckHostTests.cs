@@ -471,6 +471,32 @@ public sealed class ModelCheckHostTests
         }
     }
 
+    /// <summary>
+    /// The review of owner decision 160A (S7): a run root the rule passes - not made yet - whose final path cannot be read
+    /// once it is made is answered `RunFolderFailed`, and nothing is extracted, rather than the run named under the root as
+    /// the setting spells it. The host hands the run folder its own probe, so the probe here answers both.
+    /// </summary>
+    [Fact]
+    public void ARunRootWhoseFinalPathCannotBeReadOnceMadeIsAnsweredRunFolderFailed()
+    {
+        using (var world = new CheckWorld())
+        {
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDPRT", "Default");
+            string root = Path.GetFullPath(world.RunRoot);
+            FakeRunRootProbe probe = FakeRunRootProbe.ExistingDownTo(Path.GetDirectoryName(root)!);
+            probe.FinalPaths[root] = null;
+            world.Probe = probe;
+            world.Open();
+
+            world.Receive("check.start", "c1", new { scope = "part" });
+
+            Assert.Equal(
+                "RunFolderFailed", world.Reply("error", "c1").GetProperty("error_class").GetString());
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.RunFolders());
+        }
+    }
+
     // ---- the envelope -------------------------------------------------------------------
 
     [Fact]

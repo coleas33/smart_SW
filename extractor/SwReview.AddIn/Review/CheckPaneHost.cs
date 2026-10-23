@@ -71,6 +71,12 @@ public sealed class CheckPaneHostOptions
     /// </summary>
     public Func<string?> RunRootSaved { get; set; } = () => null;
 
+    /// <summary>
+    /// What the owner's run root rule reads of Windows: the run folders are handed it for the newest check found and for
+    /// the folders held to the run root (the review of owner decision 160A). Windows' own by default.
+    /// </summary>
+    public Func<IRunRootProbe> RunRootProbe { get; set; } = () => Native.WindowsRunRootProbe.Instance;
+
     /// <summary>`check.start` for the Model check tab, `standards.start` for the Standards tab.</summary>
     public string StartType { get; }
 
@@ -83,6 +89,9 @@ public sealed class CheckPaneHostOptions
     /// involvement with it.
     /// </summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
+
+    /// <summary>A failed start with no backend up, remembered by the Review host (owner decision 160A).</summary>
+    public Func<bool> BackendStartFailed { get; set; } = () => false;
 
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
@@ -236,7 +245,6 @@ public sealed class CheckStart
     /// <param name="nothingChecked">What a refused start did not do, in the tab's words.</param>
     /// <param name="pressAgain">What a refused start says to do once the cause is gone.</param>
     /// <param name="runRootForANewRun">The run root a check's folder is made under, read once the gate is passed and once the extraction is over.</param>
-    /// <param name="probe">What the run root rule reads of Windows.</param>
     /// <param name="createFolder">Makes the run folder under a run root for a document, at a time.</param>
     /// <param name="folder">The run folder, named in the refusal when it cannot be made.</param>
     /// <param name="reading">The status while the model is read, given the document's name.</param>
@@ -254,8 +262,7 @@ public sealed class CheckStart
         string nothingChecked,
         string pressAgain,
         Func<string?> runRootForANewRun,
-        Func<IRunRootProbe> probe,
-        Func<string, string?, DateTime, string> createFolder,
+        Func<string, string?, DateTime, IRunRootProbe, string> createFolder,
         string folder,
         Func<string, string> reading,
         DumpProfile profile,
@@ -272,7 +279,6 @@ public sealed class CheckStart
         NothingChecked = nothingChecked ?? throw new ArgumentNullException(nameof(nothingChecked));
         PressAgain = pressAgain ?? throw new ArgumentNullException(nameof(pressAgain));
         RunRootForANewRun = runRootForANewRun ?? throw new ArgumentNullException(nameof(runRootForANewRun));
-        Probe = probe ?? throw new ArgumentNullException(nameof(probe));
         CreateFolder = createFolder ?? throw new ArgumentNullException(nameof(createFolder));
         Folder = folder ?? throw new ArgumentNullException(nameof(folder));
         Reading = reading ?? throw new ArgumentNullException(nameof(reading));
@@ -299,9 +305,7 @@ public sealed class CheckStart
 
     public Func<string?> RunRootForANewRun { get; }
 
-    public Func<IRunRootProbe> Probe { get; }
-
-    public Func<string, string?, DateTime, string> CreateFolder { get; }
+    public Func<string, string?, DateTime, IRunRootProbe, string> CreateFolder { get; }
 
     public string Folder { get; }
 
@@ -413,6 +417,7 @@ public sealed class CheckPaneHost : IDisposable
         {
             RunRootsInForce = () => options.RunRootsInForce(),
             RunRootSaved = () => options.RunRootSaved(),
+            RunRootProbe = () => options.RunRootProbe(),
             LogFolder = () => options.LogFolder(),
             EntityResolver = () => options.EntityResolver(),
             Opener = () => options.Opener(),
@@ -473,7 +478,7 @@ public sealed class CheckPaneHost : IDisposable
         }
 
         if (_actions.RefusedRunRoot(
-                id, judged, start.Probe(), start.NothingChecked, RunRootRule.InSettingsOnTheReviewTab, start.PressAgain))
+                id, judged, start.NothingChecked, RunRootRule.InSettingsOnTheReviewTab, start.PressAgain))
         {
             return;
         }
@@ -533,7 +538,6 @@ public sealed class CheckPaneHost : IDisposable
                 id,
                 judged,
                 start.RunRootForANewRun(),
-                start.Probe(),
                 start.NothingChecked,
                 RunRootRule.InSettingsOnTheReviewTab,
                 start.PressAgain);
@@ -554,7 +558,7 @@ public sealed class CheckPaneHost : IDisposable
             string runDirectory;
             try
             {
-                runDirectory = start.CreateFolder(runRoot, document.Path, _options.Now());
+                runDirectory = start.CreateFolder(runRoot, document.Path, _options.Now(), _options.RunRootProbe());
             }
             catch (Exception failure)
             {
@@ -943,6 +947,7 @@ public sealed class CheckPaneHost : IDisposable
                     }
             },
             { "token", endpoint?.Token },
+            { "backend_start_failed", endpoint == null && _options.BackendStartFailed() },
             { "run_root", _options.RunRoot() },
             { "document", DocumentPayload(_options.CurrentDocument()) },
             {
@@ -988,7 +993,7 @@ public sealed class CheckPaneHost : IDisposable
         }
 
         string? directory = RunFolders.NewestCheckFolder(
-            _options.RunRoot(), _options.LatestCheckSuffix!);
+            _options.RunRoot(), _options.LatestCheckSuffix!, _options.RunRootProbe());
         if (directory == null)
         {
             return null;

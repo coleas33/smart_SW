@@ -255,12 +255,15 @@ public static partial class ReadOnlyGuard
     /// The denied surface, for reading only (feature 004, contracts/guard-allowlist.md): the
     /// re-modeler's allowlist is asserted as a set against it, so a denial added here cannot
     /// silently widen that allowlist. The lookups below stay on the concrete collections, so
-    /// exposing these changes neither the comparer nor the cost of a call.
+    /// exposing these changes neither the comparer nor the cost of a call. Since the review of
+    /// owner decision 160A each is a read-only view, as every list an allowlist guard publishes
+    /// is, which no cast turns back into the set or the array: a denial taken out through one
+    /// would have widened this guard itself.
     /// </summary>
-    public static readonly IReadOnlyCollection<string> DeniedMembers = DeniedMemberSet;
+    public static readonly IReadOnlyCollection<string> DeniedMembers = new ReadOnlySet<string>(DeniedMemberSet);
 
     /// <inheritdoc cref="DeniedMembers" />
-    public static readonly IReadOnlyCollection<string> DeniedPrefixes = DeniedPrefixArray;
+    public static readonly IReadOnlyCollection<string> DeniedPrefixes = new ReadOnlySet<string>(DeniedPrefixArray);
 
     /// <summary>
     /// Feature 011 (T004): the generated drawing-family denials (<c>ReadOnlyGuard.Drawing.cs</c>,
