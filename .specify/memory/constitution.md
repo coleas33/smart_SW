@@ -1,5 +1,38 @@
 <!--
 Sync Impact Report
+- Version change: 1.1.0 → 1.2.0 (owner decision 134A, 2026-10-19)
+- Bump: MINOR. A Technical Constraint is added, and the read-only rule gains a clarification with
+  conditions and bounds of its own (materially expanded guidance). No principle is removed or
+  redefined, no exception is added, and no guard changes.
+- Modified principles: none
+- Added sections: Technical Constraints → "Public upstream, private downstream fork" (the
+  public-upstream rule of ADR 0008, worded to stay true in a private fork's copy of this file; the
+  list of what upstream may not hold stays in CONTRIBUTING.md, "The public-repository rule")
+- Modified sections: Technical Constraints → "Documents are read, not written" gains a closing
+  paragraph: opening a document read-only is a read, not a write, recorded with feature 011's
+  read-only open of an engineer-confirmed drawing through DrawingOpenGuard, the console's attach
+  (owner decision 137A), and the read-only answer SOLIDWORKS must give after either open (owner
+  decision 136A); and the re-modeler's exception gains one sentence (owner decision 148A):
+  activating or opening the run's copy is not a write under its clause (b), the copy's path,
+  checked before each call, being its scope. The rule's other text is unchanged, and it still
+  has exactly two exceptions.
+- Removed sections: none
+- Templates: no edits required (.specify/templates/ restates neither rule; plan-template.md takes
+  its Constitution Check gates from this file)
+- Follow-up TODOs: none. AGENTS.md rule 2 and CONTRIBUTING.md's public-repository rule open with
+  "This repository is public", which holds only in upstream; docs/forking.md's list of files a
+  fork changes names both sentences from this change on.
+- Migration: specs/011-drawing-context/plan.md's Constitution Check row ("a read-only open is a
+  read, so no exception is needed") now rests on written text. AGENTS.md rule 2 agrees with the
+  new constraint in upstream. ADR 0008's Consequences still call this amendment open;
+  docs/adr/README.md edits an accepted ADR only to mark it superseded, so it is left as written.
+  Line citations of this file (constitution.md:N) in docs/drawing-creation-d0-inventory.md,
+  docs/future/llm-assistants-2026-09-28.md, specs/010-mechanical-checks/research.md and
+  specs/014-design-review-eval/research.md are renumbered to this version's lines in this change.
+  docs/future/llm-assistants-2026-09-28.md also names its own scope amendment 1.2.0; that
+  one would now be the next MINOR after this.
+
+Previous report (1.0.0 → 1.1.0, 2026-09-16), kept because ADR 0003 cites it:
 - Version change: 1.0.0 → 1.1.0
 - Modified principles: none
 - Added sections: Technical Constraints → "Documents are read, not written" (the read-only rule,
@@ -167,6 +200,9 @@ saved per design without degrading review quality.
        (b) re-verifies the target document's path, its session tag, and its COM identity
        immediately before each write. No command in the bridge protocol, and no tool exposed to
        the language model, names a document.
+     - Activating the copy, or opening it, changes and saves nothing, so neither is a write under
+       (b): their scope is the copy's own path, checked in full before each call, as feature
+       004's bridge and the re-modeler's pane seat both check it (owner decision 148A).
      - Every applied change is recorded with its before state, its after state, and the inverse
        operation that undoes it. A change that raises the rebuild-error count above the run's
        baseline is undone and recorded as undone. The run is bounded by a change count and a
@@ -183,12 +219,67 @@ saved per design without degrading review quality.
   volume, and grades better against the Resilient Modeling Strategy is a **proposal** the
   engineer accepts or discards; Principle I applies to it unchanged.
 
+  **Opening a document read-only is a read, not a write.** An open that passes SOLIDWORKS'
+  read-only option and neither changes nor saves any document is therefore not an exception, and
+  the two above remain the only ones. The documents it opens and loads are from then on under this
+  rule like every other open document. Closing a document is part of the read only when the
+  product itself opened it, and an open without the read-only option is not a read under this
+  clarification. Feature 011 opens a drawing this way, within the bounds its `spec.md` sets
+  (FR-036, FR-053 to FR-056):
+  - In a review, only the same-name drawing beside a part or assembly of the review is opened
+    (SOLIDWORKS loads with it the models its views show), and only after the engineer answers the
+    review's one candidate question with its confirming option, an answer that covers every
+    candidate drawing the question names or counts. The request is a bridge command, never a tool
+    exposed to the language model. It carries only the review's run id and the id of the reviewed
+    part or assembly, never a path, so the caller never names the document SOLIDWORKS opens; the
+    add-in resolves the drawing from its own record of the review.
+  - The seam's calls go through `DrawingOpenGuard`, the enforcement point for this open: an
+    allowlist of exactly `ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6` and `ISldWorks.CloseDoc`
+    that refuses every other interface-qualified member and hands every bare member name, the form
+    every read takes, to `ReadOnlyGuard` unchanged. The guard judges members, not arguments: the
+    seam passes `OpenDoc6` the read-only and silent options and no other, a constant its tests pin
+    and probe D14 checks. `DocumentVisible`, the one of the three that `ReadOnlyGuard` refuses,
+    changes no document: it hides the drawings opened until the restore, which runs whatever the
+    open did. A restore that fails is reported, because drawings opened afterwards may then stay
+    hidden until SOLIDWORKS restarts.
+  - A drawing already open, found before the open or reported by it as already open, is read as
+    it stands and never closed. A drawing the seam opened is
+    closed again whether or not it was read, but only while SOLIDWORKS still answers its path with
+    the same document the open returned; otherwise, or when SOLIDWORKS fails the close, it is left
+    open and the review's evidence says so. The seam closes no other document, and never a model
+    the drawing loaded.
+  - The add-in opens a closed drawing only once feature 011's seat probe D14 has recorded, at a
+    licensed seat, that the open neither changes nor saves nor locks the drawing, that SOLIDWORKS
+    answers that it opened the drawing read-only, and that the engineer's window stays where it
+    was, and a commit citing that record has turned the switch on
+    (T077); until then the switch is off. D14 runs the same seam from the console, with the switch
+    on for that one command, on the same-name drawing beside the part or assembly it is run on:
+    the one drawing open made outside a review.
+
+  The console's attach (`swreview-extract --doc`) opens a part or assembly that is not open in
+  the same way, read-only and silently, and never a drawing; it leaves the document open on
+  purpose, so that a later `resolve` or `capture` finds its persistent references (owner decision
+  137A). After either open, unless SOLIDWORKS reports the document as already open, the product
+  asks SOLIDWORKS whether it opened the document read-only; when it did not, or gives no answer,
+  the read is refused and the document that open opened is closed again, only after the same
+  COM-identity check. A document already open, found before the open or reported by it, is used as
+  it stands, never asked and never closed (owner decision 136A).
+
 - **Reasoning-side code** is Python 3.11+ with a typed, versioned IR (pydantic). It MUST
   run without a SolidWorks license so reviews can run in parallel on cheap machines and
   in CI.
 - **Third-party reuse** MUST respect each repository's license. SwpilotCLI's custom
   license permits internal organizational use only; GPL-3.0 code (CADAM) MUST NOT be
   linked into distributed components without a license decision.
+- **Public upstream, private downstream fork.** The upstream repository is public: what is
+  committed, attached or pasted there MUST NOT hold anything real from a design, a company or a
+  machine, and its examples, fixtures, profiles and review cases are fictional. The full list of
+  what that excludes is the public-repository rule in `CONTRIBUTING.md`, which this file does not
+  repeat. An organisation's private downstream fork MAY keep its private material, such as
+  standards profiles, review cases and real designs, but only in files and folders of its own
+  that upstream does not have, and in upstream's files only in the few lines `docs/forking.md`
+  lists that name the maintainer and the repository; a fix it sends upstream carries none of that
+  material.
 - **Scope boundary of the pilot**: the pilot produces review findings. Autonomous GD&T
   creation, general drawing dimensioning, and structural approval are out of scope and
   require separate specification and validation.
@@ -229,4 +320,4 @@ the runtime guidance for day-to-day agent behavior and MUST stay consistent with
   creation and at each review gate. Violations are either fixed or justified in the
   plan's Complexity Tracking table.
 
-**Version**: 1.1.0 | **Ratified**: 2026-09-12 | **Last Amended**: 2026-09-16
+**Version**: 1.2.0 | **Ratified**: 2026-09-12 | **Last Amended**: 2026-10-19

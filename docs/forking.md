@@ -41,16 +41,19 @@ not have, and upstream's files are never edited to hold company data.**
 
 ### Files a fork is expected to change
 
-A few upstream files name upstream's maintainer or repository. A fork changes them to name its
-own. These are edits of who maintains the copy, not company data, and they touch a few lines
-each, so they conflict only when upstream changes the same lines.
+A few upstream files name upstream's maintainer or repository, and two state upstream's
+public-repository rule as if it were the reading repository's own. A fork changes them to name
+its own maintainer and repository and to state its own rule. These are edits of who maintains
+the copy and what it may hold, not company data, and they touch a few lines each, so they
+conflict only when upstream changes the same lines.
 
 | File | What names upstream |
 |---|---|
 | `.github/CODEOWNERS` | `* @coleas33`: the reviewer of every path. |
 | `.github/ISSUE_TEMPLATE/config.yml` | The security contact link, a URL to upstream's `SECURITY.md`. |
+| `AGENTS.md` | Rule 2, "This repository is public". In a fork it states the fork's own rule: private material stays in the fork's own files and never goes upstream, as the constitution's "Public upstream, private downstream fork" constraint says. |
 | `SECURITY.md` | The reporting channel: GitHub's private vulnerability reporting on the repository. The fork decides its own channel; a vulnerability in upstream's code is worth reporting upstream too. |
-| `CONTRIBUTING.md` | The maintainer's handle in the opening paragraph. |
+| `CONTRIBUTING.md` | The maintainer's handle in the opening paragraph, and the first sentence of "The public-repository rule", "This repository is public": in a fork the rule's list governs what is sent upstream. |
 | `README.md` | The clone URL in the quick start. |
 | `docs/workstation-runbook.md` | The clone URL in section 3, "First install". |
 | `docs/test-plan-2026-09-27/workstation-test-plan.md` | The clone command of the first-install steps. |
