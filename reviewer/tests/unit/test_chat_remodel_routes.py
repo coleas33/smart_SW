@@ -1161,6 +1161,26 @@ class TestAFailureAfterTheOpen:
 
 
 class TestPlan:
+    @pytest.mark.parametrize("read_only", [True, False, None])
+    def test_open_and_plan_preserve_the_same_source_read_only_metadata(
+        self, client: TestClient, run_dir: Path, source: Path,
+        bridge: ProbingBridge, monkeypatch: pytest.MonkeyPatch, read_only: bool | None,
+    ) -> None:
+        original = bridge.attestation
+
+        def attestation_with_metadata(copy_path: str) -> dict[str, Any]:
+            return {**original(copy_path), "read_only": read_only}
+
+        monkeypatch.setattr(bridge, "attestation", attestation_with_metadata)
+
+        planned(client, run_dir, source)
+
+        written = json.loads(plan_path(run_dir).read_text(encoding="utf-8"))
+        stored = json.loads((run_dir / ATTESTATION_FILE_NAME).read_text(encoding="utf-8"))
+        assert written["source"]["read_only"] is read_only
+        assert stored["read_only"] is read_only
+        assert read_attestation(run_dir).read_only is read_only
+
     def test_a_folder_with_no_dump_is_refused(
         self, client: TestClient, run_dir: Path, source: Path
     ) -> None:

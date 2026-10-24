@@ -227,6 +227,7 @@ class SourceAttestation(_Model):
     length_bytes: int = Field(ge=0)
     last_write_utc: datetime
     sha256: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+    read_only: bool | None = None
     source_design_id: str
     recorded_at: datetime
     rechecked_at: datetime | None

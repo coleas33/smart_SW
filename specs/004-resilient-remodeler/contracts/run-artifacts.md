@@ -432,6 +432,7 @@ stage 1.
 ```jsonc
 {"path": "C:\\work\\bracket.SLDPRT", "length_bytes": 482913,
  "last_write_utc": "2026-09-14T09:11:03Z", "sha256": "…",
+ "read_only": true,
  "source_design_id": "dsn:4f2a91c0d3b7",
  "vault_path": "…", "vault_revision": "B",
  "recorded_at": "2026-09-16T14:22:01Z",
@@ -446,6 +447,14 @@ failure of the run**: the report says
 so in its first line, and the run is recorded as failed regardless of how well everything else
 went. This is the artifact that makes "the engineer's file was never touched" a checked claim
 rather than a promise.
+
+*Added 2026-10-24 (T188; T269 to T272, research R20):* `read_only` records the source's
+filesystem ReadOnly bit before copying. It is an exact Boolean or null, not permission to
+write, an ACL or SOLIDWORKS's open mode. Missing in an older artifact means unknown, as does a
+failed optional attribute read; false is never substituted. The same value is retained in
+`plan.json`'s `source` and through report-time rechecks, which still compare only size, time
+and hash. Readers do not rewrite old files; a later explicit write may add `read_only: null`.
+All existing required fields, extra-field refusals and mandatory source failures remain intact.
 
 ## Exceptions carry-forward
 
