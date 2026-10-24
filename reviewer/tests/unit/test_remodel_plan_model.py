@@ -37,6 +37,7 @@ catch them:
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any, get_args
 
@@ -692,6 +693,28 @@ def test_a_plan_over_a_copy_records_the_source_attestation() -> None:
     assert body.source.sha256 == "a" * 64
     assert body.source.length_bytes == 482913
     assert body.source.matches is None
+
+
+@pytest.mark.parametrize("read_only", [True, False, None])
+def test_a_plan_round_trips_optional_source_read_only_metadata(read_only: bool | None) -> None:
+    source = attestation(read_only=read_only)
+    body = plan(run_id="r", copy_path=source.copy_path, source=source)
+
+    restored = RemodelPlan.model_validate_json(body.model_dump_json())
+
+    assert restored.source is not None
+    assert restored.source.read_only is read_only
+
+
+def test_legacy_plan_attestation_keeps_read_only_unknown() -> None:
+    source = attestation()
+    body = plan(run_id="r", copy_path=source.copy_path, source=source).model_dump(mode="json")
+    body["source"].pop("read_only", None)
+
+    restored = RemodelPlan.model_validate_json(json.dumps(body))
+
+    assert restored.source is not None
+    assert restored.source.read_only is None
 
 
 def test_an_epdm_source_records_the_vault_path_and_revision() -> None:

@@ -213,6 +213,12 @@ Sequence, in order, with the call that performs each step:
    taken 2026-09-26, the owner may revise; `tasks.md` T155, T139):* until T139 adds a vault read
    the seat's `GetVault` answers null and both vault fields are recorded null, which means "not
    read by this build", never "not in a vault" (`data-model.md` section 4.1).
+   *Added 2026-10-24 (T188; T269 to T272, research R20):* also record the source filesystem
+   ReadOnly bit as nullable `read_only` beside the hash. An expected I/O, access or security
+   failure of this optional read records null; mandatory path/length/time/hash failures still
+   fail the open. The reply retains all nine required recorded fields and may add only this
+   optional metadata field (`data-model.md` section 5). Old replies which omit it remain readable
+   as unknown. This reads no SOLIDWORKS member and grants no write permission.
 6. Set the three system toggles through `ISldWorks.SetUserPreferenceToggle` -
    `swInputDimValOnCreate = 10`, `swShowErrorsEveryRebuild = 77`,
    `swWarnSaveUpdateErrors = 329` (all VERIFIED values) - plus the separately allowlisted

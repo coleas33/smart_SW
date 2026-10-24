@@ -13,6 +13,10 @@ this module measures it a second time: `attestation_from_open` opens no file at 
 there is exactly one answer to the question the attestation exists to settle. The report
 half - `rechecked_at`, `matches` and the saved copy's hash - is written by `recheck`.
 
+Optional `read_only` metadata records the source's filesystem ReadOnly bit, not permissions
+or SOLIDWORKS's open mode. Omission/null is unknown. It is retained without rereading it and
+does not change the three-value recheck verdict.
+
 **A difference is a hard failure of the run** (FR-040, SC-001), whatever the copy looks
 like: it means something wrote to the engineer's file while the run was going on, and the
 run can no longer claim it did not. The call order is deliberate and is the caller's to
@@ -51,6 +55,7 @@ from swreview.remodel.plan import SourceAttestation
 
 __all__ = [
     "ATTESTATION_FILE_NAME",
+    "OPTIONAL_RECORDED_FIELDS",
     "RECHECKED_FIELDS",
     "RECORDED_FIELDS",
     "AttestationCheck",
@@ -82,6 +87,9 @@ RECORDED_FIELDS: tuple[str, ...] = (
 """What the C# side records at copy time, in `data-model.md` section 5's order. Every one
 of them is required in the reply: an absent hash is not an empty hash, and nothing here
 writes a default for a value the run's central claim rests on."""
+
+OPTIONAL_RECORDED_FIELDS: tuple[str, ...] = ("read_only",)
+"""Additional recorded metadata. Older replies/artifacts omit it and remain unknown."""
 
 RECHECKED_FIELDS: tuple[str, ...] = ("rechecked_at", "matches", "copy_sha256_after_save")
 """The half `recheck` writes. A reply that already carries one of them is refused: the
@@ -179,6 +187,7 @@ def attestation_from_open(payload: Mapping[str, Any]) -> SourceAttestation:
         length_bytes=_count(body["length_bytes"], "length_bytes"),
         last_write_utc=_utc(body["last_write_utc"], "last_write_utc"),
         sha256=_text(body["sha256"], "sha256"),
+        read_only=body.get("read_only"),
         source_design_id=_text(body["source_design_id"], "source_design_id"),
         recorded_at=_utc(body["recorded_at"], "recorded_at"),
         rechecked_at=None,
@@ -205,7 +214,7 @@ def write_attestation(run_dir: Path, attestation: SourceAttestation) -> Path:
 
 
 def read_attestation(run_dir: Path) -> SourceAttestation:
-    """Read the artifact back, refusing a file missing any field of section 5.
+    """Read the artifact back, refusing a file missing any required field of section 5.
 
     The pane and the exceptions carry-forward both read this file rather than the run's
     memory, so a truncated or hand-edited one is refused here rather than half-read.
@@ -219,6 +228,7 @@ def read_attestation(run_dir: Path) -> SourceAttestation:
         length_bytes=_count(stored["length_bytes"], "length_bytes"),
         last_write_utc=_utc(stored["last_write_utc"], "last_write_utc"),
         sha256=_text(stored["sha256"], "sha256"),
+        read_only=stored.get("read_only"),
         source_design_id=_text(stored["source_design_id"], "source_design_id"),
         recorded_at=_utc(stored["recorded_at"], "recorded_at"),
         rechecked_at=None
@@ -349,7 +359,7 @@ def _required(body: Mapping[str, Any], fields: tuple[str, ...], what: str) -> Ma
     missing = [field for field in fields if field not in body]
     if missing:
         raise ValueError(f"{what} is missing {', '.join(missing)}")
-    unexpected = sorted(set(body) - set(fields))
+    unexpected = sorted(set(body) - set(fields) - set(OPTIONAL_RECORDED_FIELDS))
     if unexpected:
         raise ValueError(f"{what} carries {', '.join(unexpected)}, which it may not set here")
     return body

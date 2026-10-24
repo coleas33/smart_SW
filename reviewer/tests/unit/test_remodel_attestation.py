@@ -119,7 +119,7 @@ def test_the_recorded_half_carries_the_three_values_and_claims_no_verdict(
 
 
 def test_the_recorded_half_names_the_nine_fields_the_bridge_records(tmp_path: Path) -> None:
-    """The C# record and this reader agree field for field (`data-model.md` section 5)."""
+    """Legacy bridge replies retain all nine required core fields; metadata is optional."""
     source = source_file(tmp_path)
 
     assert set(reply(source)) == set(RECORDED_FIELDS)
@@ -509,3 +509,160 @@ def test_the_recorded_half_is_the_type_the_plan_carries(tmp_path: Path) -> None:
     source = source_file(tmp_path)
 
     assert isinstance(attestation_from_open(reply(source)), SourceAttestation)
+
+
+# --- T188 / T269: optional filesystem metadata, never a permission or verdict --------
+
+
+@pytest.mark.parametrize("read_only", [True, False, None])
+def test_open_attestation_preserves_optional_read_only_metadata(
+    tmp_path: Path, read_only: bool | None
+) -> None:
+    source = source_file(tmp_path)
+    recorded = attestation_from_open(reply(source, read_only=read_only))
+
+    assert recorded.read_only is read_only
+    assert recorded.matches is None
+
+
+def test_legacy_bridge_attestation_keeps_read_only_unknown(tmp_path: Path) -> None:
+    recorded = attestation_from_open(reply(source_file(tmp_path)))
+
+    assert recorded.read_only is None
+
+
+@pytest.mark.parametrize("read_only", [True, False, None])
+def test_attestation_artifact_round_trips_read_only_metadata(
+    tmp_path: Path, read_only: bool | None
+) -> None:
+    recorded = attestation_from_open(reply(source_file(tmp_path), read_only=read_only))
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    target = write_attestation(run_dir, recorded)
+
+    assert json.loads(target.read_text(encoding="utf-8"))["read_only"] is read_only
+    assert read_attestation(run_dir).read_only is read_only
+
+
+@pytest.mark.parametrize("name, expected", [("legacy.json", None), ("read-only.json", True)])
+def test_stored_attestation_fixtures_preserve_read_only_without_rewriting(
+    tmp_path: Path, name: str, expected: bool | None
+) -> None:
+    fixture = Path(__file__).parents[1] / "fixtures" / "remodel" / "attestation" / name
+    original = fixture.read_bytes()
+    target = tmp_path / ATTESTATION_FILE_NAME
+    target.write_bytes(original)
+
+    recorded = read_attestation(tmp_path)
+
+    assert recorded.read_only is expected
+    assert target.read_bytes() == original
+
+
+@pytest.mark.parametrize("reader", ["open", "artifact", "plan"])
+@pytest.mark.parametrize("value", [0, 1, "true", "false", "", [], {}])
+def test_recorded_read_only_metadata_rejects_non_boolean_values(
+    tmp_path: Path, reader: str, value: Any
+) -> None:
+    body = reply(source_file(tmp_path), read_only=value)
+    if reader == "open":
+        with pytest.raises(ValueError, match="read_only"):
+            attestation_from_open(body)
+    else:
+        body.update(rechecked_at=None, matches=None, copy_sha256_after_save=None)
+        if reader == "plan":
+            with pytest.raises(ValueError, match="read_only"):
+                SourceAttestation.model_validate_json(json.dumps(body))
+        else:
+            (tmp_path / ATTESTATION_FILE_NAME).write_text(json.dumps(body), encoding="utf-8")
+            with pytest.raises(ValueError, match="read_only"):
+                read_attestation(tmp_path)
+
+
+@pytest.mark.parametrize("reader", ["open", "artifact"])
+def test_unknown_attestation_metadata_stays_refused_beside_read_only(
+    tmp_path: Path, reader: str
+) -> None:
+    body = reply(source_file(tmp_path), read_only=False, unrecognized_metadata=True)
+    if reader == "open":
+        with pytest.raises(ValueError, match="unrecognized_metadata"):
+            attestation_from_open(body)
+    else:
+        body.update(rechecked_at=None, matches=None, copy_sha256_after_save=None)
+        (tmp_path / ATTESTATION_FILE_NAME).write_text(json.dumps(body), encoding="utf-8")
+        with pytest.raises(ValueError, match="unrecognized_metadata"):
+            read_attestation(tmp_path)
+
+
+@pytest.mark.parametrize("reader", ["open", "artifact"])
+@pytest.mark.parametrize("field", RECORDED_FIELDS)
+def test_missing_core_fields_are_still_refused_with_read_only_metadata(
+    tmp_path: Path, reader: str, field: str
+) -> None:
+    body = reply(source_file(tmp_path), read_only=False)
+    del body[field]
+    if reader == "open":
+        with pytest.raises(ValueError, match=field):
+            attestation_from_open(body)
+    else:
+        body.update(rechecked_at=None, matches=None, copy_sha256_after_save=None)
+        (tmp_path / ATTESTATION_FILE_NAME).write_text(json.dumps(body), encoding="utf-8")
+        with pytest.raises(ValueError, match=field):
+            read_attestation(tmp_path)
+
+
+@pytest.mark.parametrize("read_only", [True, False, None])
+@pytest.mark.parametrize("changed", [False, True])
+def test_recheck_preserves_read_only_metadata_without_changing_the_three_value_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, read_only: bool | None, changed: bool
+) -> None:
+    source = source_file(tmp_path)
+    recorded = attestation_from_open(reply(source, read_only=read_only))
+    if changed:
+        source.write_bytes(CONTENT + b" changed")
+    measured = source.stat()
+    original_stat = Path.stat
+
+    class SizeAndTime:
+        st_size = measured.st_size
+        st_mtime_ns = measured.st_mtime_ns
+
+        @property
+        def st_file_attributes(self) -> int:
+            raise AssertionError("the recheck must not reread optional source attributes")
+
+    def stat(self: Path, *args: Any, **kwargs: Any) -> Any:
+        return SizeAndTime() if self == source else original_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", stat)
+
+    checked = recheck(recorded, at=RECHECKED_AT)
+
+    assert checked.attestation.read_only is read_only
+    assert checked.attestation.matches is (not changed)
+    assert bool(checked.differences) is changed
+    assert {row.field for row in checked.differences} <= {
+        "length_bytes", "last_write_utc", "sha256"
+    }
+
+
+def test_read_only_metadata_is_parsed_without_touching_the_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = source_file(tmp_path)
+    body = reply(source, read_only=False)
+    original_open, original_stat = Path.open, Path.stat
+
+    def guarded_open(self: Path, *args: Any, **kwargs: Any) -> Any:
+        assert self != source, "parsing must not open the source"
+        return original_open(self, *args, **kwargs)
+
+    def guarded_stat(self: Path, *args: Any, **kwargs: Any) -> Any:
+        assert self != source, "parsing must not measure the source"
+        return original_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", guarded_open)
+    monkeypatch.setattr(Path, "stat", guarded_stat)
+
+    assert attestation_from_open(body).read_only is False

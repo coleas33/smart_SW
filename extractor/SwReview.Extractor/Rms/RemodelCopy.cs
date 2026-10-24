@@ -75,8 +75,8 @@ public interface IRemodelCopyTarget : IRemodelTarget
 /// Every property carries its <c>JsonPropertyName</c>, because
 /// <see cref="Ir.PackageSerializer"/> - whose options <c>BridgeCodec</c> inherits - sets
 /// <c>PropertyNamingPolicy = null</c>: a name without an attribute is written PascalCase, and
-/// <c>remodel/attestation.py</c>'s <c>RECORDED_FIELDS</c> is exhaustive in both directions, so
-/// it would refuse the block for nine missing keys and nine unexpected ones at once.
+/// the Python attestation reader allows only its required and explicitly optional recorded
+/// fields. An unannotated property would arrive under an unexpected name.
 /// </summary>
 public sealed class SourceAttestation
 {
@@ -89,12 +89,14 @@ public sealed class SourceAttestation
         DateTime recordedAt,
         string copyPath,
         string? vaultPath,
-        string? vaultRevision)
+        string? vaultRevision,
+        bool? readOnly = null)
     {
         Path = path;
         LengthBytes = lengthBytes;
         LastWriteUtc = lastWriteUtc;
         Sha256 = sha256;
+        ReadOnly = readOnly;
         SourceDesignId = sourceDesignId;
         RecordedAt = recordedAt;
         CopyPath = copyPath;
@@ -114,6 +116,15 @@ public sealed class SourceAttestation
 
     [JsonPropertyName("sha256")]
     public string Sha256 { get; }
+
+    /// <summary>
+    /// The source file's filesystem ReadOnly bit before copying, or null when not recorded
+    /// or its optional attribute read was unavailable.
+    /// This is not an ACL, vault permission or SOLIDWORKS document-open mode; false grants
+    /// no write permission. The size/time/hash recheck does not compare this metadata.
+    /// </summary>
+    [JsonPropertyName("read_only")]
+    public bool? ReadOnly { get; }
 
     /// <summary>
     /// <c>DocumentIds.DesignId</c> of the <b>source</b> path. This is what the exceptions
@@ -464,7 +475,25 @@ public static class RemodelCopy
         DateTime recordedAt,
         string? vaultPath,
         string? vaultRevision)
+        => RecordSource(sourcePath, copyPath, recordedAt, vaultPath, vaultRevision, File.GetAttributes);
+
+    /// <summary>
+    /// The same recording with an attribute reader, for deterministic filesystem-failure tests.
+    /// Mandatory source evidence is still read by the ordinary filesystem path.
+    /// </summary>
+    public static SourceAttestation RecordSource(
+        string sourcePath,
+        string copyPath,
+        DateTime recordedAt,
+        string? vaultPath,
+        string? vaultRevision,
+        Func<string, FileAttributes> readAttributes)
     {
+        if (readAttributes == null)
+        {
+            throw new ArgumentNullException(nameof(readAttributes));
+        }
+
         string source = Required(sourcePath, nameof(sourcePath));
         string copy = Required(copyPath, nameof(copyPath));
 
@@ -473,6 +502,18 @@ public static class RemodelCopy
         {
             throw new RemodelCopyError(
                 "not_a_part", $"'{source}' does not exist, so there is nothing to attest to.");
+        }
+
+        bool? readOnly;
+        try
+        {
+            readOnly = (readAttributes(source) & FileAttributes.ReadOnly) != 0;
+        }
+        catch (Exception error) when (error is IOException
+            || error is UnauthorizedAccessException
+            || error is System.Security.SecurityException)
+        {
+            readOnly = null;
         }
 
         return new SourceAttestation(
@@ -484,7 +525,8 @@ public static class RemodelCopy
             recordedAt,
             copy,
             vaultPath,
-            vaultRevision);
+            vaultRevision,
+            readOnly);
     }
 
     /// <summary>

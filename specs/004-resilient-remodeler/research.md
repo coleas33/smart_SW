@@ -3761,3 +3761,74 @@ green; no SOLIDWORKS launch, live/paid test, Start enablement or new owner decis
 The remaining known offline defect is cleanup after a run-root change. T180, the blocking
 probe verdicts and the real Plan/source-hash pilot prerequisites still gate Start. The public
 development handoff records the root-change recovery constraints for the next slice.
+
+## R20 Source read-only attestation metadata (T188; T269 to T272; 2026-10-24)
+
+T188/R16.4 and R16.6 leave the source's filesystem read-only attribute unrecorded in the two
+attestation artifacts. This continuation implements that bounded metadata item only. The
+configuration-watch deferral remains separate, and T188 stays open until its other acceptance
+holds. No new owner decision or Start approval is taken.
+
+Use optional `read_only: bool | null`, beside the recorded hash, in the bridge reply and the
+shared Python `SourceAttestation` carried by `plan.json` and `source-attestation.json`.
+The C# recorder measures the source file's `FileAttributes.ReadOnly` bit before copying;
+this is neither SOLIDWORKS's document-open mode nor an ACL or vault permission test. `false`
+says only that the bit was clear and grants no write permission. An expected filesystem
+failure of this extra attribute read records unknown (`null`), never `false`; only this
+optional read catches I/O, access and security failures. Mandatory path/length/time/hash
+failures and unexpected programming failures still fail recording. One injectable attribute
+reader overload follows the existing filesystem-failure test seam; the ordinary entry point
+and existing constructor calls remain compatible.
+
+Keep the nine existing recorded fields required and introduce one explicit optional field
+allowance for `read_only`. Both Python readers and the plan model require an exact Boolean or
+null; numbers, strings and containers are refused, as are unknown fields. Old replies, plans
+and artifacts with no new field load as unknown. Reading a stored artifact does not rewrite
+it; a later explicit write may add `read_only: null`. Preserve the value in both artifacts and
+through successful or failing rechecks. Python does not reread this attribute, and the
+size/time/hash recheck, its verdict and hard failures remain unchanged.
+
+Test first in T269/T270, implement in T271, then obtain independent review and the complete
+T272 slice gates. Keep source bytes, timestamps and attributes unchanged; keep all write,
+run/session and path guards and the disabled Remodel Start switch. No SOLIDWORKS launch or
+paid/live test is needed. Changed-root cleanup remains the known offline defect before Start.
+
+
+**Test-first evidence and focused acceptance:** the unchanged Python implementation ran all
+64 new cases: 23 failed for missing/refused metadata, while 41 invalid-input, required-field
+and unknown-field guards already passed. There were zero harness errors. With the implementation,
+all 320 attestation/model/route cases pass. Two fictional stored-artifact fixtures pin legacy
+omission and current metadata without read-time rewriting. Existing Python assertions are
+unchanged; the nine-field test's comment now identifies its legacy required-core purpose.
+
+C# stage 1 produced four actual failures before its implementation: the two real filesystem
+flag cases, the legacy-constructor null case and the deliberately extended exact wire-key pin.
+The 68-case copy family then passed. Stage 2 added six optional-reader cases; the three expected
+metadata exceptions and the mandatory-read failure guard failed before the narrow catch, while
+programming-error and null-reader guards already passed. All 74 copy-family cases now pass.
+The exact-key test's only new key is `read_only`; no existing assertion was loosened. Ruff,
+all-extras sync and tokenizer fetch pass. Complete slice gates and independent review follow.
+
+
+**Windows full solution gate (2026-10-24):** the Release rebuild with `--no-incremental`
+has zero warnings and errors. Full solution tests pass 10,178 extractor and 4,123 add-in cases,
+none failed or skipped. Nine source/test/fictional-fixture hashes are frozen for the complete
+Python gates and independent review; no source edit follows the C# gate.
+
+
+**Complete Python slice gate (2026-10-24):** with `SWREVIEW_REQUIRE_TOKENIZER=1`, the full
+non-live suite on Python 3.12.3 and 3.11.16 passes 18,273 cases with 5 skipped on each, zero
+failures or errors, both processes exit 0. Temporary folders and reports are outside the
+checkout. Sync, tokenizer fetch and Ruff passed. The independent source/test/contract review
+approved unchanged code with no findings after verifying all nine frozen hashes and actual
+red/green reports. All 298 final record/identifier reader cases pass, none skipped. The final
+independent source/document audit approved the complete slice with no findings after checking
+both full Python reports and C# results. Local links, 272 unique task IDs and all named tests
+resolve; final whitespace/index-LF checks precede commit. Delivery requires a PR with all four
+CI checks green.
+
+This completes only T188's source metadata item. Configuration-watch deferral remains open;
+the documented host `InvokeTimeout` alternative is retained. Changed-root cleanup and the
+owner/pilot prerequisites still gate Start, which remains disabled. The handoff also records
+read-only follow-up on the remaining watch's open boundary and lifecycle checks. No source
+write, permission expansion, SOLIDWORKS launch, paid/live test or new owner decision occurred.

@@ -321,6 +321,133 @@ public class RemodelCopyTests : IDisposable
     }
 
     /// <summary>
+    /// 004 T270: the metadata is the source file's filesystem ReadOnly bit, measured before
+    /// any copy exists. Recording it changes none of the source's bytes, time or attributes.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TheAttestationRecordsTheSourcesFilesystemReadOnlyAttribute(bool readOnly)
+    {
+        string source = WriteSource();
+        string copy = RemodelCopy.CopyPathFor(RunDirectory, source);
+        FileAttributes original = File.GetAttributes(source);
+        FileAttributes selected = readOnly ? original | FileAttributes.ReadOnly : original & ~FileAttributes.ReadOnly;
+        File.SetAttributes(source, selected);
+        byte[] beforeBytes = File.ReadAllBytes(source);
+        DateTime beforeWriteTime = File.GetLastWriteTimeUtc(source);
+        FileAttributes beforeAttributes = File.GetAttributes(source);
+        try
+        {
+            SourceAttestation attestation = RemodelCopy.RecordSource(source, copy, DateTime.UtcNow, null, null);
+
+            using (JsonDocument written = JsonDocument.Parse(JsonSerializer.Serialize(attestation, BridgeCodec.Options)))
+            {
+                Assert.True(written.RootElement.TryGetProperty("read_only", out JsonElement observed));
+                Assert.Equal(readOnly ? JsonValueKind.True : JsonValueKind.False, observed.ValueKind);
+            }
+
+            Assert.Equal(beforeBytes, File.ReadAllBytes(source));
+            Assert.Equal(beforeWriteTime, File.GetLastWriteTimeUtc(source));
+            Assert.Equal(beforeAttributes, File.GetAttributes(source));
+            Assert.False(File.Exists(copy));
+        }
+        finally
+        {
+            File.SetAttributes(source, original);
+        }
+    }
+
+    /// <summary>004 T270: older callers which did not record the optional metadata keep it unknown.</summary>
+    [Fact]
+    public void AnAttestationConstructedWithoutReadOnlyMetadataSerializesUnknown()
+    {
+        var attestation = new SourceAttestation(
+            @"C:\FICT\source.SLDPRT", 4, new DateTime(2026, 9, 16, 14, 22, 1, DateTimeKind.Utc),
+            new string('a', 64), "fictional-source", DateTime.UtcNow,
+            @"C:\FICT\run\copy\source-RMS.SLDPRT", null, null);
+
+        using (JsonDocument written = JsonDocument.Parse(JsonSerializer.Serialize(attestation, BridgeCodec.Options)))
+        {
+            Assert.True(written.RootElement.TryGetProperty("read_only", out JsonElement observed));
+            Assert.Equal(JsonValueKind.Null, observed.ValueKind);
+        }
+    }
+
+    [Theory]
+    [InlineData("io")]
+    [InlineData("access")]
+    [InlineData("security")]
+    public void AnExpectedFilesystemAttributeReadFailureRecordsUnknown(string failure)
+    {
+        string source = WriteSource();
+        string copy = RemodelCopy.CopyPathFor(RunDirectory, source);
+        byte[] beforeBytes = File.ReadAllBytes(source);
+        DateTime beforeWriteTime = File.GetLastWriteTimeUtc(source);
+        FileAttributes beforeAttributes = File.GetAttributes(source);
+        Exception error = failure == "io" ? new IOException("fictional metadata failure")
+            : failure == "access" ? new UnauthorizedAccessException("fictional access failure")
+            : new System.Security.SecurityException("fictional security failure");
+
+        SourceAttestation attestation = RemodelCopy.RecordSource(
+            source, copy, DateTime.UtcNow, null, null, path =>
+            {
+                Assert.Equal(source, path);
+                throw error;
+            });
+
+        Assert.Null(attestation.ReadOnly);
+        Assert.Equal(Sha256Of(source), attestation.Sha256);
+        Assert.Equal(beforeBytes, File.ReadAllBytes(source));
+        Assert.Equal(beforeWriteTime, File.GetLastWriteTimeUtc(source));
+        Assert.Equal(beforeAttributes, File.GetAttributes(source));
+        Assert.False(File.Exists(copy));
+        using (JsonDocument written = JsonDocument.Parse(JsonSerializer.Serialize(attestation, BridgeCodec.Options)))
+        {
+            Assert.Equal(JsonValueKind.Null, written.RootElement.GetProperty("read_only").ValueKind);
+        }
+    }
+
+    [Fact]
+    public void AnAttributeReaderProgrammingErrorStillPropagates()
+    {
+        string source = WriteSource();
+        string copy = RemodelCopy.CopyPathFor(RunDirectory, source);
+        var expected = new InvalidOperationException("fictional programming error");
+
+        var observed = Assert.Throws<InvalidOperationException>(() => RemodelCopy.RecordSource(
+            source, copy, DateTime.UtcNow, null, null, _ => throw expected));
+
+        Assert.Same(expected, observed);
+    }
+
+    [Fact]
+    public void ANullAttributeReaderIsRefused()
+    {
+        string source = WriteSource();
+        string copy = RemodelCopy.CopyPathFor(RunDirectory, source);
+
+        var error = Assert.Throws<ArgumentNullException>(() => RemodelCopy.RecordSource(
+            source, copy, DateTime.UtcNow, null, null, null!));
+
+        Assert.Equal("readAttributes", error.ParamName);
+    }
+
+    [Fact]
+    public void AnAttributeReadFailureDoesNotHideAMandatorySourceReadFailure()
+    {
+        string source = WriteSource();
+        string copy = RemodelCopy.CopyPathFor(RunDirectory, source);
+
+        Assert.Throws<FileNotFoundException>(() => RemodelCopy.RecordSource(
+            source, copy, DateTime.UtcNow, null, null, _ =>
+            {
+                File.Delete(source); // A concurrent change to this test's fictional source.
+                throw new IOException("fictional metadata failure");
+            }));
+    }
+
+    /// <summary>
     /// The attestation's <c>source_design_id</c> is the <b>source</b> path's id, which is what
     /// the exceptions carry-forward matches on. This run's packages are dumps of the copy,
     /// whose path is unique to the run, so matching on those would select no candidate, ever
@@ -476,6 +603,7 @@ public class RemodelCopyTests : IDisposable
                     "length_bytes",
                     "last_write_utc",
                     "sha256",
+                    "read_only",
                     "source_design_id",
                     "recorded_at",
                     "copy_path",
