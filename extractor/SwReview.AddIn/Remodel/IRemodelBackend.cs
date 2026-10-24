@@ -278,8 +278,11 @@ public interface IRemodelBackend
     /// </summary>
     void PackageAfter(string jobId, string packagePath);
 
-    /// <summary>`POST /remodel/runs/{job_id}/stop`. Idempotent.</summary>
-    void Stop(string jobId);
+    /// <summary>
+    /// `POST /remodel/runs/{job_id}/stop`. A Stop intent, named by 32 lowercase hexadecimal
+    /// characters. Every retry uses the same id; a later cancellation uses a new one.
+    /// </summary>
+    void Stop(string jobId, string stopId);
 
     /// <summary>`POST /remodel/close`. A copy that is not open is a no-op.</summary>
     void Close(RemodelCloseRequest request);

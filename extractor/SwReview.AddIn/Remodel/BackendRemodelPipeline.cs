@@ -413,6 +413,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
         int postedSeq = -1;
         string? stage = null;
         bool stopped = false;
+        string stopId = Guid.NewGuid().ToString("N");
         bool dumped = false;
         bool unanswered = false;
         TimeSpan wait = _pollDelay;
@@ -450,7 +451,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
 
                 if (!stopped && reporter.StopRequested)
                 {
-                    stopped = TryStop(jobId);
+                    stopped = TryStop(jobId, stopId);
                 }
 
                 _pause(wait);
@@ -523,7 +524,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
             // a request per half second for as long as the change in flight takes to finalize.
             if (!stopped && reporter.StopRequested)
             {
-                stopped = TryStop(jobId);
+                stopped = TryStop(jobId, stopId);
             }
 
             if (!dumped && status.Awaiting == RemodelRunStatus.PackageAfterAwaiting)
@@ -575,9 +576,11 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
                     dumpWords = AfterDumpNotConfirmedMessage;
                     reporter.Status("verifying", dumpWords);
 
-                    // Owner decision 159A, on the final review (S1): the job's wait for its dump ends on a Stop asked for
-                    // while it waits, and a Stop the engineer asked for before has landed already - so it is asked again.
+                    // Owner decision 159A, on the final review (S1): the job's wait for its dump ends on a new Stop
+                    // asked for while it waits. The earlier Stop belongs to apply, and its transport retries must keep
+                    // its identity; this cancellation, after the dump failed, therefore gets an identity of its own.
                     stopped = false;
+                    stopId = Guid.NewGuid().ToString("N");
                 }
 
                 continue;
@@ -632,17 +635,17 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     };
 
     /// <summary>
-    /// Posts the stop the engineer asked for, and answers whether it landed. A stop that could not be posted has not
-    /// happened, and the run it belongs to may still be healthy: the executor is applying changes to the copy either way.
-    /// Ending the run here would report "failed, 0 changes" while the backend is still applying them, and leave the folder
-    /// blocked as `RunInProgress` when the engineer pressed Start again. So it is posted again at the next poll, which the
-    /// route's idempotence makes free.
+    /// Posts the Stop the engineer asked for, and answers whether its reply arrived. A lost reply does not say whether
+    /// the backend accepted the Stop, and the run may still be applying changes to the copy. Ending the run here would
+    /// report "failed, 0 changes" while the backend still applies them and leave the folder blocked as `RunInProgress`.
+    /// So it is posted again at the next poll with the same intent, even if the job now waits for its after-dump: that
+    /// retry must not become a new cancellation of the wait (owner decision 159A; 004 T263).
     /// </summary>
-    private bool TryStop(string jobId)
+    private bool TryStop(string jobId, string stopId)
     {
         try
         {
-            _backend.Stop(jobId);
+            _backend.Stop(jobId, stopId);
             return true;
         }
         catch (Exception)

@@ -431,10 +431,13 @@ class RemodelJob:
     """Set by `POST .../stop` (`request_stop`); read by `apply_changes` **between** changes."""
 
     stops: int = 0
-    """How many Stops `POST .../stop` has asked for (owner decision 159A, on the final review:
-    S1). One asked for while the job waits for its after-dump ends that wait; one the apply loop
-    honoured before the wait began does not. Written by the route's handler alone, on the event
-    loop, and read by the worker."""
+    """How many distinct Stops `POST .../stop` has asked for (owner decision 159A). One asked
+    for while the job waits for its after-dump ends that wait; one the apply loop honoured before
+    the wait began does not. Written by the route's handler alone, on the event loop, and read by
+    the worker. A retry naming the same `stop_id` is the same Stop; a legacy unnamed request is
+    counted separately because it carries no identity to compare."""
+
+    _stop_ids: set[str] = field(default_factory=set, init=False, repr=False)
 
     arrived: threading.Event = field(default_factory=threading.Event)
     """Set when the add-in's after-dump has been handed over, or abandoned at shutdown."""
@@ -493,9 +496,18 @@ class RemodelJob:
         self.package = package
         self.arrived.set()
 
-    def request_stop(self) -> None:
+    def request_stop(self, stop_id: str | None = None) -> None:
         """The engineer's Stop, as `POST .../stop` asks for it: the flag the apply loop reads
-        between changes, and the end of a wait for the after-dump under way as it is asked."""
+        between changes, and the end of a wait for the after-dump under way as it is asked.
+
+        The route runs this on the event loop without yielding, so recording the identity and
+        counting it are one decision. A lost reply retried after the apply loop ends must not
+        become a new Stop that cancels the healthy after-dump wait.
+        """
+        if stop_id is not None:
+            if stop_id in self._stop_ids:
+                return
+            self._stop_ids.add(stop_id)
         self.stops += 1
         self.stop.set()
 
@@ -805,11 +817,18 @@ class RemodelServer:
     async def stop_run(self, request: Request) -> Response:
         """`POST /remodel/runs/{job_id}/stop`: set the flag the apply loop reads.
 
-        Idempotent, like `POST /sessions/{chat_id}/stop`: a second press says nothing new,
-        and a run that has already finished is not turned into a failure by one.
+        An identified Stop is idempotent across delivery retries; a distinct identity can end
+        a later after-dump wait. Legacy requests without an identity retain their old meaning.
+        A run that has already finished is not turned into a failure by a Stop.
         """
         job = self._job(request)
-        job.request_stop()
+        body = await _json(request)
+        stop_id = body.get("stop_id")
+        if stop_id is not None and (
+            not isinstance(stop_id, str) or JOB_ID.fullmatch(stop_id) is None
+        ):
+            raise ChatError("stop_id names a Stop as 32 lowercase hexadecimal characters")
+        job.request_stop(stop_id)
         return JSONResponse({"stopping": True})
 
     async def close_copy(self, request: Request) -> Response:

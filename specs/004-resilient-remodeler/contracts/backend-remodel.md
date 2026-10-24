@@ -36,7 +36,7 @@ run's (`bridge-remodel.md`, protocol 1.5).
 | `GET /remodel/runs/{job_id}` | | Reads the job and its run folder; nothing is evaluated. *Amended 2026-10-21 (owner decision 159A, on Codex's review; `research.md` R19.14):* the add-in polls it until the job is `finished` or `failed`, or answered `UnknownJob`, or the backend that runs it is gone - none running, or another in its place. A poll not answered while that backend runs is asked again, the wait doubling from the poll delay up to eight seconds, and a Stop asked for meanwhile is posted at every poll until it lands; the run, its session and the host stay held until then, because the run's worker may still be applying changes. An after-dump that failed - not written, refused, or its answer lost - is answered once the job ends: with that failure when the job failed, as the job ended when it finished, since a job finishes only once its dump has arrived | `200 {state, plan_state, changes_total, changes_applied, current, awaiting, error}` |
 | `GET /remodel/runs/{job_id}/events` | | `replay_events(<run_dir>/events.jsonl, after)`, with `after` a query parameter | `200 {events, next}` |
 | `POST /remodel/runs/{job_id}/package-after` | `{path}` | Hands the run the dump the add-in just wrote, ending the `dump_after` rendezvous | `200 {ok}` |
-| `POST /remodel/runs/{job_id}/stop` | `{}` | Sets the run's stop flag. Idempotent. *Amended 2026-10-21 (owner decision 159A, on the final review; `research.md` R19.20):* a Stop asked for while the run waits for its after-dump ends that wait - the run fails as stopped, never verified or saved, its change log intact - where the wait listened for the dump alone; one the apply loop honoured before the wait began does not, so that run is verified and saved as truncated | `200 {stopping}` |
+| `POST /remodel/runs/{job_id}/stop` | `{stop_id}` | Sets the run's stop flag. Idempotent for the same identified intent (see below). *Amended 2026-10-21 (owner decision 159A, on the final review; `research.md` R19.20):* a Stop asked for while the run waits for its after-dump ends that wait - the run fails as stopped, never verified or saved, its change log intact - where the wait listened for the dump alone; one the apply loop honoured before the wait began does not, so that run is verified and saved as truncated | `200 {stopping}` |
 | `POST /remodel/close` | `{run_dir, bridge, discard_copy}` | `client.close_document(discard_copy)`. A copy that is not open is a no-op. *Amended 2026-09-28 (U26, T186):* then, unless a run is in flight for that folder, re-checks a source attestation nothing has re-checked yet and files the verdict. *Amended 2026-10-21 (owner decision 159A, on review; `research.md` R19.9):* the add-in reads a close refused `BridgeUnavailable`, `BackendUnavailable`, `HttpError`, `BadResponse`, `InvalidRunDir` or `InvalidRequest` as not answered - the bridge may still hold the session - and any other class as the end-of-session routine's answer with what it left; and with no backend running it sends no close, and reads it as not answered | `200 {closed}` |
 
 Before phase B starts, the worker performs a deterministic run-entry preflight. The plan must
@@ -141,8 +141,23 @@ route already knows, and the check is what keeps a body from naming a dump of so
 `POST /remodel/runs/{job_id}/stop` sets the job's stop event, which `run_remodel` reads through
 `stop_requested` and `apply_changes` reads **between** changes. The change in flight finishes, is
 inverted if it failed, and the run finalizes as `truncated` (`pane-remodel-messages.md`,
-`remodel.stop`). Stop is idempotent: a second press answers `{stopping: true}` and changes
-nothing, for the same reason `POST /sessions/{chat_id}/stop` does.
+`remodel.stop`). Each request answers `{stopping: true}`. *Amended 2026-10-23 (decision 159A,
+[issue #37](https://github.com/coleas33/smart_SW/issues/37); research R19.31):* `stop_id` identifies
+one delivery intent within this job. When present and non-null it must be exactly 32 lowercase
+hexadecimal characters; anything else is `InvalidRequest`, before the job's Stop state changes.
+The add-in always supplies it. Every retry of an already seen identity is a no-op, including a
+retry after another intent has arrived. The same identity can independently stop another job.
+An absent or null identity preserves legacy behavior: each receipt counts as another Stop, so
+legacy callers cannot distinguish a transport retry from a later cancellation.
+
+The add-in reuses one identity until that Stop is answered, including when an accepted Stop's
+reply was lost. Retrying a Stop accepted during apply therefore cannot cancel the subsequent
+after-dump wait: that run can still be verified and saved as truncated. If the after-dump fails,
+the add-in creates a new cancellation identity; a retry of that cancellation retains its new
+identity. A new intent received during the wait retains R19.20's behavior: the wait ends as
+stopped, never verified or saved. The host's repeated Stop presses still share its stop flag;
+this change does not add a new pane cancellation mode or change first-late-Stop ordering.
+Start remains disabled while the separate late-Stop/dump and changed-root cleanup defects remain.
 
 `truncated` is one state reached two ways - the three bounds of `Limits`, and this - so the
 state alone does not say which, and `report.md`'s headline names the stop rather than a

@@ -761,6 +761,105 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         Assert.Equal(1, outcome.ChangesApplied);
     }
 
+    /// <summary>
+    /// Owner decision 159A, test first (004 T262): the backend accepted the apply Stop, but its
+    /// reply was lost. The next request is a retry of that same intent, even after the job begins
+    /// waiting for its after-dump; counting it again would fail an otherwise healthy truncated run.
+    /// Both the answered and unanswered status paths must keep that identity.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ALostStopReplyRetriesTheSameIntentWhileTheJobAwaitsItsDump(bool statusUnanswered)
+    {
+        var world = new World(this);
+        world.Reporter.StopRequested = true;
+        var accepted = new HashSet<string>(StringComparer.Ordinal);
+        bool awaiting = false;
+        bool cancelledWait = false;
+        int receipts = 0;
+        world.Backend.DuringStop = stopId =>
+        {
+            bool newIntent = accepted.Add(stopId);
+            if (newIntent && awaiting)
+            {
+                cancelledWait = true;
+            }
+
+            if (receipts++ == 0)
+            {
+                throw new IOException("FICT the accepted Stop's reply was lost.");
+            }
+        };
+        world.Backend.StatusAt = poll =>
+        {
+            if (poll == 0)
+            {
+                return Running("applying", 3, 1);
+            }
+
+            if (cancelledWait)
+            {
+                return WithoutItsDump(1);
+            }
+
+            awaiting = true;
+            if (poll == 1 && statusUnanswered)
+            {
+                throw new BackendRequestException(
+                    "BackendUnavailable", "FICT the status reply was lost.", retryable: true);
+            }
+
+            return world.Backend.PackageAfterPaths.Count == 0
+                ? Awaiting("applying", 3, 1)
+                : Finished("truncated", 1);
+        };
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal("truncated", outcome.State);
+        Assert.Equal(1, outcome.ChangesApplied);
+        Assert.Single(world.Backend.PackageAfterPaths);
+        Assert.Equal(2, world.Backend.StopIds.Count);
+        Assert.Matches("^[0-9a-f]{32}$", world.Backend.StopIds[0]);
+        Assert.Equal(world.Backend.StopIds[0], world.Backend.StopIds[1]);
+    }
+
+    /// <summary>004 T262: retrying a Stop before it reached the backend also keeps its intent.</summary>
+    [Fact]
+    public void AStopThatNeverLandedRetriesTheSameIntent()
+    {
+        var world = new World(this);
+        world.Reporter.StopRequested = true;
+        world.Backend.StopFailures = 1;
+        world.Backend.StatusAt = poll => poll < 3 ? Running("applying", 4, 1) : Finished("truncated", 1);
+
+        world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal(2, world.Backend.StopIds.Count);
+        Assert.Matches("^[0-9a-f]{32}$", world.Backend.StopIds[0]);
+        Assert.Equal(world.Backend.StopIds[0], world.Backend.StopIds[1]);
+    }
+
+    /// <summary>004 T262: a different run never inherits an earlier run's Stop identity.</summary>
+    [Fact]
+    public void EachRunUsesItsOwnStopIntent()
+    {
+        var world = new World(this);
+        world.Reporter.StopRequested = true;
+        world.Backend.StatusAt = poll => poll % 2 == 0
+            ? Running("applying", 3, 1)
+            : Finished("truncated", 1);
+
+        world.Pipeline.Run(world.RunFolder(), world.Reporter);
+        world.Pipeline.Run(world.RunFolder(), world.Reporter);
+
+        Assert.Equal(2, world.Backend.StopIds.Count);
+        Assert.Matches("^[0-9a-f]{32}$", world.Backend.StopIds[0]);
+        Assert.Matches("^[0-9a-f]{32}$", world.Backend.StopIds[1]);
+        Assert.NotEqual(world.Backend.StopIds[0], world.Backend.StopIds[1]);
+    }
+
     [Fact]
     public void NoStopIsPostedWhenNobodyAskedForOne()
     {
@@ -1237,6 +1336,44 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
         Assert.Equal("PackageAfterRefused", refusal.ErrorClass);
         Assert.Equal(2, world.Backend.Calls.Count(call => call.Route == "stop"));
+        // 004 T262: after a failed dump this is a new cancellation, not a retry of the apply Stop.
+        Assert.Matches("^[0-9a-f]{32}$", world.Backend.StopIds[0]);
+        Assert.Matches("^[0-9a-f]{32}$", world.Backend.StopIds[1]);
+        Assert.NotEqual(world.Backend.StopIds[0], world.Backend.StopIds[1]);
+    }
+
+    /// <summary>
+    /// 004 T262 guard: a lost reply to the fresh cancellation after a failed after-dump is
+    /// retried as that cancellation, without turning every transport retry into another intent.
+    /// </summary>
+    [Fact]
+    public void TheFailedAfterDumpsCancellationRetriesItsOwnIntent()
+    {
+        var world = new World(this);
+        world.Reporter.StopRequested = true;
+        world.Backend.PackageAfterFailure = new BackendRequestException(
+            "PackageAfterRefused", "FICT the package is not this run's.", retryable: false);
+        int receipts = 0;
+        world.Backend.DuringStop = _ =>
+        {
+            if (receipts++ == 1)
+            {
+                throw new IOException("FICT the cancellation's reply was lost.");
+            }
+        };
+        world.Backend.StatusAt = poll => poll == 0
+            ? Running("applying", 3, 2)
+            : poll <= 3 ? Awaiting("applying", 3, 2) : WithoutItsDump(2);
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
+            () => world.Pipeline.Run(world.RunFolder(), world.Reporter));
+
+        Assert.Equal("PackageAfterRefused", refusal.ErrorClass);
+        Assert.Equal(3, world.Backend.StopIds.Count);
+        Assert.Matches("^[0-9a-f]{32}$", world.Backend.StopIds[0]);
+        Assert.Matches("^[0-9a-f]{32}$", world.Backend.StopIds[1]);
+        Assert.NotEqual(world.Backend.StopIds[0], world.Backend.StopIds[1]);
+        Assert.Equal(world.Backend.StopIds[1], world.Backend.StopIds[2]);
     }
 
     /// <summary>
@@ -2101,13 +2238,19 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         public BackendRequestException? PackageAfterFailure { get; set; }
 
         /// <summary>
-        /// How many of the first `POST .../stop` calls fail before one lands. The route is
-        /// idempotent, so a stop that could not be posted is a stop that has not happened yet.
+        /// How many of the first `POST .../stop` calls fail before reaching the backend.
+        /// `DuringStop` can instead lose a reply after the Stop was accepted.
         /// </summary>
         public int StopFailures { get; set; }
 
         /// <summary>What a Stop that fails throws: the client's refusal by default (owner decision 159A, on the final review: A13).</summary>
         public Exception? StopFailure { get; set; }
+
+        /// <summary>Each Stop's intent, including transport retries.</summary>
+        public List<string> StopIds { get; } = new List<string>();
+
+        /// <summary>Runs when a Stop reaches the backend, before its reply can be lost.</summary>
+        public Action<string>? DuringStop { get; set; }
 
         RemodelProbeReply IRemodelBackend.Probe(RemodelProbeRequest request)
         {
@@ -2177,15 +2320,18 @@ public sealed class BackendRemodelPipelineTests : IDisposable
             PackageAfterPaths.Add(packagePath);
         }
 
-        void IRemodelBackend.Stop(string jobId)
+        void IRemodelBackend.Stop(string jobId, string stopId)
         {
             Record(new RecordedCall("stop", jobId));
+            StopIds.Add(stopId);
             if (StopFailures > 0)
             {
                 StopFailures--;
                 throw StopFailure ?? new BackendRequestException(
                     "BackendUnavailable", "the review backend did not answer.", retryable: true);
             }
+
+            DuringStop?.Invoke(stopId);
         }
 
         void IRemodelBackend.Close(RemodelCloseRequest request)
