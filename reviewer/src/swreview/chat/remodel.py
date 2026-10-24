@@ -438,6 +438,10 @@ class RemodelJob:
     counted separately because it carries no identity to compare."""
 
     _stop_ids: set[str] = field(default_factory=set, init=False, repr=False)
+    _after_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _after_closed: bool = field(default=False, init=False, repr=False)
+    """The rendezvous closes before its worker finalizes the run; a live job can have stopped
+    accepting a dump. The lock chooses one package or closure, independently of worker status."""
 
     arrived: threading.Event = field(default_factory=threading.Event)
     """Set when the add-in's after-dump has been handed over, or abandoned at shutdown."""
@@ -467,53 +471,80 @@ class RemodelJob:
         asked for before the wait began is the apply loop's, honoured between changes: that run is
         verified and saved as truncated, so its wait goes on. The dump's arrival outranks a Stop.
         """
-        self.state = JOB_AWAITING
-        asked = self.stops
+        waiting = False
         try:
+            with self._after_lock:
+                asked = self.stops
+                if self.package is None and not self._after_closed and self.live:
+                    waiting = True
+                    self.state = JOB_AWAITING
             deadline = time.monotonic() + self.timeout_s
-            while not self.arrived.is_set():
-                remaining = deadline - time.monotonic()
-                if remaining <= 0 or self.arrived.wait(min(remaining, STOP_LOOK_S)):
-                    break
-                if self.stops > asked:
-                    raise PackageAfterStopped(
-                        f"{PACKAGE_AFTER} never arrived: the engineer stopped the run while it "
-                        "waited for the dump of the copy after the last change"
-                    )
-            package = self.package
-            if not self.arrived.is_set() or package is None:
-                raise PackageAfterTimeout(
-                    f"{PACKAGE_AFTER} never arrived: the add-in had "
-                    f"{self.timeout_s:g}s to dump the copy after the last change and the "
-                    "run cannot be graded without it"
-                )
-            return package
+            while True:
+                with self._after_lock:
+                    # A timed Event.wait can answer False just before a package arrives. The
+                    # package and closure are decided together, so acceptance before this check
+                    # outranks a new Stop or expiry, and a refusal closes before the worker leaves.
+                    if self.package is not None:
+                        return self.package
+                    remaining = deadline - time.monotonic()
+                    if not self._after_closed and self.live and self.stops > asked:
+                        self._after_closed = True
+                        raise PackageAfterStopped(
+                            f"{PACKAGE_AFTER} never arrived: the engineer stopped the run while it "
+                            "waited for the dump of the copy after the last change"
+                        )
+                    if self._after_closed or not self.live or remaining <= 0:
+                        self._after_closed = True
+                        raise PackageAfterTimeout(
+                            f"{PACKAGE_AFTER} never arrived: the add-in had "
+                            f"{self.timeout_s:g}s to dump the copy after the last change and the "
+                            "run cannot be graded without it"
+                        )
+                self.arrived.wait(min(remaining, STOP_LOOK_S))
         finally:
-            if self.state == JOB_AWAITING:
-                self.state = JOB_RUNNING
+            with self._after_lock:
+                self._after_closed = True
+                if waiting and self.state == JOB_AWAITING:
+                    self.state = JOB_RUNNING
 
     def deliver(self, package: EvidencePackage) -> None:
-        self.package = package
-        self.arrived.set()
+        """Accept the first validated package, or refuse one whose rendezvous has ended.
+
+        The caller loads the file before this lock, so a load begun while the wait was open is
+        checked again here. The worker can still be finalizing failed evidence after its wait
+        closed, and a later package must neither claim acceptance nor replace its first reading.
+        """
+        with self._after_lock:
+            if self.package is not None:
+                raise PackageAfterRefused("this run already accepted its after-dump")
+            if self._after_closed or not self.live:
+                raise PackageAfterRefused("this run no longer waits for its after-dump")
+            self.package = package
+            self._after_closed = True
+            self.arrived.set()
 
     def request_stop(self, stop_id: str | None = None) -> None:
         """The engineer's Stop, as `POST .../stop` asks for it: the flag the apply loop reads
         between changes, and the end of a wait for the after-dump under way as it is asked.
 
-        The route runs this on the event loop without yielding, so recording the identity and
-        counting it are one decision. A lost reply retried after the apply loop ends must not
-        become a new Stop that cancels the healthy after-dump wait.
+        Its identity, count and the wait-entry snapshot share the rendezvous lock. A lost reply
+        retried after the apply loop ends must not become a new Stop that cancels the healthy
+        after-dump wait. A new Stop does not close the wait until the worker decides it: a package
+        accepted before that decision still outranks the Stop.
         """
-        if stop_id is not None:
-            if stop_id in self._stop_ids:
-                return
-            self._stop_ids.add(stop_id)
-        self.stops += 1
-        self.stop.set()
+        with self._after_lock:
+            if stop_id is not None:
+                if stop_id in self._stop_ids:
+                    return
+                self._stop_ids.add(stop_id)
+            self.stops += 1
+            self.stop.set()
 
     def abandon(self) -> None:
         """Release a waiting run at shutdown: the wait ends and the run fails honestly."""
-        self.arrived.set()
+        with self._after_lock:
+            self._after_closed = True
+            self.arrived.set()
 
     # --- what the poll reads ------------------------------------------------------
 
@@ -526,11 +557,17 @@ class RemodelJob:
         return self.state in (JOB_RUNNING, JOB_AWAITING)
 
     def finish(self) -> None:
-        self.state = JOB_FINISHED
+        with self._after_lock:
+            self._after_closed = True
+            self.state = JOB_FINISHED
+            self.arrived.set()
 
     def fail(self, message: str) -> None:
-        self.error = message
-        self.state = JOB_FAILED
+        with self._after_lock:
+            self._after_closed = True
+            self.error = message
+            self.state = JOB_FAILED
+            self.arrived.set()
 
 
 # --- reading the run folder ----------------------------------------------------------------
