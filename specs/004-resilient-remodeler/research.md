@@ -3611,3 +3611,81 @@ records the source/test pointers and policy questions for the remaining three de
 Decision 159A remains in progress: R19.29's Stop and changed-root cleanup work, T180 and the
 pilot-workstation prerequisites still block Start. Start remains disabled. No SOLIDWORKS
 process or paid/live test was started.
+
+
+### R19.31 Stop delivery identities (T262 to T264; 2026-10-23)
+
+R19.29's retry defect is an accepted Stop with a lost answer, not only a request that never
+reached the backend. The job counted every receipt. After the apply loop honoured the first
+receipt, a retry during `wait_for_package_after` advanced that counter and cancelled a valid
+truncated run's verification. The existing Stop test pinned the reply and event alone, and
+therefore did not establish idempotence across the apply/dump handover.
+
+[Issue #37](https://github.com/coleas33/smart_SW/issues/37) records the contract correction under
+existing decision 159A. Each Stop delivery intent has a `stop_id`, scoped to its job. Identified
+requests count once; the job retains all seen identities so a delayed retry of an earlier one
+is still a no-op after a newer intent arrived. The route validates an explicit identity as
+exactly 32 lowercase hexadecimal characters before touching Stop state. Absent or null remains
+the legacy distinct-receipt behavior: those callers cannot communicate retry identity.
+
+`BackendRemodelPipeline.Poll` creates the identity once, reuses it through every `TryStop`
+failure on both status paths, and creates a fresh identity for its intentional cancellation
+after an after-dump failure. That fresh cancellation is distinct even when the original Stop's
+answer was lost. `RemodelBackendClient.Stop` serializes the identity; `IRemodelBackend.Stop` and
+its fakes carry it explicitly. The existing empty-body client test is deliberately replaced
+with an exact identity-body test, retaining the route and request assertions. The existing
+failed-dump cancellation test is strengthened to require distinct identities, never loosened.
+
+The host still exposes a stop flag; repeated pane presses do not add a new backend cancellation
+mode. Late package delivery and the timed-wait arrival race are unchanged, as is changed-root
+cleanup. Those remain known defects before Start. The write guard, bridge/session
+identity checks and disabled Start switch are untouched. This slice needs no new owner decision,
+licensed SOLIDWORKS process or paid API.
+
+
+**Test first:** six C# cases failed by assertions before production edits: both rows of
+`ALostStopReplyRetriesTheSameIntentWhileTheJobAwaitsItsDump` reported `failed` rather than
+`truncated`; `AStopThatNeverLandedRetriesTheSameIntent` and `EachRunUsesItsOwnStopIntent`
+observed no identity; the strengthened failed-dump cancellation test observed no distinct
+identity; and the real HTTP client test lacked `stop_id`. Python's `TestStopIntent` had
+23 failures and 3 passing guards before the fix. Its controlled timed wait proved that a retry
+of an accepted apply Stop raised `PackageAfterStopped` before the package arrived; success
+requires reaching another wait and then returning the actual package. A distinct new Stop
+still cancels, and invalid IDs/bodies leave both the counter and stop event unchanged. An
+additional unknown-job precedence guard was added after the fix. The 27 new Python cases and
+surrounding route/integration tests pass (164 total); Ruff passes. The C# focused lane passes,
+including guards for a fresh cancellation's own lost reply and repeated HTTP serialization.
+No existing assertion was loosened; unrelated formatter changes were removed.
+
+Independent source review found no actionable issue. It checked the six pre-fix C# assertion
+failures, per-job identity scope, validation before state mutation, both retry paths, fresh
+cancellation, compatibility and untouched guards; approval is conditional on the full gates
+and final records below.
+
+
+**Next-work clarification:** R19.20 already chooses that a distinct Stop received during the
+after-dump wait ends it, and the current wait docstring chooses arrival over Stop. The next
+slice can enforce that existing priority with a controlled arrival after a timed wait returns
+false but before its Stop check, and ensure late delivery cannot claim a cancelled job will
+consume a package. Keeping a dump merely in progress despite a new Stop would be a policy
+revision, separate from fixing those inconsistencies. R19.29's recorded defects remain; the
+handoff now distinguishes the established rule from that possible revision.
+
+
+**Final gates (recorded 2026-10-24; T264):** the complete required-tokenizer non-live suite
+passed on Python 3.12.3 and Python 3.11.16 (`--isolated --all-extras`): 18,193 passed and
+5 skipped each. Both JUnit reports contain 18,198 cases, zero failures and zero errors. The
+earlier interrupted runs are not gate evidence; these complete reruns replace them. Sync,
+tokenizer fetch and Ruff passed. The Windows Release rebuild with `--no-incremental` had
+zero warnings and zero errors; full solution tests passed 10,169 extractor and 4,120 add-in
+cases, none failed or skipped, including all 143 focused C# cases. All eight changed product
+and test files still match the independently approved and gated source hashes.
+
+The final source/document audit found no actionable issue. The 298 workstation-plan reader
+and tracked-file identifier cases passed; final record updates receive those checks again,
+plus local Markdown links, unique task IDs, named-test resolution, whitespace and index-LF
+checks before committing. The existing approval's unchanged-source and full-local-gate
+conditions are satisfied. PR delivery still requires all four Windows/Linux and Python
+3.11/3.12 CI checks green. Decision 159A remains in progress, with the two remaining defect
+categories above, T180 and pilot-workstation prerequisites. Remodel Start stays disabled.
+No SOLIDWORKS process, paid API test or seat task ran.

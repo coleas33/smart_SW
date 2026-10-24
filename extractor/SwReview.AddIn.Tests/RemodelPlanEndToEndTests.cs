@@ -676,7 +676,7 @@ public sealed class RemodelPlanEndToEndTests
 
         public void PackageAfter(string jobId, string packagePath) => throw new NotSupportedException();
 
-        public void Stop(string jobId) => throw new NotSupportedException();
+        public void Stop(string jobId, string stopId) => throw new NotSupportedException();
 
         public void Close(RemodelCloseRequest request)
         {

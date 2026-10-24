@@ -190,9 +190,12 @@ public sealed class RemodelBackendClient : IRemodelBackend
             JsonSerializer.Serialize(new Dictionary<string, object?> { { "path", packagePath } }));
     }
 
-    public void Stop(string jobId)
+    public void Stop(string jobId, string stopId)
     {
-        Call("POST", "/remodel/runs/" + Escape(jobId) + "/stop", "{}");
+        Call(
+            "POST",
+            "/remodel/runs/" + Escape(jobId) + "/stop",
+            JsonSerializer.Serialize(new Dictionary<string, object?> { { "stop_id", stopId } }));
     }
 
     public void Close(RemodelCloseRequest request)

@@ -372,18 +372,40 @@ public sealed class RemodelBackendClientTests
     // ---- POST /remodel/runs/{job_id}/stop --------------------------------------------------
 
     [Fact]
-    public void StopPostsAnEmptyBodyToTheJobsStopRoute()
+    public void StopPostsItsIntentToTheJobsStopRoute()
     {
         using (var backend = new FakeBackend())
         {
             backend.Reply(200, @"{""stopping"":true}");
 
-            backend.Client().Stop("job-42");
+            backend.Client().Stop("job-42", JobId);
 
             RecordedRequest request = backend.Only();
             Assert.Equal("POST", request.Method);
             Assert.Equal("/remodel/runs/job-42/stop", request.Path);
-            Assert.Equal("{}", request.Body);
+            // 004 T262 deliberately replaces the empty-body pin: transport retries must name
+            // the same Stop so an accepted apply Stop is not mistaken for a later cancellation.
+            Assert.Equal(JobId, request.Text("stop_id"));
+            Assert.Equal("Bearer " + Token, request.Authorization);
+            Assert.DoesNotContain(JobId, request.Url, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>004 T262 guard: retransmission serializes the caller's same Stop intent unchanged.</summary>
+    [Fact]
+    public void RetryingAStopPostsTheSameIntentUnchanged()
+    {
+        using (var backend = new FakeBackend())
+        {
+            backend.Reply(200, @"{""stopping"":true}");
+            RemodelBackendClient client = backend.Client();
+
+            client.Stop("job-42", JobId);
+            client.Stop("job-42", JobId);
+
+            Assert.Equal(2, backend.Requests.Count);
+            Assert.All(backend.Requests, request => Assert.Equal(JobId, request.Text("stop_id")));
+            Assert.Equal(backend.Requests[0].Body, backend.Requests[1].Body);
         }
     }
 

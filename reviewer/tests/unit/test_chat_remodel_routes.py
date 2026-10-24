@@ -1692,6 +1692,175 @@ class TestStop:
         deliver_package_after(client, job_id, run_dir)
 
 
+class _PausedPackageArrival(threading.Event):
+    """Hold one timed wait before its Stop check, then report the next wait explicitly."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.waiting = threading.Event()
+        self.release = threading.Event()
+        self.waiting_again = threading.Event()
+
+    def wait(self, timeout: float | None = None) -> bool:
+        if not self.waiting.is_set():
+            self.waiting.set()
+            assert self.release.wait(WAIT_S), "the test never released the timed wait"
+            return False
+        self.waiting_again.set()
+        return super().wait(timeout)
+
+
+class TestStopIntent:
+    """A delivery retry is the same Stop; cancelling a failed dump is a new intent."""
+
+    STOP_ID = "0123456789abcdef0123456789abcdef"
+    LATER_STOP_ID = "fedcba9876543210fedcba9876543210"
+
+    def test_retry_of_an_apply_stop_does_not_cancel_the_after_dump_wait(
+        self, app: Any, client: TestClient, run_dir: Path
+    ) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, run_dir, timeout_s=WAIT_S * 10)
+        arrival = _PausedPackageArrival()
+        job.arrived = arrival
+        app.state.remodel.jobs[JOB_ID] = job
+        route = f"/remodel/runs/{JOB_ID}/stop"
+        # The backend accepted this while applying; only its reply was lost.
+        assert client.post(route, json={"stop_id": self.STOP_ID}).status_code == 200
+        thread, ended = _waiting(job)
+        try:
+            assert arrival.waiting.wait(WAIT_S)
+
+            retry = client.post(route, json={"stop_id": self.STOP_ID})
+
+            assert retry.json() == {"stopping": True}
+            arrival.release.set()
+            assert arrival.waiting_again.wait(WAIT_S), (
+                f"the retry ended the after-dump wait: {ended.get('raised')!r}"
+            )
+            assert job.stops == 1, "a lost reply made one Stop count twice"
+            job.deliver(PACKAGE)
+            thread.join(WAIT_S)
+            assert not thread.is_alive()
+            assert ended.get("package") is PACKAGE
+            assert "raised" not in ended
+        finally:
+            job.deliver(PACKAGE)
+            arrival.release.set()
+            thread.join(WAIT_S)
+
+    def test_a_new_stop_intent_cancels_the_after_dump_wait(
+        self, app: Any, client: TestClient, run_dir: Path
+    ) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, run_dir, timeout_s=WAIT_S * 10)
+        arrival = _PausedPackageArrival()
+        job.arrived = arrival
+        app.state.remodel.jobs[JOB_ID] = job
+        route = f"/remodel/runs/{JOB_ID}/stop"
+        client.post(route, json={"stop_id": self.STOP_ID})
+        thread, ended = _waiting(job)
+        try:
+            assert arrival.waiting.wait(WAIT_S)
+
+            later = client.post(route, json={"stop_id": self.LATER_STOP_ID})
+
+            assert later.json() == {"stopping": True}
+            assert job.stops == 2
+            arrival.release.set()
+            thread.join(WAIT_S)
+            assert not thread.is_alive(), "the distinct Stop did not end the wait"
+            assert isinstance(ended.get("raised"), remodel_routes.PackageAfterStopped)
+        finally:
+            job.deliver(PACKAGE)
+            arrival.release.set()
+            thread.join(WAIT_S)
+
+    @pytest.mark.parametrize(
+        "state",
+        [
+            remodel_routes.JOB_RUNNING,
+            remodel_routes.JOB_AWAITING,
+            remodel_routes.JOB_FINISHED,
+            remodel_routes.JOB_FAILED,
+        ],
+    )
+    def test_a_retried_stop_is_counted_once_per_job(
+        self, app: Any, client: TestClient, run_dir: Path, state: str
+    ) -> None:
+        jobs = [
+            remodel_routes.RemodelJob(JOB_ID, run_dir, state=state),
+            remodel_routes.RemodelJob("f" * 32, run_dir, state=state),
+        ]
+        for job in jobs:
+            app.state.remodel.jobs[job.job_id] = job
+            route = f"/remodel/runs/{job.job_id}/stop"
+            for stop_id in (self.STOP_ID, self.LATER_STOP_ID, self.STOP_ID, self.LATER_STOP_ID):
+                assert client.post(route, json={"stop_id": stop_id}).json() == {"stopping": True}
+            assert job.stops == 2, "only distinct intents are counted, scoped to this job"
+            assert job.stop.is_set()
+            assert job.state == state
+
+    @pytest.mark.parametrize(
+        "stop_id",
+        ["", " ", "x", "0" * 31, "0" * 33, "A" * 32, " " + STOP_ID, STOP_ID + " ", 1, True, [], {}],
+    )
+    def test_stop_rejects_an_invalid_intent_without_setting_the_flag(
+        self, app: Any, client: TestClient, run_dir: Path, stop_id: Any
+    ) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, run_dir)
+        app.state.remodel.jobs[JOB_ID] = job
+
+        refused = client.post(f"/remodel/runs/{JOB_ID}/stop", json={"stop_id": stop_id})
+
+        assert refused.status_code == 400
+        assert refused.json()["error_class"] == "InvalidRequest"
+        assert job.stops == 0
+        assert not job.stop.is_set()
+
+    @pytest.mark.parametrize("body", ["null", "[]", '"stop"', "true", "1", "{"])
+    def test_stop_rejects_a_body_that_is_not_a_json_object(
+        self, app: Any, client: TestClient, run_dir: Path, body: str
+    ) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, run_dir)
+        app.state.remodel.jobs[JOB_ID] = job
+
+        refused = client.post(
+            f"/remodel/runs/{JOB_ID}/stop",
+            content=body,
+            headers={"Content-Type": "application/json"},
+        )
+
+        assert refused.status_code == 400
+        assert refused.json()["error_class"] == "InvalidRequest"
+        assert job.stops == 0
+        assert not job.stop.is_set()
+
+    @pytest.mark.parametrize("body", [{}, {"stop_id": None}])
+    def test_legacy_stops_still_count_as_distinct_requests(
+        self, app: Any, client: TestClient, run_dir: Path, body: dict[str, Any]
+    ) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, run_dir)
+        app.state.remodel.jobs[JOB_ID] = job
+        route = f"/remodel/runs/{JOB_ID}/stop"
+
+        assert client.post(route, json=body).json() == {"stopping": True}
+        assert client.post(route, json=body).json() == {"stopping": True}
+
+        assert job.stops == 2
+        assert job.stop.is_set()
+
+    def test_an_unknown_job_is_refused_before_the_stop_body_is_read(
+        self, client: TestClient
+    ) -> None:
+        refused = client.post(
+            "/remodel/runs/nobody/stop",
+            content="{",
+            headers={"Content-Type": "application/json"},
+        )
+
+        assert refused.status_code == 404
+        assert refused.json()["error_class"] == "UnknownJob"
+
+
 # --- 7. POST /remodel/close ---------------------------------------------------------------
 
 
