@@ -1674,7 +1674,12 @@ class TestStop:
         assert first.json() == {"stopping": True}
         assert second.json() == {"stopping": True}
         assert app.state.remodel.jobs[job_id].stop.is_set()
-        assert deliver_package_after(client, job_id, run_dir).status_code in {200, 409}
+        # This uncalibrated run fails before entering its rendezvous. A cleanup handover
+        # after that known failure must be refused, rather than claiming it can still be graded.
+        wait_for(client, job_id, lambda state: state["state"] == "failed")
+        late = deliver_package_after(client, job_id, run_dir)
+        assert late.status_code == 400
+        assert late.json()["error_class"] == "PackageAfterRefused"
 
     def test_the_stop_flag_is_the_one_the_executor_reads(
         self, client: TestClient, run_dir: Path, source: Path, app: Any
@@ -1744,7 +1749,7 @@ class TestStopIntent:
             assert ended.get("package") is PACKAGE
             assert "raised" not in ended
         finally:
-            job.deliver(PACKAGE)
+            job.abandon()
             arrival.release.set()
             thread.join(WAIT_S)
 
@@ -1770,7 +1775,7 @@ class TestStopIntent:
             assert not thread.is_alive(), "the distinct Stop did not end the wait"
             assert isinstance(ended.get("raised"), remodel_routes.PackageAfterStopped)
         finally:
-            job.deliver(PACKAGE)
+            job.abandon()
             arrival.release.set()
             thread.join(WAIT_S)
 
@@ -1859,6 +1864,263 @@ class TestStopIntent:
 
         assert refused.status_code == 404
         assert refused.json()["error_class"] == "UnknownJob"
+
+
+class TestPackageAfterOrdering:
+    @staticmethod
+    def other_package() -> EvidencePackage:
+        return remodel_package([feature("FICT second boss", "Extrusion")], name="other-part")
+
+    def test_a_dump_arrived_before_the_stop_check_wins_a_timed_wait(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, tmp_path, timeout_s=WAIT_S)
+
+        def timed_out(timeout: float | None = None) -> bool:
+            # The timed wait answered False, but delivery won before the Stop was checked.
+            job.request_stop(JOB_ID)
+            job.deliver(PACKAGE)
+            return False
+
+        monkeypatch.setattr(job.arrived, "wait", timed_out)
+
+        assert job.wait_for_package_after() is PACKAGE
+        assert job.stops == 1
+
+    @pytest.mark.parametrize("closure", ["stop", "timeout", "abandon"])
+    def test_a_delivery_after_the_wait_closed_is_refused_before_the_job_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, closure: str
+    ) -> None:
+        job = remodel_routes.RemodelJob(
+            JOB_ID, tmp_path, timeout_s=0 if closure == "timeout" else WAIT_S
+        )
+
+        def end_wait(timeout: float | None = None) -> bool:
+            if closure == "stop":
+                job.request_stop(JOB_ID)
+            else:
+                job.abandon()
+            return False
+
+        monkeypatch.setattr(job.arrived, "wait", end_wait)
+        failure = (
+            remodel_routes.PackageAfterStopped
+            if closure == "stop"
+            else remodel_routes.PackageAfterTimeout
+        )
+        with pytest.raises(failure):
+            job.wait_for_package_after()
+
+        assert job.state == remodel_routes.JOB_RUNNING, "worker finalization still owns failure"
+        assert job.error is None
+        with pytest.raises(remodel_routes.PackageAfterRefused):
+            job.deliver(PACKAGE)
+        assert job.package is None
+
+    @pytest.mark.parametrize("state", [remodel_routes.JOB_FINISHED, remodel_routes.JOB_FAILED])
+    def test_a_terminal_job_refuses_its_first_after_dump(
+        self, app: Any, client: TestClient, run_dir: Path, state: str
+    ) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, run_dir, state=state, error="FICT prior reason")
+        app.state.remodel.jobs[JOB_ID] = job
+
+        refused = deliver_package_after(client, JOB_ID, run_dir)
+
+        assert refused.status_code == 400
+        assert refused.json()["error_class"] == "PackageAfterRefused"
+        assert job.package is None
+        assert job.state == state
+        assert job.error == "FICT prior reason"
+
+    def test_a_dump_loaded_before_closure_is_refused_when_delivery_loses(
+        self, app: Any, run_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, run_dir, timeout_s=0)
+        dumped(run_dir, PACKAGE_AFTER)
+        loaded = threading.Event()
+        release = threading.Event()
+        ended: dict[str, Any] = {}
+        original_package = remodel_routes._package
+
+        def load_then_hold(*args: Any) -> EvidencePackage:
+            package = original_package(*args)
+            loaded.set()
+            assert release.wait(WAIT_S), "the package loader was never released"
+            return package
+
+        def deliver() -> None:
+            try:
+                app.state.remodel._deliver(job, str(run_dir / PACKAGE_AFTER))
+            except Exception as exc:
+                ended["raised"] = exc
+            else:
+                ended["accepted"] = True
+
+        monkeypatch.setattr(remodel_routes, "_package", load_then_hold)
+        thread = threading.Thread(target=deliver)
+        thread.start()
+        try:
+            assert loaded.wait(WAIT_S)
+            with pytest.raises(remodel_routes.PackageAfterTimeout):
+                job.wait_for_package_after()
+        finally:
+            release.set()
+            thread.join(WAIT_S)
+
+        assert not thread.is_alive()
+        assert isinstance(ended.get("raised"), remodel_routes.PackageAfterRefused), ended
+        assert job.package is None
+        assert job.state == remodel_routes.JOB_RUNNING
+
+    def test_a_second_delivery_cannot_replace_the_package_being_graded(
+        self, tmp_path: Path
+    ) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, tmp_path)
+        job.deliver(PACKAGE)
+
+        with pytest.raises(remodel_routes.PackageAfterRefused):
+            job.deliver(self.other_package())
+
+        assert job.package is PACKAGE
+        assert job.wait_for_package_after() is PACKAGE
+
+    def test_competing_deliveries_accept_exactly_one_package(self, tmp_path: Path) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, tmp_path)
+        together = threading.Barrier(3)
+        accepted: list[EvidencePackage] = []
+        refused: list[Exception] = []
+
+        def deliver(package: EvidencePackage) -> None:
+            try:
+                together.wait(WAIT_S)
+                job.deliver(package)
+            except Exception as exc:
+                refused.append(exc)
+            else:
+                accepted.append(package)
+
+        threads = [
+            threading.Thread(target=deliver, args=(package,))
+            for package in (PACKAGE, self.other_package())
+        ]
+        for thread in threads:
+            thread.start()
+        try:
+            together.wait(WAIT_S)
+        finally:
+            for thread in threads:
+                thread.join(WAIT_S)
+
+        assert all(not thread.is_alive() for thread in threads)
+        assert len(accepted) == 1
+        assert len(refused) == 1
+        assert isinstance(refused[0], remodel_routes.PackageAfterRefused)
+        assert job.package is accepted[0]
+        assert job.wait_for_package_after() is accepted[0]
+
+    @pytest.mark.parametrize("closure", ["abandon", "finish", "fail"])
+    def test_closure_before_the_wait_does_not_resurrect_a_job(
+        self, tmp_path: Path, closure: str
+    ) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, tmp_path, timeout_s=0)
+        if closure == "fail":
+            job.fail("FICT failure before the dump")
+        else:
+            getattr(job, closure)()
+        state, error = job.state, job.error
+
+        with pytest.raises(remodel_routes.PackageAfterTimeout):
+            job.wait_for_package_after()
+
+        assert job.state == state
+        assert job.error == error
+        with pytest.raises(remodel_routes.PackageAfterRefused):
+            job.deliver(PACKAGE)
+        assert job.package is None
+
+    @pytest.mark.parametrize("closure", ["abandon", "finish", "fail"])
+    def test_an_accepted_package_survives_shutdown_and_terminal_closure(
+        self, tmp_path: Path, closure: str
+    ) -> None:
+        job = remodel_routes.RemodelJob(JOB_ID, tmp_path)
+        job.deliver(PACKAGE)
+        if closure == "fail":
+            job.fail("FICT failure after the dump")
+        else:
+            getattr(job, closure)()
+        state, error = job.state, job.error
+
+        assert job.wait_for_package_after() is PACKAGE
+        assert job.state == state
+        assert job.error == error
+        with pytest.raises(remodel_routes.PackageAfterRefused):
+            job.deliver(self.other_package())
+        assert job.package is PACKAGE
+
+    def test_the_route_refuses_a_late_dump_before_the_worker_publishes_failure(
+        self,
+        app: Any,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calibrated(monkeypatch)
+        arrival = _PausedPackageArrival()
+        failed = threading.Event()
+        release_failure = threading.Event()
+        original_wait = remodel_routes.RemodelJob.wait_for_package_after
+        original_fail = remodel_routes.RemodelJob.fail
+
+        def controlled_wait(job: remodel_routes.RemodelJob) -> EvidencePackage:
+            job.arrived = arrival
+            return original_wait(job)
+
+        def hold_failure(job: remodel_routes.RemodelJob, message: str) -> None:
+            failed.set()
+            assert release_failure.wait(WAIT_S), "the worker's failure was never released"
+            original_fail(job, message)
+
+        monkeypatch.setattr(remodel_routes.RemodelJob, "wait_for_package_after", controlled_wait)
+        monkeypatch.setattr(remodel_routes.RemodelJob, "fail", hold_failure)
+        planned(client, run_dir, source)
+        job_id = str(start(client, run_dir).json()["job_id"])
+        job = app.state.remodel.jobs[job_id]
+        try:
+            assert arrival.waiting.wait(WAIT_S)
+            assert client.post(
+                f"/remodel/runs/{job_id}/stop", json={"stop_id": JOB_ID}
+            ).status_code == 200
+            arrival.release.set()
+            assert failed.wait(WAIT_S), "the cancelled worker never finalized its evidence"
+            assert job.state == remodel_routes.JOB_RUNNING
+            assert RemodelPlan.model_validate_json(
+                plan_path(run_dir).read_text(encoding="utf-8")
+            ).state == "failed"
+            evidence = {
+                path: path.read_bytes()
+                for path in (plan_path(run_dir), run_dir / CHANGES_FILE_NAME)
+            }
+
+            refused = deliver_package_after(client, job_id, run_dir)
+
+            assert refused.status_code == 400
+            assert refused.json()["error_class"] == "PackageAfterRefused"
+            assert job.package is None
+            assert job.state == remodel_routes.JOB_RUNNING
+            assert all(path.read_bytes() == contents for path, contents in evidence.items())
+            records = read_changes(run_dir / CHANGES_FILE_NAME)
+            assert records, "the applied changes remain readable"
+            assert all(row.kind != "save" for row in records)
+            assert bridge.saves == 0
+        finally:
+            arrival.release.set()
+            release_failure.set()
+
+        terminal = wait_for(client, job_id, lambda state: state["state"] == "failed")
+        assert terminal["plan_state"] == "failed"
+        assert "stopped" in terminal["error"]
 
 
 # --- 7. POST /remodel/close ---------------------------------------------------------------

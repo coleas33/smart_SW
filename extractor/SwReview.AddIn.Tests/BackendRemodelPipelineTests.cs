@@ -6,6 +6,8 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using SwReview.AddIn.Remodel;
 using SwReview.AddIn.Review;
 using SwReview.Extractor.Dump;
@@ -894,6 +896,121 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         Assert.Equal(new[] { expected }, world.Backend.PackageAfterPaths);
         Assert.Equal(new[] { DumpProfile.ModelCheck }, world.Dump.Profiles.ToArray());
         Assert.Contains(world.Reporter.Statuses, status => status.Key == "verifying");
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T266): a first Stop already pending when the after-dump is
+    /// requested reaches the backend before dumping. If it ends that wait, the later package
+    /// is refused; the refusal keeps its class and cause, the job's end is read before returning,
+    /// and the package and change log remain evidence rather than a claim that verification ran.
+    /// </summary>
+    [Fact]
+    public void AFirstLateStopBeforeTheAfterDumpIsRefusedAsTheJobsCancellation()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        const string change = "{\"seq\":1,\"kind\":\"reorder\"}";
+        Append(runDirectory, change);
+        world.Reporter.StopRequested = true;
+        var answer = new BackendRequestException(
+            "PackageAfterRefused", "FICT the job already stopped waiting for its after-dump.", retryable: false);
+        bool cancelled = false;
+        world.Backend.DuringStop = _ =>
+        {
+            cancelled = true;
+            world.Backend.PackageAfterFailure = answer;
+        };
+        world.Dump.BeforeWrite = () => Assert.True(cancelled, "the pending Stop did not precede the dump");
+        world.Backend.StatusAt = _ => cancelled
+            ? new RemodelRunStatus(
+                RemodelRunStatus.FailedState, "failed", 3, 3, null, null,
+                "PackageAfterStopped: FICT the engineer stopped the wait before the package arrived")
+            : Awaiting("applying", 3, 3);
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
+            () => world.Pipeline.Run(runDirectory, world.Reporter));
+
+        Assert.Equal("PackageAfterRefused", refusal.ErrorClass);
+        Assert.Same(answer, refusal.InnerException);
+        Assert.Equal(answer.Message, refusal.Message);
+        Assert.False(refusal.Retryable);
+        Assert.Single(world.Dump.Folders);
+        Assert.Empty(world.Backend.PackageAfterPaths);
+        Assert.Equal(
+            new[] { "status", "stop", "package-after", "status" },
+            world.Backend.Calls.Where(call => call.Route != "runs").Select(call => call.Route).ToArray());
+        Assert.True(File.Exists(Path.Combine(runDirectory, "package-after.json")));
+        Assert.Equal(change + "\n", File.ReadAllText(Path.Combine(runDirectory, "changes.jsonl")));
+        Assert.Single(
+            world.Reporter.Statuses, status => status.Value == BackendRemodelPipeline.AfterDumpNotConfirmedMessage);
+    }
+
+    /// <summary>
+    /// 004 T266 guard: Stop pressed while the synchronous dump is held sets the host flag, but
+    /// cannot overtake the package handover. Once accepted, the backend's actual terminal result
+    /// decides the outcome, including a later failure; a UI flag invents neither truncation nor
+    /// a cancellation of a wait whose package already arrived.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AStopPressedWhileTheAfterDumpIsHeldDoesNotOvertakeItsAcceptedPackage(bool failsAfterAcceptance)
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        const string failureWords = "FICT verification failed after the package was accepted.";
+        world.Backend.StatusAt = _ => world.Backend.PackageAfterPaths.Count == 0
+            ? Awaiting("applying", 3, 3)
+            : failsAfterAcceptance
+                ? new RemodelRunStatus(
+                    RemodelRunStatus.FailedState, "failed", 3, 3, null, null, failureWords)
+                : Finished("saved", 3);
+        using (var enteredDump = new ManualResetEventSlim())
+        using (var releaseDump = new ManualResetEventSlim())
+        {
+            world.Dump.BeforeWrite = () =>
+            {
+                enteredDump.Set();
+                Assert.True(releaseDump.Wait(TimeSpan.FromSeconds(10)), "the test never released its held dump");
+            };
+            Task<RemodelRunOutcome> running = Task.Run(() => world.Pipeline.Run(runDirectory, world.Reporter));
+            try
+            {
+                Assert.True(enteredDump.Wait(TimeSpan.FromSeconds(10)), "the run never entered its after-dump");
+                world.Reporter.StopRequested = true;
+                Assert.False(running.IsCompleted);
+                Assert.DoesNotContain(world.Backend.Calls, call => call.Route == "stop");
+                Assert.DoesNotContain(world.Backend.Calls, call => call.Route == "package-after");
+
+                releaseDump.Set();
+                Assert.Same(running, await Task.WhenAny(running, Task.Delay(TimeSpan.FromSeconds(10))));
+                RemodelRunOutcome outcome = await running;
+
+                Assert.Equal(failsAfterAcceptance ? "failed" : "saved", outcome.State);
+                Assert.Equal(3, outcome.ChangesApplied);
+                Assert.Equal(
+                    new[] { Path.Combine(runDirectory, "package-after.json") }, world.Backend.PackageAfterPaths);
+                Assert.Equal(
+                    new[] { "status", "package-after", "status" },
+                    world.Backend.Calls.Where(call => call.Route != "runs").Select(call => call.Route).ToArray());
+                Assert.Single(world.Dump.Folders);
+                Assert.True(File.Exists(Path.Combine(runDirectory, "package-after.json")));
+                if (failsAfterAcceptance)
+                {
+                    Assert.Contains(new KeyValuePair<string, string>("error", failureWords), world.Reporter.Statuses);
+                }
+                else
+                {
+                    Assert.DoesNotContain(world.Reporter.Statuses, status => status.Key == "error");
+                }
+            }
+            finally
+            {
+                releaseDump.Set();
+                Assert.Same(running, await Task.WhenAny(running, Task.Delay(TimeSpan.FromSeconds(10))));
+                await running;
+            }
+        }
     }
 
     /// <summary>

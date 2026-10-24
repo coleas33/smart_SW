@@ -35,7 +35,7 @@ run's (`bridge-remodel.md`, protocol 1.5).
 | `POST /remodel/runs` | `{run_dir, bridge, provider, model, effort, job_id}` | Creates a `RemodelJob` and submits `run_remodel` to its worker thread: phases B, C and D, to completion. *Amended 2026-10-21 (owner decision 159A, on the final review; `research.md` R19.20):* `job_id`, 32 lowercase hexadecimal characters, names the job the Start makes, and is minted when absent; anything else is `InvalidRequest`. The same Start asked again - the add-in asks again when it was not answered, since it may have made its job - is answered with the job it made, whatever that job has done since, and starts no second run; a job id another run folder's job holds is `InvalidRequest`. One Start at a time is decided, under one lock | `201 {job_id, chat_id}` |
 | `GET /remodel/runs/{job_id}` | | Reads the job and its run folder; nothing is evaluated. *Amended 2026-10-21 (owner decision 159A, on Codex's review; `research.md` R19.14):* the add-in polls it until the job is `finished` or `failed`, or answered `UnknownJob`, or the backend that runs it is gone - none running, or another in its place. A poll not answered while that backend runs is asked again, the wait doubling from the poll delay up to eight seconds, and a Stop asked for meanwhile is posted at every poll until it lands; the run, its session and the host stay held until then, because the run's worker may still be applying changes. An after-dump that failed - not written, refused, or its answer lost - is answered once the job ends: with that failure when the job failed, as the job ended when it finished, since a job finishes only once its dump has arrived | `200 {state, plan_state, changes_total, changes_applied, current, awaiting, error}` |
 | `GET /remodel/runs/{job_id}/events` | | `replay_events(<run_dir>/events.jsonl, after)`, with `after` a query parameter | `200 {events, next}` |
-| `POST /remodel/runs/{job_id}/package-after` | `{path}` | Hands the run the dump the add-in just wrote, ending the `dump_after` rendezvous | `200 {ok}` |
+| `POST /remodel/runs/{job_id}/package-after` | `{path}` | Hands the run the first valid dump the add-in just wrote. *Amended 2026-10-24 (decision 159A; R19.32):* acceptance is atomic with rendezvous closure; a late or duplicate handover is refused as `PackageAfterRefused` (400), preserving the accepted package | `200 {ok}` |
 | `POST /remodel/runs/{job_id}/stop` | `{stop_id}` | Sets the run's stop flag. Idempotent for the same identified intent (see below). *Amended 2026-10-21 (owner decision 159A, on the final review; `research.md` R19.20):* a Stop asked for while the run waits for its after-dump ends that wait - the run fails as stopped, never verified or saved, its change log intact - where the wait listened for the dump alone; one the apply loop honoured before the wait began does not, so that run is verified and saved as truncated | `200 {stopping}` |
 | `POST /remodel/close` | `{run_dir, bridge, discard_copy}` | `client.close_document(discard_copy)`. A copy that is not open is a no-op. *Amended 2026-09-28 (U26, T186):* then, unless a run is in flight for that folder, re-checks a source attestation nothing has re-checked yet and files the verdict. *Amended 2026-10-21 (owner decision 159A, on review; `research.md` R19.9):* the add-in reads a close refused `BridgeUnavailable`, `BackendUnavailable`, `HttpError`, `BadResponse`, `InvalidRunDir` or `InvalidRequest` as not answered - the bridge may still hold the session - and any other class as the end-of-session routine's answer with what it left; and with no backend running it sends no close, and reads it as not answered | `200 {closed}` |
 
@@ -136,6 +136,26 @@ compared as resolved paths, and refuses a file that does not load as a ModelChec
 page never supplies a path and neither does the model: the pipeline sends back the exact path the
 route already knows, and the check is what keeps a body from naming a dump of something else.
 
+*Amended 2026-10-24 (decision 159A; [issue #39](https://github.com/coleas33/smart_SW/issues/39),
+research R19.32):* the rendezvous has its own closed state, separate from the worker's public
+`running`/`failed` state. Acceptance and closure share one per-job lock. A package arrives when
+the validated snapshot is published under that lock; starting a file load or receiving the HTTP
+request does not accept it. The wait returns an accepted package before considering a newer
+Stop or expiry. If cancellation, expiry or abandonment closes the wait first, delivery is
+refused even while the worker is still finalizing and has not yet published its terminal state.
+Terminal publication also closes acceptance. This does not publish a terminal job before its
+plan and change log are finalized.
+
+The first accepted package is retained; any later or duplicate handover is nonretryable
+`PackageAfterRefused` (400) and cannot replace what the run grades. Loading/ModelCheck validation
+happens outside the lock and eligibility is checked again before publication, so a file parsed
+while closure happens cannot reopen the wait. Wrong paths and invalid packages remain refused
+without closing an otherwise open wait, permitting a corrected valid delivery. No event wait,
+file load or callback runs while the rendezvous lock is held. An accepted package remains
+accepted if shutdown or a Stop is observed afterwards; this is the existing arrival-priority
+rule, not a new cancellation mode.
+
+
 ### The engineer stop
 
 `POST /remodel/runs/{job_id}/stop` sets the job's stop event, which `run_remodel` reads through
@@ -188,7 +208,7 @@ refusal is still a refusal and is never guessed into a nearer class.
 | `ResumeRefused` | 409 | The folder already holds a `changes.jsonl`. **A run never auto-resumes** (FR-031) |
 | `RunInProgress` | 409 | A live job already holds that run folder. One run per folder. **Checked before `RunNotPlanned` and `ResumeRefused`**, which a live run makes true of its own folder within milliseconds of the `201` - it records `judging` on the plan and opens a change log - so the most specific fact wins and the pane is never told to plan a part a run is writing to |
 | `UnknownJob` | 404 | No job of that id on this backend |
-| `PackageAfterRefused` | 400 | The posted `path` is not `<run_dir>/package-after.json`, or does not load as a ModelCheck package |
+| `PackageAfterRefused` | 400 | The posted `path` is not `<run_dir>/package-after.json`, does not load as a ModelCheck package, or the rendezvous can no longer accept it (a package was already accepted; cancellation, expiry or abandonment closed the wait; or the job ended). The accepted snapshot and run evidence are retained |
 
 `NoDocument`, `NotAttached`, `RunNotFound`, `CopyDiscarded` and `SessionLost`
 are the host's own refusals (`AddIn/Remodel/RemodelHost.cs`) and are raised before any of these

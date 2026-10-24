@@ -3689,3 +3689,75 @@ conditions are satisfied. PR delivery still requires all four Windows/Linux and 
 3.11/3.12 CI checks green. Decision 159A remains in progress, with the two remaining defect
 categories above, T180 and pilot-workstation prerequisites. Remodel Start stays disabled.
 No SOLIDWORKS process, paid API test or seat task ran.
+
+
+### R19.32 After-dump acceptance and closure (T265 to T268; 2026-10-24)
+
+[Issue #39](https://github.com/coleas33/smart_SW/issues/39) continues decision 159A's established
+rule: an accepted after-dump outranks Stop; a distinct Stop received during the wait can end it
+before acceptance. A timed event wait can return false and miss delivery before its subsequent
+Stop check. Separately, `_deliver` accepted a valid package after cancellation, expiry or terminal
+completion, even in the gap while the worker was still finalizing its failed plan. A successful
+HTTP handover therefore did not establish that the job could consume the package.
+
+Use one per-job rendezvous lock and an explicit closed flag independent of public worker state.
+The wait publishes awaiting and snapshots Stop count together; every decision gives the accepted
+package priority, then checks closure, a newer Stop and the deadline. Closure is recorded before
+an unsuccessful wait leaves. Delivery keeps existing path/ModelCheck validation outside the lock,
+then atomically rechecks eligibility and publishes the first package. Shutdown and terminal
+publication close the rendezvous too. Stop identities/counts share the lock, but a Stop does not
+close immediately: delivery before the wait's cancellation decision must still win. No lock is
+held during file parsing, event waits, callbacks or worker finalization. Merely checking arrival
+twice leaves another interval between that check and cancellation; the shared decision is needed.
+
+The first accepted package is preserved; later or duplicate handovers use existing nonretryable
+`PackageAfterRefused` (400), with words saying the wait can no longer use that dump. There is no
+existing duplicate-idempotency promise, and the add-in sends the after-dump only once. Content
+identity or duplicate acknowledgements would add a different contract without helping this fix.
+T262's cleanup-only duplicate deliveries are deliberately replaced by release/abandon while its
+actual retry/cancellation assertions remain unchanged. C# production ordering remains intact:
+a Stop sent before dumping may cancel; a flag pressed during synchronous dumping cannot overtake
+an accepted package. T266 pins those outcomes rather than changing that policy.
+
+Start stays disabled. This slice changes no write or run/session guard and does not settle the
+changed-root cleanup design. No new owner decision, SOLIDWORKS launch or paid API test is needed.
+
+
+**Test first and focused validation:** the final unchanged-production red run has 16 cases,
+16 failures and zero errors. The controlled timed-wait case raised `PackageAfterStopped` despite
+an accepted package; the real HTTP case returned 200 instead of 400 while `job.fail` was held
+before terminal publication. Other failures proved lost closure, replaced evidence, terminal
+resurrection and two competing acceptances. A test-helper NameError was corrected before this
+final red run and is not counted as defect evidence. With T267, all 180 route/integration cases
+pass, including the 16 new ordering cases and 27 existing Stop-identity cases. Ruff passes.
+
+Only two T262 finally-block deliveries were replaced by abandon; their behavioral assertions
+are unchanged. The existing `TestStop.test_stop_is_idempotent_and_sets_the_runs_flag` was
+strengthened deliberately: both Stop replies and the stop flag are still asserted, then the
+test waits for its uncalibrated worker's failure and requires the late valid handover to be
+`400 PackageAfterRefused`. Its prior cleanup assertion accepted a timing-dependent `{200,409}`
+set and accidentally required the defect's successful handover. No allowed status was added
+and no Stop assertion was removed.
+
+C# production is unchanged. All three T266 guard cases pass, including both saved/failed
+accepted-package outcomes, in the 146-case focused family. The full Windows Release rebuild
+with `--no-incremental` has zero warnings and errors; the complete solution passes 10,169
+extractor and 4,123 add-in cases, none failed or skipped. Both C# test files remain unchanged
+after that gate. The first independent source/test review found no ordering or deadlock issue;
+final approval and complete Python gates follow below.
+
+
+**Complete local slice gate (2026-10-24):** `uv sync --all-extras` and tokenizer fetch pass.
+With `SWREVIEW_REQUIRE_TOKENIZER=1`, the full non-live suite on Python 3.12.3 and 3.11.16
+passes 18,209 cases with 5 skipped on each, zero failures or errors; temporary folders are
+outside the checkout. Ruff passes. The C# Release rebuild and full solution counts above are
+complete. All four product/test file hashes remain identical to the independently reviewed
+and gated source. All 298 final record/identifier reader cases pass, none skipped. The local
+Markdown links, 268 unique task IDs and named T265/T266 tests resolve; final whitespace and
+index-LF checks precede commit. The independent full source/document audit approved with no
+findings after verifying both full Python reports and the unchanged source hashes. Delivery remains through a PR with all four required CI checks
+green; no SOLIDWORKS launch, live/paid test, Start enablement or new owner decision occurred.
+
+The remaining known offline defect is cleanup after a run-root change. T180, the blocking
+probe verdicts and the real Plan/source-hash pilot prerequisites still gate Start. The public
+development handoff records the root-change recovery constraints for the next slice.
