@@ -526,6 +526,246 @@ public class RemodelOpenHandlerTests : IDisposable
     // ---- remodel.open ----------------------------------------------------------------
 
     [Fact]
+    public void Open_HoldsTheReturnedScopeFromBeforeNativeOpenThroughSuccessfulPublication()
+    {
+        FakeRemodelSeat seat = Seat();
+        BridgeServices services = Services(seat, _runDirectory);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        var calls = new List<string>();
+        bool held = false;
+        bool heldInsideOpen = false;
+        bool publishedAtExit = false;
+        bool idleAtExit = false;
+        var lease = new OpenLease(() =>
+        {
+            calls.Add("dispose");
+            publishedAtExit = dispatcher.RemodelTargetPath == _copyPath;
+            idleAtExit = !seat.CommandInProgress
+                && RemodelSystemToggles.SuppressedToggles.All(toggle => !seat.GetUserPreferenceToggle(toggle));
+            held = false;
+        });
+        services.BeginRemodelOpen = () =>
+        {
+            calls.Add("begin");
+            held = true;
+            return lease;
+        };
+        seat.DuringCall = _ =>
+        {
+            calls.Add("open");
+            heldInsideOpen = held;
+        };
+
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Equal(new[] { "begin", "open", "dispose" }, calls);
+        Assert.True(heldInsideOpen);
+        Assert.True(publishedAtExit);
+        Assert.True(idleAtExit);
+        Assert.False(held);
+        Assert.Equal(1, lease.Disposals);
+    }
+
+    [Theory]
+    [InlineData("native")]
+    [InlineData("null handle")]
+    [InlineData("baseline")]
+    [InlineData("scope")]
+    [InlineData("close")]
+    [InlineData("settings")]
+    public void Open_DisposesTheReturnedScopeAfterFailedOpenUnwind(string failure)
+    {
+        FakeRemodelSeat seat = Seat();
+        if (failure == "native")
+        {
+            seat.OpenFailure = new InvalidOperationException("FICT native open failed");
+        }
+        else if (failure == "null handle")
+        {
+            seat.Copy = null;
+        }
+        else if (failure == "scope")
+        {
+            seat.Copy!.Signals.SolidBodyCount = 4;
+        }
+        else
+        {
+            seat.Copy!.WhatsWrongCount = 2;
+        }
+        if (failure == "close") seat.CloseFailure = new IOException("FICT close failed");
+        if (failure == "settings") seat.FailingWrites.Add("CommandInProgress=False");
+        BridgeServices services = Services(seat, _runDirectory);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        bool held = false;
+        bool heldAtEnding = false;
+        bool deletedAtExit = false;
+        string? stageAtExit = "not disposed";
+        var lease = new OpenLease(() =>
+        {
+            deletedAtExit = !File.Exists(_copyPath);
+            stageAtExit = dispatcher.RemodelStageDirectory;
+            held = false;
+        });
+        services.BeginRemodelOpen = () =>
+        {
+            held = true;
+            return lease;
+        };
+        services.RemodelSessionEnded = _ => heldAtEnding = held;
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        if (failure == "native") Assert.Contains("FICT native open failed", response.Error, StringComparison.Ordinal);
+        else Assert.Equal(
+            failure == "scope" ? RemodelErrorCodes.ScopeChanged
+                : failure == "null handle" ? RemodelErrorCodes.OpenFailed : RemodelErrorCodes.PreexistingRebuildErrors,
+            Refusal(response));
+        Assert.Equal(1, lease.Disposals);
+        Assert.True(heldAtEnding);
+        Assert.True(deletedAtExit);
+        Assert.Null(stageAtExit);
+        Assert.False(held);
+        Assert.Null(dispatcher.RemodelTargetPath);
+    }
+
+    [Theory]
+    [InlineData("parameters")]
+    [InlineData("probe")]
+    [InlineData("root")]
+    [InlineData("target")]
+    public void Open_DisposesTheReturnedScopeOnEarlyRefusals(string refusal)
+    {
+        FakeRemodelSeat seat = Seat();
+        BridgeServices services = Services(seat, _runDirectory);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        int began = 0;
+        var lease = new OpenLease(() => { });
+        services.BeginRemodelOpen = () =>
+        {
+            began++;
+            return lease;
+        };
+        string probe = Probe(dispatcher);
+        if (refusal == "root") services.RemodelRunRoot = null;
+        BridgeRequest request = refusal == "parameters"
+            ? Request("2", RemodelCommands.Open, "{}")
+            : OpenRequest(refusal == "probe" ? "probe:never-minted" : probe,
+                refusal == "target" ? _sourcePath : _copyPath);
+
+        BridgeResponse response = dispatcher.Dispatch(request);
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Equal(1, began);
+        Assert.Equal(1, lease.Disposals);
+        Assert.Empty(seat.Opened);
+        Assert.False(File.Exists(_copyPath));
+        Assert.Null(dispatcher.RemodelStageDirectory);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Open_BeginScopeFailureDoesNotChangeTheRequestsAnswer(bool refused)
+    {
+        FakeRemodelSeat seat = Seat();
+        if (refused) seat.Copy!.WhatsWrongCount = 2;
+        BridgeServices services = Services(seat, _runDirectory);
+        int began = 0;
+        services.BeginRemodelOpen = () =>
+        {
+            began++;
+            throw new IOException("FICT begin listener failed");
+        };
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(1, began);
+        if (refused) Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors, Refusal(response));
+        else Assert.Equal(BridgeStatus.Ok, response.Status);
+        Assert.DoesNotContain("FICT begin listener failed", response.Error ?? "", StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Open_ScopeDisposalFailureDoesNotChangeTheRequestsAnswer(bool refused)
+    {
+        FakeRemodelSeat seat = Seat();
+        if (refused) seat.Copy!.WhatsWrongCount = 2;
+        BridgeServices services = Services(seat, _runDirectory);
+        var lease = new OpenLease(() => throw new IOException("FICT dispose listener failed"));
+        services.BeginRemodelOpen = () => lease;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(1, lease.Disposals);
+        if (refused) Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors, Refusal(response));
+        else Assert.Equal(BridgeStatus.Ok, response.Status);
+        Assert.DoesNotContain("FICT dispose listener failed", response.Error ?? "", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Open_DisposesItsExactScopeEvenIfTheCallbackIsReplaced()
+    {
+        FakeRemodelSeat seat = Seat();
+        BridgeServices services = Services(seat, _runDirectory);
+        var original = new OpenLease(() => { });
+        var replacement = new OpenLease(() => { });
+        int began = 0;
+        services.BeginRemodelOpen = () =>
+        {
+            began++;
+            return original;
+        };
+        seat.DuringCall = _ => services.BeginRemodelOpen = () => replacement;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Equal(1, began);
+        Assert.Equal(1, original.Disposals);
+        Assert.Equal(0, replacement.Disposals);
+    }
+
+    [Theory]
+    [InlineData(RemodelCommands.ProbeScope)]
+    [InlineData(RemodelCommands.Snapshot)]
+    [InlineData(RemodelCommands.Close)]
+    public void OtherCommands_DoNotBeginAnOpenScope(string command)
+    {
+        BridgeServices services = Services(Seat(), _runDirectory);
+        int began = 0;
+        services.BeginRemodelOpen = () =>
+        {
+            began++;
+            return new OpenLease(() => { });
+        };
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        dispatcher.Dispatch(command == RemodelCommands.ProbeScope ? ProbeRequest() : Request("3", command, RunOnly));
+
+        Assert.Equal(0, began);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Open_WithNoScopeCallbackOrNoReturnedScopeKeepsItsAnswer(bool callback)
+    {
+        BridgeServices services = Services(Seat(), _runDirectory);
+        int began = 0;
+        if (callback) services.BeginRemodelOpen = () => { began++; return null; };
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Equal(callback ? 1 : 0, began);
+    }
+
+    [Fact]
     public void Open_UnknownProbeId_IsScopeNotProbed_AndNothingIsCopied()
     {
         FakeRemodelSeat seat = Seat();
@@ -1683,6 +1923,21 @@ public class RemodelOpenHandlerTests : IDisposable
     }
 
     // ---- helpers ---------------------------------------------------------------------
+
+    private sealed class OpenLease : IDisposable
+    {
+        private readonly Action _dispose;
+
+        public OpenLease(Action dispose) => _dispose = dispose;
+
+        public int Disposals { get; private set; }
+
+        public void Dispose()
+        {
+            Disposals++;
+            _dispose();
+        }
+    }
 
     /// <summary>A two-feature copy and a source SOLIDWORKS already has open.</summary>
     private FakeRemodelSeat Seat()

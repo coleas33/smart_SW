@@ -35,6 +35,22 @@ maps a refusal to a class without matching on prose. `error` still carries the s
 engineer reads. This uses the same "except where noted" allowance 1.0 grants `capture`, which
 returns its `Gap` on an error.
 
+## Internal copy-open observation
+
+The optional `BridgeServices.BeginRemodelOpen` callback is an application-thread host hook,
+not a command, tool or wire field. The dispatcher calls it once before `OpenIn` and disposes
+its exact returned scope in the existing `Open` finally, after successful session publication
+or failed-open unwind. A missing callback or null scope preserves console behavior. Observer
+failures do not change the request's result; the add-in service logs them best-effort.
+
+The add-in uses that scope only to defer active-configuration subscription following. Requests
+coalesce until the last scope exits, then queued application-thread work resolves the latest
+active document. Queued work rechecks the scope because native open can pump UI callbacks.
+Unloading or replacing the watch invalidates its old coordinator before disposal. Document-change
+fan-out, copy-loss handling and bridge attachment holds remain immediate. This hook grants no
+document access or write permission and changes no request or reply shape. Native open timing
+and failed-unwind behavior remain part of pilot-workstation acceptance (R21).
+
 ## Authorization
 
 `ScopedSecretPolicy` gains a third scope. `ToolServiceHost` mints `RemodelSecret` alongside

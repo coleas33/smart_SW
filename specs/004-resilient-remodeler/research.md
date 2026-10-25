@@ -3832,3 +3832,114 @@ the documented host `InvokeTimeout` alternative is retained. Changed-root cleanu
 owner/pilot prerequisites still gate Start, which remains disabled. The handoff also records
 read-only follow-up on the remaining watch's open boundary and lifecycle checks. No source
 write, permission expansion, SOLIDWORKS launch, paid/live test or new owner decision occurred.
+
+
+## R21 Configuration-watch deferral during copy opening (T188; T273 to T276; 2026-10-24)
+
+This continuation implements the remaining watch item of T188. Source read-only metadata
+was delivered in PR #41 at `62d22bb`; the documented host `InvokeTimeout` remains the transport
+bound. No new owner decision or Start approval is taken. Changed-root cleanup remains a
+separate known defect before Start readiness.
+
+The precise boundary is `SwBridgeDispatcher.Open`'s existing `OpenIn` try/finally: enter
+before the open handler and exit after successful session publication or complete failed-open
+unwind. An optional `Func<IDisposable?> BeginRemodelOpen` observer on bridge services and
+ToolService options supplies one captured lifetime scope. Dispose that exact scope in finally;
+never reread a mutable listener on exit or derive state from diagnostic stage markers. Observer
+failures must not change the open answer or skip cleanup; the host logs begin/dispose failures.
+Console callers without a listener retain their existing behavior.
+
+The add-in keeps a small application-thread coordinator for configuration-watch requests.
+Outside the open scope requests follow immediately. Inside it they coalesce, and final exit
+posts a flush that resolves the latest active document. Native open may pump queued UI work,
+so each queued flush rechecks the explicit scope and does no subscription while it is held.
+Nested scopes and repeated disposal must not release another open. Capture the coordinator
+identity at service creation, invalidate it before replacing or disposing the watch, and make
+old queued work and late scopes harmless after unload. Only subscription following waits:
+tab notifications, copy-loss handling and existing ToolServiceGate attachment holds remain
+immediate. `RunInProgress` spans the entire Plan/run and is not the boundary. Decision 158A's
+bridge attachment/configuration-follow policy is unchanged.
+
+T273/T274 name the failing behavior and wiring tests before T275 implementation. New APIs may
+need minimal inert compile seams to demonstrate actual assertions failing; record those seams
+and distinguish already-passing guards from red cases. T276 requires the full local and CI
+slice gates and independent review. No source-write, allowlist, protocol, or paid/live behavior
+changes are needed. Fakes establish scheduling/lifecycle behavior only: actual SOLIDWORKS
+OpenDoc7 timing and failed-open unwind still require native Plan/probe acceptance, alongside
+009 T081's configuration event checks. Keep those seat items and Remodel Start disabled.
+
+
+**Compiled test-first boundary evidence:** T273 added the two optional inert API properties
+only, then exercised real dispatcher and ToolService paths. The extractor baseline had
+17 failing lifetime cases and 4 already-passing guards; the real host had 6 failing cases.
+The failures observed missing begin/dispose callbacks through native-open, publication and
+failed-unwind paths, not compilation or test-harness errors. Assertions are made after the
+callbacks return so the product's observational catches cannot hide a test failure.
+
+All-extras sync, tokenizer fetch and Ruff pass. The complete required-tokenizer Python 3.12
+and 3.11 non-live suites ran against 1,250 frozen Python source/test/configuration inputs;
+the complete results are below. Final record/source-pin checks follow the settled records;
+no Python behavior is changed by this slice.
+
+
+**Compiled add-in red evidence:** the expanded T274 baseline ran 18 cases against the product
+compile seam's existing immediate-follow behavior and real add-in source wiring: 17 failed,
+1 outside-open guard passed, zero compiler/harness errors. Cases include resolve/follow/post/
+report failures, held-open immediate tab/copy-loss fan-out, nested queue pumping, newer-document
+coalescing and reentrant lifecycle/open changes. The seam was unwired, with inert leases and
+disposal; it did not implement the new fence before the assertions failed. Existing assertions
+are unchanged.
+
+
+**Independent lifecycle audit before freeze:** the coordinator also invalidates an ActiveDoc
+resolution if a complete nested open enters and exits during that getter, even without a
+second document event. Mark the in-progress resolution pending when an open begins; idle
+opens need not invent subscription requests. The audit found that native unsubscribe/subscribe
+inside `ActiveConfigurationWatch.Follow` can itself reenter unload or replacement. Its prior
+Dispose only released the current sink, allowing the suspended Follow to subscribe afterwards.
+Add failing reentrant tests before making disposal terminal, recheck after release and subscribe,
+and release a newly added sink when disposal occurred during its subscription. This is the
+watch's same lifetime guarantee, not an attachment-policy change. Existing assertions remain.
+
+**Focused boundary green:** all 156 `RemodelOpenHandlerTests` and 160 real
+`ToolServiceWiringTests` pass after the recorded 17+6 reds and 4 guards. The dispatcher holds
+one exact scope until the opening directory clears; the host observes begin/dispose errors
+without changing the reply, and no-listener/null-scope callers preserve their results.
+
+
+**Additional lifecycle red/green:** all six newly named cases failed against the previous
+watch and coordinator; 194 focused guards already passed. The watch now makes Dispose terminal,
+ignores late sinks, and rechecks disposal around unsubscribe/subscribe. If subscription itself
+reenters disposal, it attempts to release that just-added sink without propagating a native
+unsubscribe failure. Beginning an open during a current resolution invalidates that result,
+even when the complete nested open exits before the getter returns. All 200 expanded
+coordinator/watch/wiring/ToolService cases now pass, none skipped; existing assertions remain
+unchanged. Ten changed C# source/test hashes are frozen before the full solution gate.
+
+**Complete Python slice gate:** both required-tokenizer non-live suites completed with 18,273
+passed, 5 skipped and zero failures/errors, on Python 3.12 and 3.11. The full JUnit reports
+confirm all cases completed; the terminal handles were lost during a client-context change,
+so their process exit statuses are not separately recorded. All 1,250 frozen Python source,
+test and configuration inputs remain unchanged. Sync, tokenizer fetch and Ruff passed. The
+final record/source-pin family is rerun after the C# and documentation changes settle.
+
+
+**Final Windows solution gate (2026-10-24):** the Release `--no-incremental` build exits 0
+with zero warnings/errors. Full solution tests exit 0: 10,199 extractor and 4,153 add-in cases
+pass, with zero failures, errors or skipped cases. All ten frozen changed C# hashes and all
+1,250 Python input hashes remain unchanged. Independent backend/add-in and complete final
+source audits approved the same code with no remaining findings. Constitution I through VI
+remain satisfied: no new numerical or engineering verdict, IR loss, permission/write expansion,
+secret exposure or unverified native acceptance is introduced; meaningful failing regressions
+precede each behavior fix, and the remaining coverage is explicit.
+
+T188's implementation is complete: source metadata, open-scoped watch deferral, terminal watch
+lifetime and the retained documented `InvokeTimeout` alternative. Actual SOLIDWORKS native
+open/failed-unwind timing and configuration event acceptance are still pilot-workstation work.
+Start remains disabled; changed-root cleanup is the next known offline defect. All 298 final
+record/identifier reader cases pass, none skipped, exit 0. All 29 named regressions and eight
+local documentation links resolve. All 287 task identifiers, including inherited letter
+suffixes, are unique; the newest numeric task is T276. Staged files use LF and whitespace
+checks pass. The independent final source/document review approved the same frozen code.
+PR delivery still requires all four CI checks green before merge. No new owner decision,
+SOLIDWORKS launch or paid/live call occurred.
