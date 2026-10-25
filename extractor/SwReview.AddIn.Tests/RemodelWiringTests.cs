@@ -23,6 +23,38 @@ namespace SwReview.AddIn.Tests;
 /// </summary>
 public sealed class RemodelWiringTests
 {
+    /// <summary>004 T274: only subscription is coordinated; the existing document fan-out stays immediate.</summary>
+    [Fact]
+    public void TheAddInDefersOnlyConfigurationFollowingAtTheOpenBoundary()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+        Assert.Contains(
+            "FollowActiveConfiguration(); TellEveryTabTheDocumentChanged(", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "private void FollowActiveConfiguration() => _configurationFollow?.Request();", source, StringComparison.Ordinal);
+        Assert.Contains("() => _swApp?.ActiveDoc", source, StringComparison.Ordinal);
+        Assert.Contains("activeDocument => _configurationWatch?.Follow(activeDocument)", source, StringComparison.Ordinal);
+        Assert.Contains("new ControlAppThreadInvoker(_pane!)", source, StringComparison.Ordinal);
+        Assert.Contains("invoker.Post,", source, StringComparison.Ordinal);
+        Assert.Contains("ConfigurationFollowCoordinator configurationFollow = _configurationFollow!;", source, StringComparison.Ordinal);
+        Assert.Contains("BeginRemodelOpen = configurationFollow.BeginRemodelOpen", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>004 T274: invalidate queued work before watch disposal, replacement or unload waits.</summary>
+    [Fact]
+    public void TheAddInInvalidatesConfigurationFollowingBeforeReplacingOrDisposingItsWatch()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+        Assert.Contains("StartConfigurationWatch();", source, StringComparison.Ordinal);
+        Assert.True(source.IndexOf("StartConfigurationWatch();", StringComparison.Ordinal)
+            < source.IndexOf("_toolService = CreateToolServiceGate(reviewOptions);", StringComparison.Ordinal));
+        Assert.Contains(
+            "_configurationFollow?.Dispose(); _configurationWatch?.Dispose();", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "public bool DisconnectFromSW() { _configurationFollow?.Dispose(); _configurationFollow = null;",
+            source, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// The add-in builds exactly one <c>BackendRemodelPipeline</c>, in <c>StartRemodelHost</c>, and
     /// hands it the add-in's <c>BindRemodelRun</c> as its bind, beside the remodel half of the

@@ -3404,6 +3404,97 @@ public sealed class ToolServiceWiringTests
     // `ToolServiceOptions.RemodelSessionEnded`. Over the real host, the real dispatcher behind
     // the real pipe server, the bridge's fake seat and copy, and a fake application thread.
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TheToolServiceHoldsAnOpenScopeOnTheApplicationThreadThroughOpenAndUnwind(bool failed)
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            if (failed) world.Copy.WhatsWrongCount = 2;
+            bool held = false;
+            bool heldInsideOpen = false;
+            bool heldAtEnding = false;
+            bool deletedAtExit = false;
+            int beginThread = 0;
+            int exitThread = 0;
+            int began = 0;
+            var lease = new OpenLease(() =>
+            {
+                exitThread = Thread.CurrentThread.ManagedThreadId;
+                deletedAtExit = !File.Exists(world.CopyPath);
+                held = false;
+            });
+            world.BeginRemodelOpen = () =>
+            {
+                began++;
+                beginThread = Thread.CurrentThread.ManagedThreadId;
+                held = true;
+                return lease;
+            };
+            world.Seat.DuringCall = _ => heldInsideOpen = held;
+            world.SessionEnded = () => heldAtEnding = held;
+            world.Host.BindRemodelRun(world.RunDirectory);
+
+            PipeReply response = world.Open(world.Probe());
+
+            Assert.Equal(failed ? BridgeStatus.Error : BridgeStatus.Ok, response.Status);
+            Assert.Equal(1, began);
+            Assert.Equal(1, lease.Disposals);
+            Assert.Equal(world.App.ThreadId, beginThread);
+            Assert.Equal(world.App.ThreadId, exitThread);
+            Assert.True(heldInsideOpen);
+            Assert.False(held);
+            if (failed)
+            {
+                Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors,
+                    response.Result.GetProperty("error_code").GetString());
+                Assert.True(heldAtEnding);
+                Assert.True(deletedAtExit);
+            }
+            else
+            {
+                Assert.False(deletedAtExit);
+                Assert.Empty(world.Told);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("begin", false)]
+    [InlineData("begin", true)]
+    [InlineData("dispose", false)]
+    [InlineData("dispose", true)]
+    public void OpenScopeBeginAndDisposeFailuresAreLoggedWithoutChangingTheReply(string when, bool failed)
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            if (failed) world.Copy.WhatsWrongCount = 2;
+            int began = 0;
+            var lease = new OpenLease(() => throw new IOException("FICT dispose listener failed"));
+            world.BeginRemodelOpen = () =>
+            {
+                began++;
+                if (when == "begin") throw new IOException("FICT begin listener failed");
+                return lease;
+            };
+            world.Host.BindRemodelRun(world.RunDirectory);
+
+            PipeReply response = world.Open(world.Probe());
+
+            Assert.Equal(failed ? BridgeStatus.Error : BridgeStatus.Ok, response.Status);
+            Assert.Equal(1, began);
+            Assert.Equal(when == "begin" ? 0 : 1, lease.Disposals);
+            if (failed) Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors,
+                response.Result.GetProperty("error_code").GetString());
+            Assert.DoesNotContain("listener failed", response.Error ?? "", StringComparison.Ordinal);
+            string diagnostic = Assert.Single(world.LogLines, line => line.Contains("FICT " + when + " listener failed"));
+            Assert.Contains("remodel.open", diagnostic, StringComparison.Ordinal);
+            Assert.Contains(nameof(IOException), diagnostic, StringComparison.Ordinal);
+            Assert.DoesNotContain(world.Host.RemodelSecret, string.Join("\n", world.LogLines), StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>
     /// U27 (2026-09-28), over the real host and its real log writers: every call
     /// <c>remodel.geometry</c> makes on the copy finds its own <c>before</c> marker already the
@@ -4003,6 +4094,21 @@ public sealed class ToolServiceWiringTests
         }
     }
 
+    private sealed class OpenLease : IDisposable
+    {
+        private readonly Action _dispose;
+
+        public OpenLease(Action dispose) => _dispose = dispose;
+
+        public int Disposals { get; private set; }
+
+        public void Dispose()
+        {
+            Disposals++;
+            _dispose();
+        }
+    }
+
     /// <summary>
     /// The real <see cref="ToolServiceHost"/>, started through its own
     /// <see cref="ToolServiceHost.Start(ToolServiceOptions, ToolServiceHost.AttachWork)"/> with an
@@ -4038,6 +4144,7 @@ public sealed class ToolServiceWiringTests
                 InvokeTimeout = TimeSpan.FromSeconds(30),
                 TeardownTimeout = teardownTimeout ?? TimeSpan.FromSeconds(30),
                 Now = () => ClockFails ? throw new InvalidOperationException("the clock stopped") : Clock,
+                BeginRemodelOpen = () => BeginRemodelOpen?.Invoke(),
                 RemodelSessionEnded = outcome =>
                 {
                     lock (_toldLock)
@@ -4093,6 +4200,8 @@ public sealed class ToolServiceWiringTests
 
         /// <summary>Runs after each ending is recorded, on the thread it was told on.</summary>
         public Action? SessionEnded { get; set; }
+
+        public Func<IDisposable?>? BeginRemodelOpen { get; set; }
 
         public IReadOnlyList<Ending> Told
         {

@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using SolidWorks.Interop.sldworks;
 using SwReview.AddIn.Remodel.Seat;
 using SwReview.AddIn.Review;
@@ -665,6 +666,15 @@ public sealed class ToolServiceOptions
     /// </summary>
     public Action<RemodelSessionEnd>? RemodelSessionEnded { get; set; }
 
+    /// <summary>
+    /// 004 T188: begins an optional scope on the application thread before the bridge's open,
+    /// disposed there after the entire open and any failed unwind. The add-in uses it to defer
+    /// following the copy's configuration while native open calls can raise document events.
+    /// Null or a null returned scope does nothing. Begin/disposal failures are logged and never
+    /// change the open's result; the returned scope, not a later callback, owns the matching exit.
+    /// </summary>
+    public Func<IDisposable?>? BeginRemodelOpen { get; set; }
+
     public Func<DateTime> Now { get; set; } = () => DateTime.Now;
 }
 
@@ -882,6 +892,7 @@ public sealed class ToolServiceHost : IToolService
         // application thread the routine runs on; a listener that throws is written down here and
         // goes no further (lane D's defaults, 2026-09-27).
         attached.Services.RemodelSessionEnded = outcome => TellSessionEnded(options, log, outcome);
+        attached.Services.BeginRemodelOpen = () => BeginOpenScope(options, log);
 
         IBridgeDispatcher chain = RequestChain(
             dispatcher, attached.DocumentIsOpen, attached.DocumentPath, recorder, log.Write);
@@ -1169,6 +1180,60 @@ public sealed class ToolServiceHost : IToolService
             log.WriteLine(
                 "the Remodel tab could not be told a remodel session ended (" + outcome.Reason + "): "
                 + failure.GetType().Name + ": " + failure.Message);
+        }
+    }
+
+    private static IDisposable? BeginOpenScope(ToolServiceOptions options, ToolServiceLog log)
+    {
+        Func<IDisposable?>? begin = options.BeginRemodelOpen;
+        if (begin == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            IDisposable? scope = begin();
+            return scope == null ? null : new LoggedOpenScope(scope, log);
+        }
+        catch (Exception failure)
+        {
+            LogOpenScopeFailure(log, "begin", failure);
+            return null;
+        }
+    }
+
+    private static void LogOpenScopeFailure(ToolServiceLog log, string step, Exception failure) =>
+        log.WriteLine("remodel.open scope could not " + step + ": "
+            + failure.GetType().Name + ": " + failure.Message);
+
+    private sealed class LoggedOpenScope : IDisposable
+    {
+        private IDisposable? _scope;
+        private readonly ToolServiceLog _log;
+
+        public LoggedOpenScope(IDisposable scope, ToolServiceLog log)
+        {
+            _scope = scope;
+            _log = log;
+        }
+
+        public void Dispose()
+        {
+            IDisposable? scope = Interlocked.Exchange(ref _scope, null);
+            if (scope == null)
+            {
+                return;
+            }
+
+            try
+            {
+                scope.Dispose();
+            }
+            catch (Exception failure)
+            {
+                LogOpenScopeFailure(_log, "dispose", failure);
+            }
         }
     }
 

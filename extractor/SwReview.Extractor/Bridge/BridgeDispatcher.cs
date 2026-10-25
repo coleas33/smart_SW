@@ -348,6 +348,14 @@ public sealed class BridgeServices
     public Action<RemodelSessionEnd>? RemodelSessionEnded { get; set; }
 
     /// <summary>
+    /// 004 T188: an optional host scope around the whole <c>remodel.open</c> handler, from
+    /// before its first step until after successful publication or failed-open unwind. The
+    /// returned scope is disposed on the request's thread, after its opening directory clears.
+    /// Null listens to none. Begin and disposal failures never change the command's answer.
+    /// </summary>
+    public Func<IDisposable?>? BeginRemodelOpen { get; set; }
+
+    /// <summary>
     /// U27 (2026-09-28): where the before, after and failed markers around each native step of
     /// <c>remodel.open</c> and <c>remodel.geometry</c> go, as <c>(command, marker)</c>
     /// (<see cref="RemodelStageMarkers"/>). A native process crash cannot be caught by Dispatch,
@@ -1073,13 +1081,32 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         // fresh bind. Whether there was one is still step 4's refusal, so the order is unchanged.
         string? boundRunRoot = TakeRunRoot();
         _openingRunDirectory = string.IsNullOrWhiteSpace(boundRunRoot) ? null : boundRunRoot;
+        Func<IDisposable?>? begin = _services.BeginRemodelOpen;
+        IDisposable? openScope = null;
         try
         {
+            try
+            {
+                openScope = begin?.Invoke();
+            }
+            catch (Exception)
+            {
+                // A host observer is not part of the remodel verdict or its mutation guard.
+            }
+
             return OpenIn(request, boundRunRoot, Stage(RemodelCommands.Open));
         }
         finally
         {
             _openingRunDirectory = null;
+            try
+            {
+                openScope?.Dispose();
+            }
+            catch (Exception)
+            {
+                // The open and its unwind have their own outcome, unchanged by an observer.
+            }
         }
     }
 

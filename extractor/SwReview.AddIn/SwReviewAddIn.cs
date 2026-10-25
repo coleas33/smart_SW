@@ -110,6 +110,7 @@ public class SwReviewAddIn : ISwAddin
     /// (feature 009 FR-022). Follows the active document on every `ActiveDocChangeNotify`.
     /// </summary>
     private ActiveConfigurationWatch? _configurationWatch;
+    private ConfigurationFollowCoordinator? _configurationFollow;
 
     private JobObject? _job;
     private BackendSupervisor? _supervisor;
@@ -259,6 +260,9 @@ public class SwReviewAddIn : ISwAddin
     /// </summary>
     public bool DisconnectFromSW()
     {
+        _configurationFollow?.Dispose();
+        _configurationFollow = null;
+
         // The race review of owner decision 157A, and its final reviews: the settings restart stops first - before
         // the pumps, each joined for seconds while the message it handles can still save the settings, and before
         // the hosts whose work holds the restart back let their holds go with them - so none is made as the add-in
@@ -535,6 +539,7 @@ public class SwReviewAddIn : ISwAddin
         };
 
         _reviewHost = new ReviewHost(reviewOptions);
+        StartConfigurationWatch();
         _toolService = CreateToolServiceGate(reviewOptions);
 
         StartPageMessagePump();
@@ -569,10 +574,6 @@ public class SwReviewAddIn : ISwAddin
         {
             _events.ActiveDocChangeNotify += OnActiveDocumentChanged;
         }
-
-        // ...and a configuration switch inside the active document is a document change too
-        // (feature 009 FR-022): the watch follows the active document and runs the same fan-out.
-        _configurationWatch = ActiveConfigurationWatch.ForSolidWorks(OnActiveConfigurationChanged);
 
         // SOLIDWORKS usually loads with nothing open, in which case this is a no-op and the
         // document-changed event below starts the tool service instead. It is asked here too
@@ -1168,11 +1169,16 @@ public class SwReviewAddIn : ISwAddin
     {
         TaskPaneControl pane = _pane!;
         ISldWorks app = _swApp!;
+        ConfigurationFollowCoordinator configurationFollow = _configurationFollow!;
 
         return new ToolServiceGate(
             CurrentDocument,
             () => ToolServiceHost.Start(new ToolServiceOptions(app, new ControlAppThreadInvoker(pane))
             {
+                // Capture this watch lifetime: a late callback from an old service must not
+                // fence or follow a replacement watch after unload or host replacement.
+                BeginRemodelOpen = configurationFollow.BeginRemodelOpen,
+
                 // Feature 011 T074: `drawing.read` resolves its run_id through the review host's
                 // own session records, never as a path - since decision 141A to the review session
                 // whose count of failed opens it keeps. Read through the field per request, like
@@ -1463,20 +1469,24 @@ public class SwReviewAddIn : ISwAddin
         TellEveryTabTheDocumentChanged("The pane could not be told the active configuration changed.");
 
     /// <summary>
-    /// Moves the configuration watch to whatever document is active now. On the application
-    /// thread, like both callers; never throws out of an event sink.
+    /// Replaces a watch lifetime before any tool service captures its open callback. Invalidating
+    /// queued work first prevents a late active-document read from subscribing the new watch.
     /// </summary>
-    private void FollowActiveConfiguration()
+    private void StartConfigurationWatch()
     {
-        try
-        {
-            _configurationWatch?.Follow(_swApp?.ActiveDoc);
-        }
-        catch (Exception failure)
-        {
-            Report("The pane could not follow the active document's configuration.", failure);
-        }
+        _configurationFollow?.Dispose();
+        _configurationWatch?.Dispose();
+        _configurationWatch = ActiveConfigurationWatch.ForSolidWorks(OnActiveConfigurationChanged);
+        var invoker = new ControlAppThreadInvoker(_pane!);
+        _configurationFollow = new ConfigurationFollowCoordinator(
+            invoker.Post,
+            () => _swApp?.ActiveDoc,
+            activeDocument => _configurationWatch?.Follow(activeDocument),
+            failure => Report("The pane could not follow the active document's configuration.", failure));
     }
+
+    /// <summary>Only native copy open defers subscription; the document fan-out remains immediate.</summary>
+    private void FollowActiveConfiguration() => _configurationFollow?.Request();
 
     /// <summary>
     /// The one fan-out a document change runs - every host's `document.changed`, the step strip,

@@ -41,6 +41,7 @@ public sealed class ActiveConfigurationWatch : IDisposable
     private readonly Func<int> _sink;
 
     private object? _followed;
+    private bool _disposed;
 
     /// <param name="subscribe">Subscribes the sink to a document's configuration event and says
     /// whether the document has one (a part or an assembly does; a drawing does not).</param>
@@ -99,19 +100,25 @@ public sealed class ActiveConfigurationWatch : IDisposable
     /// </summary>
     public void Follow(object? activeDocument)
     {
-        if (activeDocument != null && ReferenceEquals(activeDocument, _followed))
+        if (_disposed || (activeDocument != null && ReferenceEquals(activeDocument, _followed)))
         {
             return;
         }
 
         Release();
-        if (activeDocument != null && _subscribe(activeDocument, _sink))
+        if (!_disposed && activeDocument != null && _subscribe(activeDocument, _sink))
         {
-            _followed = activeDocument;
+            // Native event wiring can reenter unload before the subscription returns.
+            if (_disposed) Unsubscribe(activeDocument);
+            else _followed = activeDocument;
         }
     }
 
-    public void Dispose() => Release();
+    public void Dispose()
+    {
+        _disposed = true;
+        Release();
+    }
 
     /// <summary>
     /// The event sink. Runs the fan-out and answers 0, whatever the fan-out does: nothing may
@@ -119,6 +126,7 @@ public sealed class ActiveConfigurationWatch : IDisposable
     /// </summary>
     private int OnActiveConfigChangePostNotify()
     {
+        if (_disposed) return 0;
         try
         {
             _changed();
@@ -142,6 +150,11 @@ public sealed class ActiveConfigurationWatch : IDisposable
             return;
         }
 
+        Unsubscribe(followed);
+    }
+
+    private void Unsubscribe(object followed)
+    {
         try
         {
             _unsubscribe(followed, _sink);
