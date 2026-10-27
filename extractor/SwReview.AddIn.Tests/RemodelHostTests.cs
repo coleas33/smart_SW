@@ -6517,6 +6517,49 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 159A, test first (004 T290; research R22.13, Codex's fourth review): a failed plan's close before the
+    /// run root moves is not answered, so the restart waits; then that abandoned close runs on the bridge after all, and
+    /// the bridge tells its end. A failed plan is never a tracked run, so the end never reached its record: the host went
+    /// on reading a session left under the old run root - a hung backend's callers told to restore it - and the next plan's
+    /// restart sent the close again. Now the end clears that record, and the next plan restarts under the new run root
+    /// sending no close of the old run.
+    /// </summary>
+    [Fact]
+    public void AFailedPlansCloseThatEndsLateLetsTheRunRootMoveWithNoCloseSentAgain()
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string oldRoot = world.RunRoot;
+            string first = world.ExpectedRunDirectory;
+            string copy = world.ExpectedCopyPath;
+            LeaveASessionOnTheBridge(world, "failed");
+            world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+            restart.Save("save", restart.NewRoot);
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(CleanupPromise, restart.LastStatus());
+            Assert.True(world.Host.HoldsASessionLeftUnder(oldRoot));
+
+            // The abandoned close runs on the bridge after all, and the bridge tells its end.
+            world.Pipeline.CloseFailure = null;
+            world.Pipeline.CloseCopy(first);
+            world.Host.SessionEnded(new RemodelSessionEnd(
+                RemodelSessionEnd.ReasonClose, first, copy,
+                verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                settingsOutstanding: new string[0], failures: new string[0]));
+            int closes = world.Pipeline.Closed.Count;
+
+            Assert.False(world.Host.HoldsASessionLeftUnder(oldRoot));
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(closes, world.Pipeline.Closed.Count);
+            Assert.Equal(Path.Combine(restart.NewRoot, world.ExpectedRunId), world.Host.LatestRun!.RunDirectory);
+        }
+    }
+
+    /// <summary>
     /// Owner decision 159A, test first (004 T277; research R22): each session a run can leave on the bridge - a failed plan's,
     /// a plan waiting for Start (Start on, or Start off with its close at the plan not answered) and a finished run's - is
     /// closed through the backend in force, before a save's restart moves the run root, and the restart is then made at once.
@@ -7065,15 +7108,35 @@ public sealed class RemodelHostTests
     [InlineData("ended late", false)]
     [InlineData("re-attached", false)]
     [InlineData("another run root", false)]
+    [InlineData("a failed plan ended late", false)]
+    [InlineData("a failed plan torn down", false)]
+    [InlineData("a failed plan, another run's end", true)]
     public void TheRemodelHostSaysWhetherASessionIsLeftUnderARunRoot(string state, bool expected)
     {
         using (var world = new RemodelWorld())
         {
             world.Open();
-            LeaveASessionOnTheBridge(world, state == "a failed plan" ? "failed" : state == "a finished run" ? "finished" : "waiting");
+            string failedRun = world.ExpectedRunDirectory;
+            string failedCopy = world.ExpectedCopyPath;
+            LeaveASessionOnTheBridge(
+                world,
+                state.StartsWith("a failed plan", StringComparison.Ordinal) ? "failed" : state == "a finished run" ? "finished" : "waiting");
             string runRoot = world.RunRoot;
             switch (state)
             {
+                // Owner decision 159A, test first (004 T290; research R22.13, Codex's fourth review): a failed plan is
+                // never a tracked run, so the late end of its close - or a teardown's - must reach its own record.
+                case "a failed plan ended late":
+                case "a failed plan torn down":
+                case "a failed plan, another run's end":
+                    string named = state == "a failed plan, another run's end" ? Path.Combine(world.RunRoot, "FICT-older-remodel") : failedRun;
+                    world.Host.SessionEnded(new RemodelSessionEnd(
+                        state == "a failed plan torn down" ? RemodelSessionEnd.ReasonToolServiceStopped : RemodelSessionEnd.ReasonClose,
+                        named, state == "a failed plan, another run's end" ? Path.Combine(named, "copy", "older-RMS.SLDPRT") : failedCopy,
+                        verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                        settingsOutstanding: new string[0], failures: new string[0]));
+                    break;
+
                 case "ended late":
                     RemodelRun run = world.Host.LatestRun!;
                     world.Host.SessionEnded(new RemodelSessionEnd(
