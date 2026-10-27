@@ -40,6 +40,21 @@ public sealed class RemodelWiringTests
         Assert.Contains("BeginRemodelOpen = configurationFollow.BeginRemodelOpen", source, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Owner decision 159A (004 T279; research R22): the review host's settings restart asks the Remodel host, read through
+    /// its field, to close what it left under the run root in force before a restart moves it - and with no Remodel host
+    /// there is nothing to close. Every host case survives losing this line.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsTheReviewHostTheRemodelHostsCleanupBeforeARunRootMoves()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+        Assert.Contains(
+            "EndRemodelSessionsLeftUnder = runRoot => _remodelHost?.EndTheSessionsLeftUnder(runRoot) != false,",
+            source,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>004 T274: invalidate queued work before watch disposal, replacement or unload waits.</summary>
     [Fact]
     public void TheAddInInvalidatesConfigurationFollowingBeforeReplacingOrDisposingItsWatch()

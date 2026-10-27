@@ -6551,6 +6551,19 @@ public sealed class RemodelHostTests
                 Assert.Empty(world.AllPosted("remodel.plan_lost"));
             }
 
+            if (leftover == "waiting")
+            {
+                // Start on: a Start naming the plan, and a page that loads again, are told the same words.
+                world.Receive("remodel.start", "s2", new { run_dir = first });
+                JsonElement lost = world.Reply("error", "s2");
+                Assert.Equal("SessionLost", lost.GetProperty("error_class").GetString());
+                Assert.Equal(RemodelHost.PlanClosedForRunRootMessage, lost.GetProperty("message").GetString());
+                world.Receive("ready", "r2", new { });
+                Assert.Equal(
+                    RemodelHost.PlanClosedForRunRootMessage,
+                    world.Reply("init", "r2").GetProperty("latest_run").GetProperty("plan_lost").GetString());
+            }
+
             world.Receive("remodel.plan", "p2", new { });
 
             world.Reply("remodel.planned", "p2");
@@ -6680,6 +6693,111 @@ public sealed class RemodelHostTests
             Assert.Empty(replacement.Closed);
             Assert.Equal(Path.Combine(restart.NewRoot, world.ExpectedRunId), world.Host.LatestRun!.RunDirectory);
         }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T279 - a guard added with the fix; research R22): a leftover under an earlier run root - left
+    /// there when that root's backend had gone, so the change to the run root in force was made without it - is not closed
+    /// through the backend in force, which would refuse its folder, and does not hold the next change back for ever: only
+    /// what lies under the run root leaving is the restart's to close. It stays T258's, as the known defect says.
+    /// </summary>
+    [Theory]
+    [InlineData("failed")]
+    [InlineData("waiting")]
+    [InlineData("finished")]
+    public void ALeftoverUnderAnEarlierRunRootDoesNotHoldTheNextRunRootChange(string leftover)
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            LeaveASessionOnTheBridge(world, leftover);
+            int closes = world.Pipeline.Closed.Count;
+            restart.Backend.Down = true;
+            restart.Save("first", restart.NewRoot);
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            string third = Path.Combine(world.Root, "third", "runs");
+
+            restart.Save("second", third);
+
+            restart.Reply("settings.saved", "second");
+            Assert.Equal(third, restart.Review.RunRoot);
+            Assert.Equal(2, restart.Backend.Restarts.Count);
+            Assert.Equal(closes, world.Pipeline.Closed.Count);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T279 - a guard added with the fix; research R22): a run that holds no session - a plan
+    /// whose close at the plan was answered, while Start is switched off - is not closed again before the run root moves.
+    /// </summary>
+    [Fact]
+    public void ARunRootChangeSendsNoCloseForAPlanThatHoldsNoSession()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        using (var restart = new RunRootRestart(world))
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reply("remodel.planned", "p1");
+            Assert.True(world.Host.LatestRun!.SessionClosedAtPlan);
+            int closes = world.Pipeline.Closed.Count;
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(closes, world.Pipeline.Closed.Count);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T279 - a guard added with the fix; research R22): the closes before the run root moves hold
+    /// the tool service, as a plan's do, so no follow of the active document takes the bridge down under them, and let it
+    /// go after; with no tool service listening to hold there is no session left to close, and the restart is made.
+    /// </summary>
+    [Theory]
+    [InlineData("held")]
+    [InlineData("none listening")]
+    public void TheClosesBeforeARunRootChangeHoldTheToolService(string service)
+    {
+        int holds = 0;
+        var heldDuringTheClose = new List<int>();
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            LeaveASessionOnTheBridge(world, "failed");
+            int closes = world.Pipeline.Closed.Count;
+            world.Hold = () =>
+            {
+                if (service == "none listening")
+                {
+                    return null;
+                }
+
+                holds++;
+                return new Released(() => holds--);
+            };
+            world.Pipeline.DuringClose = () => heldDuringTheClose.Add(holds);
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(0, holds);
+            Assert.Equal(service == "held" ? new[] { 1 } : new int[0], heldDuringTheClose);
+            Assert.Equal(service == "held" ? closes + 1 : closes, world.Pipeline.Closed.Count);
+        }
+    }
+
+    /// <summary>A hold that runs <c>release</c> when it is let go.</summary>
+    private sealed class Released : IDisposable
+    {
+        private readonly Action _release;
+
+        public Released(Action release) => _release = release;
+
+        public void Dispose() => _release();
     }
 
     /// <summary>

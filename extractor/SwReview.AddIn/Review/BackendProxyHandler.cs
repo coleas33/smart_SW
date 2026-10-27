@@ -457,7 +457,8 @@ public sealed class BackendProxyHandler
     /// The host's answer to a call that would start a turn, as a response, or null to send the
     /// call on. Each refusal goes out with the status the backend gives its class - `TurnRunning`
     /// 409 and `UnknownChat` 404, as chat/server.py answers them, a remodel run's
-    /// `RemodelRunning` 409 and a check's `CheckRunning` 409 (owner decision 157A) as a turn's, and
+    /// `RemodelRunning` 409 and a check's `CheckRunning` 409 (owner decision 157A) as a turn's, a remodel copy's
+    /// close not answered before the run root moves, `RemodelCleanupPending` 409 (owner decision 159A), too, and
     /// `BackendUnavailable` 503 as this proxy answers a
     /// backend that is not there - and the host's `retryable` flag, which is the backend's for
     /// the backend's classes. The words are the host's own, and say why. A host that throws is
@@ -485,6 +486,7 @@ public sealed class BackendProxyHandler
             case "TurnRunning":
             case "RemodelRunning":
             case "CheckRunning":
+            case "RemodelCleanupPending":
                 return Error(409, "Conflict", refusal.ErrorClass, refusal.Message, refusal.Retryable);
 
             case "UnknownChat":

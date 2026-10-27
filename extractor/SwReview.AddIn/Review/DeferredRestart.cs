@@ -411,6 +411,14 @@ internal sealed class DeferredRestart : IDisposable
                 heldBy = Hold.Turn;
                 return false;
             }
+            catch (RemodelCleanupPendingException)
+            {
+                // Owner decision 159A (004 research R22): nothing was stopped, so the restart waits, as for a turn,
+                // and is not dropped as a failure would drop it.
+                Defer();
+                heldBy = Hold.Cleanup;
+                return false;
+            }
             catch (Exception caught)
             {
                 // The restart for the saved settings was tried and failed. Retrying it when
@@ -567,6 +575,12 @@ internal sealed class DeferredRestart : IDisposable
                 // A turn started after the look above. Nothing was changed, so it still waits.
                 return Outcome.TurnRunning;
             }
+            catch (RemodelCleanupPendingException)
+            {
+                // Owner decision 159A (004 research R22): a remodel session's close before the run root moves was not
+                // answered. Nothing was stopped, so it still waits, and the next caller asks the close again.
+                return Outcome.CleanupPending;
+            }
             catch (Exception caught)
             {
                 // Every failure, not only a BackendStartException: this runs on the watcher's
@@ -605,8 +619,9 @@ internal sealed class DeferredRestart : IDisposable
     /// <returns><see cref="Outcome.NotPending"/>, <see cref="Outcome.Restarted"/> or
     /// <see cref="Outcome.RestartedMeanwhile"/> once <paramref name="begin"/> has run; otherwise
     /// what holds the restart back (<see cref="Outcome.TurnRunning"/>,
-    /// <see cref="Outcome.WorkInProgress"/>, <see cref="Outcome.NotAnswered"/>),
-    /// <see cref="Outcome.Failed"/> or <see cref="Outcome.Stopped"/>, and it has not run.</returns>
+    /// <see cref="Outcome.WorkInProgress"/>, <see cref="Outcome.NotAnswered"/>, and since owner decision 159A
+    /// <see cref="Outcome.CleanupPending"/>), <see cref="Outcome.Failed"/> or <see cref="Outcome.Stopped"/>, and it has
+    /// not run.</returns>
     public Outcome Begin(Action begin, out Exception? failure) => Begin(begin, out failure, out _);
 
     /// <summary>
@@ -874,7 +889,23 @@ internal sealed class DeferredRestart : IDisposable
 
             try
             {
-                if (Apply(out _) != Outcome.NotAnswered)
+                long seen = Deferrals();
+                Outcome outcome = Apply(out _);
+
+                // Owner decision 159A (004 research R22): a remodel session's close was not answered. Looking again each
+                // poll would send a close a second over a bridge that does not answer, so the watcher says so once and
+                // stops; the restart still waits, and the next review, turn call, remodel run, check or save asks again.
+                if (outcome == Outcome.CleanupPending)
+                {
+                    if (StopWatching(seen, _cleanupPending))
+                    {
+                        return;
+                    }
+
+                    continue;
+                }
+
+                if (outcome != Outcome.NotAnswered)
                 {
                     unanswered = 0;
                     continue;
@@ -887,7 +918,7 @@ internal sealed class DeferredRestart : IDisposable
                     unanswered = 0;
                 }
 
-                if (++unanswered >= UnansweredLooks && StopWatching(since))
+                if (++unanswered >= UnansweredLooks && StopWatching(since, _notAnswered))
                 {
                     return;
                 }
@@ -907,9 +938,11 @@ internal sealed class DeferredRestart : IDisposable
     /// afresh. The restart itself still waits. All of it under the restart's own lock: a restart
     /// being made is never reported as one that was not, and a later save's refusal - made under
     /// the same lock - and the promise it posts after it come after this report, never before.
+    /// Owner decision 159A (004 research R22): and at a remodel session's close not answered, saying
+    /// that instead (<paramref name="report"/>).
     /// </summary>
     /// <returns>True when this watcher stops.</returns>
-    private bool StopWatching(long since)
+    private bool StopWatching(long since, Action report)
     {
         lock (_restarting)
         {
@@ -926,7 +959,7 @@ internal sealed class DeferredRestart : IDisposable
                 }
             }
 
-            Report(_notAnswered);
+            Report(report);
             return true;
         }
     }
