@@ -500,6 +500,15 @@ public class SwReviewAddIn : ISwAddin
             ModelCheckInProgress = () => _modelCheckHost?.CheckInProgress == true,
             StandardsCheckInProgress = () => _standardsHost?.CheckInProgress == true,
 
+            // Owner decision 159A (004 research R22): before a restart moves the run root, the Remodel host closes what it
+            // left on the bridge under the run root in force, through the backend still up; read through the field, and
+            // with no Remodel host there is nothing to close.
+            EndRemodelSessionsLeftUnder = runRoot => _remodelHost?.EndTheSessionsLeftUnder(runRoot) != false,
+
+            // Owner decision 159A (004 research R22.12): whether the Remodel host still holds a session under the run root in
+            // force, read, closing nothing, so a restart's refusals say what holds it now; with no Remodel host, none.
+            RemodelSessionLeftUnder = runRoot => _remodelHost?.HoldsASessionLeftUnder(runRoot) == true,
+
             // Owner decision 145A: every other tab that holds the backend's port and token is told
             // after each restart the review host makes, and asks for its `init` again; and told of
             // one that failed once the old backend had stopped, as a failed first start is told.

@@ -484,6 +484,16 @@ public sealed class RemodelHost : IDisposable
         "Closing the earlier plan's copy was not confirmed, so that plan is left as it was and no new plan was made. "
         + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
 
+    /// <summary>
+    /// Owner decision 159A (004 research R22): what `remodel.plan_lost`, `init.latest_run.plan_lost` and a Start's
+    /// `SessionLost` say of a plan whose session the host closed before a settings restart moved the run root - the
+    /// backend in force is the only one that accepts its folder - in <see cref="PlanLostMessage"/>'s plain words. True
+    /// whether or not that restart then succeeded: the plan's session is over either way.
+    /// </summary>
+    public const string PlanClosedForRunRootMessage =
+        "This plan was closed so that the run root saved in Settings could come into force, so it can no longer be "
+        + "started. " + PartNotChanged + " Make your part the active document and press Plan again.";
+
     /// <summary>004 T258: a failed plan's cleanup still unanswered, before a new probe or copy.</summary>
     public const string FailedPlanNotClosedMessage =
         "Closing the copy from the earlier attempt was not confirmed, so no new plan was made. "
@@ -661,9 +671,31 @@ public sealed class RemodelHost : IDisposable
     /// <summary>
     /// 004 T258: the run folder and original attachment of an unsuccessful plan whose cleanup was
     /// not answered. It is not a planned run and must not replace the page's latest successful plan.
-    /// Only Plan reads and writes this record, while it holds the host and the tool service.
+    /// Plan reads and writes this record while it holds the host and the tool service; owner decision
+    /// 159A (004 research R22): so does a restart that moves the run root
+    /// (<see cref="EndTheSessionsLeftUnder"/>), under the restart's own lock, while the host is free and no
+    /// plan can make it busy. Volatile, since the two run on different threads. Since 004 research R22.13, the end of
+    /// its session (<see cref="SessionEnded(RemodelSessionEnd)"/>) lets it go too, by compare-and-swap of that exact record.
     /// </summary>
-    private Tuple<string, string?>? _failedPlanToClose;
+    private volatile Tuple<string, string?>? _failedPlanToClose;
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22.14, Codex's fifth review): the run folder of the plan attempt from its open to
+    /// its end, and whether the bridge has told the end of that attempt's session meanwhile - the failed open's unwind, or
+    /// the backend's own close inside a plan step that fails - before the attempt has any record to clear. Written with
+    /// the failed plan's record under <see cref="_attemptLock"/>, so an end lands either before the record, and none is
+    /// made, or after it, and <see cref="SessionEnded(RemodelSessionEnd)"/> lets it go.
+    /// </summary>
+    private readonly object _attemptLock = new object();
+
+    /// <summary>
+    /// The latest attempt's run folder (<see cref="_attemptLock"/>), null before the first. Left as it is once a plan ends:
+    /// each attempt writes both fields at its open, and only that attempt reads them.
+    /// </summary>
+    private string? _attemptRun;
+
+    /// <summary>Whether the bridge told the end of <see cref="_attemptRun"/>'s session (<see cref="_attemptLock"/>).</summary>
+    private bool _attemptEnded;
 
     /// <summary>A plan or a run is in flight. One per host.</summary>
     private volatile bool _busy;
@@ -1058,7 +1090,34 @@ public sealed class RemodelHost : IDisposable
             RemodelRun? run = FindRun(outcome.RunDirectory);
             if (run != null && SamePath(run.CopyPath, outcome.CopyPath))
             {
-                run.MarkSessionEnded();
+                // Owner decision 159A (004 research R22.10): the bridge tells a close's end before the close is answered,
+                // so the end of the close sent before the run root moves is marked as that close's here.
+                if (run.CloseForRunRootSent && outcome.Reason == RemodelSessionEnd.ReasonClose)
+                {
+                    run.MarkSessionClosedForRunRoot();
+                }
+                else
+                {
+                    run.MarkSessionEnded();
+                }
+            }
+
+            // Owner decision 159A (004 research R22.13, Codex's fourth review): a failed plan is never a tracked run, so
+            // the end of its session - its close's, late or not, or a teardown's - lets its record go: that exact record
+            // alone, so a newer attempt's, recorded meanwhile, survives. R22.14: an end of the attempt in flight, told
+            // before it has a record, marks it ended, so its failure makes none.
+            lock (_attemptLock)
+            {
+                if (_attemptRun != null && SamePath(_attemptRun, outcome.RunDirectory))
+                {
+                    _attemptEnded = true;
+                }
+            }
+
+            Tuple<string, string?>? failed = _failedPlanToClose;
+            if (failed != null && SamePath(failed.Item1, outcome.RunDirectory))
+            {
+                Interlocked.CompareExchange(ref _failedPlanToClose, null, failed);
             }
         }
 
@@ -1581,6 +1640,12 @@ public sealed class RemodelHost : IDisposable
                 "copying",
                 $"Copying {RunFolders.DocumentName(document.Path)} into the run folder...");
 
+            lock (_attemptLock)
+            {
+                _attemptRun = runDirectory;
+                _attemptEnded = false;
+            }
+
             RemodelCopyReading copy;
             try
             {
@@ -1873,7 +1938,18 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        _failedPlanToClose = Tuple.Create(runDirectory, attachment);
+        lock (_attemptLock)
+        {
+            // Owner decision 159A (004 research R22.14): the bridge told this attempt's end already - its session is
+            // over, so there is nothing to close and nothing to leave.
+            if (_attemptEnded && SamePath(_attemptRun, runDirectory))
+            {
+                return;
+            }
+
+            _failedPlanToClose = Tuple.Create(runDirectory, attachment);
+        }
+
         if (CloseSession(pipeline, runDirectory, out Exception? notAnswered) == CloseAnswer.NotAnswered)
         {
             Log("remodel.plan, the failed plan's close", notAnswered!);
@@ -1914,6 +1990,135 @@ public sealed class RemodelHost : IDisposable
 
         _failedPlanToClose = null;
         return true;
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22): the cleanup a settings restart that moves the run root asks for before it
+    /// stops the backend in force (<c>ReviewHostOptions.EndRemodelSessionsLeftUnder</c>). Every session this host can have
+    /// left on the bridge - a failed plan's whose close was not answered (004 T258), a plan waiting for Start that still
+    /// holds its session, and a finished run's whose close was not answered - is closed now, through the pipeline's close
+    /// (<see cref="CloseSession"/>), naming its exact run, while the backend in force is the one that takes its run folder:
+    /// the restarted backend refuses a folder outside its run root before the bridge, so after the restart no close of it
+    /// could ever be sent, and every plan would ask again. Only what lies under <paramref name="runRoot"/>, the run root
+    /// leaving, and only on the attachment listening now (<see cref="SameAttachment"/>, <see cref="HoldsItsSession"/>): a
+    /// session of an attachment gone went with it, and a close is never sent to a replacement. The tool service is held
+    /// for the closes, as a plan holds it, so no follow takes the bridge down under them; with none listening there is no
+    /// session to close.
+    ///
+    /// A close answered - closed, or answered with what it left - ends the leftover as planning again ends it: a failed
+    /// plan's record is let go, and a run is marked <see cref="RemodelRun.ClosedForRunRoot"/>, so no close is sent for it
+    /// again, and a plan so closed is told lost in <see cref="PlanClosedForRunRootMessage"/>'s words. A close not answered
+    /// leaves the leftover as it was, its failure in the log, and answers false at once, so the restart waits.
+    ///
+    /// 004 research R22.10, on review: a run whose copy was discarded is closed too while it holds its session - Discard
+    /// deletes the copy folder whatever its own close answered - and a second close of one that already ended is answered
+    /// with no SOLIDWORKS call. A run's close is marked sent (<see cref="RemodelRun.CloseForRunRootSent"/>) before it goes,
+    /// since the bridge tells its end (<see cref="SessionEnded(RemodelSessionEnd)"/>) before the close is answered.
+    ///
+    /// Called under the restart's lock, after the review host has read this host free: a plan or a run begins only through
+    /// that lock (<see cref="RemodelHostOptions.BeginRun"/>), so none begins while this runs.
+    /// </summary>
+    /// <param name="runRoot">The run root in force, which the restart would move.</param>
+    /// <returns>True when nothing under it is left holding a session; false when a close was not answered.</returns>
+    public bool EndTheSessionsLeftUnder(string runRoot)
+    {
+        IRemodelPipeline? pipeline = _options.Pipeline;
+        if (pipeline == null)
+        {
+            return true;
+        }
+
+        IDisposable? hold = _options.HoldToolService();
+        if (hold == null)
+        {
+            return true;
+        }
+
+        try
+        {
+            string? attachment = _options.ToolServiceAttachment();
+            Tuple<string, string?>? failed = _failedPlanToClose;
+            if (FailedPlanLeftUnder(failed, attachment, runRoot))
+            {
+                if (!ClosedBeforeTheRunRootMoves(pipeline, failed!.Item1))
+                {
+                    return false;
+                }
+
+                _failedPlanToClose = null;
+            }
+
+            RemodelRun? left = LatestRun;
+            if (RunLeftUnder(left, attachment, runRoot))
+            {
+                left!.MarkCloseForRunRootSent();
+                if (!ClosedBeforeTheRunRootMoves(pipeline, left.RunDirectory))
+                {
+                    return false;
+                }
+
+                left.MarkSessionClosedForRunRoot();
+                AnnounceLostPlan();
+            }
+
+            return true;
+        }
+        finally
+        {
+            try
+            {
+                hold.Dispose();
+            }
+            catch (Exception)
+            {
+                // The hold's own failure: the closes are made, and the gate's own holds never fail.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22.12, Codex's third review): whether this host still holds a session on the
+    /// bridge under <paramref name="runRoot"/> - what <see cref="EndTheSessionsLeftUnder"/> would close, read now and
+    /// closing nothing, holding nothing and asking no backend: a failed plan's whose close was not answered, or the latest
+    /// run while it holds its session, on the attachment listening now. The review host reads it when a restart waits
+    /// to move the run root and the backend does not answer, so its words say what holds the restart now - a close that
+    /// ended late, a re-attach or a newer save change the answer by themselves. No pipeline is none.
+    /// </summary>
+    public bool HoldsASessionLeftUnder(string runRoot)
+    {
+        if (_options.Pipeline == null)
+        {
+            return false;
+        }
+
+        string? attachment = _options.ToolServiceAttachment();
+        return FailedPlanLeftUnder(_failedPlanToClose, attachment, runRoot) || RunLeftUnder(LatestRun, attachment, runRoot);
+    }
+
+    /// <summary>A failed plan whose close was not answered, made on <paramref name="attachment"/>, under <paramref name="runRoot"/>.</summary>
+    private bool FailedPlanLeftUnder(Tuple<string, string?>? failed, string? attachment, string runRoot) =>
+        failed != null
+        && SameAttachment(failed.Item2, attachment)
+        && RunFolders.IsUnder(failed.Item1, runRoot, _options.RunRootProbe);
+
+    /// <summary>A run that still holds its session on <paramref name="attachment"/> (<see cref="HoldsItsSession"/>), under <paramref name="runRoot"/>.</summary>
+    private bool RunLeftUnder(RemodelRun? run, string? attachment, string runRoot) =>
+        run != null
+        && HoldsItsSession(run, attachment)
+        && RunFolders.IsUnder(run.RunDirectory, runRoot, _options.RunRootProbe);
+
+    /// <summary>
+    /// One close of <see cref="EndTheSessionsLeftUnder"/>'s: whether the bridge answered it, its failure in the log when not.
+    /// </summary>
+    private bool ClosedBeforeTheRunRootMoves(IRemodelPipeline pipeline, string runDirectory)
+    {
+        if (CloseSession(pipeline, runDirectory, out Exception? notAnswered) != CloseAnswer.NotAnswered)
+        {
+            return true;
+        }
+
+        Log("a restart that moves the run root, the earlier copy's close", notAnswered!);
+        return false;
     }
 
     /// <summary>
@@ -2366,7 +2571,8 @@ public sealed class RemodelHost : IDisposable
     /// <summary>
     /// The words Start refuses a plan whose bridge session is gone with (`SessionLost`), or null
     /// while the plan holds it: <see cref="PlanClosedMessage"/> for one planning again closed (004
-    /// T173), and <see cref="SessionLostMessage"/> for one whose session a teardown ended or whose
+    /// T173), <see cref="PlanClosedForRunRootMessage"/> for one closed before a restart moved the run root
+    /// (owner decision 159A, 004 research R22), and <see cref="SessionLostMessage"/> for one whose session a teardown ended or whose
     /// attachment is not the one listening now (decision 22A). One reading for Start's check
     /// before the restart gate and its check again once the host is busy (owner decision 145A).
     /// </summary>
@@ -2375,6 +2581,11 @@ public sealed class RemodelHost : IDisposable
         if (run.ClosedByPlanAgain)
         {
             return PlanClosedMessage;
+        }
+
+        if (run.ClosedForRunRoot)
+        {
+            return PlanClosedForRunRootMessage;
         }
 
         return run.SessionEnded || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment())
@@ -2437,11 +2648,14 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>
     /// The sentence a lost plan is told with: <see cref="PlanClosedMessage"/> for one planning
-    /// again closed (004 T173), whatever else it also lost, and <see cref="PlanLostMessage"/> for
-    /// one a re-attach took (decision 24A). One rule for the notice and for `init`.
+    /// again closed (004 T173), whatever else it also lost, <see cref="PlanClosedForRunRootMessage"/> for one
+    /// closed before a restart moved the run root (owner decision 159A, 004 research R22), and
+    /// <see cref="PlanLostMessage"/> for one a re-attach took (decision 24A). One rule for the notice and for `init`.
     /// </summary>
     private static string LostMessage(RemodelRun run) =>
-        run.ClosedByPlanAgain ? PlanClosedMessage : PlanLostMessage;
+        run.ClosedByPlanAgain ? PlanClosedMessage
+        : run.ClosedForRunRoot ? PlanClosedForRunRootMessage
+        : PlanLostMessage;
 
     /// <summary>
     /// Tells the page that the plan on screen can no longer be started, once, as soon as this

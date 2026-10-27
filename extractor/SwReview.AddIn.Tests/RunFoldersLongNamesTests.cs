@@ -298,6 +298,11 @@ public sealed class RunFoldersLongNamesTests : IDisposable
                 "PaneActions.cs IsUnder",
                 "RemodelHost.cs CreateForRemodel",
                 "RemodelHost.cs IsUnder",
+
+                // Changed deliberately 2026-10-27 (owner decision 159A, 004 research R22): the cleanup before a restart
+                // moves the run root holds a failed plan's folder and a run's to the run root leaving, with the probe.
+                "RemodelHost.cs IsUnder",
+                "RemodelHost.cs IsUnder",
                 "ReviewHost.cs CreateForDocument",
                 "ReviewHost.cs CreateForDocument",
                 "ReviewHost.cs FindNotSentReview",

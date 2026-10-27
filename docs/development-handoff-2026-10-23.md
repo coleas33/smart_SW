@@ -5,6 +5,8 @@ Updated 2026-10-24 with T188 source-attestation delivery and configuration-watch
 The T188 metadata item was delivered in PR #41. The configuration-watch continuation below
 defers subscription only during actual copy opening; verify its PR/gates before resuming.
 Changed-root cleanup remains the known offline defect before Start; keep Remodel Start disabled.
+*Updated 2026-10-27:* branch `rootcleanup-159a` (004 T277 to T280, research R22) settles the case
+where the old backend is still up; the dead-old-backend case remains a recorded known defect.
 The interrupted 160A and 157A work has been recovered, reviewed and combined; the earlier
 159A recovery fixes have merged in PR #36. Delivery and final validation are recorded below. Verify
 the table against the remote before starting new work. Original Claude branches and their worktrees were preserved.
@@ -19,6 +21,7 @@ the table against the remote before starting new work. Original Claude branches 
 | 159A Stop retry identities | [PR #38](https://github.com/coleas33/smart_SW/pull/38), head `ca1329c`, merged at `a376c03` after all four CI checks passed | 004 T262-T264, research R19.31. Six C# and 23 Python cases failed first. All 143 focused C# and 164 Python route/integration cases pass. Windows Release build: zero warnings/errors; 10,169 extractor + 4,120 add-in tests pass. Full required-tokenizer Python 3.12/3.11 each: 18,193 passed and 5 skipped; sync, tokenizer and Ruff pass. Independent source/document audit approved unchanged code. Final record/identifier/link/task/LF checks precede commit. |
 | 159A atomic after-dump handover | [PR #40](https://github.com/coleas33/smart_SW/pull/40), head `0c2473c`, merged at `6c50858` after all four required CI checks passed | 004 T265-T268, research R19.32. All 16 new Python cases failed first; 180 route/integration cases and 146 focused C# cases pass. Windows Release rebuild: zero warnings/errors; 10,169 extractor + 4,123 add-in tests pass. Full required-tokenizer Python 3.12/3.11 each: 18,209 passed and 5 skipped; sync, tokenizer and Ruff pass. Independent full source/document audit approved unchanged code; 298 final record/identifier cases pass, none skipped; link/task/named-test checks pass and final whitespace/index-LF checks precede commit. |
 | T188 source filesystem attestation metadata | [PR #41](https://github.com/coleas33/smart_SW/pull/41), head `1c0bf03`, merged at `62d22bb` after all four required CI checks passed | 004 T269-T272, research R20. All 64 new Python cases ran before implementation: 23 actual failures and 41 already-passing guards. C# stages produced four actual failures each; all 320 focused Python and 74 C# copy-family cases pass. Windows Release rebuild: zero warnings/errors; 10,178 extractor + 4,123 add-in tests pass. Full required-tokenizer Python 3.12/3.11 each: 18,273 passed and 5 skipped; sync, tokenizer and Ruff pass. Independent full source/document audit approved unchanged code; 298 final record/identifier cases pass, none skipped; link/task/named-test checks pass and final whitespace/index-LF checks precede commit. This completes only the attestation part of T188. |
+| 159A cleanup before a run-root change | `rootcleanup-159a`, based on `b7bf364`; independent Opus and Codex reviews done and settled (T281-T283, R22.10; Codex's second, T284-T286, R22.11; Codex's third, T287-T289, R22.12; Codex's fourth, T290-T292, R22.13; Codex's fifth, T293-T295, R22.14, which states what the branch covers and what Start waits on); a PR with all four required CI checks still to come | 004 T277-T295, research R22. Red first: 21 C# failures (14 guards) and 1 Python failure (2 guards); green after T279, with the mutation table in R22. The review round: 8 C# and 1 Python failure first, green after T282. Gate counts are recorded in R22. The dead and the unanswering old-backend cases are recorded, not fixed. |
 | T188 configuration-watch deferral | `codex/t188-watch-deferral`, based on `62d22bb`; verify its delivery PR and all four required CI checks | 004 T273-T276, research R21. Compiled red/green: 17 bridge + 6 host failures (4 guards), 17 add-in failures (1 guard), then 6 lifecycle failures (194 guards); focused 316 boundary and 200 add-in cases pass. Both complete Python suites pass 18,273 with 5 skipped. Windows Release rebuild/test both exit 0, zero warnings/errors, 10,199 extractor + 4,153 add-in tests passed. Independent source/document audits approved unchanged code; 298 final record/identifier cases pass, none skipped, with named-test/link/task/LF and whitespace checks passing. Native open/failed-unwind timing remains pilot acceptance; Start stays disabled. |
 
 Every PR requires green CI on Windows/Linux and Python 3.11/3.12. No live/paid API test
@@ -107,6 +110,24 @@ is retained. Neither item settles root-change cleanup or approves Start.
    cleanup/root policy without weakening run/session identity checks or permitting arbitrary
    paths. T258 intentionally retains the pending identity on this refusal.
 
+   *Settled for a live old backend on 2026-10-27 (branch `rootcleanup-159a`, 004 T277 to T280,
+   research R22), pending the independent reviews and a PR.* A restart that would move the run
+   root first asks the Remodel host (`EndTheSessionsLeftUnder`) to close every session it left
+   under the run root in force - the failed plan, a waiting plan, a finished run - through the
+   backend still serving it, after the work holds and a turn check, inside the restart action
+   (never the quick `Begin` callback). A close not answered throws
+   `RemodelCleanupPendingException`: a new `DeferredRestart` outcome (`CleanupPending`, hold
+   `Cleanup`) keeps the restart waiting, B saved and A in force; presses are refused
+   `RemodelCleanupPending`, retryable, and each asks again. Run/session identity, the
+   outside-root refusal and the three named tests are unchanged. **Still open:** with backend A
+   already exited there is nothing to close through; the restart is not held (it brings a
+   backend back), and the leftover stays pending as T258 left it until a re-attach's teardown
+   ends it. R22 records why a native hook was not added here and what it would need. With backend
+   A up but not answering, the close times out and every start is refused until the earlier run
+   root is saved again (or, while the backend still answers about turns, another document is made
+   active), as the refusals now say (R22.4, R22.10, R22.11).
+   Start (T172) waits on both, T180 and the pilot prerequisites. The text below is the original brief.
+
    Follow [`RemodelHost.EndTheFailedPlan` / `EndTheSessionARunLeft`](../extractor/SwReview.AddIn/Remodel/RemodelHost.cs)
    through `BackendRemodelPipeline.CloseCopy` to
    [`resolve_run_dir`](../reviewer/src/swreview/chat/server.py). Decide whether a root change
@@ -140,7 +161,8 @@ is retained. Neither item settles root-change cleanup or approves Start.
    allowance. Acceptance also needs dead-A recovery, waiting/failed/finished leftovers, stale
    attachments and delayed equal-basename cleanup, with Save, unload and other holds unchanged.
 
-Changed-root cleanup remains a known defect before Start readiness. Earlier R19.26 statements that no known defect
+Changed-root cleanup with the old backend gone remains a known defect before Start readiness (R22);
+with it up, the case is settled on `rootcleanup-159a`. Earlier R19.26 statements that no known defect
 remained are corrected by R19.29. The small fixes above do not approve the unresolved cases.
 
 
@@ -165,7 +187,7 @@ T188's implementation is complete with the source metadata, watch lifecycle and 
 not validate native SOLIDWORKS timing: the next licensed Plan/probe sitting must check that
 configuration subscription stays outside actual OpenDoc7 and failed-open unwind, and that
 normal configuration switching still follows the active part/assembly (009 T081). Native
-acceptance and the Start switch stay held. Changed-root cleanup above is the next known
+acceptance and the Start switch stay held. Changed-root cleanup above (now R22, with its dead-backend case open) was the next known
 offline defect; 014 T254-T259 still wait on paid slice gate T253.
 
 ## Owner and pilot-workstation prerequisites

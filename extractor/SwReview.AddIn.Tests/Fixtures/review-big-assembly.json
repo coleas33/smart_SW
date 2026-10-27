@@ -16913,6 +16913,7 @@
       "PathRefused": "That path is outside the folders this pane may open.",
       "PreparationExpired": "The preparation is out of date. Press Review again.",
       "PreparationFailed": "The review could not be prepared. Check that the model is open and saved, then press Review again.",
+      "RemodelCleanupPending": "A copy an earlier remodel left open in SOLIDWORKS could not be closed, so the saved settings are not in force yet. Save the earlier folder for runs in Settings again, then try again.",
       "RemodelRunning": "A remodel run is in progress. Wait for it to finish, then try again.",
       "ReportMissing": "The report has not been written yet. Wait for the review to finish.",
       "ResumeRefused": "This run folder already holds a change log. Start a new remodel instead.",

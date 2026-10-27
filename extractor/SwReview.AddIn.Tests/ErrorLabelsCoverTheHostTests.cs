@@ -44,7 +44,7 @@ public sealed class ErrorLabelsCoverTheHostTests
                      "NotFound", "OpenFailed", "UnknownChat", "UnknownCheck", "HttpError", "SettingNotSaved", "ReviewNotActive",
                      "RemodelRunning", "DocumentChanged", "BackendNotRestarted", "AddInStopping", "BridgeOnAnotherDocument",
                      "RunRootRefused", "RunRootChanged", "RunRootNotFullPath", "RunRootChosenNotInForce",
-                     "CheckRunning",
+                     "CheckRunning", "RemodelCleanupPending",
                  })
         {
             Assert.Contains(expected, classes);
