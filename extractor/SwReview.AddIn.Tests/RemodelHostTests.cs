@@ -6428,10 +6428,14 @@ public sealed class RemodelHostTests
         + "is closed. That is tried again before the next review, follow-up, remodel run or check; to try it now, save "
         + "the settings again.";
 
-    /// <summary>What a plan or a Start is refused with while that close holds the restart back (004 research R22).</summary>
+    /// <summary>
+    /// What a plan or a Start is refused with while that close holds the restart back (004 research R22). *Changed
+    /// deliberately 2026-10-27 (owner decision 159A, 004 research R22.10, the review's S2):* it names the ways out.
+    /// </summary>
     private const string CleanupHoldsTheRemodelRun =
         "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
-        + "with the saved settings, and no remodel run starts before then. Wait a moment, then try again.";
+        + "with the saved settings, and no remodel run starts before then. Make another document active in SOLIDWORKS, "
+        + "or save the earlier folder for runs in Settings again, then try again.";
 
     /// <summary>
     /// Owner decision 159A, test first (004 T277; research R22): the defect R19.29 named, over the review host's real
@@ -6609,23 +6613,28 @@ public sealed class RemodelHostTests
     /// Owner decision 159A, test first (004 T277; research R22): every close that is not an answer - the bridge's silence, a
     /// close that never reached it, and a failure with no class - holds the restart back: the saved run root stays saved,
     /// the one in force stays in force, nothing is stopped or started, the session is left as it was, and the failure is in
-    /// the log, masked.
+    /// the log, masked. *Changed deliberately 2026-10-27 (owner decision 159A, 004 research R22.10, the review's M1):*
+    /// the leftover is a parameter, and a waiting plan (Start on and off) and a finished run are rows beside the failed
+    /// plan, none of them marked closed or told lost: a run's unanswered close let through survived every case before.
     /// </summary>
     [Theory]
-    [InlineData("BridgeUnavailable")]
-    [InlineData("BackendUnavailable")]
-    [InlineData("HttpError")]
-    [InlineData("BadResponse")]
-    [InlineData("InvalidRunDir")]
-    [InlineData("InvalidRequest")]
-    [InlineData("exception")]
-    public void ARunRootChangeWaitsWhileTheOldRunsCloseIsNotAnswered(string failureClass)
+    [InlineData("failed", "BridgeUnavailable")]
+    [InlineData("failed", "BackendUnavailable")]
+    [InlineData("failed", "HttpError")]
+    [InlineData("failed", "BadResponse")]
+    [InlineData("failed", "InvalidRunDir")]
+    [InlineData("failed", "InvalidRequest")]
+    [InlineData("failed", "exception")]
+    [InlineData("waiting", "BridgeUnavailable")]
+    [InlineData("waiting, Start off", "BridgeUnavailable")]
+    [InlineData("finished", "BridgeUnavailable")]
+    public void ARunRootChangeWaitsWhileTheOldRunsCloseIsNotAnswered(string leftover, string failureClass)
     {
-        using (var world = new RemodelWorld())
+        using (var world = new RemodelWorld { StartValidated = leftover != "waiting, Start off" })
         using (var restart = new RunRootRestart(world))
         {
             string oldRoot = world.RunRoot;
-            LeaveASessionOnTheBridge(world, "failed");
+            LeaveASessionOnTheBridge(world, leftover);
             world.Pipeline.CloseFailure = failureClass == "exception"
                 ? new IOException("FICT the close could not reach 0FAKEtoken.")
                 : new RemodelRefusal(failureClass, "FICT the close could not reach 0FAKEtoken.", retryable: false);
@@ -6640,6 +6649,12 @@ public sealed class RemodelHostTests
             Assert.True(world.Pipeline.SessionOpen);
             Assert.Contains(world.Logged, line => line.Contains("FICT the close could not reach"));
             Assert.DoesNotContain(world.Logged, line => line.Contains("0FAKEtoken"));
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            if (leftover != "failed")
+            {
+                Assert.False(world.Host.LatestRun!.ClosedForRunRoot);
+                Assert.False(world.Host.LatestRun!.SessionEnded);
+            }
         }
     }
 
@@ -6802,15 +6817,21 @@ public sealed class RemodelHostTests
 
     /// <summary>
     /// Owner decision 159A (004 T277 - a guard; research R22): a leftover of an attachment that is no longer listening is
-    /// not closed through the new one - its session went with the old - and does not hold the restart back.
+    /// not closed through the new one - its session went with the old - and does not hold the restart back. *Changed
+    /// deliberately 2026-10-27 (owner decision 159A, 004 research R22.10, the review's S1):* a waiting plan and a finished
+    /// run are rows beside the failed plan, so a run read against its own attachment rather than the one listening now
+    /// fails here.
     /// </summary>
-    [Fact]
-    public void ARunRootChangeSendsNoCloseToAReplacementAttachment()
+    [Theory]
+    [InlineData("failed")]
+    [InlineData("waiting")]
+    [InlineData("finished")]
+    public void ARunRootChangeSendsNoCloseToAReplacementAttachment(string leftover)
     {
         using (var world = new RemodelWorld())
         using (var restart = new RunRootRestart(world))
         {
-            LeaveASessionOnTheBridge(world, "failed");
+            LeaveASessionOnTheBridge(world, leftover);
             int closes = world.Pipeline.Closed.Count;
             var replacement = new FakePipeline
             {
@@ -6826,6 +6847,144 @@ public sealed class RemodelHostTests
             Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
             Assert.Empty(replacement.Closed);
             Assert.Equal(closes, world.Pipeline.Closed.Count);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T281; research R22.10, Codex's review): the real bridge tells the host a
+    /// session ended (<c>RemodelHost.SessionEnded</c>, from <c>remodel.close</c>'s end-of-session routine) before the
+    /// close's answer comes back. A plan closed before the run root moves was then marked ended and told lost from inside
+    /// the close, in the re-attach words - SOLIDWORKS switching documents, which did not happen - and the run-root words
+    /// after it could not take the one notice back. Now the plan is told lost once, in the run-root words, whether the
+    /// bridge tells the end inside the close ("inside") or after a close whose answer never came, its wait abandoned
+    /// ("late", R22.3): a wait given up on still ends the session when the bridge gets to it.
+    /// </summary>
+    [Theory]
+    [InlineData("waiting", "inside")]
+    [InlineData("waiting, Start off", "inside")]
+    [InlineData("waiting", "late")]
+    [InlineData("waiting, Start off", "late")]
+    public void APlanClosedBeforeTheRunRootMovesIsToldLostOnceInItsOwnWordsWhenTheBridgeTellsTheEnd(
+        string leftover, string when)
+    {
+        using (var world = new RemodelWorld { StartValidated = leftover != "waiting, Start off" })
+        using (var restart = new RunRootRestart(world))
+        {
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, leftover);
+            RemodelRun run = world.Host.LatestRun!;
+            var ended = new RemodelSessionEnd(
+                RemodelSessionEnd.ReasonClose, run.RunDirectory, run.CopyPath,
+                verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                settingsOutstanding: new string[0], failures: new string[0]);
+            if (when == "inside")
+            {
+                world.Pipeline.DuringClose = () => world.Host.SessionEnded(ended);
+            }
+            else
+            {
+                world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+            }
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            if (when == "late")
+            {
+                Assert.Equal(CleanupPromise, restart.LastStatus());
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+                world.Host.SessionEnded(ended);
+            }
+            else
+            {
+                Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            }
+
+            JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(first, notice.GetProperty("run_dir").GetString());
+            Assert.Equal(RemodelHost.PlanClosedForRunRootMessage, notice.GetProperty("message").GetString());
+            world.Receive("ready", "r2", new { });
+            Assert.Equal(
+                RemodelHost.PlanClosedForRunRootMessage,
+                world.Reply("init", "r2").GetProperty("latest_run").GetProperty("plan_lost").GetString());
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T281; research R22.10, the review's S3): Discard deletes the copy folder even
+    /// when its close is not answered, and marks the copy discarded, so the run can still hold its session on the bridge.
+    /// Skipping a discarded run left that session there for ever once the run root moved; now the restart closes it through
+    /// the backend in force first, like any run that holds its session. Nobody is told a plan was lost: a discarded copy is
+    /// no plan on screen.
+    /// </summary>
+    [Theory]
+    [InlineData("waiting")]
+    [InlineData("finished")]
+    public void ARunRootChangeClosesADiscardedRunWhoseDiscardCloseWasNotAnswered(string leftover)
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, leftover);
+            world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = first });
+            world.Reply("ok", "d1");
+            Assert.True(world.Host.LatestRun!.CopyDiscarded);
+            Assert.True(world.Pipeline.SessionOpen);
+            world.Pipeline.CloseFailure = null;
+            int closes = world.Pipeline.Closed.Count;
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(new[] { false }, restart.Backend.SessionOpenAtEachRestart);
+            Assert.Equal(new[] { first }, world.Pipeline.Closed.Skip(closes));
+            Assert.False(world.Pipeline.SessionOpen);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T281 - a guard; research R22.10, the review's S3): a discarded run whose close was
+    /// answered holds no session. When the bridge told the host so, nothing more is sent; when it did not, the one close
+    /// the restart sends finds no session and is answered with no SOLIDWORKS call. Either way the restart is made and
+    /// nobody is told a plan was lost.
+    /// </summary>
+    [Theory]
+    [InlineData("told")]
+    [InlineData("not told")]
+    public void ARunRootChangeIsHarmlessForADiscardedRunWhoseDiscardCloseWasAnswered(string bridge)
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, "waiting");
+            RemodelRun run = world.Host.LatestRun!;
+            if (bridge == "told")
+            {
+                world.Pipeline.DuringClose = () => world.Host.SessionEnded(new RemodelSessionEnd(
+                    RemodelSessionEnd.ReasonClose, run.RunDirectory, run.CopyPath,
+                    verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                    settingsOutstanding: new string[0], failures: new string[0]));
+            }
+
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = first });
+            world.Reply("ok", "d1");
+            world.Pipeline.DuringClose = null;
+            Assert.False(world.Pipeline.SessionOpen);
+            int closes = world.Pipeline.Closed.Count;
+            int notices = world.AllPosted("remodel.plan_lost").Length;
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(new[] { false }, restart.Backend.SessionOpenAtEachRestart);
+            Assert.InRange(world.Pipeline.Closed.Count - closes, 0, bridge == "told" ? 0 : 1);
+            Assert.Equal(notices, world.AllPosted("remodel.plan_lost").Length);
         }
     }
 

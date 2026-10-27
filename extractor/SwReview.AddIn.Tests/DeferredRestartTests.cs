@@ -8934,20 +8934,28 @@ public sealed class DeferredRestartTests
         + "is closed. That is tried again before the next review, follow-up, remodel run or check; to try it now, save "
         + "the settings again.";
 
-    /// <summary>A new review or a turn call refused while that close holds the restart back.</summary>
+    /// <summary>
+    /// A new review or a turn call refused while that close holds the restart back. *Changed deliberately 2026-10-27
+    /// (owner decision 159A, 004 research R22.10, the review's S2):* the words name the two ways out - another document
+    /// made active, or the earlier folder for runs saved again - since a backend that does not answer never ends the wait.
+    /// </summary>
     private const string CleanupHoldsTheRestart =
         "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
-        + "with the saved settings, and nothing new starts before then. Wait a moment, then try again.";
+        + "with the saved settings, and nothing new starts before then. " + CleanupWayOut;
 
     /// <summary>...a remodel run - a plan or a Start - refused so.</summary>
     private const string CleanupHoldsTheRemodelRun =
         "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
-        + "with the saved settings, and no remodel run starts before then. Wait a moment, then try again.";
+        + "with the saved settings, and no remodel run starts before then. " + CleanupWayOut;
 
     /// <summary>...a check refused so.</summary>
     private const string CleanupHoldsTheCheck =
         "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
-        + "with the saved settings, and no check starts before then. Wait a moment, then try again.";
+        + "with the saved settings, and no check starts before then. " + CleanupWayOut;
+
+    /// <summary>The ways out each of those refusals ends with (004 research R22.10).</summary>
+    private const string CleanupWayOut =
+        "Make another document active in SOLIDWORKS, or save the earlier folder for runs in Settings again, then try again.";
 
     /// <summary>
     /// Owner decision 159A, test first (004 T277; research R22): a restart that would move the run root asks the Remodel
