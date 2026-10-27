@@ -1709,11 +1709,13 @@ public sealed class ReviewHost : IDisposable
     /// Owner decision 159A (004 research R22): what a save whose restart would move the run root says while a copy the
     /// Remodel tab left open under the run root in force is not closed - the close the restart makes first, through the
     /// backend in force, was not answered - and what the watcher says when it meets that close not answered, and stops.
+    /// R22.11: it names the earlier folder for runs saved again as the way out, not the same settings saved again, which
+    /// only asks the close again - a hung backend never answers it.
     /// </summary>
     private const string CleanupHoldsTheRestartPromise =
         "the settings are saved; the backend restarts with them once the copy an earlier remodel left open in SOLIDWORKS "
-        + "is closed. That is tried again before the next review, follow-up, remodel run or check; to try it now, save "
-        + "the settings again.";
+        + "is closed. That is tried again before the next review, follow-up, remodel run or check; if it cannot be "
+        + "closed, save the earlier folder for runs in Settings again.";
 
     /// <summary>
     /// The host's sentences about a restart that waits, as `backend.restarted` carries them once it
@@ -2080,6 +2082,26 @@ public sealed class ReviewHost : IDisposable
     private const string CleanupWayOut =
         "Make another document active in SOLIDWORKS, or save the earlier folder for runs in Settings again, then try again.";
 
+    /// <summary>
+    /// Owner decision 159A (004 research R22.11, Codex's second review): a new review, or a page call that would start a
+    /// turn, while that close held the restart at its last try and the backend now gives no answer whether a turn runs.
+    /// Saving the same settings again would only ask the close again, and another document made active does not
+    /// re-attach while a turn may be running (the tool-service gate's <see cref="TurnMayBeRunning"/>). The earlier folder
+    /// for runs saved again does: that restart keeps the run root, closes nothing, and replaces the backend, whose own
+    /// check reads no answer as no turn.
+    /// </summary>
+    private const string CleanupNoAnswerHoldsTheRestart =
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, and the review backend is not answering, "
+        + "so it has not been restarted with the saved settings, and nothing new starts before then. " + EarlierRootWayOut;
+
+    /// <summary>...work - "remodel run" or "check" - refused so, through the gate it begins through.</summary>
+    private static string CleanupNoAnswerHoldsTheWork(string work) =>
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, and the review backend is not answering, "
+        + "so it has not been restarted with the saved settings, and no " + work + " starts before then. " + EarlierRootWayOut;
+
+    /// <summary>The way out that works whether or not the backend answers (R22.11).</summary>
+    private const string EarlierRootWayOut = "Save the earlier folder for runs in Settings again, then try again.";
+
     /// <summary>...while the backend does not answer whether a turn runs.</summary>
     private const string NoAnswerHoldsTheRestart =
         "the review backend did not answer whether a turn is running, so it has not been restarted with "
@@ -2410,6 +2432,9 @@ public sealed class ReviewHost : IDisposable
             case DeferredRestart.Outcome.CleanupPending:
                 return new BackendRequestException("RemodelCleanupPending", CleanupHoldsTheRestart, retryable: true);
 
+            case DeferredRestart.Outcome.CleanupNotAnswered:
+                return new BackendRequestException("RemodelCleanupPending", CleanupNoAnswerHoldsTheRestart, retryable: true);
+
             default:
                 return null;
         }
@@ -2589,6 +2614,9 @@ public sealed class ReviewHost : IDisposable
 
             case DeferredRestart.Outcome.CleanupPending:
                 return new BackendRequestException("RemodelCleanupPending", CleanupHoldsTheWork(work), retryable: true);
+
+            case DeferredRestart.Outcome.CleanupNotAnswered:
+                return new BackendRequestException("RemodelCleanupPending", CleanupNoAnswerHoldsTheWork(work), retryable: true);
 
             case DeferredRestart.Outcome.Failed:
                 return RestartFailed(failure!);

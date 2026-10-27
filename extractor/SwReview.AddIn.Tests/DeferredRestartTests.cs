@@ -9248,24 +9248,26 @@ public sealed class DeferredRestartTests
         Assert.Single(services);
         Assert.False(services[0].Disposed);
 
-        // The way out the words name: the earlier folder for runs saved again restarts the backend under it.
-        world.Receive("settings.save", "back", Choosing(loaded, Save(effort: "low")));
-        world.Reply("settings.saved", "back");
-        Assert.Equal(loaded, Assert.Single(world.Backend.Restarts).Settings.RunRoot);
-        Assert.Equal(loaded, world.Host.RunRoot);
-        Assert.False(world.Host.RestartAhead);
-        Assert.Equal(1, Volatile.Read(ref asked));
-
-        // Nothing is pending any more: a later restart held by a backend that does not answer is told as before.
+        // A guard added with the fix (T285): the earlier folder for runs saved while a turn starts waits for the turn and
+        // asks no close; a backend that then does not answer is told in its own words, whose "save again" is now true.
         world.Backend.AnswersAgain();
-        SaveAsATurnStarts(world, "later", Save(effort: "high"));
-        world.Reply("settings.saved", "later");
+        SaveAsATurnStarts(world, "back", Choosing(loaded, Save(effort: "low")));
+        world.Reply("settings.saved", "back");
+        Assert.Equal(Promise, world.Last("status").GetProperty("message").GetString());
         world.Backend.EndTurn("chat-1");
         world.Backend.StopsAnswering();
         world.Receive("review.start", "start2", new { });
         JsonElement plain = world.Reply("error", "start2");
         Assert.Equal("BackendUnavailable", plain.GetProperty("error_class").GetString());
         Assert.Equal(NoAnswerHoldsIt, plain.GetProperty("message").GetString());
+
+        // The way out the words name: the earlier folder for runs saved again restarts the hung backend under it.
+        world.Receive("settings.save", "again", Choosing(loaded, Save(effort: "low")));
+        world.Reply("settings.saved", "again");
+        Assert.Equal(loaded, Assert.Single(world.Backend.Restarts).Settings.RunRoot);
+        Assert.Equal(loaded, world.Host.RunRoot);
+        Assert.False(world.Host.RestartAhead);
+        Assert.Equal(1, Volatile.Read(ref asked));
     }
 
     /// <summary>
@@ -9341,6 +9343,41 @@ public sealed class DeferredRestartTests
         Assert.True(restart.Pending);
         Assert.Equal(0, failures);
         Assert.Equal(0, restarted);
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T285 - a guard added with the fix; research R22.11): <see cref="DeferredRestart"/> itself.
+    /// A look that finds no answer is <c>CleanupNotAnswered</c> once the last try met a close not answered - a later
+    /// caller's try as well as a save's - and <c>NotAnswered</c> again once a save's restart has tried newer settings that
+    /// met none.
+    /// </summary>
+    [Fact]
+    public void ALookWithNoAnswerKeepsTheReasonOfTheLastTryOfTheRestart()
+    {
+        var hold = DeferredRestart.Hold.None;
+        using var restart = new DeferredRestart(
+            () => hold,
+            () => DeferredRestart.Work.None,
+            () => throw new RemodelCleanupPendingException(),
+            () => { },
+            _ => { },
+            () => { },
+            () => { },
+            TimeSpan.FromMinutes(10));
+
+        Assert.False(restart.Now(() => throw new TurnRunningException(), out DeferredRestart.Hold heldBy, out _));
+        Assert.Equal(DeferredRestart.Hold.Turn, heldBy);
+        hold = DeferredRestart.Hold.NoAnswer;
+        Assert.Equal(DeferredRestart.Outcome.NotAnswered, restart.Apply(out _));
+
+        hold = DeferredRestart.Hold.None;
+        Assert.Equal(DeferredRestart.Outcome.CleanupPending, restart.Apply(out _));
+        hold = DeferredRestart.Hold.NoAnswer;
+        Assert.Equal(DeferredRestart.Outcome.CleanupNotAnswered, restart.Apply(out _));
+
+        Assert.False(restart.Now(() => throw new TurnRunningException(), out heldBy, out _));
+        Assert.Equal(DeferredRestart.Outcome.NotAnswered, restart.Apply(out _));
+        Assert.True(restart.Pending);
     }
 
     /// <summary>
