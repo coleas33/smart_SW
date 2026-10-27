@@ -25,6 +25,17 @@ is given, and sets it on a client the factory built; `POST /remodel/probe` build
 Every command the client sends after the open names that run, and the bridge refuses one of another
 run's (`bridge-remodel.md`, protocol 1.5).
 
+*Amended 2026-10-27 (owner decision 159A; `research.md` R22):* every route that names a run folder,
+`POST /remodel/close` included, judges it against the run root this backend was started with
+(`resolve_run_dir`) before it builds a client, and a folder outside it - one of the same name under
+another run root among them - is `InvalidRunDir` (400) with nothing sent to the bridge. Unchanged, and
+deliberately so: no route accepts a folder under a run root this backend was not started with, and
+none is added for clean-up. A settings restart that would move the run root therefore has the add-in
+close what the Remodel tab left under the run root in force first, through the backend still serving
+it, and waits while that close is not answered (`pane-remodel-messages.md`, `RemodelCleanupPending`).
+`TestClose.test_a_close_outside_the_run_root_is_refused_before_the_bridge` pins the close route's own
+refusal.
+
 ## Routes
 
 | Route | Body | Does | Reply |

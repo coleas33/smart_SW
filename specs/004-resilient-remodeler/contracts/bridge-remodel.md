@@ -102,6 +102,15 @@ bridge - had its next change carried out on the next run's copy, which passes ev
 `VerifyTarget` makes because it is that run's own. `run_id` names a run, not a document: no path is
 added to any command, and the property below is unchanged.
 
+*Noted 2026-10-27 (owner decision 159A; `research.md` R22); the bridge is unchanged:* `run_id` is the
+folder's name, so two runs of one name under two run roots are one run here. What keeps an old run's
+close from a run of the same name under a new run root is the backend's run-root judging
+(`backend-remodel.md`), and the add-in's order: it closes what the Remodel tab left under the run root
+in force through the backend serving it before a settings restart moves the run root, and no run
+under the new one is planned while that close is unanswered. No new entry into the end-of-session
+routine is added: a session whose backend has exited is still ended only by a re-attach's or an
+unload's teardown, which R22 records as a known defect before Start.
+
 | Command | Params | Result on `ok` |
 |---------|--------|----------------|
 | `remodel.probe_scope` | `{source_path}` | `{probe_id, source_path, scope_signals}` |

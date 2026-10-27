@@ -3574,6 +3574,9 @@ not implement:
   an authorized path to the original session. T258 retains the identity but deliberately keeps current
   backend run-root validation. A settings restart to another root can therefore leave an old session
   on the same bridge whose close is refused before it reaches that bridge; each new Plan retries it.
+  *Updated 2026-10-27 (R22):* settled while the old backend is up - the restart closes the old
+  run's session through it first, and waits while that close is not answered; with the old backend
+  gone the case remains a known defect before Start.
 
 These are known defects to resolve before enabling Start. T180 also remains open and blocking, and the
 seat prerequisites remain the blocking probe verdicts and a real Plan whose source hash is unchanged.
@@ -3943,3 +3946,244 @@ suffixes, are unique; the newest numeric task is T276. Staged files use LF and w
 checks pass. The independent final source/document review approved the same frozen code.
 PR delivery still requires all four CI checks green before merge. No new owner decision,
 SOLIDWORKS launch or paid/live call occurred.
+
+## R22 Cleanup before a run-root change (decision 159A; T277 to T280; 2026-10-27)
+
+Continues owner decision 159A on branch `rootcleanup-159a` from main `b7bf364`. No new owner
+decision is taken, the write guard and the allowlist are unchanged, and Start stays disabled.
+
+### R22.1 The defect
+
+R19.29's third item. A failed plan whose close was not answered (T258), a plan waiting for Start
+that still holds its session, or a finished run whose close was not sent leaves one session on
+the bridge, under run root A. A settings save choosing run root B restarted the backend under B
+at once, and every later close of that run went to B, whose `resolve_run_dir` refuses a folder
+outside its run root - `InvalidRunDir`, before the bridge. T258 keeps the identity on that
+refusal, deliberately, so every new Plan refused retryably for ever on the same attachment.
+`ReviewHost.RunRootsInForce` keeps A for the pane's file access only and authorizes nothing in
+the backend. Path: `RemodelHost.EndTheFailedPlan` / `EndTheWaitingPlan` /
+`EndTheSessionARunLeft` -> `BackendRemodelPipeline.CloseCopy` -> `POST /remodel/close` ->
+`resolve_run_dir`.
+
+### R22.2 What was decided, and why
+
+The handoff's recommended direction holds and is taken: **a dedicated cleanup prerequisite runs
+inside the restart, before backend A is stopped, and its unanswered outcome defers the restart.**
+
+- **Where.** `ReviewHost.RestartWith` - every restart's action, a save's made at once
+  (`DeferredRestart.Now`) and one made after it waited (`Apply`, from the watcher, a new review,
+  a turn call, a remodel run's or a check's gate) - calls `EndTheRemodelSessionsTheRunRootLeaves`
+  before `StartWith`. It runs under the restart's own lock, after `DeferredRestart` has read the
+  work holds (remodel run, checks) under that lock, so no plan or Start can begin meanwhile. It is
+  not in `DeferredRestart.Begin`'s quick `begin` callback, which only marks work in progress.
+- **Only when needed.** Nothing is asked when the saved run root is the one in force
+  (`RunRootRule.SameRunRoot`) or when no backend is up.
+- **A turn first.** `AnyTurnRunning()` is asked before the close and throws
+  `TurnRunningException` as the backend's own check would, so a restart that would wait for a turn
+  sends no close; the supervisor's own check still runs after.
+- **The close.** `ReviewHostOptions.EndRemodelSessionsLeftUnder(runRootInForce)`, wired by the
+  add-in to `RemodelHost.EndTheSessionsLeftUnder`. It holds the tool service (as a plan does),
+  reads the attachment listening now, and closes - each naming its exact run, through the
+  existing `CloseSession` reading - the pending failed plan (`_failedPlanToClose`, same
+  attachment), then `LatestRun` when it still holds its session (`HoldsItsSession`, so same
+  attachment, not closed at the plan, not ended) and its copy is not discarded. Each only when
+  its folder is under the run root leaving (`RunFolders.IsUnder` with the host's probe). It stops
+  at the first close not answered and answers false. One bridge holds one session, so these two
+  are every leftover the host can have.
+- **Answered.** Closed, or answered with what it left (the existing `CloseAnswer` reading,
+  unchanged): the failed plan's record is let go; a run is marked `ClosedForRunRoot` (which marks
+  its session ended), so no close is sent for it again, and a plan so closed is told lost once,
+  now, in `RemodelHost.PlanClosedForRunRootMessage` - also `init.latest_run.plan_lost` and a
+  Start's `SessionLost`. Re-attach words ("SOLIDWORKS switched documents") would be untrue. The
+  restart then goes on.
+- **Not answered.** The Remodel host logs the failure masked and answers false (a delegate that
+  throws is read the same way). `ReviewHost` throws `RemodelCleanupPendingException`. It is
+  neither a turn, a remodel run in progress nor a failure: `DeferredRestart` gives it its own hold
+  (`Hold.Cleanup`, a save's restart made at once) and outcome (`Outcome.CleanupPending`). The
+  restart stays pending with nothing stopped. A failure (`End`) would have dropped the pending
+  restart and told the engineer to save again. B stays saved and A in force. A save answers
+  `settings.saved` with the promise "the settings are saved; the backend restarts with them once
+  the copy an earlier remodel left open in SOLIDWORKS is closed. ..."; `backend.restarted`
+  carries it among `sentences`. A new review, a turn call (409 through the proxy), a remodel run
+  and a check are refused `RemodelCleanupPending`, retryable, in words that name the copy and not
+  a turn. Each asks the close again. The watcher, meeting it, says the promise once and stops:
+  looking each poll would send a close a second over a bridge that does not answer.
+- **Why not `BackendBusy`.** Reading a pending cleanup as work in progress would deadlock: a Plan
+  applies the pending restart in its gate before its own cleanup, so the restart would wait for
+  the plan and the plan for the restart. The prerequisite instead does the cleanup itself, inside
+  the restart the gate asks for.
+- **Unchanged.** Run and session identity (T240/T241's `run_id`, `HoldsItsSession`,
+  `SameAttachment`), the backend's outside-root refusal on every route, `CloseNotAnsweredClasses`
+  and the answered-with-what-it-left outcomes, T258's pending identity and its words, Save,
+  unload (`StopRestarting` disposes the restart, which then begins nothing) and every other hold.
+  `Dispose`, terminal gate disposal and `FollowDocument` are not treated as cleanup receipts.
+  No outside-root HTTP exception, write allowance or arbitrary path is added.
+
+### R22.3 Equal run names and delayed closes
+
+The bridge compares a command's `run_id`, the run folder's own name (R19.15), so `A\X` and `B\X`
+are one run to it. No close of `A\X` can reach the bridge after the restart: the prerequisite
+closes it before A is stopped, and any later close of it goes through B, which refuses the
+folder before the bridge. While it is not answered, no plan under B can be made on that
+attachment (the restart waits, and Plan's own T258/T249 closes refuse first). The C# fake bridge
+now compares names the way the bridge does (changed deliberately, below), so
+`ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot` plans
+`B\X` of the old run's own name and pins that only `B\X` is closed after.
+
+A close whose wait was abandoned (`AppThreadCall.WaitOrAbandon`) still runs later on the
+application thread. The restart proceeds only after a later close of the same run was answered;
+the application thread runs posted delegates in order, so the abandoned one has run, against
+`A\X` or no session, before that answer. When backend A is stopped, a close it had not yet
+written to the pipe dies with it. This ordering argument is native and is not exercised here:
+it joins the pilot-workstation acceptance list.
+
+### R22.4 Old backend gone: recorded, not fixed (Start waits on it)
+
+With backend A already exited there is nothing to close through: HTTP cannot reach A, and B
+refuses the folder. The restart is not held in that case. Holding it would leave no backend at
+all, since the restart is what brings one back. So B comes into force and the leftover stays as
+T258 leaves it: every Plan on that attachment is refused retryably (`InvalidRunDir`,
+`FailedPlanNotClosedMessage`), and nothing is copied. `WithTheOldBackendGoneTheRunRootMovesAndTheOldRunsCloseIsRefusedBeforeTheBridge`
+pins that, and that the refusal never reaches the bridge. The way out is a re-attach (making
+another document active) or an unload: the old tool service's teardown runs the
+end-of-session routine and the attachment changes, which clears the record. The words "Wait a
+moment" do not say that, which is part of the defect. A leftover under an earlier root never
+holds a later change (`ALeftoverUnderAnEarlierRunRootDoesNotHoldTheNextRunRootChange`).
+
+A narrowly bound native hook was investigated and **not** added:
+`IToolService.EndRemodelSessionOf(canonicalRunDirectory)` would post, through
+`ToolServiceHost.OnApplicationThread`, a delegate that rechecks inside itself - since late
+delegates still run after `WaitOrAbandon` - that the service is the captured, undisposed one and
+that `SwBridgeDispatcher.RemodelRunDirectory` equals the full canonical folder, before calling
+`EndRemodelSession`. It is not narrow here:
+
+- it changes `IToolService` and `ToolServiceGate`, so every fake in the suite;
+- it adds a new trigger of the routine that closes the copy and puts back application settings,
+  outside the bridge's command path, its request log and gate-activity drain;
+- it skips the backend's U26 attestation re-check at close;
+- its safety rests on application-thread timing that cannot be exercised without a licence.
+
+Whether a new caller of that routine is a new write path is a constitution question. The
+owner should answer it before the hook is built. Start (T172) waits on this defect, beside T180
+and the pilot prerequisites.
+
+### R22.5 Tests changed on purpose
+
+Each asks more; none is loosened.
+
+- `RemodelHostTests.FakePipeline`: the fake bridge compares the run a close names by its folder's
+  name, as the bridge's `run_id` is. A new optional `BackendRunRoot` judges every run folder as
+  `resolve_run_dir` does; it is unset in every older case.
+- `DeferredRestartTests.RestartSentences` gains the cleanup promise. `RestartWorld` gains
+  `EndRemodelSessions`; older cases leave it unset.
+- `BackendProxyHandlerTests.ARefusalIsAnsweredWithTheStatusTheBackendGivesIt` and
+  `ErrorLabelsCoverTheHostTests.TheScanFindsTheClassesTheHostAndThePageMake` gain
+  `RemodelCleanupPending`.
+- `RunFoldersLongNamesTests.EveryHostHandsTheRunFoldersItsRunRootProbe` gains the two new
+  `RemodelHost.cs IsUnder` calls, each passing the host's probe.
+- `test_review_words.RESTART_HOLDS` gains the class's label, and the four pane fixtures that
+  embed the words file's labels (`review-big-assembly.json`, `review-waiting.json`,
+  `review-waiting-big-assembly.json`, `review-waiting-restored.json`) were regenerated with
+  their own generators: each gains that one label line and nothing else.
+  `review-not-sent-session.json` came back byte for byte. `review-send-failure-events.json`'s
+  pin of `review-waiting.json` (`source_fixture_sha256`) moved with it, as 143A and 015 moved it.
+
+Preserved unchanged:
+
+- `AFailedPlansCleanupKeepsTheOldRunWhenTheRunRootMovesAndTheBackendRefusesIt`;
+- the outside-root refusal tests: open in `test_chat_remodel_routes.py`, and the server and check
+  route tests;
+- `ACommandOfAnotherRunIsRefusedBeforeAnythingIsReadOrWritten`.
+
+### R22.6 Test-first evidence
+
+T277 compiled against inert seams only: the option, `EndTheSessionsLeftUnder` answering true,
+the hold, outcome, exception and words. 35 C# cases ran: **21 failed** on assertions (one of
+them `ARestartWhoseRemodelCleanupIsNotAnsweredStillWaits`, where the exception escaped as the
+restart's failure), and **14 guards passed**. T278: the Python close-route guard passed in both
+rows (the backend already refused, and the open's guard does not cover close). The label test
+failed: **1 failure, 2 guards**. Two of T277's guard rows first failed because their setup was
+wrong: a turn running before a save refuses the save. They were corrected to start the turn
+during the save, as `SaveAsATurnStarts` does, before any product change. The fix (T279) also
+added these guards, each shown meaningful by a mutation below:
+
+- `ALeftoverUnderAnEarlierRunRootDoesNotHoldTheNextRunRootChange`;
+- `ARunRootChangeSendsNoCloseForAPlanThatHoldsNoSession`;
+- `TheClosesBeforeARunRootChangeHoldTheToolService`;
+- `RemodelWiringTests.TheAddInHandsTheReviewHostTheRemodelHostsCleanupBeforeARunRootMoves`;
+- the Start/`init` words in the waiting row.
+
+### R22.7 Mutations
+
+Each fix taken out once, alone, by an exact replacement, against the 42 R22 cases (the 35 of
+T277 and the 7 added with the fix), then restored from the bytes read before, sha256 checked equal
+(the restored tree also matched commit `7e0251b`'s product files, `git status` clean). Every row
+failed at least one case. M14 was run again on its own: its first run overlapped the Python
+label mutation below, which also failed the words-file case. The row is the clean rerun.
+
+| # | Fix taken out | Failed | Cases that failed | Restored |
+|---|---|---|---|---|
+| M1 | `ReviewHost.cs`: restart closes nothing first | 18 of 42 | `ALeftoverUnderTheOldRunRootIsClosedThroughTheOldBackendBeforeTheRestartMovesIt`, `ARemodelCleanupThatThrowsHoldsTheRestartAsOneNotAnswered`, `ARestartThatWouldMoveTheRunRootWaitsWhileTheRemodelCleanupIsNotAnswered`, `ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot`, `ARunRootChangeWaitsWhileTheOldRunsCloseIsNotAnswered`, `ARunRootChangesOnceTheOldRunsCloseIsAnsweredWithWhatItLeft`, `TheClosesBeforeARunRootChangeHoldTheToolService`, `TheWatcherStopsAtARemodelCleanupNotAnsweredAndSaysSo` | sha256 equal |
+| M2 | `ReviewHost.cs`: no turn asked before the close | 3 of 42 | `ARestartAsksForNoRemodelCleanupUnlessItMovesTheRunRootWithNothingHoldingItAndABackendUp`, `ARestartClosesNothingWhileSomethingHoldsItOrWhenTheRunRootStays`, `TheWatcherStopsAtARemodelCleanupNotAnsweredAndSaysSo` | sha256 equal |
+| M3 | `ReviewHost.cs`: close asked when the run root stays | 2 of 42 | `ARestartAsksForNoRemodelCleanupUnlessItMovesTheRunRootWithNothingHoldingItAndABackendUp`, `ARestartClosesNothingWhileSomethingHoldsItOrWhenTheRunRootStays` | sha256 equal |
+| M4 | `ReviewHost.cs`: close asked with no backend up | 5 of 42 | `ALeftoverUnderAnEarlierRunRootDoesNotHoldTheNextRunRootChange`, `ARestartAsksForNoRemodelCleanupUnlessItMovesTheRunRootWithNothingHoldingItAndABackendUp`, `WithTheOldBackendGoneTheRunRootMovesAndTheOldRunsCloseIsRefusedBeforeTheBridge` | sha256 equal |
+| M5 | `ReviewHost.cs`: a throwing Remodel tab is the restart failure | 1 of 42 | `ARemodelCleanupThatThrowsHoldsTheRestartAsOneNotAnswered` | sha256 equal |
+| M6 | `ReviewHost.cs`: review/turn call not refused | 1 of 42 | `ARestartThatWouldMoveTheRunRootWaitsWhileTheRemodelCleanupIsNotAnswered` | sha256 equal |
+| M7 | `ReviewHost.cs`: remodel run/check refusal lost | 2 of 42 | `ARestartThatWouldMoveTheRunRootWaitsWhileTheRemodelCleanupIsNotAnswered`, `ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot` | sha256 equal |
+| M8 | `ReviewHost.cs`: save promises a turn | 10 of 42 | `ARemodelCleanupThatThrowsHoldsTheRestartAsOneNotAnswered`, `ARestartThatWouldMoveTheRunRootWaitsWhileTheRemodelCleanupIsNotAnswered`, `ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot`, `ARunRootChangeWaitsWhileTheOldRunsCloseIsNotAnswered` | sha256 equal |
+| M9 | `ReviewHost.cs`: sentence not carried by backend.restarted | 2 of 42 | `ARestartThatWouldMoveTheRunRootWaitsWhileTheRemodelCleanupIsNotAnswered`, `TheRestartCarriesEverySentenceTheReviewTabMayHaveShown` | sha256 equal |
+| M10 | `DeferredRestart.cs`: save treats the pending close as a failure | 11 of 42 | `ARemodelCleanupThatThrowsHoldsTheRestartAsOneNotAnswered`, `ARestartThatWouldMoveTheRunRootWaitsWhileTheRemodelCleanupIsNotAnswered`, `ARestartWhoseRemodelCleanupIsNotAnsweredStillWaits`, `ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot`, `ARunRootChangeWaitsWhileTheOldRunsCloseIsNotAnswered` | sha256 equal |
+| M11 | `DeferredRestart.cs`: a later restart treats it as a failure | 4 of 42 | `ARestartThatWouldMoveTheRunRootWaitsWhileTheRemodelCleanupIsNotAnswered`, `ARestartWhoseRemodelCleanupIsNotAnsweredStillWaits`, `ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot`, `TheWatcherStopsAtARemodelCleanupNotAnsweredAndSaysSo` | sha256 equal |
+| M12 | `DeferredRestart.cs`: watcher keeps asking | 1 of 42 | `TheWatcherStopsAtARemodelCleanupNotAnsweredAndSaysSo` | sha256 equal |
+| M13 | `RemodelHost.cs`: failed plan closed on a replacement attachment | 1 of 42 | `ARunRootChangeSendsNoCloseToAReplacementAttachment` | sha256 equal |
+| M14 | `RemodelHost.cs`: failed plan under an earlier root closed | 1 of 42 | `ALeftoverUnderAnEarlierRunRootDoesNotHoldTheNextRunRootChange` | sha256 equal |
+| M15 | `RemodelHost.cs`: failed plan record kept after the close | 4 of 42 | `ALeftoverUnderTheOldRunRootIsClosedThroughTheOldBackendBeforeTheRestartMovesIt`, `ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot`, `ARunRootChangesOnceTheOldRunsCloseIsAnsweredWithWhatItLeft` | sha256 equal |
+| M16 | `RemodelHost.cs`: a run holding no session closed | 1 of 42 | `ARunRootChangeSendsNoCloseForAPlanThatHoldsNoSession` | sha256 equal |
+| M17 | `RemodelHost.cs`: a run under an earlier root closed | 2 of 42 | `ALeftoverUnderAnEarlierRunRootDoesNotHoldTheNextRunRootChange` | sha256 equal |
+| M18 | `RemodelHost.cs`: closed run not marked | 3 of 42 | `ALeftoverUnderTheOldRunRootIsClosedThroughTheOldBackendBeforeTheRestartMovesIt` | sha256 equal |
+| M19 | `RemodelHost.cs`: tool service not held | 2 of 42 | `TheClosesBeforeARunRootChangeHoldTheToolService` | sha256 equal |
+| M20 | `RemodelHost.cs`: notice in the re-attach words | 2 of 42 | `ALeftoverUnderTheOldRunRootIsClosedThroughTheOldBackendBeforeTheRestartMovesIt` | sha256 equal |
+| M21 | `RemodelHost.cs`: Start in the re-attach words | 1 of 42 | `ALeftoverUnderTheOldRunRootIsClosedThroughTheOldBackendBeforeTheRestartMovesIt` | sha256 equal |
+| M22 | `RemodelHost.cs`: the plan not told lost at once | 2 of 42 | `ALeftoverUnderTheOldRunRootIsClosedThroughTheOldBackendBeforeTheRestartMovesIt` | sha256 equal |
+| M23 | `RemodelRun.cs`: run-root mark leaves the session held | 3 of 42 | `ALeftoverUnderTheOldRunRootIsClosedThroughTheOldBackendBeforeTheRestartMovesIt` | sha256 equal |
+| M24 | `BackendProxyHandler.cs`: proxy answers 503 | 1 of 42 | `ARefusalIsAnsweredWithTheStatusTheBackendGivesIt` | sha256 equal |
+| M25 | `SwReviewAddIn.cs`: add-in not wired | 1 of 42 | `TheAddInHandsTheReviewHostTheRemodelHostsCleanupBeforeARunRootMoves` | sha256 equal |
+| M26 | `review_words_v1.yaml`: the `RemodelCleanupPending` label | 1 of 106 | `test_each_thing_that_holds_a_restart_back_has_a_true_sentence` | sha256 equal |
+
+### R22.8 Gates
+
+Counts before (main `b7bf364`): Windows Release build with zero warnings and zero errors;
+10,199 extractor and 4,153 add-in tests passed. Python 3.12 and 3.11: 18,273 passed and 5 skipped
+each (R21).
+
+Counts after, on the final tree:
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero warnings,
+  zero errors.
+- **C# tests.** `dotnet test --no-build`: 10,199 extractor and 4,187 add-in tests passed, none
+  failed or skipped: 34 add-in cases more than before, counting theory rows.
+- **Focused runs.** The remodel, restart and tool-service classes (`RemodelHostTests`,
+  `DeferredRestartTests`, `ToolService*`; 1,099 cases) were run five times through the solution
+  with `--filter`. All five passed, before the fixture regeneration below. That regeneration
+  changes no product code and none of these classes' inputs.
+- **Python.** Required-tokenizer non-live suites (`SWREVIEW_TOKENIZER_DIR=C:\t\144a-tok`,
+  `--basetemp` outside the checkout): Python 3.12, 18,275 passed and 5 skipped; Python 3.11
+  (`uv run --isolated --python 3.11 --all-extras`), 18,275 passed and 5 skipped. The first 3.12
+  run failed the six pane-fixture cases until the fixtures were regenerated (R22.5). Then the
+  C# rerun failed `ReviewPageSendGateTests`' three cases until the pin moved; both runs above
+  are after.
+- **Lint and environment.** `uv sync --all-extras` and `uv run ruff check src tests` passed.
+
+No SOLIDWORKS process, seat task or paid/live test ran. Only processes this work started were
+stopped, by id.
+
+### R22.9 What Start waits on now
+
+- The old-backend-gone case (R22.4).
+- The native ordering of an abandoned close (R22.3), for the pilot sitting.
+- T180 and its owner decision.
+- PROBE-1, PROBE-2, PROBE-3, PROBE-4 and PROBE-12.
+- A real Plan whose source hash stays unchanged.
+
+Decision 159A stays in progress. The independent Opus and Codex reviews and a PR with all four
+required CI checks green come next.
