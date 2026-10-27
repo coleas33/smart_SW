@@ -141,6 +141,10 @@ public sealed class DeferredRestartTests
         "the settings are saved; the backend restarts when the remodel run and the running checks end.",
         "the settings are saved; the backend restarts when the running turn, the remodel run and the running checks end.",
         NotAnsweringYet,
+
+        // Changed deliberately 2026-10-27 (owner decision 159A, 004 research R22): the save's sentence while the restart waits
+        // for a remodel copy's close is one more the Review tab may show, so the restart carries it too.
+        CleanupPromise,
     };
 
     /// <summary>
@@ -8922,6 +8926,259 @@ public sealed class DeferredRestartTests
         Assert.Equal(0, looked);
     }
 
+    // ---- owner decision 159A (004 T277; research R22): a remodel session left under a run root a restart moves -------
+
+    /// <summary>The save's sentence while the restart waits for a remodel copy's close (004 research R22).</summary>
+    private const string CleanupPromise =
+        "the settings are saved; the backend restarts with them once the copy an earlier remodel left open in SOLIDWORKS "
+        + "is closed. That is tried again before the next review, follow-up, remodel run or check; to try it now, save "
+        + "the settings again.";
+
+    /// <summary>A new review or a turn call refused while that close holds the restart back.</summary>
+    private const string CleanupHoldsTheRestart =
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
+        + "with the saved settings, and nothing new starts before then. Wait a moment, then try again.";
+
+    /// <summary>...a remodel run - a plan or a Start - refused so.</summary>
+    private const string CleanupHoldsTheRemodelRun =
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
+        + "with the saved settings, and no remodel run starts before then. Wait a moment, then try again.";
+
+    /// <summary>...a check refused so.</summary>
+    private const string CleanupHoldsTheCheck =
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
+        + "with the saved settings, and no check starts before then. Wait a moment, then try again.";
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T277; research R22): a restart that would move the run root asks the Remodel
+    /// tab to close what it left under the run root in force, through the backend still up, before it stops anything. A
+    /// close not answered holds the restart back - not a failure, which would drop it: the saved run root stays saved, the
+    /// one in force stays in force, the save says so, and a new review, a turn call, a remodel run and a check are each
+    /// refused, retryably, under a class of their own, every one of them asking the close again. Once it is answered, the
+    /// next caller makes the restart.
+    /// </summary>
+    [Fact]
+    public void ARestartThatWouldMoveTheRunRootWaitsWhileTheRemodelCleanupIsNotAnswered()
+    {
+        var asked = new List<string>();
+        int answers = 0;
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            EndRemodelSessions = runRoot =>
+            {
+                lock (asked)
+                {
+                    asked.Add(runRoot);
+                }
+
+                return Volatile.Read(ref answers) == 1;
+            },
+        };
+        string loaded = world.Settings.RunRoot;
+        string chosen = ChosenRoot(world);
+        world.Open();
+        world.Track("chat-1");
+
+        world.Receive("settings.save", "save", Choosing(chosen, Save(effort: "low")));
+
+        world.Reply("settings.saved", "save");
+        Assert.Equal(CleanupPromise, world.Last("status").GetProperty("message").GetString());
+        Assert.Equal(0, world.Backend.Attempts);
+        Assert.Equal(loaded, world.Host.RunRoot);
+        Assert.Equal(chosen, world.Host.Settings.RunRoot);
+        Assert.True(world.Host.RestartAhead);
+        Assert.Equal(new[] { loaded }, asked);
+
+        world.Receive("review.start", "start", new { });
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("RemodelCleanupPending", error.GetProperty("error_class").GetString());
+        Assert.Equal(CleanupHoldsTheRestart, error.GetProperty("message").GetString());
+        Assert.True(error.GetProperty("retryable").GetBoolean());
+        Assert.Empty(world.Backend.Sessions);
+
+        BackendRequestException? turn = world.Host.PageTurnRefusal();
+        Assert.Equal("RemodelCleanupPending", turn!.ErrorClass);
+        Assert.Equal(CleanupHoldsTheRestart, turn.Message);
+        Assert.True(turn.Retryable);
+
+        bool begun = false;
+        BackendRequestException? run = world.Host.BeginRemodelRun(() => begun = true);
+        Assert.Equal("RemodelCleanupPending", run!.ErrorClass);
+        Assert.Equal(CleanupHoldsTheRemodelRun, run.Message);
+        Assert.True(run.Retryable);
+        BackendRequestException? check = world.Host.BeginCheck(() => begun = true);
+        Assert.Equal("RemodelCleanupPending", check!.ErrorClass);
+        Assert.Equal(CleanupHoldsTheCheck, check.Message);
+        Assert.False(begun);
+        Assert.Equal(0, world.Backend.Attempts);
+        Assert.Equal(loaded, world.Host.RunRoot);
+        Assert.Equal(new[] { loaded, loaded, loaded, loaded, loaded }, asked);
+
+        Volatile.Write(ref answers, 1);
+        Assert.Null(world.Host.BeginRemodelRun(() => begun = true));
+
+        Assert.True(begun);
+        Assert.Equal(chosen, Assert.Single(world.Backend.Restarts).Settings.RunRoot);
+        Assert.Equal(chosen, world.Host.RunRoot);
+        Assert.Contains(
+            CleanupPromise,
+            world.Last("backend.restarted").GetProperty("sentences").EnumerateArray().Select(sentence => sentence.GetString()));
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T277 - guards; research R22): the close is asked only of a restart that moves the run root,
+    /// only once nothing holds the restart back - a turn is asked about first, and a turn found leaves the close unasked -
+    /// and only while a backend is up to carry it: with none, the restart is what brings one back, and it is made.
+    /// </summary>
+    [Theory]
+    [InlineData("the run root kept")]
+    [InlineData("a turn running")]
+    [InlineData("no backend up")]
+    public void ARestartAsksForNoRemodelCleanupUnlessItMovesTheRunRootWithNothingHoldingItAndABackendUp(string what)
+    {
+        int asked = 0;
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            EndRemodelSessions = _ =>
+            {
+                Interlocked.Increment(ref asked);
+                return false;
+            },
+        };
+        string loaded = world.Settings.RunRoot;
+        string chosen = ChosenRoot(world);
+        world.Backend.Down = what == "no backend up";
+        world.Open();
+        world.Track("chat-1");
+        Dictionary<string, object?> payload = what == "the run root kept" ? Save(effort: "low") : Choosing(chosen, Save(effort: "low"));
+        if (what == "a turn running")
+        {
+            SaveAsATurnStarts(world, "save", payload);
+        }
+        else
+        {
+            world.Receive("settings.save", "save", payload);
+        }
+
+        world.Reply("settings.saved", "save");
+        Assert.Equal(0, Volatile.Read(ref asked));
+        if (what == "a turn running")
+        {
+            Assert.Equal(Promise, world.Last("status").GetProperty("message").GetString());
+            Assert.Equal(loaded, world.Host.RunRoot);
+        }
+        else
+        {
+            Assert.Single(world.Backend.Restarts);
+            Assert.Equal(what == "the run root kept" ? loaded : chosen, world.Host.RunRoot);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T277; research R22): a cleanup that throws is a close not answered - the restart
+    /// waits - and never the restart's failure, which would answer the save `BackendNotRestarted` and drop the restart.
+    /// </summary>
+    [Fact]
+    public void ARemodelCleanupThatThrowsHoldsTheRestartAsOneNotAnswered()
+    {
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            EndRemodelSessions = _ => throw new InvalidOperationException("FICT the Remodel tab could not be asked."),
+        };
+        string loaded = world.Settings.RunRoot;
+        world.Open();
+
+        world.Receive("settings.save", "save", Choosing(ChosenRoot(world), Save(effort: "low")));
+
+        world.Reply("settings.saved", "save");
+        Assert.Equal(CleanupPromise, world.Last("status").GetProperty("message").GetString());
+        Assert.Equal(loaded, world.Host.RunRoot);
+        Assert.True(world.Host.RestartAhead);
+        Assert.Equal(0, world.Backend.Attempts);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T277; research R22): the watcher, which makes a waiting restart once nothing holds
+    /// it, meets the close not answered when the turn it waited for ends; it says so once, in the save's sentence, and stops
+    /// asking, the restart still waiting - the next caller asks the close again, and makes the restart once it is answered.
+    /// </summary>
+    [Fact]
+    public void TheWatcherStopsAtARemodelCleanupNotAnsweredAndSaysSo()
+    {
+        int asked = 0;
+        int answers = 0;
+        using var world = new RestartWorld
+        {
+            EndRemodelSessions = _ =>
+            {
+                Interlocked.Increment(ref asked);
+                return Volatile.Read(ref answers) == 1;
+            },
+        };
+        string chosen = ChosenRoot(world);
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Choosing(chosen, Save(effort: "low")));
+        world.Reply("settings.saved", "save");
+        Assert.Equal(Promise, world.Last("status").GetProperty("message").GetString());
+
+        world.Backend.EndTurn("chat-1");
+
+        Eventually(() => world.Posted("status").Length == 2, "the watcher's word");
+        Assert.Equal(CleanupPromise, world.Last("status").GetProperty("message").GetString());
+        int seen = Volatile.Read(ref asked);
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(seen, Volatile.Read(ref asked));
+        Assert.Equal(2, world.Posted("status").Length);
+        Assert.Equal(0, world.Backend.Attempts);
+        Assert.True(world.Host.RestartAhead);
+
+        Volatile.Write(ref answers, 1);
+        Assert.Equal("UnknownChat", world.Host.PageTurnRefusal()!.ErrorClass);
+        Assert.Equal(chosen, world.Host.RunRoot);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T277; research R22): <see cref="DeferredRestart"/> itself. A restart that throws
+    /// <see cref="RemodelCleanupPendingException"/> changed nothing: a save's made at once waits (<c>Hold.Cleanup</c>), and
+    /// one asked later answers <c>CleanupPending</c> and still waits - to every caller, the gate's included, whose work does
+    /// not begin - with no failure reported and nothing ended.
+    /// </summary>
+    [Fact]
+    public void ARestartWhoseRemodelCleanupIsNotAnsweredStillWaits()
+    {
+        int failures = 0;
+        int restarted = 0;
+        using var restart = new DeferredRestart(
+            () => DeferredRestart.Hold.None,
+            () => DeferredRestart.Work.None,
+            () => throw new RemodelCleanupPendingException(),
+            () => Interlocked.Increment(ref restarted),
+            _ => Interlocked.Increment(ref failures),
+            () => { },
+            () => { },
+            TimeSpan.FromMinutes(10));
+
+        Assert.False(restart.Now(() => throw new RemodelCleanupPendingException(), out DeferredRestart.Hold heldBy, out _));
+        Assert.Equal(DeferredRestart.Hold.Cleanup, heldBy);
+        Assert.True(restart.Pending);
+
+        Assert.Equal(DeferredRestart.Outcome.CleanupPending, restart.Apply(out Exception? failure));
+        Assert.Null(failure);
+        Assert.True(restart.Pending);
+
+        bool begun = false;
+        Assert.Equal(DeferredRestart.Outcome.CleanupPending, restart.Begin(() => begun = true, out failure));
+        Assert.False(begun);
+        Assert.Null(failure);
+        Assert.True(restart.Pending);
+        Assert.Equal(0, failures);
+        Assert.Equal(0, restarted);
+    }
+
     /// <summary>
     /// A restart with the callbacks a test does not care about doing nothing, no remodel run in
     /// progress unless given a reading of one (owner decision 145A), and a ten-minute poll unless
@@ -9226,6 +9483,12 @@ public sealed class DeferredRestartTests
         public Func<bool> StandardsChecking { get; set; } = () => false;
 
         /// <summary>
+        /// Owner decision 159A (004 research R22): what the Remodel tab answers when asked to close what it left under the run
+        /// root a restart would move; null answers it has nothing to close, as the review host's default does.
+        /// </summary>
+        public Func<string, bool>? EndRemodelSessions { get; set; }
+
+        /// <summary>
         /// Sets the reading of the check tabs named - "Model check", "Standards", "both" or "none" - to
         /// <paramref name="reading"/>, and the other's to none (owner decision 157A).
         /// </summary>
@@ -9353,6 +9616,7 @@ public sealed class DeferredRestartTests
                 BackendBusy = () => BackendBusy(),
                 ModelCheckInProgress = () => ModelChecking(),
                 StandardsCheckInProgress = () => StandardsChecking(),
+                EndRemodelSessionsLeftUnder = runRoot => EndRemodelSessions == null || EndRemodelSessions(runRoot),
                 BackendRestarted = () =>
                 {
                     Interlocked.Increment(ref _otherTabsTold);

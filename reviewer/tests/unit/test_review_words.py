@@ -674,12 +674,18 @@ RESTART_HOLDS = {
         "The review backend is not running or not answering. Save Settings to start it again, "
         "then retry."
     ),
+    "RemodelCleanupPending": (
+        "A copy an earlier remodel left open in SOLIDWORKS could not be closed, so the saved "
+        "settings are not in force yet. Wait a moment, then try again."
+    ),
 }
 """The classes the add-in refuses a new review or a turn call with while the backend waits to be
 restarted with settings saved during a turn (owner decision 143A): one for each thing that can
 hold that restart back - a turn, a remodel run, a check (owner decision 157A), a backend that does
-not answer - so the sentence the page shows is true of what holds it. `RemodelRunning` and
-`CheckRunning` are the add-in's own classes; the backend never sends them."""
+not answer, and a remodel copy whose close before the run root moves was not answered (owner
+decision 159A, 004 research R22) - so the sentence the page shows is true of what holds it.
+`RemodelRunning`, `CheckRunning` and `RemodelCleanupPending` are the add-in's own classes; the
+backend never sends them."""
 
 
 def test_each_thing_that_holds_a_restart_back_has_a_true_sentence() -> None:

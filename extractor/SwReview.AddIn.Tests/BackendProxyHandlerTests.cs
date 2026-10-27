@@ -252,6 +252,7 @@ public sealed class BackendProxyHandlerTests
     [InlineData("TurnRunning", 409)]
     [InlineData("RemodelRunning", 409)]
     [InlineData("CheckRunning", 409)]
+    [InlineData("RemodelCleanupPending", 409)]
     [InlineData("UnknownChat", 404)]
     [InlineData("BackendUnavailable", 503)]
     public void ARefusalIsAnsweredWithTheStatusTheBackendGivesIt(string errorClass, int status)

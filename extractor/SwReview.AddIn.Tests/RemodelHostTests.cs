@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using SwReview.AddIn.Remodel;
 using SwReview.AddIn.Review;
+using SwReview.AddIn.Settings;
 using SwReview.AddIn.ToolService;
 using SwReview.Extractor.Rms;
 using Xunit;
@@ -6419,6 +6420,402 @@ public sealed class RemodelHostTests
         Assert.False(pipeline.SessionOpen);
     }
 
+    // ---- owner decision 159A (004 T277; research R22): a session left under a run root a restart moves --------------
+
+    /// <summary>What the Review tab says of a save whose restart waits for a remodel copy's close (004 research R22).</summary>
+    private const string CleanupPromise =
+        "the settings are saved; the backend restarts with them once the copy an earlier remodel left open in SOLIDWORKS "
+        + "is closed. That is tried again before the next review, follow-up, remodel run or check; to try it now, save "
+        + "the settings again.";
+
+    /// <summary>What a plan or a Start is refused with while that close holds the restart back (004 research R22).</summary>
+    private const string CleanupHoldsTheRemodelRun =
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
+        + "with the saved settings, and no remodel run starts before then. Wait a moment, then try again.";
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T277; research R22): the defect R19.29 named, over the review host's real
+    /// settings restart. A failed plan's close was not answered, so its session is still on the bridge, under run root A.
+    /// Saving run root B restarted the backend under B at once, and B refuses A's folder before the bridge is reached
+    /// (`resolve_run_dir`), so every later plan retried a close that could never be sent. Now the close goes first, through
+    /// A - the one backend that takes the old run's folder - before A is stopped: while it is not answered B stays saved and
+    /// A in force, a plan is refused retryably and copies nothing, and once it is answered the next plan's gate makes the
+    /// restart and plans under B - a run of the old run's own name, in the other root, which nothing closes for the old run.
+    /// </summary>
+    [Fact]
+    public void ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot()
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string oldRoot = world.RunRoot;
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+            world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            Assert.Equal("HostError", world.ErrorClass("p1"));
+            world.Pipeline.PlanFailure = null;
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(CleanupPromise, restart.LastStatus());
+            Assert.Equal(restart.NewRoot, restart.Review.Settings.RunRoot);
+            Assert.Equal(oldRoot, restart.Review.RunRoot);
+            Assert.Empty(restart.Backend.Restarts);
+            Assert.True(restart.Review.RestartAhead);
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.Equal(new[] { oldRoot, oldRoot }, world.Pipeline.RootsClosedUnder);
+            Assert.True(world.Pipeline.SessionOpen);
+
+            int probes = world.Pipeline.Count("probe");
+            int copies = world.Pipeline.Count("copy");
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement refused = world.Reply("error", "p2");
+            Assert.Equal("RemodelCleanupPending", refused.GetProperty("error_class").GetString());
+            Assert.Equal(CleanupHoldsTheRemodelRun, refused.GetProperty("message").GetString());
+            Assert.True(refused.GetProperty("retryable").GetBoolean());
+            Assert.Equal(probes, world.Pipeline.Count("probe"));
+            Assert.Equal(copies, world.Pipeline.Count("copy"));
+            Assert.False(world.Host.RunInProgress);
+            Assert.Equal(oldRoot, restart.Review.RunRoot);
+            Assert.Empty(restart.Backend.Restarts);
+            Assert.Equal(new[] { first, first, first }, world.Pipeline.Closed);
+            Assert.True(world.Pipeline.SessionOpen);
+
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.plan", "p3", new { });
+
+            world.Reply("remodel.planned", "p3");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(restart.NewRoot, Assert.Single(restart.Backend.Restarts).RunRoot);
+            Assert.Equal(new[] { false }, restart.Backend.SessionOpenAtEachRestart);
+            Assert.Equal(new[] { first, first, first, first }, world.Pipeline.Closed);
+            Assert.Equal(new[] { oldRoot, oldRoot, oldRoot, oldRoot }, world.Pipeline.RootsClosedUnder);
+            string second = world.Host.LatestRun!.RunDirectory;
+            Assert.Equal(Path.Combine(restart.NewRoot, world.ExpectedRunId), second);
+            Assert.True(world.Pipeline.SessionOpen);
+
+            // The run of the same name under B holds the bridge now, and nothing names the old run again: planning
+            // again closes the new run's session alone, through B.
+            world.Receive("remodel.plan", "p4", new { });
+
+            world.Reply("remodel.planned", "p4");
+            Assert.Equal(new[] { first, first, first, first, second }, world.Pipeline.Closed);
+            Assert.Equal(restart.NewRoot, world.Pipeline.RootsClosedUnder.Last());
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T277; research R22): each session a run can leave on the bridge - a failed plan's,
+    /// a plan waiting for Start (Start on, or Start off with its close at the plan not answered) and a finished run's - is
+    /// closed through the backend in force, before a save's restart moves the run root, and the restart is then made at once.
+    /// A plan closed so is told lost once, in words of its own; the next plan, under the new run root, closes nothing more.
+    /// </summary>
+    [Theory]
+    [InlineData("failed")]
+    [InlineData("waiting")]
+    [InlineData("waiting, Start off")]
+    [InlineData("finished")]
+    public void ALeftoverUnderTheOldRunRootIsClosedThroughTheOldBackendBeforeTheRestartMovesIt(string leftover)
+    {
+        using (var world = new RemodelWorld { StartValidated = leftover != "waiting, Start off" })
+        using (var restart = new RunRootRestart(world))
+        {
+            string oldRoot = world.RunRoot;
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, leftover);
+            int closes = world.Pipeline.Closed.Count;
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(restart.NewRoot, Assert.Single(restart.Backend.Restarts).RunRoot);
+            Assert.Equal(new[] { false }, restart.Backend.SessionOpenAtEachRestart);
+            Assert.Equal(new[] { first }, world.Pipeline.Closed.Skip(closes));
+            Assert.Equal(oldRoot, world.Pipeline.RootsClosedUnder.Last());
+            Assert.False(world.Pipeline.SessionOpen);
+            bool waiting = leftover.StartsWith("waiting", StringComparison.Ordinal);
+            if (waiting)
+            {
+                JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
+                Assert.Equal(first, notice.GetProperty("run_dir").GetString());
+                Assert.Equal(RemodelHost.PlanClosedForRunRootMessage, notice.GetProperty("message").GetString());
+                AssertPlainWords(RemodelHost.PlanClosedForRunRootMessage);
+            }
+            else
+            {
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            }
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(Path.Combine(restart.NewRoot, world.ExpectedRunId), world.Host.LatestRun!.RunDirectory);
+            Assert.Equal(new[] { first }, world.Pipeline.Closed.Skip(closes).Where(folder => folder == first));
+            Assert.Equal(waiting ? 1 : 0, world.AllPosted("remodel.plan_lost").Length);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T277; research R22): a close answered with what it left - the routine's own
+    /// refusal, or another run's session on the bridge - is an answer, as it is for planning again; the restart is made, and
+    /// the next plan, under the new run root, sends no close for the old run.
+    /// </summary>
+    [Theory]
+    [InlineData("CloseIncomplete")]
+    [InlineData("RunFolderFailed")]
+    public void ARunRootChangesOnceTheOldRunsCloseIsAnsweredWithWhatItLeft(string answer)
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, "failed");
+            int closes = world.Pipeline.Closed.Count;
+            world.Pipeline.CloseFailure = new RemodelRefusal(answer, "FICT the close answered with what it left.", retryable: false);
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(new[] { first }, world.Pipeline.Closed.Skip(closes));
+            world.Pipeline.CloseFailure = null;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(new[] { first }, world.Pipeline.Closed.Skip(closes));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T277; research R22): every close that is not an answer - the bridge's silence, a
+    /// close that never reached it, and a failure with no class - holds the restart back: the saved run root stays saved,
+    /// the one in force stays in force, nothing is stopped or started, the session is left as it was, and the failure is in
+    /// the log, masked.
+    /// </summary>
+    [Theory]
+    [InlineData("BridgeUnavailable")]
+    [InlineData("BackendUnavailable")]
+    [InlineData("HttpError")]
+    [InlineData("BadResponse")]
+    [InlineData("InvalidRunDir")]
+    [InlineData("InvalidRequest")]
+    [InlineData("exception")]
+    public void ARunRootChangeWaitsWhileTheOldRunsCloseIsNotAnswered(string failureClass)
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string oldRoot = world.RunRoot;
+            LeaveASessionOnTheBridge(world, "failed");
+            world.Pipeline.CloseFailure = failureClass == "exception"
+                ? new IOException("FICT the close could not reach 0FAKEtoken.")
+                : new RemodelRefusal(failureClass, "FICT the close could not reach 0FAKEtoken.", retryable: false);
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(CleanupPromise, restart.LastStatus());
+            Assert.Equal(restart.NewRoot, restart.Review.Settings.RunRoot);
+            Assert.Equal(oldRoot, restart.Review.RunRoot);
+            Assert.Empty(restart.Backend.Restarts);
+            Assert.True(world.Pipeline.SessionOpen);
+            Assert.Contains(world.Logged, line => line.Contains("FICT the close could not reach"));
+            Assert.DoesNotContain(world.Logged, line => line.Contains("0FAKEtoken"));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T277 - a guard and the record of a known defect; research R22): with backend A gone there is
+    /// nothing to close the old run through, and the restart is what brings a backend back, so it is not held: B comes into
+    /// force. The old run's close is then refused by B before it reaches the bridge, the plan refused retryably and nothing
+    /// copied - so no close of the old run can reach the bridge under B, where a run of the same name may later hold it. A
+    /// re-attach, whose teardown ends whatever session the old attachment held, is the way on; the next plan, on the new
+    /// attachment, sends no close of the old run.
+    /// </summary>
+    [Fact]
+    public void WithTheOldBackendGoneTheRunRootMovesAndTheOldRunsCloseIsRefusedBeforeTheBridge()
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, "failed");
+            int closes = world.Pipeline.Closed.Count;
+            restart.Backend.Down = true;
+
+            restart.Save("save", restart.NewRoot);
+
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Single(restart.Backend.Restarts);
+            Assert.Equal(closes, world.Pipeline.Closed.Count);
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement refused = world.Reply("error", "p2");
+            Assert.Equal("InvalidRunDir", refused.GetProperty("error_class").GetString());
+            Assert.Equal(FailedPlanCleanupWords, refused.GetProperty("message").GetString());
+            Assert.True(refused.GetProperty("retryable").GetBoolean());
+            Assert.Equal(new[] { first }, world.Pipeline.Closed.Skip(closes));
+            Assert.DoesNotContain(restart.NewRoot, world.Pipeline.RootsClosedUnder);
+            Assert.True(world.Pipeline.SessionOpen);
+            Assert.Equal(1, world.Pipeline.Count("copy"));
+
+            var replacement = new FakePipeline
+            {
+                HoldsTheBridgeSession = true,
+                BackendRunRoot = () => restart.Backend.Down ? null : restart.Backend.StartedRoot,
+            };
+            world.Options.Pipeline = replacement;
+            world.Attachment = SecondAttachment;
+
+            world.Receive("remodel.plan", "p3", new { });
+
+            world.Reply("remodel.planned", "p3");
+            Assert.Empty(replacement.Closed);
+            Assert.Equal(Path.Combine(restart.NewRoot, world.ExpectedRunId), world.Host.LatestRun!.RunDirectory);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T277 - a guard; research R22): a leftover of an attachment that is no longer listening is
+    /// not closed through the new one - its session went with the old - and does not hold the restart back.
+    /// </summary>
+    [Fact]
+    public void ARunRootChangeSendsNoCloseToAReplacementAttachment()
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            LeaveASessionOnTheBridge(world, "failed");
+            int closes = world.Pipeline.Closed.Count;
+            var replacement = new FakePipeline
+            {
+                HoldsTheBridgeSession = true,
+                BackendRunRoot = () => restart.Backend.Down ? null : restart.Backend.StartedRoot,
+            };
+            world.Options.Pipeline = replacement;
+            world.Attachment = SecondAttachment;
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Empty(replacement.Closed);
+            Assert.Equal(closes, world.Pipeline.Closed.Count);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T277 - guards; research R22): what holds a restart back is asked first, and the close only
+    /// once nothing does - a turn running, or a remodel run in progress, holds it with no close sent - and a restart that
+    /// keeps the run root sends none at all, the session under it left for planning again, as before.
+    /// </summary>
+    [Theory]
+    [InlineData("a turn")]
+    [InlineData("a remodel run")]
+    [InlineData("the run root kept")]
+    public void ARestartClosesNothingWhileSomethingHoldsItOrWhenTheRunRootStays(string what)
+    {
+        var kept = new List<Action>();
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string oldRoot = world.RunRoot;
+            if (what == "a remodel run")
+            {
+                world.Pipeline.HoldsTheBridgeSession = true;
+                world.Receive("remodel.plan", "p1", new { });
+                world.Options.Schedule = kept.Add;
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                Assert.True(world.Host.RunInProgress);
+            }
+            else
+            {
+                LeaveASessionOnTheBridge(world, "failed");
+            }
+
+            if (what == "a turn")
+            {
+                // A turn that starts during the save, after its own check: one running before it refuses the save.
+                restart.Review.TrackSession("chat-1", Path.Combine(oldRoot, "20261027-101500-chat-1"));
+                restart.Backend.DuringModelList = () => restart.Backend.TurnRunning = true;
+            }
+
+            int closes = world.Pipeline.Closed.Count;
+
+            restart.Save("save", what == "the run root kept" ? null : restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(closes, world.Pipeline.Closed.Count);
+            if (what == "the run root kept")
+            {
+                Assert.Single(restart.Backend.Restarts);
+                Assert.Equal(oldRoot, restart.Review.RunRoot);
+                Assert.True(world.Pipeline.SessionOpen);
+            }
+            else
+            {
+                Assert.Empty(restart.Backend.Restarts);
+                Assert.Equal(oldRoot, restart.Review.RunRoot);
+                Assert.NotEqual(CleanupPromise, restart.LastStatus());
+            }
+        }
+    }
+
+    /// <summary>
+    /// Leaves one session of the world's first run on its fake bridge, under the world's run root, whose close is not
+    /// answered, then lets later closes be answered: a failed plan's, a plan waiting for Start (Start on keeps it; Start
+    /// off, with its close at the plan not answered), or a finished run's (its close at the run's end not sent).
+    /// </summary>
+    private static void LeaveASessionOnTheBridge(RemodelWorld world, string leftover)
+    {
+        world.Pipeline.HoldsTheBridgeSession = true;
+        switch (leftover)
+        {
+            case "failed":
+                world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+                world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+                world.Receive("remodel.plan", "p1", new { });
+                Assert.Equal("HostError", world.ErrorClass("p1"));
+                world.Pipeline.PlanFailure = null;
+                break;
+
+            case "waiting":
+                world.Receive("remodel.plan", "p1", new { });
+                world.Reply("remodel.planned", "p1");
+                break;
+
+            case "waiting, Start off":
+                world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+                world.Receive("remodel.plan", "p1", new { });
+                world.Reply("remodel.planned", "p1");
+                Assert.False(world.Host.LatestRun!.SessionClosedAtPlan);
+                break;
+
+            case "finished":
+                world.Receive("remodel.plan", "p1", new { });
+                world.Pipeline.DuringRun = _ => world.WriteRunArtifacts();
+                world.Pipeline.RunState = "failed";
+                world.Pipeline.CloseFailure = new RemodelRefusal(
+                    "BackendUnavailable", "FICT the review backend is not running, so the close was not sent.", retryable: true);
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                Assert.Equal(RemodelRunPhase.Finished, world.Host.LatestRun!.Phase);
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(leftover), leftover, null);
+        }
+
+        Assert.True(world.Pipeline.SessionOpen);
+        world.Pipeline.CloseFailure = null;
+    }
+
     // ---- owner decision 155A: a run's ending reaches the page once the host is free ------------
 
     /// <summary>Whether a message is a `status` that ends the page's running state: `ready` and `error` do (`remodel.js`, `showStatus`).</summary>
@@ -9006,6 +9403,13 @@ public sealed class RemodelHostTests
         public string? RunRootSpelling { get; set; }
 
         /// <summary>
+        /// Owner decision 159A (004 research R22): the run root in force as the review host's real settings restart records
+        /// it, read per call, when a case wires that restart (<see cref="RunRootRestart"/>); unset, the spelling or
+        /// <see cref="RunRoot"/>. Set before <see cref="Open"/>.
+        /// </summary>
+        public Func<string>? RunRootInForce { get; set; }
+
+        /// <summary>
         /// What the run root rule reads (owner decision 154A); when null, a probe that answers every folder as a
         /// local one reached by its own path - not Windows, so a temp folder below a junction on a developer's
         /// machine fails no test that is not about the rule (the reviews' N11).
@@ -9091,7 +9495,7 @@ public sealed class RemodelHostTests
         public void Open()
         {
             _options = new RemodelHostOptions(
-                Channel ?? new CollectingChannel(Posted, root => WhenPosted?.Invoke(root)), () => RunRootSpelling ?? RunRoot)
+                Channel ?? new CollectingChannel(Posted, root => WhenPosted?.Invoke(root)), () => RunRootInForce?.Invoke() ?? RunRootSpelling ?? RunRoot)
             {
                 Backend = () => Endpoint,
                 CurrentDocument = () => Document,
@@ -9524,6 +9928,185 @@ public sealed class RemodelHostTests
     /// <see cref="Opened"/> is the load-bearing field: it holds every path this fake was asked
     /// to open <b>as a document</b>, and the source's path must never appear in it.
     /// </summary>
+    /// <summary>
+    /// Owner decision 159A (004 T277; research R22): the review host's real settings restart, wired to a
+    /// <see cref="RemodelWorld"/> as `SwReviewAddIn` wires the two - the Remodel host's run roots, its restart gate and its
+    /// busy reading are the review host's, and the review host's cleanup before a restart that moves the run root is the
+    /// Remodel host's - over a backend whose run root is the one its last start was made with, which the world's fake
+    /// pipeline judges every run folder against, as `resolve_run_dir` does. It opens the world. The watcher's poll is long,
+    /// so nothing happens on another thread.
+    /// </summary>
+    private sealed class RunRootRestart : IDisposable
+    {
+        private readonly List<string> _posted = new List<string>();
+
+        public RunRootRestart(RemodelWorld world)
+        {
+            NewRoot = Path.Combine(world.Root, "moved", "runs");
+            string settingsPath = Path.Combine(world.Root, "settings.json");
+            UserSettings settings = UserSettings.Defaults();
+            settings.RunRoot = world.RunRoot;
+            settings.Save(settingsPath);
+            Backend = new RootBackend(world.RunRoot, () => world.Pipeline.SessionOpen);
+            Review = new ReviewHost(new ReviewHostOptions(new ListChannel(_posted), Backend, settingsPath)
+            {
+                BuildMode = BuildMode.Development,
+                LogFolder = Path.Combine(world.Root, "review-logs"),
+                RestartPoll = TimeSpan.FromMinutes(10),
+                RunRootProbe = FakeRunRootProbe.Local(),
+                BackendBusy = () => world.Host.RunInProgress,
+                EndRemodelSessionsLeftUnder = runRoot => world.Host.EndTheSessionsLeftUnder(runRoot),
+                BackendRestarted = () => world.Host.BackendRestarted(),
+            });
+
+            world.RunRootInForce = () => Review.RunRoot;
+            world.Open();
+            world.Options.RunRootsInForce = () => Review.RunRootsInForce;
+            world.Options.RunRootForANewRun = Review.RunRootForANewRun;
+            world.Options.RunRootSaved = () => Review.Settings.RunRoot;
+            world.Options.BeginRun = Review.BeginRemodelRun;
+            world.Options.RestartAhead = () => Review.RestartAhead;
+            world.Pipeline.BackendRunRoot = () => Backend.Down ? null : Backend.StartedRoot;
+        }
+
+        /// <summary>Run root B, the one a save chooses; nothing is made in it until the backend is started with it.</summary>
+        public string NewRoot { get; }
+
+        public RootBackend Backend { get; }
+
+        public ReviewHost Review { get; }
+
+        /// <summary>A settings save on the Review tab, choosing <paramref name="runRoot"/> for runs, or keeping the run root when null.</summary>
+        public void Save(string id, string? runRoot)
+        {
+            var payload = new Dictionary<string, object?>
+            {
+                { "provider", "openai" },
+                { "model", "gpt-5.6" },
+                { "effort", "low" },
+                { "api_key", null },
+                { "base_url", null },
+                { "gemini_enterprise", null },
+            };
+            if (runRoot != null)
+            {
+                payload["run_root"] = runRoot;
+            }
+
+            Review.Receive(JsonSerializer.Serialize(new { type = "settings.save", id, payload }));
+        }
+
+        /// <summary>The single reply of <paramref name="type"/> the Review page was sent for <paramref name="id"/>.</summary>
+        public JsonElement Reply(string type, string id)
+        {
+            JsonElement[] matches = Messages()
+                .Where(root => root.GetProperty("type").GetString() == type
+                    && root.TryGetProperty("id", out JsonElement replyId)
+                    && replyId.ValueKind == JsonValueKind.String
+                    && replyId.GetString() == id)
+                .Select(root => root.GetProperty("payload").Clone())
+                .ToArray();
+            Assert.True(matches.Length == 1, $"expected one '{type}' reply to '{id}', saw {matches.Length}: " + string.Join(" | ", Snapshot()));
+            return matches[0];
+        }
+
+        /// <summary>The words of the last `status` the Review page was sent, or null with none.</summary>
+        public string? LastStatus() => Messages()
+            .Where(root => root.GetProperty("type").GetString() == "status")
+            .Select(root => root.GetProperty("payload").GetProperty("message").GetString())
+            .LastOrDefault();
+
+        public void Dispose() => Review.Dispose();
+
+        private string[] Snapshot()
+        {
+            lock (_posted)
+            {
+                return _posted.ToArray();
+            }
+        }
+
+        private IEnumerable<JsonElement> Messages() => Snapshot().Select(message => JsonDocument.Parse(message).RootElement);
+    }
+
+    /// <summary>A page that keeps what it is sent, from any thread.</summary>
+    private sealed class ListChannel : IPageChannel
+    {
+        private readonly List<string> _posted;
+
+        public ListChannel(List<string> posted) => _posted = posted;
+
+        public void PostMessage(string json)
+        {
+            lock (_posted)
+            {
+                _posted.Add(json);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The review backend as <see cref="RunRootRestart"/> needs it (owner decision 159A, 004 research R22): up from the start
+    /// under the run root it was started with, a restart refused while a turn runs, as <c>BackendSupervisor.Restart</c>
+    /// refuses it before it stops anything, and otherwise a new backend under the restart's run root.
+    /// </summary>
+    private sealed class RootBackend : IBackendClient
+    {
+        private readonly Func<bool> _sessionOpen;
+        private int _generation;
+
+        public RootBackend(string runRoot, Func<bool> sessionOpen)
+        {
+            StartedRoot = runRoot;
+            _sessionOpen = sessionOpen;
+        }
+
+        /// <summary>The run root the backend that is up was started with.</summary>
+        public string StartedRoot { get; private set; }
+
+        /// <summary>No backend process: the old one exited, and nothing answers.</summary>
+        public bool Down { get; set; }
+
+        /// <summary>Whether every chat has a turn running.</summary>
+        public bool TurnRunning { get; set; }
+
+        /// <summary>Runs inside the model-list round trip a save makes between its own check and its restart.</summary>
+        public Action? DuringModelList { get; set; }
+
+        /// <summary>The settings of every restart made, in order.</summary>
+        public List<UserSettings> Restarts { get; } = new List<UserSettings>();
+
+        /// <summary>Whether the fake bridge held a session as each restart stopped the old backend.</summary>
+        public List<bool> SessionOpenAtEachRestart { get; } = new List<bool>();
+
+        public BackendEndpoint? Endpoint => Down ? null : new BackendEndpoint(53000 + _generation, "FICT-review-token-" + _generation);
+
+        public IReadOnlyList<ModelChoice> ListModels(string provider)
+        {
+            DuringModelList?.Invoke();
+            return new ModelChoice[0];
+        }
+
+        public bool IsTurnRunning(string chatId) => TurnRunning;
+
+        public ChatSessionHandle CreateSession(NewSessionRequest request) =>
+            throw new BackendRequestException("BackendUnavailable", "FICT no review is made here.", retryable: true);
+
+        public void Restart(UserSettings settings, ResolvedApiKey key)
+        {
+            if (TurnRunning)
+            {
+                throw new TurnRunningException();
+            }
+
+            SessionOpenAtEachRestart.Add(_sessionOpen());
+            Restarts.Add(settings);
+            StartedRoot = settings.RunRoot;
+            _generation++;
+            Down = false;
+        }
+    }
+
     private sealed class FakePipeline : IRemodelPipeline
     {
         public List<string> Calls { get; } = new List<string>();
@@ -9620,6 +10203,7 @@ public sealed class RemodelHostTests
         {
             Calls.Add("copy");
             SourcePathsSeen.Add(request.SourcePath);
+            TheBackendTakes(request.RunDirectory);
             if (HoldsTheBridgeSession && SessionOpen)
             {
                 throw new RemodelRefusal(
@@ -9670,17 +10254,62 @@ public sealed class RemodelHostTests
         /// <summary>Runs inside <see cref="ProbeScope"/>, before it answers.</summary>
         public Action? DuringProbe { get; set; }
 
+        /// <summary>
+        /// Owner decision 159A (004 research R22): the run root the review backend in force was started with, or null while
+        /// none is up - read per call, so a restart the review host makes moves it. Set, every call that names a run folder
+        /// is first judged as `resolve_run_dir` judges it (chat/server.py): no backend is `BackendUnavailable`, as
+        /// <c>BackendRemodelPipeline</c> refuses it, and a folder that is not strictly inside that run root is
+        /// `InvalidRunDir`, refused before anything reaches the bridge. Unset, the backend takes every folder, as before.
+        /// </summary>
+        public Func<string?>? BackendRunRoot { get; set; }
+
+        /// <summary>The run root the backend in force had as each close passed its judging and went on to the bridge, in order.</summary>
+        public List<string> RootsClosedUnder { get; } = new List<string>();
+
+        /// <summary>The backend's judging of a run folder (<see cref="BackendRunRoot"/>): the run root it was taken under, or null when unset.</summary>
+        private string? TheBackendTakes(string runDirectory)
+        {
+            if (BackendRunRoot == null)
+            {
+                return null;
+            }
+
+            string? root = BackendRunRoot();
+            if (root == null)
+            {
+                throw new RemodelRefusal(
+                    "BackendUnavailable", "FICT the review backend is not running, so the call was not sent.", retryable: true);
+            }
+
+            string folder = Path.GetFullPath(runDirectory).TrimEnd(Path.DirectorySeparatorChar);
+            string inside = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!folder.StartsWith(inside, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new RemodelRefusal("InvalidRunDir", "FICT run_dir is not inside the run root.", retryable: false);
+            }
+
+            return root;
+        }
+
         public void CloseCopy(string runDirectory)
         {
             Calls.Add("close");
             Closed.Add(runDirectory);
             DuringClose?.Invoke();
+            string? judgedUnder = TheBackendTakes(runDirectory);
+            if (judgedUnder != null)
+            {
+                RootsClosedUnder.Add(judgedUnder);
+            }
 
             // A close the bridge answered ends the session whatever it left - `close_incomplete`
             // included - and one it could not answer (`BridgeUnavailable`, or no named refusal)
             // leaves it as it was; so does one the backend could not send (`BackendUnavailable`;
             // owner decision 159A, on the final review). Since protocol 1.5 the bridge compares the
-            // run a close names with its session's exactly, and refuses another run's.
+            // run a close names with its session's exactly, and refuses another run's. The run a close
+            // names is its folder's own name, `run_id` (BridgeDispatcher.Session), never the whole path:
+            // changed deliberately 2026-10-27 (owner decision 159A, 004 research R22), so two runs of one
+            // name under two run roots are one run to this fake, as they are to the bridge.
             bool answered = CloseFailure == null
                 || (CloseFailure is RemodelRefusal refusal
                     && refusal.ErrorClass != "BridgeUnavailable"
@@ -9691,7 +10320,7 @@ public sealed class RemodelHostTests
                     && refusal.ErrorClass != "InvalidRequest");
             if (answered
                 && SessionOpen
-                && !string.Equals(SessionRun, runDirectory, StringComparison.Ordinal))
+                && !string.Equals(Path.GetFileName(SessionRun), Path.GetFileName(runDirectory), StringComparison.Ordinal))
             {
                 throw new RemodelRefusal(
                     "RunFolderFailed",
@@ -9714,6 +10343,7 @@ public sealed class RemodelHostTests
         public string Plan(string runDirectory, IRemodelRunReporter reporter)
         {
             Calls.Add("plan");
+            TheBackendTakes(runDirectory);
             DuringPlan?.Invoke();
             if (PlanFailure != null)
             {

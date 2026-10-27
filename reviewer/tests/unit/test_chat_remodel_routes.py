@@ -2234,6 +2234,38 @@ class TestClose:
 
         assert close(client, run_dir).json() == {"closed": True}
 
+    @pytest.mark.parametrize("where", ["a run of the same name under another root", "the run root"])
+    def test_a_close_outside_the_run_root_is_refused_before_the_bridge(
+        self,
+        client: TestClient,
+        run_root: Path,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        where: str,
+    ) -> None:
+        """Owner decision 159A (004 T278; research R22): the close route judges its run folder
+        against the run root this backend was started with, as every route that names one does.
+        A folder of the same run name under another run root - the one a settings restart left -
+        and the run root itself are refused `InvalidRunDir` before the bridge is reached, so the
+        session this backend's own run holds is left as it was: a close of the old run cannot
+        end a run of the same name under the new root. `TestOpen`'s path rule guards the open
+        route only; this is the close route's own."""
+        assert open_copy(client, run_dir, source).status_code == 200
+        if where == "the run root":
+            elsewhere = run_root
+        else:
+            elsewhere = run_root.parent / "moved" / "runs" / run_dir.name
+            elsewhere.mkdir(parents=True)
+        sent = len(bridge.calls)
+
+        response = close(client, elsewhere)
+
+        assert response.status_code == 400
+        assert response.json()["error_class"] == "InvalidRunDir"
+        assert bridge.calls[sent:] == []
+        assert bridge.closed is False
+
 
 BRIDGE_METHODS = (
     "probe_scope",

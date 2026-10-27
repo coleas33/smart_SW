@@ -68,6 +68,7 @@ public sealed class RemodelRun
     private bool _closedByPlanAgain;
     private bool _sessionClosedAtPlan;
     private bool _sessionEnded;
+    private bool _closedForRunRoot;
     private Tuple<string, string>? _lastStatus;
 
     internal RemodelRun(
@@ -137,6 +138,21 @@ public sealed class RemodelRun
     public bool SessionEnded => Volatile.Read(ref _sessionEnded);
 
     internal void MarkSessionEnded() => Volatile.Write(ref _sessionEnded, true);
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22): whether the host ended this run's session before a settings restart moved
+    /// the run root - through the backend in force, the only one that accepts this run's folder - so the session ended
+    /// (<see cref="SessionEnded"/>) and a plan is lost in <c>RemodelHost.PlanClosedForRunRootMessage</c>'s words. Set
+    /// once, never cleared. Volatile for the reason <see cref="ClosedByPlanAgain"/> is.
+    /// </summary>
+    public bool ClosedForRunRoot => Volatile.Read(ref _closedForRunRoot);
+
+    /// <summary>Marks the session ended, and why (<see cref="ClosedForRunRoot"/>).</summary>
+    internal void MarkSessionClosedForRunRoot()
+    {
+        Volatile.Write(ref _closedForRunRoot, true);
+        MarkSessionEnded();
+    }
 
     /// <summary>
     /// Owner decision 159A, on the final review: the stage and the words of the last status posted for this run while it

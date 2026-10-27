@@ -320,6 +320,17 @@ public sealed class ReviewHostOptions
     public Func<bool> StandardsCheckInProgress { get; set; } = () => false;
 
     /// <summary>
+    /// Owner decision 159A (004 research R22): before a restart that moves the run root stops the backend in force, ends
+    /// every remodel session the Remodel tab left on the bridge under the run root that is leaving - given it - through
+    /// that backend, the one that accepts those run folders; and answers whether each close was answered. False holds the
+    /// restart back: nothing is stopped, the saved settings stay saved and the run root in force stays in force, and the
+    /// next caller of the restart tries again. Asked under the restart's own lock, once no work holds the restart and no
+    /// turn runs, and only while a backend is up. A delegate that throws is a close not answered. True when the caller
+    /// has no Remodel tab.
+    /// </summary>
+    public Func<string, bool> EndRemodelSessionsLeftUnder { get; set; } = _ => true;
+
+    /// <summary>
     /// Tells every other tab that holds the backend's port and token - Model check, Standards and
     /// Remodel - that the backend was restarted with saved settings, so each asks for its `init`
     /// again (owner decision 145A). Called after every restart this host makes, a save's made at

@@ -84,6 +84,13 @@ internal sealed class DeferredRestart : IDisposable
 
         /// <summary>The backend gave no usable answer, so whether a turn runs is not known.</summary>
         NoAnswer,
+
+        /// <summary>
+        /// Owner decision 159A (004 research R22): a remodel session left on the bridge under the run root the restart
+        /// would move was not closed (<see cref="RemodelCleanupPendingException"/>). Never a look's answer: only a save's
+        /// restart made at once says it (<see cref="Now(Action, out Hold, out Work)"/>).
+        /// </summary>
+        Cleanup,
     }
 
     /// <summary>
@@ -157,6 +164,14 @@ internal sealed class DeferredRestart : IDisposable
 
         /// <summary>The owner was disposed: nothing was changed, and nothing ever will be.</summary>
         Stopped,
+
+        /// <summary>
+        /// Owner decision 159A (004 research R22): the restart met a remodel session left under the run root it would
+        /// move, and that session's close was not answered (<see cref="RemodelCleanupPendingException"/>): nothing was
+        /// stopped or started, the saved settings stay saved and the run root in force stays in force, and the restart
+        /// still waits - not a failure, which would drop it. The next caller tries the close again.
+        /// </summary>
+        CleanupPending,
     }
 
     /// <summary>
@@ -177,6 +192,7 @@ internal sealed class DeferredRestart : IDisposable
     private readonly Action _restarted;
     private readonly Action<Exception> _failed;
     private readonly Action _notAnswered;
+    private readonly Action _cleanupPending;
     private readonly TimeSpan _poll;
 
     /// <summary>
@@ -248,6 +264,26 @@ internal sealed class DeferredRestart : IDisposable
         Action<Exception> failed,
         Action notAnswered,
         TimeSpan poll)
+        : this(heldBack, busy, restart, restarted, failed, notAnswered, () => { }, poll)
+    {
+    }
+
+    /// <summary>
+    /// The restart as above, with what the watcher says when it stops at a remodel session's close that was not answered
+    /// (owner decision 159A, 004 research R22).
+    /// </summary>
+    /// <param name="cleanupPending">Tells the engineer the restart still waits for a remodel session's close, and that
+    /// the next caller tries it again. Called while the restart's own lock is held, as <paramref name="notAnswered"/> is;
+    /// it must not block.</param>
+    public DeferredRestart(
+        Func<Hold> heldBack,
+        Func<Work> busy,
+        Action restart,
+        Action restarted,
+        Action<Exception> failed,
+        Action notAnswered,
+        Action cleanupPending,
+        TimeSpan poll)
     {
         _heldBack = heldBack ?? throw new ArgumentNullException(nameof(heldBack));
         _busy = busy ?? throw new ArgumentNullException(nameof(busy));
@@ -255,6 +291,7 @@ internal sealed class DeferredRestart : IDisposable
         _restarted = restarted ?? throw new ArgumentNullException(nameof(restarted));
         _failed = failed ?? throw new ArgumentNullException(nameof(failed));
         _notAnswered = notAnswered ?? throw new ArgumentNullException(nameof(notAnswered));
+        _cleanupPending = cleanupPending ?? throw new ArgumentNullException(nameof(cleanupPending));
         // Refused here rather than met on the watcher's thread, where an exception from
         // Monitor.Wait would end SOLIDWORKS and a poll under a millisecond would spin it.
         if (poll < ShortestPoll || poll.TotalMilliseconds > int.MaxValue)
@@ -905,5 +942,20 @@ internal sealed class DeferredRestart : IDisposable
         {
             // Posting to the page swallows its own failures; this is the guard for anything else.
         }
+    }
+}
+
+/// <summary>
+/// Owner decision 159A (004 research R22): thrown by a restart before it stops anything, when the run root would move and
+/// a remodel session left on the bridge under the run root in force was not closed - through the backend in force, the one
+/// backend that accepts that session's run folder. Neither a turn nor a failure: the restart waits
+/// (<see cref="DeferredRestart.Outcome.CleanupPending"/>), the saved settings stay saved and the run root in force stays in
+/// force, until a later attempt's close is answered.
+/// </summary>
+internal sealed class RemodelCleanupPendingException : Exception
+{
+    public RemodelCleanupPendingException()
+        : base("a remodel copy left open under the run root in force was not closed, so the backend was not restarted.")
+    {
     }
 }

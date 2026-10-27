@@ -484,6 +484,16 @@ public sealed class RemodelHost : IDisposable
         "Closing the earlier plan's copy was not confirmed, so that plan is left as it was and no new plan was made. "
         + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
 
+    /// <summary>
+    /// Owner decision 159A (004 research R22): what `remodel.plan_lost`, `init.latest_run.plan_lost` and a Start's
+    /// `SessionLost` say of a plan whose session the host closed before a settings restart moved the run root - the
+    /// backend in force is the only one that accepts its folder - in <see cref="PlanLostMessage"/>'s plain words. True
+    /// whether or not that restart then succeeded: the plan's session is over either way.
+    /// </summary>
+    public const string PlanClosedForRunRootMessage =
+        "This plan was closed so that the run root saved in Settings could come into force, so it can no longer be "
+        + "started. " + PartNotChanged + " Make your part the active document and press Plan again.";
+
     /// <summary>004 T258: a failed plan's cleanup still unanswered, before a new probe or copy.</summary>
     public const string FailedPlanNotClosedMessage =
         "Closing the copy from the earlier attempt was not confirmed, so no new plan was made. "
@@ -1915,6 +1925,13 @@ public sealed class RemodelHost : IDisposable
         _failedPlanToClose = null;
         return true;
     }
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22): the cleanup prerequisite of a restart that moves the run root.
+    /// </summary>
+    /// <param name="runRoot">The run root in force, which the restart would move.</param>
+    /// <returns>True when nothing under it is left holding a session; false when a close was not answered.</returns>
+    public bool EndTheSessionsLeftUnder(string runRoot) => true;
 
     /// <summary>
     /// 004 T176 (default taken 2026-09-27, the owner may revise; research R14.2): while Start is
