@@ -6422,11 +6422,15 @@ public sealed class RemodelHostTests
 
     // ---- owner decision 159A (004 T277; research R22): a session left under a run root a restart moves --------------
 
-    /// <summary>What the Review tab says of a save whose restart waits for a remodel copy's close (004 research R22).</summary>
+    /// <summary>
+    /// What the Review tab says of a save whose restart waits for a remodel copy's close (004 research R22). *Changed
+    /// deliberately 2026-10-27 (owner decision 159A, 004 research R22.11):* it names the earlier folder for runs as the
+    /// way out, where saving again only asked the close again.
+    /// </summary>
     private const string CleanupPromise =
         "the settings are saved; the backend restarts with them once the copy an earlier remodel left open in SOLIDWORKS "
-        + "is closed. That is tried again before the next review, follow-up, remodel run or check; to try it now, save "
-        + "the settings again.";
+        + "is closed. That is tried again before the next review, follow-up, remodel run or check; if it cannot be "
+        + "closed, save the earlier folder for runs in Settings again.";
 
     /// <summary>
     /// What a plan or a Start is refused with while that close holds the restart back (004 research R22). *Changed

@@ -676,8 +676,8 @@ RESTART_HOLDS = {
     ),
     "RemodelCleanupPending": (
         "A copy an earlier remodel left open in SOLIDWORKS could not be closed, so the saved "
-        "settings are not in force yet. Make another document active in SOLIDWORKS, or save the "
-        "earlier folder for runs in Settings again, then try again."
+        "settings are not in force yet. Save the earlier folder for runs in Settings again, then "
+        "try again."
     ),
 }
 """The classes the add-in refuses a new review or a turn call with while the backend waits to be
@@ -685,8 +685,8 @@ restarted with settings saved during a turn (owner decision 143A): one for each 
 hold that restart back - a turn, a remodel run, a check (owner decision 157A), a backend that does
 not answer, and a remodel copy whose close before the run root moves was not answered (owner
 decision 159A, 004 research R22) - so the sentence the page shows is true of what holds it. The
-last names its two ways out, since waiting does not end it (changed deliberately 2026-10-27,
-R22.10).
+last names the way out that works even when the backend does not answer, since waiting does
+not end it (changed deliberately 2026-10-27, R22.10 and R22.11).
 `RemodelRunning`, `CheckRunning` and `RemodelCleanupPending` are the add-in's own classes; the
 backend never sends them."""
 

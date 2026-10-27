@@ -8928,11 +8928,15 @@ public sealed class DeferredRestartTests
 
     // ---- owner decision 159A (004 T277; research R22): a remodel session left under a run root a restart moves -------
 
-    /// <summary>The save's sentence while the restart waits for a remodel copy's close (004 research R22).</summary>
+    /// <summary>
+    /// The save's sentence while the restart waits for a remodel copy's close (004 research R22). *Changed deliberately
+    /// 2026-10-27 (owner decision 159A, 004 research R22.11, Codex's second review):* saving the same settings again only
+    /// asks the close again, which a hung backend never answers; it names the way out that works instead.
+    /// </summary>
     private const string CleanupPromise =
         "the settings are saved; the backend restarts with them once the copy an earlier remodel left open in SOLIDWORKS "
-        + "is closed. That is tried again before the next review, follow-up, remodel run or check; to try it now, save "
-        + "the settings again.";
+        + "is closed. That is tried again before the next review, follow-up, remodel run or check; if it cannot be "
+        + "closed, save the earlier folder for runs in Settings again.";
 
     /// <summary>
     /// A new review or a turn call refused while that close holds the restart back. *Changed deliberately 2026-10-27
@@ -9147,6 +9151,158 @@ public sealed class DeferredRestartTests
         Volatile.Write(ref answers, 1);
         Assert.Equal("UnknownChat", world.Host.PageTurnRefusal()!.ErrorClass);
         Assert.Equal(chosen, world.Host.RunRoot);
+    }
+
+    /// <summary>What a review or a turn call is refused with while a cleanup holds the restart and the backend does not answer (R22.11).</summary>
+    private const string CleanupNoAnswerHoldsTheRestart =
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, and the review backend is not answering, "
+        + "so it has not been restarted with the saved settings, and nothing new starts before then. " + EarlierRootWayOut;
+
+    /// <summary>...a remodel run refused so.</summary>
+    private const string CleanupNoAnswerHoldsTheRemodelRun =
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, and the review backend is not answering, "
+        + "so it has not been restarted with the saved settings, and no remodel run starts before then. " + EarlierRootWayOut;
+
+    /// <summary>...a check refused so.</summary>
+    private const string CleanupNoAnswerHoldsTheCheck =
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, and the review backend is not answering, "
+        + "so it has not been restarted with the saved settings, and no check starts before then. " + EarlierRootWayOut;
+
+    /// <summary>The one way out that works while the backend does not answer (R22.11).</summary>
+    private const string EarlierRootWayOut = "Save the earlier folder for runs in Settings again, then try again.";
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T284; research R22.11, Codex's second review): a save's restart that would move
+    /// the run root waits for a remodel copy's close not answered, and then the backend stops answering whether a review's
+    /// turn runs - a hung backend. Every later caller's look found no answer before the restart was tried again, so the
+    /// review, the turn call, the remodel run and the check were refused <c>BackendUnavailable</c>, "save the settings
+    /// again", which only repeats the close that cannot be answered; and making another document active does not help
+    /// either, since the tool-service gate holds the follow while a turn may be running - the real gate is here. Now each
+    /// is refused <c>RemodelCleanupPending</c>, naming both causes and the one way out: the earlier folder for runs saved
+    /// again, which keeps the run root, closes nothing, and replaces the hung backend. Once nothing is pending, a backend
+    /// that does not answer is told in its own words again.
+    /// </summary>
+    [Fact]
+    public void AfterACleanupNotAnsweredABackendThatStopsAnsweringIsToldWithTheWayOutThatWorks()
+    {
+        int asked = 0;
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            EndRemodelSessions = _ =>
+            {
+                Interlocked.Increment(ref asked);
+                return false;
+            },
+        };
+        world.Backend.CheckAsksTheSameQuestion = true;
+        string loaded = world.Settings.RunRoot;
+        string chosen = ChosenRoot(world);
+        PageDocument reviewed = world.Document!;
+        var services = new List<FakeToolService>();
+        var looks = new List<Action>();
+        world.Open();
+        world.Track("chat-1");
+        using var gate = new ToolServiceGate(
+            () => world.Document,
+            () =>
+            {
+                var service = new FakeToolService(services.Count + 1, world.Document!.Path, world.Document.Configuration);
+                services.Add(service);
+                return service;
+            },
+            service => world.Bridge = service?.ReviewBridge,
+            (what, failure) => { },
+            schedule: work => work(),
+            busy: () => world.Host.TurnMayBeRunning(),
+            later: look => looks.Add(look));
+        gate.EnsureStarted();
+
+        world.Receive("settings.save", "save", Choosing(chosen, Save(effort: "low")));
+        world.Reply("settings.saved", "save");
+        Assert.Equal(CleanupPromise, world.Last("status").GetProperty("message").GetString());
+        Assert.Equal(1, Volatile.Read(ref asked));
+        world.Backend.StopsAnswering();
+
+        world.Receive("review.start", "start", new { });
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("RemodelCleanupPending", error.GetProperty("error_class").GetString());
+        Assert.Equal(CleanupNoAnswerHoldsTheRestart, error.GetProperty("message").GetString());
+        Assert.True(error.GetProperty("retryable").GetBoolean());
+        BackendRequestException? turn = world.Host.PageTurnRefusal();
+        Assert.Equal("RemodelCleanupPending", turn!.ErrorClass);
+        Assert.Equal(CleanupNoAnswerHoldsTheRestart, turn.Message);
+        bool begun = false;
+        BackendRequestException? run = world.Host.BeginRemodelRun(() => begun = true);
+        Assert.Equal("RemodelCleanupPending", run!.ErrorClass);
+        Assert.Equal(CleanupNoAnswerHoldsTheRemodelRun, run.Message);
+        BackendRequestException? check = world.Host.BeginCheck(() => begun = true);
+        Assert.Equal("RemodelCleanupPending", check!.ErrorClass);
+        Assert.Equal(CleanupNoAnswerHoldsTheCheck, check.Message);
+        Assert.False(begun);
+        Assert.Equal(0, world.Backend.Attempts);
+
+        // Another document made active: the gate holds the follow, since a turn may be running.
+        world.Document = Changed(reviewed, "another document");
+        gate.FollowActiveDocument();
+        Assert.Single(services);
+        Assert.False(services[0].Disposed);
+
+        // The way out the words name: the earlier folder for runs saved again restarts the backend under it.
+        world.Receive("settings.save", "back", Choosing(loaded, Save(effort: "low")));
+        world.Reply("settings.saved", "back");
+        Assert.Equal(loaded, Assert.Single(world.Backend.Restarts).Settings.RunRoot);
+        Assert.Equal(loaded, world.Host.RunRoot);
+        Assert.False(world.Host.RestartAhead);
+        Assert.Equal(1, Volatile.Read(ref asked));
+
+        // Nothing is pending any more: a later restart held by a backend that does not answer is told as before.
+        world.Backend.AnswersAgain();
+        SaveAsATurnStarts(world, "later", Save(effort: "high"));
+        world.Reply("settings.saved", "later");
+        world.Backend.EndTurn("chat-1");
+        world.Backend.StopsAnswering();
+        world.Receive("review.start", "start2", new { });
+        JsonElement plain = world.Reply("error", "start2");
+        Assert.Equal("BackendUnavailable", plain.GetProperty("error_class").GetString());
+        Assert.Equal(NoAnswerHoldsIt, plain.GetProperty("message").GetString());
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T284; research R22.11): the watcher, after a save's restart met a close not
+    /// answered, meets a backend that does not answer whether a turn runs. It told "the review backend is not answering
+    /// ... save the settings again" after three looks, which only repeats the close; now it stops at once, saying the
+    /// save's sentence, which names the earlier folder for runs as the way out, and asks nothing more.
+    /// </summary>
+    [Fact]
+    public void TheWatcherAfterACleanupNotAnsweredMeetingABackendThatDoesNotAnswerSaysTheCleanupsSentence()
+    {
+        int asked = 0;
+        using var world = new RestartWorld
+        {
+            EndRemodelSessions = _ =>
+            {
+                Interlocked.Increment(ref asked);
+                return false;
+            },
+        };
+        world.Open();
+        world.Track("chat-1");
+
+        // The save's own question reads no answer as none, so it still reaches the close; the watcher's look does not.
+        world.Backend.StopsAnswering();
+        world.Receive("settings.save", "save", Choosing(ChosenRoot(world), Save(effort: "low")));
+        world.Reply("settings.saved", "save");
+        Assert.Equal(1, Volatile.Read(ref asked));
+
+        Eventually(() => world.Posted("status").Length == 2, "the watcher's word");
+        Assert.All(world.Posted("status"), status => Assert.Equal(CleanupPromise, status.GetProperty("message").GetString()));
+        int questions = world.Backend.Questions;
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(questions, world.Backend.Questions);
+        Assert.Equal(2, world.Posted("status").Length);
+        Assert.Equal(1, Volatile.Read(ref asked));
+        Assert.True(world.Host.RestartAhead);
     }
 
     /// <summary>
