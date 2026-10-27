@@ -1071,7 +1071,16 @@ public sealed class RemodelHost : IDisposable
             RemodelRun? run = FindRun(outcome.RunDirectory);
             if (run != null && SamePath(run.CopyPath, outcome.CopyPath))
             {
-                run.MarkSessionEnded();
+                // Owner decision 159A (004 research R22.10): the bridge tells a close's end before the close is answered,
+                // so the end of the close sent before the run root moves is marked as that close's here.
+                if (run.CloseForRunRootSent && outcome.Reason == RemodelSessionEnd.ReasonClose)
+                {
+                    run.MarkSessionClosedForRunRoot();
+                }
+                else
+                {
+                    run.MarkSessionEnded();
+                }
             }
         }
 
@@ -1947,6 +1956,11 @@ public sealed class RemodelHost : IDisposable
     /// again, and a plan so closed is told lost in <see cref="PlanClosedForRunRootMessage"/>'s words. A close not answered
     /// leaves the leftover as it was, its failure in the log, and answers false at once, so the restart waits.
     ///
+    /// 004 research R22.10, on review: a run whose copy was discarded is closed too while it holds its session - Discard
+    /// deletes the copy folder whatever its own close answered - and a second close of one that already ended is answered
+    /// with no SOLIDWORKS call. A run's close is marked sent (<see cref="RemodelRun.CloseForRunRootSent"/>) before it goes,
+    /// since the bridge tells its end (<see cref="SessionEnded(RemodelSessionEnd)"/>) before the close is answered.
+    ///
     /// Called under the restart's lock, after the review host has read this host free: a plan or a run begins only through
     /// that lock (<see cref="RemodelHostOptions.BeginRun"/>), so none begins while this runs.
     /// </summary>
@@ -1984,10 +1998,10 @@ public sealed class RemodelHost : IDisposable
 
             RemodelRun? left = LatestRun;
             if (left != null
-                && !left.CopyDiscarded
                 && HoldsItsSession(left, attachment)
                 && RunFolders.IsUnder(left.RunDirectory, runRoot, _options.RunRootProbe))
             {
+                left.MarkCloseForRunRootSent();
                 if (!ClosedBeforeTheRunRootMoves(pipeline, left.RunDirectory))
                 {
                     return false;

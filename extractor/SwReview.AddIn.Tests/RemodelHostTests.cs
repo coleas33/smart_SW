@@ -6857,13 +6857,15 @@ public sealed class RemodelHostTests
     /// the close, in the re-attach words - SOLIDWORKS switching documents, which did not happen - and the run-root words
     /// after it could not take the one notice back. Now the plan is told lost once, in the run-root words, whether the
     /// bridge tells the end inside the close ("inside") or after a close whose answer never came, its wait abandoned
-    /// ("late", R22.3): a wait given up on still ends the session when the bridge gets to it.
+    /// ("late", R22.3): a wait given up on still ends the session when the bridge gets to it. A guard added with the fix
+    /// (T282): a teardown's end after a close not answered ("teardown") is no close's, and keeps the re-attach words.
     /// </summary>
     [Theory]
     [InlineData("waiting", "inside")]
     [InlineData("waiting, Start off", "inside")]
     [InlineData("waiting", "late")]
     [InlineData("waiting, Start off", "late")]
+    [InlineData("waiting", "teardown")]
     public void APlanClosedBeforeTheRunRootMovesIsToldLostOnceInItsOwnWordsWhenTheBridgeTellsTheEnd(
         string leftover, string when)
     {
@@ -6873,8 +6875,10 @@ public sealed class RemodelHostTests
             string first = world.ExpectedRunDirectory;
             LeaveASessionOnTheBridge(world, leftover);
             RemodelRun run = world.Host.LatestRun!;
+            string words = when == "teardown" ? RemodelHost.PlanLostMessage : RemodelHost.PlanClosedForRunRootMessage;
             var ended = new RemodelSessionEnd(
-                RemodelSessionEnd.ReasonClose, run.RunDirectory, run.CopyPath,
+                when == "teardown" ? RemodelSessionEnd.ReasonToolServiceStopped : RemodelSessionEnd.ReasonClose,
+                run.RunDirectory, run.CopyPath,
                 verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
                 settingsOutstanding: new string[0], failures: new string[0]);
             if (when == "inside")
@@ -6889,24 +6893,22 @@ public sealed class RemodelHostTests
             restart.Save("save", restart.NewRoot);
 
             restart.Reply("settings.saved", "save");
-            if (when == "late")
+            if (when == "inside")
+            {
+                Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            }
+            else
             {
                 Assert.Equal(CleanupPromise, restart.LastStatus());
                 Assert.Empty(world.AllPosted("remodel.plan_lost"));
                 world.Host.SessionEnded(ended);
             }
-            else
-            {
-                Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
-            }
 
             JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
             Assert.Equal(first, notice.GetProperty("run_dir").GetString());
-            Assert.Equal(RemodelHost.PlanClosedForRunRootMessage, notice.GetProperty("message").GetString());
+            Assert.Equal(words, notice.GetProperty("message").GetString());
             world.Receive("ready", "r2", new { });
-            Assert.Equal(
-                RemodelHost.PlanClosedForRunRootMessage,
-                world.Reply("init", "r2").GetProperty("latest_run").GetProperty("plan_lost").GetString());
+            Assert.Equal(words, world.Reply("init", "r2").GetProperty("latest_run").GetProperty("plan_lost").GetString());
         }
     }
 

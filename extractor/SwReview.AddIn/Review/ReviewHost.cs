@@ -2063,15 +2063,22 @@ public sealed class ReviewHost : IDisposable
     /// <summary>
     /// Owner decision 159A (004 research R22): a new review, or a page call that would start a turn, while a remodel copy's
     /// close, which a restart that moves the run root makes first, has not been answered. Each such call asks it again.
+    /// It ends with the ways out (R22.10, on review): a backend or bridge that does not answer never ends the wait, but
+    /// another document made active re-attaches the bridge, whose teardown ends the session, and the earlier folder for
+    /// runs saved again leaves the run root where it is.
     /// </summary>
     private const string CleanupHoldsTheRestart =
         "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
-        + "with the saved settings, and nothing new starts before then. Wait a moment, then try again.";
+        + "with the saved settings, and nothing new starts before then. " + CleanupWayOut;
 
     /// <summary>...work - "remodel run" or "check" - refused so, through the gate it begins through.</summary>
     private static string CleanupHoldsTheWork(string work) =>
         "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
-        + "with the saved settings, and no " + work + " starts before then. Wait a moment, then try again.";
+        + "with the saved settings, and no " + work + " starts before then. " + CleanupWayOut;
+
+    /// <summary>The ways out <see cref="CleanupHoldsTheRestart"/> and <see cref="CleanupHoldsTheWork"/> end with.</summary>
+    private const string CleanupWayOut =
+        "Make another document active in SOLIDWORKS, or save the earlier folder for runs in Settings again, then try again.";
 
     /// <summary>...while the backend does not answer whether a turn runs.</summary>
     private const string NoAnswerHoldsTheRestart =
