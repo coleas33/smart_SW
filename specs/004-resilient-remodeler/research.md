@@ -4226,6 +4226,14 @@ Those rows record T285 only. T288's fixes were each taken out alone against `Rem
 | M52 | `RemodelHost.cs`: a run's session not read | 2 of 969 | `TheRemodelHostSaysWhetherASessionIsLeftUnderARunRoot` | sha256 equal |
 | M53 | `SwReviewAddIn.cs`: the reading not wired | 1 of 969 | `TheAddInHandsTheReviewHostTheRemodelHostsReadingOfASessionLeft` | sha256 equal |
 
+*Added on the fourth review (R22.13).* Against the same three classes (962 cases).
+
+| # | Fix taken out | Failed | Cases that failed | Restored |
+|---|---|---|---|---|
+| M54 | `RemodelHost.cs`: a failed plan's end does not let its record go | 3 of 962 | `AFailedPlansCloseThatEndsLateLetsTheRunRootMoveWithNoCloseSentAgain`, `TheRemodelHostSaysWhetherASessionIsLeftUnderARunRoot` (two rows) | sha256 equal |
+| M55 | `RemodelHost.cs`: any run's end lets it go | 1 of 962 | `TheRemodelHostSaysWhetherASessionIsLeftUnderARunRoot` ("another run's end") | sha256 equal |
+| M56 | `RemodelHost.cs`: compare-and-swap made a plain clear | **0 of 962 (survived)** | none. It differs only when a newer plan records its own failed attempt between the read and the swap, a window no case can hold open without a hook in product code; recorded, not tested | sha256 equal |
+
 ### R22.8 Gates
 
 Counts before (main `b7bf364`): Windows Release build with zero warnings and zero errors;
@@ -4440,7 +4448,9 @@ now written once (`FailedPlanLeftUnder`, `RunLeftUnder`): a failed plan whose cl
 answered, or the latest run while it holds its session (`HoldsItsSession`), on the attachment
 listening now, under that root. It closes nothing, holds nothing and asks no backend. A close that
 ended late, a re-attach, a newer save and a restart made each change the answer by themselves,
-with nothing to race or forget. The watcher's word for a backend not answering is chosen the same
+with nothing to race or forget. *Corrected by R22.13:* the late end held only for a run. A failed
+plan is never a tracked run, and its late end never reached its record until T291; the predicate
+theory's "ended late" row was a waiting plan's. The watcher's word for a backend not answering is chosen the same
 way when it stops. It stops after its three looks again, rather than at once as T285 had it; the
 sentence is the cleanup's whenever a close holds the restart. A reading that throws counts as a
 session left, since its way out, the earlier folder saved again, works either way.
@@ -4480,5 +4490,58 @@ Gates on the final tree:
   `--basetemp` outside the checkout): Python 3.12 and 3.11 (`uv run --isolated --python 3.11
   --all-extras`) each 18,275 passed and 5 skipped; no Python file changed in this round.
 - **Lint and links.** `uv run ruff check src tests` passed; the link check found no broken link.
+
+No SOLIDWORKS process, seat task or paid/live test ran.
+
+### R22.13 Fourth review: a failed plan's close that ends late (T290 to T292; 2026-10-27)
+
+Codex's fourth review of `65c8f9b` found one medium issue and nothing else substantive across the
+branch. No new owner decision, and no Python or words change.
+
+**The finding, checked by reading, holds.** A failed plan's close before the run root moves is
+not answered, so the restart waits. The abandoned close then runs on the bridge after all, and
+the bridge tells its end (`RemodelHost.SessionEnded`, R22.3). `SessionEnded` updates only what
+`FindRun` finds, and a failed plan never reaches `Track`: its leftover is `_failedPlanToClose`, a
+run folder and an attachment. So the record outlived its session on the same attachment. The
+derived check (`HoldsASessionLeftUnder`, R22.12) kept answering that a session was left. A hung
+backend's callers and the watcher were then told `RemodelCleanupPending`, with no end, and asked
+to restore the earlier root. The next restart also sent the close again. R22.12's "ended late" row
+covered a waiting plan, a tracked run, and missed this.
+
+**Other leftovers checked.** The derived check reads two leftovers and no more: the failed plan's
+record, and `LatestRun` while it holds its session. `LatestRun` is always a tracked run
+(`Track`), so `FindRun` finds it and its end already reaches it, a teardown's included. Nothing
+else the check reads bypasses `FindRun`.
+
+**Settled (T291).** `SessionEnded` now lets the failed plan's record go when the end names its
+run folder (`SamePath`, as copies are matched). That holds for its close's end, late or not, and
+for a teardown's. It is done by compare-and-swap of the exact record read, so a newer attempt's
+record, written meanwhile by the next plan, survives. The check and the next restart's cleanup
+then find nothing left under the old run root, and no close of it is sent again. Clearing it
+during the cleanup's own close is right too: the session has ended, whatever the close's answer.
+
+**Tests.** T290 is the deliberately red commit: 3 cases failed on their assertions, and 1 guard
+row passed.
+
+- `TheRemodelHostSaysWhetherASessionIsLeftUnderARunRoot` gains three rows: a failed plan ended
+  late (none left), a failed plan torn down (none left), and another run's end (the record
+  survives, the guard).
+- `AFailedPlansCloseThatEndsLateLetsTheRunRootMoveWithNoCloseSentAgain` follows the restart
+  through the review host. The close is not answered, then ends late. The derived check reads
+  none left, and the next plan restarts under the new run root sending no close of the old run.
+
+All of them are green after T291. M54 and M55 fail cases. M56, the compare-and-swap made a plain
+clear, survives and is recorded (R22.7).
+
+Gates on the final tree (C# and records only; the Python suites were not rerun, since no Python
+file changed and the coordinator's run was in progress):
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero
+  warnings, zero errors.
+- **C# tests.** 10,199 extractor and 4,219 add-in tests passed, none failed or skipped: 4 rows
+  more than R22.12.
+- **Focused runs.** `RemodelHostTests`, `DeferredRestartTests`, `ToolService*` and
+  `ReviewHostTests` (1,289 cases) passed three times in a row.
+- **Links.** The link check found no broken link.
 
 No SOLIDWORKS process, seat task or paid/live test ran.
