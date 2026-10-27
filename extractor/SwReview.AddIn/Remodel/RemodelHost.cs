@@ -679,6 +679,24 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     private volatile Tuple<string, string?>? _failedPlanToClose;
 
+    /// <summary>
+    /// Owner decision 159A (004 research R22.14, Codex's fifth review): the run folder of the plan attempt from its open to
+    /// its end, and whether the bridge has told the end of that attempt's session meanwhile - the failed open's unwind, or
+    /// the backend's own close inside a plan step that fails - before the attempt has any record to clear. Written with
+    /// the failed plan's record under <see cref="_attemptLock"/>, so an end lands either before the record, and none is
+    /// made, or after it, and <see cref="SessionEnded(RemodelSessionEnd)"/> lets it go.
+    /// </summary>
+    private readonly object _attemptLock = new object();
+
+    /// <summary>
+    /// The latest attempt's run folder (<see cref="_attemptLock"/>), null before the first. Left as it is once a plan ends:
+    /// each attempt writes both fields at its open, and only that attempt reads them.
+    /// </summary>
+    private string? _attemptRun;
+
+    /// <summary>Whether the bridge told the end of <see cref="_attemptRun"/>'s session (<see cref="_attemptLock"/>).</summary>
+    private bool _attemptEnded;
+
     /// <summary>A plan or a run is in flight. One per host.</summary>
     private volatile bool _busy;
 
@@ -1086,7 +1104,16 @@ public sealed class RemodelHost : IDisposable
 
             // Owner decision 159A (004 research R22.13, Codex's fourth review): a failed plan is never a tracked run, so
             // the end of its session - its close's, late or not, or a teardown's - lets its record go: that exact record
-            // alone, so a newer attempt's, recorded meanwhile, survives.
+            // alone, so a newer attempt's, recorded meanwhile, survives. R22.14: an end of the attempt in flight, told
+            // before it has a record, marks it ended, so its failure makes none.
+            lock (_attemptLock)
+            {
+                if (_attemptRun != null && SamePath(_attemptRun, outcome.RunDirectory))
+                {
+                    _attemptEnded = true;
+                }
+            }
+
             Tuple<string, string?>? failed = _failedPlanToClose;
             if (failed != null && SamePath(failed.Item1, outcome.RunDirectory))
             {
@@ -1613,6 +1640,12 @@ public sealed class RemodelHost : IDisposable
                 "copying",
                 $"Copying {RunFolders.DocumentName(document.Path)} into the run folder...");
 
+            lock (_attemptLock)
+            {
+                _attemptRun = runDirectory;
+                _attemptEnded = false;
+            }
+
             RemodelCopyReading copy;
             try
             {
@@ -1905,7 +1938,18 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        _failedPlanToClose = Tuple.Create(runDirectory, attachment);
+        lock (_attemptLock)
+        {
+            // Owner decision 159A (004 research R22.14): the bridge told this attempt's end already - its session is
+            // over, so there is nothing to close and nothing to leave.
+            if (_attemptEnded && SamePath(_attemptRun, runDirectory))
+            {
+                return;
+            }
+
+            _failedPlanToClose = Tuple.Create(runDirectory, attachment);
+        }
+
         if (CloseSession(pipeline, runDirectory, out Exception? notAnswered) == CloseAnswer.NotAnswered)
         {
             Log("remodel.plan, the failed plan's close", notAnswered!);
