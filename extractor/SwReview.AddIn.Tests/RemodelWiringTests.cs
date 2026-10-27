@@ -55,6 +55,21 @@ public sealed class RemodelWiringTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Owner decision 159A (004 T287; research R22.12): the review host reads, through the field, whether the Remodel host
+    /// still holds a session under the run root a waiting restart would move, so its refusals say what holds the restart
+    /// now rather than what held it at the last try; with no Remodel host there is none.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsTheReviewHostTheRemodelHostsReadingOfASessionLeft()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+        Assert.Contains(
+            "RemodelSessionLeftUnder = runRoot => _remodelHost?.HoldsASessionLeftUnder(runRoot) == true,",
+            source,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>004 T274: invalidate queued work before watch disposal, replacement or unload waits.</summary>
     [Fact]
     public void TheAddInInvalidatesConfigurationFollowingBeforeReplacingOrDisposingItsWatch()

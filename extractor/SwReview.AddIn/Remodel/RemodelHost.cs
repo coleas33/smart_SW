@@ -2026,6 +2026,9 @@ public sealed class RemodelHost : IDisposable
         }
     }
 
+    /// <summary>Owner decision 159A (004 research R22.12): T287's compile seam; T288 reads it.</summary>
+    public bool HoldsASessionLeftUnder(string runRoot) => false;
+
     /// <summary>
     /// One close of <see cref="EndTheSessionsLeftUnder"/>'s: whether the bridge answered it, its failure in the log when not.
     /// </summary>

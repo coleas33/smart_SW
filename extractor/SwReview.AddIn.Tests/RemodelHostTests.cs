@@ -7052,6 +7052,51 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 159A, test first (004 T287; research R22.12): the Remodel host's reading of whether it still holds a
+    /// session under a run root - what its cleanup would close, read without closing it or asking anything: a failed plan's
+    /// whose close was not answered, or a run that holds its session, on the attachment listening now, under that run
+    /// root. The close's late end, a re-attach, or another run root is none; and a run root changed only so a review host
+    /// can read it, never a close sent.
+    /// </summary>
+    [Theory]
+    [InlineData("a waiting plan", true)]
+    [InlineData("a failed plan", true)]
+    [InlineData("a finished run", true)]
+    [InlineData("ended late", false)]
+    [InlineData("re-attached", false)]
+    [InlineData("another run root", false)]
+    public void TheRemodelHostSaysWhetherASessionIsLeftUnderARunRoot(string state, bool expected)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            LeaveASessionOnTheBridge(world, state == "a failed plan" ? "failed" : state == "a finished run" ? "finished" : "waiting");
+            string runRoot = world.RunRoot;
+            switch (state)
+            {
+                case "ended late":
+                    RemodelRun run = world.Host.LatestRun!;
+                    world.Host.SessionEnded(new RemodelSessionEnd(
+                        RemodelSessionEnd.ReasonClose, run.RunDirectory, run.CopyPath,
+                        verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                        settingsOutstanding: new string[0], failures: new string[0]));
+                    break;
+                case "re-attached":
+                    world.Attachment = SecondAttachment;
+                    break;
+                case "another run root":
+                    runRoot = Path.Combine(world.Root, "another", "runs");
+                    break;
+            }
+
+            int closes = world.Pipeline.Closed.Count;
+
+            Assert.Equal(expected, world.Host.HoldsASessionLeftUnder(runRoot));
+            Assert.Equal(closes, world.Pipeline.Closed.Count);
+        }
+    }
+
+    /// <summary>
     /// Leaves one session of the world's first run on its fake bridge, under the world's run root, whose close is not
     /// answered, then lets later closes be answered: a failed plan's, a plan waiting for Start (Start on keeps it; Start
     /// off, with its close at the plan not answered), or a finished run's (its close at the run's end not sent).

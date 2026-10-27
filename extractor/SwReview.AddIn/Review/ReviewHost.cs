@@ -331,6 +331,13 @@ public sealed class ReviewHostOptions
     public Func<string, bool> EndRemodelSessionsLeftUnder { get; set; } = _ => true;
 
     /// <summary>
+    /// Owner decision 159A (004 research R22.12): whether the Remodel tab still holds a session on the bridge, on the
+    /// attachment listening now, under the run root given - what <see cref="EndRemodelSessionsLeftUnder"/> would close.
+    /// Read, never acted on: it closes nothing and asks no backend. False when the caller has no Remodel tab.
+    /// </summary>
+    public Func<string, bool> RemodelSessionLeftUnder { get; set; } = _ => false;
+
+    /// <summary>
     /// Tells every other tab that holds the backend's port and token - Model check, Standards and
     /// Remodel - that the backend was restarted with saved settings, so each asks for its `init`
     /// again (owner decision 145A). Called after every restart this host makes, a save's made at

@@ -9189,6 +9189,7 @@ public sealed class DeferredRestartTests
         using var world = new RestartWorld
         {
             Poll = TimeSpan.FromMinutes(10),
+            RemodelSessionLeft = _ => true,
             EndRemodelSessions = _ =>
             {
                 Interlocked.Increment(ref asked);
@@ -9282,6 +9283,7 @@ public sealed class DeferredRestartTests
         int asked = 0;
         using var world = new RestartWorld
         {
+            RemodelSessionLeft = _ => true,
             EndRemodelSessions = _ =>
             {
                 Interlocked.Increment(ref asked);
@@ -9305,6 +9307,187 @@ public sealed class DeferredRestartTests
         Assert.Equal(2, world.Posted("status").Length);
         Assert.Equal(1, Volatile.Read(ref asked));
         Assert.True(world.Host.RestartAhead);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T287; research R22.12, Codex's third review, finding 1): a relative run root,
+    /// which the settings file may still name, is the one in force; a save chooses a full path, and its restart waits for a
+    /// close not answered, while the backend stops answering. The way out the words name - the earlier folder for runs
+    /// saved again - was refused, since a folder chosen other than the saved one must be a full path, and its full form
+    /// is another run root as written, whose restart asks the close again. The run root in force, as written, may now be
+    /// chosen back: judged by the rule as it is, written, and its restart asks no close and replaces the backend. Another
+    /// relative folder is still refused.
+    /// </summary>
+    [Fact]
+    public void TheRelativeRunRootInForceCanBeSavedBackWhileACleanupHoldsTheRestart()
+    {
+        const string relative = "FICT-relative-runs";
+        int asked = 0;
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            EndRemodelSessions = _ =>
+            {
+                Interlocked.Increment(ref asked);
+                return false;
+            },
+            RemodelSessionLeft = _ => true,
+        };
+        world.Backend.CheckAsksTheSameQuestion = true;
+        world.Settings.RunRoot = relative;
+        string chosen = ChosenRoot(world);
+        world.Open();
+        world.Track("chat-1");
+        Assert.Equal(relative, world.Host.RunRoot);
+        world.Receive("settings.save", "save", Choosing(chosen, Save(effort: "low")));
+        world.Reply("settings.saved", "save");
+        Assert.Equal(CleanupPromise, world.Last("status").GetProperty("message").GetString());
+        world.Backend.StopsAnswering();
+
+        world.Receive("settings.save", "other", Choosing("FICT-other-relative-runs", Save(effort: "low")));
+        Assert.Equal(
+            "RunRootNotFullPath",
+            world.Reply("settings.saved", "other").GetProperty("run_root_refusal").GetProperty("error_class").GetString());
+        Assert.Equal(chosen, world.Host.Settings.RunRoot);
+        int closes = Volatile.Read(ref asked);
+
+        world.Receive("settings.save", "back", Choosing(relative, Save(effort: "low")));
+
+        JsonElement saved = world.Reply("settings.saved", "back");
+        Assert.False(saved.TryGetProperty("run_root_refusal", out _));
+        Assert.Equal(relative, world.Host.Settings.RunRoot);
+        Assert.Equal(relative, Assert.Single(world.Backend.Restarts).Settings.RunRoot);
+        Assert.Equal(relative, world.Host.RunRoot);
+        Assert.False(world.Host.RestartAhead);
+        Assert.Equal(closes, Volatile.Read(ref asked));
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T287; research R22.12, finding 2): a second save that keeps the moved run root
+    /// asks the close again inside its restart - a turn check and then a close, each a timeout on a hung backend - while a
+    /// review's or a turn call's look finds no answer. That look was told <c>BackendUnavailable</c>, "save the settings
+    /// again", since the save had forgotten the close before trying it. Asked whether a session is still left under the
+    /// run root that would move, it is told the cleanup's words.
+    /// </summary>
+    [Fact]
+    public void ALookWhileASecondSaveAsksTheCloseAgainIsStillToldTheCleanupHoldsTheRestart()
+    {
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        int asked = 0;
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            EndRemodelSessions = _ =>
+            {
+                if (Interlocked.Increment(ref asked) == 2)
+                {
+                    entered.Set();
+                    release.Wait(TimeSpan.FromSeconds(10));
+                }
+
+                return false;
+            },
+            RemodelSessionLeft = _ => true,
+        };
+        string chosen = ChosenRoot(world);
+        world.Open();
+        world.Track("chat-1");
+        world.Receive("settings.save", "save", Choosing(chosen, Save(effort: "low")));
+        world.Reply("settings.saved", "save");
+        world.Backend.StopsAnswering();
+        var second = new Thread(() => world.Receive("settings.save", "again", Choosing(chosen, Save(effort: "high"))))
+        {
+            IsBackground = true,
+            Name = "fict-second-save",
+        };
+        second.Start();
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the second save never asked the close");
+
+        BackendRequestException? turn;
+        try
+        {
+            turn = world.Host.PageTurnRefusal();
+        }
+        finally
+        {
+            release.Set();
+        }
+
+        Assert.True(second.Join(TimeSpan.FromSeconds(10)), "the second save never finished");
+        Assert.Equal("RemodelCleanupPending", turn!.ErrorClass);
+        Assert.Equal(CleanupNoAnswerHoldsTheRestart, turn.Message);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T287; research R22.12, finding 3): the close that held the restart finishes
+    /// late, or a re-attach ends its session, so nothing is left under the run root that would move. A backend that then
+    /// does not answer was still told in the cleanup's words, which name a close no restart needs any more; now it is told
+    /// in its own, whose "save again" is true again.
+    /// </summary>
+    [Fact]
+    public void OnceNothingIsLeftUnderTheOldRunRootABackendThatDoesNotAnswerIsToldInItsOwnWords()
+    {
+        bool left = true;
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            EndRemodelSessions = _ => false,
+            RemodelSessionLeft = _ => Volatile.Read(ref left),
+        };
+        world.Open();
+        world.Track("chat-1");
+        world.Receive("settings.save", "save", Choosing(ChosenRoot(world), Save(effort: "low")));
+        world.Reply("settings.saved", "save");
+        world.Backend.StopsAnswering();
+        Assert.Equal(CleanupNoAnswerHoldsTheRestart, world.Host.PageTurnRefusal()!.Message);
+
+        Volatile.Write(ref left, false);
+
+        BackendRequestException? turn = world.Host.PageTurnRefusal();
+        Assert.Equal("BackendUnavailable", turn!.ErrorClass);
+        Assert.Equal(NoAnswerHoldsIt, turn.Message);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T287; research R22.12, finding 3's second half): <see cref="DeferredRestart"/>
+    /// itself. A look at the backend can take a timeout, and another caller can make the restart meanwhile; the look's
+    /// hold was still the answer, so a caller was refused for a restart already made. The restart having ended since the
+    /// call first looked is now its answer, as it is under the lock.
+    /// </summary>
+    [Theory]
+    [InlineData("no answer")]
+    [InlineData("a turn")]
+    public void ARestartMadeWhileALookWaitsOnTheBackendIsTheLooksAnswer(string seen)
+    {
+        DeferredRestart? restart = null;
+        bool madeDuringTheLook = false;
+        restart = new DeferredRestart(
+            () =>
+            {
+                if (!madeDuringTheLook)
+                {
+                    madeDuringTheLook = true;
+                    Assert.True(restart!.Now(() => { }));
+                }
+
+                return seen == "a turn" ? DeferredRestart.Hold.Turn : DeferredRestart.Hold.NoAnswer;
+            },
+            () => DeferredRestart.Work.None,
+            () => { },
+            () => { },
+            _ => { },
+            () => { },
+            () => { },
+            TimeSpan.FromMinutes(10));
+        using (restart)
+        {
+            Assert.False(restart.Now(() => throw new TurnRunningException(), out _, out _));
+
+            Assert.Equal(DeferredRestart.Outcome.RestartedMeanwhile, restart.Apply(out Exception? failure));
+            Assert.Null(failure);
+            Assert.False(restart.Pending);
+        }
     }
 
     /// <summary>
@@ -9690,6 +9873,12 @@ public sealed class DeferredRestartTests
         public Func<string, bool>? EndRemodelSessions { get; set; }
 
         /// <summary>
+        /// Owner decision 159A (004 research R22.12): whether the Remodel tab still holds a session under the run root given;
+        /// null answers none, as the review host's default does.
+        /// </summary>
+        public Func<string, bool>? RemodelSessionLeft { get; set; }
+
+        /// <summary>
         /// Sets the reading of the check tabs named - "Model check", "Standards", "both" or "none" - to
         /// <paramref name="reading"/>, and the other's to none (owner decision 157A).
         /// </summary>
@@ -9818,6 +10007,7 @@ public sealed class DeferredRestartTests
                 ModelCheckInProgress = () => ModelChecking(),
                 StandardsCheckInProgress = () => StandardsChecking(),
                 EndRemodelSessionsLeftUnder = runRoot => EndRemodelSessions == null || EndRemodelSessions(runRoot),
+                RemodelSessionLeftUnder = runRoot => RemodelSessionLeft != null && RemodelSessionLeft(runRoot),
                 BackendRestarted = () =>
                 {
                     Interlocked.Increment(ref _otherTabsTold);
