@@ -6560,6 +6560,74 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 159A, test first (004 T293; research R22.14, Codex's fifth review): the bridge tells a failed plan's
+    /// end before the host has a record of it - the failed open's unwind (<c>remodel.open</c>) inside the open, or the
+    /// backend's own close inside a plan step that fails - and the plan's own close after it is then not answered. The end
+    /// found no tracked run and no record, so it was dropped, and the record made after it outlived the session: the host
+    /// read a session left under the old run root and a restart sent the close again. Now the attempt is known from the open
+    /// on, an end that names it marks it ended, and a plan whose session has ended leaves nothing and sends no close.
+    /// </summary>
+    [Theory]
+    [InlineData("open")]
+    [InlineData("plan")]
+    public void AFailedPlansSessionEndedBeforeItsRecordLeavesNothingToCloseBeforeTheRunRootMoves(string where)
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string oldRoot = world.RunRoot;
+            string first = world.ExpectedRunDirectory;
+            string copy = world.ExpectedCopyPath;
+            int closesAtTheEnd = -1;
+            Action tellTheEnd = () =>
+            {
+                world.Host.SessionEnded(new RemodelSessionEnd(
+                    where == "open" ? RemodelSessionEnd.ReasonOpenFailed : RemodelSessionEnd.ReasonClose,
+                    first, copy,
+                    verified: false, failedCheck: null, tagRemoved: false, copyClosed: true,
+                    settingsOutstanding: new string[0], failures: new string[0]));
+                closesAtTheEnd = world.Pipeline.Closed.Count;
+            };
+            world.Pipeline.HoldsTheBridgeSession = true;
+            if (where == "open")
+            {
+                world.Pipeline.CopyFailure = new IOException("FICT the open failed.");
+                world.Pipeline.DuringCopy = tellTheEnd;
+            }
+            else
+            {
+                world.Pipeline.PlanFailure = new IOException("FICT planning failed.");
+                world.Pipeline.DuringPlan = () =>
+                {
+                    // The backend's own cleanup closes the session, and the bridge tells its end; the plan's own close
+                    // after it is the one not answered.
+                    Exception? later = world.Pipeline.CloseFailure;
+                    world.Pipeline.CloseFailure = null;
+                    world.Pipeline.CloseCopy(first);
+                    world.Pipeline.CloseFailure = later;
+                    tellTheEnd();
+                };
+            }
+
+            world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+            world.Receive("remodel.plan", "p1", new { });
+            Assert.NotNull(world.ErrorClass("p1"));
+            world.Pipeline.DuringCopy = null;
+            world.Pipeline.DuringPlan = null;
+            world.Pipeline.CopyFailure = null;
+            world.Pipeline.PlanFailure = null;
+
+            Assert.False(world.Host.HoldsASessionLeftUnder(oldRoot));
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.True(closesAtTheEnd >= 0, "the end was never told");
+            Assert.Equal(closesAtTheEnd, world.Pipeline.Closed.Count);
+        }
+    }
+
+    /// <summary>
     /// Owner decision 159A, test first (004 T277; research R22): each session a run can leave on the bridge - a failed plan's,
     /// a plan waiting for Start (Start on, or Start off with its close at the plan not answered) and a finished run's - is
     /// closed through the backend in force, before a save's restart moves the run root, and the restart is then made at once.
@@ -10544,6 +10612,12 @@ public sealed class RemodelHostTests
         /// <summary>Runs inside <see cref="Plan"/>, after the copy exists and before it answers.</summary>
         public Action? DuringPlan { get; set; }
 
+        /// <summary>
+        /// Runs inside <see cref="OpenCopy"/>, before it answers or throws <see cref="CopyFailure"/>: where the bridge's
+        /// failed open tells its end (owner decision 159A, 004 research R22.14).
+        /// </summary>
+        public Action? DuringCopy { get; set; }
+
         public string RunState { get; set; } = "saved";
 
         public int ChangesApplied { get; set; }
@@ -10604,6 +10678,7 @@ public sealed class RemodelHostTests
                     retryable: true);
             }
 
+            DuringCopy?.Invoke();
             if (CopyFailure != null)
             {
                 SessionOpen = HoldsTheBridgeSession && CopyFailureLeavesTheSessionOpen;
