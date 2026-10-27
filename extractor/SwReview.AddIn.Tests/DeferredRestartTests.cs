@@ -1850,7 +1850,12 @@ public sealed class DeferredRestartTests
             "failure => ReportUnlessStopping(() => { PostRestartFailed(failure); TellTheOtherTabsTheRestartFailed(failure); })",
             made,
             StringComparison.Ordinal);
-        Assert.Contains("() => ReportUnlessStopping(() => PostStatus(\"error\", RestartNotAnswered))", made, StringComparison.Ordinal);
+        // Changed deliberately 2026-10-27 (owner decision 159A, 004 research R22.12): the word chooses the cleanup's sentence
+        // while a remodel close holds the restart, read at that moment.
+        Assert.Contains(
+            "() => ReportUnlessStopping(() => PostStatus(\"error\", CleanupLeftBehind() ? CleanupHoldsTheRestartPromise : RestartNotAnswered))",
+            made,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -9274,8 +9279,10 @@ public sealed class DeferredRestartTests
     /// <summary>
     /// Owner decision 159A, test first (004 T284; research R22.11): the watcher, after a save's restart met a close not
     /// answered, meets a backend that does not answer whether a turn runs. It told "the review backend is not answering
-    /// ... save the settings again" after three looks, which only repeats the close; now it stops at once, saying the
-    /// save's sentence, which names the earlier folder for runs as the way out, and asks nothing more.
+    /// ... save the settings again" after three looks, which only repeats the close; now, when it stops, it says the
+    /// save's sentence, which names the earlier folder for runs as the way out, and asks nothing more. *Changed
+    /// deliberately 2026-10-27 (R22.12):* it stops after its looks, as before, and chooses the words then; T285 stopped it
+    /// at once.
     /// </summary>
     [Fact]
     public void TheWatcherAfterACleanupNotAnsweredMeetingABackendThatDoesNotAnswerSaysTheCleanupsSentence()
@@ -9526,41 +9533,6 @@ public sealed class DeferredRestartTests
         Assert.True(restart.Pending);
         Assert.Equal(0, failures);
         Assert.Equal(0, restarted);
-    }
-
-    /// <summary>
-    /// Owner decision 159A (004 T285 - a guard added with the fix; research R22.11): <see cref="DeferredRestart"/> itself.
-    /// A look that finds no answer is <c>CleanupNotAnswered</c> once the last try met a close not answered - a later
-    /// caller's try as well as a save's - and <c>NotAnswered</c> again once a save's restart has tried newer settings that
-    /// met none.
-    /// </summary>
-    [Fact]
-    public void ALookWithNoAnswerKeepsTheReasonOfTheLastTryOfTheRestart()
-    {
-        var hold = DeferredRestart.Hold.None;
-        using var restart = new DeferredRestart(
-            () => hold,
-            () => DeferredRestart.Work.None,
-            () => throw new RemodelCleanupPendingException(),
-            () => { },
-            _ => { },
-            () => { },
-            () => { },
-            TimeSpan.FromMinutes(10));
-
-        Assert.False(restart.Now(() => throw new TurnRunningException(), out DeferredRestart.Hold heldBy, out _));
-        Assert.Equal(DeferredRestart.Hold.Turn, heldBy);
-        hold = DeferredRestart.Hold.NoAnswer;
-        Assert.Equal(DeferredRestart.Outcome.NotAnswered, restart.Apply(out _));
-
-        hold = DeferredRestart.Hold.None;
-        Assert.Equal(DeferredRestart.Outcome.CleanupPending, restart.Apply(out _));
-        hold = DeferredRestart.Hold.NoAnswer;
-        Assert.Equal(DeferredRestart.Outcome.CleanupNotAnswered, restart.Apply(out _));
-
-        Assert.False(restart.Now(() => throw new TurnRunningException(), out heldBy, out _));
-        Assert.Equal(DeferredRestart.Outcome.NotAnswered, restart.Apply(out _));
-        Assert.True(restart.Pending);
     }
 
     /// <summary>

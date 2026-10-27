@@ -645,7 +645,7 @@ public sealed class ReviewHost : IDisposable
                 PostRestartFailed(failure);
                 TellTheOtherTabsTheRestartFailed(failure);
             }),
-            () => ReportUnlessStopping(() => PostStatus("error", RestartNotAnswered)),
+            () => ReportUnlessStopping(() => PostStatus("error", CleanupLeftBehind() ? CleanupHoldsTheRestartPromise : RestartNotAnswered)),
             () => ReportUnlessStopping(() => PostStatus("error", CleanupHoldsTheRestartPromise)),
             options.RestartPoll);
     }
@@ -1591,7 +1591,10 @@ public sealed class ReviewHost : IDisposable
         string? chosen = ChosenRunRoot(payload);
         if (chosen != null && !string.Equals(chosen, _settings.RunRoot, StringComparison.Ordinal))
         {
-            if (!RunRootRule.IsFullPath(chosen))
+            // Owner decision 159A (004 research R22.12): the run root in force, as written - a relative one the settings
+            // file named included - may be chosen back, still judged by the rule below, so a restart waiting to move it
+            // can be given up: the way out a remodel close not answered names.
+            if (!RunRootRule.IsFullPath(chosen) && !RunRootRule.SameRunRoot(chosen, _inForce.RunRoot))
             {
                 return _actions.ErrorPayload("RunRootNotFullPath", RunRootRule.NotFullPathRefusal, retryable: false);
             }
@@ -2091,7 +2094,8 @@ public sealed class ReviewHost : IDisposable
 
     /// <summary>
     /// Owner decision 159A (004 research R22.11, Codex's second review): a new review, or a page call that would start a
-    /// turn, while that close held the restart at its last try and the backend now gives no answer whether a turn runs.
+    /// turn, while a remodel close holds the restart (<see cref="CleanupLeftBehind"/>, R22.12) and the backend gives no
+    /// answer whether a turn runs.
     /// Saving the same settings again would only ask the close again, and another document made active does not
     /// re-attach while a turn may be running (the tool-service gate's <see cref="TurnMayBeRunning"/>). The earlier folder
     /// for runs saved again does: that restart keeps the run root, closes nothing, and replaces the backend, whose own
@@ -2108,6 +2112,34 @@ public sealed class ReviewHost : IDisposable
 
     /// <summary>The way out that works whether or not the backend answers (R22.11).</summary>
     private const string EarlierRootWayOut = "Save the earlier folder for runs in Settings again, then try again.";
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22.12, Codex's third review): whether a remodel close holds the waiting restart
+    /// now - read, not remembered: the saved run root is not the one in force, so the restart would move it, and the
+    /// Remodel tab still holds a session under the one in force (<see cref="ReviewHostOptions.RemodelSessionLeftUnder"/>),
+    /// which the restart would close first. A close that ended late, a re-attach, a newer save and a restart made all
+    /// change the answer by themselves, with nothing to forget or race. Asked when a look finds the backend not answering,
+    /// to choose between the cleanup's words and the backend's own - and by the watcher under the restart's lock, which
+    /// the cleanup itself reads the tool service under. A reading that throws is read as a session left: its way out,
+    /// the earlier folder for runs saved again, works either way.
+    /// </summary>
+    private bool CleanupLeftBehind()
+    {
+        string inForce = _inForce.RunRoot;
+        if (RunRootRule.SameRunRoot(_settings.RunRoot, inForce))
+        {
+            return false;
+        }
+
+        try
+        {
+            return _options.RemodelSessionLeftUnder(inForce);
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
 
     /// <summary>...while the backend does not answer whether a turn runs.</summary>
     private const string NoAnswerHoldsTheRestart =
@@ -2423,7 +2455,7 @@ public sealed class ReviewHost : IDisposable
     /// remodel run or a check (owner decision 157A), which <paramref name="work"/> names - is answered
     /// as a turn is, and a backend that does not answer as the proxy answers one that is not there.
     /// </summary>
-    private static BackendRequestException? HeldBackBy(DeferredRestart.Outcome outcome, DeferredRestart.Work work)
+    private BackendRequestException? HeldBackBy(DeferredRestart.Outcome outcome, DeferredRestart.Work work)
     {
         switch (outcome)
         {
@@ -2434,13 +2466,12 @@ public sealed class ReviewHost : IDisposable
                 return WorkHoldsIt(work, retryable: false);
 
             case DeferredRestart.Outcome.NotAnswered:
-                return new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheRestart, retryable: true);
+                return CleanupLeftBehind()
+                    ? new BackendRequestException("RemodelCleanupPending", CleanupNoAnswerHoldsTheRestart, retryable: true)
+                    : new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheRestart, retryable: true);
 
             case DeferredRestart.Outcome.CleanupPending:
                 return new BackendRequestException("RemodelCleanupPending", CleanupHoldsTheRestart, retryable: true);
-
-            case DeferredRestart.Outcome.CleanupNotAnswered:
-                return new BackendRequestException("RemodelCleanupPending", CleanupNoAnswerHoldsTheRestart, retryable: true);
 
             default:
                 return null;
@@ -2617,13 +2648,12 @@ public sealed class ReviewHost : IDisposable
                 return WorkHoldsIt(busyWith, retryable: true);
 
             case DeferredRestart.Outcome.NotAnswered:
-                return new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheWork(work), retryable: true);
+                return CleanupLeftBehind()
+                    ? new BackendRequestException("RemodelCleanupPending", CleanupNoAnswerHoldsTheWork(work), retryable: true)
+                    : new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheWork(work), retryable: true);
 
             case DeferredRestart.Outcome.CleanupPending:
                 return new BackendRequestException("RemodelCleanupPending", CleanupHoldsTheWork(work), retryable: true);
-
-            case DeferredRestart.Outcome.CleanupNotAnswered:
-                return new BackendRequestException("RemodelCleanupPending", CleanupNoAnswerHoldsTheWork(work), retryable: true);
 
             case DeferredRestart.Outcome.Failed:
                 return RestartFailed(failure!);

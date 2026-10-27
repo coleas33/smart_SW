@@ -1984,11 +1984,9 @@ public sealed class RemodelHost : IDisposable
         {
             string? attachment = _options.ToolServiceAttachment();
             Tuple<string, string?>? failed = _failedPlanToClose;
-            if (failed != null
-                && SameAttachment(failed.Item2, attachment)
-                && RunFolders.IsUnder(failed.Item1, runRoot, _options.RunRootProbe))
+            if (FailedPlanLeftUnder(failed, attachment, runRoot))
             {
-                if (!ClosedBeforeTheRunRootMoves(pipeline, failed.Item1))
+                if (!ClosedBeforeTheRunRootMoves(pipeline, failed!.Item1))
                 {
                     return false;
                 }
@@ -1997,11 +1995,9 @@ public sealed class RemodelHost : IDisposable
             }
 
             RemodelRun? left = LatestRun;
-            if (left != null
-                && HoldsItsSession(left, attachment)
-                && RunFolders.IsUnder(left.RunDirectory, runRoot, _options.RunRootProbe))
+            if (RunLeftUnder(left, attachment, runRoot))
             {
-                left.MarkCloseForRunRootSent();
+                left!.MarkCloseForRunRootSent();
                 if (!ClosedBeforeTheRunRootMoves(pipeline, left.RunDirectory))
                 {
                     return false;
@@ -2026,8 +2022,36 @@ public sealed class RemodelHost : IDisposable
         }
     }
 
-    /// <summary>Owner decision 159A (004 research R22.12): T287's compile seam; T288 reads it.</summary>
-    public bool HoldsASessionLeftUnder(string runRoot) => false;
+    /// <summary>
+    /// Owner decision 159A (004 research R22.12, Codex's third review): whether this host still holds a session on the
+    /// bridge under <paramref name="runRoot"/> - what <see cref="EndTheSessionsLeftUnder"/> would close, read now and
+    /// closing nothing, holding nothing and asking no backend: a failed plan's whose close was not answered, or the latest
+    /// run while it holds its session, on the attachment listening now. The review host reads it when a restart waits
+    /// to move the run root and the backend does not answer, so its words say what holds the restart now - a close that
+    /// ended late, a re-attach or a newer save change the answer by themselves. No pipeline is none.
+    /// </summary>
+    public bool HoldsASessionLeftUnder(string runRoot)
+    {
+        if (_options.Pipeline == null)
+        {
+            return false;
+        }
+
+        string? attachment = _options.ToolServiceAttachment();
+        return FailedPlanLeftUnder(_failedPlanToClose, attachment, runRoot) || RunLeftUnder(LatestRun, attachment, runRoot);
+    }
+
+    /// <summary>A failed plan whose close was not answered, made on <paramref name="attachment"/>, under <paramref name="runRoot"/>.</summary>
+    private bool FailedPlanLeftUnder(Tuple<string, string?>? failed, string? attachment, string runRoot) =>
+        failed != null
+        && SameAttachment(failed.Item2, attachment)
+        && RunFolders.IsUnder(failed.Item1, runRoot, _options.RunRootProbe);
+
+    /// <summary>A run that still holds its session on <paramref name="attachment"/> (<see cref="HoldsItsSession"/>), under <paramref name="runRoot"/>.</summary>
+    private bool RunLeftUnder(RemodelRun? run, string? attachment, string runRoot) =>
+        run != null
+        && HoldsItsSession(run, attachment)
+        && RunFolders.IsUnder(run.RunDirectory, runRoot, _options.RunRootProbe);
 
     /// <summary>
     /// One close of <see cref="EndTheSessionsLeftUnder"/>'s: whether the bridge answered it, its failure in the log when not.

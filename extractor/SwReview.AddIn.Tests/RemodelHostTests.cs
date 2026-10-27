@@ -10284,6 +10284,7 @@ public sealed class RemodelHostTests
                 RunRootProbe = FakeRunRootProbe.Local(),
                 BackendBusy = () => world.Host.RunInProgress,
                 EndRemodelSessionsLeftUnder = runRoot => world.Host.EndTheSessionsLeftUnder(runRoot),
+                RemodelSessionLeftUnder = runRoot => world.Host.HoldsASessionLeftUnder(runRoot),
                 BackendRestarted = () => world.Host.BackendRestarted(),
             });
 

@@ -172,15 +172,6 @@ internal sealed class DeferredRestart : IDisposable
         /// still waits - not a failure, which would drop it. The next caller tries the close again.
         /// </summary>
         CleanupPending,
-
-        /// <summary>
-        /// Owner decision 159A (004 research R22.11): the last try of the restart met a remodel close not answered
-        /// (<see cref="CleanupPending"/>), and now the backend gives no usable answer to whether a turn runs, so the
-        /// close is not asked again. A backend that does not answer at all cannot carry that close either: saving the
-        /// same settings again, which <see cref="NotAnswered"/> tells, only asks it again. Nothing was changed, and it
-        /// still waits.
-        /// </summary>
-        CleanupNotAnswered,
     }
 
     /// <summary>
@@ -226,14 +217,6 @@ internal sealed class DeferredRestart : IDisposable
     /// while one that waited stays pending until it ends. Guarded by <see cref="_state"/>.
     /// </summary>
     private bool _making;
-
-    /// <summary>
-    /// Owner decision 159A (004 research R22.11): whether the last try of the restart met a remodel close not answered
-    /// (<see cref="RemodelCleanupPendingException"/>). Cleared by each save's restart, which tries newer settings - the only
-    /// way a restart starts to wait again once one has ended; read when a look finds no answer
-    /// (<see cref="Outcome.CleanupNotAnswered"/>). Guarded by <see cref="_state"/>.
-    /// </summary>
-    private bool _cleanupHeld;
 
     /// <summary>
     /// One more each time a restart is refused and starts waiting: a newer refusal is a newer
@@ -404,8 +387,6 @@ internal sealed class DeferredRestart : IDisposable
                 {
                     throw new ObjectDisposedException(null, "the add-in is unloading, so the backend was not restarted.");
                 }
-
-                _cleanupHeld = false;
             }
 
             Work work = Busy();
@@ -434,7 +415,6 @@ internal sealed class DeferredRestart : IDisposable
             {
                 // Owner decision 159A (004 research R22): nothing was stopped, so the restart waits, as for a turn,
                 // and is not dropped as a failure would drop it.
-                CleanupHeld();
                 Defer();
                 heldBy = Hold.Cleanup;
                 return false;
@@ -540,6 +520,15 @@ internal sealed class DeferredRestart : IDisposable
             hold = Hold.None;
         }
 
+        // Owner decision 159A (004 research R22.12, Codex's third review): a look can take the backend's timeout, and a
+        // restart made, or tried and failed, meanwhile by another caller is this call's answer, as it is under the lock -
+        // not the hold the look found on a backend that has since been replaced.
+        if (hold != Hold.None && EndedSince(seen, out Exception? meanwhile))
+        {
+            failure = meanwhile;
+            return meanwhile == null ? Outcome.RestartedMeanwhile : Outcome.Failed;
+        }
+
         switch (hold)
         {
             case Hold.Turn:
@@ -551,11 +540,7 @@ internal sealed class DeferredRestart : IDisposable
                 return Outcome.WorkInProgress;
 
             case Hold.NoAnswer:
-                // Owner decision 159A (004 research R22.11): after a close not answered, saving again only asks it again.
-                lock (_state)
-                {
-                    return _cleanupHeld ? Outcome.CleanupNotAnswered : Outcome.NotAnswered;
-                }
+                return Outcome.NotAnswered;
         }
 
         lock (_restarting)
@@ -603,7 +588,6 @@ internal sealed class DeferredRestart : IDisposable
             {
                 // Owner decision 159A (004 research R22): a remodel session's close before the run root moves was not
                 // answered. Nothing was stopped, so it still waits, and the next caller asks the close again.
-                CleanupHeld();
                 return Outcome.CleanupPending;
             }
             catch (Exception caught)
@@ -874,15 +858,6 @@ internal sealed class DeferredRestart : IDisposable
         }
     }
 
-    /// <summary>The last try of the restart met a remodel close not answered (<see cref="_cleanupHeld"/>).</summary>
-    private void CleanupHeld()
-    {
-        lock (_state)
-        {
-            _cleanupHeld = true;
-        }
-    }
-
     private long Deferrals()
     {
         lock (_state)
@@ -929,9 +904,7 @@ internal sealed class DeferredRestart : IDisposable
                 // Owner decision 159A (004 research R22): a remodel session's close was not answered. Looking again each
                 // poll would send a close a second over a bridge that does not answer, so the watcher says so once and
                 // stops; the restart still waits, and the next review, turn call, remodel run, check or save asks again.
-                // R22.11: so too after such a close, at a backend that does not answer, whose "not answering" would say to
-                // save again; the save's sentence names the way out instead.
-                if (outcome == Outcome.CleanupPending || outcome == Outcome.CleanupNotAnswered)
+                if (outcome == Outcome.CleanupPending)
                 {
                     if (StopWatching(seen, _cleanupPending))
                     {
