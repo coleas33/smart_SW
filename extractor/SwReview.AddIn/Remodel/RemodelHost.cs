@@ -674,7 +674,8 @@ public sealed class RemodelHost : IDisposable
     /// Plan reads and writes this record while it holds the host and the tool service; owner decision
     /// 159A (004 research R22): so does a restart that moves the run root
     /// (<see cref="EndTheSessionsLeftUnder"/>), under the restart's own lock, while the host is free and no
-    /// plan can make it busy. Volatile, since the two run on different threads.
+    /// plan can make it busy. Volatile, since the two run on different threads. Since 004 research R22.13, the end of
+    /// its session (<see cref="SessionEnded(RemodelSessionEnd)"/>) lets it go too, by compare-and-swap of that exact record.
     /// </summary>
     private volatile Tuple<string, string?>? _failedPlanToClose;
 
@@ -1081,6 +1082,15 @@ public sealed class RemodelHost : IDisposable
                 {
                     run.MarkSessionEnded();
                 }
+            }
+
+            // Owner decision 159A (004 research R22.13, Codex's fourth review): a failed plan is never a tracked run, so
+            // the end of its session - its close's, late or not, or a teardown's - lets its record go: that exact record
+            // alone, so a newer attempt's, recorded meanwhile, survives.
+            Tuple<string, string?>? failed = _failedPlanToClose;
+            if (failed != null && SamePath(failed.Item1, outcome.RunDirectory))
+            {
+                Interlocked.CompareExchange(ref _failedPlanToClose, null, failed);
             }
         }
 
