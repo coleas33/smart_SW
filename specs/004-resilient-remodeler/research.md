@@ -4064,6 +4064,11 @@ is saved again, so the restart keeps the run root and closes nothing. `BackendUn
 `HttpError` are deliberately not read as "no old backend": the close may have reached the bridge,
 and reading them so would reopen R22.1. The `RemodelCleanupPending` words now name those two ways
 out instead of "Wait a moment". Start (T172) waits on this beside the dead-A case.
+*Corrected on the second review (R22.11):* a re-attach is a way out only while the backend still
+answers about the turns. A backend that answers nothing, with a review chat tracked, makes the
+tool-service gate hold the follow (`TurnMayBeRunning` counts an unanswered chat), and every look
+then ended in `BackendUnavailable` before the close was asked. Only the earlier folder saved again
+works there, and the words now say so.
 
 A narrowly bound native hook was investigated and **not** added:
 `IToolService.EndRemodelSessionOf(canonicalRunDirectory)` would post, through
@@ -4188,6 +4193,21 @@ then restored from the bytes read before, sha256 checked equal; M34 against
 | M33 | `ReviewHost.cs`: the ways out back to "Wait a moment" | 2 of 945 | `ARestartThatWouldMoveTheRunRootWaitsWhileTheRemodelCleanupIsNotAnswered`, `ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot` | sha256 equal |
 | M34 | `review_words_v1.yaml`: the label back to "Wait a moment" | 1 of 106 | `test_each_thing_that_holds_a_restart_back_has_a_true_sentence` | sha256 equal |
 
+*Added on the second review (R22.11).* T285's fixes, each taken out alone in the same way, against
+the same two classes (948 cases) and the words test.
+
+| # | Fix taken out | Failed | Cases that failed | Restored |
+|---|---|---|---|---|
+| M35 | `DeferredRestart.cs`: a look with no answer ignores the pending close | 3 of 948 | `ALookWithNoAnswerKeepsTheReasonOfTheLastTryOfTheRestart`, `AfterACleanupNotAnsweredABackendThatStopsAnsweringIsToldWithTheWayOutThatWorks`, `TheWatcherAfterACleanupNotAnsweredMeetingABackendThatDoesNotAnswerSaysTheCleanupsSentence` | sha256 equal |
+| M36 | `DeferredRestart.cs`: a save's close not answered not remembered | 2 of 948 | `AfterACleanupNotAnswered...`, `TheWatcherAfterACleanupNotAnswered...` | sha256 equal |
+| M37 | `DeferredRestart.cs`: a later caller's close not answered not remembered | 1 of 948 | `ALookWithNoAnswerKeepsTheReasonOfTheLastTryOfTheRestart` | sha256 equal |
+| M38 | `DeferredRestart.cs`: a save's restart does not forget it | 2 of 948 | `ALookWithNoAnswerKeepsTheReasonOfTheLastTryOfTheRestart`, `AfterACleanupNotAnswered...` | sha256 equal |
+| M39 | `DeferredRestart.cs`: the watcher counts it as not answering | 1 of 948 | `TheWatcherAfterACleanupNotAnswered...` | sha256 equal |
+| M40 | `ReviewHost.cs`: review/turn call told `BackendUnavailable` | 1 of 948 | `AfterACleanupNotAnswered...` | sha256 equal |
+| M41 | `ReviewHost.cs`: remodel run/check told `BackendUnavailable` | 1 of 948 | `AfterACleanupNotAnswered...` | sha256 equal |
+| M42 | `ReviewHost.cs`: the save's sentence back to "save the settings again" | 23 of 948 | `ARestartThatWouldMoveTheRunRootWaitsWhileTheRemodelCleanupIsNotAnswered`, `TheRestartCarriesEverySentenceTheReviewTabMayHaveShown`, `ARunRootChangeWaitsWhileTheOldRunsCloseIsNotAnswered` and eight more | sha256 equal |
+| M43 | `review_words_v1.yaml`: the label back to R22.10's two ways out | 1 of 106 | `test_each_thing_that_holds_a_restart_back_has_a_true_sentence` | sha256 equal |
+
 ### R22.8 Gates
 
 Counts before (main `b7bf364`): Windows Release build with zero warnings and zero errors;
@@ -4277,6 +4297,100 @@ Gates on the final tree:
   `--basetemp` outside the checkout): Python 3.12, 18,275 passed and 5 skipped; Python 3.11
   (`uv run --isolated --python 3.11 --all-extras`), 18,275 passed and 5 skipped. The count is
   R22.8's: this round changed one case's expected words and added none.
+- **Lint and links.** `uv run ruff check src tests` passed; the link check found no broken link.
+
+No SOLIDWORKS process, seat task or paid/live test ran.
+
+### R22.11 Second review: a cleanup held by a backend that does not answer (T284 to T286; 2026-10-27)
+
+Codex's second review of `f252a0c`, one finding (medium). No new owner decision; the guard, the
+allowlist, run/session identity and the outside-root refusal are unchanged.
+
+**The finding.** After a save's restart that would move the run root meets a remodel close not
+answered (`CleanupPending`), a backend that is alive but answers nothing - with a review chat
+tracked - made every later caller's look (`DeferredRestart.Apply`, `Hold.NoAnswer`) answer
+`NotAnswered` before the restart, and so the close, was tried again. The engineer was told
+`BackendUnavailable`, "save the settings again", which only asks the same close again; the watcher
+said, after three looks, "the review backend is not answering ... save the settings again".
+
+**Checked by reading before settling, and all of it holds.**
+
+- The look comes first: `Apply` asks `_heldBack` (`ReviewHost.RestartHeldBack`, which stops at the
+  first chat not answered) before it takes the lock and tries the restart.
+- Saving the same settings again asks the close again. The save's own check and the restart's
+  turn check (`AnyTurnRunning`) read no answer as no turn, so the save reaches
+  `EndTheRemodelSessionsTheRunRootLeaves`, whose close through the hung backend times out again.
+- A re-attach does not help while a chat is tracked. The tool-service gate's `busy`
+  (`SwReviewAddIn`, `_reviewHost.TurnMayBeRunning()`) counts a chat the backend does not answer
+  about as a turn that may be running, and holds the follow. R22.10's "make another document
+  active" is therefore true only while the backend still answers about the turns. With no chat
+  tracked, the look answers `None`, the restart is tried, the outcome is `CleanupPending`, and the
+  re-attach does work: R22.10's words stay right there.
+- Saving the earlier folder for runs does work. `SameRunRoot` then asks no close, and the
+  supervisor's own check (`AnyTurnRunning`) reads no answer as no turn, so the hung backend is
+  replaced.
+
+**Settled (T285).**
+
+- `DeferredRestart` keeps whether the last try of the restart met a close not answered. A save's
+  try or a later caller's sets it; each save's restart, which tries newer settings, resets it
+  first. The only way a restart waits again after one has ended is through a save, so nothing else
+  needs to clear it.
+- A look with no answer is then `Outcome.CleanupNotAnswered`, not `NotAnswered`. `ReviewHost`
+  refuses it `RemodelCleanupPending`, retryable: "a copy an earlier remodel left open in
+  SOLIDWORKS could not be closed, and the review backend is not answering, so it has not been
+  restarted with the saved settings, and nothing new starts before then. Save the earlier folder
+  for runs in Settings again, then try again." The remodel run and check variants read "and no
+  remodel run starts" and "and no check starts".
+- The watcher stops at it at once, saying the save's sentence. It no longer asks a hung backend
+  three more times.
+- The save's sentence no longer says "to try it now, save the settings again", which misleads in
+  the hung case. It now ends "...; if it cannot be closed, save the earlier folder for runs in
+  Settings again.", which is true whether or not the backend answers.
+- The words file's `RemodelCleanupPending` label is shared by both messages, so it names only
+  the way out that always works: "...Save the earlier folder for runs in Settings again, then try
+  again." The fold's message for an answering backend still names both ways out (R22.10). The
+  four label-bearing pane fixtures were regenerated with their generators, one line each, and
+  `review-send-failure-events.json`'s pin moved to the CRLF sha256 of the new
+  `review-waiting.json`. `review-not-sent-session.json` came back byte for byte, and
+  `review-waiting-apply-failure.json` was not regenerated. The two contracts were amended.
+- `BackendUnavailable` and its words are unchanged when no close is pending. The host case's tail
+  pins this, as does `ANewReviewWhileTheBackendDoesNotAnswerIsRefusedSayingSo`.
+
+The finding's other suggestion, a NoAnswer refusal that keeps its class and adds the way out, was
+not taken: the page shows the class's label first, and `BackendUnavailable`'s says to save
+Settings to start the backend again, which is the very advice that fails here.
+
+R22.10's note "two closes per save" holds only while the backend answers about the turns. With a
+hung backend and a chat tracked, the watcher's look asks no close.
+
+**Tests.** T284 is the deliberately red commit: 20 C# failures, most of them the save's sentence,
+and 1 Python failure (the label).
+
+- `AfterACleanupNotAnsweredABackendThatStopsAnsweringIsToldWithTheWayOutThatWorks` covers the
+  review, turn-call, remodel-run and check refusals. It runs the real `ToolServiceGate`, busy on
+  the host's `TurnMayBeRunning`, which holds the follow to another document. The earlier folder
+  saved while a turn starts waits for the turn; that tail is a guard added with the fix. A backend
+  then not answering is told `BackendUnavailable` in its own words. The earlier folder saved again
+  then restarts the hung backend under it.
+- `TheWatcherAfterACleanupNotAnsweredMeetingABackendThatDoesNotAnswerSaysTheCleanupsSentence`
+  failed before the fix on "the review backend is not answering".
+- `ALookWithNoAnswerKeepsTheReasonOfTheLastTryOfTheRestart` is a guard added with the fix, at
+  `DeferredRestart` level. It pins the flag set by a later caller's try and reset by a save's.
+
+All of them are green after T285. Mutations M35 to M43 each fail at least one case (R22.7).
+
+Gates on the final tree:
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero
+  warnings, zero errors.
+- **C# tests.** 10,199 extractor and 4,204 add-in tests passed, none failed or skipped: 3 more
+  than R22.10.
+- **Focused runs.** `RemodelHostTests`, `DeferredRestartTests`, `ToolService*` and
+  `ReviewHostTests` (1,275 cases) passed three times in a row.
+- **Python.** Required-tokenizer non-live suites (`SWREVIEW_TOKENIZER_DIR=C:\t\144a-tok`,
+  `--basetemp` outside the checkout): Python 3.12 and 3.11 (`uv run --isolated --python 3.11
+  --all-extras`) each 18,275 passed and 5 skipped; this round changed one case's expected words.
 - **Lint and links.** `uv run ruff check src tests` passed; the link check found no broken link.
 
 No SOLIDWORKS process, seat task or paid/live test ran.
