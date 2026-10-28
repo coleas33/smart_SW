@@ -2107,8 +2107,20 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     /// <param name="runRoot">The run root in force, which the restart would move.</param>
     /// <returns>True when nothing under it is left holding a session; false when a close was not answered.</returns>
-    public bool EndTheSessionsLeftUnderInProcess(string runRoot) =>
-        EndTheSessionsLeftUnder(runRoot, (pipeline, attachment, runDirectory) => ClosedInProcess(attachment, runDirectory));
+    public bool EndTheSessionsLeftUnderInProcess(string runRoot)
+    {
+        try
+        {
+            return EndTheSessionsLeftUnder(runRoot, (pipeline, attachment, runDirectory) => ClosedInProcess(attachment, runDirectory));
+        }
+        catch (Exception failure)
+        {
+            // 004 research R24.11: the walk's own failure - the hold, the attachment - is said here, since the review host,
+            // which goes on with the restart whatever this does, keeps no log of its own.
+            Log("a restart that moves the run root with the review backend gone, the walk before the closes in process", failure);
+            return false;
+        }
+    }
 
     /// <summary>
     /// Owner decision 161A (004 research R24): one close of <see cref="EndTheSessionsLeftUnderInProcess"/>'s, on the bridge of

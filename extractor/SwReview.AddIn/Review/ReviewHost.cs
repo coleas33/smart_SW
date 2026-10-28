@@ -2376,7 +2376,9 @@ public sealed class ReviewHost : IDisposable
         }
         catch (Exception)
         {
-            // Not closed: the leftover stays as it was, until a re-attach or an unload ends it, and the restart goes on.
+            // Not closed: the leftover stays as it was, until a re-attach or an unload ends it, and the restart goes on. The
+            // Remodel host logs its own failures (004 research R24.11); this host keeps no log, so only a delegate that is
+            // not the Remodel host's could throw here unsaid.
         }
     }
 
