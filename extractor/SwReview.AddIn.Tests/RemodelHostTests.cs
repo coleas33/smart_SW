@@ -6898,6 +6898,43 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 161A's review, test first (004 T304; research R24.11): a walk that throws before any close - the tool
+    /// service's hold or its attachment that cannot be read - is a close not answered: the leftover stays as it was, the
+    /// restart still goes on, and the failure is in the log, masked, where it used to leave no trace.
+    /// </summary>
+    [Theory]
+    [InlineData("the hold")]
+    [InlineData("the attachment")]
+    public void WithTheOldBackendGoneAWalkThatThrowsIsLoggedAndTheRestartGoesOn(string what)
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string oldRoot = world.RunRoot;
+            LeaveASessionOnTheBridge(world, "failed");
+            restart.Backend.Down = true;
+            var failure = new IOException("FICT the tool service could not be read for 0FAKEtoken.");
+            if (what == "the hold")
+            {
+                world.Hold = () => throw failure;
+            }
+            else
+            {
+                world.Options.ToolServiceAttachment = () => throw failure;
+            }
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Empty(world.InProcessCloses);
+            Assert.True(world.Pipeline.SessionOpen);
+            Assert.Contains(world.Logged, line => line.Contains("FICT the tool service could not be read"));
+            Assert.DoesNotContain(world.Logged, line => line.Contains("0FAKEtoken"));
+        }
+    }
+
+    /// <summary>
     /// Owner decision 159A (004 T277 - a guard and the record of a known defect; research R22): with backend A gone there is
     /// nothing to close the old run through, and the restart is what brings a backend back, so it is not held: B comes into
     /// force. The old run's close is then refused by B before it reaches the bridge, the plan refused retryably and nothing

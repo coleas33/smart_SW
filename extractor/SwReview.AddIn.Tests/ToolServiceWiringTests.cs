@@ -3969,6 +3969,10 @@ public sealed class ToolServiceWiringTests
         {
             world.PlanOnTheSeat();
 
+            // Owner decision 161A's review (004 T304): a call the gate saw between requests belongs to no request, and is
+            // not the close's - its line's gated set is exactly the routine's own.
+            world.App.RunOnApplicationThread(() => world.RemodelGate.Call("GetTitle", () => 0));
+
             if (thread == "inline")
             {
                 world.App.RunOnApplicationThread(() => world.Host.EndRemodelSessionOf(world.RunDirectory));
@@ -3992,8 +3996,10 @@ public sealed class ToolServiceWiringTests
                 "remodel close in process thread=" + thread + " reason=remodel.close verified=true tag_removed=true copy_closed=true ",
                 line,
                 StringComparison.Ordinal);
-            Assert.Contains(" gated=ICustomPropertyManager.Delete2,ISldWorks.CloseDoc,GetOpenDocumentByName", line, StringComparison.Ordinal);
-            Assert.Contains(" target=" + world.CopyPath, line, StringComparison.Ordinal);
+            Assert.Contains(
+                " gated=ICustomPropertyManager.Delete2,ISldWorks.CloseDoc,GetOpenDocumentByName target=" + world.CopyPath,
+                line,
+                StringComparison.Ordinal);
             Assert.DoesNotContain(world.Host.RemodelSecret, LiveFile.ReadAllText(world.Host.LogPath), StringComparison.Ordinal);
             string remodelLog = File.ReadAllText(Path.Combine(world.RunDirectory, RemodelRunLog.FileName));
             Assert.Equal(1, Occurrences(remodelLog, line));
@@ -4082,7 +4088,11 @@ public sealed class ToolServiceWiringTests
             {
                 ((IAppThreadInvoker)world.App).Post(() => release.Wait());
 
+                // Owner decision 161A's review (004 T304): the wait is the teardown's bound (300 ms here), not the request
+                // bound (30 s in this world), which would hold the restart's lock a hundred times as long.
+                var waited = System.Diagnostics.Stopwatch.StartNew();
                 Assert.Throws<TimeoutException>(() => world.Host.EndRemodelSessionOf(folder));
+                Assert.True(waited.Elapsed < TimeSpan.FromSeconds(10), "the close waited " + waited.Elapsed + ", not the teardown's bound");
                 Assert.Empty(world.Told);
                 Assert.Empty(world.Seat.Closed);
                 if (named == "the service stopped meanwhile")
@@ -4355,6 +4365,7 @@ public sealed class ToolServiceWiringTests
                 options,
                 (attachOptions, recorder, captureDirectory, remodelGate) =>
                 {
+                    RemodelGate = remodelGate;
                     var views = new InteropRecorder<ICaptureView>(typeof(IMeasureSource), typeof(IInterferenceSource));
                     var services = new BridgeServices(
                         views.Instance,
@@ -4377,6 +4388,12 @@ public sealed class ToolServiceWiringTests
         public FakeAppThread App { get; } = new FakeAppThread();
 
         public ToolServiceHost Host { get; }
+
+        /// <summary>
+        /// The remodel gate the host built and handed the attach (owner decision 161A's review): a case calls through it
+        /// between requests, as Show in SOLIDWORKS calls a gate, to see what a line's gated set is drained of.
+        /// </summary>
+        public SwGate RemodelGate { get; private set; } = null!;
 
         public string RunDirectory { get; }
 
