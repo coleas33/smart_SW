@@ -7106,6 +7106,217 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 162A, test first (004 T296; research R23): the real bridge tells the host a session ended
+    /// (<c>RemodelHost.SessionEnded</c>, reason <c>remodel.close</c>) before Discard's close comes back, so before the copy
+    /// is marked discarded. A waiting plan the engineer discarded was then told lost in the re-attach words - SOLIDWORKS
+    /// switching documents, which did not happen. Now a plan the engineer discards is told nothing: the Discard answer is
+    /// the word, and a discarded copy is no plan on screen. So whether the bridge tells the end inside the close
+    /// ("inside"), after a close not answered ("late"), or inside a close whose folder then cannot be deleted ("inside,
+    /// not deleted"), and for a waiting plan with Start on or off. Guards: a finished run's discard tells nothing, and a
+    /// teardown's end during the discard ("teardown") is no close's and keeps the re-attach words. Added on review (004
+    /// T299; research R23.7, Opus): "late, not deleted", a close not answered and a folder held open, so the copy is not
+    /// marked discarded and only the close's cause keeps the late end from reading as a re-attach.
+    /// </summary>
+    [Theory]
+    [InlineData("waiting", "inside")]
+    [InlineData("waiting, Start off", "inside")]
+    [InlineData("waiting", "inside, not deleted")]
+    [InlineData("waiting, Start off", "inside, not deleted")]
+    [InlineData("waiting", "late")]
+    [InlineData("waiting", "late, not deleted")]
+    [InlineData("finished", "inside")]
+    [InlineData("waiting", "teardown")]
+    public void APlanTheEngineerDiscardsIsNotToldLostWhenTheBridgeTellsTheEndOfItsClose(string leftover, string when)
+    {
+        using (var world = new RemodelWorld { StartValidated = leftover != "waiting, Start off" })
+        {
+            world.Open();
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, leftover);
+            RemodelRun run = world.Host.LatestRun!;
+            var ended = new RemodelSessionEnd(
+                when == "teardown" ? RemodelSessionEnd.ReasonToolServiceStopped : RemodelSessionEnd.ReasonClose,
+                run.RunDirectory, run.CopyPath,
+                verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                settingsOutstanding: new string[0], failures: new string[0]);
+            if (when.StartsWith("late", StringComparison.Ordinal))
+            {
+                world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+            }
+            else
+            {
+                world.Pipeline.DuringClose = () => world.Host.SessionEnded(ended);
+            }
+
+            int closes = world.Pipeline.Closed.Count;
+            if (when.EndsWith("not deleted", StringComparison.Ordinal))
+            {
+                using (new FileStream(run.CopyPath, FileMode.Open, FileAccess.Read, FileShare.None))
+                {
+                    world.Receive("remodel.discard_copy", "d1", new { run_dir = first });
+                }
+
+                Assert.Equal("DiscardFailed", world.ErrorClass("d1"));
+                Assert.False(run.CopyDiscarded);
+            }
+            else
+            {
+                world.Receive("remodel.discard_copy", "d1", new { run_dir = first });
+                world.Reply("ok", "d1");
+                Assert.True(run.CopyDiscarded);
+            }
+
+            world.Pipeline.DuringClose = null;
+            if (when.StartsWith("late", StringComparison.Ordinal))
+            {
+                world.Host.SessionEnded(ended);
+            }
+
+            Assert.Equal(new[] { first }, world.Pipeline.Closed.Skip(closes));
+            Assert.True(run.SessionEnded);
+            JsonElement[] notices = world.AllPosted("remodel.plan_lost");
+            if (when == "teardown")
+            {
+                JsonElement notice = Assert.Single(notices);
+                Assert.Equal(first, notice.GetProperty("run_dir").GetString());
+                Assert.Equal(RemodelHost.PlanLostMessage, notice.GetProperty("message").GetString());
+            }
+            else
+            {
+                Assert.Empty(notices);
+            }
+
+            world.Receive("ready", "r2", new { });
+            Assert.Equal(
+                JsonValueKind.Null,
+                world.Reply("init", "r2").GetProperty("latest_run").GetProperty("plan_lost").ValueKind);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 162A, test first (004 T299; research R23.7, Codex's review): Discard takes neither the restart's lock
+    /// nor the host, so it can close a waiting plan's session after a run-root change has read that the plan holds it and
+    /// before the change's own close goes. The bridge tells the end of Discard's close inside it, and the folder, held
+    /// open, is not deleted. The change's close then finds no session and is answered; it marked the plan closed for the
+    /// run root over the Discard's end, and told it lost in the run-root words. A plan the engineer discards is told nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("waiting")]
+    [InlineData("waiting, Start off")]
+    public void ADiscardThatEndsAPlanUnderARunRootChangesCloseIsNotToldLost(string leftover)
+    {
+        using (var world = new RemodelWorld { StartValidated = leftover != "waiting, Start off" })
+        using (var restart = new RunRootRestart(world))
+        {
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, leftover);
+            RemodelRun run = world.Host.LatestRun!;
+            var ended = new RemodelSessionEnd(
+                RemodelSessionEnd.ReasonClose, run.RunDirectory, run.CopyPath,
+                verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                settingsOutstanding: new string[0], failures: new string[0]);
+            int closes = world.Pipeline.Closed.Count;
+            bool discardPressed = false;
+            world.Pipeline.DuringClose = () =>
+            {
+                if (discardPressed)
+                {
+                    // Discard's own close: the bridge tells its end before it answers.
+                    world.Host.SessionEnded(ended);
+                    return;
+                }
+
+                // The change's close, on its way: Discard is pressed and closes the session first.
+                discardPressed = true;
+                world.Receive("remodel.discard_copy", "d1", new { run_dir = first });
+            };
+
+            using (new FileStream(run.CopyPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                restart.Save("save", restart.NewRoot);
+            }
+
+            world.Pipeline.DuringClose = null;
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal("DiscardFailed", world.ErrorClass("d1"));
+            Assert.False(run.CopyDiscarded);
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed.Skip(closes));
+            Assert.False(world.Pipeline.SessionOpen);
+            Assert.False(run.ClosedForRunRoot);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            world.Receive("ready", "r2", new { });
+            Assert.Equal(
+                JsonValueKind.Null,
+                world.Reply("init", "r2").GetProperty("latest_run").GetProperty("plan_lost").ValueKind);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 162A (004 T299; research R23.7, Opus's note): the precedence of the two closes the host sends for a
+    /// reason - a run-root change's and the engineer's Discard - when neither was answered, the folder held open so the copy
+    /// is not marked discarded. The engineer's Discard outranks the run root's close whichever went first: a plan the
+    /// engineer discards is told nothing. "discard, then run root" (test first): the change's later close, answered with
+    /// the end told inside it, was read as the run root's and the plan told lost in its words. "run root, then discard"
+    /// (a guard, pinning the precedence): the end told late, after both, is the Discard's.
+    /// </summary>
+    [Theory]
+    [InlineData("discard, then run root")]
+    [InlineData("run root, then discard")]
+    public void ADiscardPressedAroundARunRootChangesCloseOutranksIt(string order)
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, "waiting");
+            RemodelRun run = world.Host.LatestRun!;
+            var ended = new RemodelSessionEnd(
+                RemodelSessionEnd.ReasonClose, run.RunDirectory, run.CopyPath,
+                verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                settingsOutstanding: new string[0], failures: new string[0]);
+            var notAnswered = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+            world.Pipeline.CloseFailure = notAnswered;
+            if (order == "run root, then discard")
+            {
+                restart.Save("save", restart.NewRoot);
+                restart.Reply("settings.saved", "save");
+                Assert.Equal(CleanupPromise, restart.LastStatus());
+            }
+
+            using (new FileStream(run.CopyPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                world.Receive("remodel.discard_copy", "d1", new { run_dir = first });
+            }
+
+            Assert.Equal("DiscardFailed", world.ErrorClass("d1"));
+            Assert.False(run.CopyDiscarded);
+            Assert.True(world.Pipeline.SessionOpen);
+            if (order == "discard, then run root")
+            {
+                world.Pipeline.CloseFailure = null;
+                world.Pipeline.DuringClose = () => world.Host.SessionEnded(ended);
+                restart.Save("save", restart.NewRoot);
+                world.Pipeline.DuringClose = null;
+                restart.Reply("settings.saved", "save");
+                Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            }
+            else
+            {
+                world.Host.SessionEnded(ended);
+            }
+
+            Assert.True(run.SessionEnded);
+            Assert.False(run.ClosedForRunRoot);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            world.Receive("ready", "r2", new { });
+            Assert.Equal(
+                JsonValueKind.Null,
+                world.Reply("init", "r2").GetProperty("latest_run").GetProperty("plan_lost").ValueKind);
+        }
+    }
+
+    /// <summary>
     /// Owner decision 159A (004 T277 - guards; research R22): what holds a restart back is asked first, and the close only
     /// once nothing does - a turn running, or a remodel run in progress, holds it with no close sent - and a restart that
     /// keeps the run root sends none at all, the session under it left for planning again, as before.
