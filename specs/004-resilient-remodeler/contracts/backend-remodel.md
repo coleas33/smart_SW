@@ -36,6 +36,14 @@ it, and waits while that close is not answered (`pane-remodel-messages.md`, `Rem
 `TestClose.test_a_close_outside_the_run_root_is_refused_before_the_bridge` pins the close route's own
 refusal.
 
+*Amended 2026-10-27 (owner decision 161A; `research.md` R24); no route changes:* when the backend
+serving the run root in force has exited, the add-in closes those sessions in process instead, through
+the bridge's end-of-session routine (`bridge-remodel.md`), with no backend between. Such a close does
+not re-check the source attestation, as `POST /remodel/close` does (U26): the check is a hash compare
+filed in the run folder, not a condition of the close, and a run closed so keeps its attestation
+unchecked, as one ended by a re-attach's or an unload's teardown always has (R24 says why that is
+acceptable). Still no route accepts a folder outside its run root.
+
 ## Routes
 
 | Route | Body | Does | Reply |

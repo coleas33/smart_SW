@@ -505,6 +505,10 @@ public class SwReviewAddIn : ISwAddin
             // with no Remodel host there is nothing to close.
             EndRemodelSessionsLeftUnder = runRoot => _remodelHost?.EndTheSessionsLeftUnder(runRoot) != false,
 
+            // Owner decision 161A (004 research R24): with that backend gone, the Remodel host closes what it left there in
+            // process instead, through the tool service; read through the field, and with no Remodel host there is nothing.
+            EndRemodelSessionsInProcessLeftUnder = runRoot => _remodelHost?.EndTheSessionsLeftUnderInProcess(runRoot),
+
             // Owner decision 159A (004 research R22.12): whether the Remodel host still holds a session under the run root in
             // force, read, closing nothing, so a restart's refusals say what holds it now; with no Remodel host, none.
             RemodelSessionLeftUnder = runRoot => _remodelHost?.HoldsASessionLeftUnder(runRoot) == true,
@@ -947,6 +951,11 @@ public class SwReviewAddIn : ISwAddin
             // refused as while the tool service attaches. One kind for both (owner decision 158A):
             // the host takes its one hold for a plan or a run alike.
             HoldToolService = () => _toolService?.HoldAttachment(ToolServiceHolder.Remodel),
+
+            // Owner decision 161A (004 research R24): a session left under the run root a restart moves, closed in process when
+            // the review backend that would close it has exited - through the gate, read through the field per call, on the
+            // service of the attachment the session was made on and no other.
+            EndRemodelSessionInProcess = (attachment, runDirectory) => EndRemodelSessionInProcess(_toolService, attachment, runDirectory),
             Pipeline = new BackendRemodelPipeline(
                 endpoint,
                 () => _toolService?.RemodelBridge,
@@ -1093,6 +1102,24 @@ public class SwReviewAddIn : ISwAddin
 
         gate.BindRemodelRun(runDirectory);
         return true;
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): the Remodel host's in-process close of one run's session before a run-root
+    /// change, with the review backend gone, on <paramref name="gate"/>: the gate's
+    /// <see cref="ToolServiceGate.EndRemodelSessionOf"/>, on the service of <paramref name="attachment"/> only. With no gate
+    /// there is no bridge to end a session on: it throws, so the host reads the close as not answered and the leftover
+    /// stays as it was. What the gate throws is thrown on. Static so it can be tested without a SOLIDWORKS session.
+    /// </summary>
+    internal static void EndRemodelSessionInProcess(ToolServiceGate? gate, string attachment, string runDirectory)
+    {
+        if (gate == null)
+        {
+            throw new InvalidOperationException(
+                "the add-in has no SwReview tool service yet, so there is no bridge to end a remodel session on.");
+        }
+
+        gate.EndRemodelSessionOf(attachment, runDirectory);
     }
 
     private void OnRemodelPageMessage(object sender, string json)

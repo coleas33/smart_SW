@@ -3951,6 +3951,211 @@ public sealed class ToolServiceWiringTests
         }
     }
 
+    // ---- owner decision 161A: one run's session, ended in process --------------------------------
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): with the review backend gone, the add-in ends one run's
+    /// session through the tool service - on the application thread, posted and waited for from another, inline on it - by
+    /// the routine <c>remodel.close</c> runs: the copy closed unsaved and kept, the host told, one line in this service's
+    /// log and in the run's <c>remodel.log</c> with the routine's own gated set and target and no secret. The pipe still
+    /// listens, and the teardown after it has nothing left to end.
+    /// </summary>
+    [Theory]
+    [InlineData("posted")]
+    [InlineData("inline")]
+    public void EndingOneRunsSessionInProcessRunsTheCloseRoutineOnTheApplicationThreadAndWritesItDown(string thread)
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+
+            // Owner decision 161A's review (004 T304): a call the gate saw between requests belongs to no request, and is
+            // not the close's - its line's gated set is exactly the routine's own.
+            world.App.RunOnApplicationThread(() => world.RemodelGate.Call("GetTitle", () => 0));
+
+            if (thread == "inline")
+            {
+                world.App.RunOnApplicationThread(() => world.Host.EndRemodelSessionOf(world.RunDirectory));
+            }
+            else
+            {
+                world.Host.EndRemodelSessionOf(world.RunDirectory);
+            }
+
+            SeatedHostWorld.Ending ending = Assert.Single(world.Told);
+            Assert.Equal(RemodelSessionEnd.ReasonClose, ending.Outcome.Reason);
+            Assert.True(ending.Outcome.Succeeded);
+            Assert.Equal(world.App.ThreadId, ending.ThreadId);
+            Assert.False(ending.PipeHadStopped, "the in-process close ran after the pipe server was disposed");
+            Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            Assert.DoesNotContain(nameof(RemodelFakes.FakeRemodelDocument.Save), world.Copy.Members);
+            Assert.True(File.Exists(world.CopyPath));
+
+            string line = Assert.Single(world.LogLines, logged => logged.Contains("remodel close in process"));
+            Assert.Contains(
+                "remodel close in process thread=" + thread + " reason=remodel.close verified=true tag_removed=true copy_closed=true ",
+                line,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                " gated=ICustomPropertyManager.Delete2,ISldWorks.CloseDoc,GetOpenDocumentByName target=" + world.CopyPath,
+                line,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(world.Host.RemodelSecret, LiveFile.ReadAllText(world.Host.LogPath), StringComparison.Ordinal);
+            string remodelLog = File.ReadAllText(Path.Combine(world.RunDirectory, RemodelRunLog.FileName));
+            Assert.Equal(1, Occurrences(remodelLog, line));
+            Assert.False(world.PipeStopped, "the in-process close stopped the pipe");
+
+            world.Host.Dispose();
+            Assert.Single(world.Told);
+            Assert.Contains(world.LogLines, logged => logged.EndsWith("reason=tool_service_stopped session=none", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): a folder that is not the open run's - one of the same name
+    /// under another run root, which the bridge's <c>run_id</c> alone would take, or another run's - ends nothing: nobody is
+    /// told, nothing is closed, the line says so, and the session stays for the run's own teardown.
+    /// </summary>
+    [Theory]
+    [InlineData("the same name under another run root")]
+    [InlineData("another run")]
+    public void AnInProcessCloseOfAnotherRunsFolderEndsNothing(string other)
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+            string folder = other == "another run"
+                ? Path.Combine(Path.GetDirectoryName(world.RunDirectory)!, "20260927-100100-bracket-remodel")
+                : Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(world.RunDirectory)!)!, "moved", world.RunId);
+
+            world.Host.EndRemodelSessionOf(folder);
+
+            Assert.Empty(world.Told);
+            Assert.Empty(world.Seat.Closed);
+            Assert.Contains(
+                world.LogLines,
+                logged => logged.Contains("remodel close in process thread=posted run=" + Path.GetFileName(folder) + " nothing closed"));
+
+            world.Host.Dispose();
+            Assert.Equal(RemodelSessionEnd.ReasonToolServiceStopped, Assert.Single(world.Told).Outcome.Reason);
+            Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): an in-process close that cannot be asked throws, so the
+    /// Remodel tab reads it as not answered and leaves the leftover as it was: an application thread that cannot be reached,
+    /// and a service that has stopped, whose own teardown ended its session.
+    /// </summary>
+    [Fact]
+    public void AnInProcessCloseThatCannotBeAskedThrows()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+            world.App.CanInvokeValue = false;
+            Assert.Throws<InvalidOperationException>(() => world.Host.EndRemodelSessionOf(world.RunDirectory));
+            Assert.Empty(world.Told);
+            Assert.Empty(world.Seat.Closed);
+
+            world.App.CanInvokeValue = true;
+            world.Host.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => world.Host.EndRemodelSessionOf(world.RunDirectory));
+            Assert.Equal(RemodelSessionEnd.ReasonToolServiceStopped, Assert.Single(world.Told).Outcome.Reason);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): an in-process close the application thread does not answer
+    /// in time throws a timeout, and still runs when the thread is free - checking the run again then: it ends the run's own
+    /// session, and ends nothing when the folder it names is a run of the same name under another run root. *Added with the
+    /// fix (004 T301), a guard:* nor when the service has stopped meanwhile - its teardown, posted behind it, ends the session.
+    /// </summary>
+    [Theory]
+    [InlineData("the run's own")]
+    [InlineData("the same name under another run root")]
+    [InlineData("the service stopped meanwhile")]
+    public void AnInProcessCloseNotAnsweredInTimeThrowsAndChecksTheRunAgainWhenItRuns(string named)
+    {
+        using (var release = new ManualResetEventSlim(false))
+        using (var world = new SeatedHostWorld(TimeSpan.FromMilliseconds(300)))
+        {
+            world.PlanOnTheSeat();
+            string folder = named == "the same name under another run root"
+                ? Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(world.RunDirectory)!)!, "moved", world.RunId)
+                : world.RunDirectory;
+            try
+            {
+                ((IAppThreadInvoker)world.App).Post(() => release.Wait());
+
+                // Owner decision 161A's review (004 T304): the wait is the teardown's bound (300 ms here), not the request
+                // bound (30 s in this world), which would hold the restart's lock a hundred times as long.
+                var waited = System.Diagnostics.Stopwatch.StartNew();
+                Assert.Throws<TimeoutException>(() => world.Host.EndRemodelSessionOf(folder));
+                Assert.True(waited.Elapsed < TimeSpan.FromSeconds(10), "the close waited " + waited.Elapsed + ", not the teardown's bound");
+                Assert.Empty(world.Told);
+                Assert.Empty(world.Seat.Closed);
+                if (named == "the service stopped meanwhile")
+                {
+                    world.Host.Dispose();
+                }
+            }
+            finally
+            {
+                release.Set();
+            }
+
+            // Queued behind the abandoned close, and the teardown if any: back only once they have run.
+            world.App.RunOnApplicationThread(() => { });
+
+            if (named == "the run's own")
+            {
+                Assert.Equal(RemodelSessionEnd.ReasonClose, Assert.Single(world.Told).Outcome.Reason);
+                Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            }
+            else if (named == "the service stopped meanwhile")
+            {
+                Assert.Equal(RemodelSessionEnd.ReasonToolServiceStopped, Assert.Single(world.Told).Outcome.Reason);
+                Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            }
+            else
+            {
+                Assert.Empty(world.Told);
+                Assert.Empty(world.Seat.Closed);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): the gate ends a run's session in process on the service of the
+    /// attachment named only - none listening, another listening now and a disposed gate each throw and reach no service - and
+    /// what the service throws reaches the caller unchanged.
+    /// </summary>
+    [Fact]
+    public void TheGateEndsARunsSessionInProcessOnlyOnTheAttachmentNamed()
+    {
+        const string run = @"C:\FICT\runs\20260927-100000-bracket-remodel";
+        var world = new GateWorld { DocumentPath = @"C:\models\bracket.sldprt" };
+        ToolServiceGate gate = world.Gate();
+
+        Assert.Throws<InvalidOperationException>(() => gate.EndRemodelSessionOf("swreview-fake-1", run));
+
+        gate.EnsureStarted();
+        FakeToolService service = world.Services.Single();
+        gate.EndRemodelSessionOf(service.PipeName, run);
+        Assert.Equal(new[] { run }, service.EndedInProcess);
+
+        Assert.Throws<InvalidOperationException>(() => gate.EndRemodelSessionOf("swreview-fake-2", run));
+        Assert.Single(service.EndedInProcess);
+
+        service.EndInProcessFailure = new TimeoutException("the application thread did not answer");
+        Assert.Throws<TimeoutException>(() => gate.EndRemodelSessionOf(service.PipeName, run));
+
+        gate.Dispose();
+        Assert.Throws<InvalidOperationException>(() => gate.EndRemodelSessionOf(service.PipeName, run));
+        Assert.Equal(2, service.EndedInProcess.Count);
+    }
+
     // ---- the run folder is bound per run (004 T158's bind) --------------------------------------
 
     [Fact]
@@ -4160,6 +4365,7 @@ public sealed class ToolServiceWiringTests
                 options,
                 (attachOptions, recorder, captureDirectory, remodelGate) =>
                 {
+                    RemodelGate = remodelGate;
                     var views = new InteropRecorder<ICaptureView>(typeof(IMeasureSource), typeof(IInterferenceSource));
                     var services = new BridgeServices(
                         views.Instance,
@@ -4182,6 +4388,12 @@ public sealed class ToolServiceWiringTests
         public FakeAppThread App { get; } = new FakeAppThread();
 
         public ToolServiceHost Host { get; }
+
+        /// <summary>
+        /// The remodel gate the host built and handed the attach (owner decision 161A's review): a case calls through it
+        /// between requests, as Show in SOLIDWORKS calls a gate, to see what a line's gated set is drained of.
+        /// </summary>
+        public SwGate RemodelGate { get; private set; } = null!;
 
         public string RunDirectory { get; }
 

@@ -331,6 +331,16 @@ public sealed class ReviewHostOptions
     public Func<string, bool> EndRemodelSessionsLeftUnder { get; set; } = _ => true;
 
     /// <summary>
+    /// Owner decision 161A (004 research R24): with no backend up to close through - the one in force has exited - ends, in
+    /// process, every remodel session the Remodel tab left on the bridge under the run root that is leaving, given it,
+    /// before a restart that moves the run root starts the next backend. Asked under the restart's own lock, once no work
+    /// holds the restart, and only then. Whatever it does or throws, the restart goes on: holding it would leave no backend
+    /// at all, and a session it could not close stays as it was, until a re-attach or an unload ends it. Nothing when the
+    /// caller has no Remodel tab.
+    /// </summary>
+    public Action<string> EndRemodelSessionsInProcessLeftUnder { get; set; } = _ => { };
+
+    /// <summary>
     /// Owner decision 159A (004 research R22.12): whether the Remodel tab still holds a session on the bridge, on the
     /// attachment listening now, under the run root given - what <see cref="EndRemodelSessionsLeftUnder"/> would close.
     /// Read, never acted on: it closes nothing and asks no backend. False when the caller has no Remodel tab.
@@ -2312,14 +2322,21 @@ public sealed class ReviewHost : IDisposable
     /// would wait anyway sends nothing. A close not answered, or a Remodel tab that throws, throws
     /// <see cref="RemodelCleanupPendingException"/>: nothing is stopped, the saved settings stay saved and the run root in
     /// force stays in force, and the restart waits for the next caller to ask again. Nothing is asked of a restart that keeps
-    /// the run root, nor with no backend up: there is none to close through, and the restart is what brings one back - that
-    /// session is the known defect R22 records, which a re-attach ends.
+    /// the run root. With no backend up there is none to close through, and the restart is what brings one back: since owner
+    /// decision 161A (004 research R24) those sessions are closed in process instead
+    /// (<see cref="EndTheRemodelSessionsInProcess"/>), and the restart goes on whatever that does.
     /// </summary>
     private void EndTheRemodelSessionsTheRunRootLeaves(UserSettings settings)
     {
         string leaving = _inForce.RunRoot;
-        if (RunRootRule.SameRunRoot(settings.RunRoot, leaving) || _options.Backend.Endpoint == null)
+        if (RunRootRule.SameRunRoot(settings.RunRoot, leaving))
         {
+            return;
+        }
+
+        if (_options.Backend.Endpoint == null)
+        {
+            EndTheRemodelSessionsInProcess(leaving);
             return;
         }
 
@@ -2342,6 +2359,26 @@ public sealed class ReviewHost : IDisposable
         if (!answered)
         {
             throw new RemodelCleanupPendingException();
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): with the backend in force gone, the Remodel tab closes in process what it left
+    /// under <paramref name="leaving"/> (<see cref="ReviewHostOptions.EndRemodelSessionsInProcessLeftUnder"/>), under the
+    /// restart's own lock, before the next backend starts. It holds nothing back: holding the restart would leave no backend
+    /// at all. A session it could not close stays as it was, the Remodel tab logging why; a throw is read the same way.
+    /// </summary>
+    private void EndTheRemodelSessionsInProcess(string leaving)
+    {
+        try
+        {
+            _options.EndRemodelSessionsInProcessLeftUnder(leaving);
+        }
+        catch (Exception)
+        {
+            // Not closed: the leftover stays as it was, until a re-attach or an unload ends it, and the restart goes on. The
+            // Remodel host logs its own failures (004 research R24.11); this host keeps no log, so only a delegate that is
+            // not the Remodel host's could throw here unsaid.
         }
     }
 

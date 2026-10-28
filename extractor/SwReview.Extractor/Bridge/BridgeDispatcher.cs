@@ -2419,6 +2419,48 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     }
 
     /// <summary>
+    /// Owner decision 161A (004 research R24): ends the session of exactly the run whose folder is
+    /// <paramref name="runDirectory"/>, through <see cref="EndRemodelSession"/> for
+    /// <see cref="RemodelSessionEnd.ReasonClose"/> - the routine <c>remodel.close</c> runs: verified,
+    /// untagged and closed unsaved, the settings put back, nothing saved and nothing deleted - and
+    /// nothing else. Its one caller is the add-in's tool service, when a settings restart is about to
+    /// move the run root and the review backend that would have sent that close has exited.
+    ///
+    /// The session is that run's only when both hold: the folder's name is the run id the open was
+    /// given, compared exactly, as <see cref="Session(BridgeRequest)"/> compares a command's
+    /// <c>run_id</c>; and the whole folder, canonicalized, is the scope's own - which a <c>run_id</c>
+    /// cannot say, so a run of the same name under another run root is not this one. Otherwise - no
+    /// session, another run's, or a folder that is not a path - it calls nothing, changes nothing, the
+    /// bound run root included, and answers null. On the application thread, like every command.
+    /// </summary>
+    public RemodelSessionEnd? EndRemodelSessionOf(string runDirectory)
+    {
+        RemodelSession? session = _session;
+        if (session == null || string.IsNullOrWhiteSpace(runDirectory))
+        {
+            return null;
+        }
+
+        string folder;
+        try
+        {
+            folder = System.IO.Path.GetFullPath(runDirectory.Trim()).TrimEnd(System.IO.Path.DirectorySeparatorChar);
+        }
+        catch (Exception error) when (RemodelScope.IsPathError(error))
+        {
+            return null;
+        }
+
+        if (!string.Equals(System.IO.Path.GetFileName(folder), session.Scope.RunId, StringComparison.Ordinal)
+            || !string.Equals(folder, session.Scope.RunDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return EndRemodelSession(RemodelSessionEnd.ReasonClose);
+    }
+
+    /// <summary>
     /// 004 T158: binds this run's folder, the one <c>RunFolders.CreateForRemodel</c> made, for the
     /// next <c>remodel.open</c> to take. The host's call, on the application thread, before every
     /// open - never a path from a request.

@@ -174,6 +174,15 @@ public sealed class RemodelHostOptions
     /// the folder the tab's View log opens); nowhere by default, so no test writes into the engineer's log.
     /// </summary>
     public Action<string> Log { get; set; } = _ => { };
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): ends, in process, the session the bridge of the attachment named first
+    /// holds for the run whose folder is named second - the routine `remodel.close` runs, through the tool service - or
+    /// throws when it could not. Asked only by <see cref="RemodelHost.EndTheSessionsLeftUnderInProcess"/>, when the
+    /// review backend that would have sent the close has exited. The add-in answers it through the gate
+    /// (`ToolServiceGate.EndRemodelSessionOf`). Null by default: nothing is closed so, and a leftover stays as before.
+    /// </summary>
+    public Action<string, string>? EndRemodelSessionInProcess { get; set; }
 }
 
 /// <summary>
@@ -2021,7 +2030,16 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     /// <param name="runRoot">The run root in force, which the restart would move.</param>
     /// <returns>True when nothing under it is left holding a session; false when a close was not answered.</returns>
-    public bool EndTheSessionsLeftUnder(string runRoot)
+    public bool EndTheSessionsLeftUnder(string runRoot) =>
+        EndTheSessionsLeftUnder(runRoot, (pipeline, attachment, runDirectory) => ClosedBeforeTheRunRootMoves(pipeline, runDirectory));
+
+    /// <summary>
+    /// The one walk over what this host left under <paramref name="runRoot"/>, for <see cref="EndTheSessionsLeftUnder"/>,
+    /// through the backend in force, and since owner decision 161A for <see cref="EndTheSessionsLeftUnderInProcess"/>,
+    /// with that backend gone: each leftover closed by <paramref name="close"/> - given the pipeline, the attachment
+    /// listening now and the run folder - which answers whether it was answered.
+    /// </summary>
+    private bool EndTheSessionsLeftUnder(string runRoot, Func<IRemodelPipeline, string, string, bool> close)
     {
         IRemodelPipeline? pipeline = _options.Pipeline;
         if (pipeline == null)
@@ -2037,11 +2055,12 @@ public sealed class RemodelHost : IDisposable
 
         try
         {
+            // Never null where a close is made: a leftover is one only on the attachment listening now (SameAttachment).
             string? attachment = _options.ToolServiceAttachment();
             Tuple<string, string?>? failed = _failedPlanToClose;
             if (FailedPlanLeftUnder(failed, attachment, runRoot))
             {
-                if (!ClosedBeforeTheRunRootMoves(pipeline, failed!.Item1))
+                if (!close(pipeline, attachment!, failed!.Item1))
                 {
                     return false;
                 }
@@ -2053,7 +2072,7 @@ public sealed class RemodelHost : IDisposable
             if (RunLeftUnder(left, attachment, runRoot))
             {
                 left!.MarkCloseSentFor(RemodelCloseCause.RunRoot);
-                if (!ClosedBeforeTheRunRootMoves(pipeline, left.RunDirectory))
+                if (!close(pipeline, attachment!, left.RunDirectory))
                 {
                     return false;
                 }
@@ -2074,6 +2093,57 @@ public sealed class RemodelHost : IDisposable
             {
                 // The hold's own failure: the closes are made, and the gate's own holds never fail.
             }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): <see cref="EndTheSessionsLeftUnder"/> when the review backend that would
+    /// send its closes has exited. The same leftovers, under <paramref name="runRoot"/>, on the attachment listening now,
+    /// with the tool service held, are each closed in process instead
+    /// (<see cref="RemodelHostOptions.EndRemodelSessionInProcess"/>): the routine `remodel.close` runs, on that attachment's
+    /// bridge, for that exact run. A close answered ends the leftover as there; one not answered - the option unset, or
+    /// a throw - leaves it as it was, its failure in the log, and answers false. The review host goes on with the restart
+    /// whatever this answers: with no backend up, the restart is what brings one back.
+    /// </summary>
+    /// <param name="runRoot">The run root in force, which the restart would move.</param>
+    /// <returns>True when nothing under it is left holding a session; false when a close was not answered.</returns>
+    public bool EndTheSessionsLeftUnderInProcess(string runRoot)
+    {
+        try
+        {
+            return EndTheSessionsLeftUnder(runRoot, (pipeline, attachment, runDirectory) => ClosedInProcess(attachment, runDirectory));
+        }
+        catch (Exception failure)
+        {
+            // 004 research R24.11: the walk's own failure - the hold, the attachment - is said here, since the review host,
+            // which goes on with the restart whatever this does, keeps no log of its own.
+            Log("a restart that moves the run root with the review backend gone, the walk before the closes in process", failure);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): one close of <see cref="EndTheSessionsLeftUnderInProcess"/>'s, on the bridge of
+    /// <paramref name="attachment"/>: whether it was answered - that run's session ended, or none of that run there - its
+    /// failure in the log when not. With no in-process close given, nothing is closed, and it is not answered.
+    /// </summary>
+    private bool ClosedInProcess(string attachment, string runDirectory)
+    {
+        Action<string, string>? end = _options.EndRemodelSessionInProcess;
+        if (end == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            end(attachment, runDirectory);
+            return true;
+        }
+        catch (Exception failure)
+        {
+            Log("a restart that moves the run root with the review backend gone, the earlier copy's close in process", failure);
+            return false;
         }
     }
 

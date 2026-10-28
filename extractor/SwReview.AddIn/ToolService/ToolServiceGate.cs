@@ -60,6 +60,17 @@ public interface IToolService : IDisposable
     /// </summary>
     void BindRemodelRun(string runDirectory);
 
+    /// <summary>
+    /// Owner decision 161A (004 research R24): ends, on the application thread with a bounded wait, the
+    /// remodel session this service's bridge holds for exactly the run whose folder is
+    /// <paramref name="runDirectory"/>, through the routine <c>remodel.close</c> runs, unsaved and deleting
+    /// nothing - when a settings restart is about to move the run root and the review backend that would
+    /// have sent that close has exited. A bridge holding no session of that run - none at all, or another
+    /// run's, which it leaves as it was - ends nothing. Throws when it could not be asked: the service has
+    /// stopped, or the application thread cannot be reached or does not answer in time.
+    /// </summary>
+    void EndRemodelSessionOf(string runDirectory);
+
     /// <summary>The attached scope, so <c>entity.show</c> resolves against the same one.</summary>
     ISwSession Session { get; }
 
@@ -623,6 +634,27 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         IToolService service = Service ?? throw new InvalidOperationException(
             "no SwReview tool service is listening, so there is no bridge to bind the run folder on.");
         service.BindRemodelRun(runDirectory);
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): ends, in process, the remodel session the service of
+    /// <paramref name="attachment"/> holds for the run whose folder is <paramref name="runDirectory"/>
+    /// (<see cref="IToolService.EndRemodelSessionOf"/>) - on that service only: the attachment a session
+    /// was made on names its one bridge, so with none listening, or another listening now, it throws and
+    /// closes nothing, as a replacement attachment's bridge never holds that session. Whatever the service
+    /// throws passes through unchanged.
+    /// </summary>
+    public void EndRemodelSessionOf(string attachment, string runDirectory)
+    {
+        IToolService? service = Service;
+        if (service == null || !string.Equals(service.PipeName, attachment, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "the SwReview tool service listening now is not the attachment that holds that run's session, so nothing is "
+                + "closed through it.");
+        }
+
+        service.EndRemodelSessionOf(runDirectory);
     }
 
     /// <summary>

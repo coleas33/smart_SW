@@ -111,6 +111,18 @@ under the new one is planned while that close is unanswered. No new entry into t
 routine is added: a session whose backend has exited is still ended only by a re-attach's or an
 unload's teardown, which R22 records as a known defect before Start.
 
+*Amended 2026-10-27 (owner decision 161A; `research.md` R24); the protocol is unchanged:* one entry
+into the end-of-session routine is added, in process and in no command:
+`SwBridgeDispatcher.EndRemodelSessionOf(runDirectory)`, the tool service's only, for a settings
+restart that would move the run root after the backend serving the run root in force has exited. It
+ends the session only when it is that run's by the check a command's `run_id` gets - the folder's
+name equal to the run id the open was given, exactly - and by one `run_id` cannot make: the whole
+folder, canonicalized, is the scope's own, so a run of the same name under another run root is not
+this one. It then runs `EndRemodelSession(remodel.close)`, as `remodel.close` with `discard_copy:
+false` does: verified, untagged and closed unsaved, the settings put back, nothing deleted, the host
+told. Otherwise it calls nothing and changes nothing, the bound run root included. No command, secret,
+guard key or allowlist entry is added, and no path reaches the bridge from a request.
+
 | Command | Params | Result on `ok` |
 |---------|--------|----------------|
 | `remodel.probe_scope` | `{source_path}` | `{probe_id, source_path, scope_signals}` |
@@ -688,7 +700,9 @@ revise; research R13.1):* the teardown ends it ("Ending a session", next).
 
 *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167; the routine and
 its hosting landed 2026-09-27, lane D).* A session ends in one routine, `SwBridgeDispatcher.EndRemodelSession(reason)`, whatever
-ends it: `remodel.close`, a tool-service re-attach, or an add-in unload.
+ends it: `remodel.close`, a tool-service re-attach, or an add-in unload. *Amended 2026-10-27 (owner
+decision 161A; `research.md` R24):* and the tool service's in-process close of one run's session before
+a run-root change with the backend gone (`EndRemodelSessionOf`, above), for the reason `remodel.close`.
 
 1. `VerifyTarget` (`guard-allowlist.md`).
 2. When it passes, remove the session tag (`ICustomPropertyManager.Delete2`) and close the copy

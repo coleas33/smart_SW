@@ -1006,6 +1006,76 @@ public sealed class ToolServiceHost : IToolService
     }
 
     /// <summary>
+    /// Owner decision 161A (004 research R24): ends the remodel session this service's bridge holds for
+    /// exactly the run whose folder is <paramref name="runDirectory"/>, through the routine
+    /// <c>remodel.close</c> runs (<see cref="SwBridgeDispatcher.EndRemodelSessionOf"/>), when a settings
+    /// restart is about to move the run root and the review backend that would have sent that close has
+    /// exited. On the application thread, where the dispatcher lives: inline when called from it, otherwise
+    /// posted and waited for within <see cref="ToolServiceOptions.TeardownTimeout"/>, the bound the same
+    /// routine gets at a teardown. One line goes to this service's log and, when a session was ended, to
+    /// the run's <c>remodel.log</c>, its gated set the routine's own, as a teardown's does; the add-in hears
+    /// the outcome through <see cref="ToolServiceOptions.RemodelSessionEnded"/>. Everything is checked again
+    /// on the application thread, when the call runs - this service not stopped, and the session that
+    /// run's - so a call whose wait was given up, and that runs later, ends nothing else. Throws after
+    /// <see cref="Dispose"/>, whose teardown ends whatever session there was, and when the application thread
+    /// cannot be reached or does not answer in time.
+    /// </summary>
+    public void EndRemodelSessionOf(string runDirectory)
+    {
+        if (runDirectory == null)
+        {
+            throw new ArgumentNullException(nameof(runDirectory));
+        }
+
+        if (_invoker.IsApplicationThread)
+        {
+            EndRemodelSessionOfHere(runDirectory, "inline");
+            return;
+        }
+
+        OnApplicationThread(
+            _invoker,
+            () =>
+            {
+                EndRemodelSessionOfHere(runDirectory, "posted");
+                return true;
+            },
+            _teardownTimeout);
+    }
+
+    /// <summary>
+    /// On the application thread: <see cref="EndRemodelSessionOf"/>'s checks and close, then its one line. A service that
+    /// has stopped - before the call, or while it waited to run - ends nothing here: its own teardown ends whatever session
+    /// it held. The gated set is the close's own, as a teardown's is (<see cref="EndRemodelSession(bool)"/>).
+    /// </summary>
+    private void EndRemodelSessionOfHere(string runDirectory, string thread)
+    {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(
+                nameof(ToolServiceHost), "this tool service has stopped; its own teardown ends whatever remodel session it held.");
+        }
+
+        _recorder.Drain();
+        RemodelSessionEnd? outcome = _dispatcher.EndRemodelSessionOf(runDirectory);
+        SwGateActivity activity = _recorder.Drain();
+
+        string opening = "remodel close in process thread=" + thread;
+        if (outcome == null)
+        {
+            // The folder's last name, read without Path, which throws on a folder that is not a path.
+            string named = runDirectory.TrimEnd('\\', '/');
+            named = named.Substring(named.LastIndexOfAny(new[] { '\\', '/' }) + 1);
+            _log.WriteLine(opening + " run=" + named + " nothing closed: this bridge holds no session of that run");
+            return;
+        }
+
+        string line = SessionEndLine(new DateTimeOffset(_now()), outcome, activity, opening) + System.Environment.NewLine;
+        _log.Write(line);
+        new RemodelRunLog(() => outcome.RunDirectory).Write(line);
+    }
+
+    /// <summary>
     /// The teardown's reach to the application thread. A teardown that cannot be posted, or that
     /// does not answer within <see cref="ToolServiceOptions.TeardownTimeout"/>, is written down;
     /// an abandoned one still runs when the application thread is free, and writes its own line
@@ -1109,7 +1179,16 @@ public sealed class ToolServiceHost : IToolService
     /// differently. Like every line here it carries no secret: nothing it is built from has one.
     /// </summary>
     public static string TeardownLine(
-        DateTimeOffset at, RemodelSessionEnd outcome, SwGateActivity activity, string thread)
+        DateTimeOffset at, RemodelSessionEnd outcome, SwGateActivity activity, string thread) =>
+        SessionEndLine(at, outcome, activity, "remodel teardown thread=" + thread);
+
+    /// <summary>
+    /// A line for one run of the end-of-session routine, after <paramref name="opening"/>: a teardown's
+    /// (<see cref="TeardownLine"/>), or since owner decision 161A an in-process close's
+    /// (<see cref="EndRemodelSessionOf"/>), so the two write the outcome the same way.
+    /// </summary>
+    private static string SessionEndLine(
+        DateTimeOffset at, RemodelSessionEnd outcome, SwGateActivity activity, string opening)
     {
         if (outcome == null)
         {
@@ -1123,7 +1202,7 @@ public sealed class ToolServiceHost : IToolService
 
         var line = new StringBuilder(200);
         line.Append(ToolServiceLog.Stamp(at));
-        line.Append("remodel teardown thread=").Append(thread);
+        line.Append(opening);
 
         if (!outcome.HadSession)
         {

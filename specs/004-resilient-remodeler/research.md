@@ -4085,7 +4085,10 @@ that `SwBridgeDispatcher.RemodelRunDirectory` equals the full canonical folder, 
 
 Whether a new caller of that routine is a new write path is a constitution question. The
 owner should answer it before the hook is built. Start (T172) waits on this defect, beside T180
-and the pilot prerequisites.
+and the pilot prerequisites. *Updated by R24 (owner decision 161A, 2026-10-27):* the owner answered:
+a new caller acting only on the run's own copy, inside the re-modeler exception. The hook is built
+(T300 to T302); each of the four reasons above is met or recorded there (R24.1 to R24.4), and the
+seat timing is T303.
 
 ### R22.5 Tests changed on purpose
 
@@ -4266,6 +4269,9 @@ No SOLIDWORKS process, seat task or paid/live test ran. Only processes this work
 stopped, by id.
 
 ### R22.9 What Start waits on now
+
+*Superseded by R24.10 (owner decision 161A):* the first item is settled in code, its seat timing
+left as T303.
 
 - The old-backend-gone case (R22.4).
 - The old backend alive but not answering, which holds every start until a re-attach or the
@@ -4802,3 +4808,304 @@ Python file, words file or pane fixture changed, so the Python suites are not re
 - **Links and line endings.** The link check found no broken link; every changed file is `i/lf`.
 
 No SOLIDWORKS process, seat task or paid/live test ran.
+
+## R24 The in-process close when the old backend has exited (decision 161A; T300 to T303; 2026-10-27)
+
+Owner decision 161A (2026-10-27), on branch `nativeclose-161a` from main `0f9e990`. When the review
+backend in force has exited before a restart that moves the run root (R22.4), the add-in may close
+the old run's copy itself, through the routine that already closes a run's copy and restores its
+settings. The owner judged this a new caller of that routine, acting only on the run's own copy,
+inside the constitution's re-modeler exception, so no amendment. Its conditions: it reaches the
+exact old session only; it adds no outside-root HTTP exception and no write allowance; and its
+timing on the SOLIDWORKS thread is checked at the pilot workstation (T303). R23 is reserved for
+decision 162A.
+
+### R24.1 The design
+
+The R22.4 sketch is built, narrowed at each layer. Every layer refuses anything but one run's own
+session on one attachment.
+
+- **Where.** `ReviewHost.EndTheRemodelSessionsTheRunRootLeaves`, inside the restart's own action
+  and lock, after the work holds have been read, as R22.2's close is. With the run root kept nothing
+  happens, as before. With a backend up the close goes through it, unchanged. With none
+  (`Backend.Endpoint == null`, which `BackendClient` answers once the child has exited), the review
+  host calls `ReviewHostOptions.EndRemodelSessionsInProcessLeftUnder(leaving)`, wired by the add-in
+  to `RemodelHost.EndTheSessionsLeftUnderInProcess`. Whatever that does, a throw included, the
+  restart goes on: holding it would leave no backend at all. No HTTP is added anywhere, and
+  `DeferredRestart.Begin` is untouched.
+- **What.** `RemodelHost.EndTheSessionsLeftUnderInProcess` is R22's walk, written once and shared:
+  `EndTheSessionsLeftUnder(runRoot, close)` holds the tool service, reads the attachment listening
+  now, and takes the same two leftovers by the same predicates (`FailedPlanLeftUnder`,
+  `RunLeftUnder`: same attachment, `HoldsItsSession`, `RunFolders.IsUnder` with the host's probe).
+  Only the close differs. Through a backend it is `ClosedBeforeTheRunRootMoves`. In process it is
+  `ClosedInProcess`, which calls the new `RemodelHostOptions.EndRemodelSessionInProcess(attachment,
+  runDirectory)`. A close answered ends the leftover exactly as R22 does: the failed plan's record
+  is let go, and a run is marked sent before and `ClosedForRunRoot` after, a waiting plan told lost
+  once in `PlanClosedForRunRootMessage`. A close not answered (the option unset, or a throw) leaves
+  it as it was, logged masked, and stops.
+- **To whom.** The add-in wires the option to `SwReviewAddIn.EndRemodelSessionInProcess(_toolService,
+  attachment, runDirectory)`, which throws with no gate. `ToolServiceGate.EndRemodelSessionOf
+  (attachment, runDirectory)` reaches the service listening now only when its pipe name is that
+  attachment, and otherwise throws. A replacement attachment's bridge never holds that session.
+- **How.** `IToolService.EndRemodelSessionOf(runDirectory)` is one narrowly named member, so one
+  fake (`FakeToolService`) gained it. `ToolServiceHost` runs it inline on the application thread
+  or posts it with `TeardownTimeout`, the bound the same routine gets at a teardown (30 s, the add-in
+  client's own bound). On the application thread it checks again that the service has not stopped
+  (a teardown posted meanwhile owns the end). It drains the gate recorder before and after, as a
+  teardown does, and calls `SwBridgeDispatcher.EndRemodelSessionOf(runDirectory)`. It writes one
+  line, `remodel close in process thread=<inline|posted> reason=remodel.close ...` with the
+  routine's fields, gated set and target, to the tool-service log and the run's `remodel.log`.
+  `TeardownLine` and this line share one formatter (`SessionEndLine`). A bridge holding no session
+  of that run writes `... run=<name> nothing closed: ...` to the tool-service log only.
+- **The exact session.** `SwBridgeDispatcher.EndRemodelSessionOf` ends the session only when both
+  of these hold. The folder's name equals the run id the open was given, compared exactly, as
+  `Session(request)` compares `run_id`. And the whole canonical folder (`GetFullPath`, trailing
+  separator trimmed, ignoring case as Windows does) is the scope's `RunDirectory`. That is the check
+  R22.3 says `run_id` cannot make: `A\X` and `B\X` are two runs here. It then runs
+  `EndRemodelSession(remodel.close)`, as `remodel.close` with `discard_copy: false` does. Otherwise
+  it calls nothing and changes nothing, the bound run root included (a teardown with no session
+  clears it; this does not).
+
+### R24.2 What the in-process close checks, against the bridge's close
+
+| Check | `remodel.close` through backend A | In-process close |
+|---|---|---|
+| Caller authorized | remodel secret (`ScopedSecretPolicy`) | the add-in's own code. No command, no secret. The member is not on `IToolServiceAccess`. |
+| Folder under the run root | `resolve_run_dir` against A's root | the run root leaving, by `RunFolders.IsUnder` with the host's probe, before anything is asked |
+| Attachment | the bridge config the host hands the backend | the gate's pipe name must equal the attachment the leftover was made on; also checked by the host's predicates |
+| Run identity | `run_id` (the folder's name) exactly equal to the scope's run id | the same, **and** the whole canonical folder equal to the scope's |
+| Session present | `target_mismatch` with none | none of that run: nothing called, read as answered (as `target_mismatch`/`session_mismatch` are read, R19.9) |
+| The routine | `EndRemodelSession(remodel.close)`: `VerifyTarget` (path, tag, COM identity, containment), untag, unsaved close confirmed by a read, settings put back | the same routine, same reason, same guard (`RemodelGuard` allowlist, unchanged) |
+| Discard | only with `discard_copy` | never. The copy and the run folder are kept. |
+| Service still the one | the pipe it reached | rechecked on the application thread: a stopped service ends nothing |
+| Request log | the request line in both logs | one `remodel close in process` line in both logs, the routine's gated set and target |
+| Source attestation recheck (U26) | after the close, unless a run is in flight, `_recheck_unverified_attestation` | **not made** (R24.3) |
+
+### R24.3 What an in-process close cannot recheck, and why that is acceptable
+
+The backend's U26 recheck (`chat/remodel.py`, `_close`) is not a check on the close. It runs after
+the bridge has answered, whatever it answered. It compares the source's size, time and hash with
+those recorded at the open, and files the verdict in `source-attestation.json`. It is Python and
+needs the backend, so an in-process close with the backend gone cannot make it. A run closed so
+keeps `rechecked_at` and `matches` null. That is the state a run ended by a re-attach's or an
+unload's teardown has always had. It is acceptable under the copy-only rule for four reasons:
+
+- The close never touches the source. The routine acts on the scope's own copy, after
+  `VerifyTarget`, through the unchanged guard.
+- The attestation is evidence for a run's report, not a precondition of any write. A plan-only run
+  never reaches phase D, where the gate's own recheck is a hard failure.
+- A later recheck can still be made from the files: nothing is overwritten, and `rechecked_at`
+  stays null rather than claiming a verdict.
+- The alternative, a C# copy of the recheck, would be a second implementation of a Python rule
+  and a new file write from the add-in. Neither is in 161A.
+
+Recorded, not dropped silently: the backend contract's amendment says it too.
+
+### R24.4 Threads and locks
+
+The in-process close runs under the restart's own lock (`DeferredRestart._restarting`), as R22's
+close through the backend already does. It waits on the application thread for at most
+`TeardownTimeout`. By reading, the application thread never takes that lock. Its callers are the
+page pumps, the watcher, the proxy and the thread pool. `Dispose` takes only `_state`. While it
+waits, the close holds none of the locks the application thread does take: the gate's `_lock` is
+let go after `Service` is read, and the hold is a registration, not a lock. The Remodel host's
+`_attemptLock`, `_runsLock` and `_endingLock` are not held across the call either. That matters,
+because the routine tells `RemodelHost.SessionEnded` on the application thread, which takes them.
+So the wait cannot deadlock on a lock (decision 155A's rule), and it is bounded either way. A wait
+that runs out throws `TimeoutException`. The restart goes on with the leftover recorded, and the
+posted call still runs later, checking the run and the service again then (the "delayed" rows
+below). The native timing of that order is T303's.
+
+Existing holds are kept. A remodel run in progress holds the restart even with no backend
+(145A), so the walk runs only while the Remodel host is free. Save and unload are unchanged: unload
+disposes the restart, and a service disposed first ends nothing here. The tool service is held for
+the walk, as a plan holds it.
+
+### R24.5 Scope
+
+The exited backend only. A backend that is up but does not answer is unchanged: R22.10 to R22.12's
+words, and Start still waits on it. It was not covered. While A is alive it may still send
+commands over the bridge, and the decision names the exited case only. Covering it would mean
+closing under a backend that may be mid-close itself, which is extra risk the owner has not
+weighed.
+
+### R24.6 Tests changed on purpose
+
+Each asks more.
+
+- `WithTheOldBackendGoneTheRunRootMovesAndTheOldRunsCloseIsRefusedBeforeTheBridge`. With A gone
+  the leftover is now closed in process, so this case makes that close not answered: the fallback.
+  It keeps every assertion it had (B in force, the old close refused `InvalidRunDir` before the
+  bridge, the session left, nothing copied, the replacement attachment planning cleanly). It adds
+  that the in-process close was tried once, for `(FirstAttachment, first)`, and that its failure is
+  logged with the key masked.
+- `ALeftoverUnderAnEarlierRunRootDoesNotHoldTheNextRunRootChange`. A leftover under an earlier root
+  now exists only if that root's in-process close was not answered, so the case makes it so. It
+  adds that the first change tried one in-process close and the second tried none.
+- `RemodelHostTests.RunRootRestart` wires the in-process close as the add-in does. `RemodelWorld`
+  gains an in-process close over its fake bridge (`InProcessCloseWired`, `InProcessCloses`,
+  `InProcessCloseFailure`, `DuringInProcessClose`). The fake refuses another attachment as the
+  gate does, ends the session only for its whole folder, and tells `SessionEnded` inside the call,
+  as the routine does. `FakePipeline.EndSessionInProcess` is new. `RestartWorld` gains
+  `EndRemodelSessionsInProcess`, and `FakeToolService` gains `EndedInProcess` and
+  `EndInProcessFailure`. Older cases leave all of them unset or unused.
+
+Preserved unchanged: `AFailedPlansCleanupKeepsTheOldRunWhenTheRunRootMovesAndTheBackendRefusesIt`;
+`ACommandOfAnotherRunIsRefusedBeforeAnythingIsReadOrWritten`; the outside-root refusal tests; every
+teardown test (`TeardownLine` keeps its signature and output); and the guards and their lists, byte
+for byte.
+
+### R24.7 Test-first evidence
+
+T300 (`e0110bf`) compiled against inert seams: the new members existed and did nothing. 35 cases
+ran. **23 failed** on their assertions (`Assert.Equal`/`Contains`/`Single`/`NotNull`/`Throws`
+failures, no exception escaping a seam), and **12 guards passed**. The failures:
+
+- the dispatcher's three in-process rows;
+- the tool service's posted/inline, other-run, cannot-be-asked and delayed rows;
+- the gate's attachment case;
+- both add-in wiring cases;
+- the review host's two no-backend rows;
+- the Remodel host's four leftover rows and the two tests changed on purpose (four rows).
+
+One row was corrected before the fix, not loosened: "in another case" had upper-cased the whole
+folder, including the run's name. The bridge compares `run_id` exactly, so that spelling must be
+refused. The row now upper-cases the run root alone and still ends the session. The name in
+another case became a refusal row. Added with the fix (T301), a guard: "the service stopped
+meanwhile" (a close whose wait ran out and whose service was disposed before it ran ends nothing,
+and the teardown ends the session). All green after T301.
+
+### R24.8 Mutations
+
+Each fix was taken out once, alone, by an exact replacement matching once. Each was built and run
+against `RemodelTeardownTests`, `ToolServiceWiringTests`, `RemodelWiringTests`, `RemodelHostTests`
+and `DeferredRestartTests` (1,206 cases), then restored from the bytes read before, with sha256
+checked equal. After the sixteen, the product tree was compared with commit `4bb0172` and was
+identical. Every row failed at least one case; none survived.
+
+| # | Fix taken out | Failed | Cases that failed | Restored |
+|---|---|---|---|---|
+| M61 | `BridgeDispatcher.cs`: the run id compared exactly | 1 of 1206 | `AFolderThatIsNotTheOpenRunsEndsNothing` (the name in another case) | sha256 equal |
+| M62 | `BridgeDispatcher.cs`: the whole folder compared | 4 of 1206 | `AFolderThatIsNotTheOpenRunsEndsNothing`, `AnInProcessCloseOfAnotherRunsFolderEndsNothing`, `AnInProcessCloseNotAnsweredInTimeThrowsAndChecksTheRunAgainWhenItRuns` | sha256 equal |
+| M63 | `BridgeDispatcher.cs`: the reason `remodel.close` (made `tool_service_stopped`) | 6 of 1206 | `EndingOneRunsSessionInProcessIsTheCloseRoutineForThatRunAlone`, `EndingOneRunsSessionInProcessRunsTheCloseRoutineOnTheApplicationThreadAndWritesItDown`, `AnInProcessCloseNotAnsweredInTime...` | sha256 equal |
+| M64 | `ToolServiceHost.cs`: the stopped service rechecked on the application thread | 2 of 1206 | `AnInProcessCloseThatCannotBeAskedThrows`, `AnInProcessCloseNotAnsweredInTime...` (the service stopped meanwhile) | sha256 equal |
+| M65 | `ToolServiceHost.cs`: the line in the run's `remodel.log` | 2 of 1206 | `EndingOneRunsSessionInProcessRunsTheCloseRoutine...` | sha256 equal |
+| M66 | `ToolServiceHost.cs`: inline on the application thread (posted to itself instead) | 1 of 1206 | `EndingOneRunsSessionInProcessRunsTheCloseRoutine...` (inline) | sha256 equal |
+| M67 | `ToolServiceGate.cs`: the exact attachment | 2 of 1206 | `TheGateEndsARunsSessionInProcessOnlyOnTheAttachmentNamed`, `TheAddInsInProcessCloseIsTheGatesOnTheAttachmentNamed` | sha256 equal |
+| M68 | `SwReviewAddIn.cs`: no gate throws | 1 of 1206 | `TheAddInsInProcessCloseIsTheGatesOnTheAttachmentNamed` | sha256 equal |
+| M69 | `RemodelHost.cs`: no in-process close given read as answered | 1 of 1206 | `WithTheOldBackendGoneAndNoInProcessCloseTheLeftoverStaysAsItWas` | sha256 equal |
+| M70 | `RemodelHost.cs`: an in-process close that throws read as answered | 1 of 1206 | `WithTheOldBackendGoneTheRunRootMovesAndTheOldRunsCloseIsRefusedBeforeTheBridge` | sha256 equal |
+| M71 | `RemodelHost.cs`: the in-process walk closing through the backend | 8 of 1206 | `WithTheOldBackendGoneALeftoverUnderTheOldRunRootIsClosedInProcessBeforeTheRunRootMoves`, `WithTheOldBackendGoneTheRunRootMoves...`, `ALeftoverUnderAnEarlierRunRootDoesNotHoldTheNextRunRootChange` | sha256 equal |
+| M72 | `ReviewHost.cs`: no in-process close with no backend up | 10 of 1206 | `WithNoBackendUpARestartThatMovesTheRunRootClosesInProcessFirstAndIsMadeWhateverThatDoes`, `WithTheOldBackendGoneALeftover...`, `WithTheOldBackendGoneTheRunRootMoves...`, `ALeftoverUnderAnEarlierRunRoot...` | sha256 equal |
+| M73 | `ReviewHost.cs`: a throw from it taken as the restart's failure | 1 of 1206 | `WithNoBackendUpARestartThatMovesTheRunRootClosesInProcess...` (throws) | sha256 equal |
+| M74 | `ReviewHost.cs`: the in-process close asked with a backend up too | 26 of 1206 | `NothingIsClosedInProcessWithABackendUpOrTheRunRootKept`, `NothingIsClosedInProcessOnAReplacementAttachmentOrWithABackendUp` and eight R22 cases | sha256 equal |
+| M75 | `SwReviewAddIn.cs`: the review host not wired | 1 of 1206 | `TheAddInHandsBothHostsTheInProcessCloseWithTheBackendGone` | sha256 equal |
+| M76 | `SwReviewAddIn.cs`: the Remodel host not wired | 1 of 1206 | `TheAddInHandsBothHostsTheInProcessCloseWithTheBackendGone` | sha256 equal |
+
+The lock rule (R24.4) and the application thread's real order are not mutation-testable here.
+They are reasoned from the code, and the order is T303's.
+
+### R24.9 Gates
+
+Gates on the final tree (`4bb0172` product code). Only C# and records changed; no Python file,
+words file or pane fixture changed, so the Python suites stand on R22.12's:
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero
+  warnings, zero errors.
+- **C# tests.** 10,209 extractor and 4,244 add-in tests passed, none failed or skipped: 10 and 23
+  rows more than R22.14's 10,199 and 4,221.
+- **Focused runs.** `RemodelHostTests`, `DeferredRestartTests`, `ToolService*`, `ReviewHostTests`,
+  `RemodelWiringTests` and `RemodelTeardownTests` (1,372 cases) passed three times in a row.
+- **Guards.** `extractor/SwReview.Extractor/Guard` and every allowlist are untouched (`git diff
+  0f9e990` names no guard file).
+- **Links and line endings.** The link check found no broken link, and every changed file is `i/lf`.
+
+No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped.
+
+### R24.10 What Start (T172) waits on now
+
+- The old backend alive but not answering, which holds every start until the earlier run root is
+  saved again, or, while the backend still answers about turns, another document is made active
+  (R22.4, R22.10 to R22.12).
+- T303: the in-process close's timing on the SOLIDWORKS thread at the pilot workstation, with
+  R22.3's native ordering of an abandoned close.
+- An end told during a `Plan` that then succeeds (R22.14).
+- T180 and its owner decision.
+- PROBE-1, PROBE-2, PROBE-3, PROBE-4 and PROBE-12.
+- A real Plan whose source hash stays unchanged.
+
+The old-backend-gone case (R22.4) is settled in code by decision 161A and leaves R22.9's list,
+apart from its seat check (T303). A close that could not be made still falls back to R22.4's
+behaviour, and the known defect applies to that case alone.
+
+### R24.11 Review round, and the merge of decision 162A (T304 to T306; 2026-10-27)
+
+Codex approved `41f904b` with no material finding. Opus found nothing that must be fixed and four
+items, settled below. No new owner decision. The guard, the allowlist, run and session identity,
+and the outside-root refusal are unchanged.
+
+**The merge.** `423dc7c` merges main `90bcfa0` (decision 162A, PR #45, research R23, T296 to T299)
+into this branch. 162A replaced `RemodelRun`'s run-root flags with `RemodelCloseCause`:
+`CloseSentFor` (Discard outranks a run-root close) and `ClosedFor`, recorded once by
+compare-and-swap. The one conflict was the shared walk (`EndTheSessionsLeftUnder`). It keeps 162A's
+marks, `MarkCloseSentFor(RunRoot)` before the close and `MarkSessionClosedFor(RunRoot)` after, and
+this branch's `close` parameter. So the in-process close records the run-root cause exactly as the
+backend close does. Its end is told for the reason `remodel.close`, which `SessionEnded` reads, by
+162A's own rule, as a close of the cause sent. R24.1's "marked sent ... and `ClosedForRunRoot`
+after" now reads as those two marks; `ClosedForRunRoot` is 162A's read-only view of `ClosedFor`.
+`research.md` keeps R23 before R24, and `tasks.md` keeps T296 to T299 before T300. On the merged
+tree every 162A test passes: 10,209 extractor and 4,256 add-in tests.
+
+| Item | How it was settled |
+|---|---|
+| **1. The 30-second bound untested (X3).** Swapping `_teardownTimeout` for `_invokeTimeout` in `EndRemodelSessionOf` survived: the timeout rows shortened the teardown bound only. | The not-answered-in-time theory now times the wait. That world's request bound is 30 s, and the case asks that the throw come within 10 s of its 300 ms teardown bound. X3 now fails 3 cases. Test only; a guard that passed before and after. |
+| **2. The first gate drain untested (X4).** | The posted/inline theory makes one gate call between requests (`GetTitle`, through the host's remodel gate, as Show calls a gate), then pins the close line's exact gated set, up to its target. X4 now fails both rows. Test only, as item 1. |
+| **3. A throw before any close left no trace.** `ReviewHost.EndTheRemodelSessionsInProcess` swallowed it, so a hold or an attachment reading that threw was invisible. | Test first (T304, `WithTheOldBackendGoneAWalkThatThrowsIsLoggedAndTheRestartGoesOn`, the hold and the attachment: red 2 of 2). Fixed in T305. The review host has no log of its own: its sentences go to the page, and it has no `Log` option. So the Remodel host, whose log is the add-in's `addin.log` and masked, catches the walk's throw in `EndTheSessionsLeftUnderInProcess`, logs it and answers not answered. The restart goes on, and the leftover stays. The review host's catch stays as the last resort, with a comment saying why it logs nothing. X5 (the catch rethrowing) now fails 2 cases. |
+| **4. A null answer read as closed.** When the dispatcher finds no session of that run, `ClosedInProcess` reads it as answered, as R19.9 reads `target_mismatch`. | Recorded. Nothing at `remodel.open` enforces that the run id equals the run folder's name. The backend sends `run_dir.name` (`_client(body, run_dir.name)`), and the Remodel host names the folders it makes. If that convention broke, every in-process close would find "nothing of that run" and the leftover would be marked closed while its session stayed. The tool-service log's `nothing closed` line would be the only trace. This is not a separate Start prerequisite: T303 already asks for the `remodel close in process ... verified=true ... copy_closed=true` line at the seat, which such a break would fail. A test pinning the open's run id to the folder name across the backend and the bridge is a candidate for the next round. |
+
+**Tests first.** T304 (`900bdf3`) is the deliberately red commit: the new theory's two rows failed
+on their assertions (no log line), and the two strengthened rows passed as guards. All of them are
+green after T305 (`bcb803d`).
+
+**Mutations over the merged tree.** M61 to M76 were run again, X3 to X5 added, each alone in the way
+R24.8 describes (1,220 cases now), restored, sha256 checked equal, and the product tree compared with
+`bcb803d`.
+
+| # | Fix taken out | Failed | Cases that failed | Restored |
+|---|---|---|---|---|
+| M61 | the run id compared exactly | 1 of 1220 | `AFolderThatIsNotTheOpenRunsEndsNothing` | sha256 equal |
+| M62 | the whole folder compared | 4 of 1220 | `AFolderThatIsNotTheOpenRunsEndsNothing`, `AnInProcessCloseOfAnotherRunsFolderEndsNothing`, `AnInProcessCloseNotAnsweredInTime...` | sha256 equal |
+| M63 | the reason `remodel.close` | 6 of 1220 | `EndingOneRunsSessionInProcessIsTheCloseRoutineForThatRunAlone`, `EndingOneRunsSessionInProcessRunsTheCloseRoutine...`, `AnInProcessCloseNotAnsweredInTime...` | sha256 equal |
+| M64 | the stopped service rechecked | 2 of 1220 | `AnInProcessCloseThatCannotBeAskedThrows`, `AnInProcessCloseNotAnsweredInTime...` | sha256 equal |
+| M65 | the line in `remodel.log` | 2 of 1220 | `EndingOneRunsSessionInProcessRunsTheCloseRoutine...` | sha256 equal |
+| M66 | inline on the application thread | 1 of 1220 | `EndingOneRunsSessionInProcessRunsTheCloseRoutine...` (inline) | sha256 equal |
+| M67 | the gate's exact attachment | 2 of 1220 | `TheGateEndsARunsSessionInProcessOnlyOnTheAttachmentNamed`, `TheAddInsInProcessCloseIsTheGatesOnTheAttachmentNamed` | sha256 equal |
+| M68 | no gate throws | 1 of 1220 | `TheAddInsInProcessCloseIsTheGatesOnTheAttachmentNamed` | sha256 equal |
+| M69 | no in-process close read as answered | 1 of 1220 | `WithTheOldBackendGoneAndNoInProcessCloseTheLeftoverStaysAsItWas` | sha256 equal |
+| M70 | a close that throws read as answered | 1 of 1220 | `WithTheOldBackendGoneTheRunRootMovesAndTheOldRunsCloseIsRefusedBeforeTheBridge` | sha256 equal |
+| M71 | the in-process walk closing through the backend | 8 of 1220 | `WithTheOldBackendGoneALeftover...`, `WithTheOldBackendGoneTheRunRootMoves...`, `ALeftoverUnderAnEarlierRunRoot...` | sha256 equal |
+| M72 | no in-process close with no backend up | 12 of 1220 | `WithNoBackendUpARestart...`, `WithTheOldBackendGoneALeftover...`, `WithTheOldBackendGoneAWalkThatThrows...`, `ALeftoverUnderAnEarlierRunRoot...` and more | sha256 equal |
+| M73 | a throw taken as the restart's failure | 1 of 1220 | `WithNoBackendUpARestart...` (throws) | sha256 equal |
+| M74 | the in-process close asked with a backend up too | 29 of 1220 | `NothingIsClosedInProcess...` (both), 162A's `ADiscardPressedAroundARunRootChangesCloseOutranksIt` and `ADiscardThatEndsAPlanUnderARunRootChangesCloseIsNotToldLost`, and R22 cases | sha256 equal |
+| M75 | the review host not wired | 1 of 1220 | `TheAddInHandsBothHostsTheInProcessCloseWithTheBackendGone` | sha256 equal |
+| M76 | the Remodel host not wired | 1 of 1220 | `TheAddInHandsBothHostsTheInProcessCloseWithTheBackendGone` | sha256 equal |
+| X3 | `ToolServiceHost.cs`: the teardown's bound (made the request bound) | 3 of 1220 | `AnInProcessCloseNotAnsweredInTime...` (all three rows) | sha256 equal |
+| X4 | `ToolServiceHost.cs`: the first gate drain | 2 of 1220 | `EndingOneRunsSessionInProcessRunsTheCloseRoutine...` (both rows) | sha256 equal |
+| X5 | `RemodelHost.cs`: the walk's throw logged (rethrown) | 2 of 1220 | `WithTheOldBackendGoneAWalkThatThrowsIsLoggedAndTheRestartGoesOn` (both rows) | sha256 equal |
+
+Every row failed at least one case; none survived. After the nineteen, the product tree was identical to `bcb803d`.
+
+**Gates on the final tree.**
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero
+  warnings, zero errors.
+- **C# tests.** 10,209 extractor and 4,258 add-in tests passed, none failed or skipped: the
+  merge's 4,256 and the new theory's two rows.
+- **Focused runs.** `RemodelHostTests`, `DeferredRestartTests`, `ToolService*`, `ReviewHostTests`,
+  `RemodelWiringTests` and `RemodelTeardownTests` (1,386 cases) passed three times in a row.
+- **Links and line endings.** The link check found no broken link, and every changed file is `i/lf`.
+  No Python, words or fixture file changed, and `docs/decisions.md` was changed by the merge only.
+
+No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped.
+
+R24.10's list is unchanged: item 4 is covered by T303.
