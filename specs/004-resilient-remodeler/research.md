@@ -4627,3 +4627,131 @@ Python run on this worktree was in progress):
 - **Links.** The link check found no broken link.
 
 No SOLIDWORKS process, seat task or paid/live test ran.
+
+## R23 A plan the engineer discards is not told lost (decision 162A; T296 to T298; 2026-10-27)
+
+Owner decision 162A: a waiting plan the engineer discards is told it was discarded, not that
+SOLIDWORKS switched documents, when the bridge reports its session ended before the copy is
+marked discarded. Found by reading while settling R22.10's S3, and recorded there for the next
+round.
+
+### R23.1 The defect, checked by reading
+
+Discard copy (`RemodelHost.DiscardCopy`) closes the copy through the pipeline while the run holds
+its session (`HoldsItsSession`), deletes `copy/`, then sets `CopyDiscarded`. The real bridge tells
+the host the session ended (`RemodelHost.SessionEnded`, reason `remodel.close`) before
+`CloseCopy` returns, as it does for the run-root cleanup's close (R22.10). At that moment the plan
+is still planned and not discarded. `SessionEnded` marked it ended and, the host being free and
+the attachment its own, asked `AnnounceLostPlan`; `IsLostPlan` read it lost, and the one
+`remodel.plan_lost` notice went out in `PlanLostMessage`, which says SOLIDWORKS switched
+documents. That did not happen: the engineer pressed Discard.
+
+- A **waiting plan with Start on** holds its session until Start, so its discard always met it.
+- A **waiting plan with Start off** meets it when the close at the plan (T176) was not answered:
+  the plan still holds its session, and Discard sends the close.
+- When the folder then **could not be deleted** (`DiscardFailed`, the copy held open), the plan
+  stayed planned and not discarded, so `init.latest_run.plan_lost` also carried the re-attach
+  words on every page that loaded again.
+- A **finished run** has no such defect: `IsLostPlan` asks for a planned run, so the end of a
+  finished run's discard close is told nothing, before or after this change. Checked by a guard
+  row, not changed.
+
+### R23.2 What the engineer sees now, and why
+
+Nothing about a lost plan. A plan the engineer discards is not told lost at all: no
+`remodel.plan_lost`, and `init.latest_run.plan_lost` is null. The Discard answer is the word:
+`ok {kept}` when the copy is gone, `DiscardFailed` in `DiscardCopyFailedMessage` when it is not,
+which already tells the engineer to close the copy and press Discard copy again.
+
+Why no notice rather than new discard words: the contract's notice is for "the plan on screen ...
+its copy not discarded. No plan held, nothing told"; the end-to-end case pins "Discard ending the
+session with nothing posted"; and R22.10's S3 rows already say "nobody is told a plan was lost: a
+discarded copy is no plan on screen". A sentence of its own would tell the engineer what the
+button they just pressed already answered. The case where the folder could not be deleted is read
+the same way: the engineer asked for the plan to go, and was told how to finish that.
+
+A **teardown's end** (`tool_service_stopped`) during the discard is no close's, and keeps the
+re-attach words, as the run-root cleanup's does (T282's guard row): the attachment really went.
+
+### R23.3 What was changed (T297)
+
+One mechanism, shared with T282's, rather than a second near-copy of it.
+
+- `RemodelRun` kept two run-root flags: `CloseForRunRootSent` (the close was sent) and
+  `ClosedForRunRoot` (that close ended the session). They become one cause each, of a new
+  `RemodelCloseCause` (`None`, `RunRoot`, `Discard`): `CloseSentFor` and `ClosedFor`, set by
+  `MarkCloseSentFor` and `MarkSessionClosedFor`. `ClosedForRunRoot` stays, read off `ClosedFor`.
+- `RemodelHost.SessionEnded` reads a `remodel.close` end of a run whose close was sent as closed
+  for that cause; any other end, a teardown's included, only marks it ended, as before.
+- `EndTheSessionsLeftUnder` marks its close `RunRoot`, where it marked the run-root flags.
+- `DiscardCopy` marks its close `Discard` before it goes, when it sends one.
+- `IsLostPlan` reads a plan its own Discard closed as not lost, beside `SessionClosedAtPlan`, so
+  planning again, which sets such a plan aside, still tells it lost in `PlanClosedMessage`.
+
+`LostMessage`, `LostSessionWords` and the words are unchanged. No words file, Python file or pane
+fixture changed.
+
+### R23.4 Tests
+
+T296 is the deliberately red commit:
+`APlanTheEngineerDiscardsIsNotToldLostWhenTheBridgeTellsTheEndOfItsClose`, over the fake
+pipeline's `DuringClose` hook (T281's), which calls `SessionEnded` inside `CloseCopy`. It asserts
+the exact notices and `init.latest_run.plan_lost` after the discard, and that the discard sent one
+close of its run.
+
+| Row | Before T297 | After |
+|---|---|---|
+| waiting, "inside" | red: notice in `PlanLostMessage` | no notice, `plan_lost` null |
+| waiting with Start off, "inside" | red: the same | no notice, `plan_lost` null |
+| waiting, "inside, not deleted" (`DiscardFailed`) | red: the same | no notice, `plan_lost` null |
+| waiting with Start off, "inside, not deleted" | red: the same | no notice, `plan_lost` null |
+| waiting, "late" (close not answered, end told after) | guard, green | green |
+| finished, "inside" | guard, green | green |
+| waiting, "teardown" (end inside the close, `tool_service_stopped`) | guard, green: one notice, `PlanLostMessage` | green, the same |
+
+4 rows failed on the notice assertion and 3 guard rows passed before T297; all 7 pass after it.
+No existing test changed. `ARunRootChangeIsHarmlessForADiscardedRunWhoseDiscardCloseWasAnswered`
+("told") counted the notice before its restart rather than asserting none, which is why it never
+caught this; it is unchanged and passes.
+
+### R23.5 Mutations
+
+Each fix taken out once, one at a time, with `RemodelHostTests` (526 cases) run against it, then
+restored byte for byte: the sha256 of `RemodelHost.cs` after each restore equalled the one before
+(`9873329a...2ba5671b52`). Numbered 162A-M1 onward so they cannot collide with R22.7's.
+
+| Id | Mutation | Cases failed |
+|---|---|---|
+| 162A-M1 | `DiscardCopy` does not mark its close `Discard` before it goes | 4: the four T296 "inside" rows |
+| 162A-M2 | `IsLostPlan` drops the `ClosedFor != Discard` exclusion | 4: the same |
+| 162A-M3 | `SessionEnded` reads any end of a run whose close was sent as that close's, the reason ignored | 2: the T296 and the R22.10 "teardown" rows |
+| 162A-M4 | `SessionEnded` reads only a `RunRoot` cause (the code before T297) | 4: the four T296 "inside" rows |
+| 162A-M5 | the run-root cleanup marks its close with the wrong cause (`Discard`) | 2: R22.10's "late" rows, Start on and off |
+
+None survived.
+
+### R23.6 Left, recorded for Start (T172)
+
+- A plan whose Discard closed its session but whose folder could not be deleted is not told lost,
+  by design (R23.2). A Start pressed on it then, with Start switched on, is refused `SessionLost`
+  in `SessionLostMessage`, the re-attach words. Start is switched off in this build, which refuses
+  it `StartNotValidated` first; the words of that Start are for T172.
+- Untested by intent: a plan whose Discard close was not answered and whose folder could not be
+  deleted, then set aside by planning again whose close's end the bridge tells. It is told
+  `PlanClosedMessage`, notice and `init` alike, because the Discard exclusion sits beside
+  `SessionClosedAtPlan`, inside planning again's branch. Two failures in a row to reach it.
+
+### R23.7 Gates
+
+On the final tree (C# and records only; no Python file, words file or pane fixture changed, so
+the Python suites are not required):
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero
+  warnings, zero errors.
+- **C# tests.** 10,199 extractor and 4,228 add-in tests passed, none failed or skipped: 7 rows
+  more than R22.14, T296's.
+- **Focused runs.** `RemodelHostTests`, `DeferredRestartTests`, `ToolService*` and
+  `ReviewHostTests` (1,298 cases) passed three times in a row.
+- **Links and line endings.** The link check found no broken link; every changed file is `i/lf`.
+
+No SOLIDWORKS process, seat task or paid/live test ran.
