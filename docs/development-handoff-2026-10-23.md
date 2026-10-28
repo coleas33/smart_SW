@@ -7,6 +7,9 @@ defers subscription only during actual copy opening; verify its PR/gates before 
 Changed-root cleanup remains the known offline defect before Start; keep Remodel Start disabled.
 *Updated 2026-10-27:* branch `rootcleanup-159a` (004 T277 to T280, research R22) settles the case
 where the old backend is still up; the dead-old-backend case remains a recorded known defect.
+*Updated 2026-10-27, owner decision 161A:* branch `nativeclose-161a` (004 T300 to T302, research
+R24) settles the dead-old-backend case in code by closing the old run's copy in process; its seat
+timing is pilot task T303. The old backend up but not answering stays open.
 The interrupted 160A and 157A work has been recovered, reviewed and combined; the earlier
 159A recovery fixes have merged in PR #36. Delivery and final validation are recorded below. Verify
 the table against the remote before starting new work. Original Claude branches and their worktrees were preserved.
@@ -127,6 +130,14 @@ is retained. Neither item settles root-change cleanup or approves Start.
    root is saved again (or, while the backend still answers about turns, another document is made
    active), as the refusals now say (R22.4, R22.10, R22.11).
    Start (T172) waits on both, T180 and the pilot prerequisites. The text below is the original brief.
+   *Updated 2026-10-27 (owner decision 161A; branch `nativeclose-161a`, 004 T300 to T302, research
+   R24):* with backend A exited, the restart now closes those leftovers in process before backend B
+   starts. It goes through the gate, on the exact attachment, to the tool service on the application
+   thread, and to `SwBridgeDispatcher.EndRemodelSessionOf`, which checks the run id exactly and the
+   whole canonical run folder, then runs the routine `remodel.close` runs. A close not answered
+   leaves the leftover as before, and the restart is never held. The backend's U26 attestation
+   recheck is not made by such a close (R24.3). Its native timing is pilot task T303. Start still
+   waits on the alive-but-not-answering case and on T303.
 
    Follow [`RemodelHost.EndTheFailedPlan` / `EndTheSessionARunLeft`](../extractor/SwReview.AddIn/Remodel/RemodelHost.cs)
    through `BackendRemodelPipeline.CloseCopy` to
@@ -164,6 +175,8 @@ is retained. Neither item settles root-change cleanup or approves Start.
 Changed-root cleanup with the old backend gone remains a known defect before Start readiness (R22);
 with it up, the case is settled on `rootcleanup-159a`. Earlier R19.26 statements that no known defect
 remained are corrected by R19.29. The small fixes above do not approve the unresolved cases.
+*Updated 2026-10-27 (owner decision 161A; R24):* the old-backend-gone case is settled in code on
+`nativeclose-161a`, pending its seat check (T303); the old backend up but not answering stays open.
 
 
 ## T188 configuration-watch continuation (004 T273 to T276)
@@ -187,7 +200,7 @@ T188's implementation is complete with the source metadata, watch lifecycle and 
 not validate native SOLIDWORKS timing: the next licensed Plan/probe sitting must check that
 configuration subscription stays outside actual OpenDoc7 and failed-open unwind, and that
 normal configuration switching still follows the active part/assembly (009 T081). Native
-acceptance and the Start switch stay held. Changed-root cleanup above (now R22, with its dead-backend case open) was the next known
+acceptance and the Start switch stay held. Changed-root cleanup above (now R22, its dead-backend case settled in code by R24, 161A) was the next known
 offline defect; 014 T254-T259 still wait on paid slice gate T253.
 
 ## Owner and pilot-workstation prerequisites
