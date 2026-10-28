@@ -331,6 +331,16 @@ public sealed class ReviewHostOptions
     public Func<string, bool> EndRemodelSessionsLeftUnder { get; set; } = _ => true;
 
     /// <summary>
+    /// Owner decision 161A (004 research R24): with no backend up to close through - the one in force has exited - ends, in
+    /// process, every remodel session the Remodel tab left on the bridge under the run root that is leaving, given it,
+    /// before a restart that moves the run root starts the next backend. Asked under the restart's own lock, once no work
+    /// holds the restart, and only then. Whatever it does or throws, the restart goes on: holding it would leave no backend
+    /// at all, and a session it could not close stays as it was, until a re-attach or an unload ends it. Nothing when the
+    /// caller has no Remodel tab.
+    /// </summary>
+    public Action<string> EndRemodelSessionsInProcessLeftUnder { get; set; } = _ => { };
+
+    /// <summary>
     /// Owner decision 159A (004 research R22.12): whether the Remodel tab still holds a session on the bridge, on the
     /// attachment listening now, under the run root given - what <see cref="EndRemodelSessionsLeftUnder"/> would close.
     /// Read, never acted on: it closes nothing and asks no backend. False when the caller has no Remodel tab.

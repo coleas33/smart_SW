@@ -1006,6 +1006,25 @@ public sealed class ToolServiceHost : IToolService
     }
 
     /// <summary>
+    /// Owner decision 161A (004 research R24): ends the remodel session this service's bridge holds for
+    /// exactly the run whose folder is <paramref name="runDirectory"/>, through the routine
+    /// <c>remodel.close</c> runs (<see cref="SwBridgeDispatcher.EndRemodelSessionOf"/>), when a settings
+    /// restart is about to move the run root and the review backend that would have sent that close has
+    /// exited. On the application thread, where the dispatcher lives: inline when called from it, otherwise
+    /// posted and waited for within <see cref="ToolServiceOptions.TeardownTimeout"/>, the bound the same
+    /// routine gets at a teardown. One line goes to this service's log and, when a session was ended, to
+    /// the run's <c>remodel.log</c>, its gated set the routine's own, as a teardown's does; the add-in hears
+    /// the outcome through <see cref="ToolServiceOptions.RemodelSessionEnded"/>. Everything is checked again
+    /// on the application thread, when the call runs - this service not stopped, and the session that
+    /// run's - so a call whose wait was given up, and that runs later, ends nothing else. Throws after
+    /// <see cref="Dispose"/>, whose teardown ends whatever session there was, and when the application thread
+    /// cannot be reached or does not answer in time.
+    /// </summary>
+    public void EndRemodelSessionOf(string runDirectory)
+    {
+    }
+
+    /// <summary>
     /// The teardown's reach to the application thread. A teardown that cannot be posted, or that
     /// does not answer within <see cref="ToolServiceOptions.TeardownTimeout"/>, is written down;
     /// an abandoned one still runs when the application thread is free, and writes its own line

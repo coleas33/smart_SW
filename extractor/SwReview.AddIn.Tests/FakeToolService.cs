@@ -87,6 +87,21 @@ internal sealed class FakeToolService : IToolService
         }
     }
 
+    /// <summary>Every folder <see cref="EndRemodelSessionOf"/> was handed, in order (owner decision 161A).</summary>
+    public List<string> EndedInProcess { get; } = new List<string>();
+
+    /// <summary>What <see cref="EndRemodelSessionOf"/> throws, if anything: a stopped service, an application thread that did not answer.</summary>
+    public Exception? EndInProcessFailure { get; set; }
+
+    public void EndRemodelSessionOf(string runDirectory)
+    {
+        EndedInProcess.Add(runDirectory);
+        if (EndInProcessFailure != null)
+        {
+            throw EndInProcessFailure;
+        }
+    }
+
     public Action? DuringDispose { get; set; }
 
     public void Dispose()

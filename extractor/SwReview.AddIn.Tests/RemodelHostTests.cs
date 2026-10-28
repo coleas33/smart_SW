@@ -6774,12 +6774,140 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): with backend A gone there is no backend to close through, so
+    /// each session a run can leave on the bridge - a failed plan's, a plan waiting for Start (Start on, or Start off with its
+    /// close at the plan not answered) and a finished run's - is closed in process, on the attachment listening now, naming its
+    /// exact run, with the tool service held, before the restart brings backend B up under the new run root. Nothing is sent
+    /// through a backend. A plan closed so is told lost once, in its own words, and the next plan, under the new run root,
+    /// sends no close of the old run.
+    /// </summary>
+    [Theory]
+    [InlineData("failed")]
+    [InlineData("waiting")]
+    [InlineData("waiting, Start off")]
+    [InlineData("finished")]
+    public void WithTheOldBackendGoneALeftoverUnderTheOldRunRootIsClosedInProcessBeforeTheRunRootMoves(string leftover)
+    {
+        using (var world = new RemodelWorld { StartValidated = leftover != "waiting, Start off" })
+        using (var restart = new RunRootRestart(world))
+        {
+            string oldRoot = world.RunRoot;
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, leftover);
+            int closes = world.Pipeline.Closed.Count;
+            int holds = 0;
+            var heldDuringTheClose = new List<int>();
+            world.Hold = () =>
+            {
+                holds++;
+                return new Released(() => holds--);
+            };
+            world.DuringInProcessClose = () => heldDuringTheClose.Add(holds);
+            restart.Backend.Down = true;
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(new[] { false }, restart.Backend.SessionOpenAtEachRestart);
+            Assert.Equal(new[] { (FirstAttachment, first) }, world.InProcessCloses);
+            Assert.Equal(new[] { 1 }, heldDuringTheClose);
+            Assert.Equal(0, holds);
+            Assert.Equal(closes, world.Pipeline.Closed.Count);
+            Assert.False(world.Pipeline.SessionOpen);
+            Assert.False(world.Host.HoldsASessionLeftUnder(oldRoot));
+            bool waiting = leftover.StartsWith("waiting", StringComparison.Ordinal);
+            if (waiting)
+            {
+                JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
+                Assert.Equal(first, notice.GetProperty("run_dir").GetString());
+                Assert.Equal(RemodelHost.PlanClosedForRunRootMessage, notice.GetProperty("message").GetString());
+                Assert.True(world.Host.LatestRun!.ClosedForRunRoot);
+            }
+            else
+            {
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            }
+
+            world.Hold = null;
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(Path.Combine(restart.NewRoot, world.ExpectedRunId), world.Host.LatestRun!.RunDirectory);
+            Assert.DoesNotContain(first, world.Pipeline.Closed.Skip(closes));
+            Assert.Single(world.InProcessCloses);
+            Assert.Equal(waiting ? 1 : 0, world.AllPosted("remodel.plan_lost").Length);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 T300 - guards; research R24): with backend A gone, nothing is closed in process that this host
+    /// did not leave on the attachment listening now - a leftover of an attachment since replaced went with it - and with a
+    /// backend up the close goes through it as before, none in process.
+    /// </summary>
+    [Theory]
+    [InlineData("failed", "a replacement attachment")]
+    [InlineData("waiting", "a replacement attachment")]
+    [InlineData("failed", "a backend up")]
+    public void NothingIsClosedInProcessOnAReplacementAttachmentOrWithABackendUp(string leftover, string what)
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            LeaveASessionOnTheBridge(world, leftover);
+            int closes = world.Pipeline.Closed.Count;
+            bool replaced = what == "a replacement attachment";
+            if (replaced)
+            {
+                world.Attachment = SecondAttachment;
+                restart.Backend.Down = true;
+            }
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Empty(world.InProcessCloses);
+            Assert.Equal(replaced ? closes : closes + 1, world.Pipeline.Closed.Count);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 T300 - a guard; research R24): a host given no in-process close leaves the leftover as it was -
+    /// read as a close not answered - and the restart still goes on: it is what brings a backend back.
+    /// </summary>
+    [Fact]
+    public void WithTheOldBackendGoneAndNoInProcessCloseTheLeftoverStaysAsItWas()
+    {
+        using (var world = new RemodelWorld { InProcessCloseWired = false })
+        using (var restart = new RunRootRestart(world))
+        {
+            string oldRoot = world.RunRoot;
+            LeaveASessionOnTheBridge(world, "waiting");
+            restart.Backend.Down = true;
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.True(world.Pipeline.SessionOpen);
+            Assert.False(world.Host.LatestRun!.ClosedForRunRoot);
+            Assert.True(world.Host.HoldsASessionLeftUnder(oldRoot));
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    /// <summary>
     /// Owner decision 159A (004 T277 - a guard and the record of a known defect; research R22): with backend A gone there is
     /// nothing to close the old run through, and the restart is what brings a backend back, so it is not held: B comes into
     /// force. The old run's close is then refused by B before it reaches the bridge, the plan refused retryably and nothing
     /// copied - so no close of the old run can reach the bridge under B, where a run of the same name may later hold it. A
     /// re-attach, whose teardown ends whatever session the old attachment held, is the way on; the next plan, on the new
-    /// attachment, sends no close of the old run.
+    /// attachment, sends no close of the old run. *Changed deliberately 2026-10-27 (owner decision 161A, 004 T300, research
+    /// R24):* with backend A gone the leftover is now closed in process first
+    /// (<see cref="WithTheOldBackendGoneALeftoverUnderTheOldRunRootIsClosedInProcessBeforeTheRunRootMoves"/>). This case is
+    /// that close not answered - the fallback - and keeps everything it asked before, and asks too that the in-process close
+    /// was tried once, on the attachment listening, for that run, with its failure in the log, masked.
     /// </summary>
     [Fact]
     public void WithTheOldBackendGoneTheRunRootMovesAndTheOldRunsCloseIsRefusedBeforeTheBridge()
@@ -6791,12 +6919,17 @@ public sealed class RemodelHostTests
             LeaveASessionOnTheBridge(world, "failed");
             int closes = world.Pipeline.Closed.Count;
             restart.Backend.Down = true;
+            world.InProcessCloseFailure = new TimeoutException("FICT the application thread did not answer for 0FAKEtoken.");
 
             restart.Save("save", restart.NewRoot);
 
             Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
             Assert.Single(restart.Backend.Restarts);
             Assert.Equal(closes, world.Pipeline.Closed.Count);
+            Assert.Equal(new[] { (FirstAttachment, first) }, world.InProcessCloses);
+            Assert.Contains(world.Logged, line => line.Contains("FICT the application thread did not answer"));
+            Assert.DoesNotContain(world.Logged, line => line.Contains("0FAKEtoken"));
+            world.InProcessCloseFailure = null;
 
             world.Receive("remodel.plan", "p2", new { });
 
@@ -6830,6 +6963,10 @@ public sealed class RemodelHostTests
     /// there when that root's backend had gone, so the change to the run root in force was made without it - is not closed
     /// through the backend in force, which would refuse its folder, and does not hold the next change back for ever: only
     /// what lies under the run root leaving is the restart's to close. It stays T258's, as the known defect says.
+    /// *Changed deliberately 2026-10-27 (owner decision 161A, 004 T300, research R24):* with that root's backend gone the
+    /// leftover is now closed in process first, so the case makes that close not answered to leave a leftover under the
+    /// earlier run root at all, and asks too that the second change, whose run root leaving holds none, closes nothing in
+    /// process either.
     /// </summary>
     [Theory]
     [InlineData("failed")]
@@ -6843,8 +6980,10 @@ public sealed class RemodelHostTests
             LeaveASessionOnTheBridge(world, leftover);
             int closes = world.Pipeline.Closed.Count;
             restart.Backend.Down = true;
+            world.InProcessCloseFailure = new TimeoutException("FICT the application thread did not answer.");
             restart.Save("first", restart.NewRoot);
             Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Single(world.InProcessCloses);
             string third = Path.Combine(world.Root, "third", "runs");
 
             restart.Save("second", third);
@@ -6853,6 +6992,7 @@ public sealed class RemodelHostTests
             Assert.Equal(third, restart.Review.RunRoot);
             Assert.Equal(2, restart.Backend.Restarts.Count);
             Assert.Equal(closes, world.Pipeline.Closed.Count);
+            Assert.Single(world.InProcessCloses);
         }
     }
 
@@ -9989,6 +10129,9 @@ public sealed class RemodelHostTests
                         Logged.Add(line);
                     }
                 },
+
+                // Owner decision 161A: the in-process close, as the add-in wires it through the gate, over this world's bridge.
+                EndRemodelSessionInProcess = InProcessCloseWired ? EndInProcess : (Action<string, string>?)null,
             };
             _options.RunRootProbe = Probe ?? FakeRunRootProbe.Local();
 
@@ -9997,6 +10140,48 @@ public sealed class RemodelHostTests
 
         public void Receive(string type, string id, object payload) =>
             Host.Receive(JsonSerializer.Serialize(new { type, id, payload }));
+
+        /// <summary>Owner decision 161A (004 research R24): whether the host is given an in-process close at all. Set before <see cref="Open"/>.</summary>
+        public bool InProcessCloseWired { get; set; } = true;
+
+        /// <summary>Every in-process close the host asked for, in order: the attachment named, and the run folder.</summary>
+        public List<(string Attachment, string RunDirectory)> InProcessCloses { get; } = new List<(string Attachment, string RunDirectory)>();
+
+        /// <summary>What the in-process close throws, if anything: an application thread that did not answer, a stopped service.</summary>
+        public Exception? InProcessCloseFailure { get; set; }
+
+        /// <summary>Runs inside the in-process close, before it answers.</summary>
+        public Action? DuringInProcessClose { get; set; }
+
+        /// <summary>
+        /// Owner decision 161A (004 research R24): the in-process close as the add-in's gate and tool service make it, over this
+        /// world's fake bridge: refused on any attachment but the one listening now, as the gate refuses it; the session ended only
+        /// when it is that run's, whole folder and name, as the bridge's routine ends it; and the host told the end inside the
+        /// close, as the routine tells it before the close returns.
+        /// </summary>
+        private void EndInProcess(string attachment, string runDirectory)
+        {
+            InProcessCloses.Add((attachment, runDirectory));
+            DuringInProcessClose?.Invoke();
+            if (InProcessCloseFailure != null)
+            {
+                throw InProcessCloseFailure;
+            }
+
+            if (!string.Equals(attachment, AttachmentNow, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("FICT the tool service listening now is not that attachment.");
+            }
+
+            string? copy = Pipeline.EndSessionInProcess(runDirectory);
+            if (copy != null)
+            {
+                Host.SessionEnded(new RemodelSessionEnd(
+                    RemodelSessionEnd.ReasonClose, runDirectory, copy,
+                    verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                    settingsOutstanding: new string[0], failures: new string[0]));
+            }
+        }
 
         /// <summary>
         /// What the add-in's gate callback does each time the gate publishes a service or
@@ -10415,6 +10600,7 @@ public sealed class RemodelHostTests
                 RunRootProbe = FakeRunRootProbe.Local(),
                 BackendBusy = () => world.Host.RunInProgress,
                 EndRemodelSessionsLeftUnder = runRoot => world.Host.EndTheSessionsLeftUnder(runRoot),
+                EndRemodelSessionsInProcessLeftUnder = runRoot => world.Host.EndTheSessionsLeftUnderInProcess(runRoot),
                 RemodelSessionLeftUnder = runRoot => world.Host.HoldsASessionLeftUnder(runRoot),
                 BackendRestarted = () => world.Host.BackendRestarted(),
             });
@@ -10805,6 +10991,27 @@ public sealed class RemodelHostTests
             {
                 throw CloseFailure;
             }
+        }
+
+        /// <summary>
+        /// Owner decision 161A (004 research R24): the bridge's in-process close of one run's session, with no backend between:
+        /// it ends the session only when the folder is the session's own - the whole folder, so a run of the same name under
+        /// another run root is not - and answers the copy it closed, or null when it ended nothing.
+        /// </summary>
+        public string? EndSessionInProcess(string runDirectory)
+        {
+            if (!SessionOpen
+                || !string.Equals(
+                    Path.GetFullPath(SessionRun!).TrimEnd(Path.DirectorySeparatorChar),
+                    Path.GetFullPath(runDirectory).TrimEnd(Path.DirectorySeparatorChar),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            SessionOpen = false;
+            SessionRun = null;
+            return CopyPath;
         }
 
         public string Plan(string runDirectory, IRemodelRunReporter reporter)

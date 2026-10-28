@@ -1095,6 +1095,17 @@ public class SwReviewAddIn : ISwAddin
         return true;
     }
 
+    /// <summary>
+    /// Owner decision 161A (004 research R24): the Remodel host's in-process close of one run's session before a run-root
+    /// change, with the review backend gone, on <paramref name="gate"/>: the gate's
+    /// <see cref="ToolServiceGate.EndRemodelSessionOf"/>, on the service of <paramref name="attachment"/> only. With no gate
+    /// there is no bridge to end a session on: it throws, so the host reads the close as not answered and the leftover
+    /// stays as it was. What the gate throws is thrown on. Static so it can be tested without a SOLIDWORKS session.
+    /// </summary>
+    internal static void EndRemodelSessionInProcess(ToolServiceGate? gate, string attachment, string runDirectory)
+    {
+    }
+
     private void OnRemodelPageMessage(object sender, string json)
     {
         try

@@ -174,6 +174,15 @@ public sealed class RemodelHostOptions
     /// the folder the tab's View log opens); nowhere by default, so no test writes into the engineer's log.
     /// </summary>
     public Action<string> Log { get; set; } = _ => { };
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): ends, in process, the session the bridge of the attachment named first
+    /// holds for the run whose folder is named second - the routine `remodel.close` runs, through the tool service - or
+    /// throws when it could not. Asked only by <see cref="RemodelHost.EndTheSessionsLeftUnderInProcess"/>, when the
+    /// review backend that would have sent the close has exited. The add-in answers it through the gate
+    /// (`ToolServiceGate.EndRemodelSessionOf`). Null by default: nothing is closed so, and a leftover stays as before.
+    /// </summary>
+    public Action<string, string>? EndRemodelSessionInProcess { get; set; }
 }
 
 /// <summary>
@@ -2075,6 +2084,19 @@ public sealed class RemodelHost : IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): <see cref="EndTheSessionsLeftUnder"/> when the review backend that would
+    /// send its closes has exited. The same leftovers, under <paramref name="runRoot"/>, on the attachment listening now,
+    /// with the tool service held, are each closed in process instead
+    /// (<see cref="RemodelHostOptions.EndRemodelSessionInProcess"/>): the routine `remodel.close` runs, on that attachment's
+    /// bridge, for that exact run. A close answered ends the leftover as there; one not answered - the option unset, or
+    /// a throw - leaves it as it was, its failure in the log, and answers false. The review host goes on with the restart
+    /// whatever this answers: with no backend up, the restart is what brings one back.
+    /// </summary>
+    /// <param name="runRoot">The run root in force, which the restart would move.</param>
+    /// <returns>True when nothing under it is left holding a session; false when a close was not answered.</returns>
+    public bool EndTheSessionsLeftUnderInProcess(string runRoot) => true;
 
     /// <summary>
     /// Owner decision 159A (004 research R22.12, Codex's third review): whether this host still holds a session on the

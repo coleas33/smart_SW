@@ -70,6 +70,58 @@ public sealed class RemodelWiringTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): with the review backend gone, the review host's settings
+    /// restart asks the Remodel host, read through its field, to close what it left under the run root in force in process;
+    /// and the Remodel host's in-process close reaches the gate the add-in holds, read through the field per call. Every
+    /// host case survives losing these lines.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsBothHostsTheInProcessCloseWithTheBackendGone()
+    {
+        Assert.Contains(
+            "EndRemodelSessionsInProcessLeftUnder = runRoot => _remodelHost?.EndTheSessionsLeftUnderInProcess(runRoot),",
+            Collapsed("SwReviewAddIn.cs"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "EndRemodelSessionInProcess = (attachment, runDirectory) => EndRemodelSessionInProcess(_toolService, attachment, runDirectory),",
+            StartRemodelHost(),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): the add-in's in-process close is the gate's, on the service of
+    /// the attachment named; with no gate yet there is no bridge, and it throws, so the Remodel host reads the close as not
+    /// answered; what the gate throws - another attachment listening, none listening - is thrown on.
+    /// </summary>
+    [Fact]
+    public void TheAddInsInProcessCloseIsTheGatesOnTheAttachmentNamed()
+    {
+        const string run = @"C:\FICT\runs\20260927-100000-bracket-remodel";
+        var services = new List<FakeToolService>();
+        var gate = new ToolServiceGate(
+            () => new PageDocument(@"C:\models\bracket.sldprt", "Default"),
+            () =>
+            {
+                var service = new FakeToolService(services.Count + 1);
+                services.Add(service);
+                return service;
+            },
+            _ => { },
+            (_, __) => { },
+            schedule: work => work());
+
+        Assert.Throws<InvalidOperationException>(() => SwReviewAddIn.EndRemodelSessionInProcess(null, "swreview-fake-1", run));
+        Assert.Throws<InvalidOperationException>(() => SwReviewAddIn.EndRemodelSessionInProcess(gate, "swreview-fake-1", run));
+
+        gate.EnsureStarted();
+        SwReviewAddIn.EndRemodelSessionInProcess(gate, "swreview-fake-1", run);
+        Assert.Equal(new[] { run }, Assert.Single(services).EndedInProcess);
+
+        Assert.Throws<InvalidOperationException>(() => SwReviewAddIn.EndRemodelSessionInProcess(gate, "swreview-fake-2", run));
+        Assert.Single(services[0].EndedInProcess);
+    }
+
     /// <summary>004 T274: invalidate queued work before watch disposal, replacement or unload waits.</summary>
     [Fact]
     public void TheAddInInvalidatesConfigurationFollowingBeforeReplacingOrDisposingItsWatch()

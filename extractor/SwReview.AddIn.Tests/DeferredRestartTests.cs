@@ -9094,6 +9094,92 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): with no backend up - the one in force has exited - a restart
+    /// that would move the run root first asks the Remodel tab to close in process what it left under the run root leaving,
+    /// once, before the backend is started, and asks no close through a backend. Whatever that does, a throw included, the
+    /// restart is made: it is what brings a backend back.
+    /// </summary>
+    [Theory]
+    [InlineData("closed")]
+    [InlineData("throws")]
+    public void WithNoBackendUpARestartThatMovesTheRunRootClosesInProcessFirstAndIsMadeWhateverThatDoes(string answer)
+    {
+        var asked = new List<(string RunRoot, int Restarts)>();
+        int askedThroughABackend = 0;
+        RestartWorld? opened = null;
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            EndRemodelSessions = _ =>
+            {
+                Interlocked.Increment(ref askedThroughABackend);
+                return true;
+            },
+            EndRemodelSessionsInProcess = runRoot =>
+            {
+                lock (asked)
+                {
+                    asked.Add((runRoot, opened!.Backend.Restarts.Count()));
+                }
+
+                if (answer == "throws")
+                {
+                    throw new InvalidOperationException("FICT the application thread did not answer.");
+                }
+            },
+        };
+        opened = world;
+        string loaded = world.Settings.RunRoot;
+        string chosen = ChosenRoot(world);
+        world.Backend.Down = true;
+        world.Open();
+
+        world.Receive("settings.save", "save", Choosing(chosen, Save(effort: "low")));
+
+        world.Reply("settings.saved", "save");
+        Assert.Equal(new[] { (loaded, 0) }, asked);
+        Assert.Equal(0, Volatile.Read(ref askedThroughABackend));
+        Assert.Equal(chosen, Assert.Single(world.Backend.Restarts).Settings.RunRoot);
+        Assert.Equal(chosen, world.Host.RunRoot);
+        Assert.False(world.Host.RestartAhead);
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 T300 - guards; research R24): the in-process close is asked only with no backend up and only
+    /// by a restart that moves the run root: with a backend up the close goes through it, as before, and a restart that keeps
+    /// the run root closes nothing at all.
+    /// </summary>
+    [Theory]
+    [InlineData("a backend up")]
+    [InlineData("the run root kept, no backend up")]
+    public void NothingIsClosedInProcessWithABackendUpOrTheRunRootKept(string what)
+    {
+        int askedInProcess = 0;
+        int askedThroughABackend = 0;
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            EndRemodelSessions = _ =>
+            {
+                Interlocked.Increment(ref askedThroughABackend);
+                return true;
+            },
+            EndRemodelSessionsInProcess = _ => Interlocked.Increment(ref askedInProcess),
+        };
+        string chosen = ChosenRoot(world);
+        bool kept = what != "a backend up";
+        world.Backend.Down = kept;
+        world.Open();
+
+        world.Receive("settings.save", "save", kept ? Save(effort: "low") : Choosing(chosen, Save(effort: "low")));
+
+        world.Reply("settings.saved", "save");
+        Assert.Equal(0, Volatile.Read(ref askedInProcess));
+        Assert.Equal(kept ? 0 : 1, Volatile.Read(ref askedThroughABackend));
+        Assert.Single(world.Backend.Restarts);
+    }
+
+    /// <summary>
     /// Owner decision 159A, test first (004 T277; research R22): a cleanup that throws is a close not answered - the restart
     /// waits - and never the restart's failure, which would answer the save `BackendNotRestarted` and drop the restart.
     /// </summary>
@@ -9851,6 +9937,12 @@ public sealed class DeferredRestartTests
         public Func<string, bool>? RemodelSessionLeft { get; set; }
 
         /// <summary>
+        /// Owner decision 161A (004 research R24): what the Remodel tab does when asked, with no backend up, to close in
+        /// process what it left under the run root a restart would move; null does nothing, as the review host's default.
+        /// </summary>
+        public Action<string>? EndRemodelSessionsInProcess { get; set; }
+
+        /// <summary>
         /// Sets the reading of the check tabs named - "Model check", "Standards", "both" or "none" - to
         /// <paramref name="reading"/>, and the other's to none (owner decision 157A).
         /// </summary>
@@ -9980,6 +10072,7 @@ public sealed class DeferredRestartTests
                 StandardsCheckInProgress = () => StandardsChecking(),
                 EndRemodelSessionsLeftUnder = runRoot => EndRemodelSessions == null || EndRemodelSessions(runRoot),
                 RemodelSessionLeftUnder = runRoot => RemodelSessionLeft != null && RemodelSessionLeft(runRoot),
+                EndRemodelSessionsInProcessLeftUnder = runRoot => EndRemodelSessionsInProcess?.Invoke(runRoot),
                 BackendRestarted = () =>
                 {
                     Interlocked.Increment(ref _otherTabsTold);
