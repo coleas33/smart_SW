@@ -168,26 +168,40 @@ public sealed class RemodelRun
     /// <summary>
     /// Why the host's own close ended this run's session: before the run root moved (<see cref="ClosedForRunRoot"/>), or
     /// the engineer's Discard (owner decision 162A, 004 research R23), which no notice tells lost; none otherwise.
+    /// Recorded once: the first cause recorded wins, and a later close answered with no session left - a run-root
+    /// change's close that a Discard pressed meanwhile beat to the session - never overwrites it (R23.7).
     /// </summary>
     internal RemodelCloseCause ClosedFor => (RemodelCloseCause)Volatile.Read(ref _closedFor);
 
-    /// <summary>Marks the session ended, and why (<see cref="ClosedFor"/>).</summary>
+    /// <summary>Marks the session ended, and why (<see cref="ClosedFor"/>) when no cause is recorded yet.</summary>
     internal void MarkSessionClosedFor(RemodelCloseCause cause)
     {
-        Volatile.Write(ref _closedFor, (int)cause);
+        Interlocked.CompareExchange(ref _closedFor, (int)cause, (int)RemodelCloseCause.None);
         MarkSessionEnded();
     }
 
     /// <summary>
-    /// Owner decision 159A (004 research R22.10, Codex's review), and 162A (research R23): why the host last sent this
-    /// run's close - before a settings restart moved the run root, or the engineer's Discard - answered or not. The
-    /// bridge tells a close's end (<c>RemodelHost.SessionEnded</c>, reason <c>remodel.close</c>) before the close is
-    /// answered, or after a wait abandoned; this says whose end it is, so the session is marked <see cref="ClosedFor"/>
-    /// that cause there and not merely ended. It ends nothing itself, and is never cleared.
+    /// Owner decision 159A (004 research R22.10, Codex's review), and 162A (research R23): why the host sent this run's
+    /// close - before a settings restart moved the run root, or the engineer's Discard - answered or not. The bridge
+    /// tells a close's end (<c>RemodelHost.SessionEnded</c>, reason <c>remodel.close</c>) before the close is answered,
+    /// or after a wait abandoned; this says whose end it is, so the session is marked <see cref="ClosedFor"/> that cause
+    /// there and not merely ended. It ends nothing itself, and is never cleared. The engineer's Discard outranks the run
+    /// root's close (R23.7): Discard always marks it, and the run root's close only while nothing is marked, so an end
+    /// that could be either close's is the Discard's, whichever was sent first.
     /// </summary>
     internal RemodelCloseCause CloseSentFor => (RemodelCloseCause)Volatile.Read(ref _closeSentFor);
 
-    internal void MarkCloseSentFor(RemodelCloseCause cause) => Volatile.Write(ref _closeSentFor, (int)cause);
+    internal void MarkCloseSentFor(RemodelCloseCause cause)
+    {
+        if (cause == RemodelCloseCause.Discard)
+        {
+            Volatile.Write(ref _closeSentFor, (int)cause);
+        }
+        else
+        {
+            Interlocked.CompareExchange(ref _closeSentFor, (int)cause, (int)RemodelCloseCause.None);
+        }
+    }
 
     /// <summary>
     /// Owner decision 159A, on the final review: the stage and the words of the last status posted for this run while it
