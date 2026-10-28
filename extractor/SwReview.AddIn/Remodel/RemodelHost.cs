@@ -1099,11 +1099,12 @@ public sealed class RemodelHost : IDisposable
             RemodelRun? run = FindRun(outcome.RunDirectory);
             if (run != null && SamePath(run.CopyPath, outcome.CopyPath))
             {
-                // Owner decision 159A (004 research R22.10): the bridge tells a close's end before the close is answered,
-                // so the end of the close sent before the run root moves is marked as that close's here.
-                if (run.CloseForRunRootSent && outcome.Reason == RemodelSessionEnd.ReasonClose)
+                // Owner decision 159A (004 research R22.10), and 162A (R23): the bridge tells a close's end before the close
+                // is answered, so the end of a close sent before the run root moves, or by Discard, is marked as that close's here.
+                RemodelCloseCause sentFor = run.CloseSentFor;
+                if (sentFor != RemodelCloseCause.None && outcome.Reason == RemodelSessionEnd.ReasonClose)
                 {
-                    run.MarkSessionClosedForRunRoot();
+                    run.MarkSessionClosedFor(sentFor);
                 }
                 else
                 {
@@ -2021,7 +2022,7 @@ public sealed class RemodelHost : IDisposable
     ///
     /// 004 research R22.10, on review: a run whose copy was discarded is closed too while it holds its session - Discard
     /// deletes the copy folder whatever its own close answered - and a second close of one that already ended is answered
-    /// with no SOLIDWORKS call. A run's close is marked sent (<see cref="RemodelRun.CloseForRunRootSent"/>) before it goes,
+    /// with no SOLIDWORKS call. A run's close is marked sent (<see cref="RemodelRun.CloseSentFor"/>) before it goes,
     /// since the bridge tells its end (<see cref="SessionEnded(RemodelSessionEnd)"/>) before the close is answered.
     ///
     /// Called under the restart's lock, after the review host has read this host free: a plan or a run begins only through
@@ -2070,13 +2071,13 @@ public sealed class RemodelHost : IDisposable
             RemodelRun? left = LatestRun;
             if (RunLeftUnder(left, attachment, runRoot))
             {
-                left!.MarkCloseForRunRootSent();
+                left!.MarkCloseSentFor(RemodelCloseCause.RunRoot);
                 if (!close(pipeline, attachment!, left.RunDirectory))
                 {
                     return false;
                 }
 
-                left.MarkSessionClosedForRunRoot();
+                left.MarkSessionClosedFor(RemodelCloseCause.RunRoot);
                 AnnounceLostPlan();
             }
 
@@ -2694,6 +2695,10 @@ public sealed class RemodelHost : IDisposable
     /// a teardown to take, and no Start can use it in this build either way, so neither makes it lost -
     /// the tool service following the copy the plan's close left active included, which was told as
     /// SOLIDWORKS switching documents. Planning again, which sets such a plan aside, still does.
+    ///
+    /// Owner decision 162A (004 research R23): nor is a plan whose session the engineer's own Discard closed
+    /// (<see cref="RemodelRun.ClosedFor"/>), though the bridge tells that end before the copy is marked discarded, and
+    /// though the folder could not be deleted: the Discard answer is the word. A teardown's end meanwhile is a re-attach's.
     /// </summary>
     private bool IsLostPlan(RemodelRun? run) =>
         run != null
@@ -2701,6 +2706,7 @@ public sealed class RemodelHost : IDisposable
         && !run.CopyDiscarded
         && (run.ClosedByPlanAgain
             || (!run.SessionClosedAtPlan
+                && run.ClosedFor != RemodelCloseCause.Discard
                 && (run.SessionEnded
                     || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()))));
 
@@ -2949,6 +2955,13 @@ public sealed class RemodelHost : IDisposable
         IRemodelPipeline? pipeline = HoldsItsSession(run, _options.ToolServiceAttachment())
             ? _options.Pipeline
             : null;
+        if (pipeline != null)
+        {
+            // Owner decision 162A (004 research R23): the bridge tells the close's end before the close is answered, so
+            // before the copy is marked discarded; marked the Discard's first, that end is never told as a lost plan.
+            run.MarkCloseSentFor(RemodelCloseCause.Discard);
+        }
+
         try
         {
             DeleteCopyFolder(pipeline, run.RunDirectory);
