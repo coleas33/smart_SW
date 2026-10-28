@@ -2435,7 +2435,29 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// </summary>
     public RemodelSessionEnd? EndRemodelSessionOf(string runDirectory)
     {
-        return null;
+        RemodelSession? session = _session;
+        if (session == null || string.IsNullOrWhiteSpace(runDirectory))
+        {
+            return null;
+        }
+
+        string folder;
+        try
+        {
+            folder = System.IO.Path.GetFullPath(runDirectory.Trim()).TrimEnd(System.IO.Path.DirectorySeparatorChar);
+        }
+        catch (Exception error) when (RemodelScope.IsPathError(error))
+        {
+            return null;
+        }
+
+        if (!string.Equals(System.IO.Path.GetFileName(folder), session.Scope.RunId, StringComparison.Ordinal)
+            || !string.Equals(folder, session.Scope.RunDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return EndRemodelSession(RemodelSessionEnd.ReasonClose);
     }
 
     /// <summary>

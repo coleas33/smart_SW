@@ -4062,20 +4062,22 @@ public sealed class ToolServiceWiringTests
     /// <summary>
     /// Owner decision 161A, test first (004 T300; research R24): an in-process close the application thread does not answer
     /// in time throws a timeout, and still runs when the thread is free - checking the run again then: it ends the run's own
-    /// session, and ends nothing when the folder it names is a run of the same name under another run root.
+    /// session, and ends nothing when the folder it names is a run of the same name under another run root. *Added with the
+    /// fix (004 T301), a guard:* nor when the service has stopped meanwhile - its teardown, posted behind it, ends the session.
     /// </summary>
     [Theory]
     [InlineData("the run's own")]
     [InlineData("the same name under another run root")]
+    [InlineData("the service stopped meanwhile")]
     public void AnInProcessCloseNotAnsweredInTimeThrowsAndChecksTheRunAgainWhenItRuns(string named)
     {
         using (var release = new ManualResetEventSlim(false))
         using (var world = new SeatedHostWorld(TimeSpan.FromMilliseconds(300)))
         {
             world.PlanOnTheSeat();
-            string folder = named == "the run's own"
-                ? world.RunDirectory
-                : Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(world.RunDirectory)!)!, "moved", world.RunId);
+            string folder = named == "the same name under another run root"
+                ? Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(world.RunDirectory)!)!, "moved", world.RunId)
+                : world.RunDirectory;
             try
             {
                 ((IAppThreadInvoker)world.App).Post(() => release.Wait());
@@ -4083,18 +4085,27 @@ public sealed class ToolServiceWiringTests
                 Assert.Throws<TimeoutException>(() => world.Host.EndRemodelSessionOf(folder));
                 Assert.Empty(world.Told);
                 Assert.Empty(world.Seat.Closed);
+                if (named == "the service stopped meanwhile")
+                {
+                    world.Host.Dispose();
+                }
             }
             finally
             {
                 release.Set();
             }
 
-            // Queued behind the abandoned close: back only once it has run.
+            // Queued behind the abandoned close, and the teardown if any: back only once they have run.
             world.App.RunOnApplicationThread(() => { });
 
             if (named == "the run's own")
             {
                 Assert.Equal(RemodelSessionEnd.ReasonClose, Assert.Single(world.Told).Outcome.Reason);
+                Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            }
+            else if (named == "the service stopped meanwhile")
+            {
+                Assert.Equal(RemodelSessionEnd.ReasonToolServiceStopped, Assert.Single(world.Told).Outcome.Reason);
                 Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
             }
             else

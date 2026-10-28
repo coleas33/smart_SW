@@ -646,6 +646,15 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// </summary>
     public void EndRemodelSessionOf(string attachment, string runDirectory)
     {
+        IToolService? service = Service;
+        if (service == null || !string.Equals(service.PipeName, attachment, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "the SwReview tool service listening now is not the attachment that holds that run's session, so nothing is "
+                + "closed through it.");
+        }
+
+        service.EndRemodelSessionOf(runDirectory);
     }
 
     /// <summary>

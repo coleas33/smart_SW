@@ -682,14 +682,16 @@ public sealed class RemodelTeardownTests : IDisposable
     [Theory]
     [InlineData("as made")]
     [InlineData("with a trailing separator")]
-    [InlineData("in another case")]
+    [InlineData("its run root in another case")]
     public void EndingOneRunsSessionInProcessIsTheCloseRoutineForThatRunAlone(string spelling)
     {
         _harness.Open();
         _harness.Seat.ToggleWrites.Clear();
         string folder = spelling == "with a trailing separator"
             ? _harness.RunDirectory + Path.DirectorySeparatorChar
-            : spelling == "in another case" ? _harness.RunDirectory.ToUpperInvariant() : _harness.RunDirectory;
+            : spelling == "its run root in another case"
+                ? Path.Combine(_harness.Root.ToUpperInvariant(), RemodelHarness.RunId)
+                : _harness.RunDirectory;
 
         RemodelSessionEnd? outcome = _harness.Dispatcher.EndRemodelSessionOf(folder);
 
@@ -709,12 +711,14 @@ public sealed class RemodelTeardownTests : IDisposable
     /// <summary>
     /// Owner decision 161A, test first (004 T300 - guards; research R24): a folder that is not the open run's ends nothing - a
     /// run of the same name under another run root, which a <c>run_id</c> alone cannot tell apart, another run under the same
-    /// root, the run's name alone, and what is not a path. Nothing is called on SOLIDWORKS or the gate, nobody is told, and
-    /// the session is left as it was for the run's own close.
+    /// root, the run's name in another case, which a <c>run_id</c> compared exactly is not, the run's name alone, and what is
+    /// not a path. Nothing is called on SOLIDWORKS or the gate, nobody is told, and the session is left as it was for the
+    /// run's own close.
     /// </summary>
     [Theory]
     [InlineData("the same name under another run root")]
     [InlineData("another run under the same root")]
+    [InlineData("the run's name in another case")]
     [InlineData("the run's name alone")]
     [InlineData("blank")]
     [InlineData("not a path")]
@@ -726,6 +730,7 @@ public sealed class RemodelTeardownTests : IDisposable
         {
             "the same name under another run root" => Path.Combine(_harness.Root, "moved", RemodelHarness.RunId),
             "another run under the same root" => Path.Combine(_harness.Root, "20260916-142202-bracket-remodel"),
+            "the run's name in another case" => Path.Combine(_harness.Root, RemodelHarness.RunId.ToUpperInvariant()),
             "the run's name alone" => RemodelHarness.RunId,
             "blank" => "  ",
             _ => _harness.RunDirectory + "|" + "\0",

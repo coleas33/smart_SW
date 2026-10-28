@@ -495,6 +495,19 @@ With no backend up there is nothing to close through, and the restart, which bri
 held: that leftover stays pending as T258 leaves it, each plan refused retryably, until a re-attach's
 teardown ends the session - a known defect before Start (research R22).
 
+*Amended 2026-10-27 (owner decision 161A; T300 to T302; research R24):* with no backend up, the same
+leftovers - the pending failed plan, and a waiting plan or a finished run that still holds its session,
+on the attachment listening now, under the run root in force - are closed in process before the
+restart starts the next backend (`RemodelHost.EndTheSessionsLeftUnderInProcess`, holding the tool
+service as a plan does): through the gate, on the service of that attachment only, by the routine
+`remodel.close` runs, for that exact run (`bridge-remodel.md`). A close answered ends the leftover as
+the close through the backend does - the failed plan's record let go, a run marked closed for the run
+root, and a plan so closed told lost once in `RemodelHost.PlanClosedForRunRootMessage`. The restart is
+never held by it: a close not answered - the application thread not answering in time, the service
+gone, another attachment listening - leaves the leftover as before, its failure in the add-in's log,
+and the known defect above applies to that case only. A backend that is up but does not answer is
+unchanged (`RemodelCleanupPending`, above). No word on the tab changes.
+
 *Amended 2026-10-22 (T259, T260; research R19.28):* the engineer's Stop and the vanished-copy stop
 remember their `applying` stopping words before posting them, under the existing run-ending lock.
 An `init.latest_run.status` while that run remains in flight therefore carries the host's latest word,
