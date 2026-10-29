@@ -32,7 +32,8 @@ another run root among them - is `InvalidRunDir` (400) with nothing sent to the 
 deliberately so: no route accepts a folder under a run root this backend was not started with, and
 none is added for clean-up. A settings restart that would move the run root therefore has the add-in
 close what the Remodel tab left under the run root in force first, through the backend still serving
-it, and waits while that close is not answered (`pane-remodel-messages.md`, `RemodelCleanupPending`).
+it. (While that close was not answered the restart waited; owner decisions 163A and 164A remove the
+wait - below.)
 `TestClose.test_a_close_outside_the_run_root_is_refused_before_the_bridge` pins the close route's own
 refusal.
 
@@ -43,6 +44,16 @@ not re-check the source attestation, as `POST /remodel/close` does (U26): the ch
 filed in the run folder, not a condition of the close, and a run closed so keeps its attestation
 unchecked, as one ended by a re-attach's or an unload's teardown always has (R24 says why that is
 acceptable). Still no route accepts a folder outside its run root.
+
+*Amended 2026-10-29 (owner decisions 163A and 164A; `research.md` R25); no route changes:* when the
+backend serving the run root in force does not answer that close - stuck, timing out, unreachable, or
+answering with no class the Remodel tab reads as an answer - the add-in no longer waits. It stops that
+backend, refusing as before while a turn runs, waits until every process of it has exited, so that it
+can send the bridge nothing more, and then closes the sessions in process as above, before the next
+backend starts. A stop that does not reach that exit within its bound closes nothing in process, and
+the restart goes on. A close this backend had already handed to the bridge runs there before the one
+in process, which then finds no session of that run and is answered so (R24.11), or after it, when it
+finds none itself. Either way the run is ended once. Nothing this backend serves changes.
 
 ## Routes
 

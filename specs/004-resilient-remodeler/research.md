@@ -4069,6 +4069,10 @@ answers about the turns. A backend that answers nothing, with a review chat trac
 tool-service gate hold the follow (`TurnMayBeRunning` counts an unanswered chat), and every look
 then ended in `BackendUnavailable` before the close was asked. Only the earlier folder saved again
 works there, and the words now say so.
+*Settled by R25 (owner decisions 163A and 164A, 2026-10-29):* a close through the alive backend that
+is not answered no longer holds the restart. The add-in stops that backend, waits until it has exited,
+closes the leftover in process as R24 does, and starts the next backend; the words above, and the
+`RemodelCleanupPending` class, are removed.
 
 A narrowly bound native hook was investigated and **not** added:
 `IToolService.EndRemodelSessionOf(canonicalRunDirectory)` would post, through
@@ -4927,7 +4931,9 @@ The exited backend only. A backend that is up but does not answer is unchanged: 
 words, and Start still waits on it. It was not covered. While A is alive it may still send
 commands over the bridge, and the decision names the exited case only. Covering it would mean
 closing under a backend that may be mid-close itself, which is extra risk the owner has not
-weighed.
+weighed. *Superseded by R25 (owner decision 163A, 2026-10-29):* the owner weighed it. A backend up
+but not answering is now stopped first, and the same close is made in process once its processes
+have exited, so it can send nothing more (R25.3).
 
 ### R24.6 Tests changed on purpose
 
@@ -5024,6 +5030,9 @@ No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopp
 
 ### R24.10 What Start (T172) waits on now
 
+*Updated by R25.9 (owner decision 163A):* the first item below is settled in code; its seat order joins
+T303.
+
 - The old backend alive but not answering, which holds every start until the earlier run root is
   saved again, or, while the backend still answers about turns, another document is made active
   (R22.4, R22.10 to R22.12).
@@ -5109,3 +5118,290 @@ Every row failed at least one case; none survived. After the nineteen, the produ
 No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped.
 
 R24.10's list is unchanged: item 4 is covered by T303.
+
+## R25 A stuck old backend is stopped before the run-root change (decisions 163A and 164A; T307 to T309; 2026-10-29)
+
+Owner decisions 163A and 164A (2026-10-29, thirteenth round, answers 1A and 2A), on branch
+`stuckbackend-163a` from main `1d2fe20`. The guard, the allowlists, run and session identity, the
+outside-root refusal and every bridge command are unchanged; Start stays disabled.
+
+### R25.1 What was decided, and why
+
+- **163A.** R22.4's known defect: with backend A alive but not answering - stuck, timing out,
+  `BackendUnavailable`, `HttpError`, any class the Remodel host reads as not answered, or the
+  Remodel tab's delegate throwing - the close of the old run before the run root moves was not
+  answered, and the restart waited, every review, turn call, remodel run and check refused until the
+  earlier folder for runs was saved again. Now the restart does not wait. It stops A, waits until
+  A's processes have really exited, so that A can send the bridge nothing more, closes what is left
+  in process through 161A's path (`ReviewHost.EndTheRemodelSessionsInProcess` ->
+  `ReviewHostOptions.EndRemodelSessionsInProcessLeftUnder` -> `RemodelHost.EndTheSessionsLeftUnderInProcess`
+  -> `ToolServiceGate`/`IToolService`/`ToolServiceHost` -> `SwBridgeDispatcher.EndRemodelSessionOf`),
+  then starts B. If that close fails too, the restart goes on and the leftover stays until a
+  re-attach or an unload, as 161A's fallback leaves it, logged and masked. An answered close
+  (closed, or answered with what it left), a restart that keeps the run root, and the
+  `AnyTurnRunning()` check before the close are unchanged.
+- **164A.** With 163A no restart waits for a close, so the waiting machinery is unreachable and is
+  removed: `RemodelCleanupPendingException`; `DeferredRestart`'s `Hold.Cleanup`,
+  `Outcome.CleanupPending`, its eight-argument constructor and the watcher's cleanup branch
+  (`DeferredRestart.cs` is its pre-159A text plus R22.12's recheck after a look, which is not
+  cleanup's and stays); the `RemodelCleanupPending` class, its 409 in `BackendProxyHandler`, the
+  host's words for it (`CleanupHoldsTheRestart`, `CleanupHoldsTheWork`, `CleanupNoAnswerHoldsTheRestart`,
+  `CleanupNoAnswerHoldsTheWork` and their ways out), and its label in `review_words_v1.yaml`; the
+  save's and the watcher's sentence (`CleanupHoldsTheRestartPromise`) and its place among
+  `backend.restarted`'s sentences; and the derived reading that chose those words
+  (`ReviewHost.CleanupLeftBehind`, `ReviewHostOptions.RemodelSessionLeftUnder` and its wiring). A save
+  whose restart is made at once is answered `settings.saved` with no `status`, as any restart made
+  at once always was; the watcher's word is `RestartNotAnswered` again.
+- **Kept.** The run root in force saved back exactly as written (R22.12, T288: `ChooseRunRoot`), still
+  a valid choice; 162A's close causes and their compare-and-swap; the attempt marker (R22.14);
+  `PlanClosedForRunRootMessage`; the failed plan's record let go by compare-and-swap (T291); and
+  `RemodelHost.HoldsASessionLeftUnder`, which no product code reads any more but which is the one
+  reading of the walk's two leftovers that the tests assert the walk's effects against (late ends,
+  re-attach, the fallback). Kept on purpose; removing it would rewrite those assertions to observe
+  less. `RemodelHost.EndTheSessionsLeftUnder` still answers whether its close was answered: that
+  answer now chooses the stop.
+
+### R25.2 The design
+
+- **The seam.** `IBackendClient.StopForRestart()`: stops the backend in force for a restart that will
+  start the next one with `Restart`, refusing as `Restart` does while a turn runs, and answers whether
+  every process of it has exited. `BackendClient.StopForRestart` takes the client's start gate and
+  refuses once unloading (as `Start`/`Restart` do); `BackendSupervisor.StopForRestart` asks the
+  supervisor's one rule (`_anyTurnRunning`, the review host's `AnyTurnRunning`), then
+  `BackendProcess.Stop(TreeExitBound)` and sets `Current` to null. The interface rather than an
+  option, so every backend the review host can be given must answer it; the ten test fakes gained
+  it (seven throw `NotSupportedException`: no case of theirs leaves a close unanswered).
+- **Where.** `ReviewHost.RestartWith` reads the run root leaving, then
+  `EndTheRemodelSessionsTheRunRootLeaves` - unchanged up to its answer, which it now returns rather
+  than throwing. Answered (or nothing to ask): `StartWith(settings, key, Backend.Restart)`, as before.
+  Not answered: `StartWith` with a start whose first step is
+  `StopTheOldBackendThenEndTheRemodelSessionsInProcess` and whose second is `Backend.Restart`.
+- **The stop.** Refused with `ObjectDisposedException` once the host is stopping (unload). Otherwise
+  `StopForRestart()`; when it answers true, the in-process close; when false, nothing in process.
+  Either way the start goes on to `Restart`, which with A gone stops nothing and starts B.
+
+### R25.3 The reading checks
+
+1. **Really exited before the in-process close.** It was not so. `BackendProcess.Dispose`
+   (`BackendProcess.cs`) asks Ctrl+Break and waits the grace for the *launcher*, then
+   `ChildProcess.Dispose` -> `Kill` (`ChildProcess.cs:550`) terminates the launcher and waits at most
+   5 s for it without checking (`ChildProcess.cs:561`), then `JobObject.Dispose` closes the job handle.
+   The server - the process holding the bridge's pipe - is a grandchild of `uv.exe`, and
+   kill-on-close terminates it asynchronously: `CloseHandle` returns at once. The existing tests poll
+   for exactly that (`RestartEndsTheWholeProcessTreeAndNotOnlyTheLauncher` waits on the grandchild).
+   Fixed: `JobObject.EndAll(bound)` (`JobObject.cs:114`) calls `TerminateJobObject` and polls the job's
+   `ActiveProcesses` (basic accounting) every 10 ms until it is zero or the bound is up, never
+   throwing; `BackendProcess.Stop(TimeSpan)` (`BackendProcess.cs:431`) runs it before the job is
+   closed and answers it, writing "a process of the backend had not exited N seconds after it was
+   ended" to the backend's own log (masked by its secrets) when it is false;
+   `BackendSupervisor.TreeExitBound` is 5 s (`BackendProcess.cs:785`), `Kill`'s own bound. `Dispose`
+   is `Stop(TimeSpan.Zero)`: the unload path waits for nothing more than before. False: the review
+   host closes nothing in process, and the restart goes on with the leftover as 161A's fallback
+   leaves it. **Pipe order.** A command A wrote to the bridge's pipe before it exited can still be
+   read and run on the application thread before or after the close we post. The only such command
+   is that same close: no turn runs (asked before the close and again by the stop) and no remodel run
+   or check is in progress (read under the lock). Whichever runs second finds no session of that run
+   - the dispatcher answers null ("nothing closed", read as answered, R24.11), or `target_mismatch`
+   through the route - so the run is ended once. The native order is not exercised here and joins
+   T303's seat check, beside R22.3's.
+2. **How A is stopped, and the bookkeeping.** The stop is the start's first step, inside `StartWith`,
+   so 153A/154A's marks cover it: `_keysStarted` gains B's key before the stop, `_starting` is set
+   and `_lastStartFailed` cleared before it, so `BackendStartFailed` reads false while no backend is
+   up (`WhileTheOldBackendIsStoppedForARestartNoStartIsReadAsFailed`, after an earlier restart that
+   failed before it stopped anything); a `TurnRunningException` from the stop is the refused path
+   (nothing stopped, `_lastStartFailed` restored, the restart waits for the turn); a failure after it
+   is a failed start with no backend up, told to the other tabs (`TellTheOtherTabsTheRestartFailed`
+   reads `Endpoint == null`); `_inForce` and `_runRootsInForce` change only once B has started. Once
+   A is stopping, `Endpoint` reads null - `BackendProcess.Healthy` is false from `_disposed` on, and
+   the supervisor's `Current` is null after - exactly the existing `Endpoint == null` path. Every
+   restart runs under `DeferredRestart._restarting` (`RestartWith` is reached only from a save's
+   `Now` and from `Apply`'s `RestartWithSavedSettings`, both under that lock). Outside it: the proxy
+   answers `BackendUnavailable` (503), the event pump finds no endpoint, a look reads no backend and
+   then waits on the lock and is told the restart was made (`EndedSince`), a plan, Start or check
+   begins only through `Begin` on the same lock, and the tool-service gate's `TurnMayBeRunning` is
+   false with no endpoint, so a follow may re-attach in the window - as in 161A's window: the walk
+   holds the tool service while it closes, and a teardown that lands first ends the session itself,
+   the gate then refusing the in-process close for another attachment (logged, the restart going on).
+3. **A slow, not hung, A.** The walk marks the run's close sent for the run root (162A) before the
+   close through A. If A's close reaches the bridge as A stops, its end (`remodel.close`) is read as
+   the run root's close: a waiting plan is told lost once in `PlanClosedForRunRootMessage`, a failed
+   plan's record let go by T291's compare-and-swap, and the walk in process finds nothing left. If it
+   runs inside the close in process, the dispatcher finds no session of that run and answers null,
+   read as answered (R24.11), and the marks land once. Discard still outranks a run-root close
+   (`ADiscardPressedAroundARunRootChangesCloseOutranksIt`, both orders). Pinned by
+   `ASlowOldBackendsCloseThatReachesTheBridgeAfterAllIsNotMadeTwice` (four rows).
+4. **Later callers and the NoAnswer words.** `Apply`'s look and `Hold.NoAnswer` are unchanged: with a
+   hung backend and a tracked chat, a restart that waits (for a turn that started during the save, a
+   remodel run or a check) is answered `NotAnswered` before it is tried. Its words, R22.11's and
+   R22.12's cleanup variants, became untrue under 163A - "could not be closed" when no close was
+   tried, and "the earlier folder for runs" as the only way out - so they are removed with the
+   derived reading (164A). What remains is `BackendUnavailable`'s own, "Save the settings again to
+   restart it", and the watcher's `RestartNotAnswered`, "to restart it now, save the settings again";
+   both are true now: a save made then reads no answer as no turn (the save's own check, the close's,
+   and the supervisor's), its close through A times out, A is stopped, the leftover closed in
+   process and B started on that save
+   (`AfterARestartWaitsABackendThatStopsAnsweringIsToldToSaveAgainAndSavingAgainReplacesIt`). The
+   behaviour of `NoAnswer` itself is not changed.
+5. **Unload and disposal.** `StopRestarting` sets `_stopping` first; the stop step reads it and stops
+   nothing once it is set (`AnUnloadDuringTheCloseStopsNothingAndClosesNothingInProcess`: the save is
+   answered `AddInStopping`). `BackendClient.StopForRestart` refuses once `_unloading` is cancelled and
+   the supervisor once disposed. No double disposal: the stop nulls `Current`, so the unload's
+   `BackendSupervisor.Dispose` -> `Stop` finds none, and `BackendProcess.Stop` returns at once a
+   second time. A stop in flight holds the client's gate, which `BackendClient.Dispose` waits for,
+   bounded by the grace, `Kill`'s 5 s and the 5-s tree bound. An in-process close running while
+   unload proceeds is 161A's existing window (a stopped service ends nothing, R24.4).
+6. **Constitution.** No write path, guard key, allowlist entry, bridge command, secret or outside-root
+   route is added: the stop ends a process the add-in started, and the close is 161A's caller,
+   unchanged. `git diff 1d2fe20 -- extractor/SwReview.Extractor/Guard` is empty.
+
+### R25.4 Costs, recorded
+
+- A save that moves the run root past a hung backend takes the close's 30-s client timeout, then the
+  stop (grace, kill, tree bound), then the in-process close (at most `TeardownTimeout`, 30 s), then
+  B's start. The turn checks are as many as before: one before the close, the supervisor's at the
+  stop, and `Restart`'s, which with A down asks nothing.
+- A hung A with a turn really running is stopped all the same: a save reads no answer as no turn, as
+  it always has (R22.11).
+
+### R25.5 Tests changed or removed on purpose
+
+Removed, with what they pinned:
+
+- `DeferredRestartTests.ARestartWhoseRemodelCleanupIsNotAnsweredStillWaits`: the exception, hold and
+  outcome 164A removes.
+- `DeferredRestartTests.ARemodelCleanupThatThrowsHoldsTheRestartAsOneNotAnswered`: now the "throws" row
+  of `ARestartWhoseRemodelCleanupIsNotAnsweredStopsTheOldBackendClosesInProcessAndStartsTheNext`.
+- `DeferredRestartTests.ALookWhileASecondSaveAsksTheCloseAgainIsStillToldTheCleanupHoldsTheRestart`: a
+  race on the cleanup's words while a close held the restart; neither exists.
+- `DeferredRestartTests.OnceNothingIsLeftUnderTheOldRunRootABackendThatDoesNotAnswerIsToldInItsOwnWords`:
+  with the derived reading gone a backend that does not answer is always told in its own words, which
+  the item-4 case and `ANewReviewWhileTheBackendDoesNotAnswerIsRefusedSayingSo` pin.
+- `RemodelWiringTests.TheAddInHandsTheReviewHostTheRemodelHostsReadingOfASessionLeft`: the wiring it
+  pinned is removed.
+- `BackendProxyHandlerTests.ARefusalIsAnsweredWithTheStatusTheBackendGivesIt`, its
+  `RemodelCleanupPending` row: the class is removed.
+
+Changed, each now asking the new behaviour (renamed where the old name named the wait):
+
+- `ARestartThatWouldMoveTheRunRootWaitsWhileTheRemodelCleanupIsNotAnswered` ->
+  `ARestartWhoseRemodelCleanupIsNotAnsweredStopsTheOldBackendClosesInProcessAndStartsTheNext`;
+  `TheWatcherStopsAtARemodelCleanupNotAnsweredAndSaysSo` -> `TheWatcherMakesARestartWhoseRemodelCleanupIsNotAnswered`;
+  `TheWatcherAfterACleanupNotAnsweredMeetingABackendThatDoesNotAnswerSaysTheCleanupsSentence` ->
+  `AStuckBackendIsReplacedOnTheFirstSaveThatMovesTheRunRoot`;
+  `AfterACleanupNotAnsweredABackendThatStopsAnsweringIsToldWithTheWayOutThatWorks` ->
+  `AfterARestartWaitsABackendThatStopsAnsweringIsToldToSaveAgainAndSavingAgainReplacesIt` (its part
+  on the tool-service gate holding a follow argued for the removed words; the gate's rule itself is
+  unchanged and pinned by the tool-service tests);
+  `TheRelativeRunRootInForceCanBeSavedBackWhileACleanupHoldsTheRestart` ->
+  `TheRelativeRunRootInForceCanBeSavedBackAsWritten` (a remodel run holds the restart instead; it asks
+  the same of the save back, and of another relative folder refused).
+- `RemodelHostTests`: `ARunRootChangeWaitsWhileTheOldRunsCloseIsNotAnswered` ->
+  `ARunRootChangeWhoseOldRunsCloseIsNotAnsweredStopsTheOldBackendThenClosesItInProcess` (the same ten
+  rows, the log assertions kept); `ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot`
+  -> `ARunRootChangeWhoseFailedPlansCloseIsNotAnsweredClosesItInProcessThenPlansUnderTheNewRoot` (R22.3's
+  same-name pins kept); `AFailedPlansCloseThatEndsLateLetsTheRunRootMoveWithNoCloseSentAgain` ->
+  `ASlowOldBackendsCloseThatReachesTheBridgeAfterAllIsNotMadeTwice`.
+- `APlanClosedBeforeTheRunRootMovesIsToldLostOnceInItsOwnWordsWhenTheBridgeTellsTheEnd` ("late",
+  "teardown") and `ADiscardPressedAroundARunRootChangesCloseOutranksIt` ("run root, then discard"):
+  the close in process is made not answered too, to keep the session on the bridge for the end they
+  tell; they ask that the run root moved where they asked for the removed sentence. Every other
+  assertion is as it was.
+- Asking more: `NothingIsClosedInProcessWithABackendUpOrTheRunRootKept` (nothing stopped),
+  `ALeftoverUnderTheOldRunRootIsClosedThroughTheOldBackendBeforeTheRestartMovesIt` (an answered close
+  stops nothing and closes nothing in process), `ARestartClosesNothingWhileSomethingHoldsItOrWhenTheRunRootStays`
+  (its line that the removed sentence was not posted dropped; nothing stopped in any row).
+- Mechanical: `ARestartMadeWhileALookWaitsOnTheBackendIsTheLooksAnswer` builds the seven-argument
+  `DeferredRestart`; `RestartSentences` loses the removed sentence (three cases compare it);
+  `EachOfTheRestartsReportsIsSaidOnlyWhileTheHostIsNotStopping` pins the watcher's word as
+  `RestartNotAnswered` again; `ErrorLabelsCoverTheHostTests.TheScanFindsTheClassesTheHostAndThePageMake`
+  no longer expects the class; `RestartWorld` loses `RemodelSessionLeft` and its fake backend gains the
+  stop (`StopExits`, `DuringStop`, `Stops`, `StopsAsked`); `RunRootRestart` loses the reading's wiring
+  and `RootBackend` gains the stop and `Steps`; the other seven fakes gain `StopForRestart`.
+- Python: `test_review_words.RESTART_HOLDS` loses the label. Fixtures: the four label-bearing pane
+  fixtures (`review-big-assembly.json`, `review-waiting.json`, `review-waiting-big-assembly.json`,
+  `review-waiting-restored.json`) were regenerated with `generate_pane_fixture.py --write` and
+  `generate_waiting_fixtures.py --write`, each losing that one line and nothing else;
+  `review-not-sent-session.json` came back byte for byte; `review-waiting-apply-failure.json` was not
+  regenerated; `review-send-failure-events.json`'s `source_fixture_sha256` is the CRLF sha256 of the new
+  `review-waiting.json` (`354308bf...`).
+
+### R25.6 Test-first evidence
+
+T307 (`d167233`) compiled against inert seams (`StopForRestart` answering false, stopping nothing). The
+six focused classes ran 1,135 cases: **36 failed**, every one on its assertion (`Assert.Null`,
+`Equal`, `Empty`, `True`, `Throws`, `DoesNotContain`, `Contains`), none on an exception from a seam;
+the guards (`AnUnloadDuringTheCloseStopsNothingAndClosesNothingInProcess`,
+`TheRelativeRunRootInForceCanBeSavedBackAsWritten`) and the strengthened rows passed. Python: **1
+failure** (`test_the_retired_remodel_cleanup_class_has_no_sentence`). One helper was corrected before the
+fix, not loosened: `ASlowOldBackendsCloseThatReachesTheBridgeAfterAllIsNotMadeTwice` first ran the late
+close through the fake pipeline, the backend's route, which is refused once A is down; it now ends the
+session at the fake bridge, where a close A had handed over runs. Its rows still fail with the stop
+taken out (M77). Added with the fix (T308), a guard:
+`WhileTheOldBackendIsStoppedForARestartNoStartIsReadAsFailed` (M81).
+
+### R25.7 Mutations
+
+Each fix taken out once, alone, by an exact replacement matching once, built, and run against the six
+focused classes (`DeferredRestartTests`, `RemodelHostTests`, `BackendProcessTests`,
+`BackendProxyHandlerTests`, `ErrorLabelsCoverTheHostTests`, `RemodelWiringTests`; 1,136 cases), then
+restored from the bytes read before, sha256 checked equal. After the eleven, the tree was identical to
+the one before them.
+
+| # | Fix taken out | Failed | Cases that failed | Restored |
+|---|---|---|---|---|
+| M77 | `ReviewHost.cs`: the stop and the close in process (straight to the restart) | 26 of 1136 | the 163A cases in `DeferredRestartTests` and `RemodelHostTests` | sha256 equal |
+| M78 | `ReviewHost.cs`: the close in process made whatever the stop answered | 2 of 1136 | `AStopThatDoesNotReachTheOldBackendsExitClosesNothingInProcessAndTheRestartGoesOn`, `AStuckOldBackendsLeftover...` (the stop does not reach A's exit) | sha256 equal |
+| M79 | `ReviewHost.cs`: the close in process before the stop | 17 of 1136 | the order rows, `ATurnFoundBeforeTheStop...`, `ASlowOldBackendsClose...` (as A stops) | sha256 equal |
+| M80 | `ReviewHost.cs`: the unload check before the stop | 1 of 1136 | `AnUnloadDuringTheCloseStopsNothingAndClosesNothingInProcess` | sha256 equal |
+| M81 | `ReviewHost.cs`: the stop made before the start, outside its marks | 1 of 1136 | `WhileTheOldBackendIsStoppedForARestartNoStartIsReadAsFailed` | sha256 equal |
+| M82 | `ReviewHost.cs`: a Remodel tab that throws read as a close answered | 1 of 1136 | `ARestartWhoseRemodelCleanupIsNotAnswered...` (throws) | sha256 equal |
+| M83 | `BackendProcess.cs`: the supervisor's turn check at the stop | 1 of 1136 | `AStopForARestartIsRefusedWhileATurnIsRunningAndLeavesTheProcessAlone` | sha256 equal |
+| M84 | `BackendProcess.cs`: the supervisor's stop not waiting for the tree, answered exited | 0 of 1136 | **survived** | sha256 equal |
+| M85 | `BackendProcess.cs`: `Stop` not ending and waiting for the tree before closing the job | 0 of 1136 | **survived** | sha256 equal |
+| M86 | `JobObject.cs`: `EndAll` answering at once, not waiting for the processes | 0 of 1136 | **survived** | sha256 equal |
+| M87 | `BackendClient.cs`: the unload check in `StopForRestart` | 0 of 1136 | **survived** | sha256 equal |
+
+**The survivors, recorded.** M84 to M86 take out the wait for the tree's exit.
+`AStopForARestartReturnsOnlyOnceTheWholeTreeHasExited` asks that neither the launcher nor the server
+below it is running the moment the stop returns, but the stub processes are idle, and Windows
+completes their termination before the test's next check whether the add-in waited or not: no case
+here can hold open the moment between the job's close and the grandchild's exit, as none could for
+M56. The wait rests on `TerminateProcess` and kill-on-close being asynchronous (documented) and on the
+kernel's own count of the job's processes; a real backend mid-I/O is what it is for. The case stays as
+the end-to-end pin that the stop ends the whole tree. M87 takes out a check that only matters between
+`BackendClient.Dispose` cancelling `_unloading` and taking the gate; after that the supervisor refuses
+as disposed, and before it the review host's own `_stopping` check (M80) refuses first. Kept, as
+`Start` and `Restart` have it.
+
+### R25.8 Gates
+
+Gates on the final tree:
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero warnings, zero
+  errors.
+- **C# tests.** 10,209 extractor and 4,265 add-in tests passed, none failed or skipped (4,258
+  before this round).
+- **Focused runs.** `RemodelHostTests`, `DeferredRestartTests`, `ReviewHostTests`, `ToolService*`,
+  `BackendProxyHandlerTests` and `ErrorLabelsCoverTheHostTests` (1,414 cases) passed three times
+  in a row.
+- **Python.** Required-tokenizer non-live suites (`SWREVIEW_TOKENIZER_DIR=C:\t\144a-tok`,
+  `--basetemp` outside the checkout): Python 3.12 18,275 passed and 6 skipped (the sixth: `embreex`, not installed in the local 3.12 environment); Python 3.11 (`uv run --isolated --python
+  3.11 --all-extras`) 18,276 passed and 5 skipped.
+- **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no
+  broken link (`COUNT 0`); every changed file is `i/lf`.
+- **Guards.** `git diff 1d2fe20 -- extractor/SwReview.Extractor/Guard` names no file.
+
+No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.
+
+### R25.9 What Start (T172) waits on now
+
+- T303: the in-process close's timing on the SOLIDWORKS thread at the pilot workstation, with R22.3's
+  native order of an abandoned close and R25.3's order of a close the old backend handed over before
+  it stopped.
+- An end told during a `Plan` that then succeeds (R22.14).
+- T180 and its owner decision.
+- PROBE-1, PROBE-2, PROBE-3, PROBE-4 and PROBE-12.
+- A real Plan whose source hash stays unchanged.
+
+R24.10's first item - the old backend alive but not answering - is settled in code by 163A and leaves
+the list, apart from its seat order (T303).
