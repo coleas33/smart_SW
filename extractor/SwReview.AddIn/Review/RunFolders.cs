@@ -21,6 +21,16 @@ namespace SwReview.AddIn.Review;
 /// The folder is created, not just named: every caller writes into it immediately, and a
 /// name handed back without the directory behind it would fail later, inside the extractor or
 /// inside a CLI's working-directory switch, where the message no longer points here.
+///
+/// <b>In its full, long-name form</b> (owner decisions 148A and 160A; feature 011 research R12.3): every folder
+/// made, and every folder found, is named under the existing run root's final path - its long-name form, in the
+/// disk's own letter case since the decision's review - whatever spelling of it the setting holds. The folder is
+/// handed on as it is named: to the backend, whose rule for a run folder refuses a <c>..</c> segment rather than
+/// resolve it, to the bridge's bind, and, as the folder of a re-modeler's copy, to the pane seat,
+/// whose rule for the copy's path refuses one too - so under a run root spelled
+/// <c>C:\work\..\runs</c> a folder named as it was spelled ended every plan before it began
+/// (research R11.8 item 5). A folder made and the same folder found are spelled one way, letter for letter,
+/// which the review host's comparison of a removed review's folder with the one its search finds relies on.
 /// </summary>
 public static class RunFolders
 {
@@ -74,15 +84,17 @@ public static class RunFolders
     /// missing or unreadable head never falls back to an older waiting review. Nothing throws.
     /// </summary>
     public static SessionRecord? FindNotSentReview(
-        string? runRoot, PageDocument document, Func<string, Stream>? openHead = null)
+        string? runRoot, PageDocument document, Func<string, Stream>? openHead = null, IRunRootProbe? probe = null)
     {
         if (string.IsNullOrWhiteSpace(runRoot)) return null;
         try
         {
+            string? root = ExistingLongRoot(runRoot!, probe);
+            if (root == null) return null;
             string label = "-" + DocumentName(document.Path);
             string? newest = null;
             DateTime newestStamp = DateTime.MinValue;
-            foreach (string directory in Directory.EnumerateDirectories(runRoot))
+            foreach (string directory in Directory.EnumerateDirectories(root))
             {
                 string name = Path.GetFileName(directory);
                 DateTime? stamp = TimestampOf(name);
@@ -189,8 +201,8 @@ public static class RunFolders
     private const string TimestampFormat = "yyyyMMdd-HHmmss";
 
     /// <summary>Creates the run folder for a review of <paramref name="documentPath"/>.</summary>
-    public static string CreateForDocument(string runRoot, string? documentPath, DateTime timestamp) =>
-        Create(runRoot, timestamp, DocumentName(documentPath));
+    public static string CreateForDocument(string runRoot, string? documentPath, DateTime timestamp, IRunRootProbe? probe = null) =>
+        Create(runRoot, timestamp, DocumentName(documentPath), probe);
 
     /// <summary>
     /// Creates the run folder for one Model check of <paramref name="documentPath"/>.
@@ -202,8 +214,8 @@ public static class RunFolders
     /// destroying the previous check's evidence, which is exactly what an engineer compares
     /// against after an edit. The accepted cost is one folder per press of the button.
     /// </summary>
-    public static string CreateForCheck(string runRoot, string? documentPath, DateTime timestamp) =>
-        Create(runRoot, timestamp, DocumentName(documentPath) + CheckSuffix);
+    public static string CreateForCheck(string runRoot, string? documentPath, DateTime timestamp, IRunRootProbe? probe = null) =>
+        Create(runRoot, timestamp, DocumentName(documentPath) + CheckSuffix, probe);
 
     /// <summary>
     /// Creates the run folder for one Standards check of <paramref name="documentPath"/>.
@@ -212,8 +224,8 @@ public static class RunFolders
     /// by the same rule so the two kinds of check sort beside the review they belong to in the
     /// one listing the engineer reads in Explorer.
     /// </summary>
-    public static string CreateForStandards(string runRoot, string? documentPath, DateTime timestamp) =>
-        Create(runRoot, timestamp, DocumentName(documentPath) + StandardsSuffix);
+    public static string CreateForStandards(string runRoot, string? documentPath, DateTime timestamp, IRunRootProbe? probe = null) =>
+        Create(runRoot, timestamp, DocumentName(documentPath) + StandardsSuffix, probe);
 
     /// <summary>
     /// The newest check run folder under <paramref name="runRoot"/> carrying
@@ -236,7 +248,7 @@ public static class RunFolders
     /// cannot be combined or cannot be listed is answered "none", which is the same answer as
     /// an empty one and is equally true of a tab opened before the first run.
     /// </summary>
-    public static string? NewestCheckFolder(string? runRoot, string suffix)
+    public static string? NewestCheckFolder(string? runRoot, string suffix, IRunRootProbe? probe = null)
     {
         if (suffix == null)
         {
@@ -251,13 +263,13 @@ public static class RunFolders
         string[] directories;
         try
         {
-            directories = Directory.Exists(runRoot)
-                ? Directory.GetDirectories(runRoot)
-                : new string[0];
+            string? root = ExistingLongRoot(runRoot!, probe);
+            directories = root == null ? new string[0] : Directory.GetDirectories(root);
         }
         catch (Exception failure)
             when (failure is IOException || failure is UnauthorizedAccessException
-                || failure is ArgumentException)
+                || failure is ArgumentException || failure is NotSupportedException
+                || failure is System.Security.SecurityException)
         {
             return null;
         }
@@ -352,12 +364,12 @@ public static class RunFolders
     /// copy lives <b>only</b> under this folder and never beside the source: one bad path join
     /// beside a source inside an EPDM vault writes into the vault.
     /// </summary>
-    public static string CreateForRemodel(string runRoot, string? documentPath, DateTime timestamp) =>
-        Create(runRoot, timestamp, DocumentName(documentPath) + RemodelSuffix);
+    public static string CreateForRemodel(string runRoot, string? documentPath, DateTime timestamp, IRunRootProbe? probe = null) =>
+        Create(runRoot, timestamp, DocumentName(documentPath) + RemodelSuffix, probe);
 
     /// <summary>Creates the run folder for a terminal session started without a review.</summary>
-    public static string CreateForTerminal(string runRoot, DateTime timestamp) =>
-        Create(runRoot, timestamp, TerminalName);
+    public static string CreateForTerminal(string runRoot, DateTime timestamp, IRunRootProbe? probe = null) =>
+        Create(runRoot, timestamp, TerminalName, probe);
 
     /// <summary>
     /// Whether a run folder already holds an evidence package.
@@ -460,7 +472,7 @@ public static class RunFolders
         return trimmed.Length == 0 ? "document" : trimmed;
     }
 
-    private static string Create(string runRoot, DateTime timestamp, string label)
+    private static string Create(string runRoot, DateTime timestamp, string label, IRunRootProbe? probe)
     {
         if (string.IsNullOrWhiteSpace(runRoot))
         {
@@ -471,15 +483,98 @@ public static class RunFolders
 
         string stem = timestamp.ToString(TimestampFormat, CultureInfo.InvariantCulture) + "-" + label;
 
+        // Every caller but the hidden Terminal tab's has judged the root by the run root rule before anything
+        // is made (154A); the Terminal tab judges nothing. Once the root exists, read its final path once,
+        // outside any lock - its long-name form in the disk's own letter case, which the rule hands a search
+        // and the backend's own resolution reads - so the backend, the re-modeler's seat and a later search
+        // name it alike, letter for letter (160A, and its review).
+        string root = FullFormOf(runRoot);
+        Directory.CreateDirectory(root);
+        root = (probe ?? Native.WindowsRunRootProbe.Instance).FinalPathOf(root)
+            ?? throw new IOException("The run root's full name on the disk could not be read.");
+
         // Two reviews of the same document inside one second is a double-click, not an error,
         // and the second one must not be written into the first one's folder.
-        string candidate = Path.Combine(runRoot, stem);
+        string candidate = Path.Combine(root, stem);
         for (int suffix = 2; Directory.Exists(candidate); suffix++)
         {
-            candidate = Path.Combine(runRoot, stem + "-" + suffix.ToString(CultureInfo.InvariantCulture));
+            candidate = Path.Combine(root, stem + "-" + suffix.ToString(CultureInfo.InvariantCulture));
         }
 
         Directory.CreateDirectory(candidate);
         return candidate;
+    }
+
+    /// <summary>
+    /// The run root in its full form - <c>Path.GetFullPath</c>: canonical, rooted, with no <c>.</c> or
+    /// <c>..</c> segment and a backslash between segments - the one form every folder this class makes or
+    /// is compared under (owner decision 148A). A root that names no folder throws here as it would
+    /// below. The run root rule judges the same folder from the root's
+    /// text without reading anything (owner decision 154A and its reviews, <see cref="RunRootRule"/>), where
+    /// this form can expand an 8.3 short name by reading the folders of the path - and, under the newer path
+    /// handling, can leave one as written. Creation and searches therefore read the existing root's final
+    /// path explicitly, outside any lock (decision 160A, and its review), before any run folder is named under it.
+    /// </summary>
+    private static string FullFormOf(string runRoot) => Path.GetFullPath(runRoot);
+
+    /// <summary>
+    /// The search's root in its long-name form, only after the run-root rule has checked every existing
+    /// ancestor. Searches can run before a run start has judged the root; no long-name lookup or enumeration
+    /// may read over a share or through a link. The rule's final-path reading already names an existing root
+    /// in long names, in the disk's own letter case - checked against its long-name form once when the root is
+    /// spelled with 8.3 names - so reuse that answer.
+    /// </summary>
+    private static string? ExistingLongRoot(string runRoot, IRunRootProbe? probe)
+    {
+        IRunRootProbe source = probe ?? Native.WindowsRunRootProbe.Instance;
+        return RunRootRule.Judge(runRoot, source, out string? root) == RunRootVerdict.Accepted ? root : null;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="folder"/> is <paramref name="runRoot"/> or lies below it, each in its full form,
+    /// ignoring letter case; false when either has none. What a run's folder is held to before it is handed to
+    /// the backend, which makes runs only under the run root it was started with, and what a folder the pane
+    /// opens is held to (owner decision 154A, the reviews' finding F6). A mismatch also checks the existing
+    /// root's verified long form, outside callers' locks, since decision 160A names new folders that way even
+    /// when the setting keeps an 8.3 spelling. The usual lexical match needs no additional disk reading.
+    /// </summary>
+    internal static bool IsUnder(string folder, string runRoot, IRunRootProbe? probe = null)
+    {
+        string fullFolder;
+        string fullRoot;
+        try
+        {
+            fullFolder = Path.GetFullPath(folder);
+            fullRoot = FullFormOf(runRoot);
+        }
+        catch (Exception failure) when (failure is ArgumentException || failure is NotSupportedException
+            || failure is PathTooLongException || failure is System.Security.SecurityException)
+        {
+            return false;
+        }
+
+        if (IsWithin(fullFolder, fullRoot)) return true;
+
+        try
+        {
+            string? longRoot = ExistingLongRoot(fullRoot, probe);
+            return longRoot != null && IsWithin(fullFolder, longRoot);
+        }
+        catch (Exception failure) when (failure is IOException || failure is UnauthorizedAccessException
+            || failure is ArgumentException || failure is NotSupportedException || failure is System.Security.SecurityException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsWithin(string fullFolder, string fullRoot)
+    {
+        string trimmed = fullRoot.TrimEnd(Path.DirectorySeparatorChar);
+        if (string.Equals(trimmed, fullFolder.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return fullFolder.StartsWith(trimmed + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 }

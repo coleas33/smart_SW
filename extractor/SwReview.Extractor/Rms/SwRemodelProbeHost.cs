@@ -86,7 +86,10 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
         public const string CustomPropertyAdd3 = "Add3";
         public const string CustomPropertyGet4 = "Get4";
         public const string GetOpenDocSpec = "GetOpenDocSpec";
-        public const string OpenDoc7 = "OpenDoc7";
+
+        // PROBE-12's reopen, by the qualified key RemodelProbeGuard's run-scoped members exempt: owner
+        // decision 148A (feature 011, 2026-10-20) has the read-only guard refuse the bare OpenDoc7.
+        public const string OpenDoc7 = "ISldWorks.OpenDoc7";
         public const string GetTitle = "GetTitle";
         public const string CreateCenterRectangle = "CreateCenterRectangle";
         public const string CreateCircleByRadius = "CreateCircleByRadius";

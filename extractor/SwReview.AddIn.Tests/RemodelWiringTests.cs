@@ -23,6 +23,120 @@ namespace SwReview.AddIn.Tests;
 /// </summary>
 public sealed class RemodelWiringTests
 {
+    /// <summary>004 T274: only subscription is coordinated; the existing document fan-out stays immediate.</summary>
+    [Fact]
+    public void TheAddInDefersOnlyConfigurationFollowingAtTheOpenBoundary()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+        Assert.Contains(
+            "FollowActiveConfiguration(); TellEveryTabTheDocumentChanged(", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "private void FollowActiveConfiguration() => _configurationFollow?.Request();", source, StringComparison.Ordinal);
+        Assert.Contains("() => _swApp?.ActiveDoc", source, StringComparison.Ordinal);
+        Assert.Contains("activeDocument => _configurationWatch?.Follow(activeDocument)", source, StringComparison.Ordinal);
+        Assert.Contains("new ControlAppThreadInvoker(_pane!)", source, StringComparison.Ordinal);
+        Assert.Contains("invoker.Post,", source, StringComparison.Ordinal);
+        Assert.Contains("ConfigurationFollowCoordinator configurationFollow = _configurationFollow!;", source, StringComparison.Ordinal);
+        Assert.Contains("BeginRemodelOpen = configurationFollow.BeginRemodelOpen", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T279; research R22): the review host's settings restart asks the Remodel host, read through
+    /// its field, to close what it left under the run root in force before a restart moves it - and with no Remodel host
+    /// there is nothing to close. Every host case survives losing this line.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsTheReviewHostTheRemodelHostsCleanupBeforeARunRootMoves()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+        Assert.Contains(
+            "EndRemodelSessionsLeftUnder = runRoot => _remodelHost?.EndTheSessionsLeftUnder(runRoot) != false,",
+            source,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T287; research R22.12): the review host reads, through the field, whether the Remodel host
+    /// still holds a session under the run root a waiting restart would move, so its refusals say what holds the restart
+    /// now rather than what held it at the last try; with no Remodel host there is none.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsTheReviewHostTheRemodelHostsReadingOfASessionLeft()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+        Assert.Contains(
+            "RemodelSessionLeftUnder = runRoot => _remodelHost?.HoldsASessionLeftUnder(runRoot) == true,",
+            source,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): with the review backend gone, the review host's settings
+    /// restart asks the Remodel host, read through its field, to close what it left under the run root in force in process;
+    /// and the Remodel host's in-process close reaches the gate the add-in holds, read through the field per call. Every
+    /// host case survives losing these lines.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsBothHostsTheInProcessCloseWithTheBackendGone()
+    {
+        Assert.Contains(
+            "EndRemodelSessionsInProcessLeftUnder = runRoot => _remodelHost?.EndTheSessionsLeftUnderInProcess(runRoot),",
+            Collapsed("SwReviewAddIn.cs"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "EndRemodelSessionInProcess = (attachment, runDirectory) => EndRemodelSessionInProcess(_toolService, attachment, runDirectory),",
+            StartRemodelHost(),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): the add-in's in-process close is the gate's, on the service of
+    /// the attachment named; with no gate yet there is no bridge, and it throws, so the Remodel host reads the close as not
+    /// answered; what the gate throws - another attachment listening, none listening - is thrown on.
+    /// </summary>
+    [Fact]
+    public void TheAddInsInProcessCloseIsTheGatesOnTheAttachmentNamed()
+    {
+        const string run = @"C:\FICT\runs\20260927-100000-bracket-remodel";
+        var services = new List<FakeToolService>();
+        var gate = new ToolServiceGate(
+            () => new PageDocument(@"C:\models\bracket.sldprt", "Default"),
+            () =>
+            {
+                var service = new FakeToolService(services.Count + 1);
+                services.Add(service);
+                return service;
+            },
+            _ => { },
+            (_, __) => { },
+            schedule: work => work());
+
+        Assert.Throws<InvalidOperationException>(() => SwReviewAddIn.EndRemodelSessionInProcess(null, "swreview-fake-1", run));
+        Assert.Throws<InvalidOperationException>(() => SwReviewAddIn.EndRemodelSessionInProcess(gate, "swreview-fake-1", run));
+
+        gate.EnsureStarted();
+        SwReviewAddIn.EndRemodelSessionInProcess(gate, "swreview-fake-1", run);
+        Assert.Equal(new[] { run }, Assert.Single(services).EndedInProcess);
+
+        Assert.Throws<InvalidOperationException>(() => SwReviewAddIn.EndRemodelSessionInProcess(gate, "swreview-fake-2", run));
+        Assert.Single(services[0].EndedInProcess);
+    }
+
+    /// <summary>004 T274: invalidate queued work before watch disposal, replacement or unload waits.</summary>
+    [Fact]
+    public void TheAddInInvalidatesConfigurationFollowingBeforeReplacingOrDisposingItsWatch()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+        Assert.Contains("StartConfigurationWatch();", source, StringComparison.Ordinal);
+        Assert.True(source.IndexOf("StartConfigurationWatch();", StringComparison.Ordinal)
+            < source.IndexOf("_toolService = CreateToolServiceGate(reviewOptions);", StringComparison.Ordinal));
+        Assert.Contains(
+            "_configurationFollow?.Dispose(); _configurationWatch?.Dispose();", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "public bool DisconnectFromSW() { _configurationFollow?.Dispose(); _configurationFollow = null;",
+            source, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// The add-in builds exactly one <c>BackendRemodelPipeline</c>, in <c>StartRemodelHost</c>, and
     /// hands it the add-in's <c>BindRemodelRun</c> as its bind, beside the remodel half of the
@@ -256,6 +370,18 @@ public sealed class RemodelWiringTests
         throw new InvalidOperationException("the call at " + open + " never closes");
     }
 
+    /// <summary>
+    /// Owner decision 159A (004 T208): the add-in hands the Remodel host its own log, so the sentence a failure carried,
+    /// which the tab tells in its own words since it can name a path, reaches the log the tab's View log opens - and is
+    /// not lost: the host's log is nowhere by default, so no test writes into the engineer's. *Changed deliberately
+    /// 2026-10-21 (159A, on review; 004 T229):* read from the code alone, where a line commented out met it.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsTheRemodelHostItsLog()
+    {
+        Assert.Contains("Log = AddInLog.Write,", StartRemodelHost(), StringComparison.Ordinal);
+    }
+
     private static string AddIn() =>
         Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
 
@@ -267,10 +393,31 @@ public sealed class RemodelWiringTests
     private static string Collapsed(string relativePath) =>
         Regex.Replace(File.ReadAllText(Path.Combine(AddIn(), relativePath)), @"\s+", " ");
 
-    /// <summary><c>SwReviewAddIn.StartRemodelHost</c>, up to where it starts the remodel pump.</summary>
+    /// <summary>
+    /// Owner decision 159A, on the final review (004 T253; its nit): the add-in flushes its log as it unloads, last, so a
+    /// line kept while something held the file is written rather than lost with the process.
+    /// </summary>
+    [Fact]
+    public void TheAddInFlushesItsLogAsItUnloads()
+    {
+        string source = Regex.Replace(
+            AdapterShape.CodeOutsideComments(File.ReadAllText(Path.Combine(AddIn(), "SwReviewAddIn.cs"))), @"\s+", " ");
+        int start = source.IndexOf("public bool DisconnectFromSW()", StringComparison.Ordinal);
+        int end = start < 0 ? -1 : source.IndexOf("return true;", start, StringComparison.Ordinal);
+        Assert.True(end > start, "SwReviewAddIn.DisconnectFromSW was not found.");
+
+        Assert.Contains("AddInLog.Flush(); return true;", source.Substring(start, end - start + "return true;".Length), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <c>SwReviewAddIn.StartRemodelHost</c>, up to where it starts the remodel pump: its code, every run of white space as
+    /// one space, with no comment line in it, so no pin is met by a line commented out (owner decision 159A, on review:
+    /// <see cref="TheAddInHandsTheRemodelHostItsLog"/> passed with its line commented out).
+    /// </summary>
     private static string StartRemodelHost()
     {
-        string source = Collapsed("SwReviewAddIn.cs");
+        string source = Regex.Replace(
+            AdapterShape.CodeOutsideComments(File.ReadAllText(Path.Combine(AddIn(), "SwReviewAddIn.cs"))), @"\s+", " ");
         int start = source.IndexOf("private void StartRemodelHost(", StringComparison.Ordinal);
         int end = start < 0 ? -1 : source.IndexOf("StartRemodelPump();", start, StringComparison.Ordinal);
         Assert.True(end > start, "SwReviewAddIn.StartRemodelHost was not found, or no longer starts the remodel pump.");

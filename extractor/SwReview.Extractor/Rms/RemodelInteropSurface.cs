@@ -221,7 +221,8 @@ public static class RemodelInteropSurface
 
     private static readonly RemodelInteropCall[] CallArray =
     {
-        // ---- the stage-1 write surface (contracts/guard-allowlist.md), twenty keys ----------
+        // ---- the stage-1 write surface (contracts/guard-allowlist.md), twenty-one keys ------
+        // (twenty until owner decision 148A put ISldWorks.OpenDoc7, below, on the allowlist)
 
         // The only move operation; MoveLocation is Before = 2 or After = 3.
         Call("IModelDocExtension", "ReorderFeature", Method, "System.Boolean", true,
@@ -330,6 +331,18 @@ public static class RemodelInteropSurface
             .WithNote("closes the tagged copy only; T179: it answers nothing, so a GetOpenDocumentByName "
                 + "read of the copy's path confirms it"),
 
+        // Open the copy. Allowlisted since owner decision 148A (2026-10-20, feature 011 research R12.2):
+        // remodel.open gated it by the bare name the read-only guard left allowed, and names it by this
+        // key now, the bare name refused; the pane seat's remodel.open_copy calls it by the same key
+        // through its own guard.
+        Call("ISldWorks", "OpenDoc7", Method, "SolidWorks.Interop.sldworks.ModelDoc2", true,
+            "Specification")
+            .WithUsedBy("remodel.open", "remodel.open_copy")
+            .WithNote("opens the copy at its own path with Silent | LoadModel = 17, never ReadOnly or "
+                + "ViewOnly; T181: the pane seat's remodel.open_copy reopens a copy the engineer "
+                + "closed through the same open request; decision 148A: called by this qualified key by "
+                + "remodel.open, on the stage-1 allowlist, and by the pane seat under its own guard"),
+
         // ---- the read members the bridge uses -----------------------------------------------
         // Allowlisted: false. They take RemodelGuard's delegation branch to ReadOnlyGuard,
         // exactly as the reviewer's reads do, and are recorded here because a read whose
@@ -342,12 +355,6 @@ public static class RemodelInteropSurface
             .WithNote("reaches the engineer's already-open source, and is VerifyTarget check 3 on the "
                 + "copy; T181: the pane seat finds the copy with it before it activates it; T179: "
                 + "IRemodelSeat.IsDocumentOpen, the read that confirms the copy's close"),
-        Call("ISldWorks", "OpenDoc7", Method, "SolidWorks.Interop.sldworks.ModelDoc2", false,
-            "Specification")
-            .WithUsedBy("remodel.open", "remodel.open_copy")
-            .WithNote("opens the copy at its own path with Silent | LoadModel = 17, never ReadOnly or "
-                + "ViewOnly; T181: the pane seat's remodel.open_copy reopens a copy the engineer "
-                + "closed through the same open request"),
         Call("ISldWorks", "GetUserPreferenceToggle", Method, "System.Boolean", false,
             "UserPreferenceToggle")
             .WithUsedBy("remodel.probe_scope", "remodel.open",
@@ -691,6 +698,10 @@ public static class RemodelInteropSurface
         // pane seat is outside the bridge and its guard, a row records a member and never permits
         // one, and ActivateDoc3 stays on the read-only guard's denylist. OpenDoc7,
         // GetOpenDocumentByName and GetPathName, which the bridge calls too, name its commands above.
+        // Since decision 144A (2026-10-19, feature 011 research R11) the seat calls each through a
+        // gate of its own, whose guard, RemodelSeatGuard, allows ISldWorks.ActivateDoc3 and
+        // ISldWorks.OpenDoc7 by those keys; "allowlisted" here is the stage-1 allowlist's, which
+        // holds ISldWorks.OpenDoc7 since decision 148A, for remodel.open, and never ActivateDoc3.
 
         // Activate the copy by its title, the user's preferences not consulted, without a rebuild.
         Call("ISldWorks", "ActivateDoc3", Method, "System.Object", false,

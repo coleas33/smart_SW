@@ -18,7 +18,7 @@ namespace SwReview.AddIn.Tests;
 /// </summary>
 internal sealed class FakeToolService : IToolService
 {
-    public FakeToolService(int ordinal, string? documentPath = null)
+    public FakeToolService(int ordinal, string? documentPath = null, string? configuration = null)
     {
         PipeName = "swreview-fake-" + ordinal;
         ReviewBridge = new BridgeConfig(PipeName, "review-secret-" + ordinal);
@@ -26,12 +26,16 @@ internal sealed class FakeToolService : IToolService
         RemodelBridge = new BridgeConfig(PipeName, "remodel-secret-" + ordinal);
         RemodelSeatAvailable = false;
         DocumentPath = documentPath ?? @"C:\models\bracket-" + ordinal + ".sldasm";
+        Configuration = configuration;
         Session = new FakeSession();
     }
 
     public string PipeName { get; }
 
     public string DocumentPath { get; }
+
+    /// <summary>The configuration the scope is bound to (owner decision 152A); none unless a case names one.</summary>
+    public string? Configuration { get; }
 
     public BridgeConfig ReviewBridge { get; }
 
@@ -55,7 +59,18 @@ internal sealed class FakeToolService : IToolService
     /// <summary>What the gate wrote into this service's own tool-service log.</summary>
     public List<string> LogLines { get; } = new List<string>();
 
-    public void WriteLog(string line) => LogLines.Add(line);
+    /// <summary>
+    /// Runs inside <see cref="WriteLog"/> with the line, before it is recorded, on the gate's thread: a
+    /// real log takes a lock of its own and appends to a file there (owner decision 158A, on its review:
+    /// S4).
+    /// </summary>
+    public Action<string>? DuringWriteLog { get; set; }
+
+    public void WriteLog(string line)
+    {
+        DuringWriteLog?.Invoke(line);
+        LogLines.Add(line);
+    }
 
     /// <summary>Every folder <see cref="BindRemodelRun"/> was handed, in order (004 T158).</summary>
     public List<string> Bound { get; } = new List<string>();
@@ -69,6 +84,21 @@ internal sealed class FakeToolService : IToolService
         if (BindFailure != null)
         {
             throw BindFailure;
+        }
+    }
+
+    /// <summary>Every folder <see cref="EndRemodelSessionOf"/> was handed, in order (owner decision 161A).</summary>
+    public List<string> EndedInProcess { get; } = new List<string>();
+
+    /// <summary>What <see cref="EndRemodelSessionOf"/> throws, if anything: a stopped service, an application thread that did not answer.</summary>
+    public Exception? EndInProcessFailure { get; set; }
+
+    public void EndRemodelSessionOf(string runDirectory)
+    {
+        EndedInProcess.Add(runDirectory);
+        if (EndInProcessFailure != null)
+        {
+            throw EndInProcessFailure;
         }
     }
 

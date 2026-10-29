@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -109,6 +110,7 @@ public class SwReviewAddIn : ISwAddin
     /// (feature 009 FR-022). Follows the active document on every `ActiveDocChangeNotify`.
     /// </summary>
     private ActiveConfigurationWatch? _configurationWatch;
+    private ConfigurationFollowCoordinator? _configurationFollow;
 
     private JobObject? _job;
     private BackendSupervisor? _supervisor;
@@ -258,6 +260,15 @@ public class SwReviewAddIn : ISwAddin
     /// </summary>
     public bool DisconnectFromSW()
     {
+        _configurationFollow?.Dispose();
+        _configurationFollow = null;
+
+        // The race review of owner decision 157A, and its final reviews: the settings restart stops first - before
+        // the pumps, each joined for seconds while the message it handles can still save the settings, and before
+        // the hosts whose work holds the restart back let their holds go with them - so none is made as the add-in
+        // unloads, on a backend about to be stopped.
+        _reviewHost?.StopRestarting();
+
         // Order matters: stop listening to the page, stop draining it, then stop the child.
         // The job object goes last, so a backend that ignored its shutdown still dies with the
         // handle (T050).
@@ -348,6 +359,10 @@ public class SwReviewAddIn : ISwAddin
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
+
+        // Owner decision 159A, on the final review: last, so a line kept while something held addin.log - another
+        // SOLIDWORKS session's append, a reader that locks it - is written rather than lost with the process.
+        AddInLog.Flush();
         return true;
     }
 
@@ -405,6 +420,24 @@ public class SwReviewAddIn : ISwAddin
             // field for the same reason as the two above: `_backend` is created after this
             // pane is, and a settings save replaces it with a child on another port.
             Backend = () => _backend?.Endpoint,
+
+            // Owner decision 143A: while the backend waits to be restarted with settings saved
+            // during a turn, a page call that would start a turn is for a chat of the backend
+            // being replaced, and the review host answers it instead. Read through the field:
+            // the host is built after this pane, and one that has gone answers nothing.
+            PageTurnRefusal = () => _reviewHost?.PageTurnRefusal(),
+
+            // Owner decision 152A, on the Codex review (X2): a page call that would start a turn holds
+            // the tool service through the gate while it is out. Read through the field: the gate is
+            // built after this pane. Owner decision 158A: named, for the gate's line about a hold it
+            // ignores past its limit.
+            HoldToolService = () => _toolService?.HoldAttachment(ToolServiceHolder.TurnCall),
+
+            // Owner decision 157A: a check page's evaluation holds its check's hold on a settings restart
+            // while it is out. The folder it names is one check host's at most, and the other answers none.
+            // Read through the fields: both hosts are built after this pane.
+            HoldCheckEvaluation = (runDirectory, token) =>
+                _modelCheckHost?.HoldEvaluation(runDirectory, token) ?? _standardsHost?.HoldEvaluation(runDirectory, token),
         });
 
         _panel = _pane.Actions;
@@ -455,6 +488,49 @@ public class SwReviewAddIn : ISwAddin
             _pane.ReviewChannel, _backend, UserSettings.DefaultPath)
         {
             CurrentDocument = CurrentDocument,
+
+            // Owner decision 143A: a restart for settings saved during a turn waits for a remodel
+            // run too, which it would end. Read through the field: the Remodel host is built
+            // after these options, and one that has gone runs nothing.
+            BackendBusy = () => _remodelHost?.RunInProgress == true,
+
+            // Owner decision 157A: ...and, while a backend is up, for a Model check or a Standards check,
+            // from its gate until the page's evaluation of it has been answered. Read through the fields,
+            // for the same reason.
+            ModelCheckInProgress = () => _modelCheckHost?.CheckInProgress == true,
+            StandardsCheckInProgress = () => _standardsHost?.CheckInProgress == true,
+
+            // Owner decision 159A (004 research R22): before a restart moves the run root, the Remodel host closes what it
+            // left on the bridge under the run root in force, through the backend still up; read through the field, and
+            // with no Remodel host there is nothing to close.
+            EndRemodelSessionsLeftUnder = runRoot => _remodelHost?.EndTheSessionsLeftUnder(runRoot) != false,
+
+            // Owner decision 161A (004 research R24): with that backend gone, the Remodel host closes what it left there in
+            // process instead, through the tool service; read through the field, and with no Remodel host there is nothing.
+            EndRemodelSessionsInProcessLeftUnder = runRoot => _remodelHost?.EndTheSessionsLeftUnderInProcess(runRoot),
+
+            // Owner decision 159A (004 research R22.12): whether the Remodel host still holds a session under the run root in
+            // force, read, closing nothing, so a restart's refusals say what holds it now; with no Remodel host, none.
+            RemodelSessionLeftUnder = runRoot => _remodelHost?.HoldsASessionLeftUnder(runRoot) == true,
+
+            // Owner decision 145A: every other tab that holds the backend's port and token is told
+            // after each restart the review host makes, and asks for its `init` again; and told of
+            // one that failed once the old backend had stopped, as a failed first start is told.
+            BackendRestarted = TellTheOtherTabsTheBackendRestarted,
+            BackendRestartFailed = TellTheOtherTabsTheBackendDidNotStart,
+
+            // Owner decision 152A: a review's session is given the tool service's bridge only while
+            // that bridge serves the review's document, asked of the gate, which knows each
+            // attachment's document and configuration; and a start refused for a bridge left on
+            // another document asks the gate to follow the active one. Read through the field: the
+            // gate is built after these options, and one that has gone serves nothing.
+            BridgeDocument = bridge => _toolService?.DocumentServedBy(bridge),
+            FollowActiveDocument = () => _toolService?.FollowActiveDocument(),
+
+            // ...and on the Codex review (X2), a review session being made holds the tool service
+            // through the gate from before its bridge is read until it is tracked (named, 158A).
+            HoldToolService = () => _toolService?.HoldAttachment(ToolServiceHolder.ReviewSession),
+
             DrawingModels = DrawingModels,
             Dump = reviewDump,
             PrepareReview = reviewDump.Prepare,
@@ -476,6 +552,7 @@ public class SwReviewAddIn : ISwAddin
         };
 
         _reviewHost = new ReviewHost(reviewOptions);
+        StartConfigurationWatch();
         _toolService = CreateToolServiceGate(reviewOptions);
 
         StartPageMessagePump();
@@ -511,10 +588,6 @@ public class SwReviewAddIn : ISwAddin
             _events.ActiveDocChangeNotify += OnActiveDocumentChanged;
         }
 
-        // ...and a configuration switch inside the active document is a document change too
-        // (feature 009 FR-022): the watch follows the active document and runs the same fan-out.
-        _configurationWatch = ActiveConfigurationWatch.ForSolidWorks(OnActiveConfigurationChanged);
-
         // SOLIDWORKS usually loads with nothing open, in which case this is a no-op and the
         // document-changed event below starts the tool service instead. It is asked here too
         // because the add-in can be enabled from Tools > Add-ins with an assembly already open,
@@ -523,9 +596,47 @@ public class SwReviewAddIn : ISwAddin
         _toolService.EnsureStarted();
         FollowActiveConfiguration();
 
-        UserSettings settings = _reviewHost.Settings;
-        ResolvedApiKey key = settings.ResolveApiKey();
-        ThreadPool.QueueUserWorkItem(_ => StartBackend(settings, key));
+        // The settings are read when the start is made, by the review host, not now (owner
+        // decision 153A, found on review): a save can come first, on the page pump.
+        ThreadPool.QueueUserWorkItem(_ => StartBackend());
+    }
+
+    /// <summary>
+    /// The run root in force, the review host's (owner decision 154A, the owner's follow-up): the one the
+    /// backend was last started with, under which the Model check, Standards and Remodel tabs make their run
+    /// folders and look for their latest run - not the run root saved, a folder outside which the backend
+    /// refuses until a restart brings it in. The default run root when there is no review host, as the
+    /// add-in unloads.
+    /// </summary>
+    private string RunRootInForce() => _reviewHost?.RunRoot ?? UserSettings.DefaultRunRoot();
+
+    /// <summary>
+    /// Every run root in force this SOLIDWORKS session, the review host's (owner decision 154A, the reviews'
+    /// finding F6): the Model check, Standards and Remodel tabs open the runs made under any of them, and the
+    /// Remodel tab knows its copies under any of them, after a save has moved the run root. The run root in
+    /// force alone when there is no review host, as the add-in unloads.
+    /// </summary>
+    private IReadOnlyList<string> RunRootsInForce() => _reviewHost?.RunRootsInForce ?? new[] { RunRootInForce() };
+
+    /// <summary>
+    /// The run root saved in the review host's Settings, which the next restart brings into force (the reviews of
+    /// 154A's merge, N4): a start on the Model check, Standards or Remodel tab refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None when there is no review
+    /// host, as the add-in unloads.
+    /// </summary>
+    private string? RunRootSaved() => _reviewHost?.Settings.RunRoot;
+
+    /// <summary>
+    /// The run root a new run's folder is made under, the review host's (owner decision 154A, with 153A's record of
+    /// the settings in force): the run root in force, or none while a start of the backend under way would bring
+    /// another into force, which the Model check, Standards and Remodel tabs refuse a start on. One reading of the
+    /// host, so its none is never taken for its absence, which alone gives <see cref="RunRootInForce"/>'s default
+    /// run root, as the add-in unloads.
+    /// </summary>
+    private string? RunRootForANewRun()
+    {
+        ReviewHost? host = _reviewHost;
+        return host == null ? RunRootInForce() : host.RunRootForANewRun();
     }
 
     /// <summary>
@@ -550,9 +661,13 @@ public class SwReviewAddIn : ISwAddin
 
         _modelCheckHost = new ModelCheckHost(new ModelCheckHostOptions(
             _pane.ModelCheckChannel,
-            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+            RunRootInForce)
         {
+            RunRootsInForce = RunRootsInForce,
+            RunRootForANewRun = RunRootForANewRun,
+            RunRootSaved = RunRootSaved,
             Backend = () => _backend?.Endpoint,
+            BackendStartFailed = () => _reviewHost?.BackendStartFailed == true,
             CurrentDocument = CurrentDocument,
 
             // The Review tab's own setting, read fresh: the page relays it so the check can say
@@ -570,12 +685,24 @@ public class SwReviewAddIn : ISwAddin
                 _pane?.RefreshSteps();
             },
 
-            // The same secret the Review host masks out of its own messages. This host is
+            // The same secrets the Review host masks out of its own messages. This host is
             // handed the backend's start-up failures too, and a key-resolution failure is
             // exactly the kind of message that carries one (FR-015).
-            Secrets = () => new[]
+            Secrets = KeysToMask,
+
+            // Owner decision 157A: a check begins as a remodel run does - once no settings restart waits,
+            // the review host making a waiting one first - and holds that restart back until the page's
+            // evaluation of it has been answered. The page is told first when a restart stands before the
+            // press, read through the field per call.
+            Hold =
             {
-                (_reviewHost?.Settings ?? UserSettings.Defaults()).ResolveApiKey().Key,
+                BeginCheck = BeginCheck,
+                RestartAhead = () => _reviewHost?.RestartAhead == true,
+
+                // The reviews of 157A: the page's minute from when its reply reached it, and an evaluation
+                // held up past it taken back while it carries the token of the backend up now.
+                AfterPosts = AfterPagePosts,
+                WhileNoRestartRuns = WhileNoRestartRuns,
             },
         });
 
@@ -664,9 +791,13 @@ public class SwReviewAddIn : ISwAddin
 
         _standardsHost = new StandardsHost(new StandardsHostOptions(
             _pane.StandardsChannel,
-            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+            RunRootInForce)
         {
+            RunRootsInForce = RunRootsInForce,
+            RunRootForANewRun = RunRootForANewRun,
+            RunRootSaved = RunRootSaved,
             Backend = () => _backend?.Endpoint,
+            BackendStartFailed = () => _reviewHost?.BackendStartFailed == true,
             CurrentDocument = CurrentDocument,
             Dump = reviewOptions.Dump,
             EntityResolver = () => reviewOptions.EntityResolver,
@@ -681,11 +812,17 @@ public class SwReviewAddIn : ISwAddin
                 _pane?.RefreshSteps();
             },
 
-            // The same secret the Review host masks out of its own messages: this host is handed
+            // The same secrets the Review host masks out of its own messages: this host is handed
             // the backend's start-up failures too (FR-015).
-            Secrets = () => new[]
+            Secrets = KeysToMask,
+
+            // Owner decision 157A: as the Model check tab's.
+            Hold =
             {
-                (_reviewHost?.Settings ?? UserSettings.Defaults()).ResolveApiKey().Key,
+                BeginCheck = BeginCheck,
+                RestartAhead = () => _reviewHost?.RestartAhead == true,
+                AfterPosts = AfterPagePosts,
+                WhileNoRestartRuns = WhileNoRestartRuns,
             },
         });
 
@@ -785,9 +922,13 @@ public class SwReviewAddIn : ISwAddin
 
         _remodelHost = new RemodelHost(new RemodelHostOptions(
             _pane.RemodelChannel,
-            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+            RunRootInForce)
         {
+            RunRootsInForce = RunRootsInForce,
+            RunRootForANewRun = RunRootForANewRun,
+            RunRootSaved = RunRootSaved,
             Backend = endpoint,
+            BackendStartFailed = () => _reviewHost?.BackendStartFailed == true,
             CurrentDocument = CurrentDocument,
             RemodelAvailability = () => _toolService?.RemodelCapability
                 ?? RemodelAvailability.Unknown,
@@ -796,6 +937,25 @@ public class SwReviewAddIn : ISwAddin
             // the capability above. A plan records it and Start refuses a run whose attachment
             // has changed, because the plan's bridge session did not survive the re-attach.
             ToolServiceAttachment = () => _toolService?.Attachment,
+
+            // Owner decision 145A: a plan or a run begins as a turn does - once no settings
+            // restart waits, the review host making a waiting one first - and is marked in
+            // progress under that restart's lock, so a restart never ends one. The page is told
+            // first when a restart stands before the press, read through the field per call.
+            BeginRun = BeginRemodelRun,
+            RestartAhead = () => _reviewHost?.RestartAhead == true,
+
+            // Owner decision 152A, on the Codex review (X2): a plan or a run holds the tool service
+            // through the gate, read through the field per call, so no follow of the active document
+            // takes the bridge down under it; with no gate there is no bridge to hold, and it is
+            // refused as while the tool service attaches. One kind for both (owner decision 158A):
+            // the host takes its one hold for a plan or a run alike.
+            HoldToolService = () => _toolService?.HoldAttachment(ToolServiceHolder.Remodel),
+
+            // Owner decision 161A (004 research R24): a session left under the run root a restart moves, closed in process when
+            // the review backend that would close it has exited - through the gate, read through the field per call, on the
+            // service of the attachment the session was made on and no other.
+            EndRemodelSessionInProcess = (attachment, runDirectory) => EndRemodelSessionInProcess(_toolService, attachment, runDirectory),
             Pipeline = new BackendRemodelPipeline(
                 endpoint,
                 () => _toolService?.RemodelBridge,
@@ -822,18 +982,97 @@ public class SwReviewAddIn : ISwAddin
                 _pane?.RefreshSteps();
             },
 
-            // The configured key, and the remodel secret as well: this host relays the
+            // The keys the Review host masks, and the remodel secret as well: this host relays the
             // backend's own sentences to the page, and a `/remodel/*` failure is exactly the
             // kind of message that could quote the credential it was called with (FR-015).
-            Secrets = () => new[]
-            {
-                (_reviewHost?.Settings ?? UserSettings.Defaults()).ResolveApiKey().Key,
-                _toolService?.RemodelBridge?.Secret,
-            },
+            Secrets = () => KeysToMask().Concat(new[] { _toolService?.RemodelBridge?.Secret }),
+
+            // Owner decision 159A: what a failure said where the tab tells it in its own words - its
+            // sentence can name a path - masked by the host, into the add-in's log, which View log opens.
+            Log = AddInLog.Write,
         });
 
         StartRemodelPump();
         _pane.RemodelPageMessageReceived += OnRemodelPageMessage;
+    }
+
+    /// <summary>
+    /// The keys every pane host masks (FR-015): the review host's, read through the field per call -
+    /// the saved key and the key the backend that is up was started with, which differ until a
+    /// restart has put the saved settings in force (owner decision 153A, found on review) - and with
+    /// no review host the default settings' key, as before.
+    /// </summary>
+    private IEnumerable<string?> KeysToMask() => _reviewHost?.KeysToMask()
+        ?? new[] { UserSettings.Defaults().ResolveApiKey().Key };
+
+    /// <summary>
+    /// Owner decision 145A: the gate a plan or a run begins through, which reaches the review
+    /// host's settings restart from the Remodel page's own pump. <see cref="ReviewHost.BeginRemodelRun"/>
+    /// makes a restart that waits first, or waits for the one being made, then marks the run in
+    /// progress under the restart's lock - or refuses the run, saying what holds the restart back.
+    /// The review host is read through its field per call; with none, there is no settings restart
+    /// to wait for, and the run is marked and begins.
+    /// </summary>
+    private BackendRequestException? BeginRemodelRun(Action begin)
+    {
+        ReviewHost? host = _reviewHost;
+        if (host != null)
+        {
+            return host.BeginRemodelRun(begin);
+        }
+
+        begin();
+        return null;
+    }
+
+    /// <summary>
+    /// Owner decision 157A: the gate a Model check or a Standards check begins through, which reaches the review host's
+    /// settings restart from the check tab's own pump, as <see cref="BeginRemodelRun"/> does from the Remodel tab's.
+    /// <see cref="ReviewHost.BeginCheck"/> makes a restart that waits first, or waits for the one being made, then marks
+    /// the check in progress under the restart's lock - or refuses the check, saying what holds the restart back. The
+    /// review host is read through its field per call; with none, there is no settings restart to wait for, and the
+    /// check is marked and begins.
+    /// </summary>
+    private BackendRequestException? BeginCheck(Action begin)
+    {
+        ReviewHost? host = _reviewHost;
+        if (host != null)
+        {
+            return host.BeginCheck(begin);
+        }
+
+        begin();
+        return null;
+    }
+
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="action"/> behind every message posted to the pane's
+    /// pages so far, once they have been delivered on SOLIDWORKS' application thread
+    /// (<see cref="TaskPaneControl.AfterPosts"/>), so a check's minute starts when its page has its reply. The pane is
+    /// read through its field per call; with none there is nothing to wait behind, and the action runs at once.
+    /// </summary>
+    private void AfterPagePosts(Action action)
+    {
+        TaskPaneControl? pane = _pane;
+        if (pane != null)
+        {
+            pane.AfterPosts(action);
+            return;
+        }
+
+        action();
+    }
+
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="step"/> while no settings restart can begin or be made
+    /// (<see cref="ReviewHost.WhileNoRestartRuns"/>), for a check's evaluation held up past its page's minute. The
+    /// review host is read through its field per call; with none there is no settings restart, and the step runs at
+    /// once.
+    /// </summary>
+    private bool WhileNoRestartRuns(Func<bool> step)
+    {
+        ReviewHost? host = _reviewHost;
+        return host != null ? host.WhileNoRestartRuns(step) : step();
     }
 
     /// <summary>
@@ -863,6 +1102,24 @@ public class SwReviewAddIn : ISwAddin
 
         gate.BindRemodelRun(runDirectory);
         return true;
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): the Remodel host's in-process close of one run's session before a run-root
+    /// change, with the review backend gone, on <paramref name="gate"/>: the gate's
+    /// <see cref="ToolServiceGate.EndRemodelSessionOf"/>, on the service of <paramref name="attachment"/> only. With no gate
+    /// there is no bridge to end a session on: it throws, so the host reads the close as not answered and the leftover
+    /// stays as it was. What the gate throws is thrown on. Static so it can be tested without a SOLIDWORKS session.
+    /// </summary>
+    internal static void EndRemodelSessionInProcess(ToolServiceGate? gate, string attachment, string runDirectory)
+    {
+        if (gate == null)
+        {
+            throw new InvalidOperationException(
+                "the add-in has no SwReview tool service yet, so there is no bridge to end a remodel session on.");
+        }
+
+        gate.EndRemodelSessionOf(attachment, runDirectory);
     }
 
     private void OnRemodelPageMessage(object sender, string json)
@@ -948,15 +1205,21 @@ public class SwReviewAddIn : ISwAddin
     {
         TaskPaneControl pane = _pane!;
         ISldWorks app = _swApp!;
+        ConfigurationFollowCoordinator configurationFollow = _configurationFollow!;
 
         return new ToolServiceGate(
             CurrentDocument,
             () => ToolServiceHost.Start(new ToolServiceOptions(app, new ControlAppThreadInvoker(pane))
             {
+                // Capture this watch lifetime: a late callback from an old service must not
+                // fence or follow a replacement watch after unload or host replacement.
+                BeginRemodelOpen = configurationFollow.BeginRemodelOpen,
+
                 // Feature 011 T074: `drawing.read` resolves its run_id through the review host's
-                // own session records, never as a path. Read through the field per request, like
+                // own session records, never as a path - since decision 141A to the review session
+                // whose count of failed opens it keeps. Read through the field per request, like
                 // `busy` below, so a host that has gone answers null - a refusal, not a crash.
-                ReviewRunDirectory = runId => _reviewHost?.ReviewRunDirectory(runId),
+                DrawingReadSession = runId => _reviewHost?.DrawingReadSession(runId),
 
                 // 004 T167: every ending of a remodel session on this service - remodel.close's,
                 // and the teardown a re-attach or an unload runs - reaches the Remodel tab as the
@@ -977,14 +1240,23 @@ public class SwReviewAddIn : ISwAddin
             schedule: null,
             // What holds the bridge, and so what stops it being re-attached to another document
             // (docs/history/pane-findings-2026-09-16.md, finding 1). Both read late: the remodel host is
-            // built after this gate is, and either can be gone by the time the question is asked.
-            busy: () => (_reviewHost != null && _reviewHost.AnyTurnRunning())
-                || (_remodelHost != null && _remodelHost.RunInProgress),
+            // built after this gate is, and either can be gone by the time the question is asked. Owner
+            // decision 152A, on review: the remodel run first, which costs nothing, then whether a turn
+            // may be running - a chat the backend does not answer about counts - since the gate asks
+            // again every second while a follow is owed, and a "no" takes the bridge down.
+            busy: () => (_remodelHost != null && _remodelHost.RunInProgress) || (_reviewHost != null && _reviewHost.TurnMayBeRunning()),
             preserveAttachment: (path, attachment) => _remodelHost?.KeepCopyAttachment(path, attachment) == true,
             afterStopped: _ => _remodelHost?.RefreshAvailability());
     }
 
-    private void StartBackend(UserSettings settings, ResolvedApiKey key)
+    /// <summary>
+    /// The add-in's first start of the backend, on a worker thread. Made through the review host
+    /// (owner decision 153A, found on review): under the lock every settings restart holds, with the
+    /// settings saved when it is made, which the host records as the settings in force - and not at
+    /// all once a save's restart has started the backend, which it would replace
+    /// (<see cref="ReviewHost.FirstStart"/>).
+    /// </summary>
+    private void StartBackend()
     {
         try
         {
@@ -994,7 +1266,7 @@ public class SwReviewAddIn : ISwAddin
             // opened yet is not a problem: `PageChannel` asks for the view per post and drops
             // the message when there is none.
             PostStatusToPages("backend_starting", "Starting the review backend...");
-            _backend?.Start(settings, key);
+            _reviewHost?.FirstStart((settings, key) => _backend?.Start(settings, key));
             PostStatusToPages("ready", "Backend ready.");
         }
         catch (Exception failure)
@@ -1004,8 +1276,12 @@ public class SwReviewAddIn : ISwAddin
             // redacted - a job-object failure, a key-resolution failure, or anything thrown
             // before that wrapper - and the page must never be the first place a key appears.
             // Reported to the page and to the log, never thrown from a thread pool thread,
-            // where it would end the process.
-            PostStatusToPages("error", failure.Message);
+            // where it would end the process. Each page is told the way on with it (150A review):
+            // the Review tab saves the settings itself, and every other tab is sent there. Marked
+            // as the backend's own word on every page, the Review page's too (the review of owner
+            // decision 160A, S3): it is what tells the Review page's strip the backend is not running.
+            _reviewHost?.PostStatus("error", ReviewHost.WithTheWayOn(failure.Message, ReviewHost.StartItAgain), lifecycle: true);
+            TellTheOtherTabsTheBackendDidNotStart(failure.Message);
             Report("The SwReview backend did not start.", failure);
         }
     }
@@ -1025,13 +1301,28 @@ public class SwReviewAddIn : ISwAddin
     private void PostStatusToPages(string stage, string message)
     {
         _reviewHost?.PostStatus(stage, message);
-        _modelCheckHost?.PostStatus(stage, message);
+        PostStatusToTheOtherPages(stage, message);
+    }
+
+    /// <summary>
+    /// <see cref="PostStatusToPages"/> less the Review page: the share of every page but the
+    /// Review tab's, whose host tells it of a failed settings restart itself (owner decision 145A,
+    /// <see cref="TellTheOtherTabsTheBackendDidNotStart"/>).
+    /// </summary>
+    private void PostStatusToTheOtherPages(string stage, string message)
+    {
+        // Each marked as the add-in's own word on the backend (`lifecycle: true`), so a page takes
+        // down a banner it put up for a failed start or restart once a later `init` names a backend
+        // (owner decision 145A, third review), and its backend strip says the backend is not
+        // running from such an `error` until then (owner decision 150A). The Review page's own
+        // Save clears its banner.
+        _modelCheckHost?.PostStatus(stage, message, lifecycle: true);
 
         // The Standards page tracks the backend for the reason the Model check page does: it
         // calls `POST /checks/standards` itself with the endpoint its `init` carried, so a tab
         // opened while the backend was still starting holds a null endpoint, and `ready` is
         // what tells it to ask again.
-        _standardsHost?.PostStatus(stage, message);
+        _standardsHost?.PostStatus(stage, message, lifecycle: true);
 
         // The Remodel page's `status` stages are a closed list that names the three
         // backend-lifecycle stages posted here, so today every one of them goes through; the
@@ -1040,8 +1331,36 @@ public class SwReviewAddIn : ISwAddin
         // boot to ask for its `init` again.
         if (RemodelHost.IsStatusStage(stage))
         {
-            _remodelHost?.PostStatus(stage, message);
+            _remodelHost?.PostStatus(stage, message, lifecycle: true);
         }
+    }
+
+    /// <summary>
+    /// The add-in's word to the Model check, Standards and Remodel tabs that the backend did not
+    /// start: the first start failed (<see cref="StartBackend"/>), or a settings restart the review
+    /// host made failed once the old backend had stopped (owner decision 145A, found on review). No
+    /// backend answers the port and token they hold, and they are told `status {stage: "error"}`
+    /// with the failure, which each host masks again, and the way on after it, which is on the
+    /// Review tab, since they have no Save of their own (150A review). The Review page is told by
+    /// its own host, or by <see cref="StartBackend"/>.
+    /// </summary>
+    private void TellTheOtherTabsTheBackendDidNotStart(string message) =>
+        PostStatusToTheOtherPages("error", ReviewHost.WithTheWayOn(message, ReviewHost.StartItAgainOnTheReviewTab));
+
+    /// <summary>
+    /// Owner decision 145A: the review host has restarted the backend with saved settings - a
+    /// save's restart made at once, or one made after it waited - so every other tab that holds
+    /// the backend's port and token is told, and asks for its `init` again. The Model check and
+    /// Standards pages call their check routes with that token, which the restarted backend
+    /// refuses, and the Remodel page keeps it so one `init` field means one thing on every tab.
+    /// The Terminal tab holds no backend. Each host is read through its field: all three are
+    /// built after the review host's options, and one that has gone tells nothing.
+    /// </summary>
+    private void TellTheOtherTabsTheBackendRestarted()
+    {
+        _modelCheckHost?.BackendRestarted();
+        _standardsHost?.BackendRestarted();
+        _remodelHost?.BackendRestarted();
     }
 
     /// <summary>
@@ -1186,20 +1505,24 @@ public class SwReviewAddIn : ISwAddin
         TellEveryTabTheDocumentChanged("The pane could not be told the active configuration changed.");
 
     /// <summary>
-    /// Moves the configuration watch to whatever document is active now. On the application
-    /// thread, like both callers; never throws out of an event sink.
+    /// Replaces a watch lifetime before any tool service captures its open callback. Invalidating
+    /// queued work first prevents a late active-document read from subscribing the new watch.
     /// </summary>
-    private void FollowActiveConfiguration()
+    private void StartConfigurationWatch()
     {
-        try
-        {
-            _configurationWatch?.Follow(_swApp?.ActiveDoc);
-        }
-        catch (Exception failure)
-        {
-            Report("The pane could not follow the active document's configuration.", failure);
-        }
+        _configurationFollow?.Dispose();
+        _configurationWatch?.Dispose();
+        _configurationWatch = ActiveConfigurationWatch.ForSolidWorks(OnActiveConfigurationChanged);
+        var invoker = new ControlAppThreadInvoker(_pane!);
+        _configurationFollow = new ConfigurationFollowCoordinator(
+            invoker.Post,
+            () => _swApp?.ActiveDoc,
+            activeDocument => _configurationWatch?.Follow(activeDocument),
+            failure => Report("The pane could not follow the active document's configuration.", failure));
     }
+
+    /// <summary>Only native copy open defers subscription; the document fan-out remains immediate.</summary>
+    private void FollowActiveConfiguration() => _configurationFollow?.Request();
 
     /// <summary>
     /// The one fan-out a document change runs - every host's `document.changed`, the step strip,

@@ -92,6 +92,15 @@
     <input type="text" id="gcp-location" autocomplete="off" spellcheck="false">
   </fieldset>
 
+  <!-- Owner decision 154A, the owner's follow-up: the folder runs are made in. A save checks it by the
+       run root rule; a folder the rule refuses is not saved, and the note under the field says why. -->
+  <div class="field">
+    <label for="run-root">Folder for runs (run root)</label>
+    <input type="text" id="run-root" autocomplete="off" spellcheck="false">
+    <span class="note">A local folder on this computer, not a network share or a link. Leave it blank for Documents\SwReview\runs.</span>
+    <p id="run-root-note" class="note bad" role="status" hidden></p>
+  </div>
+
   <div class="actions">
     <button type="button" id="save-settings">Save</button>
     <span id="save-state" class="note" role="status"></span>

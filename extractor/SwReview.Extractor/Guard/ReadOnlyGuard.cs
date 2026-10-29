@@ -39,8 +39,10 @@ public static partial class ReadOnlyGuard
         "ForceRebuild3",
         "ForceRebuildAll",
 
-        // Writing files. SaveAs3 has one legitimate use - saving a capture image - which
-        // goes through AssertSaveAs so the extension is checked.
+        // Writing files. SaveAs3 is refused even for an image: the capture writes its image with
+        // SaveBMP, after AssertSaveAs has checked the target's extension. (Corrected 2026-10-19,
+        // decision 140A, which refused the rest of the save family and left SaveBMP allowed: this
+        // said the capture image was SaveAs3's one legitimate use.)
         "Save3",
         "SaveAs3",
 
@@ -253,12 +255,15 @@ public static partial class ReadOnlyGuard
     /// The denied surface, for reading only (feature 004, contracts/guard-allowlist.md): the
     /// re-modeler's allowlist is asserted as a set against it, so a denial added here cannot
     /// silently widen that allowlist. The lookups below stay on the concrete collections, so
-    /// exposing these changes neither the comparer nor the cost of a call.
+    /// exposing these changes neither the comparer nor the cost of a call. Since the review of
+    /// owner decision 160A each is a read-only view, as every list an allowlist guard publishes
+    /// is, which no cast turns back into the set or the array: a denial taken out through one
+    /// would have widened this guard itself.
     /// </summary>
-    public static readonly IReadOnlyCollection<string> DeniedMembers = DeniedMemberSet;
+    public static readonly IReadOnlyCollection<string> DeniedMembers = new ReadOnlySet<string>(DeniedMemberSet);
 
     /// <inheritdoc cref="DeniedMembers" />
-    public static readonly IReadOnlyCollection<string> DeniedPrefixes = DeniedPrefixArray;
+    public static readonly IReadOnlyCollection<string> DeniedPrefixes = new ReadOnlySet<string>(DeniedPrefixArray);
 
     /// <summary>
     /// Feature 011 (T004): the generated drawing-family denials (<c>ReadOnlyGuard.Drawing.cs</c>,
@@ -278,7 +283,7 @@ public static partial class ReadOnlyGuard
         DeniedMemberSet.UnionWith(CreationFamilyDeniedMembers);
     }
 
-    /// <summary>Image extensions SaveAs3 may write. Anything else is a model write.</summary>
+    /// <summary>The extensions <see cref="AssertSaveAs"/> lets a capture image be written to; any other target is refused.</summary>
     private static readonly HashSet<string> AllowedSaveAsExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         ".png",
@@ -292,10 +297,11 @@ public static partial class ReadOnlyGuard
     ///
     /// An interface-qualified key (<c>IDrawingDoc.ActivateSheet</c>) is judged by its member half
     /// as well as by the whole key, so no spelling of a denied member passes a read-only gate
-    /// (feature 011 review, 2026-09-23: a qualified key had passed whatever it named). The two
-    /// allowlist guards, <see cref="RemodelGuard"/> and <see cref="DrawingOpenGuard"/>, accept
-    /// their own qualified keys before this guard is asked, and are unchanged by this. The error
-    /// names the key as the caller wrote it.
+    /// (feature 011 review, 2026-09-23: a qualified key had passed whatever it named). The
+    /// allowlist guards - <see cref="RemodelGuard"/>, <see cref="DrawingOpenGuard"/> and, since
+    /// decision 144A, <see cref="RemodelSeatGuard"/> - accept their own qualified keys before this
+    /// guard is asked, and are unchanged by this; the pane seat's, a closed allowlist since decision
+    /// 148A, never asks it. The error names the key as the caller wrote it.
     /// </summary>
     public static void Assert(string interopMemberName)
     {
@@ -329,8 +335,15 @@ public static partial class ReadOnlyGuard
     }
 
     /// <summary>
-    /// The one sanctioned use of SaveAs3: writing a capture image. Throws
-    /// <see cref="MutatingCallError"/> for any other target, including a model file.
+    /// The check on a capture image's target, which <c>CaptureService</c> makes before the image is
+    /// written: an image extension only. Throws <see cref="MutatingCallError"/> for any other target,
+    /// including a model file. <see cref="Assert"/> judges a member by its name and never sees a
+    /// path, so this is the check on where the capture writes: <c>SaveBMP</c>, which the guard
+    /// allows, writes to whatever path it is handed, and <c>SwCaptureView</c> hands it this one
+    /// with <c>.bmp</c> for its extension. It is named for SaveAs3, as its refusal's member is, but
+    /// the capture writes with SaveBMP and SaveAs3 itself stays refused (corrected 2026-10-19,
+    /// decision 140A: this called a capture image SaveAs3's one sanctioned use; and on the
+    /// decision's review, when the refusal's sentence stopped saying SaveAs3 may write one).
     /// </summary>
     public static void AssertSaveAs(string path)
     {
@@ -345,7 +358,7 @@ public static partial class ReadOnlyGuard
             string described = string.IsNullOrEmpty(extension) ? "(no extension)" : extension;
             throw new MutatingCallError(
                 "SaveAs3",
-                $"SaveAs3 may only write a capture image (.png, .bmp, .jpg); refused {described}.");
+                $"A capture image may only be written as .png, .bmp or .jpg; refused {described}.");
         }
     }
 }

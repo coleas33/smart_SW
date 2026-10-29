@@ -56,6 +56,22 @@ internal sealed class FakeDrawingOpenHost : IDrawingOpenHost
     /// <summary>Thrown by <c>CloseDoc</c>, when set.</summary>
     public Exception? CloseFailure { get; set; }
 
+    /// <summary>
+    /// What <c>IsOpenedReadOnly</c> answers (decision 136A): true, as SOLIDWORKS should answer for
+    /// a document <c>OpenDoc6</c> opened with the read-only option, unless a test says otherwise.
+    /// </summary>
+    public bool OpenedReadOnly { get; set; } = true;
+
+    /// <summary>Thrown by <c>IsOpenedReadOnly</c>, when set.</summary>
+    public Exception? ReadOnlyFailure { get; set; }
+
+    /// <summary>
+    /// Run after each lookup has answered, with the path it was asked (decision 141A's tests): what
+    /// the engineer does in SOLIDWORKS between one lookup and the next, such as
+    /// <see cref="EngineerCloses"/>.
+    /// </summary>
+    public Action<string>? AfterLookup { get; set; }
+
     public object AlreadyOpen(string path)
     {
         var document = new object();
@@ -63,9 +79,24 @@ internal sealed class FakeDrawingOpenHost : IDrawingOpenHost
         return document;
     }
 
+    /// <summary>The engineer closes the drawing in SOLIDWORKS: no call of the seam's, so none is recorded.</summary>
+    public void EngineerCloses(string path) => _open.Remove(path);
+
     public object? OpenDocument(string path)
     {
         Calls.Add(new FakeOpenCall("OpenDocument", path));
+        try
+        {
+            return Lookup(path);
+        }
+        finally
+        {
+            AfterLookup?.Invoke(path);
+        }
+    }
+
+    private object? Lookup(string path)
+    {
         if (!_open.TryGetValue(path, out object? document))
         {
             return null;
@@ -110,6 +141,18 @@ internal sealed class FakeDrawingOpenHost : IDrawingOpenHost
 
         _open[path] = Opened;
         return Opened;
+    }
+
+    /// <summary>Recorded with which document it was asked of: the one the open returned, or another.</summary>
+    public bool IsOpenedReadOnly(object document)
+    {
+        Calls.Add(new FakeOpenCall("IsOpenedReadOnly", ReferenceEquals(document, Opened) ? "opened" : "other"));
+        if (ReadOnlyFailure != null)
+        {
+            throw ReadOnlyFailure;
+        }
+
+        return OpenedReadOnly;
     }
 
     public void CloseDoc(string path)

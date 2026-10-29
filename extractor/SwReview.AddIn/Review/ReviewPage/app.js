@@ -61,6 +61,13 @@
    */
   var DOT = ' · ';
 
+  /**
+   * What the strip says after a failed start or restart, until an `init` names a backend (owner
+   * decisions 150A and 160A), as the check pages' and the Remodel page's strips say it.
+   */
+  var NOT_RUNNING = 'Backend not running';
+  var START_IT_AGAIN = 'The backend is not running. Save Settings to start it again.';
+
   var pending = Object.create(null);
   var nextId = 0;
 
@@ -189,7 +196,34 @@
     stream: null,
     reconnectTimer: null,
     reconnectDelay: RECONNECT_MIN,
-    initPending: false
+    initPending: false,
+    // A `backend.restarted`, or a `ready` status, arrived while an `init` was on its way: ask once
+    // more after it.
+    initAgain: false,
+    // ...and that ask loads the models, as the `ready` status's own would have (the review of owner
+    // decision 160A, D2).
+    initAgainLoadsModels: false,
+    // A `backend.restarted` arrived and no `init` has named the new backend yet.
+    backendReplaced: false,
+    // The token the page held when `backend.restarted` arrived: an `init` that names it was read
+    // before the restart, and is not the new backend.
+    replacedToken: null,
+    // A start or restart failed and no `init` has named a backend since (owner decisions 150A and
+    // 160A): the strip says the backend is not running, not that it is starting.
+    notRunning: false,
+    // The banner holds the host's word that a start failed, until an init names a backend.
+    lifecycleBanner: false,
+    // A lifecycle failure invalidates every init already on its way, including one naming the old
+    // backend. Only a fresh request can clear the failure (the final review of owner decision 160A).
+    backendFailureRevision: 0,
+    // The host's sentence while the backend that is up runs with settings other than the saved
+    // ones - a restart failed before it stopped the old backend - as the last `init` carried it,
+    // or null (owner decision 153A): what the banner says whenever it says nothing else.
+    notInForce: null,
+    // The number of the host's last reading of whether the saved settings are in force that this
+    // page took (owner decision 153A, found on review): a reading numbered no higher is an older
+    // one, delivered late, and changes nothing.
+    notInForceRevision: 0
   };
 
   var ui = {};
@@ -249,6 +283,9 @@
     var error = new Error((payload && payload.message) || 'the host reported an error');
     error.errorClass = (payload && payload.error_class) || 'HostError';
     error.retryable = !!(payload && payload.retryable);
+    // What a save says of the run root, which the error of a save whose restart failed carries as its
+    // `settings.saved` would (owner decision 154A, the owner's follow-up); null on every other error.
+    error.runRootRefusal = (payload && payload.run_root_refusal) || null;
     return error;
   }
 
@@ -274,7 +311,28 @@
         state.token = null;
         closeStream();
         setTurnRunning(false);
-        renderBackendState('The backend stopped. Reopen the pane to start it again.', true);
+        // No backend holds any settings: none are in force (owner decision 153A).
+        holdNotInForce(null);
+        renderBackendState('The backend stopped. Save Settings to start it again.', true);
+        return;
+      case 'backend.restarted':
+        // Owner decision 143A: the host restarted the backend with settings saved while a turn
+        // ran. The port and token of the last `init` are the old child's and nothing else says
+        // so, so the page asks again, as after a save that restarted it at once - after the
+        // `init` already on its way, if there is one, since the host may have read that before
+        // the new child was up. The host's sentences about the restart that waited - that it
+        // would restart, and that the backend was not answering - are done with: the message
+        // carries them, and whichever is on the banner is taken off it, and nothing else there.
+        state.backendReplaced = true;
+        state.replacedToken = state.token;
+        if (Array.isArray(payload.sentences) && payload.sentences.indexOf(ui.banner.textContent) >= 0) {
+          showBanner('');
+        }
+        if (state.initPending) {
+          state.initAgain = true;
+        } else {
+          requestInit(false);
+        }
         return;
       case 'events.frame':
         // One raw SSE frame, read by the host. Frames for a chat this page is no longer
@@ -2754,8 +2812,35 @@
   }
 
   function showBanner(text) {
-    ui.banner.textContent = text || '';
-    ui.banner.hidden = !text;
+    state.lifecycleBanner = false;
+    // While the saved settings are not in force, the host's sentence saying so is what the banner
+    // says when it is given nothing else to say (owner decision 153A).
+    var shown = text || state.notInForce || '';
+    ui.banner.textContent = shown;
+    ui.banner.hidden = !shown;
+  }
+
+  /**
+   * Owner decision 153A: holds the host's sentence that the saved settings are not in force, or
+   * none. A banner saying nothing, or saying the sentence held until now, takes the new one, or
+   * nothing; any other word stays where it is, and the sentence comes back once that word goes.
+   */
+  function holdNotInForce(sentence, revision) {
+    // Found on review (C2): the host numbers its readings in the order it takes them, and posts them
+    // from different threads - an `init` read before a restart failed can come after that failure's
+    // word - so a reading numbered no higher than the last one taken is not taken. One with no
+    // number is the page's own (`backend.stopped`).
+    if (typeof revision === 'number') {
+      if (revision <= state.notInForceRevision) {
+        return;
+      }
+      state.notInForceRevision = revision;
+    }
+    var resting = ui.banner.hidden || ui.banner.textContent === state.notInForce;
+    state.notInForce = (typeof sentence === 'string' && sentence) ? sentence : null;
+    if (resting) {
+      showBanner('');
+    }
   }
 
   function showStreamState(text) {
@@ -2783,20 +2868,53 @@
   function showStatus(payload) {
     var message = (payload && payload.message) || '';
     var stage = payload && payload.stage;
+    // Owner decision 153A, found on review: the host's word that a restart which waited has failed
+    // says whether the saved settings are in force, as `init` does, and no `init` follows it - so
+    // the sentence is held from here too. A status that does not carry it leaves it as it is.
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'settings_not_in_force')) {
+      holdNotInForce(payload.settings_not_in_force, payload.settings_not_in_force_revision);
+    }
     if (stage === 'error') {
       showBanner(message);
-      renderBackendState('Error', true);
+      // Only the backend's own word that it did not start or restart, marked `lifecycle`, says it
+      // is not running - with a save's `BackendNotRestarted` - not any `error` while the page holds
+      // no backend: the host's word on the settings after every `init` comes while the first start
+      // runs, too (the review of owner decision 160A, S3).
+      state.lifecycleBanner = payload.lifecycle === true;
+      if (state.lifecycleBanner) {
+        state.backendFailureRevision++;
+        expectBackendReplacement();
+        state.notRunning = true;
+        state.backend = null;
+        state.token = null;
+      }
+      renderBackendState(state.notRunning ? NOT_RUNNING : 'Error', true);
       return;
     }
     if (stage === 'ready') {
       showBanner('');
       if (!state.backend) {
         // The backend finished starting after this page loaded, so the `init` it was given
-        // carried no endpoint. Ask again rather than leaving Review unusable until a reload.
-        requestInit(true);
+        // carried no endpoint. Ask again rather than leaving Review unusable until a reload -
+        // once more after an `init` already on its way, which may have been read before the
+        // backend was up (the review of owner decision 160A, D2).
+        if (state.initPending) {
+          state.initAgain = true;
+          state.initAgainLoadsModels = true;
+        } else {
+          requestInit(true);
+        }
       }
     }
-    renderBackendState(message || stage || '', false);
+    renderBackendState(state.notRunning && !state.backend ? NOT_RUNNING : (message || stage || ''),
+      state.notRunning && !state.backend);
+  }
+
+  function expectBackendReplacement() {
+    if (!state.backendReplaced) {
+      state.backendReplaced = true;
+      state.replacedToken = state.token;
+    }
   }
 
   function renderBackendState(text, bad) {
@@ -2874,6 +2992,7 @@
     ui.baseUrl.value = state.settings.base_url || '';
     ui.project.value = state.settings.gemini_enterprise ? state.settings.gemini_enterprise.project : '';
     ui.location.value = state.settings.gemini_enterprise ? state.settings.gemini_enterprise.location : '';
+    ui.runRoot.value = state.settings.run_root || '';
     ui.apiKey.value = '';
     ui.clearKey.checked = false;
     ui.keySource.textContent = describeKeySource(state.keySource);
@@ -2958,7 +3077,9 @@
       base_url: currentProvider() === 'openai' && ui.baseUrl.value.trim()
         ? ui.baseUrl.value.trim()
         : null,
-      gemini_enterprise: null
+      gemini_enterprise: null,
+      // The folder for runs, which the host checks by the run root rule; empty chooses the default.
+      run_root: ui.runRoot.value.trim()
     };
 
     if (currentProvider() === 'gemini' && ui.project.value.trim() && ui.location.value.trim()) {
@@ -2978,17 +3099,48 @@
       // and there is no reason for it to stay in the renderer process.
       renderSettings(reply.settings, reply.key_source);
       ui.saveState.textContent = 'Saved.';
+      showRunRootRefusal(reply.run_root_refusal);
       // The save restarted the backend, so the port and the token this page holds are the old
       // child's. Nothing else tells the page that.
       requestInit(false);
     }).catch(function (error) {
+      var notRestarted = error.errorClass === 'BackendNotRestarted';
       ui.saveState.className = 'note bad';
-      errorInto(ui.saveState, error, error.errorClass === 'TurnRunning'
+      errorInto(ui.saveState, error, error.errorClass === 'TurnRunning' || notRestarted
+        || error.errorClass === 'AddInStopping'
         ? error.message
         : (error.errorClass + ': ' + error.message));
+      if (notRestarted) {
+        showRunRootRefusal(error.runRootRefusal);
+        // Owner decision 150A: the save was kept and only its restart failed, so the settings in
+        // force, and the backend there is now - the old one, or none - are what `init` names: the
+        // page asks for it, as after a save that restarted the backend.
+        state.notRunning = true;
+        // And the backend may be gone: an `init` that names none carries no token, so the next
+        // that names a backend would have none to compare its own with. Marked as `backend.restarted`
+        // marks it, the first such `init` naming a token other than the one held now is believed to
+        // be a new backend - the old one still up names this one (150A review, S1).
+        expectBackendReplacement();
+        requestInit(false);
+      }
     }).then(function () {
       ui.save.disabled = false;
     });
+  }
+
+  /**
+   * What a save that was written says of the run root, under the field (owner decision 154A, the owner's
+   * follow-up): its answer's `run_root_refusal` - the folder chosen and refused, or the run root left in
+   * force and refused - in the class's sentence with the class and the message in a fold, or with no labels
+   * the message as it is; none takes the note down. A save refused before anything was written says nothing
+   * of the run root, and leaves the note as it was.
+   */
+  function showRunRootRefusal(refusal) {
+    render.clear(ui.runRootNote);
+    ui.runRootNote.hidden = !refusal;
+    if (refusal) {
+      errorInto(ui.runRootNote, asError(refusal), String(refusal.message || ''));
+    }
   }
 
   function start() {
@@ -3012,11 +3164,26 @@
 
     state.initPending = true;
     var heldToken = state.token;
+    var failureRevision = state.backendFailureRevision;
     send('ready', {}).then(function (payload) {
+      // The host can read this init's endpoint before a watcher fails its restart, then deliver
+      // it after the failure's status. Nothing in that old reply can revive the failed backend.
+      if (failureRevision !== state.backendFailureRevision) {
+        return;
+      }
       // Another token is another backend (a Settings save, or a restart after it stopped): no
       // chat of the old one survives. A live waiting review on screen is restored from its folder
       // at once, read-only with Send offered (feature 015 FR-042, contracts/pane.md section 7).
-      var restarted = !!heldToken && !!payload.token && payload.token !== heldToken;
+      // `backend.restarted` says so as well (owner decision 143A), and is believed even when the
+      // `init` before this one was read while there was no backend, and so carried no token to
+      // compare: it is kept until an `init` names the new backend - a token other than the one
+      // held when it arrived, since an `init` the host read before the restart names that one.
+      var replaced = state.backendReplaced && !!payload.token && payload.token !== state.replacedToken;
+      var restarted = replaced || (!!payload.token && !!heldToken && payload.token !== heldToken);
+      if (replaced) {
+        state.backendReplaced = false;
+        state.replacedToken = null;
+      }
       var waiting = restarted && !!state.chatId && state.readOnly === null && waitingForSend()
         && !state.sending && !state.sendPending;
       state.providers = payload.providers || state.providers;
@@ -3029,7 +3196,25 @@
       renderSettings(payload.settings, payload.key_source);
       renderDocument();
       renderBinding();
-      renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', false);
+      // Read this before the failed-start notice: no backend means no settings are in force, and
+      // removing the old sentence must leave room for the way on (owner decision 160A).
+      holdNotInForce(payload.settings_not_in_force, payload.settings_not_in_force_revision);
+      if (state.backend) {
+        state.notRunning = false;
+        if (state.lifecycleBanner) {
+          showBanner('');
+        }
+      } else if (payload.backend_start_failed === true) {
+        // A page opened after the failure missed its status (owner decision 160A).
+        state.notRunning = true;
+        if (ui.banner.hidden) {
+          showBanner(START_IT_AGAIN);
+          state.lifecycleBanner = true;
+        }
+      }
+      renderBackendState(
+        state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),
+        state.notRunning);
       if (loadModels && state.backend) {
         refreshModels();
       }
@@ -3040,14 +3225,37 @@
         var shown = state.chatId;
         state.chatId = null;
         showReview(shown);
+      } else if (restarted) {
+        // The new backend does not hold the chat on screen, so nothing is asked of its stream:
+        // not now, and not by a reconnect the old stream's close left waiting.
+        closeStream();
+      } else if (state.stream) {
+        // A `ready` also makes the host close the event reader it holds for this page - that is
+        // how a page that reloads drops a stream it no longer shows - but this page did not
+        // reload. Reading a stream, it asks for it again from the last event it showed, on the
+        // same backend: a re-init while a turn runs - after a save that turn started during
+        // (owner decision 143A) - must not cost the page the rest of the turn.
+        openStream();
       }
       // The reviews the host kept for this SOLIDWORKS session, and - a page reloaded with one of
       // them open - that review shown again (contracts/sessions.md sections 5 and 6).
       requestSessions(true);
     }).catch(function (error) {
-      showBanner(error.message);
+      if (failureRevision === state.backendFailureRevision) {
+        showBanner(error.message);
+      }
     }).then(function () {
       state.initPending = false;
+      if (failureRevision !== state.backendFailureRevision) {
+        state.initAgain = true;
+        state.initAgainLoadsModels = state.initAgainLoadsModels || loadModels;
+      }
+      if (state.initAgain) {
+        var loadModelsAgain = state.initAgainLoadsModels;
+        state.initAgain = false;
+        state.initAgainLoadsModels = false;
+        requestInit(loadModelsAgain);
+      }
     });
   }
 
@@ -3072,6 +3280,8 @@
     ui.baseUrlField = document.getElementById('base-url-field');
     ui.project = document.getElementById('gcp-project');
     ui.location = document.getElementById('gcp-location');
+    ui.runRoot = document.getElementById('run-root');
+    ui.runRootNote = document.getElementById('run-root-note');
     ui.save = document.getElementById('save-settings');
     ui.saveState = document.getElementById('save-state');
     ui.waitingSettingsNote = document.getElementById('waiting-settings-note');

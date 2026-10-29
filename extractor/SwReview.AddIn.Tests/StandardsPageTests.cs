@@ -919,6 +919,84 @@ public sealed class StandardsPageTests
         Assert.Equal(0, rendered.GetProperty("warningNotes").GetInt32());
     }
 
+    /// <summary>
+    /// Accept, driven end to end against a stubbed backend, as the Model check page's twin is: the
+    /// check the engineer just accepted is re-read, stays on screen as `checked`, and its exception
+    /// is named on the check's line - and nothing goes into the banner, which is for an Accept whose
+    /// re-read was dropped for a newer check or failed (owner decision 150A; the 150A review found
+    /// nothing pinned it, S2).
+    /// </summary>
+    [Fact]
+    public void AcceptingACheckKeepsItVisibleAsCheckedAndNamesTheExceptionWithNoBanner()
+    {
+        JsonElement state = Drive(AcceptStub, AcceptPress, AcceptRead);
+
+        Assert.Equal("checked", state.GetProperty("bucket").GetString());
+        Assert.False(state.GetProperty("hidden").GetBoolean(), "The accepted check was re-rendered into a hidden group.");
+        Assert.Contains("EX-012", state.GetProperty("said").GetString()!);
+        Assert.True(
+            state.GetProperty("banner").ValueKind == JsonValueKind.Null,
+            "The banner is up after an Accept whose re-read was shown: " + state.GetProperty("banner").GetRawText());
+        Assert.Equal(
+            new[]
+            {
+                "POST /checks/20260917-101532-top-plate-standards/exceptions/F-001",
+                "GET /checks/20260917-101532-top-plate-standards",
+            },
+            state.GetProperty("calls").EnumerateArray().Select(value => value.GetString()).ToArray());
+    }
+
+    /// <summary>
+    /// The sample on screen, and a backend whose exceptions route writes `EX-012` and whose re-read
+    /// answers the check with that exception applied - as the route re-runs the checks before it
+    /// replies.
+    /// </summary>
+    private static readonly string AcceptStub = @"
+(function () {
+  var sample = " + StandardsResultSample.Json() + @";
+  var accepted = JSON.parse(JSON.stringify(sample));
+  var row = accepted.findings[0];
+  row.finding.status = 'checked_within_scope';
+  row.finding.exception_id = 'EX-012';
+  row.exception = {id: 'EX-012', state: 'active', note: 'FICT the material is set at release'};
+
+  window.__calls = [];
+  window.fetch = function (url, request) {
+    window.__calls.push(request.method + ' ' + String(url).replace('https://swreview.invalid/__backend', ''));
+    var body = (request.method === 'POST') ? {finding: row, exception_id: 'EX-012'} : accepted;
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      text: function () { return Promise.resolve(JSON.stringify(body)); }
+    });
+  };
+
+  window.SwReviewStandards.renderResult(sample);
+}());
+";
+
+    private const string AcceptPress = @"
+(function () {
+  var row = document.querySelector('.rule[data-finding-id=""F-001""]');
+  row.querySelector('input.note').value = 'FICT the material is set at release';
+  row.querySelector('[data-action=""accept""]').click();
+}());
+";
+
+    private const string AcceptRead = @"
+var row = document.querySelector('.rule[data-finding-id=""F-001""]');
+var group = row;
+while (group && !(group.classList && group.classList.contains('bucket-group'))) { group = group.parentNode; }
+var banner = document.getElementById('banner');
+return JSON.stringify({
+  ok: true,
+  bucket: row ? row.getAttribute('data-bucket') : null,
+  hidden: !!(group && group.hidden),
+  said: document.getElementById('check-state').textContent,
+  banner: banner.hidden ? null : banner.textContent,
+  calls: window.__calls
+});";
+
     // ---- the run folder controls ----------------------------------------------------------------
 
     /// <summary>
@@ -1480,9 +1558,10 @@ public sealed class StandardsPageTests
                 }
             }
 
-            // A parser that quietly matched nothing would make every test above vacuous.
+            // A parser that quietly matched nothing would make every test above vacuous. Four
+            // unsolicited rows since owner decision 145A added `backend.restarted`.
             Assert.True(
-                pageToHost.Count == 6 && unsolicited.Count == 3 && hostToPage.Count >= 6,
+                pageToHost.Count == 6 && unsolicited.Count == 4 && hostToPage.Count >= 6,
                 $"contracts/standards-check.md did not parse: {pageToHost.Count} page-to-host "
                     + $"rows ({Join(pageToHost)}), {unsolicited.Count} unsolicited rows "
                     + $"({Join(unsolicited)}). Did the table or heading shape change?");

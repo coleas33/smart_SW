@@ -10,11 +10,13 @@ namespace SwReview.AddIn.Standards;
 public sealed class StandardsHostOptions
 {
     /// <param name="channel">Where replies and unsolicited messages go.</param>
-    /// <param name="runRoot">The run root in force, read fresh: a settings save moves it.</param>
+    /// <param name="runRoot">The run root in force, read fresh: the restart a settings save makes moves it.</param>
     public StandardsHostOptions(IPageChannel channel, Func<string> runRoot)
     {
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
+        RunRootsInForce = () => new[] { RunRoot() };
+        RunRootForANewRun = () => RunRoot();
     }
 
     public IPageChannel Channel { get; }
@@ -22,11 +24,37 @@ public sealed class StandardsHostOptions
     public Func<string> RunRoot { get; }
 
     /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, the one in force among them (owner
+    /// decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open - its report
+    /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
+    /// </summary>
+    public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
+
+    /// <summary>
+    /// The run root a Standards run's folder is made under, read once to judge it and make the folder (owner
+    /// decision 154A, with 153A's record of the settings in force), and again once the extraction is over (the
+    /// reviews of 154A's merge, N6): the run root in force, or null while a start of the backend under way would
+    /// bring another into force - the backend coming up makes runs only under its own, and may yet fail and leave
+    /// the one it would replace - which `standards.start` refuses. The run root in force by default.
+    /// </summary>
+    public Func<string?> RunRootForANewRun { get; set; }
+
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
+
+    /// <summary>
     /// The backend's endpoint, or null before it is listening. The page calls
     /// `POST /checks/standards` itself with what `init` carries, so this is the whole of the
     /// host's involvement with it.
     /// </summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
+
+    /// <summary>A failed start with no backend up, remembered by the Review host (owner decision 160A).</summary>
+    public Func<bool> BackendStartFailed { get; set; } = () => false;
 
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
@@ -65,6 +93,20 @@ public sealed class StandardsHostOptions
 
     /// <summary>Values that must never reach the page (FR-015).</summary>
     public Func<IEnumerable<string?>> Secrets { get; set; } = () => new string?[0];
+
+    /// <summary>
+    /// What the run root rule reads of Windows (owner decision 154A): a share, a mapped or substituted drive,
+    /// a link. Windows itself by default; injected so a test fakes each without making one.
+    /// </summary>
+    public IRunRootProbe RunRootProbe { get; set; } = Native.WindowsRunRootProbe.Instance;
+
+    /// <summary>
+    /// Owner decision 157A: how a Standards check holds a settings restart back - the gate it begins through, the word
+    /// on a restart ahead, the hand-over's limit and its clock (<see cref="CheckHoldOptions"/>) - handed on whole to
+    /// the check pane. The add-in sets the gate and the word through the review host. No restart to wait for, by
+    /// default.
+    /// </summary>
+    public CheckHoldOptions Hold { get; } = new CheckHoldOptions();
 }
 
 /// <summary>
@@ -100,12 +142,16 @@ public sealed class StandardsHostOptions
 /// `entity.show` resolves `document_id` through the package that was just written and the Ask
 /// tab opens in the same place.
 ///
-/// What it does own is the order of one `standards.start`, and it is not negotiable. Every
-/// refusal comes first, the profile check among them, so a run with nothing to grade against
-/// leaves no folder behind for the page to render as an empty run. The run folder is created
-/// before the dump because the dump writes into it. The folder is registered before the reply,
-/// so a `POST /checks/standards` the page sends the instant it sees `standards.extracted`
-/// resolves ids through the right folder.
+/// What it does own is the first half of one `standards.start`: its refusals. Every refusal
+/// comes first, the profile check among them, so a run with nothing to grade against leaves no
+/// folder behind for the page to render as an empty run. Once they are behind it the start is
+/// the collaborator's, written once for both check tabs in this tab's words
+/// (<see cref="CheckPaneHost.RunCheck"/>, the reviews of owner decision 157A): the run begins
+/// through the review host's gate, reads the run root and the document again once the gate is
+/// passed, creates the run folder before the dump because the dump writes into it, registers the
+/// folder before the reply, so a `POST /checks/standards` the page sends the instant it sees
+/// `standards.extracted` resolves ids through the right folder, and holds a settings restart back
+/// until the page's evaluation of it has been answered.
 ///
 /// Threading: <see cref="Receive"/> is not re-entrant, and must not run on the SOLIDWORKS UI
 /// thread - a dump occupies the application thread for as long as it takes. The caller delivers
@@ -116,8 +162,28 @@ public sealed class StandardsHost : IDisposable
     /// <summary>The one message type this host answers itself.</summary>
     private const string StartType = "standards.start";
 
+    /// <summary>What a refused `standards.start` did not do, in its words (owner decision 154A).</summary>
+    private const string NothingChecked = "nothing was checked";
+
+    /// <summary>What a refused `standards.start` says to do once the cause is gone (owner decision 154A).</summary>
+    private const string PressAgain = "press Standards check again";
+
     /// <summary>The setting a refusal names, because it is what the engineer has to change.</summary>
     private const string ProfileSetting = "StandardsProfilePath";
+
+    /// <summary>
+    /// What the page is told before the gate when a settings restart stands before the press (owner decision 157A),
+    /// posted as `status {stage: "backend_starting"}`.
+    /// </summary>
+    public const string CheckAfterRestartMessage = PaneActions.WaitingForTheRestart + "reading the document...";
+
+    /// <summary>
+    /// What a `standards.start` whose document changed while its gate waited through a settings restart is refused
+    /// with, `DocumentChanged` (owner decision 157A): no path, and the way on.
+    /// </summary>
+    public const string DocumentChangedMessage =
+        "The active document or its configuration changed after Standards check was pressed, so nothing was checked. "
+        + "Make the document you want graded the active document and press Standards check again.";
 
     /// <summary>
     /// The document kinds the sixteen checks are written for. All three are gradable - unlike
@@ -128,6 +194,7 @@ public sealed class StandardsHost : IDisposable
 
     private readonly StandardsHostOptions _options;
     private readonly CheckPaneHost _pane;
+    private readonly CheckStart _start;
 
     public StandardsHost(StandardsHostOptions options)
     {
@@ -139,7 +206,11 @@ public sealed class StandardsHost : IDisposable
         _pane = new CheckPaneHost(new CheckPaneHostOptions(
             options.Channel, () => options.RunRoot(), StartType, Start)
         {
+            RunRootsInForce = () => options.RunRootsInForce(),
+            RunRootSaved = () => options.RunRootSaved(),
+            RunRootProbe = () => options.RunRootProbe,
             Backend = () => options.Backend(),
+            BackendStartFailed = () => options.BackendStartFailed(),
             CurrentDocument = () => options.CurrentDocument(),
 
             // What `init` reads the newest run back by after a restart, from the folder names
@@ -160,7 +231,42 @@ public sealed class StandardsHost : IDisposable
             LogFolder = () => options.LogFolder(),
             Now = () => options.Now(),
             Secrets = () => options.Secrets(),
+
+            // Owner decision 157A: a check holds a settings restart back, beginning through the review host's gate.
+            Hold = options.Hold,
         });
+
+        // Owner decision 157A, the reviews: what is this tab's own in a run's start once its refusals are behind it;
+        // the start itself is the check pane's, written once for both tabs.
+        _start = new CheckStart(
+            noDocument: "open the part, assembly or drawing you want graded in SOLIDWORKS first: the "
+                + "checks are read from the active document.",
+            refuses: Refused,
+            dump: () => options.Dump,
+            restartFirst: CheckAfterRestartMessage,
+            documentChanged: DocumentChangedMessage,
+            nothingChecked: NothingChecked,
+            pressAgain: PressAgain,
+            runRootForANewRun: () => options.RunRootForANewRun(),
+            createFolder: RunFolders.CreateForStandards,
+            folder: "the standards run folder",
+            reading: document => $"Reading {document}...",
+
+            // The hole, fastener, face and mesh phases are most of a dump's cost and no standards check reads any of
+            // them; the cut-list and drawing phases this profile adds are what four of the sixteen do read. The package
+            // records that this profile ran, so a thin package is never mistaken for a model with no holes in it
+            // (FR-027).
+            profile: DumpProfile.Standards,
+            during: "the document was read",
+            next: ". Grading against the profile...",
+            extractedType: "standards.extracted",
+            counts: summary => new Dictionary<string, object?>
+            {
+                { "documents", summary.Documents },
+                { "features", summary.Features },
+                { "cut_list_items", summary.CutListItems },
+                { "drawing_sheets", summary.DrawingSheets },
+            });
     }
 
     /// <summary>The runs this host made, oldest first.</summary>
@@ -184,8 +290,26 @@ public sealed class StandardsHost : IDisposable
     /// <summary>Posts one `status`, with every secret masked out of it (FR-015).</summary>
     public void PostStatus(string stage, string message) => _pane.PostStatus(stage, message);
 
+    /// <summary><see cref="PostStatus(string, string)"/>, marked as the add-in's own word on the backend when <paramref name="lifecycle"/> (owner decision 145A).</summary>
+    public void PostStatus(string stage, string message, bool lifecycle) => _pane.PostStatus(stage, message, lifecycle);
+
     /// <summary>Tells the page which document the pane is looking at now, or that there is none.</summary>
     public void DocumentChanged() => _pane.DocumentChanged();
+
+    /// <summary>Tells the page the backend was restarted with saved settings (owner decision 145A).</summary>
+    public void BackendRestarted() => _pane.BackendRestarted();
+
+    /// <summary>
+    /// Whether a Standards check holds a settings restart back (owner decision 157A,
+    /// <see cref="CheckPaneHost.CheckInProgress"/>): what the review host's restart reads, under its own lock.
+    /// </summary>
+    public bool CheckInProgress => _pane.CheckInProgress;
+
+    /// <summary>
+    /// The pane's proxy takes over the hold of the check whose run it evaluates, while the evaluation is out (owner
+    /// decision 157A, <see cref="CheckPaneHost.HoldEvaluation"/>); null when no check of this tab waits for it.
+    /// </summary>
+    public IDisposable? HoldEvaluation(string runDirectory, string? token) => _pane.HoldEvaluation(runDirectory, token);
 
     public void Dispose() => _pane.Dispose();
 
@@ -196,32 +320,16 @@ public sealed class StandardsHost : IDisposable
     /// the open document into it with the Standards profile, register the folder as the pane's
     /// latest run, and tell the page where it is. The page does the rest.
     /// </summary>
-    private void Start(string? id)
+    private void Start(string? id) => _pane.StartCheck(id, _start);
+
+    /// <summary>
+    /// This tab's own refusals of the active document, after the shared ones (<see cref="CheckPaneHost.StartCheck"/>):
+    /// one never saved, a kind not graded, and no profile to grade against. Answers whether it refused the press,
+    /// having sent the refusal.
+    /// </summary>
+    private bool Refused(string? id, PageDocument document)
     {
         PaneActions actions = _pane.Actions;
-
-        PageDocument? document = _options.CurrentDocument();
-        if (document == null)
-        {
-            actions.SendError(
-                id,
-                "NoDocument",
-                "open the part, assembly or drawing you want graded in SOLIDWORKS first: the "
-                + "checks are read from the active document.",
-                retryable: true);
-            return;
-        }
-
-        if (_options.Dump == null)
-        {
-            actions.SendError(
-                id,
-                "NotAttached",
-                "the add-in is not attached to a SOLIDWORKS session, so nothing can be extracted.",
-                retryable: true);
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(document.Path))
         {
             // No path means no library prefix to match and no file name to match the
@@ -234,7 +342,7 @@ public sealed class StandardsHost : IDisposable
                 "this document has never been saved, so it has no file name or folder for the "
                 + "library and part-number checks to read. Save it and press Standards again.",
                 retryable: true);
-            return;
+            return true;
         }
 
         if (Array.IndexOf(GradableKinds, document.Kind) < 0)
@@ -251,7 +359,7 @@ public sealed class StandardsHost : IDisposable
                 // and a strange path must not turn a refusal into a crash.
                 + " ('" + RunFolders.DocumentName(document.Path) + "').",
                 retryable: true);
-            return;
+            return true;
         }
 
         // Before the run folder and before the dump: with no profile there is nothing to grade
@@ -261,79 +369,10 @@ public sealed class StandardsHost : IDisposable
         if (profileFailure != null)
         {
             actions.SendError(id, "NoProfile", profileFailure, retryable: true);
-            return;
+            return true;
         }
 
-        string runDirectory;
-        try
-        {
-            runDirectory = RunFolders.CreateForStandards(
-                _options.RunRoot(), document.Path, _options.Now());
-        }
-        catch (Exception failure)
-        {
-            PostStatus("error", failure.Message);
-            actions.SendError(
-                id,
-                "RunFolderFailed",
-                $"the standards run folder could not be created under '{_options.RunRoot()}': "
-                + failure.Message,
-                retryable: false);
-            return;
-        }
-
-        DumpSummary summary;
-        PostStatus(
-            "extracting",
-            $"Reading {RunFolders.DocumentName(document.Path)}...");
-        try
-        {
-            summary = _options.Dump.Run(
-                runDirectory,
-                message => PostStatus("extracting", message),
-
-                // The hole, fastener, face and mesh phases are most of a dump's cost and no
-                // standards check reads any of them; the cut-list and drawing phases this
-                // profile adds are what four of the sixteen do read. The package records that
-                // this profile ran, so a thin package is never mistaken for a model with no
-                // holes in it (FR-027).
-                DumpProfile.Standards);
-        }
-        catch (Exception failure)
-        {
-            // The folder is left behind on purpose: whatever the dump did write is the evidence
-            // for why it stopped (constitution Principle I). It is not registered, because a
-            // half-written package must not become the folder Show and the Ask tab read from.
-            PostStatus("error", failure.Message);
-            actions.SendError(id, "ExtractionFailed", failure.Message, retryable: true);
-            return;
-        }
-
-        TrackCheck(runDirectory);
-
-        PostStatus(
-            "ready",
-            (summary.Gaps == 0 ? "Extracted" : $"Extracted with {summary.Gaps} gaps")
-                + DumpSummary.UnexaminedClause(summary.Unexamined)
-                + ". Grading against the profile...");
-
-        actions.Send("standards.extracted", id, new Dictionary<string, object?>
-        {
-            { "run_dir", runDirectory },
-            { "document", document.Path },
-            { "configuration", document.Configuration },
-            {
-                "counts",
-                new Dictionary<string, object?>
-                {
-                    { "documents", summary.Documents },
-                    { "features", summary.Features },
-                    { "cut_list_items", summary.CutListItems },
-                    { "drawing_sheets", summary.DrawingSheets },
-                }
-            },
-            { "gaps", summary.Gaps },
-        });
+        return false;
     }
 
     /// <summary>

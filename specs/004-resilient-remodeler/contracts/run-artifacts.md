@@ -7,7 +7,11 @@ example below into the pydantic model named beside it, so an example cannot drif
 the Phase 5 and Phase 6 artifact tests are written against it.
 
 One run, one folder, created by the existing `RunFolders` helper so the naming convention stays in
-one place:
+one place. *Amended 2026-10-20 (feature 011, owner decision 148A; its research R12.3):* the folder is
+made in its full form - named under `Path.GetFullPath` of the run root, whatever spelling the setting
+holds - so the folder handed to the backend and bound for the bridge, and the copy the pane seat is
+handed, carry no `..` segment, which the backend's rule for a run folder and the one rule for the
+copy's path both refuse:
 
 ```text
 <run_root>/<yyyyMMdd-HHmmss>-<doc>-remodel/
@@ -16,6 +20,17 @@ one place:
 The `-remodel` suffix sorts beside feature 003's `-check` and feature 001's review folders and
 makes the folder obviously disposable. **The copy lives only here.** It never sits beside the
 source: one bad path join beside a source inside an EPDM vault writes into the vault.
+
+*Amended 2026-10-20 (feature 002, owner decision 154A; its research, 154A):* the run root is a
+local folder reached by its own path. A plan and a Start are refused first, `RunRootRefused`, when
+it is on a network share, reached through a link - a substituted drive, a junction, a symbolic
+link, any root whose final path differs from its full path other than by letter case - or written
+as a device path: the backend refuses a run folder on a share on every route and spells one
+reached through a link by its final path, and `remodel.open` compares the copy's run folder with
+the one this host binds, so such a root ended every plan ([`pane-remodel-messages.md`](pane-remodel-messages.md);
+011 research R12.9, items 1 and 2). *Amended on 154A's reviews (finding F6):* a Start whose plan's run
+folder is not under the run root in force - a settings save moved it after the plan - is refused,
+`RunRootChanged`, once its gate is passed and before the run begins.
 
 ## Files
 
@@ -28,6 +43,7 @@ source: one bad path join beside a source inside an EPDM vault writes into the v
 | `package-after.json` | the same dumper | the same schema | After the last change, with the copy made the active document first, as `package-before.json` is (T159) |
 | `rms-before.json` | `checks/rms/run.py::run_rms_check` | 003's `RmsCheckRun` | Over `package-before.json` |
 | `rms-after.json` | the same entry point | the same schema | Over `package-after.json` |
+| `rms-before/`, `rms-after/` | `remodel/artifacts.py`, `grade_remodel_run` | 003's check run folder | *Added 2026-10-19 (owner decision 146A):* where each side is graded: its `package.json`, a byte copy of `package-<side>.json` that `write_package` files in it and beside it before anything is graded, then the `session.json`, `report.md`, `attention.json` and `check.json` `run_rms_check` writes there, which `rms-<side>.json` names. That `check.json` is the rms record a Model check's folder holds, so a grade's folder is told from a Model check's by this layout - `rms-before/` beside `package-before.json`, `rms-after/` beside `package-after.json` (`grade_side_of`) - and no review claims one, whatever it holds (002 [chat-api.md](../../002-task-pane-assistant/contracts/chat-api.md)) |
 | `grades.json` | `remodel/report.py` | below | 003's `RmsGrade` before and after, plus the per-rule delta |
 | `geometry.json` | `remodel/report.py` | below | Both `GeometryReading`s and the `GateResult` |
 | `source-attestation.json` | `RemodelCopy`, re-checked by `remodel/report.py` | below | A difference between plan time and report time is a **hard failure of the run** |
@@ -35,7 +51,7 @@ source: one bad path join beside a source inside an EPDM vault writes into the v
 | `report.md` | `remodel/report.py` | prose | The engineer-facing summary |
 | `events.jsonl` | `agent/events.py` | feature 002 `contracts/chat-events.schema.json` | The agent run, same shape as a review, through the **extracted** sink |
 | `session.json` | the recorded `ToolRegistry` steps | feature 001 session schema | So `tool_result_ids` reference steps that exist |
-| `remodel.log` | `BridgeDispatcher` | one line per request (and, since 2026-09-28, a begin line ahead of it and the markers below) | Command, elapsed, gated members, and the **target path** of every mutating call. *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167, landed 2026-09-27):* plus one teardown line when a session ends without `remodel.close` - a tool-service re-attach or an add-in unload - carrying the gated set of the clean-up and its outcome (settings restored, copy closed, each failure); the same line goes to the tool-service log. A teardown writes no other file: `plan.json` stays `planned`, and `copy/` keeps the unsaved byte copy |
+| `remodel.log` | `BridgeDispatcher`; and, since 2026-10-19, the re-modeler's pane seat (`RemodelSeatGateLog`) | one line per request (and, since 2026-09-28, a begin line ahead of it and the markers below); and the pane seat's two `seat=` lines per action, below | Command, elapsed, gated members, and the **target path** of every mutating call. *Amended 2026-10-20 (owner decision 144A's second review; feature 011 T181):* the request lines are the `id=` and `command=` lines - a begin line and a completed line per request - and the `seat=` lines are the pane seat's, never a request; a count of requests counts request lines only, since a seat's closing line carries `status=` too. *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167, landed 2026-09-27):* plus one teardown line when a session ends without `remodel.close` - a tool-service re-attach or an add-in unload - carrying the gated set of the clean-up and its outcome (settings restored, copy closed, each failure); the same line goes to the tool-service log. A teardown writes no other file: `plan.json` stays `planned`, and `copy/` keeps the unsaved byte copy. *Recorded 2026-10-20 (owner decision 155A; `research.md` R18.2):* a mutating call's target is the session's copy, so a call made while the bridge holds no session for the run records `(none)` (`RemodelGateRecorder.NoTarget`): every call of `remodel.open`, whose session is set only as it returns - the settings, the open of the copy, and the copy's tag, rollback and rebuild - so its completed line ends `target=(none)`, which the report counts apart (section 2, below) |
 
 Added 2026-09-28 after U27: `remodel.log` also carries timestamped
 `command=remodel.geometry stage=before <member>`, `stage=after <member>`, and (on a managed
@@ -49,7 +65,8 @@ T185, research R16.1):*
 
 - `command=remodel.open stage=...` markers around each step of `remodel.open` that calls
   SOLIDWORKS or does file work - the source re-check's reads, `RecordSource`, the toggles,
-  `File.Copy`, `OpenDoc7`, the tag, the rollback, the rolled-back walk, the rebuild, the error
+  `File.Copy`, `OpenDoc7` (marked `ISldWorks.OpenDoc7`, its gate key, since decision 148A), the tag,
+  the rollback, the rolled-back walk, the rebuild, the error
   count, the copy's signals, its save flag and units, and `CommandInProgress` put back - and around
   the unwind's `unwind.CloseDoc`, `unwind.DeleteCopy` and `unwind.PutBackSettings`. They go to the
   run folder the host bound, before the run exists.
@@ -58,13 +75,44 @@ T185, research R16.1):*
 - A `[<time>] id=<id> command=<command> begin` line for every request, written before the command
   runs - to the tool-service log always, and to `remodel.log` for a remodel command once its run
   exists - so a request that never completed still has a line. The completed line follows as
-  before; a reader counting requests counts completed lines.
+  before; a reader counting requests counts completed lines. *Amended 2026-10-20 (owner decision
+  144A's second review)*: completed request lines, those with `id=` and `command=`; the pane seat's
+  closing lines (`seat=`, below) carry `status=` as well and are not requests.
 - In `addin.log`, while a remodel plan or run is in flight, `active document changed during a
   remodel run: fan-out begin` and `... fan-out end` around the add-in's document-change fan-out,
   which `OpenDoc7` on the copy raises inside the bridge's open.
 
 Each marker and line is one `File.AppendAllText`, in the operating system's hands before the call
 it names starts; none carries a value, a path or a request field.
+
+*Added 2026-10-21 (owner decision 159A; `research.md` R19.3):* `addin.log` also takes one `Remodel tab,
+<what was asked>: ...` line for each failure the Remodel tab told in its own words in place of the failure's
+own sentence: a refusal's class and sentence, or the whole of an exception, masked. Unlike the markers above,
+it carries the failure's sentence, a path included - that is what it is kept for, and why the tab does not
+print it; the tab's words send whoever needs it there by View log's label.
+
+*Amended 2026-10-21 on the decision's review (`research.md` R19.9):* `addin.log` keeps every line. The add-in's
+appends are made one at a time; the file is shared with any other reader or writer; a holder that shares it
+with neither is waited out for up to 300 ms, while no line waits already; and a line that still cannot be
+written is kept, at most 1,000, and written ahead of the next. The Remodel tab's lines leave out the add-in's
+word that the backend did not start, which the add-in's own start report logs. *Amended 2026-10-21 on Codex's review
+of the merge (owner decision 159A; `research.md` R19.16):* the file is shared with readers only, so one writer holds
+it at a time whatever process it is in - two SOLIDWORKS sessions' append handles each wrote at the end they opened
+at, the later line over the earlier - and a writer of another process is waited out, a line kept, as any holder's is.
+*Amended 2026-10-21 on the final review (owner decision 159A; `research.md` R19.23):* the lines kept are written as
+the add-in unloads, last, where they were lost with the process.
+
+*Added 2026-10-19 (owner decision 144A; feature 011's research R11.1):* the pane seat's gate log.
+`remodel.open_copy` and the activation of the copy before each dump call SOLIDWORKS through the
+pane seat's own gate (`guard-allowlist.md`, "The re-modeler's pane seat"), and each writes two
+timestamped lines to this run's `remodel.log`, on the application thread: `seat=open_copy begin` or
+`seat=activate_before_dump begin` before its first call, as every request's begin line is written
+before it runs; and once its calls are made, `status=ok` with `outcome=` how it ended (`activated`,
+`opened`, or for the activation before a dump `not_open`, `not_the_copy` or `not_activated`) or
+`status=error`, then `gated=` the members its gate was asked about, once each in the order first
+seen, and `refused=` and `error=<exception type>` when they apply. A seat line carries no `target=`,
+so the report's count of writes (`read_log_targets`) is unchanged, and no path; a line that cannot
+be written fails nothing.
 
 The backend also writes `remodel-open.jsonl`, a diagnostic JSON-lines file with `at` (UTC)
 and `phase`. Its fixed phases cover copy open, attestation written, baseline geometry,
@@ -80,7 +128,7 @@ three and FR-056 fixes the last:
 | # | Section | Content |
 |---|---------|---------|
 | 1 | Headline | One sentence. A run that moved 3 of 200 features says "this part needs rebuilding", not "success". A `truncated` run says so here. A changed source attestation says so here, ahead of everything else |
-| 2 | Change list | Every attempted change with its outcome, and the copy path, with the statement that every write of the run went to that path, cited from `remodel.log`'s per-request target and from each `ChangeRecord.target_path` (FR-041) |
+| 2 | Change list | Every attempted change with its outcome, and the copy path, with the statement that every write of the run went to that path, cited from `remodel.log`'s per-request target and from each `ChangeRecord.target_path` (FR-041). *Amended 2026-10-20 (owner decision 155A; `research.md` R18.2):* a target of `(none)` - a call the tool service saw while the bridge held no session for the run, as every call `remodel.open` makes is - is counted apart, as naming no document: it neither withdraws the statement, as another target does, nor counts for it, and the section says so after the statement, naming the application settings and the open of the copy among such calls and calling none of them a write. *Amended on the decision's review (`research.md` R18.8):* while the log holds such an entry, the statement and its count of mutating requests speak of those that name a document ("Every write of this run that names a document went to ..."), and with none they read as they did; and a teardown line's target is read up to its `failures=` field, as a request line's is up to `refused=` or `error=` |
 | 3 | Grade | Before and after as counts per bucket, the fraction secondary, **the unresolved rule ids named alongside**, then the per-rule delta |
 | 4 | Geometry | The compared quantities, the profile and its calibration reference, the verdict, and the coverage statement of what the gate cannot detect |
 | 5 | Rebuild list | One reason per entry from the closed taxonomy, with the blocking edge, interloper, span or cycle |
@@ -384,6 +432,7 @@ stage 1.
 ```jsonc
 {"path": "C:\\work\\bracket.SLDPRT", "length_bytes": 482913,
  "last_write_utc": "2026-09-14T09:11:03Z", "sha256": "…",
+ "read_only": true,
  "source_design_id": "dsn:4f2a91c0d3b7",
  "vault_path": "…", "vault_revision": "B",
  "recorded_at": "2026-09-16T14:22:01Z",
@@ -398,6 +447,14 @@ failure of the run**: the report says
 so in its first line, and the run is recorded as failed regardless of how well everything else
 went. This is the artifact that makes "the engineer's file was never touched" a checked claim
 rather than a promise.
+
+*Added 2026-10-24 (T188; T269 to T272, research R20):* `read_only` records the source's
+filesystem ReadOnly bit before copying. It is an exact Boolean or null, not permission to
+write, an ACL or SOLIDWORKS's open mode. Missing in an older artifact means unknown, as does a
+failed optional attribute read; false is never substituted. The same value is retained in
+`plan.json`'s `source` and through report-time rechecks, which still compare only size, time
+and hash. Readers do not rewrite old files; a later explicit write may add `read_only: null`.
+All existing required fields, extra-field refusals and mandatory source failures remain intact.
 
 ## Exceptions carry-forward
 

@@ -37,6 +37,9 @@ internal sealed class FakeRemodelDump : IReviewDump
     /// <summary>Whether the written package names a document at all.</summary>
     public bool WritesADocument { get; set; } = true;
 
+    /// <summary>Optional barrier before the fake writes its package (004 T266).</summary>
+    public Action? BeforeWrite { get; set; }
+
     public DumpSummary Run(
         string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)
     {
@@ -44,6 +47,7 @@ internal sealed class FakeRemodelDump : IReviewDump
         Profiles.Add(profile);
         _log.Add("dump");
         progress("Extracting bracket.SLDPRT [Default]...");
+        BeforeWrite?.Invoke();
 
         Directory.CreateDirectory(outputDirectory);
         string path = Path.Combine(outputDirectory, "package.json");

@@ -172,7 +172,8 @@ public interface IRemodelPipeline
     /// <summary>
     /// `CloseDoc` on the copy without saving. Called before the copy folder is deleted - by a
     /// `PreexistingRebuildErrors` refusal and by `remodel.discard_copy` - and a no-op when the
-    /// copy is not open.
+    /// copy is not open. Refused <c>BackendUnavailable</c>, sending nothing, when no review backend
+    /// runs to carry it (owner decision 159A, on review).
     /// </summary>
     void CloseCopy(string runDirectory);
 

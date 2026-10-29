@@ -1,6 +1,6 @@
 # Bridge protocol (`swreview-extract serve`)
 
-Protocol version **1.4**. This file is the contract the Python client in
+Protocol version **1.5**. This file is the contract the Python client in
 `reviewer/src/swreview/bridge/client.py` (T073) is written against; the agent-facing tool
 names and arguments are in
 `specs/001-agentic-design-review/contracts/agent-tools.md`.
@@ -27,6 +27,14 @@ written against 1.0, 1.1 or 1.2 works against a 1.3 host without an edit.
 exactly one member to the `ping` answer, `drawing_read`, described under "`ping`" below. No command
 is added. A client written against 1.0 to 1.3 works against a 1.4 host without an edit and ignores
 the member; the backend reads it (`specs/013-engineer-first-review/contracts/drawing-capability.md`).
+
+**1.5 changes the `remodel.*` family only** (feature 004, owner decision 159A). Every `remodel.*`
+command after `remodel.open` names its run, `params.run_id`, and is refused - before anything is read
+or written - when it names none (`bad_request`) or another run than the one whose session the host
+holds (`session_mismatch`, a new token); described under "The `remodel.*` family" below. It is not
+additive for that family: a remodel client written before 1.5 is refused after its open. The six
+other commands are untouched, so a client written against 1.0 to 1.4 that sends none of the family
+works against a 1.5 host without an edit.
 
 `ping` reports the host's own `SwBridgeDispatcher.ProtocolVersion`, which is what a client
 compares against.
@@ -61,16 +69,28 @@ compares against.
 | Field | Type | Rules |
 |-------|------|-------|
 | `id` | string | Required, non-empty. Echoed on the response so a client can match them up. |
-| `command` | string | Required. One of the five below, or one of the twelve `remodel.*` commands of `specs/004-resilient-remodeler/contracts/bridge-remodel.md`. |
+| `command` | string | Required. One of the six below, or one of the twelve `remodel.*` commands of `specs/004-resilient-remodeler/contracts/bridge-remodel.md`. |
 | `params` | object | Command arguments. May be omitted for `ping`. |
 | `secret` | string or null | Optional on the wire. Ignored by the console host; **required** by the in-process host, where it also selects the command scope (below). |
 
 Unknown **top-level** fields are rejected (the same `additionalProperties: false` stance as
 the IR schema). Unknown fields inside `params` are ignored.
 
-Every request passes the read-only guard by command name before anything runs, and every
-SOLIDWORKS call underneath goes through `SwGate`, which asks the guard again. A command
-named after a mutating API (`Save3`, `FeatureCut4`, …) is refused with `status: "error"`.
+Every request's `command` is judged, before anything runs, against the host's own fixed set -
+the six commands below and the twelve `remodel.*` - by exact name, and any other is refused as
+an unknown command with `status: "error"` (the last table of this file). Every SOLIDWORKS call
+underneath goes through `SwGate`, whose guard judges the interop member it names: the read-only
+guard, or for the `remodel.*` family the allowlist guard of 004's
+`contracts/guard-allowlist.md`. A command named after a mutating API (`Save3`, `FeatureCut4`, …)
+is no command of the set, so it is refused. *Amended 2026-10-19 (owner decision 140A)*: until
+then the command name itself was handed to the read-only guard, which judges `a.b` by `b`, so
+`remodel.close`, `remodel.save` and `remodel.rebuild` were judged as `Close`, `Save` and
+`Rebuild`; a command name is not an interop member, and no guard sees one now. The commands
+answered are the same eighteen, and every name refused before is refused still; only the answer
+to one differs: "Unknown command", with `result: null`, where a name the guard denied was answered
+as a member that modifies the model - with `error_code: guard_refused` when it began `remodel.`.
+(An empty or blank `command` never reaches the dispatcher from the wire: the line is refused first,
+in the table at the end of this file.)
 
 ### `secret` and the two scopes
 
@@ -131,7 +151,7 @@ an `Interference` that travels over the bridge is byte-identical to one written 
 ```
 
 ```json
-{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.4","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17,"drawing_read":"open_only"},"error":null,"elapsed_ms":1}
+{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.5","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17,"drawing_read":"open_only"},"error":null,"elapsed_ms":1}
 ```
 
 `document` and `component_count` are how a client checks that the component ids in its
@@ -307,14 +327,36 @@ error, not ignored.)
   its run folder holds no package, the package's root is not the document the bridge is attached
   to, the document is unknown or is a drawing or has no candidate row, the row's path is not the
   drawing beside the document by discovery's rule, the file no longer exists, the drawing is
-  already in the package, or the package already holds ten drawings.
+  already in the package, the package already holds ten drawings, or *(decision 136A,
+  2026-10-19)* the review's limit of ten is reached counting the package's drawings together with
+  every open the host attempted for the review that left no record: an open SOLIDWORKS refused or
+  did not make read-only, a read that threw after it, a merge or save that did not land. *Since
+  decision 141A (2026-10-19)* that count is kept per review session - the latest review the host
+  started in the run folder `run_id` names - so a Retry or Recheck in the same folder starts its
+  own, and it bounds only an open: a drawing already open is still read, since reading it opens
+  nothing, the package's ten drawings still bounding it. Once a session's such opens reach ten on
+  their own, a candidate whose drawing is not open is refused before the package is even loaded,
+  SOLIDWORKS asked only whether that drawing is open. The limit's refusal ends saying how to go
+  on: *since decision 147A (2026-10-19)*, a new review first, which Review starts in a run folder
+  of its own and so with a count of its own, then that a drawing already open is still read. The
+  sentences are `specs/011-drawing-context/contracts/confirmed-open.md` section 2 item 5's.
 - The drawing is opened **read-only and hidden** only when it is not already open - through its
   own allowlisted seam (`ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6` with type 3 and options
-  3, `ISldWorks.CloseDoc`; `specs/004-resilient-remodeler/contracts/guard-allowlist.md`) - read
-  with every drawing id continuing the package's, merged into `package.json` in the run folder,
-  and closed again only when the host opened it and SOLIDWORKS still answers its path with the
-  same document. A drawing the engineer had open is read as it stands and left open
-  (`opened: false`, `closed: false`).
+  3, `ISldWorks.CloseDoc`; `specs/004-resilient-remodeler/contracts/guard-allowlist.md`). *Since
+  decision 136A* it is read only when SOLIDWORKS then confirms it opened read-only
+  (`IModelDoc2.IsOpenedReadOnly`, a read); one SOLIDWORKS did not open read-only, or would not
+  confirm, is refused with a sentence that says why, names the open's errors and warnings and says
+  whether it was closed again. A confirmed drawing is read with every drawing id continuing the
+  package's, merged into `package.json` in the run folder, and closed again only when the host
+  opened it and SOLIDWORKS still answers its path with the same document. A drawing the engineer
+  had open is read as it stands and left open (`opened: false`, `closed: false`), and so is one
+  the open itself says SOLIDWORKS already had open (`swFileLoadWarning_AlreadyOpen` in its
+  warnings, or `swFileAlreadyOpenWarn` in its errors): the host did not open it, so it neither
+  checks nor closes it.
+- **When the visibility of new drawings cannot be restored** after the hidden open, nothing is read
+  and the host refuses: a drawing it opened is closed again under the same rule, one the open says
+  was already open is left open, and the sentence adds that drawings opened from now on may stay
+  hidden until SOLIDWORKS is restarted.
 - **Shipped off** until probe D14 passes at a seat: a closed candidate is answered "the read-only
   open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14)", and an
   already-open one is still read.
@@ -353,11 +395,29 @@ and it is three things:
    reference and reaches the one document the run's scope holds. The Python end of this
    family is `reviewer/src/swreview/bridge/remodel_client.py`, whose own command allowlist
    is `ping` plus these twelve — `COMMANDS` in `client.py` is unchanged.
+4. **Every command after `remodel.open` names its run** (1.5, owner decision 159A). `params.run_id`
+   is the id the open was given - the run folder's own name, which it tags the copy with - and the
+   host reads it as it reads the open's, trimmed of any space around it, then compares it exactly
+   with its session's before anything is read or written: none is
+   `bad_request`, another run's is `session_mismatch`, and with no session the answer is
+   `target_mismatch` as before. A run's command can then never be carried out on another run's
+   copy, which passes every check the scope makes because it is that run's own.
 
-These commands are refused by the read-only guard, as a mutating command must be: they run
-under the document-scoped allowlist guard of
-`specs/004-resilient-remodeler/contracts/guard-allowlist.md`, on a copy the run created, and
-on no other document.
+Those that write - all but `remodel.probe_scope`, `remodel.snapshot` and `remodel.geometry`,
+which `RemodelCommandTable` marks as writing nothing - make their writes through the
+re-modeler's own gate, whose guard is the document-scoped allowlist of
+`specs/004-resilient-remodeler/contracts/guard-allowlist.md`, not the read-only guard: it lets
+through the writes it names, each by its interface-qualified key, and the read-only guard
+refuses some of them (`Save3`, `ForceRebuild3`) and misses others, the reason each is named
+with its interface. They write only the copy the run created, besides the four
+application-wide settings `remodel.open` sets for the run, under their own two allowlist keys,
+and the end of the session puts back. `remodel.probe_scope` and `remodel.open` read the
+engineer's open source, whose path they name (item 3), and change nothing in it. *Corrected
+2026-10-19 (decision 140A's second review)*: this said the commands themselves are refused by
+the read-only guard; no guard judges a command's name (Request, above), only the members its
+handler calls. *And on that review's second pass*: it then said every one of these commands
+writes, and on no document but the copy; three write nothing, and two read the engineer's
+source.
 
 ## Errors that are not command failures
 
@@ -367,4 +427,5 @@ on no other document.
 | Unknown `command` | `status: "error"`, listing the commands the host speaks — but `error: "unauthorized"` on a host that requires a secret, which refuses an out-of-vocabulary command before looking it up. |
 | Wrong, missing, or out-of-scope `secret` | `status: "error"`, `error: "unauthorized"`, `result: null`. Only on a host that requires a secret. |
 | Missing or wrong-typed `params` field | `status: "error"` naming the field. |
+| A live command - `capture`, `measure`, `interference`, `tessellate` - while the attached document's active configuration is not the one the host attached in | `status: "error"`, `result: null`, `error` starting `configuration changed: ` and naming the configuration attached in, the document and the one active, before the command runs: it would run on the active configuration and map what it found through the component table walked in the other. `ping`, `drawing.read` and the `remodel.*` family are not asked. Only on a host that reads the active configuration - the add-in's in-process host; this console host does not, since a switch can land between any two of its calls from out of process (owner decision 152A, on the Codex review, 2026-10-20). |
 | Three consecutive SOLIDWORKS failures | `status: "circuit_open"` on this and every later request until the server is restarted. |

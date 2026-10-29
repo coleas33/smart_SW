@@ -68,6 +68,12 @@ public class RemodelOpenHandlerTests : IDisposable
 
     private const string RunId = "20260916-142201-bracket-remodel";
 
+    /// <summary>
+    /// The params of a command after the open that takes none of its own: the run it is for
+    /// (owner decision 159A, protocol 1.5).
+    /// </summary>
+    private const string RunOnly = "{\"run_id\":\"" + RunId + "\"}";
+
     private readonly string _root;
     private readonly string _runDirectory;
     private readonly string _sourcePath;
@@ -520,6 +526,246 @@ public class RemodelOpenHandlerTests : IDisposable
     // ---- remodel.open ----------------------------------------------------------------
 
     [Fact]
+    public void Open_HoldsTheReturnedScopeFromBeforeNativeOpenThroughSuccessfulPublication()
+    {
+        FakeRemodelSeat seat = Seat();
+        BridgeServices services = Services(seat, _runDirectory);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        var calls = new List<string>();
+        bool held = false;
+        bool heldInsideOpen = false;
+        bool publishedAtExit = false;
+        bool idleAtExit = false;
+        var lease = new OpenLease(() =>
+        {
+            calls.Add("dispose");
+            publishedAtExit = dispatcher.RemodelTargetPath == _copyPath;
+            idleAtExit = !seat.CommandInProgress
+                && RemodelSystemToggles.SuppressedToggles.All(toggle => !seat.GetUserPreferenceToggle(toggle));
+            held = false;
+        });
+        services.BeginRemodelOpen = () =>
+        {
+            calls.Add("begin");
+            held = true;
+            return lease;
+        };
+        seat.DuringCall = _ =>
+        {
+            calls.Add("open");
+            heldInsideOpen = held;
+        };
+
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Equal(new[] { "begin", "open", "dispose" }, calls);
+        Assert.True(heldInsideOpen);
+        Assert.True(publishedAtExit);
+        Assert.True(idleAtExit);
+        Assert.False(held);
+        Assert.Equal(1, lease.Disposals);
+    }
+
+    [Theory]
+    [InlineData("native")]
+    [InlineData("null handle")]
+    [InlineData("baseline")]
+    [InlineData("scope")]
+    [InlineData("close")]
+    [InlineData("settings")]
+    public void Open_DisposesTheReturnedScopeAfterFailedOpenUnwind(string failure)
+    {
+        FakeRemodelSeat seat = Seat();
+        if (failure == "native")
+        {
+            seat.OpenFailure = new InvalidOperationException("FICT native open failed");
+        }
+        else if (failure == "null handle")
+        {
+            seat.Copy = null;
+        }
+        else if (failure == "scope")
+        {
+            seat.Copy!.Signals.SolidBodyCount = 4;
+        }
+        else
+        {
+            seat.Copy!.WhatsWrongCount = 2;
+        }
+        if (failure == "close") seat.CloseFailure = new IOException("FICT close failed");
+        if (failure == "settings") seat.FailingWrites.Add("CommandInProgress=False");
+        BridgeServices services = Services(seat, _runDirectory);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        bool held = false;
+        bool heldAtEnding = false;
+        bool deletedAtExit = false;
+        string? stageAtExit = "not disposed";
+        var lease = new OpenLease(() =>
+        {
+            deletedAtExit = !File.Exists(_copyPath);
+            stageAtExit = dispatcher.RemodelStageDirectory;
+            held = false;
+        });
+        services.BeginRemodelOpen = () =>
+        {
+            held = true;
+            return lease;
+        };
+        services.RemodelSessionEnded = _ => heldAtEnding = held;
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        if (failure == "native") Assert.Contains("FICT native open failed", response.Error, StringComparison.Ordinal);
+        else Assert.Equal(
+            failure == "scope" ? RemodelErrorCodes.ScopeChanged
+                : failure == "null handle" ? RemodelErrorCodes.OpenFailed : RemodelErrorCodes.PreexistingRebuildErrors,
+            Refusal(response));
+        Assert.Equal(1, lease.Disposals);
+        Assert.True(heldAtEnding);
+        Assert.True(deletedAtExit);
+        Assert.Null(stageAtExit);
+        Assert.False(held);
+        Assert.Null(dispatcher.RemodelTargetPath);
+    }
+
+    [Theory]
+    [InlineData("parameters")]
+    [InlineData("probe")]
+    [InlineData("root")]
+    [InlineData("target")]
+    public void Open_DisposesTheReturnedScopeOnEarlyRefusals(string refusal)
+    {
+        FakeRemodelSeat seat = Seat();
+        BridgeServices services = Services(seat, _runDirectory);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        int began = 0;
+        var lease = new OpenLease(() => { });
+        services.BeginRemodelOpen = () =>
+        {
+            began++;
+            return lease;
+        };
+        string probe = Probe(dispatcher);
+        if (refusal == "root") services.RemodelRunRoot = null;
+        BridgeRequest request = refusal == "parameters"
+            ? Request("2", RemodelCommands.Open, "{}")
+            : OpenRequest(refusal == "probe" ? "probe:never-minted" : probe,
+                refusal == "target" ? _sourcePath : _copyPath);
+
+        BridgeResponse response = dispatcher.Dispatch(request);
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Equal(1, began);
+        Assert.Equal(1, lease.Disposals);
+        Assert.Empty(seat.Opened);
+        Assert.False(File.Exists(_copyPath));
+        Assert.Null(dispatcher.RemodelStageDirectory);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Open_BeginScopeFailureDoesNotChangeTheRequestsAnswer(bool refused)
+    {
+        FakeRemodelSeat seat = Seat();
+        if (refused) seat.Copy!.WhatsWrongCount = 2;
+        BridgeServices services = Services(seat, _runDirectory);
+        int began = 0;
+        services.BeginRemodelOpen = () =>
+        {
+            began++;
+            throw new IOException("FICT begin listener failed");
+        };
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(1, began);
+        if (refused) Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors, Refusal(response));
+        else Assert.Equal(BridgeStatus.Ok, response.Status);
+        Assert.DoesNotContain("FICT begin listener failed", response.Error ?? "", StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Open_ScopeDisposalFailureDoesNotChangeTheRequestsAnswer(bool refused)
+    {
+        FakeRemodelSeat seat = Seat();
+        if (refused) seat.Copy!.WhatsWrongCount = 2;
+        BridgeServices services = Services(seat, _runDirectory);
+        var lease = new OpenLease(() => throw new IOException("FICT dispose listener failed"));
+        services.BeginRemodelOpen = () => lease;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(1, lease.Disposals);
+        if (refused) Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors, Refusal(response));
+        else Assert.Equal(BridgeStatus.Ok, response.Status);
+        Assert.DoesNotContain("FICT dispose listener failed", response.Error ?? "", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Open_DisposesItsExactScopeEvenIfTheCallbackIsReplaced()
+    {
+        FakeRemodelSeat seat = Seat();
+        BridgeServices services = Services(seat, _runDirectory);
+        var original = new OpenLease(() => { });
+        var replacement = new OpenLease(() => { });
+        int began = 0;
+        services.BeginRemodelOpen = () =>
+        {
+            began++;
+            return original;
+        };
+        seat.DuringCall = _ => services.BeginRemodelOpen = () => replacement;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Equal(1, began);
+        Assert.Equal(1, original.Disposals);
+        Assert.Equal(0, replacement.Disposals);
+    }
+
+    [Theory]
+    [InlineData(RemodelCommands.ProbeScope)]
+    [InlineData(RemodelCommands.Snapshot)]
+    [InlineData(RemodelCommands.Close)]
+    public void OtherCommands_DoNotBeginAnOpenScope(string command)
+    {
+        BridgeServices services = Services(Seat(), _runDirectory);
+        int began = 0;
+        services.BeginRemodelOpen = () =>
+        {
+            began++;
+            return new OpenLease(() => { });
+        };
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        dispatcher.Dispatch(command == RemodelCommands.ProbeScope ? ProbeRequest() : Request("3", command, RunOnly));
+
+        Assert.Equal(0, began);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Open_WithNoScopeCallbackOrNoReturnedScopeKeepsItsAnswer(bool callback)
+    {
+        BridgeServices services = Services(Seat(), _runDirectory);
+        int began = 0;
+        if (callback) services.BeginRemodelOpen = () => { began++; return null; };
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Equal(callback ? 1 : 0, began);
+    }
+
+    [Fact]
     public void Open_UnknownProbeId_IsScopeNotProbed_AndNothingIsCopied()
     {
         FakeRemodelSeat seat = Seat();
@@ -837,6 +1083,101 @@ public class RemodelOpenHandlerTests : IDisposable
             RemodelErrorCodes.GuardRefused,
             Refusal(dispatcher.Dispatch(OpenRequest(Probe(dispatcher), outside))));
         Assert.False(File.Exists(outside));
+    }
+
+    // ---- the one rule for the copy's path, shared with the pane seat (decision 148A) ----------------
+
+    /// <summary>
+    /// Owner decision 148A (feature 011 T186, research R12.3): <c>remodel.open</c> takes the copy's path
+    /// by the one rule the pane seat takes it by (<c>RemodelCopy.CopyOf</c>), so every form of a run's copy
+    /// the rule takes passes step 4 - the rule, this run's folder and <c>AssertSaveTarget</c> - with the
+    /// run folder bound as the host binds its own. Each is stopped at step 6, the first write to the
+    /// engineer's settings, so nothing is copied or opened at a fictional path; the answer is the
+    /// settings' failure, never a refusal of the path.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RemodelCopyPathForms.Accepted), MemberType = typeof(RemodelCopyPathForms))]
+    public void Open_EveryFormOfARunsCopyTheOneRuleTakesPassesStepFour(string path, string canonical, string runDirectory)
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.FailingWrites.Add("10=False");
+        var told = new List<RemodelSessionEnd>();
+        BridgeServices services = Services(seat, runDirectory);
+        services.RemodelSessionEnded = told.Add;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher), path));
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Null(response.Result);
+        Assert.Equal("10=False", seat.ToggleWrites.First());
+        Assert.Empty(seat.Opened);
+
+        // The open's ending names the copy in the canonical form the rule answered, in the run folder bound.
+        RemodelSessionEnd outcome = Assert.Single(told);
+        Assert.Equal(canonical, outcome.CopyPath);
+        Assert.Equal(runDirectory, outcome.RunDirectory);
+    }
+
+    /// <summary>
+    /// Decision 148A: every other path a request can carry is refused at step 4 as a save target is -
+    /// <c>guard_refused</c>, naming <c>Save3</c> - before anything is recorded, set, copied or opened, with
+    /// this run's folder bound: a <c>..</c> segment that canonicalizes onto the run's copy, which the
+    /// bridge took until this decision, a device path, a path that names nothing, and the rest the rule
+    /// refuses. A blank path is the request reader's to refuse, before any rule.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RemodelCopyPathForms.RefusedThatARequestCanCarry), MemberType = typeof(RemodelCopyPathForms))]
+    public void Open_EveryOtherPathIsRefusedAsASaveTargetBeforeAnythingIsSet(string path)
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.FailingWrites.Add("10=False");
+        SwBridgeDispatcher dispatcher = Dispatcher(seat, RemodelCopyPathForms.RunDirectory);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher), path));
+
+        Assert.Equal(RemodelErrorCodes.GuardRefused, Refusal(response));
+        Assert.Equal("Save3", Assert.IsType<RemodelErrorResult>(response.Result).Detail!["member"]);
+        Assert.Empty(seat.ToggleWrites);
+        Assert.Empty(seat.Opened);
+    }
+
+    /// <summary>
+    /// Decision 148A: a device path is refused even when the run folder bound is spelt as one, so the
+    /// two agree - the case the bridge took until this decision, copying and opening the copy through
+    /// the device path.
+    /// </summary>
+    [Fact]
+    public void Open_ADevicePathIsRefusedEvenWhenTheBoundRunFolderIsSpeltAsOne()
+    {
+        FakeRemodelSeat seat = Seat();
+        SwBridgeDispatcher dispatcher = Dispatcher(seat, @"\\?\" + _runDirectory);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher), @"\\?\" + _copyPath));
+
+        Assert.Equal(RemodelErrorCodes.GuardRefused, Refusal(response));
+        Assert.Empty(seat.Opened);
+        Assert.Empty(seat.ToggleWrites);
+        Assert.False(File.Exists(_copyPath));
+    }
+
+    /// <summary>
+    /// Decision 148A: what the rule checked is what the bridge uses - the copy is made, opened and attested
+    /// at the canonical form of a path spelt with forward slashes and spaces around it.
+    /// </summary>
+    [Fact]
+    public void Open_TheCopyIsMadeOpenedAndAttestedInTheCanonicalFormItWasCheckedIn()
+    {
+        FakeRemodelSeat seat = Seat();
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+        string spelt = "  " + _copyPath.Replace('\\', '/') + " ";
+
+        var result = Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher), spelt)));
+
+        Assert.Equal(_copyPath, result.DocumentPath);
+        Assert.Equal(new[] { _copyPath }, seat.Opened);
+        Assert.Equal(_copyPath, result.SourceAttestation!.CopyPath);
+        Assert.True(File.Exists(_copyPath));
     }
 
     /// <summary>
@@ -1236,7 +1577,9 @@ public class RemodelOpenHandlerTests : IDisposable
     /// U27: every native step of <c>remodel.open</c> - and the file work between them - has a
     /// <c>before</c> marker written ahead of it and an <c>after</c> marker once it returns, in the
     /// exact order the open makes them. The marker for <c>OpenDoc7</c> is asserted from inside
-    /// the seat's open, the only moment that proves it was written first.
+    /// the seat's open, the only moment that proves it was written first. Edited deliberately for
+    /// owner decision 148A (2026-10-20, feature 011 T184): the open is gated under its qualified key,
+    /// <c>ISldWorks.OpenDoc7</c>, and marked under it, as every other gated write of the open is.
     /// </summary>
     [Fact]
     public void Open_WritesABeforeMarkerAheadOfEveryStepAndAnAfterMarkerOnceItReturns()
@@ -1249,7 +1592,7 @@ public class RemodelOpenHandlerTests : IDisposable
             Assert.Equal(RemodelCommands.Open, command);
             markers.Add(marker);
         };
-        seat.DuringCall = _ => Assert.Equal("before OpenDoc7", markers.Last());
+        seat.DuringCall = _ => Assert.Equal("before ISldWorks.OpenDoc7", markers.Last());
         var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
         string probeId = Probe(dispatcher);
         Assert.Empty(markers);
@@ -1266,7 +1609,7 @@ public class RemodelOpenHandlerTests : IDisposable
                 "RecordSource",
                 "RemodelSystemToggles.Apply",
                 "File.Copy",
-                "OpenDoc7",
+                "ISldWorks.OpenDoc7",
                 "AssertOpenedAtCopy",
                 "ICustomPropertyManager.Add3",
                 "IFeatureManager.EditRollback",
@@ -1283,7 +1626,10 @@ public class RemodelOpenHandlerTests : IDisposable
             markers);
     }
 
-    /// <summary>A step that throws leaves <c>failed</c> in place of its <c>after</c>, and the open's unwind follows.</summary>
+    /// <summary>
+    /// A step that throws leaves <c>failed</c> in place of its <c>after</c>, and the open's unwind follows.
+    /// Edited deliberately for decision 148A (T184): the open's marker is its qualified key.
+    /// </summary>
     [Fact]
     public void Open_AStepThatThrowsLeavesAFailedMarkerInPlaceOfItsAfterMarker()
     {
@@ -1296,10 +1642,10 @@ public class RemodelOpenHandlerTests : IDisposable
 
         Assert.Equal(BridgeStatus.Error, dispatcher.Dispatch(OpenRequest(Probe(dispatcher))).Status);
 
-        int failed = markers.IndexOf("failed OpenDoc7");
-        Assert.True(failed > 0, "no failed marker for OpenDoc7.");
-        Assert.Equal("before OpenDoc7", markers[failed - 1]);
-        Assert.DoesNotContain("after OpenDoc7", markers);
+        int failed = markers.IndexOf("failed ISldWorks.OpenDoc7");
+        Assert.True(failed > 0, "no failed marker for ISldWorks.OpenDoc7.");
+        Assert.Equal("before ISldWorks.OpenDoc7", markers[failed - 1]);
+        Assert.DoesNotContain("after ISldWorks.OpenDoc7", markers);
 
         // The unwind's own steps are marked too, after the failure, so a crash inside the
         // clean-up is attributable as well.
@@ -1346,7 +1692,7 @@ public class RemodelOpenHandlerTests : IDisposable
         SwBridgeDispatcher dispatcher = Opened(seat);
 
         var result = Ok<RemodelSnapshotResult>(
-            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, "{}")));
+            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, RunOnly)));
 
         Assert.Equal(new[] { "ref:boss", "ref:fillet" }, result.Order);
         Assert.Equal("Boss-Extrude1", result.Names["ref:boss"]);
@@ -1377,7 +1723,7 @@ public class RemodelOpenHandlerTests : IDisposable
         SwBridgeDispatcher dispatcher = Opened(seat);
         Assert.DoesNotContain("GetEquationMgr", _observer.Members);
 
-        Ok<RemodelSnapshotResult>(dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, "{}")));
+        Ok<RemodelSnapshotResult>(dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, RunOnly)));
 
         List<string> members = _observer.Members.ToList();
         Assert.Contains("GetEquationMgr", members);
@@ -1399,7 +1745,7 @@ public class RemodelOpenHandlerTests : IDisposable
         SwBridgeDispatcher dispatcher = Opened(seat);
 
         var result = Ok<RemodelSnapshotResult>(
-            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, "{}")));
+            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, RunOnly)));
 
         Ir.Equation equation = Assert.Single(result.Equations);
         Assert.Equal("\"t\" = 4", equation.Text);
@@ -1418,7 +1764,7 @@ public class RemodelOpenHandlerTests : IDisposable
         SwBridgeDispatcher dispatcher = Opened(seat);
 
         var result = Ok<RemodelSnapshotResult>(
-            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, "{}")));
+            dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, RunOnly)));
 
         Assert.Empty(result.UnreadableEquationIndexes);
     }
@@ -1431,8 +1777,12 @@ public class RemodelOpenHandlerTests : IDisposable
             Refusal(Dispatcher(Seat()).Dispatch(Request("9", RemodelCommands.Snapshot, "{}"))));
     }
 
+    /// <summary>
+    /// Edited deliberately by owner decision 159A (004 T241): the snapshot takes one parameter
+    /// now, the run it is for, and still ignores a member that names a document.
+    /// </summary>
     [Fact]
-    public void Snapshot_TakesNoParametersAndIgnoresOneThatNamesADocument()
+    public void Snapshot_TakesOnlyItsRunAndIgnoresAParameterThatNamesADocument()
     {
         // The target is unreachable, not validated: a member the table does not declare is
         // simply not read, and the snapshot is of the scope's copy either way.
@@ -1442,7 +1792,7 @@ public class RemodelOpenHandlerTests : IDisposable
             Request(
                 "9",
                 RemodelCommands.Snapshot,
-                "{\"document\":\"C:\\\\work\\\\somebody-elses.SLDPRT\"}")));
+                "{\"run_id\":\"" + RunId + "\",\"document\":\"C:\\\\work\\\\somebody-elses.SLDPRT\"}")));
 
         Assert.Equal(2, result.FeatureCount);
     }
@@ -1491,6 +1841,26 @@ public class RemodelOpenHandlerTests : IDisposable
             RemodelErrorCodes.BadRequest,
             Refusal(dispatcher.Dispatch(Request("2", RemodelCommands.Open, "{}"))));
         Assert.Null(services.RemodelRunRoot);
+    }
+
+    /// <summary>
+    /// Owner decision 148A (2026-10-20, feature 011 T184; research R11.8 item 1): <c>remodel.open</c> opens
+    /// the copy under its qualified key, <c>ISldWorks.OpenDoc7</c>, on the stage-1 allowlist - never the
+    /// bare name, which the read-only guard refuses - once, with nothing refused.
+    /// </summary>
+    [Fact]
+    public void Open_OpensTheCopyUnderItsQualifiedKeyOnTheStage1Allowlist()
+    {
+        FakeRemodelSeat seat = Seat();
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Single(_observer.Members, member => member == "ISldWorks.OpenDoc7");
+        Assert.DoesNotContain("OpenDoc7", _observer.Members);
+        Assert.Empty(_observer.Refusals);
+        Assert.Contains("ISldWorks.OpenDoc7", RemodelGuard.AllowedKeys);
+        Assert.Equal(new[] { _copyPath }, seat.Opened);
     }
 
     [Fact]
@@ -1553,6 +1923,21 @@ public class RemodelOpenHandlerTests : IDisposable
     }
 
     // ---- helpers ---------------------------------------------------------------------
+
+    private sealed class OpenLease : IDisposable
+    {
+        private readonly Action _dispose;
+
+        public OpenLease(Action dispose) => _dispose = dispose;
+
+        public int Disposals { get; private set; }
+
+        public void Dispose()
+        {
+            Disposals++;
+            _dispose();
+        }
+    }
 
     /// <summary>A two-feature copy and a source SOLIDWORKS already has open.</summary>
     private FakeRemodelSeat Seat()

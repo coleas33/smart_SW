@@ -37,6 +37,9 @@ public sealed class RemodelBackendClientTests
 
     private const string Secret = "remodel-secret-never-in-a-url";
 
+    /// <summary>The job a Start names (owner decision 159A, on the final review: S3).</summary>
+    private const string JobId = "0123456789abcdef0123456789abcdef";
+
     private const string RunDirectory = @"C:\SwReviewRuns\20260916-142201-bracket-remodel";
 
     private const string SourcePath = @"C:\work\bracket.SLDPRT";
@@ -226,15 +229,19 @@ public sealed class RemodelBackendClientTests
 
     // ---- POST /remodel/runs ----------------------------------------------------------------
 
+    /// <summary>
+    /// Edited deliberately by owner decision 159A, on the final review (004 T247; its S3): the Start names the job it makes,
+    /// so one whose answer was lost can be asked again and answered with that job.
+    /// </summary>
     [Fact]
-    public void StartRunPostsTheRunFolderAndTheBridgeAndReturnsTheJobId()
+    public void StartRunPostsTheRunFolderTheBridgeAndTheJobItMakesAndReturnsTheJobId()
     {
         using (var backend = new FakeBackend())
         {
             backend.Reply(201, @"{""job_id"":""job-42"",""chat_id"":""job-42""}");
 
             string jobId = backend.Client().StartRun(
-                new RemodelRunRequest(RunDirectory, new BridgeConfig(Pipe, Secret)));
+                new RemodelRunRequest(RunDirectory, new BridgeConfig(Pipe, Secret), JobId));
 
             RecordedRequest request = backend.Only();
             Assert.Equal("POST", request.Method);
@@ -242,6 +249,7 @@ public sealed class RemodelBackendClientTests
             Assert.Equal(RunDirectory, request.Text("run_dir"));
             Assert.Equal(Pipe, request.Text("bridge", "pipe"));
             Assert.Equal(Secret, request.Text("bridge", "secret"));
+            Assert.Equal(JobId, request.Text("job_id"));
             Assert.Equal("job-42", jobId);
         }
     }
@@ -255,7 +263,7 @@ public sealed class RemodelBackendClientTests
 
             BackendRequestException failure = Assert.Throws<BackendRequestException>(
                 () => backend.Client().StartRun(
-                    new RemodelRunRequest(RunDirectory, new BridgeConfig(Pipe, Secret))));
+                    new RemodelRunRequest(RunDirectory, new BridgeConfig(Pipe, Secret), JobId)));
 
             Assert.Equal("BadResponse", failure.ErrorClass);
         }
@@ -364,18 +372,40 @@ public sealed class RemodelBackendClientTests
     // ---- POST /remodel/runs/{job_id}/stop --------------------------------------------------
 
     [Fact]
-    public void StopPostsAnEmptyBodyToTheJobsStopRoute()
+    public void StopPostsItsIntentToTheJobsStopRoute()
     {
         using (var backend = new FakeBackend())
         {
             backend.Reply(200, @"{""stopping"":true}");
 
-            backend.Client().Stop("job-42");
+            backend.Client().Stop("job-42", JobId);
 
             RecordedRequest request = backend.Only();
             Assert.Equal("POST", request.Method);
             Assert.Equal("/remodel/runs/job-42/stop", request.Path);
-            Assert.Equal("{}", request.Body);
+            // 004 T262 deliberately replaces the empty-body pin: transport retries must name
+            // the same Stop so an accepted apply Stop is not mistaken for a later cancellation.
+            Assert.Equal(JobId, request.Text("stop_id"));
+            Assert.Equal("Bearer " + Token, request.Authorization);
+            Assert.DoesNotContain(JobId, request.Url, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>004 T262 guard: retransmission serializes the caller's same Stop intent unchanged.</summary>
+    [Fact]
+    public void RetryingAStopPostsTheSameIntentUnchanged()
+    {
+        using (var backend = new FakeBackend())
+        {
+            backend.Reply(200, @"{""stopping"":true}");
+            RemodelBackendClient client = backend.Client();
+
+            client.Stop("job-42", JobId);
+            client.Stop("job-42", JobId);
+
+            Assert.Equal(2, backend.Requests.Count);
+            Assert.All(backend.Requests, request => Assert.Equal(JobId, request.Text("stop_id")));
+            Assert.Equal(backend.Requests[0].Body, backend.Requests[1].Body);
         }
     }
 
@@ -472,6 +502,42 @@ public sealed class RemodelBackendClientTests
 
         BackendRequestException failure = Assert.Throws<BackendRequestException>(
             () => client.Status("job-42"));
+
+        Assert.Equal("BackendUnavailable", failure.ErrorClass);
+        Assert.True(failure.Retryable);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T232; research R19.9; found on the review's round, older than
+    /// 159A): a request with a body - a plan, a close, and with them the probe, the open, a Start and a Stop - to a backend
+    /// that is no longer listening is `BackendUnavailable`, retryable, as a request with none is (above). The body was sent
+    /// outside the call's try, so the refused connection left as the transport's own exception: the Remodel tab told it as
+    /// a failure the add-in did not expect, and the pipeline's close let it through unnamed.
+    /// </summary>
+    [Theory]
+    [InlineData("plan")]
+    [InlineData("close")]
+    public void ARequestWithABodyToABackendThatDiedIsBackendUnavailableRatherThanAnUnhandledWebException(string route)
+    {
+        BackendEndpoint endpoint;
+        using (var backend = new FakeBackend())
+        {
+            endpoint = backend.Endpoint;
+        }
+
+        var client = new RemodelBackendClient(() => endpoint);
+
+        BackendRequestException failure = Assert.Throws<BackendRequestException>(() =>
+        {
+            if (route == "plan")
+            {
+                client.Plan(RunDirectory);
+            }
+            else
+            {
+                client.Close(new RemodelCloseRequest(RunDirectory, new BridgeConfig(Pipe, Secret), false));
+            }
+        });
 
         Assert.Equal("BackendUnavailable", failure.ErrorClass);
         Assert.True(failure.Retryable);

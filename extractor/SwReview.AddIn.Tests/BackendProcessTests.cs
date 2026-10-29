@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using SwReview.AddIn.Native;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
@@ -34,8 +35,12 @@ namespace SwReview.AddIn.Tests;
 ///   process we hold a handle to;
 /// - the credential and endpoint variables that reach the child are the pane's answers and
 ///   not the workstation's, asserted against a real child's own view of its environment,
-///   because that block is the parent's environment with the pane's values merged over it.
+///   because that block is the parent's environment with the pane's values merged over it;
+/// - when the key copied there is the one saved in the pane, the command line names its
+///   provider (`--settings-key-provider`, owner decision 138A), because the backend cannot
+///   tell that from its environment and the session has to name the credential to revoke.
 /// </summary>
+[Collection(StubChildrenCollection.Name)]
 public sealed class BackendProcessTests
 {
     private const string Key = "sk-proj-EXAMPLE-not-a-real-key-0123456789";
@@ -101,6 +106,185 @@ public sealed class BackendProcessTests
             Assert.NotNull(failure.ProcessId);
             Assert.True(StubBackend.Waits(() => !ProcessLifetimeTests.IsRunning(failure.ProcessId!.Value)));
         }
+    }
+
+    // ---- a start no longer wanted (owner decision 143A) ------------------------------------
+
+    /// <summary>
+    /// A start the add-in no longer wants - SOLIDWORKS unloading while a restart for settings
+    /// saved during a turn is under way on the host's own thread - stops waiting for the
+    /// handshake at once, not at its timeout, and stops the child it started.
+    /// </summary>
+    [Fact]
+    public void AStartNoLongerWantedStopsWaitingForTheHandshakeAndStopsItsChild()
+    {
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (var unloading = new CancellationTokenSource())
+        {
+            stub.PrintsNothing().RecordsThatItRan();
+            BackendStartOptions options = Options(stub, job);
+            options.HandshakeTimeout = TimeSpan.FromSeconds(60);
+            options.Cancellation = unloading.Token;
+
+            BackendStartException failure = StoppedWhenAsked(options, () => File.Exists(stub.MarkerPath), unloading);
+
+            Assert.StartsWith("the backend start was stopped before the backend was ready", failure.Message, StringComparison.Ordinal);
+            Assert.NotNull(failure.ProcessId);
+            Assert.True(StubBackend.Waits(() => !ProcessLifetimeTests.IsRunning(failure.ProcessId!.Value)));
+        }
+    }
+
+    /// <summary>...and stops waiting for `/health` too, between probes.</summary>
+    [Fact]
+    public void AStartNoLongerWantedStopsWaitingForHealthAndStopsItsChild()
+    {
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (var unloading = new CancellationTokenSource())
+        using (var probed = new ManualResetEventSlim(false))
+        {
+            stub.PrintsHandshake();
+            BackendStartOptions options = Options(stub, job);
+            options.HealthTimeout = TimeSpan.FromSeconds(60);
+            options.HealthProbe = (origin, token) =>
+            {
+                probed.Set();
+                return false;
+            };
+            options.Cancellation = unloading.Token;
+
+            BackendStartException failure = StoppedWhenAsked(options, () => probed.IsSet, unloading);
+
+            Assert.StartsWith("the backend start was stopped before the backend was ready", failure.Message, StringComparison.Ordinal);
+            Assert.NotNull(failure.ProcessId);
+            Assert.True(StubBackend.Waits(() => !ProcessLifetimeTests.IsRunning(failure.ProcessId!.Value)));
+        }
+    }
+
+    /// <summary>A start asked for once it is no longer wanted starts nothing: no log, no child.</summary>
+    [Fact]
+    public void AStartAskedForOnceNoLongerWantedStartsNothing()
+    {
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (var unloading = new CancellationTokenSource())
+        {
+            stub.PrintsHandshake().RecordsThatItRan();
+            BackendStartOptions options = Options(stub, job);
+            unloading.Cancel();
+            options.Cancellation = unloading.Token;
+
+            var failure = Assert.Throws<BackendStartException>(() => BackendProcess.Start(options));
+
+            Assert.StartsWith("the backend start was stopped before the backend was ready", failure.Message, StringComparison.Ordinal);
+            Assert.Null(failure.ProcessId);
+            Thread.Sleep(500);
+            Assert.False(File.Exists(stub.MarkerPath), "a child was started");
+            Assert.False(File.Exists(stub.LogPath), "a log was opened");
+        }
+    }
+
+    /// <summary>
+    /// Disposing the client - the add-in unloading, on the SOLIDWORKS thread - tells a start in
+    /// flight to stop before it waits for the gate that start holds, so the unload waits for the
+    /// start to stop its child, not for the new backend's handshake and health; and a restart
+    /// asked for after that starts nothing. The supervisor's own check stands in for the start in
+    /// flight: it runs on the restart's thread, inside the gate.
+    /// </summary>
+    [Fact]
+    public void DisposingTheClientStopsARestartInFlightRatherThanWaitingForIt()
+    {
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (var inside = new ManualResetEventSlim(false))
+        using (var release = new ManualResetEventSlim(false))
+        {
+            UserSettings settings = UserSettings.Defaults();
+            string launcher = Path.Combine(Path.GetDirectoryName(stub.ScriptPath)!, "swreview.exe");
+            File.WriteAllText(launcher, string.Empty);
+            settings.Python = launcher;
+            settings.RunRoot = stub.RunRoot;
+            ResolvedApiKey key = settings.ResolveApiKey(_ => null);
+
+            var supervisor = new BackendSupervisor(() =>
+            {
+                inside.Set();
+                release.Wait(TimeSpan.FromSeconds(30));
+                return false;
+            });
+            var client = new BackendClient(supervisor, Path.GetDirectoryName(stub.LogPath)!, job);
+            CancellationToken handedOut = client.StartOptions(settings, key).Cancellation;
+
+            Exception? restarted = null;
+            var restarting = new Thread(() =>
+            {
+                try
+                {
+                    client.Restart(settings, key);
+                }
+                catch (Exception caught)
+                {
+                    restarted = caught;
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "fict-restart-in-flight",
+            };
+            restarting.Start();
+            Assert.True(inside.Wait(TimeSpan.FromSeconds(10)), "the restart never got inside the gate");
+
+            var disposing = new Thread(client.Dispose) { IsBackground = true, Name = "fict-unload" };
+            disposing.Start();
+
+            // Told to stop while the restart still holds the gate.
+            Assert.True(
+                StubBackend.Waits(() => handedOut.IsCancellationRequested, 5000),
+                "the client waited for the start in flight before telling it to stop");
+            Assert.True(restarting.IsAlive);
+
+            release.Set();
+            Assert.True(restarting.Join(TimeSpan.FromSeconds(15)), "the restart in flight did not stop");
+            Assert.True(disposing.Join(TimeSpan.FromSeconds(15)), "the client's dispose did not finish");
+            var stopped = Assert.IsType<BackendStartException>(restarted);
+            Assert.StartsWith("the backend start was stopped before the backend was ready", stopped.Message, StringComparison.Ordinal);
+
+            var late = Assert.Throws<BackendStartException>(() => client.Restart(settings, key));
+            Assert.Equal("the add-in is unloading, so the backend was not started.", late.Message);
+        }
+    }
+
+    /// <summary>
+    /// Starts <paramref name="options"/> on a thread of its own, cancels once <paramref name="reached"/>
+    /// holds, and answers the start's failure - having asserted the start ended within seconds of
+    /// the cancel, far inside the minute its own timeout would have taken.
+    /// </summary>
+    private static BackendStartException StoppedWhenAsked(
+        BackendStartOptions options, Func<bool> reached, CancellationTokenSource unloading)
+    {
+        Exception? outcome = null;
+        var starting = new Thread(() =>
+        {
+            try
+            {
+                BackendProcess.Start(options).Dispose();
+            }
+            catch (Exception caught)
+            {
+                outcome = caught;
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "fict-backend-start",
+        };
+        starting.Start();
+        Assert.True(StubBackend.Waits(reached), "the start never got as far as the wait it is stopped in");
+
+        unloading.Cancel();
+        Assert.True(starting.Join(TimeSpan.FromSeconds(15)), "the start kept waiting after it was no longer wanted");
+        return Assert.IsType<BackendStartException>(outcome);
     }
 
     [Fact]
@@ -348,6 +532,138 @@ public sealed class BackendProcessTests
             gemini.SetApiKey(Key);
 
             Assert.DoesNotContain(Gateway, EnvironmentOf(stub, job, gemini));
+        }
+    }
+
+    // ---- where the key came from (owner decision 138A) --------------------------------------
+
+    /// <summary>The key saved in the pane. Built from fragments and not provider-shaped.</summary>
+    private const string SavedKey = "fict" + "-pane-saved-" + "0138a";
+
+    /// <summary>A key the workstation exports for itself, inherited from SLDWORKS.exe.</summary>
+    private const string WorkstationKey = "fict" + "-workstation-" + "0138a";
+
+    [Theory]
+    [InlineData("openai")]
+    [InlineData(null)]
+    public void TheSettingsKeyProviderIsOnTheCommandLineAndTheKeyIsNot(string? provider)
+    {
+        // The backend finds the key in its environment either way and cannot tell by itself
+        // that it is the one saved in the pane; the session records `settings` only when the
+        // add-in says so. A statement, not a credential, so it travels as a start argument
+        // beside --run-root and --allow-origin, and the key itself still never does (FR-015).
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        {
+            stub.PrintsHandshake().RecordsItsCommandLine();
+            BackendStartOptions options = Options(stub, job);
+            options.Environment["OPENAI_API_KEY"] = SavedKey;
+            options.Secrets.Add(SavedKey);
+            options.SettingsKeyProvider = provider;
+
+            using (BackendProcess.Start(options))
+            {
+                string commandLine = stub.ReadCommandLine();
+
+                Assert.DoesNotContain(SavedKey, commandLine);
+                if (provider == null)
+                {
+                    Assert.DoesNotContain("--settings-key-provider", commandLine);
+                }
+                else
+                {
+                    Assert.Contains("--settings-key-provider " + provider, commandLine);
+                }
+            }
+        }
+    }
+
+    [Theory]
+    // Both present: the saved key wins (ResolveApiKey) and its provider is named.
+    [InlineData("openai", "saved", WorkstationKey, "openai")]
+    [InlineData("openai", "saved", null, "openai")]
+    [InlineData("gemini", "saved", WorkstationKey, "gemini")]
+    // No saved key: the environment's key is copied through and nothing is named.
+    [InlineData("openai", null, WorkstationKey, null)]
+    [InlineData("openai", null, null, null)]
+    // A stored key this Windows account cannot decrypt falls back to the environment's.
+    [InlineData("openai", "undecryptable", WorkstationKey, null)]
+    // The scripted provider reads no key, so none is copied into the environment or named.
+    [InlineData("fake", "saved", null, null)]
+    public void StartOptionsNamesTheProviderOnlyWhenItCopiedTheSavedKey(
+        string provider, string? stored, string? environmentKey, string? named)
+    {
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        {
+            UserSettings settings = UserSettings.Defaults();
+            settings.Provider = provider;
+            settings.Model = UserSettings.DefaultModelFor(provider);
+            if (stored == "saved")
+            {
+                settings.SetApiKey(SavedKey);
+            }
+            else if (stored == "undecryptable")
+            {
+                settings.ApiKeyProtected = "this is not base64 !!!";
+            }
+
+            BackendStartOptions built = StartOptionsFor(stub, job, settings, name => environmentKey);
+
+            Assert.Equal(named, built.SettingsKeyProvider);
+            if (named != null)
+            {
+                // The statement is true of what was copied: every variable the provider
+                // reads holds the saved key, so no inherited one can be what the backend finds.
+                foreach (string variable in provider == "gemini"
+                    ? new[] { "GOOGLE_API_KEY", "GEMINI_API_KEY" }
+                    : new[] { "OPENAI_API_KEY" })
+                {
+                    Assert.Equal(SavedKey, built.Environment[variable]);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void ASavedKeyAndAWorkstationKeyStartTheBackendWithTheSavedOneAndItsProviderNamed()
+    {
+        // The case 138A is about, read back out of a real child: the workstation exports a
+        // personal key, the engineer saved another in the pane. The child's environment holds
+        // the saved one, its command line names the provider - and holds neither key.
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (Seeded("OPENAI_API_KEY", WorkstationKey))
+        {
+            UserSettings settings = UserSettings.Defaults();
+            settings.SetApiKey(SavedKey);
+
+            (string commandLine, string environment) =
+                Launched(stub, job, settings, Environment.GetEnvironmentVariable);
+
+            Assert.Contains("--settings-key-provider openai", commandLine);
+            Assert.DoesNotContain(SavedKey, commandLine);
+            Assert.DoesNotContain(WorkstationKey, commandLine);
+            Assert.Contains("OPENAI_API_KEY=" + SavedKey, environment);
+            Assert.DoesNotContain(WorkstationKey, environment);
+        }
+    }
+
+    [Fact]
+    public void AWorkstationKeyAloneStartsTheBackendWithNothingNamed()
+    {
+        // No key saved in the pane: the workstation's key is the one used, the backend records
+        // `env`, and the command line says nothing about the settings.
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (Seeded("OPENAI_API_KEY", WorkstationKey))
+        {
+            (string commandLine, string environment) =
+                Launched(stub, job, UserSettings.Defaults(), Environment.GetEnvironmentVariable);
+
+            Assert.DoesNotContain("--settings-key-provider", commandLine);
+            Assert.DoesNotContain(WorkstationKey, commandLine);
+            Assert.Contains("OPENAI_API_KEY=" + WorkstationKey, environment);
         }
     }
 
@@ -691,14 +1007,48 @@ public sealed class BackendProcessTests
 
     /// <summary>
     /// The credential and endpoint block <see cref="BackendClient.StartOptions"/> builds for
-    /// <paramref name="settings"/>, read back out of a real child process.
+    /// <paramref name="settings"/>, with no key in the environment, read back out of a real
+    /// child process.
+    /// </summary>
+    private static string EnvironmentOf(StubBackend stub, JobObject job, UserSettings settings) =>
+        Launched(stub, job, settings, name => null).Environment;
+
+    /// <summary>
+    /// What <see cref="BackendClient.StartOptions"/> builds for <paramref name="settings"/>, the
+    /// key resolved against <paramref name="environment"/>, launched as a real child: its
+    /// command line and its own view of its environment.
     ///
     /// Asserted against the child's own view rather than against the dictionary, because the
     /// bug these tests exist for is precisely that the dictionary is *merged into the parent's
     /// environment* (<see cref="ChildProcess"/>): a variable the pane does not write is not a
     /// variable the child does not have.
     /// </summary>
-    private static string EnvironmentOf(StubBackend stub, JobObject job, UserSettings settings)
+    private static (string CommandLine, string Environment) Launched(
+        StubBackend stub, JobObject job, UserSettings settings, Func<string, string?> environment)
+    {
+        BackendStartOptions built = StartOptionsFor(stub, job, settings, environment);
+
+        stub.PrintsHandshake().RecordsItsCommandLine().RecordsItsEnvironment();
+        BackendStartOptions options = Options(stub, job);
+        foreach (KeyValuePair<string, string> variable in built.Environment)
+        {
+            options.Environment[variable.Key] = variable.Value;
+        }
+
+        options.SettingsKeyProvider = built.SettingsKeyProvider;
+
+        using (BackendProcess.Start(options))
+        {
+            return (stub.ReadCommandLine(), stub.ReadEnvironmentDump());
+        }
+    }
+
+    /// <summary>
+    /// <see cref="BackendClient.StartOptions"/> for <paramref name="settings"/>, the key resolved
+    /// against <paramref name="environment"/>, with this stub's folder as the launcher's home.
+    /// </summary>
+    private static BackendStartOptions StartOptionsFor(
+        StubBackend stub, JobObject job, UserSettings settings, Func<string, string?> environment)
     {
         // `python` names the launcher BackendLocator resolves; a file called swreview.exe is
         // taken as the console script and run directly, which is all StartOptions needs.
@@ -707,23 +1057,10 @@ public sealed class BackendProcessTests
         settings.Python = launcher;
         settings.RunRoot = stub.RunRoot;
 
-        BackendStartOptions built;
         using (var supervisor = new BackendSupervisor(() => false))
         using (var client = new BackendClient(supervisor, Path.GetDirectoryName(stub.LogPath)!, job))
         {
-            built = client.StartOptions(settings, settings.ResolveApiKey(name => null));
-        }
-
-        stub.PrintsHandshake().RecordsItsEnvironment();
-        BackendStartOptions options = Options(stub, job);
-        foreach (KeyValuePair<string, string> variable in built.Environment)
-        {
-            options.Environment[variable.Key] = variable.Value;
-        }
-
-        using (BackendProcess.Start(options))
-        {
-            return stub.ReadEnvironmentDump();
+            return client.StartOptions(settings, settings.ResolveApiKey(environment));
         }
     }
 
@@ -741,8 +1078,9 @@ public sealed class BackendProcessTests
     /// Nothing in the add-in ever does this - it is how the test runner impersonates the
     /// console-less GUI process the add-in really lives in, because
     /// <see cref="ChildProcess.StartSuspended"/> decides how the child gets a console from
-    /// whether this process has one. Every test in this class runs in the same xUnit
-    /// collection, so none of them can be starting a child while the console is gone.
+    /// whether this process has one. Every class that starts a stub child runs in one xUnit
+    /// collection (<see cref="StubChildrenCollection"/>), so none of them can be starting or
+    /// stopping a child while the console is gone.
     /// </summary>
     private static IDisposable Detached() => new DetachedConsole();
 

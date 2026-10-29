@@ -15,19 +15,46 @@ namespace SwReview.AddIn.Remodel;
 public sealed class RemodelHostOptions
 {
     /// <param name="channel">Where replies and unsolicited messages go.</param>
-    /// <param name="runRoot">The run root in force, read fresh: a settings save moves it.</param>
+    /// <param name="runRoot">The run root in force, read fresh: the restart a settings save makes moves it.</param>
     public RemodelHostOptions(IPageChannel channel, Func<string> runRoot)
     {
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
+        RunRootsInForce = () => new[] { RunRoot() };
+        RunRootForANewRun = () => RunRoot();
     }
 
     public IPageChannel Channel { get; }
 
     public Func<string> RunRoot { get; }
 
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, the one in force among them (owner
+    /// decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open - its report
+    /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
+    /// </summary>
+    public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
+
+    /// <summary>
+    /// The run root a plan's folder is made under, and a Start's plan must lie under, read once each pass of the
+    /// gate (owner decision 154A, with 153A's record of the settings in force): the run root in force, or null while
+    /// a start of the backend under way would bring another into force, which a plan and a Start refuse. The run
+    /// root in force by default.
+    /// </summary>
+    public Func<string?> RunRootForANewRun { get; set; }
+
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
+
     /// <summary>The backend's endpoint, or null before it is listening.</summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
+
+    /// <summary>A failed start with no backend up, remembered by the Review host (owner decision 160A).</summary>
+    public Func<bool> BackendStartFailed { get; set; } = () => false;
 
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
@@ -98,6 +125,64 @@ public sealed class RemodelHostOptions
     /// scheduler so the message order they read is the order the page would see.
     /// </summary>
     public Action<Action> Schedule { get; set; } = work => Task.Run(work);
+
+    /// <summary>
+    /// Owner decision 145A: begins a plan or a run - what <see cref="RemodelHost.RunInProgress"/>
+    /// covers - as a turn begins, so a settings restart and a remodel run never overlap. Called
+    /// with the step that marks the host busy, after every refusal that needs no call: a settings
+    /// restart that waits is made first, or the one being made is waited for, then the step is run
+    /// under the restart's own lock and null answered; or the step is not run and the refusal is
+    /// answered - what holds the restart back, or the restart's failure - with its class, words and
+    /// flag. The add-in answers it through the review host (`ReviewHost.BeginRemodelRun`), which
+    /// keeps the restart on another pump. By default there is no restart to wait for, and the
+    /// step runs at once.
+    /// </summary>
+    public Func<Action, BackendRequestException?> BeginRun { get; set; } = begin =>
+    {
+        begin();
+        return null;
+    };
+
+    /// <summary>
+    /// Whether a settings restart stands before a plan or a run - one waits to be made, or one is
+    /// being made - which the gate (<see cref="BeginRun"/>) makes, or waits for, first (owner
+    /// decision 145A, found on review). Read only to tell the page so; the gate decides. The add-in
+    /// answers it through the review host (`ReviewHost.RestartAhead`). By default none does.
+    /// </summary>
+    public Func<bool> RestartAhead { get; set; } = () => false;
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds the tool service's attachment for a plan or
+    /// a run, taken once the host is busy and before the attachment is read, and let go when the host
+    /// is free again - so no follow of the active document takes the bridge down under them, even one
+    /// whose busy question was out as they began - or null when no service is listening to hold, which
+    /// refuses the press. The add-in answers it through the gate (<c>ToolServiceGate.HoldAttachment</c>).
+    /// By default there is no gate, and nothing is held.
+    /// </summary>
+    public Func<IDisposable?> HoldToolService { get; set; } = () => ToolServiceHold.Nothing;
+
+    /// <summary>
+    /// What the run root rule reads of Windows (owner decision 154A): a share, a mapped or substituted drive,
+    /// a link. Windows itself by default; injected so a test fakes each without making one.
+    /// </summary>
+    public IRunRootProbe RunRootProbe { get; set; } = Native.WindowsRunRootProbe.Instance;
+
+    /// <summary>
+    /// Owner decision 159A (004 research R19): where the host writes, for whoever debugs, what a failure said
+    /// where the tab told it in its own words - a refusal's class and sentence, an exception's whole text -
+    /// masked as everything the host sends is (FR-015). The add-in writes it to its own log (`addin.log`, in
+    /// the folder the tab's View log opens); nowhere by default, so no test writes into the engineer's log.
+    /// </summary>
+    public Action<string> Log { get; set; } = _ => { };
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): ends, in process, the session the bridge of the attachment named first
+    /// holds for the run whose folder is named second - the routine `remodel.close` runs, through the tool service - or
+    /// throws when it could not. Asked only by <see cref="RemodelHost.EndTheSessionsLeftUnderInProcess"/>, when the
+    /// review backend that would have sent the close has exited. The add-in answers it through the gate
+    /// (`ToolServiceGate.EndRemodelSessionOf`). Null by default: nothing is closed so, and a leftover stays as before.
+    /// </summary>
+    public Action<string, string>? EndRemodelSessionInProcess { get; set; }
 }
 
 /// <summary>
@@ -132,8 +217,10 @@ public sealed class RemodelHostOptions
 /// Threading: <see cref="Receive"/> is not re-entrant and is delivered one message at a time,
 /// off the SOLIDWORKS UI thread. The run itself executes on
 /// <see cref="RemodelHostOptions.Schedule"/> so that `remodel.stop` can be delivered while it
-/// is running; the only state the two share is the run's stop flag and the pending stop id,
-/// both written atomically.
+/// is running; the only state the two share is the run's stop flag, written atomically, and -
+/// owner decision 155A - the run's end: the host freed from it, and what its ending holds back
+/// meanwhile, under one lock, which `init`'s reading of a run in flight takes too, and - owner
+/// decision 159A - a stop's decision and the Stops waiting for the run's end.
 /// </summary>
 public sealed class RemodelHost : IDisposable
 {
@@ -218,6 +305,30 @@ public sealed class RemodelHost : IDisposable
         + "the active document and press Remodel a copy again.";
 
     /// <summary>
+    /// What `remodel.plan` answers when the active document, read again once the settings-restart
+    /// gate has marked the host busy, is not the one the press was for (owner decision 145A, found on
+    /// review): the gate can wait through a restart, and the engineer can switch documents - or
+    /// configurations - meanwhile. True of a configuration switched alone, and of an earlier plan
+    /// waiting for Start, which is kept (third review). No path: the tab says whose document it
+    /// means without one.
+    /// </summary>
+    public const string DocumentChangedMessage =
+        "The active document or its configuration changed after Remodel a copy was pressed, so nothing "
+        + "was copied and no new plan was made. " + PartNotChanged + " Make your part the active document "
+        + "and press Remodel a copy again.";
+
+    /// <summary>
+    /// What the page's run status line is told before a plan whose gate meets a settings restart
+    /// that waits or is being made (owner decision 145A, found on review). Posted as
+    /// `status {stage: "backend_starting"}`. Its beginning, <see cref="PaneActions.WaitingForTheRestart"/>, is
+    /// the check tabs' too since owner decision 157A, and written once there.
+    /// </summary>
+    public const string PlanAfterRestartMessage = PaneActions.WaitingForTheRestart + "reading the part...";
+
+    /// <summary>...before a Start's run.</summary>
+    public const string StartAfterRestartMessage = PaneActions.WaitingForTheRestart + "starting the run...";
+
+    /// <summary>
     /// The full no-change reassurance for refusals before any copy change. Loss and cleanup
     /// notices instead use <see cref="PartNotChanged"/>, because cleanup may be late or incomplete.
     /// </summary>
@@ -246,6 +357,238 @@ public sealed class RemodelHost : IDisposable
     public const string RunNotBoundMessage =
         "The add-in could not reach SOLIDWORKS to get the copy ready, so nothing was copied. "
         + PartNotChanged + " Wait a moment and press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 148A (feature 011 research R12.4): `remodel.open_copy`'s refusal while a remodel run
+    /// is in progress, `RunInProgress`. Opening or activating the copy between the run's requests to the
+    /// bridge would change the document SOLIDWORKS has active under the run. In the engineer's words, with
+    /// no path, naming the button that works once the run has finished by its label.
+    /// </summary>
+    public const string OpenCopyWhileARunIsInProgressMessage =
+        "The copy is not opened while a remodel run is in progress: opening it would change the "
+        + "document SOLIDWORKS has active under the run. Press Open copy again once the run has finished.";
+
+    /// <summary>
+    /// Owner decision 155A (004 research R18): what the tab says for `DocumentDirty`, whoever refused - this
+    /// host's own reading of the probe's signals, or the bridge's probe or its reading of the part again
+    /// inside `remodel.open`, before the copy. The bridge's sentences name the part's full path, and the
+    /// backend passes them on, so the page is given these words instead (<see cref="PageWords"/>); the
+    /// bridge's sentence stays in the tool-service log's line for the request it refused. No path, the way
+    /// on by the button's label, and the engineer's part vouched for alone, as the tab's other refusals of a
+    /// plan do (<see cref="DocumentChangedMessage"/>).
+    /// </summary>
+    public const string DocumentDirtyMessage =
+        "Your part has unsaved changes, and the re-modeler copies the part as it is saved on disk, so "
+        + "nothing was copied and no new plan was made. " + PartNotChanged + " Save it, or close it "
+        + "without saving and open it again, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 155A: what the tab says for `ExternalReferences`, whoever refused, by
+    /// <see cref="DocumentDirtyMessage"/>'s rules. It names no button: pressing again changes nothing, and
+    /// breaking the part's references is a change to the engineer's own part, which this tab does not ask
+    /// for.
+    /// </summary>
+    public const string ExternalReferencesMessage =
+        "This part references other files, which this remodel cannot copy with it, so nothing was "
+        + "copied and no new plan was made. " + PartNotChanged + " This version remodels only parts "
+        + "that reference no other files.";
+
+    /// <summary>
+    /// Owner decision 155A: what every row that looks a run up answers for a run folder this host has no
+    /// record of (`RunNotFound`) - Start, the result, Open copy, Discard copy, Show and the shared rows'
+    /// lookup - where it named the folder the page sent. A host keeps its runs for as long as it lives, so
+    /// a page naming one it does not have is showing a run from before it.
+    /// </summary>
+    public const string RunNotFoundMessage =
+        "This tab no longer has that run, so nothing was done with it. Press Remodel a copy to plan again.";
+
+    /// <summary>
+    /// Owner decision 155A: what the page is told when the copy goes away while a run is in progress (RK-14)
+    /// and the run is stopped, where it named the copy's full path. Told as the engineer's own Stop is told,
+    /// a stage the page shows in its run line while the run goes on to its end (<see cref="DocumentChanged"/>).
+    /// </summary>
+    public const string CopyGoneMessage =
+        "The copy is gone, so the run is stopping: the change in flight is finished first, and the "
+        + "change log stays in the run folder. " + PartNotChanged + " Once the run has ended, press "
+        + "Remodel a copy to plan again.";
+
+    // ---- owner decision 159A: the tab's words for a failure whose own sentence can name a path ----------
+    //
+    // Each is what the page prints in place of a failure's own sentence - a refusal the review backend
+    // answered, an exception, a restart's or a start's failure - which can name the part's, the run folder's,
+    // the log's or the bridge's pipe's full path (004 research R19). The failure's own sentence goes to the
+    // add-in's log (RemodelHostOptions.Log), which View log opens, and never to the tab.
+
+    /// <summary>How the tab's words send whoever needs the failure's own sentence to the log, by the button's label.</summary>
+    private const string PressViewLog = "Press View log to see why.";
+
+    /// <summary>
+    /// Owner decision 159A: a failure the add-in did not expect - an exception rather than a named refusal, in
+    /// a plan, a Start, a run or any other message - in place of its message, which can name a path (the
+    /// pipeline's refusal of a dump that read another document, a file the disk refused, SOLIDWORKS' refusal
+    /// of a drawing). The reply's class stays `HostError`.
+    /// </summary>
+    public const string UnexpectedFailureMessage =
+        "The add-in met a failure it did not expect, so what was asked was not done. " + PartNotChanged + " "
+        + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: `NotAPart` as the review backend answers it, from the bridge's probe or its reading
+    /// of the part again before the copy: the active document, which this host saw as a part, is not a part file
+    /// at the path SOLIDWORKS opened it from. The bridge's sentence names that path. This host's own `NotAPart`,
+    /// for an assembly or a drawing, keeps its words.
+    /// </summary>
+    public const string NotAPartOnDiskMessage =
+        "The active document is not a part file the re-modeler can find where SOLIDWORKS opened it from - it may "
+        + "have been moved, renamed or deleted since - so nothing was copied and no new plan was made. "
+        + PartNotChanged + " Save it as a part, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: `BridgeUnavailable` as the review backend answers it - the bridge did not answer one
+    /// of its routes, or its circuit is open - whose sentence carries the transport's, naming the bridge's pipe.
+    /// The add-in's own refusals of the class (<see cref="RunNotBoundMessage"/>, a tool service not listening yet)
+    /// keep their words.
+    /// </summary>
+    public const string BridgeNotAnsweringMessage =
+        "SOLIDWORKS did not answer the re-modeler, so it stopped. " + PartNotChanged
+        + " Wait a moment, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: `BackendUnavailable` as the add-in's client of the review backend answers it - the
+    /// backend is not running, or did not answer a call - whose sentence carries the transport's own.
+    /// </summary>
+    public const string BackendNotAnsweringMessage =
+        "The review backend did not answer, so the re-modeler stopped. " + PartNotChanged
+        + " Wait for the backend to be ready, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: every other refusal the review backend answers, whose sentence can name the part's or
+    /// the run folder's full path - `RunFolderFailed` (the bridge's `source_not_open`, the copy's own refusals,
+    /// every code with no row of its own, the open record and the waivers), `PackageMissing`, `NotModelCheck`,
+    /// `RunNotPlanned`, `ResumeRefused` and `RunInProgress` from `POST /remodel/runs`, `PackageAfterRefused`,
+    /// `InvalidRunDir`, and any class this build has no words for; and the backend's own word, in the run line,
+    /// that a run failed. True of every step it can stop - before any change to a copy, or during a run, whose
+    /// last word follows it.
+    /// </summary>
+    public const string BackendFailedMessage =
+        "The review backend could not do a step of this remodel, so it stopped. " + PartNotChanged
+        + " Press View log to see why, then press Remodel a copy to plan again.";
+
+    /// <summary>
+    /// Owner decision 159A: `RunFolderFailed` as this host raises it - the run folder could not be made under the
+    /// run root - where it named the run root and carried the disk's refusal, which names the folder too.
+    /// </summary>
+    public const string RunFolderNotMadeMessage =
+        "The run folder could not be made under the run root, so nothing was copied and no new plan was made. "
+        + PartNotChanged + " Press View log to see why; if the run root cannot be written to, choose a local folder "
+        + "for runs in Settings on the Review tab, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: `BridgeUnavailable` when the close of an earlier plan waiting for Start failed with no
+    /// named refusal (004 T173), where the sentence ended with the failure's own message. On review (the mutation
+    /// review's M3 and M6): every close of that plan that was not answered, the bridge's own `BridgeUnavailable` and a
+    /// close that never reached the bridge included, in words that say what is known rather than who did not answer.
+    /// </summary>
+    public const string EarlierPlanNotClosedMessage =
+        "Closing the earlier plan's copy was not confirmed, so that plan is left as it was and no new plan was made. "
+        + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22): what `remodel.plan_lost`, `init.latest_run.plan_lost` and a Start's
+    /// `SessionLost` say of a plan whose session the host closed before a settings restart moved the run root - the
+    /// backend in force is the only one that accepts its folder - in <see cref="PlanLostMessage"/>'s plain words. True
+    /// whether or not that restart then succeeded: the plan's session is over either way.
+    /// </summary>
+    public const string PlanClosedForRunRootMessage =
+        "This plan was closed so that the run root saved in Settings could come into force, so it can no longer be "
+        + "started. " + PartNotChanged + " Make your part the active document and press Plan again.";
+
+    /// <summary>004 T258: a failed plan's cleanup still unanswered, before a new probe or copy.</summary>
+    public const string FailedPlanNotClosedMessage =
+        "Closing the copy from the earlier attempt was not confirmed, so no new plan was made. "
+        + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
+
+    /// <summary>The run's first word, as Start hands the run to the pipeline.</summary>
+    public const string RunningThePlanMessage = "Running the plan against the copy...";
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (S2): a plan refused because the close of the copy the earlier run left
+    /// open - its own close not answered, its backend gone - is still not answered: one bridge holds one session, so no
+    /// copy can be opened until that one is closed. Plain words, no path; the close's failure goes to the log.
+    /// </summary>
+    public const string EarlierRunNotClosedMessage =
+        "Closing the copy the earlier run left open was not confirmed, so no new plan was made. "
+        + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: the run's last word when the close of its session was not answered (004 T180), where it
+    /// ended with the failure's own message. On review (the mutation review's M6): a close that never reached the bridge
+    /// included, in words that say what is known rather than who did not answer.
+    /// </summary>
+    public const string RunCloseNotAnsweredMessage =
+        "The run ended, but closing its copy was not confirmed, so the copy may still be open in SOLIDWORKS; the report "
+        + "and the saved artifacts are kept. " + PartNotChanged + " " + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: `OpenFailed` for Open copy - SOLIDWORKS would not open or activate the copy, or answered
+    /// with another document - where the seat's sentence named the copy's full path.
+    /// </summary>
+    public const string OpenCopyFailedMessage =
+        "SOLIDWORKS did not open the copy, so nothing was opened. " + PartNotChanged
+        + " Press View log to see why, then press Open copy again.";
+
+    /// <summary>
+    /// Owner decision 159A: `DiscardFailed` when the copy could not be deleted - SOLIDWORKS has it open, most often -
+    /// where the disk's refusal named the copy's full path.
+    /// </summary>
+    public const string DiscardCopyFailedMessage =
+        "The copy could not be deleted, so it is still in the run folder; SOLIDWORKS may still have it open. "
+        + PartNotChanged + " Close the copy in SOLIDWORKS without saving, then press Discard copy again. "
+        + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: `DiscardFailed` when the copy was deleted and `plan.json` would not take its new state,
+    /// where the sentence ended with the disk's refusal, which names the file's full path.
+    /// </summary>
+    public const string DiscardStateNotWrittenMessage =
+        "The copy was deleted, but 'discarded' could not be written to plan.json, so this tab would go on reporting "
+        + "the state the run ended in. " + PartNotChanged + " " + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: the settings-restart gate's `BackendUnavailable`, retryable, for a plan or a Start - the
+    /// restart the press made or waited for failed, whose failure can end in the backend's log's path (decision
+    /// 150A), or the backend did not answer whether a turn runs - which leave the backend not restarted with the
+    /// saved settings. The gate's other refusals keep their words.
+    /// </summary>
+    public const string BackendNotRestartedMessage =
+        "The review backend has not restarted with the saved settings, so nothing was done. " + PartNotChanged
+        + " Save the settings again on the Review tab to restart it, then try again. " + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: the add-in's word that the backend did not start - a first start, or a settings restart
+    /// once the old backend had stopped - posted `status {stage: "error", lifecycle: true}`, where it carried the
+    /// failure, which can end in the backend's log's path (decision 150A). The Review tab shows the failure whole.
+    /// </summary>
+    public const string BackendDidNotStartMessage =
+        "The review backend did not start, so this tab cannot plan or run. The Review tab says why. "
+        + ReviewHost.StartItAgainOnTheReviewTab;
+
+    /// <summary>
+    /// Owner decision 159A: Show change's `entity.shown {ok: false}` when showing threw - SOLIDWORKS did not answer,
+    /// or refused to attach while a drawing was active - where it carried the failure, which can name the drawing's
+    /// full path.
+    /// </summary>
+    public const string ShowFailedMessage =
+        "SOLIDWORKS could not show this, so nothing was selected. " + PressViewLog;
+
+    /// <summary>Owner decision 159A: `OpenFailed` for Open report and Open run folder, where it carried Windows' refusal.</summary>
+    public const string NotOpenedMessage = "Windows could not open it, so nothing was opened. " + PressViewLog;
+
+    /// <summary>
+    /// Owner decision 159A: `OpenFailed` for View log, where it carried the refusal to make the log folder, which names
+    /// the folder: the log could not be written there either.
+    /// </summary>
+    public const string LogFolderNotOpenedMessage = "Windows could not open the log folder, so nothing was opened.";
 
     /// <summary>
     /// The reason both of 004 T159's refusals give: the copy could not be made the active document
@@ -334,14 +677,76 @@ public sealed class RemodelHost : IDisposable
     private readonly List<RemodelRun> _runs = new List<RemodelRun>();
     private readonly object _runsLock = new object();
 
+    /// <summary>
+    /// 004 T258: the run folder and original attachment of an unsuccessful plan whose cleanup was
+    /// not answered. It is not a planned run and must not replace the page's latest successful plan.
+    /// Plan reads and writes this record while it holds the host and the tool service; owner decision
+    /// 159A (004 research R22): so does a restart that moves the run root
+    /// (<see cref="EndTheSessionsLeftUnder"/>), under the restart's own lock, while the host is free and no
+    /// plan can make it busy. Volatile, since the two run on different threads. Since 004 research R22.13, the end of
+    /// its session (<see cref="SessionEnded(RemodelSessionEnd)"/>) lets it go too, by compare-and-swap of that exact record.
+    /// </summary>
+    private volatile Tuple<string, string?>? _failedPlanToClose;
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22.14, Codex's fifth review): the run folder of the plan attempt from its open to
+    /// its end, and whether the bridge has told the end of that attempt's session meanwhile - the failed open's unwind, or
+    /// the backend's own close inside a plan step that fails - before the attempt has any record to clear. Written with
+    /// the failed plan's record under <see cref="_attemptLock"/>, so an end lands either before the record, and none is
+    /// made, or after it, and <see cref="SessionEnded(RemodelSessionEnd)"/> lets it go.
+    /// </summary>
+    private readonly object _attemptLock = new object();
+
+    /// <summary>
+    /// The latest attempt's run folder (<see cref="_attemptLock"/>), null before the first. Left as it is once a plan ends:
+    /// each attempt writes both fields at its open, and only that attempt reads them.
+    /// </summary>
+    private string? _attemptRun;
+
+    /// <summary>Whether the bridge told the end of <see cref="_attemptRun"/>'s session (<see cref="_attemptLock"/>).</summary>
+    private bool _attemptEnded;
+
     /// <summary>A plan or a run is in flight. One per host.</summary>
     private volatile bool _busy;
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): the hold on the tool service's attachment the plan
+    /// or run that made the host busy took (<see cref="RemodelHostOptions.HoldToolService"/>), and null
+    /// while the host is free. Let go with <see cref="_busy"/>, by whichever thread frees the host.
+    /// </summary>
+    private IDisposable? _toolServiceHold;
 
     /// <summary>The run the executor is inside, so `remodel.stop` has something to set.</summary>
     private volatile RemodelRun? _active;
 
-    /// <summary>The `remodel.stop` that is waiting for the executor to finalize.</summary>
-    private string? _pendingStopId;
+    /// <summary>
+    /// Every `remodel.stop` that reached the run in flight, waiting for the executor to finalize, each
+    /// answered once at the run's end (owner decision 159A: Stop stays pressable until the run ends, and
+    /// a second press no longer replaces the first). Guarded by <see cref="_endingLock"/>, and taken as
+    /// the host is freed, so none outlives its run.
+    /// </summary>
+    private readonly List<string?> _pendingStops = new List<string?>();
+
+    /// <summary>
+    /// Owner decision 155A (004 research R18): orders the end of a run - the host freed from it - with what
+    /// an `init` reads of a run in flight and posts (<see cref="SendInit"/>), and with what the run's ending
+    /// holds back meanwhile (<see cref="HoldUntilTheHostIsFree"/>). Held only to read and write the run's
+    /// fields and to post, which queues the message to the pane and returns, so nothing under it waits on
+    /// another thread: SOLIDWORKS' application thread takes it too, when a session's ending is told during
+    /// a run (<see cref="PostWhatWasLeft"/>), and a wait on that thread under it could hang SOLIDWORKS.
+    /// Owner decision 159A (004 research R19): a stop - the engineer's (<see cref="Stop"/>) or the copy
+    /// going away (<see cref="DocumentChanged"/>) - is decided and told under it too, so it reaches the run
+    /// before its end or finds the host free.
+    /// </summary>
+    private readonly object _endingLock = new object();
+
+    /// <summary>
+    /// Owner decision 155A: what a run's ending tells the page while the run still holds the host - a
+    /// `status` the page ends its running state on (`ready`, `error`), and the refusal posted beside one -
+    /// in the order it was made, told by <see cref="Execute"/> once the host is free. Guarded by
+    /// <see cref="_endingLock"/>.
+    /// </summary>
+    private readonly List<Action> _heldForTheEnd = new List<Action>();
 
     /// <summary>
     /// The host as shipped: Start is switched on or off by <see cref="RemodelStart.SeatValidated"/>
@@ -369,14 +774,20 @@ public sealed class RemodelHost : IDisposable
             new PaneRunLookup(
                 "run_dir",
                 "RunNotFound",
-                runDir => $"this pane did not start a remodel run in '{runDir}', so it does not "
-                    + "know which folder to open.",
+                _ => RunNotFoundMessage,
                 runDir => FindRun(runDir)?.RunDirectory))
         {
+            RunRootsInForce = () => options.RunRootsInForce(),
+            RunRootSaved = () => options.RunRootSaved(),
+            RunRootProbe = () => options.RunRootProbe,
             LogFolder = options.LogFolder,
             EntityResolver = options.EntityResolver,
             Opener = options.Opener,
             Secrets = options.Secrets,
+
+            // Owner decision 159A (004 research R19): a failure the shared rows caught - Windows that would not open
+            // a file or a folder, SOLIDWORKS that would not show a change - in this tab's words, its message logged.
+            FailureWords = SharedRowWords,
         });
     }
 
@@ -410,6 +821,10 @@ public sealed class RemodelHost : IDisposable
     /// bridge session goes with the old attachment, and `remodel.start` refuses that plan as
     /// `SessionLost` rather than start it on a dispatcher that never saw its copy. The page is
     /// told at the re-attach itself, before Start (decision 24A, <see cref="AnnounceLostPlan"/>).
+    ///
+    /// Read too by the review host's settings restart, which waits while it is true (owner
+    /// decision 145A): it is set only through <see cref="RemodelHostOptions.BeginRun"/>, under that
+    /// restart's own lock, so a restart and a plan or a run never overlap.
     /// </summary>
     public bool RunInProgress => _busy;
 
@@ -444,6 +859,7 @@ public sealed class RemodelHost : IDisposable
     public void Receive(string json)
     {
         string? id = null;
+        string? type = null;
         try
         {
             using (JsonDocument document = JsonDocument.Parse(json))
@@ -455,7 +871,7 @@ public sealed class RemodelHost : IDisposable
                 }
 
                 id = PagePayload.Text(root, "id");
-                string? type = PagePayload.Text(root, "type");
+                type = PagePayload.Text(root, "type");
                 if (string.IsNullOrEmpty(type))
                 {
                     throw new FormatException("a page message must carry a 'type'");
@@ -474,13 +890,16 @@ public sealed class RemodelHost : IDisposable
             // named travels out of them as an exception with its class attached. Answered as
             // `HostError` it would read to the engineer as a bug in the pane rather than as the
             // condition of the part it is (`contracts/pane-remodel-messages.md`, refusal classes).
-            SendRefusal(id, refusal);
+            SendRefusal(id, refusal, type ?? "a page message");
         }
         catch (Exception failure)
         {
             // An exception escaping into the `WebMessageReceived` handler would surface inside
-            // SOLIDWORKS.
-            _actions.SendError(id, "HostError", failure.Message, retryable: false);
+            // SOLIDWORKS. Owner decision 159A (004 research R19): its message can name a path - a
+            // file the disk refused, the pipeline's refusal of a dump that read another document - so
+            // it goes to the log, and the page is told in this tab's words.
+            Log(type ?? "a page message", failure);
+            _actions.SendError(id, "HostError", UnexpectedFailureMessage, retryable: false);
         }
     }
 
@@ -489,6 +908,36 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>Posts one `status`, with every secret masked out of it (FR-015).</summary>
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
+
+    /// <summary>
+    /// <see cref="PostStatus(string, string)"/>, marked as the add-in's own word on the backend when <paramref name="lifecycle"/>
+    /// (owner decision 145A). Owner decision 159A (004 research R19): that word's `error` - the backend did not start, a
+    /// first start or a settings restart once the old backend had stopped - carries the failure, which can end in the
+    /// backend's log's path (decision 150A); this tab tells it in <see cref="BackendDidNotStartMessage"/>. On review: the
+    /// failure is not logged here. Those words send the engineer to the Review tab, which shows it whole, and the add-in's
+    /// own report of a first start that failed logs it (<c>SwReviewAddIn.StartBackend</c>); a second line was the same
+    /// failure twice.
+    /// </summary>
+    public void PostStatus(string stage, string message, bool lifecycle)
+    {
+        if (lifecycle && string.Equals(stage, "error", StringComparison.Ordinal))
+        {
+            _actions.PostStatus(stage, BackendDidNotStartMessage, lifecycle);
+            return;
+        }
+
+        _actions.PostStatus(stage, message, lifecycle);
+    }
+
+    /// <summary>
+    /// Tells the page the backend was restarted with saved settings, so it asks `ready` again for
+    /// the new port and token (owner decision 145A). This page makes no call of its own - its
+    /// backend work is this host's, which reads the endpoint per call - but it keeps them, so one
+    /// `init` field means one thing on every tab. The add-in calls it after every restart the
+    /// review host makes. No sentence travels with it: the Review tab's sentences about a restart
+    /// that waited are shown on the Review tab alone.
+    /// </summary>
+    public void BackendRestarted() => _actions.PostBackendRestarted(Array.Empty<string>());
 
     /// <summary>
     /// The `status` stages this page has a branch for, closed by
@@ -537,17 +986,27 @@ public sealed class RemodelHost : IDisposable
     {
         Post("document.changed", DocumentPayload(_options.CurrentDocument()));
 
-        RemodelRun? run = _active;
-        if (run == null || run.StopRequested || CopyExists(run))
+        // Owner decision 159A (004 research R19): decided, and told, under the lock that frees the host, as the
+        // engineer's Stop is, so a run that has ended is not stopped, nor told it is stopping after its last
+        // word. The copy is looked for under it too: the run folder is local (owner decision 154A), so the look
+        // waits on no other thread.
+        lock (_endingLock)
         {
-            return;
-        }
+            RemodelRun? run = _active;
+            if (run == null || run.StopRequested || CopyExists(run))
+            {
+                return;
+            }
 
-        run.RequestStop();
-        PostStatus(
-            "error",
-            $"the copy '{run.CopyPath}' is no longer there, so the run is stopping. The change "
-            + "log in the run folder is intact.");
+            run.RequestStop();
+
+            // Owner decision 155A: in plain words, naming no path - the run folder holds the copy's - and
+            // told as the engineer's own Stop is told, in a stage the page shows in its run line while the
+            // run goes on to its end, not in one that ends the page's running state while the run still
+            // finishes the change in flight and holds the host.
+            run.RememberStatus("applying", CopyGoneMessage);
+            PostStatus("applying", CopyGoneMessage);
+        }
     }
 
     /// <summary>
@@ -640,7 +1099,35 @@ public sealed class RemodelHost : IDisposable
             RemodelRun? run = FindRun(outcome.RunDirectory);
             if (run != null && SamePath(run.CopyPath, outcome.CopyPath))
             {
-                run.MarkSessionEnded();
+                // Owner decision 159A (004 research R22.10), and 162A (R23): the bridge tells a close's end before the close
+                // is answered, so the end of a close sent before the run root moves, or by Discard, is marked as that close's here.
+                RemodelCloseCause sentFor = run.CloseSentFor;
+                if (sentFor != RemodelCloseCause.None && outcome.Reason == RemodelSessionEnd.ReasonClose)
+                {
+                    run.MarkSessionClosedFor(sentFor);
+                }
+                else
+                {
+                    run.MarkSessionEnded();
+                }
+            }
+
+            // Owner decision 159A (004 research R22.13, Codex's fourth review): a failed plan is never a tracked run, so
+            // the end of its session - its close's, late or not, or a teardown's - lets its record go: that exact record
+            // alone, so a newer attempt's, recorded meanwhile, survives. R22.14: an end of the attempt in flight, told
+            // before it has a record, marks it ended, so its failure makes none.
+            lock (_attemptLock)
+            {
+                if (_attemptRun != null && SamePath(_attemptRun, outcome.RunDirectory))
+                {
+                    _attemptEnded = true;
+                }
+            }
+
+            Tuple<string, string?>? failed = _failedPlanToClose;
+            if (failed != null && SamePath(failed.Item1, outcome.RunDirectory))
+            {
+                Interlocked.CompareExchange(ref _failedPlanToClose, null, failed);
             }
         }
 
@@ -660,7 +1147,9 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>
     /// The one post both seams make: the status error when there are words, nothing when there
-    /// are none, and never a throw.
+    /// are none, and never a throw. While a run holds the host - its own close, or the run's discard
+    /// of its copy, ends a session - the words wait for the run's ending, since the page ends its
+    /// running state on them (owner decision 155A).
     /// </summary>
     private void PostWhatWasLeft(Func<string?> words)
     {
@@ -669,7 +1158,7 @@ public sealed class RemodelHost : IDisposable
             string? message = words();
             if (message != null)
             {
-                PostStatus("error", message);
+                HoldUntilTheHostIsFree(() => PostStatus("error", message));
             }
         }
         catch (Exception)
@@ -856,13 +1345,37 @@ public sealed class RemodelHost : IDisposable
 
     // ---- ready / init -------------------------------------------------------------------
 
+    /// <summary>
+    /// Answers `ready` with `init`. Whether the latest run is in flight is read, and the `init` posted, under
+    /// <see cref="_endingLock"/> (owner decision 155A): an `init` that reads the run in flight is posted
+    /// before the host is freed from it, and so before the run's ending reaches the page, or it reads that
+    /// the run is not - never told after the ending that the run is in flight, which would leave a page
+    /// loaded again showing a run that has ended. Everything else is read before the lock is taken: the
+    /// active document is read on SOLIDWORKS' application thread, which takes that lock when a session's
+    /// ending is told during a run.
+    /// </summary>
     private void SendInit(string? id)
     {
         BackendEndpoint? endpoint = _options.Backend();
         RemodelRun? latest = LatestRun;
         RemodelLimits limits = _options.Limits;
+        Dictionary<string, object?>? latestRun = latest == null
+            ? null
+            : new Dictionary<string, object?>
+            {
+                { "run_dir", latest.RunDirectory },
+                { "at", latest.At.ToString("o", CultureInfo.InvariantCulture) },
+                { "state", StateOf(latest.RunDirectory) },
 
-        _actions.Send("init", id, new Dictionary<string, object?>
+                // Decision 24A, amended on review: the notice is told once per plan,
+                // and a page that loads again starts from this alone. Read afresh by
+                // the notice's own rule, whatever holds the host, since `init`
+                // describes the run it names; the notice's once-per-plan claim is
+                // neither spent nor needed here.
+                { "plan_lost", IsLostPlan(latest) ? LostMessage(latest) : null },
+            };
+
+        var init = new Dictionary<string, object?>
         {
             {
                 "backend",
@@ -884,6 +1397,7 @@ public sealed class RemodelHost : IDisposable
                     }
             },
             { "token", endpoint?.Token },
+            { "backend_start_failed", endpoint == null && _options.BackendStartFailed() },
             { "run_root", _options.RunRoot() },
             { "document", DocumentPayload(_options.CurrentDocument()) },
             {
@@ -899,25 +1413,30 @@ public sealed class RemodelHost : IDisposable
                 "remodel",
                 RemodelCapabilityPayload()
             },
-            {
-                "latest_run",
-                latest == null
-                    ? null
-                    : new Dictionary<string, object?>
-                    {
-                        { "run_dir", latest.RunDirectory },
-                        { "at", latest.At.ToString("o", CultureInfo.InvariantCulture) },
-                        { "state", StateOf(latest.RunDirectory) },
+            { "latest_run", latestRun },
+        };
 
-                        // Decision 24A, amended on review: the notice is told once per plan,
-                        // and a page that loads again starts from this alone. Read afresh by
-                        // the notice's own rule, whatever holds the host, since `init`
-                        // describes the run it names; the notice's once-per-plan claim is
-                        // neither spent nor needed here.
-                        { "plan_lost", IsLostPlan(latest) ? LostMessage(latest) : null },
-                    }
-            },
-        });
+        lock (_endingLock)
+        {
+            if (latestRun != null)
+            {
+                // Owner decision 155A (feature 011 research R12.9 item 9): whether this run is in
+                // flight - started and not yet ended - which `state`, the plan's, does not say. A page
+                // that loads again starts from `init` alone, and shows the run running, Stop
+                // pressable, rather than offering what the host refuses.
+                bool running = ReferenceEquals(_active, latest);
+                latestRun["running"] = running;
+
+                // Owner decision 159A, on the final review: and the run's last word while it runs, which a page that
+                // loads again writes where it wrote "Running..." - the backend not answering, told once, among them.
+                Tuple<string, string>? said = running ? latest!.LastStatus : null;
+                latestRun["status"] = said == null
+                    ? null
+                    : new Dictionary<string, object?> { { "stage", said.Item1 }, { "message", said.Item2 } };
+            }
+
+            _actions.Send("init", id, init);
+        }
     }
 
     private Dictionary<string, object?> RemodelCapabilityPayload()
@@ -967,6 +1486,16 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     private void Plan(string? id)
     {
+        // Owner decision 154A: first - before a run in progress, the document, the seat, the gate, an earlier
+        // plan's session or the probe is asked about. The run folder is made under the run root, and the backend
+        // refuses one on a share and spells one reached through a link otherwise than this host binds it, so the
+        // copy's open would refuse it (feature 011 research R12.9, items 1 and 2).
+        string judged = _options.RunRoot();
+        if (RunRootRefused(id, judged, "nothing was copied"))
+        {
+            return;
+        }
+
         if (_busy)
         {
             SendRunInProgress(id);
@@ -1025,9 +1554,50 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        _busy = true;
+        // Owner decision 145A: a plan holds the backend for as long as it runs, as a turn does.
+        // After every refusal that needs no call, a settings restart that waits is made first - or
+        // the one being made waited for - and the host is marked busy under that restart's own
+        // lock, so no restart can begin under the plan; or the plan is refused, saying why.
+        if (!BeganRun(id, PlanAfterRestartMessage))
+        {
+            return;
+        }
+
         try
         {
+            // The reviews of decision 154A, N8: the gate can make a waiting settings restart, which can bring
+            // another run root into force; it is judged before anything is asked or made under it.
+            string? runRoot = RunRootToUse(id, judged, "nothing was copied");
+            if (runRoot == null)
+            {
+                return;
+            }
+
+            // Owner decision 152A, on the Codex review (X2): the plan holds the tool service before it
+            // reads its attachment, so no follow takes the bridge down under it - the busy question a
+            // follow asks can have been answered before this plan began. None listening to hold - none
+            // started, or a follow taking one down - is refused as while the tool service attaches.
+            // After the run root (merged with 154A, 2026-10-21): 154A judges the run root before anything
+            // is asked or made under it, and the hold asks the tool service (corrected on the final
+            // reviews, N1).
+            if (!HoldTheToolService())
+            {
+                SendUnavailable(id, RemodelAvailability.Unknown);
+                return;
+            }
+
+            // The document was read before the gate, and the gate can wait through a settings
+            // restart - seconds, up to the backend's handshake - in which the engineer can make
+            // another document active. Read again now the host is busy, before any call: a plan of
+            // another document than the one the press was for is refused in plain words, rather
+            // than met at the bridge's open as `scope_not_probed`, both paths in its words (owner
+            // decision 145A, found on review).
+            if (!document.IsSameDocument(_options.CurrentDocument()))
+            {
+                _actions.SendError(id, "DocumentChanged", DocumentChangedMessage, retryable: true);
+                return;
+            }
+
             // Decision 22A: the attachment this plan's bridge session will live on. Read once
             // the host is busy - from here the tool service begins no re-attach of its own - and
             // before the probe, so it is the attachment the probe, the copy and the session go
@@ -1038,7 +1608,8 @@ public sealed class RemodelHost : IDisposable
             // 004 T173: an earlier plan waiting for Start is ended - its session closed, the plan
             // marked lost and the page told - after every refusal that needs no call and before
             // this plan's first one, so a Plan refused on the spot costs it nothing.
-            if (!EndTheWaitingPlan(id, pipeline, attachment))
+            if (!EndTheFailedPlan(id, pipeline, attachment)
+                || !EndTheWaitingPlan(id, pipeline, attachment))
             {
                 return;
             }
@@ -1050,7 +1621,7 @@ public sealed class RemodelHost : IDisposable
             }
             catch (Exception failure)
             {
-                PostStatus("error", failure.Message);
+                PostStatus("error", PageWords(failure));
                 throw;
             }
 
@@ -1062,18 +1633,15 @@ public sealed class RemodelHost : IDisposable
             string runDirectory;
             try
             {
-                runDirectory = RunFolders.CreateForRemodel(
-                    _options.RunRoot(), document.Path, _options.Now());
+                runDirectory = RunFolders.CreateForRemodel(runRoot, document.Path, _options.Now(), _options.RunRootProbe);
             }
             catch (Exception failure)
             {
-                PostStatus("error", failure.Message);
-                _actions.SendError(
-                    id,
-                    "RunFolderFailed",
-                    $"the run folder could not be created under '{_options.RunRoot()}': "
-                    + failure.Message,
-                    retryable: false);
+                // Owner decision 159A (004 research R19): the run root, and the disk's refusal, named the
+                // folder; this tab says it in its own words, and the refusal goes to the log.
+                Log("remodel.plan", failure);
+                PostStatus("error", RunFolderNotMadeMessage);
+                _actions.SendError(id, "RunFolderFailed", RunFolderNotMadeMessage, retryable: false);
                 return;
             }
 
@@ -1081,6 +1649,12 @@ public sealed class RemodelHost : IDisposable
             PostStatus(
                 "copying",
                 $"Copying {RunFolders.DocumentName(document.Path)} into the run folder...");
+
+            lock (_attemptLock)
+            {
+                _attemptRun = runDirectory;
+                _attemptEnded = false;
+            }
 
             RemodelCopyReading copy;
             try
@@ -1093,8 +1667,8 @@ public sealed class RemodelHost : IDisposable
             {
                 // The run folder is left behind on purpose: whatever it holds is the evidence
                 // for why the run stopped (constitution Principle I).
-                PostStatus("error", failure.Message);
-                EndTheSessionOfAFailedPlan(pipeline, runDirectory);
+                PostStatus("error", PageWords(failure));
+                EndTheSessionOfAFailedPlan(pipeline, runDirectory, attachment);
                 throw;
             }
 
@@ -1164,8 +1738,8 @@ public sealed class RemodelHost : IDisposable
             }
             catch (Exception failure)
             {
-                PostStatus("error", failure.Message);
-                EndTheSessionOfAFailedPlan(pipeline, runDirectory);
+                PostStatus("error", PageWords(failure));
+                EndTheSessionOfAFailedPlan(pipeline, runDirectory, attachment);
                 throw;
             }
 
@@ -1184,12 +1758,10 @@ public sealed class RemodelHost : IDisposable
         }
         finally
         {
-            _busy = false;
-
             // Decision 24A: a re-attach that landed while this plan held the host was not told
             // then. It is asked about now, of whichever plan is on screen - the one just
             // recorded, or the earlier one if this plan was refused.
-            AnnounceLostPlan();
+            FreeTheHost();
         }
     }
 
@@ -1209,7 +1781,9 @@ public sealed class RemodelHost : IDisposable
     ///
     /// A close the bridge could not answer - refused as <c>BridgeUnavailable</c>, or failed with no
     /// named refusal at all - refuses the new plan with <c>BridgeUnavailable</c> and leaves the
-    /// earlier plan as it was (lane D's default, 2026-09-27). A close that answered with what it
+    /// earlier plan as it was (lane D's default, 2026-09-27); since owner decision 159A, on review, so does
+    /// a close that never reached the bridge (<see cref="CloseNotAnsweredClasses"/>), with its own class, and
+    /// each in <see cref="EarlierPlanNotClosedMessage"/>. A close that answered with what it
     /// left - any other named refusal - lets the new plan go ahead: the routine clears the session
     /// whatever it left, and what it left reaches the page as T167's one status error through
     /// <c>ToolServiceOptions.RemodelSessionEnded</c>, which is told every ending, so nothing is
@@ -1219,6 +1793,11 @@ public sealed class RemodelHost : IDisposable
     private bool EndTheWaitingPlan(string? id, IRemodelPipeline pipeline, string? attachment)
     {
         RemodelRun? waiting = LatestRun;
+        if (waiting != null && waiting.Phase == RemodelRunPhase.Finished && !waiting.CopyDiscarded)
+        {
+            return EndTheSessionARunLeft(id, pipeline, waiting, attachment);
+        }
+
         if (waiting == null || waiting.Phase != RemodelRunPhase.Planned || waiting.CopyDiscarded)
         {
             return true;
@@ -1227,26 +1806,51 @@ public sealed class RemodelHost : IDisposable
         if (HoldsItsSession(waiting, attachment)
             && CloseSession(pipeline, waiting.RunDirectory, out Exception? notAnswered) == CloseAnswer.NotAnswered)
         {
-            if (notAnswered is RemodelRefusal refusal)
-            {
-                SendRefusal(id, refusal);
-            }
-            else
-            {
-                _actions.SendError(
-                    id,
-                    BridgeUnavailableClass,
-                    "the SOLIDWORKS bridge did not answer the close of the earlier plan, so that plan "
-                    + "is left as it was and no new plan was made: " + notAnswered!.Message,
-                    retryable: true);
-            }
-
+            // Owner decision 159A (004 research R19): the close's failure, which can name the bridge's pipe, goes to
+            // the log. On review (the mutation review's M3): whoever did not answer - the bridge, its refusal carried
+            // by the backend, or a close that never reached it - the earlier plan is left as it was, and the tab says
+            // so in one sentence; the class the close was refused with is kept, and any other failure is
+            // `BridgeUnavailable`. Pressing again sends the close again.
+            Log("remodel.plan, the earlier plan's close", notAnswered!);
+            string errorClass = notAnswered is RemodelRefusal refusal ? refusal.ErrorClass : BridgeUnavailableClass;
+            _actions.SendError(id, errorClass, EarlierPlanNotClosedMessage, retryable: true);
             return false;
         }
 
         // Closed, or answered with what it left (see the remarks), or nothing to close.
         waiting.MarkClosedByPlanAgain();
         TellPlanLost(waiting);
+        return true;
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review (S2): a finished run whose close was not answered - its backend gone
+    /// mid-run, so the close was never sent - may still hold its session on the bridge: the copy open, the settings
+    /// changed. One bridge holds one session, and since protocol 1.5 a close names its run, so no other run's close ends
+    /// it: the next plan's open was refused <c>run_in_progress</c>, its clean-up close was refused as another run's, and
+    /// every later press did the same. So before the next plan asks for anything, that session is closed, naming the run
+    /// that holds it, when its attachment is the one listening now (<see cref="HoldsItsSession"/>). A close the bridge
+    /// answered, with what it left or none of the run's left to end, marks the run's session ended; one not answered
+    /// refuses the new plan, retryable, in <see cref="EarlierRunNotClosedMessage"/>, the close's class kept and its
+    /// failure in the log, and pressing again asks the close again.
+    /// </summary>
+    /// <returns>False when the new plan was refused and has been answered.</returns>
+    private bool EndTheSessionARunLeft(string? id, IRemodelPipeline pipeline, RemodelRun run, string? attachment)
+    {
+        if (!HoldsItsSession(run, attachment))
+        {
+            return true;
+        }
+
+        if (CloseSession(pipeline, run.RunDirectory, out Exception? notAnswered) == CloseAnswer.NotAnswered)
+        {
+            Log("remodel.plan, the earlier run's close", notAnswered!);
+            string errorClass = notAnswered is RemodelRefusal refusal ? refusal.ErrorClass : BridgeUnavailableClass;
+            _actions.SendError(id, errorClass, EarlierRunNotClosedMessage, retryable: true);
+            return false;
+        }
+
+        run.MarkSessionEnded();
         return true;
     }
 
@@ -1257,18 +1861,42 @@ public sealed class RemodelHost : IDisposable
         Closed,
 
         /// <summary>
-        /// A named refusal other than <c>BridgeUnavailable</c>: the bridge ran its end-of-session
-        /// routine, which clears the session whatever it left, and what it left reaches the page as
-        /// T167's one status error through <c>ToolServiceOptions.RemodelSessionEnded</c>.
+        /// A named refusal other than those of <see cref="CloseNotAnsweredClasses"/>: after it the bridge holds no session
+        /// of this run. Either its end-of-session routine ran, which clears the session whatever it left - what it left
+        /// reaching the page as T167's one status error through <c>ToolServiceOptions.RemodelSessionEnded</c> - or there
+        /// was none of this run's to end: no session at all (<c>target_mismatch</c>), or, since protocol 1.5, another
+        /// run's (<c>session_mismatch</c>, which the backend answers as <c>RunFolderFailed</c>), left as it was and told
+        /// nothing (owner decision 159A, on the final review: S2). Every reader acts on that alone: this run holds no
+        /// session.
         /// </summary>
         AnsweredWithWhatItLeft,
 
         /// <summary>
-        /// <c>BridgeUnavailable</c>, or a failure with no named refusal at all: the bridge may still
-        /// hold the session.
+        /// <c>BridgeUnavailable</c>, a close that never reached the bridge's routine
+        /// (<see cref="CloseNotAnsweredClasses"/>), or a failure with no named refusal at all: the bridge
+        /// may still hold the session.
         /// </summary>
         NotAnswered,
     }
+
+    /// <summary>
+    /// The classes a close is refused with when the bridge's end-of-session routine may not have run: the
+    /// bridge did not answer (<c>BridgeUnavailable</c>); and, owner decision 159A on review (the mutation
+    /// review's M6, older than 159A), the close never reached it - the add-in's client gave up on the review
+    /// backend after its 30 seconds while the backend waited 60 for the bridge, or no backend was running
+    /// (<c>BackendUnavailable</c>), the backend's answer could not be read (<c>HttpError</c>,
+    /// <c>BadResponse</c>), or the backend refused the request before asking the bridge (<c>InvalidRunDir</c>,
+    /// <c>InvalidRequest</c>). Any other named refusal is the routine's answer with what it left.
+    /// </summary>
+    private static readonly HashSet<string> CloseNotAnsweredClasses = new HashSet<string>(StringComparer.Ordinal)
+    {
+        BridgeUnavailableClass,
+        "BackendUnavailable",
+        "HttpError",
+        "BadResponse",
+        "InvalidRunDir",
+        "InvalidRequest",
+    };
 
     /// <summary>
     /// One close of the session the bridge holds for <paramref name="runDirectory"/>'s plan, through
@@ -1286,8 +1914,7 @@ public sealed class RemodelHost : IDisposable
             pipeline.CloseCopy(runDirectory);
             return CloseAnswer.Closed;
         }
-        catch (RemodelRefusal refusal)
-            when (!string.Equals(refusal.ErrorClass, BridgeUnavailableClass, StringComparison.Ordinal))
+        catch (RemodelRefusal refusal) when (!CloseNotAnsweredClasses.Contains(refusal.ErrorClass))
         {
             return CloseAnswer.AnsweredWithWhatItLeft;
         }
@@ -1308,10 +1935,262 @@ public sealed class RemodelHost : IDisposable
     /// one nothing else this host sends will end - planning again closed the waiting plan's first
     /// (004 T173), and in this build no run has started - and a close with no session is answered
     /// with no SOLIDWORKS call. Whatever the close does, the page is told the
-    /// plan's own failure: a close that fails is not this plan's answer.
+    /// plan's own failure: a close that fails is not this plan's answer. Since 004 T258, an
+    /// unanswered close keeps its run folder and attachment for the next plan to retry before
+    /// probing or copying anything, without inventing a successful RemodelRun.
     /// </summary>
-    private static void EndTheSessionOfAFailedPlan(IRemodelPipeline pipeline, string runDirectory) =>
-        CloseSession(pipeline, runDirectory, out _);
+    private void EndTheSessionOfAFailedPlan(IRemodelPipeline pipeline, string runDirectory, string? attachment)
+    {
+        // The service hold prevents ordinary replacement during Plan, but never send this run's
+        // cleanup to a different dispatcher if an explicit detach still replaced the attachment.
+        if (!SameAttachment(attachment, _options.ToolServiceAttachment()))
+        {
+            return;
+        }
+
+        lock (_attemptLock)
+        {
+            // Owner decision 159A (004 research R22.14): the bridge told this attempt's end already - its session is
+            // over, so there is nothing to close and nothing to leave.
+            if (_attemptEnded && SamePath(_attemptRun, runDirectory))
+            {
+                return;
+            }
+
+            _failedPlanToClose = Tuple.Create(runDirectory, attachment);
+        }
+
+        if (CloseSession(pipeline, runDirectory, out Exception? notAnswered) == CloseAnswer.NotAnswered)
+        {
+            Log("remodel.plan, the failed plan's close", notAnswered!);
+        }
+        else
+        {
+            _failedPlanToClose = null;
+        }
+    }
+
+    /// <summary>
+    /// 004 T258: retry an unanswered failed-plan cleanup before a new probe, naming exactly its
+    /// original run. A replacement attachment has no session of that attempt to close. Backend
+    /// availability and run-root validation remain the pipeline's: a close refused before reaching
+    /// the bridge leaves the identity for another attempt and refuses the new plan retryably.
+    /// </summary>
+    private bool EndTheFailedPlan(string? id, IRemodelPipeline pipeline, string? attachment)
+    {
+        Tuple<string, string?>? failed = _failedPlanToClose;
+        if (failed == null)
+        {
+            return true;
+        }
+
+        if (!SameAttachment(failed.Item2, attachment))
+        {
+            _failedPlanToClose = null;
+            return true;
+        }
+
+        if (CloseSession(pipeline, failed.Item1, out Exception? notAnswered) == CloseAnswer.NotAnswered)
+        {
+            Log("remodel.plan, the failed plan's close", notAnswered!);
+            string errorClass = notAnswered is RemodelRefusal refusal ? refusal.ErrorClass : BridgeUnavailableClass;
+            _actions.SendError(id, errorClass, FailedPlanNotClosedMessage, retryable: true);
+            return false;
+        }
+
+        _failedPlanToClose = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22): the cleanup a settings restart that moves the run root asks for before it
+    /// stops the backend in force (<c>ReviewHostOptions.EndRemodelSessionsLeftUnder</c>). Every session this host can have
+    /// left on the bridge - a failed plan's whose close was not answered (004 T258), a plan waiting for Start that still
+    /// holds its session, and a finished run's whose close was not answered - is closed now, through the pipeline's close
+    /// (<see cref="CloseSession"/>), naming its exact run, while the backend in force is the one that takes its run folder:
+    /// the restarted backend refuses a folder outside its run root before the bridge, so after the restart no close of it
+    /// could ever be sent, and every plan would ask again. Only what lies under <paramref name="runRoot"/>, the run root
+    /// leaving, and only on the attachment listening now (<see cref="SameAttachment"/>, <see cref="HoldsItsSession"/>): a
+    /// session of an attachment gone went with it, and a close is never sent to a replacement. The tool service is held
+    /// for the closes, as a plan holds it, so no follow takes the bridge down under them; with none listening there is no
+    /// session to close.
+    ///
+    /// A close answered - closed, or answered with what it left - ends the leftover as planning again ends it: a failed
+    /// plan's record is let go, and a run is marked <see cref="RemodelRun.ClosedForRunRoot"/>, so no close is sent for it
+    /// again, and a plan so closed is told lost in <see cref="PlanClosedForRunRootMessage"/>'s words. A close not answered
+    /// leaves the leftover as it was, its failure in the log, and answers false at once, so the restart waits.
+    ///
+    /// 004 research R22.10, on review: a run whose copy was discarded is closed too while it holds its session - Discard
+    /// deletes the copy folder whatever its own close answered - and a second close of one that already ended is answered
+    /// with no SOLIDWORKS call. A run's close is marked sent (<see cref="RemodelRun.CloseSentFor"/>) before it goes,
+    /// since the bridge tells its end (<see cref="SessionEnded(RemodelSessionEnd)"/>) before the close is answered.
+    ///
+    /// Called under the restart's lock, after the review host has read this host free: a plan or a run begins only through
+    /// that lock (<see cref="RemodelHostOptions.BeginRun"/>), so none begins while this runs.
+    /// </summary>
+    /// <param name="runRoot">The run root in force, which the restart would move.</param>
+    /// <returns>True when nothing under it is left holding a session; false when a close was not answered.</returns>
+    public bool EndTheSessionsLeftUnder(string runRoot) =>
+        EndTheSessionsLeftUnder(runRoot, (pipeline, attachment, runDirectory) => ClosedBeforeTheRunRootMoves(pipeline, runDirectory));
+
+    /// <summary>
+    /// The one walk over what this host left under <paramref name="runRoot"/>, for <see cref="EndTheSessionsLeftUnder"/>,
+    /// through the backend in force, and since owner decision 161A for <see cref="EndTheSessionsLeftUnderInProcess"/>,
+    /// with that backend gone: each leftover closed by <paramref name="close"/> - given the pipeline, the attachment
+    /// listening now and the run folder - which answers whether it was answered.
+    /// </summary>
+    private bool EndTheSessionsLeftUnder(string runRoot, Func<IRemodelPipeline, string, string, bool> close)
+    {
+        IRemodelPipeline? pipeline = _options.Pipeline;
+        if (pipeline == null)
+        {
+            return true;
+        }
+
+        IDisposable? hold = _options.HoldToolService();
+        if (hold == null)
+        {
+            return true;
+        }
+
+        try
+        {
+            // Never null where a close is made: a leftover is one only on the attachment listening now (SameAttachment).
+            string? attachment = _options.ToolServiceAttachment();
+            Tuple<string, string?>? failed = _failedPlanToClose;
+            if (FailedPlanLeftUnder(failed, attachment, runRoot))
+            {
+                if (!close(pipeline, attachment!, failed!.Item1))
+                {
+                    return false;
+                }
+
+                _failedPlanToClose = null;
+            }
+
+            RemodelRun? left = LatestRun;
+            if (RunLeftUnder(left, attachment, runRoot))
+            {
+                left!.MarkCloseSentFor(RemodelCloseCause.RunRoot);
+                if (!close(pipeline, attachment!, left.RunDirectory))
+                {
+                    return false;
+                }
+
+                left.MarkSessionClosedFor(RemodelCloseCause.RunRoot);
+                AnnounceLostPlan();
+            }
+
+            return true;
+        }
+        finally
+        {
+            try
+            {
+                hold.Dispose();
+            }
+            catch (Exception)
+            {
+                // The hold's own failure: the closes are made, and the gate's own holds never fail.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): <see cref="EndTheSessionsLeftUnder"/> when the review backend that would
+    /// send its closes has exited. The same leftovers, under <paramref name="runRoot"/>, on the attachment listening now,
+    /// with the tool service held, are each closed in process instead
+    /// (<see cref="RemodelHostOptions.EndRemodelSessionInProcess"/>): the routine `remodel.close` runs, on that attachment's
+    /// bridge, for that exact run. A close answered ends the leftover as there; one not answered - the option unset, or
+    /// a throw - leaves it as it was, its failure in the log, and answers false. The review host goes on with the restart
+    /// whatever this answers: with no backend up, the restart is what brings one back.
+    /// </summary>
+    /// <param name="runRoot">The run root in force, which the restart would move.</param>
+    /// <returns>True when nothing under it is left holding a session; false when a close was not answered.</returns>
+    public bool EndTheSessionsLeftUnderInProcess(string runRoot)
+    {
+        try
+        {
+            return EndTheSessionsLeftUnder(runRoot, (pipeline, attachment, runDirectory) => ClosedInProcess(attachment, runDirectory));
+        }
+        catch (Exception failure)
+        {
+            // 004 research R24.11: the walk's own failure - the hold, the attachment - is said here, since the review host,
+            // which goes on with the restart whatever this does, keeps no log of its own.
+            Log("a restart that moves the run root with the review backend gone, the walk before the closes in process", failure);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): one close of <see cref="EndTheSessionsLeftUnderInProcess"/>'s, on the bridge of
+    /// <paramref name="attachment"/>: whether it was answered - that run's session ended, or none of that run there - its
+    /// failure in the log when not. With no in-process close given, nothing is closed, and it is not answered.
+    /// </summary>
+    private bool ClosedInProcess(string attachment, string runDirectory)
+    {
+        Action<string, string>? end = _options.EndRemodelSessionInProcess;
+        if (end == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            end(attachment, runDirectory);
+            return true;
+        }
+        catch (Exception failure)
+        {
+            Log("a restart that moves the run root with the review backend gone, the earlier copy's close in process", failure);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22.12, Codex's third review): whether this host still holds a session on the
+    /// bridge under <paramref name="runRoot"/> - what <see cref="EndTheSessionsLeftUnder"/> would close, read now and
+    /// closing nothing, holding nothing and asking no backend: a failed plan's whose close was not answered, or the latest
+    /// run while it holds its session, on the attachment listening now. The review host reads it when a restart waits
+    /// to move the run root and the backend does not answer, so its words say what holds the restart now - a close that
+    /// ended late, a re-attach or a newer save change the answer by themselves. No pipeline is none.
+    /// </summary>
+    public bool HoldsASessionLeftUnder(string runRoot)
+    {
+        if (_options.Pipeline == null)
+        {
+            return false;
+        }
+
+        string? attachment = _options.ToolServiceAttachment();
+        return FailedPlanLeftUnder(_failedPlanToClose, attachment, runRoot) || RunLeftUnder(LatestRun, attachment, runRoot);
+    }
+
+    /// <summary>A failed plan whose close was not answered, made on <paramref name="attachment"/>, under <paramref name="runRoot"/>.</summary>
+    private bool FailedPlanLeftUnder(Tuple<string, string?>? failed, string? attachment, string runRoot) =>
+        failed != null
+        && SameAttachment(failed.Item2, attachment)
+        && RunFolders.IsUnder(failed.Item1, runRoot, _options.RunRootProbe);
+
+    /// <summary>A run that still holds its session on <paramref name="attachment"/> (<see cref="HoldsItsSession"/>), under <paramref name="runRoot"/>.</summary>
+    private bool RunLeftUnder(RemodelRun? run, string? attachment, string runRoot) =>
+        run != null
+        && HoldsItsSession(run, attachment)
+        && RunFolders.IsUnder(run.RunDirectory, runRoot, _options.RunRootProbe);
+
+    /// <summary>
+    /// One close of <see cref="EndTheSessionsLeftUnder"/>'s: whether the bridge answered it, its failure in the log when not.
+    /// </summary>
+    private bool ClosedBeforeTheRunRootMoves(IRemodelPipeline pipeline, string runDirectory)
+    {
+        if (CloseSession(pipeline, runDirectory, out Exception? notAnswered) != CloseAnswer.NotAnswered)
+        {
+            return true;
+        }
+
+        Log("a restart that moves the run root, the earlier copy's close", notAnswered!);
+        return false;
+    }
 
     /// <summary>
     /// 004 T176 (default taken 2026-09-27, the owner may revise; research R14.2): while Start is
@@ -1340,20 +2219,19 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>
     /// 004 T173: whether <paramref name="documentPath"/> is one of the re-modeler's own copies - a
-    /// file in a <c>copy</c> folder whose run folder is a direct child of the run root in force, by
-    /// <see cref="RemodelCopy.RunDirectoryOf"/>'s rule, canonical and case-insensitive (lane D's
-    /// default, 2026-09-27). A folder merely named <c>copy</c> anywhere else is not one, and a path
-    /// that cannot be read as one is not one either: this check refuses, it never guesses.
+    /// file in a <c>copy</c> folder whose run folder is a direct child of a run root in force this
+    /// session, by <see cref="RemodelCopy.RunDirectoryOf"/>'s rule, canonical and case-insensitive (lane
+    /// D's default, 2026-09-27). Every run root in force this session, not only the one in force now, so
+    /// a copy made under one a settings save has since moved is still a copy (owner decision 154A, the
+    /// reviews' finding F6). A folder merely named <c>copy</c> anywhere else is not one, and a path that
+    /// cannot be read as one is not one either: this check refuses, it never guesses.
     /// </summary>
     private bool IsRemodelCopy(string documentPath)
     {
         string runDirectory;
-        string runRoot;
         try
         {
             runDirectory = RemodelCopy.RunDirectoryOf(documentPath);
-            runRoot = Path.GetFullPath(_options.RunRoot())
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
         catch (Exception error) when (error is Extractor.Guard.MutatingCallError
             || error is Extractor.Bridge.RemodelCommandError
@@ -1367,11 +2245,26 @@ public sealed class RemodelHost : IDisposable
 
         string? parent = Path.GetDirectoryName(
             runDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        return parent != null
-            && string.Equals(
-                parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                runRoot,
-                StringComparison.OrdinalIgnoreCase);
+        return parent != null && _options.RunRootsInForce().Any(runRoot => IsTheRunRoot(parent, runRoot));
+    }
+
+    /// <summary>Whether <paramref name="folder"/> is <paramref name="runRoot"/>, canonical and case-insensitive.</summary>
+    private static bool IsTheRunRoot(string folder, string runRoot)
+    {
+        string root;
+        try
+        {
+            root = Path.GetFullPath(runRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch (Exception error) when (error is ArgumentException
+            || error is NotSupportedException
+            || error is PathTooLongException)
+        {
+            return false;
+        }
+
+        return string.Equals(
+            folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), root, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -1387,26 +2280,18 @@ public sealed class RemodelHost : IDisposable
     {
         ScopeSignals signals = scope.Signals;
 
+        // Owner decision 155A: one sentence per class, the tab's own, whoever refused (PageWords). The
+        // bridge as built never reaches these two: its probe refuses `source_dirty` and `external_refs`
+        // before it answers a dirty save flag or a count of references.
         if (signals.SaveFlagDirty == true)
         {
-            _actions.SendError(
-                id,
-                "DocumentDirty",
-                "the part has unsaved changes. This feature never saves your file, so save it "
-                + "or close it yourself, then press Remodel again.",
-                retryable: true);
+            _actions.SendError(id, "DocumentDirty", DocumentDirtyMessage, retryable: true);
             return false;
         }
 
         if (signals.ExternalReferenceCount > 0)
         {
-            _actions.SendError(
-                id,
-                "ExternalReferences",
-                $"the part carries {signals.ExternalReferenceCount} external file "
-                + (signals.ExternalReferenceCount == 1 ? "reference" : "references")
-                + ", which a copy cannot carry with it.",
-                retryable: false);
+            _actions.SendError(id, "ExternalReferences", ExternalReferencesMessage, retryable: false);
             return false;
         }
 
@@ -1455,10 +2340,18 @@ public sealed class RemodelHost : IDisposable
 
     private void Start(string? id, JsonElement payload)
     {
+        // Owner decision 154A: first, as a plan is refused - the run hands its folder to the backend and the
+        // bridge again.
+        string judged = _options.RunRoot();
+        if (RunRootRefused(id, judged, "the plan was not applied"))
+        {
+            return;
+        }
+
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -1511,15 +2404,10 @@ public sealed class RemodelHost : IDisposable
         // anything. Ahead of the seat check on purpose: mid-restart the seat reads as still
         // being checked, and asking the engineer to wait would only earn this answer next time.
         // 004 T173: a plan planning again closed is lost the same way, in its own words.
-        if (run.ClosedByPlanAgain)
+        string? lost = LostSessionWords(run);
+        if (lost != null)
         {
-            _actions.SendError(id, "SessionLost", PlanClosedMessage, retryable: false);
-            return;
-        }
-
-        if (run.SessionEnded || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()))
-        {
-            _actions.SendError(id, "SessionLost", SessionLostMessage, retryable: false);
+            _actions.SendError(id, "SessionLost", lost, retryable: false);
             return;
         }
 
@@ -1542,18 +2430,98 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        _busy = true;
-        run.Phase = RemodelRunPhase.Running;
-        _active = run;
-
-        // The reply goes first, so the page has the chat id before the first `status` or
-        // `remodel.change` arrives on it.
-        _actions.Send("remodel.started", id, new Dictionary<string, object?>
+        // Owner decision 145A: a run begins as a plan does (Plan, above), after every refusal that
+        // needs no call and before `remodel.started`.
+        if (!BeganRun(id, StartAfterRestartMessage))
         {
-            { "chat_id", run.RunId },
-        });
+            return;
+        }
 
-        _options.Schedule(() => Execute(pipeline, run));
+        // From here the run holds the host. Whatever ends Start before the run is handed to its
+        // scheduler - the refusal below, or anything that throws - frees it again: a host left busy
+        // would hold back every settings restart, and every new review with it, until SOLIDWORKS
+        // restarts (owner decision 145A, found on review).
+        RemodelRunPhase phaseBefore = run.Phase;
+        bool started = false;
+        bool handedOver = false;
+        try
+        {
+            // The reviews of decision 154A, N8 and finding F6: the gate can make a waiting settings restart,
+            // which can bring another run root into force - judged again - and the backend makes runs only under
+            // the one it was started with, so a plan made under one a save has since moved is not applied.
+            string? runRoot = RunRootToUse(id, judged, "the plan was not applied");
+            if (runRoot == null)
+            {
+                return;
+            }
+
+            if (!RunFolders.IsUnder(run.RunDirectory, runRoot, _options.RunRootProbe))
+            {
+                _actions.SendError(id, "RunRootChanged", StartRunRootChangedMessage, retryable: false);
+                return;
+            }
+
+            // Owner decision 152A, on the Codex review (X2): the run holds the tool service until its
+            // session is closed (Execute), taken before the session is read again below. None
+            // listening to hold means the plan's attachment is gone or going, and its session with it.
+            // After the run root (merged with 154A, 2026-10-21), as at a plan: the run root, and the
+            // plan's folder under it, before anything is asked of the tool service.
+            if (!HoldTheToolService())
+            {
+                _actions.SendError(id, "SessionLost", LostSessionWords(run) ?? SessionLostMessage, retryable: false);
+                return;
+            }
+
+            // The gate may have waited through a settings restart - seconds in which the host was
+            // not busy, so the tool service was free to re-attach, or a teardown to end the plan's
+            // session. Read again now the host is busy, which a re-attach of the service's own asks
+            // before it moves: a run never starts on a session that went while the gate waited
+            // (decision 22A).
+            lost = LostSessionWords(run);
+            if (lost != null)
+            {
+                _actions.SendError(id, "SessionLost", lost, retryable: false);
+                return;
+            }
+
+            run.Phase = RemodelRunPhase.Running;
+            _active = run;
+
+            // The reply goes first, so the page has the chat id before the first `status` or
+            // `remodel.change` arrives on it.
+            _actions.Send("remodel.started", id, new Dictionary<string, object?>
+            {
+                { "chat_id", run.RunId },
+            });
+            started = true;
+
+            _options.Schedule(() => Execute(pipeline, run));
+            handedOver = true;
+        }
+        catch (Exception failure) when (started)
+        {
+            // The page was told the run began, and none is coming: it is told the run is over by
+            // the status a run's end posts, and the failure is answered as any failure is - in this
+            // tab's words, its message logged (owner decision 159A). The run is let go of first, under
+            // the lock that frees the host (159A, on review), so the stop when the copy goes away is
+            // never told after that last word.
+            LetGoOfARunNeverHandedOn(run);
+            PostStatus("error", PageWords(failure));
+            throw;
+        }
+        finally
+        {
+            if (!handedOver)
+            {
+                // Nothing runs: what Start set is undone, the plan stays startable, and nothing is
+                // left in flight for Stop.
+                run.Phase = phaseBefore;
+                LetGoOfARunNeverHandedOn(run);
+                // Decision 24A: a re-attach or a teardown that took the plan's session while Start
+                // held the host was not announced then; it is now, as the end of a plan announces it.
+                FreeTheHost();
+            }
+        }
     }
 
     /// <summary>
@@ -1562,29 +2530,48 @@ public sealed class RemodelHost : IDisposable
     /// Never throws into the scheduler: a faulted background task in a SOLIDWORKS add-in is an
     /// unobserved exception nobody sees. A failure is a `status {stage: "error"}` and an
     /// `error` message, and the run ends `failed`.
+    ///
+    /// Owner decision 155A (004 research R18; feature 011 research R12.9 item 4): the page ends its
+    /// running state - and offers Open copy and Discard copy again - on a `status` of `ready` or
+    /// `error`, so none is posted while the run holds the host. What the ending says before the host
+    /// is free - the failure caught here, the pipeline's own error, T167's words of a close that left
+    /// something - is held (<see cref="HoldUntilTheHostIsFree"/>) and told once the session is closed
+    /// and the host freed, in the order it was made, then the run's last word, then the answer to every
+    /// Stop that reached the run (owner decision 159A).
     /// </summary>
     private void Execute(IRemodelPipeline pipeline, RemodelRun run)
     {
         RemodelRunOutcome outcome;
         string? closeProblem = null;
+        List<Action> held;
+        List<string?> stops;
         try
         {
-            PostStatus("judging", "Running the plan against the copy...");
-            outcome = pipeline.Run(run.RunDirectory, new RunReporter(this, run));
+            var reporter = new RunReporter(this, run);
+            reporter.Status("judging", RunningThePlanMessage);
+            outcome = pipeline.Run(run.RunDirectory, reporter);
         }
         catch (RemodelRefusal refusal)
         {
             // Unsolicited: `remodel.started` was answered before the run began, so there is no
             // message left to reply to. The class still travels, for the reason it does on the
             // message thread.
-            PostStatus("error", refusal.Message);
-            SendRefusal(null, refusal);
+            HoldUntilTheHostIsFree(() =>
+            {
+                PostStatus("error", PageWords(refusal));
+                SendRefusal(null, refusal, "the run");
+            });
             outcome = new RemodelRunOutcome("failed", 0);
         }
         catch (Exception failure)
         {
-            PostStatus("error", failure.Message);
-            _actions.SendError(null, "HostError", failure.Message, retryable: false);
+            // Owner decision 159A (004 research R19): in this tab's words, its message logged.
+            Log("the run", failure);
+            HoldUntilTheHostIsFree(() =>
+            {
+                PostStatus("error", UnexpectedFailureMessage);
+                _actions.SendError(null, "HostError", UnexpectedFailureMessage, retryable: false);
+            });
             outcome = new RemodelRunOutcome("failed", 0);
         }
         finally
@@ -1598,15 +2585,23 @@ public sealed class RemodelHost : IDisposable
                 }
                 else
                 {
-                    closeProblem = "The run ended, but the SOLIDWORKS bridge did not answer its close. "
-                        + "The copy may still be open; the report and saved artifacts are kept. "
-                        + notAnswered!.Message;
+                    // Owner decision 159A: the close's failure, which ended this sentence, goes to the log.
+                    Log("the run's close", notAnswered!);
+                    closeProblem = RunCloseNotAnsweredMessage;
                 }
             }
 
-            run.Phase = RemodelRunPhase.Finished;
-            _active = null;
-            _busy = false;
+            // Owner decision 152A, on the Codex review (X2): held until the run's session is closed,
+            // above, on the bridge it ran on - and let go before the host is free, since this is the
+            // run's own thread (on review, N4): a plan pressed the moment the host is free takes a hold
+            // of its own, which letting go after would let go of.
+            LetGoOfTheToolService();
+            held = FreeTheHostFromTheRun(run, out stops);
+        }
+
+        foreach (Action post in held)
+        {
+            post();
         }
 
         if (closeProblem != null)
@@ -1627,15 +2622,46 @@ public sealed class RemodelHost : IDisposable
 
         // The stop is answered when the executor has finalized, not when the flag was set:
         // `changes_applied` is not knowable until the change in flight has landed or been
-        // inverted.
-        string? stopId = Interlocked.Exchange(ref _pendingStopId, null);
-        if (stopId != null || run.StopRequested)
+        // inverted. Every Stop that reached this run, each once, taken as the host was freed (owner
+        // decision 159A); a run stopped only because its copy went away is answered unasked, as before.
+        var stopped = new Dictionary<string, object?>
         {
-            _actions.Send("remodel.stopped", stopId, new Dictionary<string, object?>
-            {
-                { "changes_applied", outcome.ChangesApplied },
-            });
+            { "changes_applied", outcome.ChangesApplied },
+        };
+        foreach (string? stopId in stops)
+        {
+            _actions.Send("remodel.stopped", stopId, stopped);
         }
+
+        if (stops.Count == 0 && run.StopRequested)
+        {
+            _actions.Send("remodel.stopped", null, stopped);
+        }
+    }
+
+    /// <summary>
+    /// The words Start refuses a plan whose bridge session is gone with (`SessionLost`), or null
+    /// while the plan holds it: <see cref="PlanClosedMessage"/> for one planning again closed (004
+    /// T173), <see cref="PlanClosedForRunRootMessage"/> for one closed before a restart moved the run root
+    /// (owner decision 159A, 004 research R22), and <see cref="SessionLostMessage"/> for one whose session a teardown ended or whose
+    /// attachment is not the one listening now (decision 22A). One reading for Start's check
+    /// before the restart gate and its check again once the host is busy (owner decision 145A).
+    /// </summary>
+    private string? LostSessionWords(RemodelRun run)
+    {
+        if (run.ClosedByPlanAgain)
+        {
+            return PlanClosedMessage;
+        }
+
+        if (run.ClosedForRunRoot)
+        {
+            return PlanClosedForRunRootMessage;
+        }
+
+        return run.SessionEnded || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment())
+            ? SessionLostMessage
+            : null;
     }
 
     /// <summary>
@@ -1651,8 +2677,9 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>
     /// Whether <paramref name="run"/>'s bridge session can still be on the bridge listening now,
-    /// so that a `remodel.close` - which names no run and closes whatever session the bridge holds
-    /// - would reach its session and nobody else's: made on the attachment listening now
+    /// so that a `remodel.close` - which named no run and closed whatever session the bridge held,
+    /// until owner decision 159A had it name its run and the bridge refuse another run's - would
+    /// reach its session and nobody else's: made on the attachment listening now
     /// (<see cref="SameAttachment"/>, T168), not closed by planning again (004 T173) and not closed
     /// by the host at the plan while Start is switched off (004 T176), and not ended since then
     /// (T180). One predicate for Discard, planning again, finished-run close and copy preservation.
@@ -1674,22 +2701,37 @@ public sealed class RemodelHost : IDisposable
     /// One rule for the two ways the page hears of it: the notice
     /// (<see cref="AnnounceLostPlan"/>) and `init.latest_run.plan_lost`, which a page that loads
     /// again starts from (<see cref="SendInit"/>; decision 24A, amended on review).
+    ///
+    /// Owner decision 159A (004 research R19; 002 research 152A's owner question 3): a plan this host
+    /// closed at the plan, while Start is switched off (004 T176), holds no session for a re-attach or
+    /// a teardown to take, and no Start can use it in this build either way, so neither makes it lost -
+    /// the tool service following the copy the plan's close left active included, which was told as
+    /// SOLIDWORKS switching documents. Planning again, which sets such a plan aside, still does.
+    ///
+    /// Owner decision 162A (004 research R23): nor is a plan whose session the engineer's own Discard closed
+    /// (<see cref="RemodelRun.ClosedFor"/>), though the bridge tells that end before the copy is marked discarded, and
+    /// though the folder could not be deleted: the Discard answer is the word. A teardown's end meanwhile is a re-attach's.
     /// </summary>
     private bool IsLostPlan(RemodelRun? run) =>
         run != null
         && run.Phase == RemodelRunPhase.Planned
         && !run.CopyDiscarded
         && (run.ClosedByPlanAgain
-            || (run.SessionEnded && !run.SessionClosedAtPlan)
-            || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()));
+            || (!run.SessionClosedAtPlan
+                && run.ClosedFor != RemodelCloseCause.Discard
+                && (run.SessionEnded
+                    || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()))));
 
     /// <summary>
     /// The sentence a lost plan is told with: <see cref="PlanClosedMessage"/> for one planning
-    /// again closed (004 T173), whatever else it also lost, and <see cref="PlanLostMessage"/> for
-    /// one a re-attach took (decision 24A). One rule for the notice and for `init`.
+    /// again closed (004 T173), whatever else it also lost, <see cref="PlanClosedForRunRootMessage"/> for one
+    /// closed before a restart moved the run root (owner decision 159A, 004 research R22), and
+    /// <see cref="PlanLostMessage"/> for one a re-attach took (decision 24A). One rule for the notice and for `init`.
     /// </summary>
     private static string LostMessage(RemodelRun run) =>
-        run.ClosedByPlanAgain ? PlanClosedMessage : PlanLostMessage;
+        run.ClosedByPlanAgain ? PlanClosedMessage
+        : run.ClosedForRunRoot ? PlanClosedForRunRootMessage
+        : PlanLostMessage;
 
     /// <summary>
     /// Tells the page that the plan on screen can no longer be started, once, as soon as this
@@ -1744,24 +2786,42 @@ public sealed class RemodelHost : IDisposable
         });
     }
 
+    /// <summary>
+    /// What the page's run line is told as the engineer's Stop reaches the run, in `applying`: the run goes on
+    /// to its end, which follows once the host is free (owner decision 155A). Named for the page's tests (owner
+    /// decision 159A); the words are as they were.
+    /// </summary>
+    public const string StoppingMessage =
+        "Stopping: the change in flight is finished and the artifacts are finalized first.";
+
+    /// <summary>
+    /// `remodel.stop`: owner decision 159A (004 research R19; R18.7 item 4) decides it under the lock that frees
+    /// the host from the run (<see cref="_endingLock"/>), and tells it under that lock, so a Stop either reaches
+    /// the run - its word told before the run's end, its id answered at that end, with every other Stop of the
+    /// run - or finds the host free and is answered at once, storing nothing. Read outside the lock, a Stop could
+    /// read the run in flight just before the host was freed and store its id just after the end had taken it:
+    /// its word was told after the run's last word, and the next run's end answered it with that run's count.
+    /// </summary>
     private void Stop(string? id)
     {
-        RemodelRun? run = _active;
-        if (run == null)
+        lock (_endingLock)
         {
-            _actions.SendError(
-                id,
-                "RunNotFound",
-                "no remodel run is in flight, so there is nothing to stop.",
-                retryable: false);
-            return;
+            RemodelRun? run = _active;
+            if (run != null)
+            {
+                _pendingStops.Add(id);
+                run.RequestStop();
+                run.RememberStatus("applying", StoppingMessage);
+                PostStatus("applying", StoppingMessage);
+                return;
+            }
         }
 
-        Interlocked.Exchange(ref _pendingStopId, id);
-        run.RequestStop();
-        PostStatus(
-            "applying",
-            "Stopping: the change in flight is finished and the artifacts are finalized first.");
+        _actions.SendError(
+            id,
+            "RunNotFound",
+            "no remodel run is in flight, so there is nothing to stop.",
+            retryable: false);
     }
 
     // ---- remodel.result ------------------------------------------------------------------
@@ -1778,7 +2838,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -1817,7 +2877,18 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
+            return;
+        }
+
+        // Owner decision 148A (feature 011 research R12.4; R11.8 item 9): not while a plan or a run is in
+        // flight - any run's copy, not only its own - since the copy activated or opened between the run's
+        // requests to the bridge would change the document SOLIDWORKS has active under the run. The page
+        // offers Open copy no more than Discard copy while a run runs; this is the backstop, before
+        // anything is asked of SOLIDWORKS.
+        if (_busy)
+        {
+            _actions.SendError(id, "RunInProgress", OpenCopyWhileARunIsInProgressMessage, retryable: true);
             return;
         }
 
@@ -1852,12 +2923,15 @@ public sealed class RemodelHost : IDisposable
         {
             // A seat that refused by name keeps that name. `OpenFailed` is for the SOLIDWORKS
             // that would not open the file, which is a different thing to tell the engineer.
-            SendRefusal(id, refusal);
+            SendRefusal(id, refusal, "remodel.open_copy");
             return;
         }
         catch (Exception failure)
         {
-            _actions.SendError(id, "OpenFailed", failure.Message, retryable: true);
+            // Owner decision 159A (004 research R19): the seat's sentence names the copy's full path;
+            // it goes to the log.
+            Log("remodel.open_copy", failure);
+            _actions.SendError(id, "OpenFailed", OpenCopyFailedMessage, retryable: true);
             return;
         }
 
@@ -1873,7 +2947,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -1883,8 +2957,9 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        // T168 (decision 22A): `remodel.close` names no run - the bridge closes whatever session
-        // its dispatcher holds - so the copy is closed only while the run still holds its session
+        // T168 (decision 22A): `remodel.close` named no run - the bridge closed whatever session
+        // its dispatcher held, until owner decision 159A had it name its run and the bridge refuse
+        // another run's - so the copy is closed only while the run still holds its session
         // on the attachment listening now (HoldsItsSession). When that attachment is gone, or
         // planning again already closed the session (004 T173), or the host closed it at the plan
         // because Start is switched off (004 T176), a close sent now would close the copy of
@@ -1892,13 +2967,23 @@ public sealed class RemodelHost : IDisposable
         IRemodelPipeline? pipeline = HoldsItsSession(run, _options.ToolServiceAttachment())
             ? _options.Pipeline
             : null;
+        if (pipeline != null)
+        {
+            // Owner decision 162A (004 research R23): the bridge tells the close's end before the close is answered, so
+            // before the copy is marked discarded; marked the Discard's first, that end is never told as a lost plan.
+            run.MarkCloseSentFor(RemodelCloseCause.Discard);
+        }
+
         try
         {
             DeleteCopyFolder(pipeline, run.RunDirectory);
         }
         catch (Exception failure)
         {
-            _actions.SendError(id, "DiscardFailed", failure.Message, retryable: true);
+            // Owner decision 159A (004 research R19): the disk's refusal names the copy's full path; it goes
+            // to the log.
+            Log("remodel.discard_copy", failure);
+            _actions.SendError(id, "DiscardFailed", DiscardCopyFailedMessage, retryable: true);
             return;
         }
 
@@ -1917,12 +3002,10 @@ public sealed class RemodelHost : IDisposable
         }
         catch (Exception failure)
         {
-            _actions.SendError(
-                id,
-                "DiscardFailed",
-                "the copy was deleted, but 'discarded' could not be written to plan.json, so "
-                + "this tab would go on reporting the state the run ended in: " + failure.Message,
-                retryable: false);
+            // Owner decision 159A: the disk's refusal, which ended this sentence, names plan.json's full
+            // path; it goes to the log.
+            Log("remodel.discard_copy, plan.json", failure);
+            _actions.SendError(id, "DiscardFailed", DiscardStateNotWrittenMessage, retryable: false);
             return;
         }
 
@@ -2009,7 +3092,7 @@ public sealed class RemodelHost : IDisposable
         RemodelRun? run = FindRun(PagePayload.Text(payload, "run_dir"));
         if (run == null)
         {
-            SendRunNotFound(id, PagePayload.Text(payload, "run_dir"));
+            SendRunNotFound(id);
             return;
         }
 
@@ -2279,16 +3362,379 @@ public sealed class RemodelHost : IDisposable
     private static string? Text(JsonDocument? document, string name) =>
         document == null ? null : PagePayload.Text(document.RootElement, name);
 
+    // ---- a settings restart and a plan or a run (owner decision 145A) -----------------------
+
+    /// <summary>
+    /// Marks the host busy for a plan or a run through <see cref="RemodelHostOptions.BeginRun"/>
+    /// (owner decision 145A), so a settings restart that waits is made first, or the one being
+    /// made is waited for, and none can begin under the plan or the run. Answers whether the host
+    /// is now busy; when it is not, the press has been answered with the gate's refusal - its class,
+    /// words and flag - and the host is still free, since a gate that refuses runs no step
+    /// (<see cref="ReviewHost.BeginRemodelRun"/>). A gate that throws leaves the host free
+    /// too, whether or not it ran the step, so one failure cannot hold every later plan, and the
+    /// restart waiting on the run, back for good; the throw is the press's answer, as `Receive`
+    /// gives any failure.
+    /// </summary>
+    /// <param name="id">The press's id, which a refusal answers.</param>
+    /// <param name="restartFirst">What the page is told before the gate when a settings restart
+    /// stands before the press (<see cref="RemodelHostOptions.RestartAhead"/>): the gate can wait
+    /// through it for seconds, up to the backend's handshake, in which the page would otherwise say
+    /// only what the press set (owner decision 145A, found on review).</param>
+    private bool BeganRun(string? id, string restartFirst)
+    {
+        if (RestartAhead())
+        {
+            PostStatus("backend_starting", restartFirst);
+        }
+
+        BackendRequestException? held;
+        try
+        {
+            held = _options.BeginRun(() => _busy = true);
+        }
+        catch (Exception)
+        {
+            _busy = false;
+            throw;
+        }
+
+        if (held == null)
+        {
+            return true;
+        }
+
+        // Owner decision 159A (004 research R19): the gate's `BackendUnavailable` that can be pressed again - the restart
+        // the press made or waited for failed, whose failure can end in the backend's log's path (decision 150A), or the
+        // backend did not answer whether a turn runs - leaves the backend not restarted with the saved settings, and is
+        // told in this tab's words, its own logged. The gate's other refusals - a turn, a remodel run in flight, the
+        // add-in unloading - keep the words the review host writes for this tab, which name no path.
+        if (string.Equals(held.ErrorClass, "BackendUnavailable", StringComparison.Ordinal) && held.Retryable)
+        {
+            Log("the restart gate", held.Message);
+            _actions.SendError(id, held.ErrorClass, BackendNotRestartedMessage, retryable: true);
+            return false;
+        }
+
+        _actions.SendError(id, held.ErrorClass, held.Message, held.Retryable);
+        return false;
+    }
+
+    /// <summary>
+    /// Frees the host once a plan, or a Start that did not hand its run on, is over, and tells the
+    /// page of a plan lost while the host was busy, which nothing told it then (decision 24A). One
+    /// copy for Plan's `finally` and Start's (owner decision 145A, third review).
+    /// </summary>
+    private void FreeTheHost()
+    {
+        // The hold first, as a run's end lets go of it (Execute): nothing held is let go once the host
+        // is free for the next press.
+        LetGoOfTheToolService();
+        _busy = false;
+        AnnounceLostPlan();
+    }
+
+    // ---- a run's ending and the host's freeing (owner decision 155A) -----------------------------
+
+    /// <summary>
+    /// Whether the page ends its running state on a `status` of <paramref name="stage"/> - and offers the
+    /// copy actions again: `ready` and `error` (`remodel.js`, `showStatus`).
+    /// </summary>
+    private static bool EndsTheRunOnThePage(string stage) =>
+        string.Equals(stage, "ready", StringComparison.Ordinal)
+        || string.Equals(stage, "error", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Owner decision 155A: posts <paramref name="post"/> now, or holds it while a run holds the host,
+    /// for <see cref="Execute"/> to tell once the host is free - so a page that ends its running state
+    /// on what it is told is never offered what the host would refuse for a run that is not over. Only
+    /// a run's own ending holds anything: its executor's failure, its pipeline's error, and the words of
+    /// a close made under it.
+    /// </summary>
+    private void HoldUntilTheHostIsFree(Action post)
+    {
+        lock (_endingLock)
+        {
+            if (_active != null)
+            {
+                _heldForTheEnd.Add(post);
+                return;
+            }
+        }
+
+        post();
+    }
+
+    /// <summary>
+    /// Owner decision 155A: frees the host from <paramref name="run"/>, which has ended, and hands back what
+    /// its ending held, in the order it was made, for the caller to tell: one step under
+    /// <see cref="_endingLock"/>, so nothing is held after it and an `init` reads the run in flight only
+    /// before it. Owner decision 159A: and the Stops that reached the run, in <paramref name="stops"/>, for
+    /// the caller to answer - a Stop decided after this step finds the host free.
+    /// </summary>
+    private List<Action> FreeTheHostFromTheRun(RemodelRun run, out List<string?> stops)
+    {
+        lock (_endingLock)
+        {
+            run.Phase = RemodelRunPhase.Finished;
+            _active = null;
+            _busy = false;
+            var held = new List<Action>(_heldForTheEnd);
+            _heldForTheEnd.Clear();
+            stops = new List<string?>(_pendingStops);
+            _pendingStops.Clear();
+            return held;
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 research R19.9; the race review's finding R3): lets go of a run Start set in
+    /// flight and never handed to its scheduler, under the lock that frees the host, and takes back a stop asked for
+    /// meanwhile. The stop when the copy goes away is decided under that lock on SOLIDWORKS' thread: it either reached the
+    /// run before - told before the run's last word, and taken back here, so the plan, which stays startable, carries no
+    /// stop into its next run - or finds no run in flight. Let go of outside the lock, after the run's last word, it was
+    /// told after that word, and its flag stopped the next run before it began, answered `remodel.stopped` unasked. Called
+    /// before that last word is told, and again as Start frees the host; the second finds nothing to do.
+    /// </summary>
+    private void LetGoOfARunNeverHandedOn(RemodelRun run)
+    {
+        lock (_endingLock)
+        {
+            _active = null;
+            run.WithdrawStop();
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds the tool service's attachment for the plan
+    /// or run that has just made the host busy (<see cref="RemodelHostOptions.HoldToolService"/>), and
+    /// answers whether one could be held. Never waits: a hold is taken under the gate's lock alone. A
+    /// delegate that throws is the press's failure, and the caller's <c>finally</c> frees the host.
+    /// </summary>
+    private bool HoldTheToolService()
+    {
+        IDisposable? hold = _options.HoldToolService();
+        if (hold == null)
+        {
+            return false;
+        }
+
+        Interlocked.Exchange(ref _toolServiceHold, hold)?.Dispose();
+        return true;
+    }
+
+    /// <summary>
+    /// Lets go of the hold the plan or run took, once, on whichever thread frees the host - the
+    /// message thread for a plan or a Start that handed nothing on, the run's own once its session is
+    /// closed (<see cref="Execute"/>). Never throws: it comes before the host is freed (on review,
+    /// N4), and a hold that fails as it is let go must neither keep the host busy - which would hold
+    /// back every plan and every settings restart - nor reach a run's own thread, which no one waits
+    /// on. The gate's own holds never fail.
+    /// </summary>
+    private void LetGoOfTheToolService()
+    {
+        try
+        {
+            Interlocked.Exchange(ref _toolServiceHold, null)?.Dispose();
+        }
+        catch (Exception)
+        {
+            // The hold's own failure, and the host is freed all the same.
+        }
+    }
+
+    /// <summary>
+    /// Whether a settings restart stands before the press. Only words for the page hang on it, so
+    /// a reading that throws is none: the press goes on through the gate, which decides.
+    /// </summary>
+    private bool RestartAhead()
+    {
+        try
+        {
+            return _options.RestartAhead();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     // ---- the refusals two handlers share --------------------------------------------------
 
     /// <summary>
     /// One `error {error_class, message}` carrying the class whoever refused chose - the
     /// backend's reply body, or the pipeline's own pre-call refusal. One copy of it, because
     /// three handlers answer the same exception and three spellings of "pass the class through"
-    /// is three chances to drop it.
+    /// is three chances to drop it. Owner decision 159A: what the page is told in place of the
+    /// refusal's own sentence goes to the log, under <paramref name="what"/> was asked.
     /// </summary>
-    private void SendRefusal(string? id, RemodelRefusal refusal) =>
-        _actions.SendError(id, refusal.ErrorClass, refusal.Message, refusal.Retryable);
+    private void SendRefusal(string? id, RemodelRefusal refusal, string what)
+    {
+        string words = PageWords(refusal);
+        if (!string.Equals(words, refusal.Message, StringComparison.Ordinal))
+        {
+            Log(what, refusal);
+        }
+
+        _actions.SendError(id, refusal.ErrorClass, words, refusal.Retryable);
+    }
+
+    /// <summary>
+    /// Owner decision 155A (004 research R18): the classes whose words on this tab are the host's own,
+    /// whoever refused. The bridge refuses both with a sentence naming the part's full path, which the
+    /// backend passes on unchanged (`BRIDGE_REFUSALS`) and the tool-service log keeps on the refused
+    /// request's line; one sentence per class, the one the host already had for its own reading of the
+    /// probe, is what the page prints.
+    /// </summary>
+    private static readonly Dictionary<string, string> TabWords =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            { "DocumentDirty", DocumentDirtyMessage },
+            { "ExternalReferences", ExternalReferencesMessage },
+        };
+
+    /// <summary>
+    /// Owner decision 159A (004 research R19): the tab's words for a refusal the review backend answered, by its class,
+    /// where the backend's sentence can name a path - the part's, the run folder's, the bridge's pipe - and the class
+    /// says what the engineer can do. Every other class the backend answers is told in
+    /// <see cref="BackendFailedMessage"/>, but the ones it words plainly itself
+    /// (<see cref="ClassesTheBackendWordsPlainly"/>).
+    /// </summary>
+    private static readonly Dictionary<string, string> BackendWords =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            { "NotAPart", NotAPartOnDiskMessage },
+            { "BridgeUnavailable", BridgeNotAnsweringMessage },
+            { "BackendUnavailable", BackendNotAnsweringMessage },
+        };
+
+    /// <summary>
+    /// Owner decision 159A: the classes whose sentence the review backend writes in plain words that name no path, which
+    /// the tab prints as they are: `ScopeRefused`, one sentence for each of the bridge's two codes (owner decision 149A,
+    /// <c>SCOPE_REFUSAL_WORDS</c> in <c>chat/remodel.py</c>, pinned there word for word).
+    /// </summary>
+    private static readonly HashSet<string> ClassesTheBackendWordsPlainly =
+        new HashSet<string>(StringComparer.Ordinal) { "ScopeRefused" };
+
+    /// <summary>
+    /// The words a failure reaches the page in, in a refusal and in the run line's `status {stage:
+    /// "error"}` alike: <see cref="TabWords"/>' sentence for a refusal of one of its classes, whoever refused
+    /// (owner decision 155A); and owner decision 159A (004 research R19), since every other sentence a failure
+    /// carries can name a path: a refusal the review backend answered in <see cref="BackendWords"/>' words for
+    /// its class, or <see cref="BackendFailedMessage"/> - but in its own for a class the backend words plainly;
+    /// a refusal the add-in raised itself in its own words, which name no path; and any other failure in
+    /// <see cref="UnexpectedFailureMessage"/>. What a failure said goes to the log where it is answered.
+    /// </summary>
+    private static string PageWords(Exception failure)
+    {
+        if (!(failure is RemodelRefusal refusal))
+        {
+            return UnexpectedFailureMessage;
+        }
+
+        if (TabWords.TryGetValue(refusal.ErrorClass, out string? words))
+        {
+            return words;
+        }
+
+        if (!TheBackendAnswered(refusal) || ClassesTheBackendWordsPlainly.Contains(refusal.ErrorClass))
+        {
+            return refusal.Message;
+        }
+
+        return BackendWords.TryGetValue(refusal.ErrorClass, out string? backends) ? backends : BackendFailedMessage;
+    }
+
+    /// <summary>
+    /// Owner decision 159A: whether the review backend answered <paramref name="refusal"/> - the pipeline keeps the
+    /// backend's answer as the cause of the refusal it raises for it (<c>BackendRemodelPipeline.Refusal</c>, pinned by
+    /// <c>BackendRemodelPipelineTests</c>), and raises its own - no backend, no bridge, no copy to make active - with none.
+    /// </summary>
+    private static bool TheBackendAnswered(RemodelRefusal refusal) => refusal.InnerException is BackendRequestException;
+
+    /// <summary>
+    /// Owner decision 159A: the words a failure one of the shared rows caught reaches this tab in
+    /// (<see cref="PaneActionsOptions.FailureWords"/>), its own message logged: View log's, which no View log can
+    /// help; Show's; and Open report's and Open run folder's.
+    /// </summary>
+    private string SharedRowWords(string row, Exception failure)
+    {
+        Log(row, failure);
+        switch (row)
+        {
+            case "log.open":
+                return LogFolderNotOpenedMessage;
+
+            case "entity.show":
+                return ShowFailedMessage;
+
+            case "report.open":
+            case "folder.open":
+                return NotOpenedMessage;
+
+            default:
+                return UnexpectedFailureMessage;
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 research R19): writes, for whoever debugs, what was said where the tab told it in its
+    /// own words - <paramref name="said"/>, under <paramref name="what"/> was asked - on <see cref="RemodelHostOptions.Log"/>,
+    /// masked as everything this host sends is (FR-015). Never throws: a log that cannot be written changes no answer.
+    /// </summary>
+    private void Log(string what, string said)
+    {
+        try
+        {
+            _options.Log(_actions.Redact("Remodel tab, " + what + ": " + said));
+        }
+        catch (Exception)
+        {
+            // The log is gone or full; the page's answer is what matters now.
+        }
+    }
+
+    /// <summary>...a failure: a refusal's class and sentence, and the whole of anything else that threw.</summary>
+    private void Log(string what, Exception failure) =>
+        Log(what, failure is RemodelRefusal refusal ? refusal.ErrorClass + ": " + refusal.Message : failure.ToString());
+
+    /// <summary>
+    /// Owner decision 154A: a plan or a Start refuses a run root the run root rule refuses, in this tab's words,
+    /// which its page shows whole - <paramref name="notDone"/> says what the press did not do, and the way on
+    /// names the Settings on the Review tab, since this page has none (the reviews' finding F5) - before it does
+    /// anything else.
+    /// </summary>
+    private bool RunRootRefused(string? id, string runRoot, string notDone) =>
+        _actions.RefusedRunRoot(id, runRoot, notDone, RunRootRule.InSettingsOnTheReviewTab, PressAgain);
+
+    /// <summary>What a plan or a Start refused for its run root says to do once the cause is gone (owner decision 154A).</summary>
+    private const string PressAgain = "press Remodel a copy again";
+
+    /// <summary>
+    /// The run root a plan or a Start goes on under once its gate is passed (the reviews of decision 154A, N8):
+    /// the run root in force, judged again when the gate's restart moved it from <paramref name="judged"/>; null
+    /// once the press is answered with the refusal. Read once, with 153A's record of the settings in force: the gate
+    /// holds back every settings restart, but not the add-in's first start of the backend, and while one that would
+    /// bring another run root into force is under way there is none to go on under, and the press is refused.
+    /// Written once for every start that passes a gate since owner decision 157A, the check tabs' too
+    /// (<see cref="PaneActions.RunRootToUse"/>).
+    /// </summary>
+    private string? RunRootToUse(string? id, string judged, string notDone) =>
+        _actions.RunRootToUse(
+            id,
+            judged,
+            _options.RunRootForANewRun(),
+            notDone,
+            RunRootRule.InSettingsOnTheReviewTab,
+            PressAgain);
+
+    /// <summary>
+    /// What a Start answers, <c>RunRootChanged</c>, when its plan's run folder is under a run root a settings save
+    /// has since moved (the reviews of decision 154A, finding F6): the backend makes runs only under the one in
+    /// force. No path; the way on is a new plan, under the run root in force.
+    /// </summary>
+    private const string StartRunRootChangedMessage =
+        "this plan's run folder is under a run root that is no longer in force, and the backend makes runs only "
+        + "under the one in force, so the plan was not applied. Press Remodel a copy again.";
 
     private void SendRunInProgress(string? id) =>
         _actions.SendError(
@@ -2298,12 +3744,13 @@ public sealed class RemodelHost : IDisposable
             + "share one SOLIDWORKS session and neither could be attributed.",
             retryable: true);
 
-    private void SendRunNotFound(string? id, string? runDir) =>
-        _actions.SendError(
-            id,
-            "RunNotFound",
-            $"this pane did not start a remodel run in '{runDir}', so it will not act on it.",
-            retryable: false);
+    /// <summary>
+    /// `RunNotFound` for a run folder the page named that this host has no record of, in
+    /// <see cref="RunNotFoundMessage"/>'s plain words: the folder the page sent is not repeated (owner
+    /// decision 155A).
+    /// </summary>
+    private void SendRunNotFound(string? id) =>
+        _actions.SendError(id, "RunNotFound", RunNotFoundMessage, retryable: false);
 
     private void SendUnavailable(string? id, RemodelAvailability availability) =>
         _actions.SendError(
@@ -2343,7 +3790,32 @@ public sealed class RemodelHost : IDisposable
         /// </summary>
         public bool StopRequested => _run != null && _run.StopRequested;
 
-        public void Status(string stage, string message) => _host.PostStatus(stage, message);
+        /// <summary>
+        /// A stage the page ends its running state on waits for the run's ending while a run holds the host
+        /// (owner decision 155A): the pipeline posts its own error before it answers, and the host is not
+        /// free until `Execute` has closed the run's session.
+        /// </summary>
+        public void Status(string stage, string message)
+        {
+            if (EndsTheRunOnThePage(stage))
+            {
+                // Owner decision 159A (004 research R19): the pipeline's word that a run failed carries the
+                // backend's or the transport's sentence, which can name a path; told in the tab's words, its own
+                // logged, before the run's last word.
+                string words = message;
+                if (string.Equals(stage, "error", StringComparison.Ordinal))
+                {
+                    _host.Log("the run", message);
+                    words = BackendFailedMessage;
+                }
+
+                _host.HoldUntilTheHostIsFree(() => _host.PostStatus(stage, words));
+                return;
+            }
+
+            _run?.RememberStatus(stage, message);
+            _host.PostStatus(stage, message);
+        }
 
         public void Progress(int applied, int total, int seq, string kind, string? subjectName) =>
             _host._actions.Send("remodel.progress", null, new Dictionary<string, object?>

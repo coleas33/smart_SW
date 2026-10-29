@@ -9,7 +9,15 @@ The shared token, origin, error and run-root rules in Feature 002 apply unchange
 constructing a provider. The reply is `context.prepared {run_id, package_sha256,
 document}`. The host retains the directory, exact package digest and root document /
 configuration. Another preparation, ordinary review or active-document notification
-invalidates it. The host rechecks the document after extraction.
+invalidates it. The host rechecks the document after extraction. *Amended 2026-10-20 (feature 002,
+owner decision 154A):* a preparation, and `context.review` below, are refused first,
+`RunRootRefused`, with nothing extracted and no session asked for, when the run root is on a
+network share, reached through a link or written as a device path, or could not be checked (002 `pane-host-messages.md`,
+"The run root rule"). *Amended on 154A's reviews (findings F6 and N8):* a preparation judges again,
+once the backend is ready, a run root a restart moved before it makes the run folder, and a
+`context.review` - or a context review's Retry - whose run folder is not under the run root in force,
+a settings save having moved it since the evidence was extracted, is refused before any session is
+asked for, `RunRootChanged`, not retryable; the way on is to extract the evidence again.
 
 `context.selection {run_id, package_sha256}` asks for exactly one selected component
 or face against that prepared package. `context.selected` returns an observation ID,
@@ -137,6 +145,12 @@ folder, `retry_of`, the same attachment and the box's Send or Wait, through the 
 `CreateReviewSession`. The backend validates the head as a re-run does; a context changed
 since is `409 EngineeringContextConflict` with a line that points to the Engineering context
 panel, and nothing in the folder moves. Another document active is `ReviewNotActive`.
+*Amended 2026-10-19 (owner decision 142A):* the backend claims the folder for that Retry only
+while it holds the failed chat and the folder still holds that chat's session (002
+[chat-api.md](../../002-task-pane-assistant/contracts/chat-api.md)). A settings save restarts
+the backend, which then holds no chat from before it, so a Retry after one is `404 UnknownChat`
+and nothing in the folder moves; the engineer starts a new review. A Retry of an attempt that a
+later Retry replaced is `409 RunDirInUse`.
 
 **The lock is strict** (owner decision 106A): the panel is disabled while any review is shown
 waiting, and the backend refuses context edits per folder.

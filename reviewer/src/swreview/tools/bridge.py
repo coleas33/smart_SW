@@ -20,11 +20,13 @@ nothing here reformats a value. The rules that keep this side honest:
   working shows up in the report as checks that did not run, never as checks that passed.
   Where the host attached a `Gap` to the failure, that gap is recorded before the error is
   returned, so the request survives as something extraction could not provide;
-- the two refusals the in-process tool service makes - `unauthorized` for a secret that
-  does not carry this command, and `document no longer open` once the engineer closes the
-  model - arrive as the named `BridgeError` subclasses and are answered the same way, with
-  a sentence saying which of the two it was. The secret itself is the client's business:
-  nothing here reads or forwards it.
+- the refusals the in-process tool service makes - `unauthorized` for a secret that
+  does not carry this command, `document no longer open` once the engineer closes the
+  model, and `configuration changed` for a live command while another configuration is
+  active (owner decision 152A) - arrive as the named `BridgeError` subclasses and are
+  answered the same way: the first two with a sentence saying which of the two it was, the
+  third with none, as the host's own names the change and the way on. The secret itself is
+  the client's business: nothing here reads or forwards it.
 
 `fetch_bodies_through_bridge` is not an agent tool at all: lever 10a has
 `check_tool_envelope` pull a body's mesh back over the same bridge when the package was

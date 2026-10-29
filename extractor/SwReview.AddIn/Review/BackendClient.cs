@@ -5,6 +5,7 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using SwReview.AddIn.Native;
 using SwReview.AddIn.Settings;
 
@@ -51,6 +52,15 @@ public sealed class BackendClient : IBackendClient, IDisposable
     /// </summary>
     private readonly object _gate = new object();
 
+    /// <summary>
+    /// Cancelled by <see cref="Dispose"/> before it takes <see cref="_gate"/>, and handed to every
+    /// start (<see cref="BackendStartOptions.Cancellation"/>): a start in flight when SOLIDWORKS
+    /// unloads - a restart for settings saved during a turn, made on the host's own thread - stops
+    /// waiting for the new backend and stops it, rather than holding the unload for the handshake
+    /// and health timeouts; and a restart asked for after that starts nothing.
+    /// </summary>
+    private readonly CancellationTokenSource _unloading = new CancellationTokenSource();
+
     public BackendClient(BackendSupervisor supervisor, string logFolder, JobObject? job)
         : this(supervisor, logFolder, job, () => DateTime.Now)
     {
@@ -78,6 +88,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
     {
         lock (_gate)
         {
+            ThrowIfUnloading();
             return _supervisor.Start(StartOptions(settings, key));
         }
     }
@@ -86,6 +97,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
     {
         lock (_gate)
         {
+            ThrowIfUnloading();
             _supervisor.Restart(StartOptions(settings, key));
         }
     }
@@ -182,12 +194,26 @@ public sealed class BackendClient : IBackendClient, IDisposable
             chatId!, Text(body, "review_session_id") ?? string.Empty, notExamined);
     }
 
-    /// <summary>Stops the child and releases the supervisor. Called on add-in disconnect.</summary>
+    /// <summary>
+    /// Stops the child and releases the supervisor. Called on add-in disconnect, on the
+    /// SOLIDWORKS thread: a start in flight is told to stop first, before the gate it holds is
+    /// waited for, so the unload waits for that start to stop its child, not for it to finish.
+    /// </summary>
     public void Dispose()
     {
+        _unloading.Cancel();
         lock (_gate)
         {
             _supervisor.Dispose();
+        }
+    }
+
+    /// <summary>A start or restart asked for once the add-in has begun to unload starts nothing.</summary>
+    private void ThrowIfUnloading()
+    {
+        if (_unloading.IsCancellationRequested)
+        {
+            throw new BackendStartException("the add-in is unloading, so the backend was not started.");
         }
     }
 
@@ -196,7 +222,8 @@ public sealed class BackendClient : IBackendClient, IDisposable
     /// <summary>
     /// How the backend is launched for these settings: the resolved launcher, a timestamped
     /// log, the run root it must keep every `run_dir` inside, the page's origin as the only
-    /// allowed CORS origin, and the credentials - in the environment, as secrets.
+    /// allowed CORS origin, and the credentials - in the environment, as secrets - with the
+    /// provider of a key saved in the pane named on the command line (owner decision 138A).
     /// </summary>
     public BackendStartOptions StartOptions(UserSettings settings, ResolvedApiKey key)
     {
@@ -210,16 +237,30 @@ public sealed class BackendClient : IBackendClient, IDisposable
             RunRoot = settings.RunRoot,
             AllowOrigin = TaskPaneControl.PageOrigin,
             Job = _job,
+            Cancellation = _unloading.Token,
         };
 
         if (key != null && !string.IsNullOrEmpty(key.Key))
         {
+            bool copied = false;
             foreach (string name in KeyVariablesFor(settings.Provider))
             {
                 options.Environment[name] = key.Key!;
+                copied = true;
             }
 
             options.Secrets.Add(key.Key!);
+
+            // The backend finds the key in its environment either way and cannot tell by itself
+            // that it is the one saved in the pane, so the add-in says so, naming the provider
+            // whose variables it just wrote: that provider's sessions record `key_source:
+            // settings`, the credential to revoke (owner decision 138A, FR-015). Only a key it
+            // copied is named - the scripted provider reads none - and a key from the
+            // workstation's environment is named nowhere, so its sessions record `env`.
+            if (copied && key.Source == "settings")
+            {
+                options.SettingsKeyProvider = settings.Provider;
+            }
         }
 
         // OPENAI_BASE_URL is the only endpoint override the backend reads, and it reads it for
@@ -227,18 +268,38 @@ public sealed class BackendClient : IBackendClient, IDisposable
         // provider would be an override the engineer was told was saved and that nothing ever
         // consults; `ReviewHost` refuses such a save, and this is the second half of that rule
         // for a settings file that was edited by hand.
-        if (settings.Provider == "openai" && !string.IsNullOrWhiteSpace(settings.BaseUrl))
+        string? baseUrl = BaseUrlFor(settings);
+        if (baseUrl != null)
         {
-            options.Environment["OPENAI_BASE_URL"] = settings.BaseUrl!.Trim();
+            options.Environment["OPENAI_BASE_URL"] = baseUrl;
         }
 
-        if (settings.Provider == "gemini")
+        if (ReadsGeminiEnterprise(settings))
         {
             WriteGeminiEndpoint(options, settings.GeminiEnterprise);
         }
 
         return options;
     }
+
+    /// <summary>
+    /// The `OPENAI_BASE_URL` a backend started with <paramref name="settings"/> is given, or null for
+    /// none: for the openai provider only, trimmed, and none for a blank one. One rule for the start
+    /// and for the review host's reading of whether the saved settings are the ones in force (owner
+    /// decision 153A, found on review).
+    /// </summary>
+    internal static string? BaseUrlFor(UserSettings settings) =>
+        settings.Provider == "openai" && !string.IsNullOrWhiteSpace(settings.BaseUrl)
+            ? settings.BaseUrl!.Trim()
+            : null;
+
+    /// <summary>
+    /// Whether a backend started with <paramref name="settings"/> is told of Gemini Enterprise at all,
+    /// on or off (<see cref="WriteGeminiEndpoint"/>): for the gemini provider only. One rule for the
+    /// start and for the review host's reading of whether the saved settings are the ones in force
+    /// (owner decision 153A, found on review).
+    /// </summary>
+    internal static bool ReadsGeminiEnterprise(UserSettings settings) => settings.Provider == "gemini";
 
     /// <summary>
     /// Whether this run goes at Vertex, stated either way.
@@ -345,6 +406,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
         var response = failure.Response as HttpWebResponse;
         if (response == null)
         {
+            // No HTTP answer at all, so no status.
             return new BackendRequestException(
                 "BackendUnavailable",
                 "the review backend did not answer: " + failure.Message,
@@ -354,6 +416,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
 
         using (response)
         {
+            int status = (int)response.StatusCode;
             string text = Read(response);
             JsonElement body;
             try
@@ -364,16 +427,18 @@ public sealed class BackendClient : IBackendClient, IDisposable
             {
                 return new BackendRequestException(
                     "HttpError",
-                    $"the backend answered {(int)response.StatusCode}.",
-                    retryable: (int)response.StatusCode >= 500,
-                    failure);
+                    $"the backend answered {status}.",
+                    retryable: status >= 500,
+                    failure,
+                    status);
             }
 
             return new BackendRequestException(
                 Text(body, "error_class") ?? "HttpError",
-                Text(body, "message") ?? $"the backend answered {(int)response.StatusCode}.",
+                Text(body, "message") ?? $"the backend answered {status}.",
                 Flag(body, "retryable"),
-                failure);
+                failure,
+                status);
         }
     }
 

@@ -15,17 +15,29 @@ namespace SwReview.Extractor.Tests;
 
 /// <summary>
 /// Feature 011 T071 (contracts/confirmed-open.md section 2): the host side of <c>drawing.read</c>.
-/// Everything is resolved from the host's own records - the run folder from the run id, the
-/// candidate from the package - and any step that fails is a sentence with nothing opened: the
-/// fake seam records no call. Then the candidate is opened through the guarded seam, read by the
-/// drawing phase with every id continuing the package's, merged, and closed when the seam opened
-/// it.
+/// Everything is resolved from the host's own records - the review session and its run folder
+/// from the run id, the candidate from the package - and any step that fails is a sentence with
+/// nothing opened: the fake seam records no call. Then the candidate is opened through the guarded
+/// seam, read by the drawing phase with every id continuing the package's, merged, and closed when
+/// the seam opened it.
 /// </summary>
 public class ConfirmedDrawingReadTests : IDisposable
 {
     private const string RunId = "20260923-101500-chat0001";
 
+    /// <summary>
+    /// How the limit's refusal ends (decision 141A): the two ways on that are true of the host - since
+    /// decision 147A a new review first, and no longer a Retry or Recheck.
+    /// </summary>
+    private const string HowToGoOn =
+        "a new review (press Review) starts its own count, and a drawing already open in SOLIDWORKS is still "
+        + "read, since reading it opens nothing";
+
     private readonly string _runFolder;
+
+    /// <summary>The review session the host resolves <see cref="RunId"/> to (decision 141A).</summary>
+    private readonly ConfirmedDrawingSession _session;
+
     private readonly FakeDrawingOpenHost _host = new FakeDrawingOpenHost();
     private readonly FakeConfirmedDrawingPhase _phase = new FakeConfirmedDrawingPhase();
     private readonly FakeConfirmedDrawingDocuments _documents = new FakeConfirmedDrawingDocuments();
@@ -43,6 +55,7 @@ public class ConfirmedDrawingReadTests : IDisposable
         _runFolder = Path.Combine(Path.GetTempPath(), "swreview-tests", Guid.NewGuid().ToString("N"), RunId);
         Directory.CreateDirectory(_runFolder);
         PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build());
+        _session = new ConfirmedDrawingSession(_runFolder);
     }
 
     public void Dispose()
@@ -273,6 +286,49 @@ public class ConfirmedDrawingReadTests : IDisposable
         Assert.Null(Reloaded().DrawingRecords!.SingleOrDefault(row => row.DocumentId == DocumentIds.For(HousingDrawingPath)));
     }
 
+    /// <summary>
+    /// Decision 136A (2026-10-19): a candidate SOLIDWORKS did not open read-only is refused, closed
+    /// again and never read, and the package is left as it was. The refusal is the sentence the
+    /// backend records, word for word, as the <c>drawing.confirmed_open</c> item's reason
+    /// (<c>contracts/confirmed-open.md</c> section 1), so the review says why.
+    /// </summary>
+    [Fact]
+    public void ACandidateSolidWorksDidNotOpenReadOnlyIsARefusalSayingWhy_ClosedUnreadAndMergingNothing()
+    {
+        _host.OpenedReadOnly = false;
+        string before = File.ReadAllText(PackageAppender.PathIn(_runFolder));
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+
+        Assert.Equal(
+            "SOLIDWORKS opened 'housing.SLDDRW', but not read-only (IsOpenedReadOnly answered false; "
+            + FileLoadErrors.Describe(0, 0) + "), so it was not read; it was closed again.",
+            refusal.Message);
+        Assert.Equal("CloseDoc " + HousingDrawingPath, _host.Calls.Last().ToString());
+        Assert.Empty(_phase.Seen);
+        Assert.Equal(before, File.ReadAllText(PackageAppender.PathIn(_runFolder)));
+    }
+
+    /// <summary>
+    /// Decision 136A's review (2026-10-19): a candidate the open says SOLIDWORKS already had open -
+    /// the engineer opened it after the lookup, or has it open under another spelling of its path -
+    /// was not opened by this read: it is read as it stood and left open, recorded as one the lookup
+    /// found, never asked whether it is read-only and never closed.
+    /// </summary>
+    [Fact]
+    public void ACandidateTheOpenSaysWasAlreadyOpenIsReadAsItStoodAndLeftOpen()
+    {
+        _host.OpenWarnings = 128;
+        _host.OpenedReadOnly = false;
+
+        ConfirmedDrawingResult result = Read(RunId, HousingId);
+
+        Assert.False(result.Opened);
+        Assert.False(result.Closed);
+        Assert.Null(Reloaded().DrawingRecords!.Last().OpenedByReview);
+        Assert.DoesNotContain(_host.Calls, call => call.Name == "CloseDoc" || call.Name == "IsOpenedReadOnly");
+    }
+
     [Fact]
     public void ACloseTheSeamRefusesIsRecordedAsAGapOnTheDrawing()
     {
@@ -358,6 +414,482 @@ public class ConfirmedDrawingReadTests : IDisposable
         AssertRefusedOpeningNothing(() => Read(RunId, HousingId), "no candidate drawing");
     }
 
+    // ---- decision 136A (2026-10-19): every attempted open counts toward the ten --------------------
+
+    /// <summary>
+    /// An open that left no drawing record still counts toward the bound: with nine drawings held and
+    /// the candidate's open refused, the next read is refused by the bound, in a sentence naming both
+    /// counts, and nothing is opened. Edited deliberately for decision 141A (2026-10-19): the bound
+    /// now refuses at the seam's lookup, since a drawing already open is never refused for failed
+    /// opens, so SOLIDWORKS is asked that one thing, where before it was asked nothing.
+    /// </summary>
+    [Fact]
+    public void ARefusedOpenCountsTowardTheTen_SoTheNextReadOpensNothing()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        _host.OpenAnswersNull = true;
+        Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+        _host.Calls.Clear();
+        _host.OpenAnswersNull = false;
+
+        AssertRefusedAfterOnlyTheLookup(
+            () => Read(RunId, HousingId),
+            HousingDrawingPath,
+            "the limit of ten drawings for this review is reached: 9 in the package and 1 more open that was "
+                + "refused or failed, so this one was not opened");
+    }
+
+    /// <summary>
+    /// The opens are bounded whatever happens: every open fails, the review asks again and again, and
+    /// each request reaches a source built anew, as the add-in builds one on every attach - and still
+    /// only the room the package left, nine opens, is ever tried.
+    /// </summary>
+    [Fact]
+    public void OpensThatAllFailAreBoundedByTheRoomLeft_HoweverOftenAndThroughHoweverManySources()
+    {
+        _host.OpenAnswersNull = true;
+
+        for (int attempt = 0; attempt < 25; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, attempt % 2 == 0 ? HousingId : PinId));
+        }
+
+        Assert.Equal(9, _host.Calls.Count(call => call.Name == "OpenDoc6"));
+        Assert.Empty(_phase.Seen);
+    }
+
+    /// <summary>Edited deliberately for decision 141A: refused at the seam's lookup, as above.</summary>
+    [Fact]
+    public void AnOpenSolidWorksDidNotMakeReadOnlyCountsTowardTheTen()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        _host.OpenedReadOnly = false;
+        Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+        _host.Calls.Clear();
+        _host.OpenedReadOnly = true;
+
+        AssertRefusedAfterOnlyTheLookup(
+            () => Read(RunId, PinId), PinDrawingPath, "the limit of ten drawings for this review is reached");
+    }
+
+    /// <summary>Edited deliberately for decision 141A: refused at the seam's lookup, as above.</summary>
+    [Fact]
+    public void AReadThatThrowsAfterTheOpenCountsTowardTheTen()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        _phase.Failure = new InvalidOperationException("the sheets did not answer");
+        Assert.Throws<InvalidOperationException>(() => Read(RunId, HousingId));
+        _phase.Failure = null;
+        _phase.Seen.Clear();
+        _host.Calls.Clear();
+
+        AssertRefusedAfterOnlyTheLookup(
+            () => Read(RunId, PinId), PinDrawingPath, "the limit of ten drawings for this review is reached");
+    }
+
+    /// <summary>
+    /// A drawing read counts once, by its record: with eight held, a read that lands makes nine, a
+    /// refused open the tenth, and the next is refused naming nine in the package and one refused.
+    /// Edited deliberately for decision 141A: refused at the seam's lookup, as above.
+    /// </summary>
+    [Fact]
+    public void AReadThatLandsCountsOnceByItsRecordAndARefusedOneByItsAttempt()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 8));
+        Read(RunId, HousingId);
+        _host.OpenAnswersNull = true;
+        Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, PinId));
+        _host.Calls.Clear();
+        _phase.Seen.Clear();
+        _host.OpenAnswersNull = false;
+
+        AssertRefusedAfterOnlyTheLookup(
+            () => Read(RunId, PinId),
+            PinDrawingPath,
+            "the limit of ten drawings for this review is reached: 9 in the package and 1 more open that was "
+                + "refused or failed, so this one was not opened");
+    }
+
+    /// <summary>
+    /// Only an open counts: a refusal before the seam, the seam's own refusal while the seat has not
+    /// validated it, and a read of a drawing already open that throws open nothing, so with nine held
+    /// the tenth drawing is still read afterwards.
+    /// </summary>
+    [Fact]
+    public void WhatOpensNothingCountsForNothing()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read("20260923-000000-other", HousingId));
+        }
+
+        _seatValidated = false;
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, PinId));
+        }
+
+        _seatValidated = true;
+        _host.AlreadyOpen(HousingDrawingPath);
+        _phase.Failure = new InvalidOperationException("the sheets did not answer");
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            Assert.Throws<InvalidOperationException>(() => Read(RunId, HousingId));
+        }
+
+        _phase.Failure = null;
+        ConfirmedDrawingResult result = Read(RunId, PinId);
+
+        Assert.True(result.Opened);
+        Assert.Equal(10, Reloaded().DrawingRecords!.Count);
+    }
+
+    /// <summary>
+    /// Decision 136A's review (2026-10-19): once the opens that left no record reach the limit on
+    /// their own, a request is refused before the review's package is loaded - here a package that
+    /// can no longer be loaded at all - so a spent review costs SOLIDWORKS's thread nothing more.
+    /// Edited deliberately for decision 141A (2026-10-19): the refusal comes after SOLIDWORKS is asked
+    /// whether the candidate's drawing is open - the drawing the session knows from its package as it
+    /// last loaded it - since one already open is never refused for failed opens; that one lookup is
+    /// all, where before nothing was asked.
+    /// </summary>
+    [Fact]
+    public void AReviewWhoseFailedOpensAloneReachTheLimitIsRefusedBeforeItsPackageIsLoaded()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 0));
+        _host.OpenAnswersNull = true;
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, attempt % 2 == 0 ? HousingId : PinId));
+        }
+
+        Assert.Equal(10, _host.Calls.Count(call => call.Name == "OpenDoc6"));
+        File.WriteAllText(PackageAppender.PathIn(_runFolder), "not a package");
+        _host.Calls.Clear();
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+
+        // Edited deliberately for decision 141A: the sentence now ends saying how to go on.
+        Assert.Equal(
+            "the limit of ten drawings for this review is reached: 10 opens that were refused or failed, so this "
+                + "one was not opened; " + HowToGoOn,
+            refusal.Message);
+        Assert.Equal(new[] { "OpenDocument " + HousingDrawingPath }, _host.Calls.Select(call => call.ToString()));
+        Assert.Empty(_phase.Seen);
+    }
+
+    /// <summary>The count is per review: refused opens of one run leave another's room alone.</summary>
+    [Fact]
+    public void TheCountIsKeptPerReview()
+    {
+        string otherFolder = Path.Combine(Path.GetDirectoryName(_runFolder)!, "20260923-111500-chat0002");
+        Directory.CreateDirectory(otherFolder);
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        PackageAppender.Save(otherFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        _host.OpenAnswersNull = true;
+        Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+        _host.OpenAnswersNull = false;
+
+        ConfirmedDrawingResult result =
+            Source(id => id == "20260923-111500-chat0002" ? new ConfirmedDrawingSession(otherFolder) : null)
+                .Read("20260923-111500-chat0002", HousingId);
+
+        Assert.True(result.Opened);
+    }
+
+    // ---- decision 141A (2026-10-19): the count is the review session's -------------------------------
+
+    /// <summary>
+    /// A Retry or Recheck is a new review session in the same run folder (the add-in's
+    /// <c>ReviewHost.RetryContextReview</c> and <c>RecheckReview</c>), and the host hands the read the
+    /// new session's own: its count starts at nothing, so it opens again where the earlier session's
+    /// failed opens had spent the limit, and the earlier session's stays spent.
+    /// </summary>
+    [Fact]
+    public void ANewReviewSessionInTheSameRunFolderStartsItsOwnCount()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 0));
+        _host.OpenAnswersNull = true;
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, attempt % 2 == 0 ? HousingId : PinId));
+        }
+
+        _host.OpenAnswersNull = false;
+        _host.Calls.Clear();
+        var retried = new ConfirmedDrawingSession(_runFolder);
+
+        ConfirmedDrawingResult result = Source(id => id == RunId ? retried : null).Read(RunId, HousingId);
+
+        Assert.True(result.Opened);
+        Assert.Single(_host.Calls, call => call.Name == "OpenDoc6");
+        Assert.Equal(0, retried.UnrecordedOpens);
+        Assert.Equal(10, _session.UnrecordedOpens);
+
+        _host.Calls.Clear();
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, PinId));
+        Assert.StartsWith("the limit of ten drawings for this review is reached: 10 opens", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(_host.Calls, call => call.Name == "OpenDoc6");
+    }
+
+    /// <summary>
+    /// Two review sessions of one run folder never share a count. With eight drawings held, each
+    /// session's refused open leaves the other's room alone, so the first still opens the ninth -
+    /// shared, the two refused opens would have filled the ten - and the second is then refused by
+    /// the nine records and its own one refused open, never the other's.
+    /// </summary>
+    [Fact]
+    public void TwoSessionsOfOneRunFolderDoNotShareACount()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 8));
+        var other = new ConfirmedDrawingSession(_runFolder);
+        _host.OpenAnswersNull = true;
+        Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+        Assert.Throws<ConfirmedDrawingRefused>(() => ReadIn(other, HousingId));
+        _host.OpenAnswersNull = false;
+
+        ConfirmedDrawingResult result = Read(RunId, PinId);
+
+        Assert.True(result.Opened);
+        Assert.Equal(9, Reloaded().DrawingRecords!.Count);
+        _host.Calls.Clear();
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => ReadIn(other, HousingId));
+        Assert.StartsWith(
+            "the limit of ten drawings for this review is reached: 9 in the package and 1 more open that was refused "
+                + "or failed, so this one was not opened",
+            refusal.Message,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(_host.Calls, call => call.Name == "OpenDoc6");
+        Assert.Equal(1, _session.UnrecordedOpens);
+        Assert.Equal(1, other.UnrecordedOpens);
+    }
+
+    /// <summary>
+    /// The count is keyed by the session the host resolves, never by anything a request supplies:
+    /// a run id spelt as the host's own lookup still matches it (ignoring case), any document of
+    /// the review, and a source built anew for every request all reach the one session, so a spent
+    /// session stays spent and nothing more is opened.
+    /// </summary>
+    [Fact]
+    public void NothingARequestSuppliesResetsTheCount()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 0));
+        string shouted = RunId.ToUpperInvariant();
+        Func<string, ConfirmedDrawingSession?> records =
+            id => string.Equals(id, RunId, StringComparison.OrdinalIgnoreCase) ? _session : null;
+        _host.OpenAnswersNull = true;
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            string runId = attempt % 2 == 0 ? RunId : shouted;
+            Assert.Throws<ConfirmedDrawingRefused>(() => Source(records).Read(runId, attempt % 3 == 0 ? HousingId : PinId));
+        }
+
+        _host.OpenAnswersNull = false;
+        _host.Calls.Clear();
+
+        foreach (string runId in new[] { RunId, shouted })
+        {
+            foreach (string documentId in new[] { HousingId, PinId })
+            {
+                ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(
+                    () => Source(records).Read(runId, documentId));
+                Assert.StartsWith("the limit of ten drawings for this review is reached", refusal.Message, StringComparison.Ordinal);
+            }
+        }
+
+        Assert.DoesNotContain(_host.Calls, call => call.Name == "OpenDoc6");
+        Assert.Empty(_phase.Seen);
+        Assert.Equal(10, _session.UnrecordedOpens);
+    }
+
+    // ---- decision 141A (2026-10-19): a drawing already open is never refused for failed opens ------
+
+    /// <summary>
+    /// Once the session's failed opens have spent the limit - on their own, or with the package's
+    /// records - a drawing the engineer has open is still read as it stands, since reading it opens
+    /// nothing: no visibility call, no open, no close, and the count unchanged. SOLIDWORKS is asked
+    /// only whether it is open: by the seam, and, when the failed opens alone spent the limit, once
+    /// before the package is loaded as well.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(9, 1)]
+    [InlineData(5, 5)]
+    public void ADrawingAlreadyOpenIsReadAfterTheCountIsSpent(int drawings, int failedOpens)
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: drawings));
+        SpendWithFailedOpens(failedOpens);
+        _host.AlreadyOpen(HousingDrawingPath);
+
+        ConfirmedDrawingResult result = Read(RunId, HousingId);
+
+        Assert.False(result.Opened);
+        Assert.False(result.Closed);
+        Assert.Equal(
+            Enumerable.Repeat("OpenDocument " + HousingDrawingPath, failedOpens >= 10 ? 2 : 1),
+            _host.Calls.Select(call => call.ToString()));
+        Assert.Contains(Reloaded().DrawingRecords!, record => record.DocumentId == DocumentIds.For(HousingDrawingPath));
+        Assert.Equal(drawings + 1, Reloaded().DrawingRecords!.Count);
+        Assert.Equal(failedOpens, _session.UnrecordedOpens);
+    }
+
+    /// <summary>
+    /// The limit of ten drawing records still applies to a drawing already open: the read that makes
+    /// the tenth record lands, and the next already-open drawing is refused with the ten-records
+    /// sentence before SOLIDWORKS is asked anything.
+    /// </summary>
+    [Fact]
+    public void TheTenDrawingRecordsStillBoundADrawingAlreadyOpen()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        SpendWithFailedOpens(1);
+        _host.AlreadyOpen(HousingDrawingPath);
+        _host.AlreadyOpen(PinDrawingPath);
+        Assert.False(Read(RunId, HousingId).Opened);
+        _host.Calls.Clear();
+        _phase.Seen.Clear();
+
+        AssertRefusedOpeningNothing(
+            () => Read(RunId, PinId), "the package already holds ten drawings, so this one was not opened");
+    }
+
+    /// <summary>
+    /// The early refusal asks SOLIDWORKS about the very path the seam would read: the candidate
+    /// row's own, which may spell the drawing beside the document otherwise than discovery's rule
+    /// writes it. A drawing open under that spelling is read, never refused before the package is
+    /// loaded.
+    /// </summary>
+    [Fact]
+    public void TheEarlyLookIsOfTheCandidateRowsOwnPath()
+    {
+        const string spelledOtherwise = @"C:\Fictional\bracket\sub\..\housing.SLDDRW";
+        EvidencePackage package = ConfirmedDrawingPackage.Build(drawings: 0);
+        package.DrawingCandidates![0].Path = spelledOtherwise;
+        PackageAppender.Save(_runFolder, package);
+        _existing.Add(spelledOtherwise);
+        SpendWithFailedOpens(10);
+        _host.AlreadyOpen(spelledOtherwise);
+
+        ConfirmedDrawingResult result = Read(RunId, HousingId);
+
+        Assert.False(result.Opened);
+        Assert.Equal(
+            new[] { "OpenDocument " + spelledOtherwise, "OpenDocument " + spelledOtherwise },
+            _host.Calls.Select(call => call.ToString()));
+    }
+
+    /// <summary>
+    /// The engineer closes the drawing between the look that let the request past the early refusal
+    /// and the seam's own lookup: the seam decides at its lookup, so the spent session's drawing is
+    /// refused there and never opened.
+    /// </summary>
+    [Fact]
+    public void ADrawingClosedBetweenTheLookAndTheReadIsRefusedNotOpened()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 0));
+        SpendWithFailedOpens(10);
+        _host.AlreadyOpen(HousingDrawingPath);
+        _host.AfterLookup = path => _host.EngineerCloses(path);
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+
+        Assert.StartsWith(
+            "the limit of ten drawings for this review is reached: 10 opens that were refused or failed, so this one "
+                + "was not opened",
+            refusal.Message,
+            StringComparison.Ordinal);
+        Assert.Equal(
+            new[] { "OpenDocument " + HousingDrawingPath, "OpenDocument " + HousingDrawingPath },
+            _host.Calls.Select(call => call.ToString()));
+        Assert.Empty(_phase.Seen);
+        Assert.Equal(10, _session.UnrecordedOpens);
+    }
+
+    // ---- decision 141A (2026-10-19): the refusal says how to go on --------------------------------
+
+    /// <summary>
+    /// The limit's refusal ends with the two ways on that are true of the host: a new review, which
+    /// Review starts in a run folder of its own, starts its own count - named first since decision
+    /// 147A - and a drawing already open is still read, since reading it opens nothing. Both forms
+    /// say so - failed opens alone, refused before the package is loaded, and failed opens with the
+    /// package's records.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 10, "10 opens that were refused or failed")]
+    [InlineData(9, 1, "9 in the package and 1 more open that was refused or failed")]
+    [InlineData(6, 4, "6 in the package and 4 more opens that were refused or failed")]
+    public void TheLimitsRefusalSaysHowToGoOn(int drawings, int failedOpens, string counted)
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: drawings));
+        SpendWithFailedOpens(failedOpens);
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+
+        Assert.Equal(
+            "the limit of ten drawings for this review is reached: " + counted + ", so this one was not opened; "
+                + HowToGoOn,
+            refusal.Message);
+    }
+
+    /// <summary>
+    /// The ten-records sentence is unchanged - the backend pins it - and says nothing of a new
+    /// session: a new session starts its own count of failed opens, but the package's drawings stay.
+    /// </summary>
+    [Fact]
+    public void TheTenRecordsRefusalIsUnchangedSinceANewSessionKeepsThePackagesDrawings()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 10));
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(
+            () => ReadIn(new ConfirmedDrawingSession(_runFolder), HousingId));
+
+        Assert.Equal("the package already holds ten drawings, so this one was not opened", refusal.Message);
+    }
+
+    /// <summary>
+    /// The way on the limit's sentence names holds whenever it is said: a session whose failed opens
+    /// alone spent the limit, and whose package then came to hold ten drawings by reads of drawings
+    /// already open, refuses the next request with the ten-records sentence, never with the limit's,
+    /// which would say a drawing already open is still read. The session's memory of its package is
+    /// brought up to date by its own merge.
+    /// </summary>
+    [Fact]
+    public void OnceThePackageHoldsTenDrawingsASpentSessionSaysSoRatherThanTheLimitsWayOn()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 0));
+        SpendWithFailedOpens(10);
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        _host.AlreadyOpen(HousingDrawingPath);
+        Assert.False(Read(RunId, HousingId).Opened);
+        Assert.Equal(10, Reloaded().DrawingRecords!.Count);
+        _host.Calls.Clear();
+        _phase.Seen.Clear();
+
+        AssertRefusedOpeningNothing(
+            () => Read(RunId, PinId), "the package already holds ten drawings, so this one was not opened");
+    }
+
+    /// <summary>
+    /// The early refusal is for a candidate the spent session knows from its package: a document it
+    /// knows no candidate for goes through every rule as before, and is refused by the rule it fails.
+    /// (Failed opens alone reach ten only while the package holds no drawing, so the package holding
+    /// the root drawing is written once the session is spent.)
+    /// </summary>
+    [Theory]
+    [InlineData("root drawing", "is a drawing")]
+    [InlineData("assembly", "names no candidate drawing")]
+    [InlineData("unknown", "is not a document of the review")]
+    public void ARequestTheSpentSessionKnowsNoCandidateForMeetsEveryRuleAsBefore(string which, string refusedWith)
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 0));
+        SpendWithFailedOpens(10);
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 1));
+        string documentId = which == "root drawing" ? RootDrawingId : which == "assembly" ? AssemblyId : "doc:000000000000";
+
+        AssertRefusedOpeningNothing(() => Read(RunId, documentId), refusedWith);
+    }
+
     // ---- the switch ping reports (feature 013 T072, contracts/drawing-capability.md section 1) --
 
     /// <summary>
@@ -380,9 +912,16 @@ public class ConfirmedDrawingReadTests : IDisposable
 
     private ConfirmedDrawingResult Read(string runId, string documentId) => Source().Read(runId, documentId);
 
+    /// <summary>A read that <see cref="RunId"/> resolves to <paramref name="session"/>, as a new session of the same review would.</summary>
+    private ConfirmedDrawingResult ReadIn(ConfirmedDrawingSession session, string documentId) =>
+        Source(id => string.Equals(id, RunId, StringComparison.Ordinal) ? session : null).Read(RunId, documentId);
+
     private ConfirmedDrawingRead Source() =>
+        Source(id => string.Equals(id, RunId, StringComparison.Ordinal) ? _session : null);
+
+    private ConfirmedDrawingRead Source(Func<string, ConfirmedDrawingSession?> sessionOf) =>
         new ConfirmedDrawingRead(
-            id => string.Equals(id, RunId, StringComparison.Ordinal) ? _runFolder : null,
+            sessionOf,
             _attachedDocument,
             path => _existing.Contains(path),
             new DrawingOpenScope(_host, null, _seatValidated),
@@ -391,6 +930,42 @@ public class ConfirmedDrawingReadTests : IDisposable
             _documents);
 
     private EvidencePackage Reloaded() => PackageAppender.Load(_runFolder);
+
+    /// <summary>
+    /// <paramref name="failedOpens"/> requests of the session whose opens SOLIDWORKS refuses, by
+    /// turns for the pin and the housing; then SOLIDWORKS opens again, and the calls and the reads
+    /// seen so far are cleared.
+    /// </summary>
+    private void SpendWithFailedOpens(int failedOpens)
+    {
+        _host.OpenAnswersNull = true;
+        for (int attempt = 0; attempt < failedOpens; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, attempt % 2 == 0 ? PinId : HousingId));
+        }
+
+        Assert.Equal(failedOpens, _session.UnrecordedOpens);
+        _host.OpenAnswersNull = false;
+        _host.Calls.Clear();
+        _phase.Seen.Clear();
+    }
+
+    /// <summary>
+    /// Decision 141A: refused by the bound with SOLIDWORKS asked one thing only - whether the drawing
+    /// at <paramref name="drawingPath"/> is open, since one already open is still read - and nothing
+    /// hidden, opened, read or closed, the package unchanged.
+    /// </summary>
+    private void AssertRefusedAfterOnlyTheLookup(Func<ConfirmedDrawingResult> read, string drawingPath, string contains)
+    {
+        string before = File.ReadAllText(PackageAppender.PathIn(_runFolder));
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => read());
+
+        Assert.Contains(contains, refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(new[] { "OpenDocument " + drawingPath }, _host.Calls.Select(call => call.ToString()));
+        Assert.Empty(_phase.Seen);
+        Assert.Equal(before, File.ReadAllText(PackageAppender.PathIn(_runFolder)));
+    }
 
     private void AssertRefusedOpeningNothing(Func<ConfirmedDrawingResult> read, string contains)
     {

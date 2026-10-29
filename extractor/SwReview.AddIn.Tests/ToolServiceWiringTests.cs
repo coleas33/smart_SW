@@ -522,6 +522,1354 @@ public sealed class ToolServiceWiringTests
         Assert.Null(documentMidway);
     }
 
+    // ---- following once the hold ends (owner decision 152A) ------------------------------------
+
+    /// <summary>
+    /// Owner decision 152A, its first half. A switch made while a review turn or a remodel run held
+    /// the bridge was skipped, and nothing followed it until the next switch: a review pressed once
+    /// the turn had ended was given the bridge left on the document switched away from (002
+    /// research, 149A's owner question 5). The gate now owes the follow and asks again a poll later;
+    /// once nothing holds the bridge it attaches to the document active then, publishes that
+    /// service's bridge, and asks no more.
+    /// </summary>
+    [Fact]
+    public void ASwitchSkippedWhileWorkHeldTheBridgeIsFollowedOnceTheHoldEnds()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(1, world.LooksWaiting);
+
+        world.Busy = false;
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.True(first.Disposed);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        Assert.Equal(world.Services[1].ReviewBridge.Secret, world.Published!.Secret);
+        Assert.Equal(0, world.LooksWaiting);
+        Assert.Empty(world.Reports);
+    }
+
+    /// <summary>
+    /// While the hold lasts, each look finds it and re-attaches nothing: the follow stays owed and
+    /// is asked again a poll later - one look waiting at a time, however many switches were
+    /// skipped. The tool-service log says why at each skipped switch, as before, and a look writes
+    /// nothing: a line a second for the length of a turn would bury the one the engineer is sent
+    /// there to read.
+    /// </summary>
+    [Fact]
+    public void WhileTheHoldLastsOneLookWaitsAtATimeAndLooksWriteNoLine()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        world.DocumentPath = @"C:\models\plate.SLDPRT";
+        gate.FollowDocument(@"C:\models\plate.SLDPRT");
+        Assert.Equal(1, world.LooksWaiting);
+
+        for (int poll = 0; poll < 3; poll++)
+        {
+            world.RunLooks();
+
+            Assert.Equal(1, world.Starts);
+            Assert.False(world.Services[0].Disposed);
+            Assert.Equal(1, world.LooksWaiting);
+        }
+
+        Assert.Equal(2, world.Services[0].LogLines.Count);
+
+        world.Busy = false;
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\plate.SLDPRT", gate.DocumentPath);
+        Assert.Equal(0, world.LooksWaiting);
+    }
+
+    /// <summary>
+    /// The look follows the document active when the hold ends, not the one the skipped switch
+    /// named. Another model made active since is attached to; back on the attached document,
+    /// however spelled, on a drawing, or with nothing open, nothing is re-attached - as at a switch
+    /// to any of them - and nothing is asked again.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\models\plate.SLDPRT", true)]
+    [InlineData(@"c:\MODELS\FRAME.sldasm", false)]
+    [InlineData(@"C:\models\sheet.SLDDRW", false)]
+    [InlineData(null, false)]
+    public void TheLookFollowsTheDocumentActiveWhenTheHoldEnds(string? active, bool follows)
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        world.Busy = false;
+        world.DocumentOpen = active != null;
+        world.DocumentPath = active ?? world.DocumentPath;
+        world.RunLooks();
+
+        Assert.Equal(follows ? 2 : 1, world.Starts);
+        Assert.Equal(follows, world.Services[0].Disposed);
+        Assert.Equal(follows ? active : @"C:\models\frame.SLDASM", gate.DocumentPath);
+        Assert.Equal(0, world.LooksWaiting);
+        Assert.Empty(world.Reports);
+    }
+
+    /// <summary>
+    /// The follow must not race a new switch. One that lands while a start is in flight - after the
+    /// start read the active document, before it is listening - was dropped, and the service stayed
+    /// on the document left until the next switch (docs/review-backlog.md, the finding against
+    /// `FollowDocument`'s early return while a start is in flight). It is owed now, and looked at as
+    /// soon as the start is listening.
+    /// </summary>
+    [Fact]
+    public void ASwitchThatLandsWhileAStartIsInFlightIsFollowedOnceItIsListening()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        world.AfterAttach = () =>
+        {
+            world.AfterAttach = null;
+            world.DocumentPath = @"C:\models\bracket.SLDPRT";
+            gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        };
+
+        gate.EnsureStarted();
+
+        Assert.Equal(2, world.Starts);
+        Assert.True(world.Services[0].Disposed);
+        Assert.False(world.Services[1].Disposed);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        Assert.Equal(world.Services[1].ReviewBridge.Secret, world.Published!.Secret);
+    }
+
+    /// <summary>
+    /// One service at a time (data-model.md). A look that comes due while a follow is in flight -
+    /// here while it asks whether work holds the bridge, one HTTP round trip per open chat in the
+    /// add-in - starts nothing of its own and asks nothing: the follow in flight reads the active
+    /// document once it has its answer, and attaches to it.
+    /// </summary>
+    [Fact]
+    public void ALookThatComesDueWhileAFollowIsInFlightAsksNothingAndStartsNothing()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        int asked = world.BusyQuestions;
+
+        world.Busy = false;
+        world.DocumentPath = @"C:\models\plate.SLDPRT";
+        world.OnBusy = () =>
+        {
+            world.OnBusy = null;
+            world.RunLooks();
+        };
+        gate.FollowDocument(@"C:\models\plate.SLDPRT");
+
+        Assert.Equal(asked + 1, world.BusyQuestions);
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\plate.SLDPRT", gate.DocumentPath);
+        Assert.False(world.Services[1].Disposed);
+        Assert.Equal(0, world.LooksWaiting);
+    }
+
+    /// <summary>
+    /// A look that comes due once the add-in has unloaded starts nothing, publishes nothing and
+    /// says nothing: a pipe listening into a SOLIDWORKS with no add-in is worse than none.
+    /// </summary>
+    [Fact]
+    public void ALookThatComesDueAfterDisposeStartsNothing()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        world.Busy = false;
+
+        gate.Dispose();
+        world.RunLooks();
+
+        Assert.Equal(1, world.Starts);
+        Assert.True(world.Services[0].Disposed);
+        Assert.Null(world.Published);
+        Assert.Null(gate.Service);
+        Assert.Equal(0, world.LooksWaiting);
+        Assert.Empty(world.Reports);
+    }
+
+    /// <summary>
+    /// The planned copy's attachment is kept exactly as before (004 T180): a look that finds the
+    /// exact held copy active once the hold ends - the plan that opened the copy held the bridge
+    /// while it did - keeps the attachment, says why in the log, and asks no more; and a look that
+    /// finds another document active follows it, as a switch to it would.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ALookKeepsThePlannedCopysAttachmentAsASwitchDoes(bool keptForThePlan)
+    {
+        string copy = @"C:\runs\20261020-plan\copy\bracket-RMS.SLDPRT";
+        var world = new GateWorld { DocumentPath = @"C:\models\bracket.SLDPRT", Busy = true };
+        world.Preserve = (path, attachment) => keptForThePlan
+            && string.Equals(path, copy, StringComparison.OrdinalIgnoreCase)
+            && attachment == "swreview-fake-1";
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.DocumentPath = copy;
+        gate.FollowDocument(copy);
+
+        world.Busy = false;
+        world.RunLooks();
+
+        Assert.Equal(keptForThePlan ? 1 : 2, world.Starts);
+        Assert.Equal(keptForThePlan ? "swreview-fake-1" : "swreview-fake-2", gate.Attachment);
+        Assert.Equal(0, world.LooksWaiting);
+        if (keptForThePlan)
+        {
+            Assert.Contains(
+                world.Services[0].LogLines,
+                line => line.IndexOf("the planned copy still belongs to", StringComparison.Ordinal) >= 0);
+        }
+    }
+
+    /// <summary>
+    /// A configuration switch is not followed at the switch: the add-in fans it out as a follow of
+    /// the same path, which re-attaches nothing (004, decision 22A). A review that finds the bridge
+    /// on another configuration asks the gate to follow the active document (owner decision 152A),
+    /// and a follow attaches to the document as it is, its configuration included - so the next
+    /// press finds the bridge on the review's. Asked when the attachment is the active document's
+    /// already, it re-attaches nothing.
+    /// </summary>
+    [Fact]
+    public void AReviewsRequestFollowsTheActiveConfigurationWhichASwitchAloneDoesNot()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Configuration = "Default" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+
+        gate.FollowActiveDocument();
+        Assert.Equal(1, world.Starts);
+
+        world.Configuration = "Machined";
+        gate.FollowDocument(@"C:\models\frame.SLDASM");
+        Assert.Equal(1, world.Starts);
+
+        gate.FollowActiveDocument();
+
+        Assert.Equal(2, world.Starts);
+        Assert.True(world.Services[0].Disposed);
+        PageDocument served = gate.DocumentServedBy(world.Published!)!;
+        Assert.Equal(@"C:\models\frame.SLDASM", served.Path);
+        Assert.Equal("Machined", served.Configuration);
+        Assert.Equal(0, world.LooksWaiting);
+    }
+
+    /// <summary>
+    /// A review's request is a follow like any other: while work holds the bridge it re-attaches
+    /// nothing and waits for the hold to end, and then follows.
+    /// </summary>
+    [Fact]
+    public void AReviewsRequestWhileWorkHoldsTheBridgeWaitsForTheHoldToEnd()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Configuration = "Default", Busy = true };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.Configuration = "Machined";
+
+        gate.FollowActiveDocument();
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(1, world.LooksWaiting);
+        Assert.Empty(world.Services[0].LogLines);
+
+        world.Busy = false;
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal("Machined", gate.DocumentServedBy(world.Published!)!.Configuration);
+    }
+
+    /// <summary>
+    /// What a review asks before its session is given the bridge (owner decision 152A): the
+    /// document and configuration the service listening on that bridge's pipe is attached to - what
+    /// its `ping` answers, read from the service rather than over its pipe - and nothing for a pipe
+    /// no service listening now has: before the first start, another attachment's, the one a
+    /// re-attach is taking down, the one it took down, and any after Dispose.
+    /// </summary>
+    [Fact]
+    public void DocumentServedByNamesTheListeningServicesAttachmentForItsOwnPipeOnly()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Configuration = "Default" };
+        ToolServiceGate gate = world.Gate();
+        Assert.Null(gate.DocumentServedBy(new BridgeConfig("swreview-fake-1", "review-secret-1")));
+
+        gate.EnsureStarted();
+        BridgeConfig first = world.Published!;
+        PageDocument served = gate.DocumentServedBy(first)!;
+        Assert.Equal(@"C:\models\frame.SLDASM", served.Path);
+        Assert.Equal("Default", served.Configuration);
+        Assert.Null(gate.DocumentServedBy(new BridgeConfig("swreview-fake-9", first.Secret)));
+
+        PageDocument? midway = new PageDocument("not asked", null);
+        world.OnStart = () => midway = gate.DocumentServedBy(first);
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        world.Configuration = "Welded";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Null(midway);
+        Assert.Null(gate.DocumentServedBy(first));
+        PageDocument now = gate.DocumentServedBy(world.Published!)!;
+        Assert.Equal(@"C:\models\bracket.SLDPRT", now.Path);
+        Assert.Equal("Welded", now.Configuration);
+
+        BridgeConfig second = world.Published!;
+        gate.Dispose();
+        Assert.Null(gate.DocumentServedBy(second));
+    }
+
+    /// <summary>
+    /// The answer the gate gives for a bridge is what that bridge's own `ping` answers over its pipe
+    /// with the review secret: the document and configuration the attach bound the scope to. The
+    /// review host asks the gate rather than the pipe - a request over the pipe waits behind every
+    /// command ahead of it on the application thread - so the two must not be able to differ.
+    /// </summary>
+    [Fact]
+    public void WhatTheGateNamesForABridgeIsWhatThatBridgesPingAnswers()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            PipeReply ping = RemodelPipe.Send(world.Host.PipeName, world.Host.ReviewSecret, BridgeCommands.Ping, new { });
+            Assert.True(ping.Status == BridgeStatus.Ok, "ping answered: " + ping.Error);
+            string? document = ping.Result.GetProperty("document").GetString();
+            string? configuration = ping.Result.GetProperty("configuration").GetString();
+            Assert.Equal(world.SourcePath, document);
+            Assert.Equal("Default", configuration);
+
+            Assert.Equal(document, world.Host.DocumentPath);
+            Assert.Equal(configuration, world.Host.Configuration);
+
+            var gate = new ToolServiceGate(
+                () => new PageDocument(world.SourcePath, "Default"),
+                () => world.Host,
+                _ => { },
+                (what, failure) => { },
+                schedule: work => work());
+            gate.EnsureStarted();
+            PageDocument served = gate.DocumentServedBy(world.Host.ReviewBridge)!;
+            Assert.Equal(document, served.Path);
+            Assert.Equal(configuration, served.Configuration);
+        }
+    }
+
+    // ---- what the 152A review found ---------------------------------------------------------
+
+    /// <summary>
+    /// The 152A review's R3. A review compares its document with the bridge's by the pane's one rule
+    /// (<see cref="PageDocument.IsSameDocument(PageDocument)"/>: the path ignoring case), and the gate
+    /// compares paths canonically; a document the attach spelled otherwise - opened through `..`, say -
+    /// was refused by the review and called the same by the gate, so the review's request re-attached
+    /// nothing and the refusal never cleared. A review's request is decided by the review's rule; a
+    /// switch keeps the gate's.
+    /// </summary>
+    [Fact]
+    public void AReviewsRequestFollowsADocumentTheAttachSpelledOtherwise()
+    {
+        var world = new GateWorld
+        {
+            DocumentPath = @"C:\models\frame.SLDASM",
+            Configuration = "Default",
+            AttachSpelling = () => @"C:\models\sub\..\frame.SLDASM",
+        };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.AttachSpelling = null;
+        var reviewed = new PageDocument(@"C:\models\frame.SLDASM", "Default");
+        Assert.False(reviewed.IsSameDocument(gate.DocumentServedBy(world.Published!)));
+
+        gate.FollowDocument(@"C:\models\frame.SLDASM");
+        Assert.Equal(1, world.Starts);
+
+        gate.FollowActiveDocument();
+
+        Assert.Equal(2, world.Starts);
+        Assert.True(reviewed.IsSameDocument(gate.DocumentServedBy(world.Published!)));
+    }
+
+    /// <summary>
+    /// The 152A review's N3. A configuration switch is the same document at the switch, and
+    /// re-attaches nothing (004, decision 22A) - also when it lands while a start or a follow is in
+    /// flight, and is looked at once that work is over, and when the hold that skipped a switch ends
+    /// with the attached document back in another configuration. Only a review's request follows a
+    /// configuration.
+    /// </summary>
+    [Theory]
+    [InlineData("during a start")]
+    [InlineData("once a hold ends")]
+    public void AConfigurationSwitchReattachesNothingWhereverItLands(string when)
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Configuration = "Default" };
+        ToolServiceGate gate = world.Gate();
+        if (when == "during a start")
+        {
+            world.AfterAttach = () =>
+            {
+                world.AfterAttach = null;
+                world.Configuration = "Machined";
+                gate.FollowDocument(@"C:\models\frame.SLDASM");
+            };
+            gate.EnsureStarted();
+        }
+        else
+        {
+            gate.EnsureStarted();
+            world.Busy = true;
+            world.DocumentPath = @"C:\models\bracket.SLDPRT";
+            gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+            world.DocumentPath = @"C:\models\frame.SLDASM";
+            world.Configuration = "Machined";
+            gate.FollowDocument(@"C:\models\frame.SLDASM");
+            world.Busy = false;
+            world.RunLooks();
+        }
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal("Default", gate.DocumentServedBy(world.Published!)!.Configuration);
+        Assert.Equal(0, world.LooksWaiting);
+
+        gate.FollowActiveDocument();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal("Machined", gate.DocumentServedBy(world.Published!)!.Configuration);
+    }
+
+    /// <summary>
+    /// The 152A review's R4. A switch that lands just after a follow read the active document - a
+    /// look that found the attached document, so re-attaches nothing - is looked at as soon as that
+    /// look is over, not left until the next switch.
+    /// </summary>
+    [Fact]
+    public void ASwitchThatLandsJustAfterALooksReadingIsFollowedOnceTheLookIsOver()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        world.Busy = false;
+        world.DocumentPath = @"C:\models\frame.SLDASM";
+        world.AfterActive = () =>
+        {
+            world.AfterActive = null;
+            world.DocumentPath = @"C:\models\plate.SLDPRT";
+            gate.FollowDocument(@"C:\models\plate.SLDPRT");
+        };
+
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\plate.SLDPRT", gate.DocumentPath);
+        Assert.Equal(0, world.LooksWaiting);
+    }
+
+    /// <summary>
+    /// The 152A review's R4. A review's request that comes while a start is in flight is owed, and
+    /// looked at once the start is listening: a review refused as the tool service attached is not
+    /// left on the configuration the start found.
+    /// </summary>
+    [Fact]
+    public void AReviewsRequestWhileAStartIsInFlightIsFollowedOnceItIsListening()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Configuration = "Default" };
+        ToolServiceGate gate = world.Gate();
+        world.AfterAttach = () =>
+        {
+            world.AfterAttach = null;
+            world.Configuration = "Machined";
+            gate.FollowActiveDocument();
+        };
+
+        gate.EnsureStarted();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal("Machined", gate.DocumentServedBy(world.Published!)!.Configuration);
+    }
+
+    /// <summary>
+    /// The 152A review's R4. A busy question that throws counts as busy and is said, as before 152A,
+    /// and owes nothing: nothing says the next answer would come, so it is not asked again every poll,
+    /// nor at once. The next switch, or a review's request, asks again.
+    /// </summary>
+    [Fact]
+    public void ABusyQuestionThatThrowsIsSaidAndOwesNothing()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.BusyFailure = new InvalidOperationException("the backend did not answer");
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Contains("the backend did not answer", Assert.Single(world.Reports), StringComparison.Ordinal);
+        Assert.Equal(1, world.BusyQuestions);
+        Assert.Equal(0, world.LooksWaiting);
+        Assert.Equal(1, world.Starts);
+    }
+
+    /// <summary>
+    /// The same for a look: a look whose busy question throws is said, and owes nothing - neither a
+    /// look at once nor one a poll later - so a question that keeps throwing is not asked back to back.
+    /// </summary>
+    [Fact]
+    public void ALookWhoseBusyQuestionThrowsIsSaidAndAsksNoMore()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true };
+        var queued = new Queue<Action>();
+        ToolServiceGate gate = world.Gate(work => queued.Enqueue(work));
+        gate.EnsureStarted();
+        queued.Dequeue()();
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        queued.Dequeue()();
+        Assert.Equal(1, world.LooksWaiting);
+        world.BusyFailure = new InvalidOperationException("the backend did not answer");
+
+        world.RunLooks();
+
+        Assert.Empty(queued);
+        Assert.Equal(0, world.LooksWaiting);
+        Assert.Equal(2, world.BusyQuestions);
+        Assert.Equal(1, world.Starts);
+        Assert.Contains("the backend did not answer", Assert.Single(world.Reports), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The 152A review's N2. A switch that lands while the busy question is out is owed, and is not
+    /// dropped when that question then throws: it is looked at once the question is over, and the
+    /// look asks afresh.
+    /// </summary>
+    [Fact]
+    public void ASwitchMadeWhileTheBusyQuestionIsOutIsFollowedThoughTheQuestionThrows()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        int asked = 0;
+        world.OnBusy = () =>
+        {
+            asked++;
+            world.BusyFailure = null;
+            if (asked == 1)
+            {
+                world.DocumentPath = @"C:\models\plate.SLDPRT";
+                gate.FollowDocument(@"C:\models\plate.SLDPRT");
+                world.BusyFailure = new InvalidOperationException("the backend did not answer");
+            }
+        };
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, asked);
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\plate.SLDPRT", gate.DocumentPath);
+        Assert.Single(world.Reports);
+    }
+
+    /// <summary>
+    /// The 152A review's R4. A switch back to the attached document while a follow's busy question is
+    /// out is read with the rest by that follow, which re-attaches nothing and owes no second look:
+    /// the busy question is asked once.
+    /// </summary>
+    [Fact]
+    public void ASwitchBackWhileTheBusyQuestionIsOutCostsNoSecondQuestion()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.OnBusy = () =>
+        {
+            world.OnBusy = null;
+            world.DocumentPath = @"C:\models\frame.SLDASM";
+            gate.FollowDocument(@"C:\models\frame.SLDASM");
+        };
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(1, world.BusyQuestions);
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(@"C:\models\frame.SLDASM", gate.DocumentPath);
+        Assert.Equal(0, world.LooksWaiting);
+    }
+
+    // ---- what the Codex review found: work holds the bridge through the gate (152A, X2) -------
+
+    /// <summary>
+    /// The Codex review of 152A, X2. A follow's busy question is a round trip per open chat, and work
+    /// can begin while it is out - a plan, a review session, a turn - after its answer was had: the
+    /// follow then took the bridge down under work that had just begun. Work holds the attachment
+    /// through the gate before it reads the bridge, and a follow takes the bridge down only if no hold
+    /// was taken since it noted them, before its question: a hold taken and let go while the question
+    /// was out still keeps the bridge, the follow is owed, and the next look, asked afresh, follows.
+    /// </summary>
+    [Fact]
+    public void AHoldTakenWhileAFollowsBusyQuestionIsOutKeepsTheBridgeAndTheFollowIsOwed()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        world.OnBusy = () =>
+        {
+            world.OnBusy = null;
+            using (IDisposable? hold = gate.HoldAttachment(ToolServiceHolder.Remodel))
+            {
+                Assert.NotNull(hold);
+            }
+        };
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(1, world.BusyQuestions);
+        Assert.False(world.Services[0].Disposed);
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(@"C:\models\frame.SLDASM", gate.DocumentPath);
+        Assert.Equal(1, world.LooksWaiting);
+
+        world.RunLooks();
+
+        Assert.Equal(2, world.BusyQuestions);
+        Assert.True(world.Services[0].Disposed);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        Assert.Equal(0, world.LooksWaiting);
+    }
+
+    /// <summary>
+    /// A hold held when a follow begins is work holding the bridge, answered without the busy
+    /// question's round trip: a switch's follow is skipped and said in the tool-service log as any
+    /// busy one is, and owed; looked at a poll later while the hold is held it is owed again, asking
+    /// nothing; and once the hold is let go the next look asks and follows.
+    /// </summary>
+    [Fact]
+    public void AHoldHeldWhenAFollowBeginsIsBusyWithoutTheQuestionUntilItIsLetGo()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        IDisposable hold = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        world.RunLooks();
+
+        Assert.Equal(0, world.BusyQuestions);
+        Assert.Equal(1, world.Starts);
+        Assert.StartsWith(
+            @"not re-attaching to C:\models\bracket.SLDPRT: ",
+            Assert.Single(world.Services[0].LogLines),
+            StringComparison.Ordinal);
+        Assert.Equal(1, world.LooksWaiting);
+
+        hold.Dispose();
+        world.RunLooks();
+
+        Assert.Equal(1, world.BusyQuestions);
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        Assert.Equal(0, world.LooksWaiting);
+    }
+
+    /// <summary>
+    /// Each hold is its own: letting one go twice lets it go once, and the bridge stays held until
+    /// every hold is let go - two of one kind too, as two chats' turn calls are (owner decision 158A,
+    /// on its review: S2).
+    /// </summary>
+    [Fact]
+    public void LettingAHoldGoTwiceLetsItGoOnce()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        IDisposable first = gate.HoldAttachment(ToolServiceHolder.TurnCall)!;
+        IDisposable second = gate.HoldAttachment(ToolServiceHolder.TurnCall)!;
+        first.Dispose();
+        first.Dispose();
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(1, world.LooksWaiting);
+
+        second.Dispose();
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+    }
+
+    /// <summary>
+    /// A hold is on the service listening now, so none is given while there is none: before the first
+    /// start, once a follow has begun taking the bridge down - work that would start there finds no
+    /// bridge to hold and starts on none, never on one being taken down - while the next start
+    /// attaches, and once the gate is disposed. The next service, once listening, is held.
+    /// </summary>
+    [Fact]
+    public void NoHoldIsGivenWhileNoServiceIsListening()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        Assert.Null(gate.HoldAttachment(ToolServiceHolder.ReviewSession));
+        gate.EnsureStarted();
+        IDisposable? whileTakenDown = ToolServiceHold.Nothing;
+        IDisposable? whileStarting = ToolServiceHold.Nothing;
+        world.Services[0].DuringDispose = () => whileTakenDown = gate.HoldAttachment(ToolServiceHolder.ReviewSession);
+        world.OnStart = () => whileStarting = gate.HoldAttachment(ToolServiceHolder.ReviewSession);
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Null(whileTakenDown);
+        Assert.Null(whileStarting);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        IDisposable? next = gate.HoldAttachment(ToolServiceHolder.ReviewSession);
+        Assert.NotNull(next);
+        world.DocumentPath = @"C:\models\plate.SLDPRT";
+        gate.FollowDocument(@"C:\models\plate.SLDPRT");
+        Assert.Equal(2, world.Starts);
+        next!.Dispose();
+
+        gate.Dispose();
+
+        Assert.Null(gate.HoldAttachment(ToolServiceHolder.ReviewSession));
+    }
+
+    /// <summary>
+    /// ...the same race with a turn. The page's Send, a follow-up or an answer starts a turn through
+    /// the pane's proxy, which holds the bridge through the gate while the call is out; the backend
+    /// marks the turn running before it answers, so from then on the busy question sees it. A follow
+    /// whose question was out as the turn began keeps the bridge, and follows once the turn has ended.
+    /// </summary>
+    [Fact]
+    public void ATurnStartedThroughThePaneWhileAFollowsBusyQuestionIsOutKeepsTheBridge()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        var proxy = new BackendProxyHandler(
+            () => new BackendEndpoint(51234, "0FAKEtoken"),
+            _ => new ProxiedResponse(202, "Accepted", "Content-Type: application/json", System.Text.Encoding.UTF8.GetBytes("{\"state\":\"running\"}")),
+            () => null,
+            () => gate.HoldAttachment(ToolServiceHolder.TurnCall));
+        world.OnBusy = () =>
+        {
+            world.OnBusy = null;
+            ProxiedResponse? sent = proxy.TryServe(
+                "https://swreview.invalid/__backend/sessions/chat-1/messages", "POST", null, null);
+            Assert.Equal(202, sent!.Status);
+        };
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.False(world.Services[0].Disposed);
+        Assert.Equal(1, world.LooksWaiting);
+
+        world.Busy = true;
+        world.RunLooks();
+        Assert.False(world.Services[0].Disposed);
+
+        world.Busy = false;
+        world.RunLooks();
+        Assert.True(world.Services[0].Disposed);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+    }
+
+    // ---- a hold's time limit, and what a review asks the gate to follow (owner decision 158A) --
+
+    /// <summary>
+    /// Owner decision 158A. A hold is let go by its holder, and nothing in the gate bounded it: a holder
+    /// that never let go kept the tool service on its document for good (152A's owner question 6). A
+    /// hold that has held longer than <see cref="ToolServiceGate.HoldLimit"/> no longer holds back a
+    /// follow: the look that finds it so asks the busy question as for no hold, and follows. Until then
+    /// it holds as before, asking nothing.
+    /// </summary>
+    [Fact]
+    public void AStuckHoldPastTheLimitNoLongerHoldsBackTheFollow()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+        IDisposable stuck = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        world.Clock = TimeSpan.FromMinutes(59);
+        world.RunLooks();
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(0, world.BusyQuestions);
+        Assert.Equal(1, world.LooksWaiting);
+
+        world.Clock = ToolServiceGate.HoldLimit + TimeSpan.FromSeconds(1);
+        world.RunLooks();
+
+        Assert.Equal(1, world.BusyQuestions);
+        Assert.Equal(2, world.Starts);
+        Assert.True(first.Disposed);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        Assert.Equal(world.Services[1].ReviewBridge.Secret, world.Published!.Secret);
+        Assert.Equal(0, world.LooksWaiting);
+        Assert.Empty(world.Reports);
+        stuck.Dispose();
+    }
+
+    /// <summary>
+    /// ...measured from when that hold was taken, not from the switch it holds back, and only once it
+    /// has held longer than the limit: a hold that has held the limit exactly still holds.
+    /// </summary>
+    [Fact]
+    public void AHoldHoldsUntilItHasHeldLongerThanTheLimitSinceItWasTaken()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Clock = TimeSpan.FromMinutes(10) };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        IDisposable hold = gate.HoldAttachment(ToolServiceHolder.Remodel)!;
+        world.Clock = TimeSpan.FromMinutes(25);
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        world.Clock = TimeSpan.FromMinutes(10) + ToolServiceGate.HoldLimit;
+        world.RunLooks();
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(0, world.BusyQuestions);
+        Assert.Equal(1, world.LooksWaiting);
+
+        world.Clock += TimeSpan.FromTicks(1);
+        world.RunLooks();
+
+        Assert.Equal(1, world.BusyQuestions);
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        hold.Dispose();
+    }
+
+    /// <summary>
+    /// A hold ignored past the limit is said once, in the tool-service log of the attachment it held -
+    /// after the line its switch was skipped with - naming its holder's kind and how long it had held,
+    /// in hours, minutes and seconds, and naming no path and no document: what holds, never what it
+    /// holds for. It says the hold no longer holds back the follow by itself, which is true of every
+    /// holder - the busy question still keeps the bridge under a turn the backend has marked running,
+    /// or a remodel plan or run in progress (owner decision 158A, on its review).
+    /// </summary>
+    [Theory]
+    [InlineData(ToolServiceHolder.ReviewSession, "a review session's start")]
+    [InlineData(ToolServiceHolder.TurnCall, "a page call that starts a turn")]
+    [InlineData(ToolServiceHolder.Remodel, "a Remodel plan or run")]
+    public void AHoldIgnoredPastTheLimitIsSaidByItsKindAndHowLongItHeldAndNoPath(ToolServiceHolder holder, string kind)
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+        IDisposable hold = gate.HoldAttachment(holder)!;
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        world.Clock = ToolServiceGate.HoldLimit + new TimeSpan(0, 1, 1);
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(2, first.LogLines.Count);
+        Assert.StartsWith(@"not re-attaching to C:\models\bracket.SLDPRT: ", first.LogLines[0], StringComparison.Ordinal);
+        Assert.Equal(
+            "ignoring a hold by " + kind + ": held for 1:01:01, longer than the 1:00:00 limit, so it no longer "
+            + "holds back following the active document by itself; its work is not stopped",
+            first.LogLines[1]);
+        Assert.DoesNotContain(@"C:\", first.LogLines[1], StringComparison.Ordinal);
+        Assert.Empty(world.Services[1].LogLines);
+        hold.Dispose();
+    }
+
+    /// <summary>
+    /// ...in whole hours, minutes and seconds, cut and not rounded: a hold held a moment short of two
+    /// hours says 1:59:59, neither 2:00:00 nor 2:59:59 (owner decision 158A, on its review: RC6).
+    /// </summary>
+    [Fact]
+    public void HowLongAHoldHeldIsSaidCutNotRounded()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+        IDisposable hold = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        world.Clock = TimeSpan.FromHours(2) - TimeSpan.FromMilliseconds(100);
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, world.Starts);
+        Assert.StartsWith(
+            "ignoring a hold by a review session's start: held for 1:59:59, longer than the 1:00:00 limit, ",
+            Assert.Single(first.LogLines),
+            StringComparison.Ordinal);
+        hold.Dispose();
+    }
+
+    /// <summary>
+    /// ...said once, though the follow it no longer holds back stays owed. Past the limit a look asks the
+    /// busy question as for no hold, and while that answers busy - a turn the backend has marked running,
+    /// a plan or a run in progress - nothing is re-attached and a look is asked for again a poll later,
+    /// saying nothing more: ignoring a hold changes the hold, not the busy question. A day's hold says
+    /// its hours past 24.
+    /// </summary>
+    [Fact]
+    public void AnIgnoredHoldIsSaidOnceWhileTheBusyQuestionKeepsTheFollowOwed()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+        IDisposable hold = gate.HoldAttachment(ToolServiceHolder.Remodel)!;
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        world.Clock = TimeSpan.FromHours(26) + TimeSpan.FromSeconds(5);
+
+        for (int poll = 1; poll <= 3; poll++)
+        {
+            world.RunLooks();
+
+            Assert.Equal(poll, world.BusyQuestions);
+            Assert.Equal(1, world.Starts);
+            Assert.False(first.Disposed);
+            Assert.Equal(1, world.LooksWaiting);
+        }
+
+        Assert.Equal(2, first.LogLines.Count);
+        Assert.StartsWith("ignoring a hold by a Remodel plan or run: held for 26:00:05, ", first.LogLines[1], StringComparison.Ordinal);
+
+        world.Busy = false;
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(2, first.LogLines.Count);
+        hold.Dispose();
+    }
+
+    /// <summary>
+    /// Every hold past the limit is taken out and said at the same look, each once and in the order
+    /// they were taken - not the first alone, the rest left for a later look - while one taken since,
+    /// under the limit, still holds; and the follow is made once that one is let go.
+    /// </summary>
+    [Fact]
+    public void EveryHoldPastTheLimitIsSaidInTheOrderTakenWhileOneUnderItStillHolds()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+        IDisposable remodel = gate.HoldAttachment(ToolServiceHolder.Remodel)!;
+        world.Clock = TimeSpan.FromMinutes(1);
+        IDisposable session = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        world.Clock = ToolServiceGate.HoldLimit + TimeSpan.FromMinutes(1) + TimeSpan.FromSeconds(1);
+        IDisposable turn = gate.HoldAttachment(ToolServiceHolder.TurnCall)!;
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(0, world.BusyQuestions);
+        Assert.Equal(3, first.LogLines.Count);
+        Assert.StartsWith("ignoring a hold by a Remodel plan or run: held for 1:01:01, ", first.LogLines[0], StringComparison.Ordinal);
+        Assert.StartsWith("ignoring a hold by a review session's start: held for 1:00:01, ", first.LogLines[1], StringComparison.Ordinal);
+        Assert.StartsWith(@"not re-attaching to C:\models\bracket.SLDPRT: ", first.LogLines[2], StringComparison.Ordinal);
+
+        turn.Dispose();
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(3, first.LogLines.Count);
+        remodel.Dispose();
+        session.Dispose();
+    }
+
+    /// <summary>
+    /// A holder that lets go after its hold was ignored lets go of nothing more - not of another hold,
+    /// which a count of holds would have let go of in its place, nor of another of its kind, as two
+    /// chats' turn calls are (owner decision 158A, on its review: S2) - and is said nowhere, its line
+    /// written when it was ignored. Letting it go twice does nothing either. The other hold holds until
+    /// it is let go, and the follow is made then.
+    /// </summary>
+    [Fact]
+    public void AHoldLetGoAfterItWasIgnoredLetsGoOfNoOtherHold()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+        IDisposable stuck = gate.HoldAttachment(ToolServiceHolder.TurnCall)!;
+        world.Clock = ToolServiceGate.HoldLimit + TimeSpan.FromSeconds(1);
+        IDisposable working = gate.HoldAttachment(ToolServiceHolder.TurnCall)!;
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(0, world.BusyQuestions);
+        Assert.Equal(2, first.LogLines.Count);
+        Assert.StartsWith("ignoring a hold by a page call that starts a turn: held for 1:00:01, ", first.LogLines[0], StringComparison.Ordinal);
+        Assert.StartsWith(@"not re-attaching to C:\models\bracket.SLDPRT: ", first.LogLines[1], StringComparison.Ordinal);
+
+        stuck.Dispose();
+        stuck.Dispose();
+        world.RunLooks();
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(0, world.BusyQuestions);
+        Assert.Equal(1, world.LooksWaiting);
+        Assert.Equal(2, first.LogLines.Count);
+
+        working.Dispose();
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        Assert.Equal(2, first.LogLines.Count);
+    }
+
+    /// <summary>
+    /// A hold let go past the limit before any follow found it was never ignored, and is said nowhere:
+    /// the line is for a hold that held a follow back too long, and this one held none back.
+    /// </summary>
+    [Fact]
+    public void AHoldLetGoPastTheLimitBeforeAnyFollowFoundItIsSaidNowhere()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        IDisposable hold = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        world.Clock = ToolServiceGate.HoldLimit + TimeSpan.FromHours(1);
+        hold.Dispose();
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, world.Starts);
+        Assert.Empty(world.Services[0].LogLines);
+    }
+
+    /// <summary>
+    /// No race with a hold taken as another is ignored. The limit is each hold's own, from when it was
+    /// taken, so a hold taken the moment a stuck one passes the limit holds the bridge - one the follow
+    /// finds held as it looks, or one taken while its busy question is out after the stuck one was
+    /// ignored, which keeps the bridge as any hold taken then does (152A's X2) - and the follow is made
+    /// once it is let go.
+    /// </summary>
+    [Theory]
+    [InlineData("as the follow looks")]
+    [InlineData("while its busy question is out")]
+    public void AHoldTakenAsAStuckOneIsIgnoredStillHoldsTheBridge(string when)
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+        IDisposable stuck = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        world.Clock = ToolServiceGate.HoldLimit + TimeSpan.FromTicks(1);
+        IDisposable? fresh = null;
+        if (when == "as the follow looks")
+        {
+            fresh = gate.HoldAttachment(ToolServiceHolder.TurnCall);
+        }
+        else
+        {
+            world.OnBusy = () =>
+            {
+                world.OnBusy = null;
+                fresh = gate.HoldAttachment(ToolServiceHolder.TurnCall);
+            };
+        }
+
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.NotNull(fresh);
+        Assert.Equal(1, world.Starts);
+        Assert.False(first.Disposed);
+        Assert.Equal(1, world.LooksWaiting);
+        Assert.Single(first.LogLines, line => line.StartsWith("ignoring a hold by a review session's start: ", StringComparison.Ordinal));
+
+        world.RunLooks();
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(1, world.LooksWaiting);
+
+        fresh!.Dispose();
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        stuck.Dispose();
+    }
+
+    /// <summary>
+    /// The line is written once the gate's lock is let go, as the gate's other lines are (owner decision
+    /// 158A, on its review: S4). A tool-service log takes a lock of its own and appends to a file, and the
+    /// gate's lock is one the SOLIDWORKS application thread takes on every document change, so nothing is
+    /// written under it (155A's lesson, 004 research R18). So work asking for a hold on another thread
+    /// while the line is being written gets one at once - a hold taken since the follow noted the holds,
+    /// which keeps the bridge as any does (152A's X2) - and the follow is made once it is let go.
+    /// </summary>
+    [Fact]
+    public void AnIgnoredHoldsLineIsWrittenWithTheGatesLockLetGo()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+        IDisposable stuck = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        IDisposable? asked = null;
+        bool answered = false;
+        first.DuringWriteLog = line =>
+        {
+            if (!line.StartsWith("ignoring a hold ", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var work = new Thread(() => asked = gate.HoldAttachment(ToolServiceHolder.TurnCall)) { IsBackground = true };
+            work.Start();
+            answered = work.Join(TimeSpan.FromSeconds(15));
+        };
+        world.Clock = ToolServiceGate.HoldLimit + TimeSpan.FromSeconds(1);
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.True(answered, "a hold asked for on another thread while the line was written waited for the gate's lock.");
+        Assert.NotNull(asked);
+        Assert.Equal(1, world.Starts);
+        Assert.False(first.Disposed);
+        Assert.Equal(1, world.LooksWaiting);
+
+        asked!.Dispose();
+        world.RunLooks();
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        stuck.Dispose();
+    }
+
+    /// <summary>
+    /// The gate's own clock - the add-in's, every other case here moving its own - ages a hold with
+    /// time: under a limit set short for the case, a hold a quarter of a second old no longer holds back
+    /// a follow, where under the gate's own limit, an hour, the same hold still does.
+    /// </summary>
+    [Fact]
+    public void TheGatesOwnClockAgesAHoldWithTime()
+    {
+        var shortLimit = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", TheGatesOwnClock = true, HoldLimit = TimeSpan.FromMilliseconds(50) };
+        ToolServiceGate gate = shortLimit.Gate();
+        gate.EnsureStarted();
+        IDisposable hold = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        Thread.Sleep(TimeSpan.FromMilliseconds(250));
+        shortLimit.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, shortLimit.Starts);
+        hold.Dispose();
+
+        var ownLimit = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", TheGatesOwnClock = true };
+        ToolServiceGate held = ownLimit.Gate();
+        held.EnsureStarted();
+        IDisposable working = held.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        Thread.Sleep(TimeSpan.FromMilliseconds(250));
+        ownLimit.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        held.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(1, ownLimit.Starts);
+        Assert.Equal(1, ownLimit.LooksWaiting);
+        working.Dispose();
+    }
+
+    /// <summary>
+    /// The gate's own clock is a stopwatch of its own, read from its source: a clock that only goes
+    /// forward, so a change of the system's time neither ages a hold nor keeps one young. Any clock that
+    /// moves passes <see cref="TheGatesOwnClockAgesAHoldWithTime"/>, the system's time among them (owner
+    /// decision 158A, on its review: RE4).
+    /// </summary>
+    [Fact]
+    public void TheGatesOwnClockIsAStopwatchOfItsOwn()
+    {
+        string built = AddInSource(
+            Path.Combine("ToolService", "ToolServiceGate.cs"), "public ToolServiceGate(", "public PageDocument? DocumentServedBy(");
+
+        Assert.Contains("Stopwatch ownClock = Stopwatch.StartNew();", built, StringComparison.Ordinal);
+        Assert.Contains("_clock = clock ?? (() => ownClock.Elapsed);", built, StringComparison.Ordinal);
+        Assert.DoesNotContain("DateTime", built, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A limit of no time, or less, is refused when the gate is built - as a poll the settings restart's
+    /// watcher could not wait out is (<c>DeferredRestart</c>) - rather than ignoring every hold the moment
+    /// it is taken (owner decision 158A, on its review: R2).
+    /// </summary>
+    [Theory]
+    [InlineData(0L)]
+    [InlineData(-1L)]
+    [InlineData(-TimeSpan.TicksPerHour)]
+    public void AHoldLimitOfNoTimeOrLessIsRefusedWhenTheGateIsBuilt(long ticks)
+    {
+        var world = new GateWorld { HoldLimit = TimeSpan.FromTicks(ticks) };
+
+        ArgumentOutOfRangeException refused = Assert.Throws<ArgumentOutOfRangeException>(() => world.Gate());
+
+        Assert.Equal("holdLimit", refused.ParamName);
+    }
+
+    /// <summary>...and the shortest limit, a tick, is taken: a hold held two ticks no longer holds back a follow.</summary>
+    [Fact]
+    public void AHoldLimitOfATickIsTaken()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", HoldLimit = TimeSpan.FromTicks(1) };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        IDisposable hold = gate.HoldAttachment(ToolServiceHolder.ReviewSession)!;
+        world.Clock = TimeSpan.FromTicks(2);
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, world.Starts);
+        hold.Dispose();
+    }
+
+    /// <summary>
+    /// The limit is an hour, far past the holds the busy question cannot see while they hold: a review
+    /// session's start, which holds until `POST /sessions` gives up, the backend client's 30 seconds, and
+    /// a page call that starts a turn, which holds until the proxy's 120 - each read from its own
+    /// constant, so a bound raised toward the limit fails here, for the limit to be weighed again. A
+    /// Remodel plan or run is bounded by no time: its hold covers the model's judgement turn, which only
+    /// its steps bound, and a healthy run can outlast the hour; what keeps the bridge under it is the busy
+    /// question, never the limit (<see cref="RemodelHostTests.ThroughTheGateARunHeldPastTheHoldLimitIsStillNotTakenDownUnder"/>,
+    /// <see cref="RemodelHostTests.APlanOrARunTakesItsHoldOnlyOnceTheHostIsBusy"/>). Owner decision 158A,
+    /// on its review (S1): this case first claimed three times a run's twenty minutes, which bound only
+    /// its changes.
+    /// </summary>
+    [Fact]
+    public void TheHoldLimitIsAnHourFarPastTheHoldsTheBusyQuestionCannotSee()
+    {
+        Assert.Equal(TimeSpan.FromHours(1), ToolServiceGate.HoldLimit);
+        var bounds = new Dictionary<string, TimeSpan>
+        {
+            ["a review session's start, until POST /sessions gives up"] = CallTimeoutOf(typeof(BackendClient)),
+            ["a page call that starts a turn"] = CallTimeoutOf(typeof(BackendProxyHandler)),
+        };
+
+        foreach (KeyValuePair<string, TimeSpan> bound in bounds)
+        {
+            Assert.True(
+                ToolServiceGate.HoldLimit.Ticks >= 10 * bound.Value.Ticks,
+                bound.Key + "'s own bound, " + bound.Value + ", is more than a tenth of the hold limit.");
+        }
+    }
+
+    /// <summary>
+    /// The add-in's half, read from its source because <c>SwReviewAddIn</c> needs a live
+    /// <c>ISldWorks</c>: its gate keeps the gate's own clock and limit - an hour on a clock that only
+    /// goes forward - passing nothing after <c>afterStopped</c>.
+    /// </summary>
+    [Fact]
+    public void TheAddInsGateKeepsItsOwnClockAndTheHourLimit()
+    {
+        string gate = AddInSource("SwReviewAddIn.cs", "private ToolServiceGate CreateToolServiceGate(", "private void StartBackend(");
+
+        Assert.Contains("afterStopped: _ => _remodelHost?.RefreshAvailability());", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("clock:", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("holdLimit:", gate, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Owner decision 158A, its third part: a configuration switch is followed only when a review asks.
+    /// The gate's half is pinned above: a switch is followed by its path, and a configuration switch,
+    /// the same path, re-attaches nothing wherever it lands, while a review's request follows the active
+    /// configuration (<see cref="AReviewsRequestFollowsTheActiveConfigurationWhichASwitchAloneDoesNot"/>,
+    /// <see cref="AConfigurationSwitchReattachesNothingWhereverItLands"/>). This is the add-in's, read
+    /// from its source: the one fan-out a document or a configuration change runs asks the gate to
+    /// follow by the active document's path alone, and the gate is asked to follow the active document
+    /// as it is, its configuration included, from one place only - the review host's request, made
+    /// when a review finds its bridge on another document or configuration. Asked by a call or handed
+    /// on as a method group alike (owner decision 158A, on its review: RG2); comments are not read.
+    /// </summary>
+    [Fact]
+    public void TheAddInFollowsAConfigurationSwitchOnlyWhenAReviewAsks()
+    {
+        string fanOut = AddInSource("SwReviewAddIn.cs", "private void TellEveryTabTheDocumentChanged(", "private void OnPageMessage(");
+        Assert.Contains("_toolService?.FollowDocument(CurrentDocument()?.Path);", fanOut, StringComparison.Ordinal);
+        Assert.Contains(
+            "private void OnActiveConfigurationChanged() => TellEveryTabTheDocumentChanged(",
+            AddInSource("SwReviewAddIn.cs", "private void OnActiveConfigurationChanged(", "private void FollowActiveConfiguration("),
+            StringComparison.Ordinal);
+
+        var asked = new Regex(@"\.FollowActiveDocument\b", RegexOptions.CultureInvariant);
+        string addIn = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
+        var callers = Directory.EnumerateFiles(addIn, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Split(Path.DirectorySeparatorChar).Any(part => part == "obj" || part == "bin"))
+            .SelectMany(file => File.ReadAllLines(file)
+                .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+                .SelectMany(line => asked.Matches(line).Cast<Match>())
+                .Select(_ => Path.GetFileName(file)))
+            .OrderBy(file => file, StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(new[] { "ReviewHost.cs", "SwReviewAddIn.cs" }, callers);
+        Assert.Contains(
+            "FollowActiveDocument = () => _toolService?.FollowActiveDocument(),",
+            AddInSource("SwReviewAddIn.cs", "var reviewOptions = new ReviewHostOptions(", "_reviewHost = new ReviewHost(reviewOptions);"),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>A private static <c>CallTimeout</c>: the bound a client puts on each of its calls.</summary>
+    private static TimeSpan CallTimeoutOf(Type client)
+    {
+        System.Reflection.FieldInfo timeout = Assert.IsAssignableFrom<System.Reflection.FieldInfo>(client.GetField(
+            "CallTimeout", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static));
+        return Assert.IsType<TimeSpan>(timeout.GetValue(null));
+    }
+
+    /// <summary>
+    /// The add-in's source <paramref name="file"/>, its whitespace collapsed, from <paramref name="from"/>
+    /// up to <paramref name="to"/>.
+    /// </summary>
+    private static string AddInSource(string file, string from, string to)
+    {
+        string path = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn", file);
+        string source = Regex.Replace(File.ReadAllText(path), @"\s+", " ");
+        int start = source.IndexOf(from, StringComparison.Ordinal);
+        int end = start < 0 ? -1 : source.IndexOf(to, start, StringComparison.Ordinal);
+        Assert.True(end > start, file + " no longer has '" + from + "' before '" + to + "'.");
+        return source.Substring(start, end - start);
+    }
+
     // ---- the attachment the Remodel tab compares (decision 22A, 004 T160) ---------------------
 
     /// <summary>
@@ -771,6 +2119,73 @@ public sealed class ToolServiceWiringTests
         Assert.Contains("preserveAttachment: (path, attachment) => _remodelHost?.KeepCopyAttachment(path, attachment) == true", gate, StringComparison.Ordinal);
         Assert.Contains("afterStopped: _ => _remodelHost?.RefreshAvailability()", gate, StringComparison.Ordinal);
         Assert.Contains("(_remodelHost != null && _remodelHost.RunInProgress)", gate, StringComparison.Ordinal);
+
+        // The 152A review's R1: the gate's question reads the remodel run first, which costs nothing,
+        // and then whether a turn may be running - a chat the backend does not answer about counts -
+        // since a follow owed is asked again every second for the length of a turn.
+        Assert.Contains(
+            "busy: () => (_remodelHost != null && _remodelHost.RunInProgress) || (_reviewHost != null && _reviewHost.TurnMayBeRunning()),",
+            gate,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Owner decision 152A, the add-in's half, read from its source for the reason above: the review
+    /// host asks the gate - read through the field per call, since the gate is built after the
+    /// review host's options - which document the bridge it is about to hand a session serves, and
+    /// asks it to follow the active document when that is not the review's. Either line dropped,
+    /// and every review start would be refused (a host that cannot ask refuses), or refused for
+    /// good on a configuration switch, with every host and gate case above still passing.
+    /// </summary>
+    [Fact]
+    public void TheAddInAsksTheGateWhichDocumentTheReviewBridgeServesAndToFollowTheActiveOne()
+    {
+        string addIn = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
+        string source = Regex.Replace(File.ReadAllText(Path.Combine(addIn, "SwReviewAddIn.cs")), @"\s+", " ");
+        int start = source.IndexOf("var reviewOptions = new ReviewHostOptions(", StringComparison.Ordinal);
+        int end = start < 0 ? -1 : source.IndexOf("_reviewHost = new ReviewHost(reviewOptions);", start, StringComparison.Ordinal);
+        Assert.True(end > start, "SwReviewAddIn no longer builds the review host's options before the review host.");
+        string options = source.Substring(start, end - start);
+
+        Assert.Contains("BridgeDocument = bridge => _toolService?.DocumentServedBy(bridge),", options, StringComparison.Ordinal);
+        Assert.Contains("FollowActiveDocument = () => _toolService?.FollowActiveDocument(),", options, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2), the add-in's half, read from its source for the
+    /// reason above: the three kinds of work that run over the bridge hold it through the gate - read
+    /// through the field per call, since the gate is built after all three - the review host's sessions,
+    /// the Remodel host's plans and runs, and the pane's turn calls, which the pane's proxy holds it for.
+    /// A line dropped, and that work could have the bridge taken down under it with every host, proxy
+    /// and gate case still passing. Owner decision 158A: each names its holder's kind, which the gate
+    /// says when it ignores a hold held past its limit (changed deliberately, tightened).
+    /// </summary>
+    [Fact]
+    public void TheAddInsReviewSessionsRemodelRunsAndTurnCallsHoldTheBridgeThroughTheGate()
+    {
+        const string Held = "HoldToolService = () => _toolService?.HoldAttachment(ToolServiceHolder.";
+        string addIn = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
+        string source = Regex.Replace(File.ReadAllText(Path.Combine(addIn, "SwReviewAddIn.cs")), @"\s+", " ");
+        Func<string, string, string> between = (from, to) =>
+        {
+            int start = source.IndexOf(from, StringComparison.Ordinal);
+            int end = start < 0 ? -1 : source.IndexOf(to, start, StringComparison.Ordinal);
+            Assert.True(end > start, "SwReviewAddIn no longer has '" + from + "' before '" + to + "'.");
+            return source.Substring(start, end - start);
+        };
+
+        Assert.Contains(Held + "TurnCall),", between("new TaskPaneOptions(", "_panel = _pane.Actions;"), StringComparison.Ordinal);
+        Assert.Contains(Held + "ReviewSession),", between("var reviewOptions = new ReviewHostOptions(", "_reviewHost = new ReviewHost(reviewOptions);"), StringComparison.Ordinal);
+        Assert.Contains(Held + "Remodel),", between("private void StartRemodelHost(", "StartRemodelPump();"), StringComparison.Ordinal);
+        Assert.Equal(3, Regex.Matches(source, Regex.Escape(Held)).Count);
+
+        // Changed deliberately for owner decision 157A: the proxy is handed the check hosts' holds of an evaluation
+        // after the bridge's hold, which is pinned as before.
+        string pane = Regex.Replace(File.ReadAllText(Path.Combine(addIn, "TaskPaneControl.cs")), @"\s+", " ");
+        Assert.Contains(
+            "_proxy = new BackendProxyHandler( () => _options.Backend(), request => _options.ProxySend(request), () => _options.PageTurnRefusal(), () => _options.HoldToolService(), (runDirectory, token) => _options.HoldCheckEvaluation(runDirectory, token));",
+            pane,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1034,6 +2449,50 @@ public sealed class ToolServiceWiringTests
             Assert.NotEqual(caller, starter);
             Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
             Assert.Empty(world.Reports);
+            gate.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 152A: the gate's own look again - the one the add-in gets, every other case
+    /// here injecting its own - comes a poll later and on the thread pool, never on the caller's
+    /// thread, which is the SOLIDWORKS application thread: a look asks the add-in's busy question,
+    /// an HTTP round trip per open chat. Bounded below by the poll, because a look that came at
+    /// once would ask that question back to back for the length of a turn.
+    /// </summary>
+    [Fact]
+    public void TheGatesOwnLookComesAPollLaterOnThePool()
+    {
+        using (var followed = new ManualResetEventSlim())
+        {
+            int caller = Thread.CurrentThread.ManagedThreadId;
+            int looker = caller;
+            bool onThePool = false;
+            var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true, TheGatesOwnLater = true };
+            world.Publish = service =>
+            {
+                if (service != null && world.Services.Count > 1)
+                {
+                    followed.Set();
+                }
+            };
+            ToolServiceGate gate = world.Gate();
+            gate.EnsureStarted();
+            world.OnStart = () =>
+            {
+                Volatile.Write(ref looker, Thread.CurrentThread.ManagedThreadId);
+                onThePool = Thread.CurrentThread.IsThreadPoolThread;
+            };
+            world.DocumentPath = @"C:\models\bracket.SLDPRT";
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+            world.Busy = false;
+
+            Assert.True(followed.Wait(PoolBound), "the gate never looked again.");
+            Assert.True(clock.Elapsed >= TimeSpan.FromMilliseconds(900), "looked again after " + clock.Elapsed);
+            Assert.NotEqual(caller, Volatile.Read(ref looker));
+            Assert.True(onThePool, "the look ran on a thread of its own rather than the pool's.");
             gate.Dispose();
         }
     }
@@ -1308,7 +2767,7 @@ public sealed class ToolServiceWiringTests
     }
 
     /// <summary>
-    /// Null review records - <c>ToolServiceOptions.ReviewRunDirectory</c>'s default - build no
+    /// Null review records - <c>ToolServiceOptions.DrawingReadSession</c>'s default - build no
     /// source, and the command then answers the dispatcher's sentence rather than reading from
     /// records the host does not keep.
     /// </summary>
@@ -1504,12 +2963,16 @@ public sealed class ToolServiceWiringTests
             string line = Assert.Single(world.LogLines);
             Assert.Contains(" command=" + BridgeCommands.DrawingRead + " ", line, StringComparison.Ordinal);
             Assert.Contains(" status=ok ", line, StringComparison.Ordinal);
+
+            // Edited deliberately for decision 136A (2026-10-19): the seam's read-only check, a bare
+            // read, joins the line after the open and before the drawing phase's reads.
             Assert.Equal(
                 new[]
                 {
                     "GetOpenDocumentByName",
                     DrawingOpenGuard.DocumentVisibleKey,
                     DrawingOpenGuard.OpenDocKey,
+                    "IsOpenedReadOnly",
                     DrawingReadWorld.PhaseRead,
                     DrawingOpenGuard.CloseDocKey,
                 },
@@ -1628,6 +3091,112 @@ public sealed class ToolServiceWiringTests
             DumpPhase drawingRow = Assert.Single(after.Extractor.Phases, phase => phase.Name == PackageWriter.DrawingPhase);
             Assert.Equal(DumpPhaseStatus.Skipped, drawingRow.Status);
             Assert.Null(drawingRow.ElapsedMs);
+        }
+    }
+
+    /// <summary>
+    /// Decision 141A (2026-10-19), through the add-in's own records: once a review session's opens
+    /// have failed ten times nothing more is opened for it, and a new session in the same run folder
+    /// - what a Retry or Recheck starts - is resolved by the same run id to a count of its own, so
+    /// the next request opens again. The request is the same line both times; only the host's
+    /// records changed.
+    /// </summary>
+    [Fact]
+    public void ANewReviewSessionInTheSameRunFolderStartsItsOwnCountThroughTheReviewHostsRecords()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: true))
+        {
+            string run = world.ReviewRun("chat-1");
+            string name = Path.GetFileName(run);
+            world.Seat.OpenRefused = true;
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                Assert.Equal(BridgeStatus.Error, world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret).Status);
+            }
+
+            BridgeResponse spent = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+            Assert.Equal(
+                "the limit of ten drawings for this review is reached: 10 opens that were refused or failed, so this "
+                    + "one was not opened; a new review (press Review) starts its own count, and a drawing already open "
+                    + "in SOLIDWORKS is still read, since reading it opens nothing",
+                spent.Error);
+            Assert.Equal(10, world.Seat.Calls.Count(call => call == "OpenDoc6"));
+
+            world.NewSessionIn(run, "chat-2");
+            world.Seat.OpenRefused = false;
+            BridgeResponse response = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+
+            Assert.Equal(BridgeStatus.Ok, response.Status);
+            Assert.True(Assert.IsType<ConfirmedDrawingResult>(response.Result).Opened);
+            Assert.Equal(11, world.Seat.Calls.Count(call => call == "OpenDoc6"));
+            Assert.All(world.LookupRunIds, runId => Assert.Equal(name, runId));
+        }
+    }
+
+    /// <summary>
+    /// Decision 141A (2026-10-19), through the add-in's own records: no spelling of the run id the
+    /// review host matches resets a spent session's count - the host resolves every one of them to
+    /// the same session, so nothing more is opened.
+    /// </summary>
+    [Fact]
+    public void NoSpellingOfTheRunIdResetsASpentSessionsCountThroughTheReviewHostsRecords()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: true))
+        {
+            string name = Path.GetFileName(world.ReviewRun("chat-1"));
+            world.Seat.OpenRefused = true;
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                Assert.Equal(BridgeStatus.Error, world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret).Status);
+            }
+
+            world.Seat.OpenRefused = false;
+            foreach (string spelling in new[] { name.ToUpperInvariant(), name.ToLowerInvariant(), name })
+            {
+                BridgeResponse response = world.Read(spelling, world.HousingId, DrawingReadWorld.ReviewSecret);
+                Assert.Equal(BridgeStatus.Error, response.Status);
+                Assert.StartsWith("the limit of ten drawings for this review is reached", response.Error, StringComparison.Ordinal);
+            }
+
+            Assert.Equal(10, world.Seat.Calls.Count(call => call == "OpenDoc6"));
+            Assert.Equal(0, world.Seat.Reads);
+        }
+    }
+
+    /// <summary>
+    /// Decision 141A (2026-10-19), through the add-in's own records: in the same review session,
+    /// after ten failed opens, a candidate whose drawing is not open is refused with only the lookup
+    /// gated, and once the engineer has it open it is read as it stands - nothing hidden, opened or
+    /// closed - since reading it opens nothing.
+    /// </summary>
+    [Fact]
+    public void ADrawingTheEngineerHasOpenIsReadAfterTheSessionsFailedOpensSpentTheLimit()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: true))
+        {
+            string name = Path.GetFileName(world.ReviewRun("chat-1"));
+            world.Seat.OpenRefused = true;
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                Assert.Equal(BridgeStatus.Error, world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret).Status);
+            }
+
+            world.Seat.OpenRefused = false;
+            BridgeResponse refused = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+            Assert.Equal(BridgeStatus.Error, refused.Status);
+            Assert.StartsWith("the limit of ten drawings for this review is reached", refused.Error, StringComparison.Ordinal);
+            Assert.Equal(new[] { "GetOpenDocumentByName" }, GatedOf(world.LogLines.Last()));
+            world.Seat.Calls.Clear();
+
+            world.Seat.AlreadyOpen(world.CandidatePath);
+            BridgeResponse response = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+
+            Assert.Equal(BridgeStatus.Ok, response.Status);
+            ConfirmedDrawingResult result = Assert.IsType<ConfirmedDrawingResult>(response.Result);
+            Assert.False(result.Opened);
+            Assert.False(result.Closed);
+            Assert.Equal(new[] { "OpenDocument" }, world.Seat.Calls.Distinct().ToArray());
+            Assert.Equal(1, world.Seat.Reads);
         }
     }
 
@@ -1750,6 +3319,36 @@ public sealed class ToolServiceWiringTests
     }
 
     /// <summary>
+    /// Owner decision 152A, on the Codex review (X1), the in-process host's half: its bridge's four
+    /// live commands ask the active configuration of the document the session attached to - read
+    /// through that session's own gate - before they run, and are refused while it is not the one the
+    /// bridge attached in (the dispatcher's half is <c>BridgeDispatcherTests</c>). <c>Attach</c> needs
+    /// a live SOLIDWORKS, so its one line is read from the source, once and nowhere else in the
+    /// add-in. The console host reads none: its bridge runs out of process, where a switch can land
+    /// between any two of its calls, and it is left as it was (002 research, 152A).
+    /// </summary>
+    [Fact]
+    public void TheInProcessHostsBridgeAsksTheActiveConfigurationOfItsOwnSessionAndTheConsoleHostsDoesNot()
+    {
+        string root = ErrorLabelsCoverTheHostTests.RepositoryRoot();
+        string addIn = Path.Combine(root, "extractor", "SwReview.AddIn");
+        var assignment = new Regex(@"\bActiveConfiguration\s*=\s*\(", RegexOptions.CultureInvariant);
+        Func<string, string[]> sitesUnder = folder => Directory.EnumerateFiles(folder, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Split(Path.DirectorySeparatorChar).Any(part => part == "obj" || part == "bin"))
+            .SelectMany(file => assignment.Matches(File.ReadAllText(file)).Cast<Match>().Select(_ => Path.GetFileName(file)))
+            .ToArray();
+        Assert.Equal(new[] { "ToolServiceHost.cs" }, sitesUnder(addIn));
+        Assert.Empty(sitesUnder(Path.Combine(root, "extractor", "SwReview.Extractor.Console")));
+
+        string source = Regex.Replace(
+            File.ReadAllText(Path.Combine(addIn, "ToolService", "ToolServiceHost.cs")), @"\s+", " ");
+        int start = source.IndexOf("private static Attached Attach(", StringComparison.Ordinal);
+        int end = start < 0 ? -1 : source.IndexOf("recorder.Drain();", start, StringComparison.Ordinal);
+        Assert.True(end > start, "ToolServiceHost.Attach was not found, or no longer drains the recorder.");
+        Assert.Contains("ActiveConfiguration = () => session.ActiveConfigurationName(),", source.Substring(start, end - start), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The console host (<c>swreview-extract serve</c>) runs <c>NoSecretPolicy</c>, which authorizes
     /// every command, so there the null seat is the only thing that keeps <c>remodel.*</c> off: no
     /// source file of the console names the seat or the run root at all.
@@ -1805,6 +3404,97 @@ public sealed class ToolServiceWiringTests
     // `ToolServiceOptions.RemodelSessionEnded`. Over the real host, the real dispatcher behind
     // the real pipe server, the bridge's fake seat and copy, and a fake application thread.
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TheToolServiceHoldsAnOpenScopeOnTheApplicationThreadThroughOpenAndUnwind(bool failed)
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            if (failed) world.Copy.WhatsWrongCount = 2;
+            bool held = false;
+            bool heldInsideOpen = false;
+            bool heldAtEnding = false;
+            bool deletedAtExit = false;
+            int beginThread = 0;
+            int exitThread = 0;
+            int began = 0;
+            var lease = new OpenLease(() =>
+            {
+                exitThread = Thread.CurrentThread.ManagedThreadId;
+                deletedAtExit = !File.Exists(world.CopyPath);
+                held = false;
+            });
+            world.BeginRemodelOpen = () =>
+            {
+                began++;
+                beginThread = Thread.CurrentThread.ManagedThreadId;
+                held = true;
+                return lease;
+            };
+            world.Seat.DuringCall = _ => heldInsideOpen = held;
+            world.SessionEnded = () => heldAtEnding = held;
+            world.Host.BindRemodelRun(world.RunDirectory);
+
+            PipeReply response = world.Open(world.Probe());
+
+            Assert.Equal(failed ? BridgeStatus.Error : BridgeStatus.Ok, response.Status);
+            Assert.Equal(1, began);
+            Assert.Equal(1, lease.Disposals);
+            Assert.Equal(world.App.ThreadId, beginThread);
+            Assert.Equal(world.App.ThreadId, exitThread);
+            Assert.True(heldInsideOpen);
+            Assert.False(held);
+            if (failed)
+            {
+                Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors,
+                    response.Result.GetProperty("error_code").GetString());
+                Assert.True(heldAtEnding);
+                Assert.True(deletedAtExit);
+            }
+            else
+            {
+                Assert.False(deletedAtExit);
+                Assert.Empty(world.Told);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("begin", false)]
+    [InlineData("begin", true)]
+    [InlineData("dispose", false)]
+    [InlineData("dispose", true)]
+    public void OpenScopeBeginAndDisposeFailuresAreLoggedWithoutChangingTheReply(string when, bool failed)
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            if (failed) world.Copy.WhatsWrongCount = 2;
+            int began = 0;
+            var lease = new OpenLease(() => throw new IOException("FICT dispose listener failed"));
+            world.BeginRemodelOpen = () =>
+            {
+                began++;
+                if (when == "begin") throw new IOException("FICT begin listener failed");
+                return lease;
+            };
+            world.Host.BindRemodelRun(world.RunDirectory);
+
+            PipeReply response = world.Open(world.Probe());
+
+            Assert.Equal(failed ? BridgeStatus.Error : BridgeStatus.Ok, response.Status);
+            Assert.Equal(1, began);
+            Assert.Equal(when == "begin" ? 0 : 1, lease.Disposals);
+            if (failed) Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors,
+                response.Result.GetProperty("error_code").GetString());
+            Assert.DoesNotContain("listener failed", response.Error ?? "", StringComparison.Ordinal);
+            string diagnostic = Assert.Single(world.LogLines, line => line.Contains("FICT " + when + " listener failed"));
+            Assert.Contains("remodel.open", diagnostic, StringComparison.Ordinal);
+            Assert.Contains(nameof(IOException), diagnostic, StringComparison.Ordinal);
+            Assert.DoesNotContain(world.Host.RemodelSecret, string.Join("\n", world.LogLines), StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>
     /// U27 (2026-09-28), over the real host and its real log writers: every call
     /// <c>remodel.geometry</c> makes on the copy finds its own <c>before</c> marker already the
@@ -1824,7 +3514,7 @@ public sealed class ToolServiceWiringTests
             world.Copy.DuringCall = inside;
             world.Copy.MassProperty!.DuringCall = inside;
 
-            Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Geometry, new { }).Status);
+            Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Geometry, new { run_id = world.RunId }).Status);
 
             Assert.NotEmpty(seen);
             Assert.All(seen, entry => Assert.Contains("command=remodel.geometry stage=before ", entry));
@@ -1855,7 +3545,8 @@ public sealed class ToolServiceWiringTests
             world.PlanOnTheSeat();
 
             Assert.NotNull(lastLine);
-            Assert.EndsWith("command=remodel.open stage=before OpenDoc7", lastLine!);
+            // Edited deliberately for decision 148A (feature 011 T184): the open's marker is its key.
+            Assert.EndsWith("command=remodel.open stage=before ISldWorks.OpenDoc7", lastLine!);
             string[] lines = LiveFile.ReadAllLines(remodelLog);
             Assert.Contains(lines, line => line.EndsWith("command=remodel.open stage=after ISldWorks.set_CommandInProgress", StringComparison.Ordinal));
             Assert.Contains(lines, line => line.Contains("command=remodel.open status=ok"));
@@ -1958,6 +3649,39 @@ public sealed class ToolServiceWiringTests
             Assert.Contains(teardown, remodelLog, StringComparison.Ordinal);
             Assert.Equal(1, Occurrences(remodelLog, "remodel teardown"));
         }
+    }
+
+    /// <summary>
+    /// Owner decision 155A's review (004 T200): the run report reads a line's target up to the field written
+    /// after it (`report.py`, `_TARGET`): `refused=` and `error=` on a request line, and on a teardown line -
+    /// which a re-attach or an unload writes into the run's `remodel.log`, mid-run too - `refused=` and
+    /// `failures=`. A guard: a teardown line carrying every field it can puts only those two after its target,
+    /// in that order, so the report's boundaries are the line's own.
+    /// </summary>
+    [Fact]
+    public void ATeardownLinePutsOnlyRefusedAndFailuresAfterItsTarget()
+    {
+        const string copy = @"C:\FICT\runs\20260101-000000-part-remodel\copy\part-RMS.SLDPRT";
+        var outcome = new RemodelSessionEnd(
+            RemodelSessionEnd.ReasonToolServiceStopped,
+            @"C:\FICT\runs\20260101-000000-part-remodel",
+            copy,
+            verified: true,
+            failedCheck: null,
+            tagRemoved: true,
+            copyClosed: false,
+            settingsOutstanding: new[] { "swWarnSaveUpdateErrors" },
+            failures: new[] { "close: COMException: CloseDoc refused", "the settings were not all put back" });
+        var activity = new SwGateActivity(
+            new[] { "ISldWorks.CloseDoc" }, new[] { "IModelDoc2.EditDelete" }, new[] { copy });
+
+        string line = ToolServiceHost.TeardownLine(DateTimeOffset.Now, outcome, activity, "posted");
+
+        Assert.EndsWith(
+            " target=" + copy + " refused=IModelDoc2.EditDelete"
+            + " failures=\"close: COMException: CloseDoc refused; the settings were not all put back\"",
+            line,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2213,7 +3937,7 @@ public sealed class ToolServiceWiringTests
         {
             world.PlanOnTheSeat();
 
-            PipeReply closed = world.Remodel(RemodelCommands.Close, new { discard_copy = false });
+            PipeReply closed = world.Remodel(RemodelCommands.Close, new { run_id = world.RunId, discard_copy = false });
 
             Assert.Equal(BridgeStatus.Ok, closed.Status);
             SeatedHostWorld.Ending ending = Assert.Single(world.Told);
@@ -2225,6 +3949,211 @@ public sealed class ToolServiceWiringTests
             Assert.Single(world.Told);
             Assert.Contains(world.LogLines, line => line.EndsWith("session=none", StringComparison.Ordinal));
         }
+    }
+
+    // ---- owner decision 161A: one run's session, ended in process --------------------------------
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): with the review backend gone, the add-in ends one run's
+    /// session through the tool service - on the application thread, posted and waited for from another, inline on it - by
+    /// the routine <c>remodel.close</c> runs: the copy closed unsaved and kept, the host told, one line in this service's
+    /// log and in the run's <c>remodel.log</c> with the routine's own gated set and target and no secret. The pipe still
+    /// listens, and the teardown after it has nothing left to end.
+    /// </summary>
+    [Theory]
+    [InlineData("posted")]
+    [InlineData("inline")]
+    public void EndingOneRunsSessionInProcessRunsTheCloseRoutineOnTheApplicationThreadAndWritesItDown(string thread)
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+
+            // Owner decision 161A's review (004 T304): a call the gate saw between requests belongs to no request, and is
+            // not the close's - its line's gated set is exactly the routine's own.
+            world.App.RunOnApplicationThread(() => world.RemodelGate.Call("GetTitle", () => 0));
+
+            if (thread == "inline")
+            {
+                world.App.RunOnApplicationThread(() => world.Host.EndRemodelSessionOf(world.RunDirectory));
+            }
+            else
+            {
+                world.Host.EndRemodelSessionOf(world.RunDirectory);
+            }
+
+            SeatedHostWorld.Ending ending = Assert.Single(world.Told);
+            Assert.Equal(RemodelSessionEnd.ReasonClose, ending.Outcome.Reason);
+            Assert.True(ending.Outcome.Succeeded);
+            Assert.Equal(world.App.ThreadId, ending.ThreadId);
+            Assert.False(ending.PipeHadStopped, "the in-process close ran after the pipe server was disposed");
+            Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            Assert.DoesNotContain(nameof(RemodelFakes.FakeRemodelDocument.Save), world.Copy.Members);
+            Assert.True(File.Exists(world.CopyPath));
+
+            string line = Assert.Single(world.LogLines, logged => logged.Contains("remodel close in process"));
+            Assert.Contains(
+                "remodel close in process thread=" + thread + " reason=remodel.close verified=true tag_removed=true copy_closed=true ",
+                line,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                " gated=ICustomPropertyManager.Delete2,ISldWorks.CloseDoc,GetOpenDocumentByName target=" + world.CopyPath,
+                line,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(world.Host.RemodelSecret, LiveFile.ReadAllText(world.Host.LogPath), StringComparison.Ordinal);
+            string remodelLog = File.ReadAllText(Path.Combine(world.RunDirectory, RemodelRunLog.FileName));
+            Assert.Equal(1, Occurrences(remodelLog, line));
+            Assert.False(world.PipeStopped, "the in-process close stopped the pipe");
+
+            world.Host.Dispose();
+            Assert.Single(world.Told);
+            Assert.Contains(world.LogLines, logged => logged.EndsWith("reason=tool_service_stopped session=none", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): a folder that is not the open run's - one of the same name
+    /// under another run root, which the bridge's <c>run_id</c> alone would take, or another run's - ends nothing: nobody is
+    /// told, nothing is closed, the line says so, and the session stays for the run's own teardown.
+    /// </summary>
+    [Theory]
+    [InlineData("the same name under another run root")]
+    [InlineData("another run")]
+    public void AnInProcessCloseOfAnotherRunsFolderEndsNothing(string other)
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+            string folder = other == "another run"
+                ? Path.Combine(Path.GetDirectoryName(world.RunDirectory)!, "20260927-100100-bracket-remodel")
+                : Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(world.RunDirectory)!)!, "moved", world.RunId);
+
+            world.Host.EndRemodelSessionOf(folder);
+
+            Assert.Empty(world.Told);
+            Assert.Empty(world.Seat.Closed);
+            Assert.Contains(
+                world.LogLines,
+                logged => logged.Contains("remodel close in process thread=posted run=" + Path.GetFileName(folder) + " nothing closed"));
+
+            world.Host.Dispose();
+            Assert.Equal(RemodelSessionEnd.ReasonToolServiceStopped, Assert.Single(world.Told).Outcome.Reason);
+            Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): an in-process close that cannot be asked throws, so the
+    /// Remodel tab reads it as not answered and leaves the leftover as it was: an application thread that cannot be reached,
+    /// and a service that has stopped, whose own teardown ended its session.
+    /// </summary>
+    [Fact]
+    public void AnInProcessCloseThatCannotBeAskedThrows()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+            world.App.CanInvokeValue = false;
+            Assert.Throws<InvalidOperationException>(() => world.Host.EndRemodelSessionOf(world.RunDirectory));
+            Assert.Empty(world.Told);
+            Assert.Empty(world.Seat.Closed);
+
+            world.App.CanInvokeValue = true;
+            world.Host.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => world.Host.EndRemodelSessionOf(world.RunDirectory));
+            Assert.Equal(RemodelSessionEnd.ReasonToolServiceStopped, Assert.Single(world.Told).Outcome.Reason);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): an in-process close the application thread does not answer
+    /// in time throws a timeout, and still runs when the thread is free - checking the run again then: it ends the run's own
+    /// session, and ends nothing when the folder it names is a run of the same name under another run root. *Added with the
+    /// fix (004 T301), a guard:* nor when the service has stopped meanwhile - its teardown, posted behind it, ends the session.
+    /// </summary>
+    [Theory]
+    [InlineData("the run's own")]
+    [InlineData("the same name under another run root")]
+    [InlineData("the service stopped meanwhile")]
+    public void AnInProcessCloseNotAnsweredInTimeThrowsAndChecksTheRunAgainWhenItRuns(string named)
+    {
+        using (var release = new ManualResetEventSlim(false))
+        using (var world = new SeatedHostWorld(TimeSpan.FromMilliseconds(300)))
+        {
+            world.PlanOnTheSeat();
+            string folder = named == "the same name under another run root"
+                ? Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(world.RunDirectory)!)!, "moved", world.RunId)
+                : world.RunDirectory;
+            try
+            {
+                ((IAppThreadInvoker)world.App).Post(() => release.Wait());
+
+                // Owner decision 161A's review (004 T304): the wait is the teardown's bound (300 ms here), not the request
+                // bound (30 s in this world), which would hold the restart's lock a hundred times as long.
+                var waited = System.Diagnostics.Stopwatch.StartNew();
+                Assert.Throws<TimeoutException>(() => world.Host.EndRemodelSessionOf(folder));
+                Assert.True(waited.Elapsed < TimeSpan.FromSeconds(10), "the close waited " + waited.Elapsed + ", not the teardown's bound");
+                Assert.Empty(world.Told);
+                Assert.Empty(world.Seat.Closed);
+                if (named == "the service stopped meanwhile")
+                {
+                    world.Host.Dispose();
+                }
+            }
+            finally
+            {
+                release.Set();
+            }
+
+            // Queued behind the abandoned close, and the teardown if any: back only once they have run.
+            world.App.RunOnApplicationThread(() => { });
+
+            if (named == "the run's own")
+            {
+                Assert.Equal(RemodelSessionEnd.ReasonClose, Assert.Single(world.Told).Outcome.Reason);
+                Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            }
+            else if (named == "the service stopped meanwhile")
+            {
+                Assert.Equal(RemodelSessionEnd.ReasonToolServiceStopped, Assert.Single(world.Told).Outcome.Reason);
+                Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            }
+            else
+            {
+                Assert.Empty(world.Told);
+                Assert.Empty(world.Seat.Closed);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A, test first (004 T300; research R24): the gate ends a run's session in process on the service of the
+    /// attachment named only - none listening, another listening now and a disposed gate each throw and reach no service - and
+    /// what the service throws reaches the caller unchanged.
+    /// </summary>
+    [Fact]
+    public void TheGateEndsARunsSessionInProcessOnlyOnTheAttachmentNamed()
+    {
+        const string run = @"C:\FICT\runs\20260927-100000-bracket-remodel";
+        var world = new GateWorld { DocumentPath = @"C:\models\bracket.sldprt" };
+        ToolServiceGate gate = world.Gate();
+
+        Assert.Throws<InvalidOperationException>(() => gate.EndRemodelSessionOf("swreview-fake-1", run));
+
+        gate.EnsureStarted();
+        FakeToolService service = world.Services.Single();
+        gate.EndRemodelSessionOf(service.PipeName, run);
+        Assert.Equal(new[] { run }, service.EndedInProcess);
+
+        Assert.Throws<InvalidOperationException>(() => gate.EndRemodelSessionOf("swreview-fake-2", run));
+        Assert.Single(service.EndedInProcess);
+
+        service.EndInProcessFailure = new TimeoutException("the application thread did not answer");
+        Assert.Throws<TimeoutException>(() => gate.EndRemodelSessionOf(service.PipeName, run));
+
+        gate.Dispose();
+        Assert.Throws<InvalidOperationException>(() => gate.EndRemodelSessionOf(service.PipeName, run));
+        Assert.Equal(2, service.EndedInProcess.Count);
     }
 
     // ---- the run folder is bound per run (004 T158's bind) --------------------------------------
@@ -2255,7 +4184,7 @@ public sealed class ToolServiceWiringTests
 
             world.Host.BindRemodelRun(world.RunDirectory);
             Assert.Equal(BridgeStatus.Ok, world.Open(probeId).Status);
-            Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Close, new { discard_copy = true }).Status);
+            Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Close, new { run_id = world.RunId, discard_copy = true }).Status);
 
             // The run root went with the first open: the next run is refused until it is bound.
             PipeReply again = world.Open(world.Probe());
@@ -2370,6 +4299,21 @@ public sealed class ToolServiceWiringTests
         }
     }
 
+    private sealed class OpenLease : IDisposable
+    {
+        private readonly Action _dispose;
+
+        public OpenLease(Action dispose) => _dispose = dispose;
+
+        public int Disposals { get; private set; }
+
+        public void Dispose()
+        {
+            Disposals++;
+            _dispose();
+        }
+    }
+
     /// <summary>
     /// The real <see cref="ToolServiceHost"/>, started through its own
     /// <see cref="ToolServiceHost.Start(ToolServiceOptions, ToolServiceHost.AttachWork)"/> with an
@@ -2405,6 +4349,7 @@ public sealed class ToolServiceWiringTests
                 InvokeTimeout = TimeSpan.FromSeconds(30),
                 TeardownTimeout = teardownTimeout ?? TimeSpan.FromSeconds(30),
                 Now = () => ClockFails ? throw new InvalidOperationException("the clock stopped") : Clock,
+                BeginRemodelOpen = () => BeginRemodelOpen?.Invoke(),
                 RemodelSessionEnded = outcome =>
                 {
                     lock (_toldLock)
@@ -2420,6 +4365,7 @@ public sealed class ToolServiceWiringTests
                 options,
                 (attachOptions, recorder, captureDirectory, remodelGate) =>
                 {
+                    RemodelGate = remodelGate;
                     var views = new InteropRecorder<ICaptureView>(typeof(IMeasureSource), typeof(IInterferenceSource));
                     var services = new BridgeServices(
                         views.Instance,
@@ -2443,6 +4389,12 @@ public sealed class ToolServiceWiringTests
 
         public ToolServiceHost Host { get; }
 
+        /// <summary>
+        /// The remodel gate the host built and handed the attach (owner decision 161A's review): a case calls through it
+        /// between requests, as Show in SOLIDWORKS calls a gate, to see what a line's gated set is drained of.
+        /// </summary>
+        public SwGate RemodelGate { get; private set; } = null!;
+
         public string RunDirectory { get; }
 
         public string SourcePath { get; }
@@ -2460,6 +4412,8 @@ public sealed class ToolServiceWiringTests
 
         /// <summary>Runs after each ending is recorded, on the thread it was told on.</summary>
         public Action? SessionEnded { get; set; }
+
+        public Func<IDisposable?>? BeginRemodelOpen { get; set; }
 
         public IReadOnlyList<Ending> Told
         {
@@ -2503,7 +4457,7 @@ public sealed class ToolServiceWiringTests
             Seat.SetUserPreferenceToggle(RemodelSystemToggles.WarnSaveUpdateErrors, true);
             Seat.ToggleWrites.Clear();
             Seat.FailingWrites.Add("329=True");
-            PipeReply rebuild = Remodel(RemodelCommands.Rebuild, new { force = false });
+            PipeReply rebuild = Remodel(RemodelCommands.Rebuild, new { run_id = RunId, force = false });
             Assert.Equal(BridgeStatus.Error, rebuild.Status);
             Assert.Contains(nameof(RemodelFakes.FakeRemodelDocument.ForceRebuild), Copy.Members);
             Assert.False(Seat.GetUserPreferenceToggle(RemodelSystemToggles.WarnSaveUpdateErrors));
@@ -2520,7 +4474,13 @@ public sealed class ToolServiceWiringTests
 
         public PipeReply Open(string probeId) => Remodel(
             RemodelCommands.Open,
-            new { source_path = SourcePath, copy_path = CopyPath, run_id = Path.GetFileName(RunDirectory), probe_id = probeId });
+            new { source_path = SourcePath, copy_path = CopyPath, run_id = RunId, probe_id = probeId });
+
+        /// <summary>
+        /// The run the open is for, the run folder's own name, which every command after the open
+        /// names (owner decision 159A, protocol 1.5).
+        /// </summary>
+        public string RunId => Path.GetFileName(RunDirectory);
 
         /// <summary>
         /// One <c>remodel.*</c> line with the remodel secret, written to the host's own pipe and
@@ -2711,7 +4671,7 @@ public sealed class ToolServiceWiringTests
             Recorder = new SwGateRecorder();
             Seat = new FakeDrawingSeat(new SwGate { Observer = Recorder });
             Source = ToolServiceHost.ConfirmedDrawingSource(
-                reviewRecords ? Lookup : (Func<string, string?>?)null,
+                reviewRecords ? Lookup : (Func<string, ConfirmedDrawingSession?>?)null,
                 AssemblyPath,
                 Recorder,
                 Seat,
@@ -2802,6 +4762,12 @@ public sealed class ToolServiceWiringTests
             return folder;
         }
 
+        /// <summary>
+        /// A new review session in a review's own run folder, as a Retry or a Recheck starts one
+        /// (decision 141A): a new record for another chat, the folder and its package unchanged.
+        /// </summary>
+        public void NewSessionIn(string folder, string chatId) => _host.TrackSession(chatId, folder);
+
         /// <summary>A Model check's, a Standards run's or a remodel run's folder, tracked as one.</summary>
         public string CheckRun(string name)
         {
@@ -2846,8 +4812,8 @@ public sealed class ToolServiceWiringTests
             }
         }
 
-        /// <summary>The add-in's lookup, <see cref="ReviewHost.ReviewRunDirectory"/>, watched.</summary>
-        private string? Lookup(string runId)
+        /// <summary>The add-in's lookup, <see cref="ReviewHost.DrawingReadSession"/>, watched.</summary>
+        private ConfirmedDrawingSession? Lookup(string runId)
         {
             lock (_lookupLock)
             {
@@ -2855,7 +4821,7 @@ public sealed class ToolServiceWiringTests
                 _lookupThreads.Add(Thread.CurrentThread.ManagedThreadId);
             }
 
-            return _host.ReviewRunDirectory(runId);
+            return _host.DrawingReadSession(runId);
         }
 
         private string RunFolder(string name)
@@ -2975,14 +4941,29 @@ public sealed class ToolServiceWiringTests
 
         public void DocumentVisible(bool visible, int documentType) => Record(nameof(DocumentVisible));
 
+        /// <summary>When set, SOLIDWORKS answers every open with no document (decision 141A's tests).</summary>
+        public bool OpenRefused { get; set; }
+
         public object? OpenDoc6(string path, int documentType, int options, string configuration, out int errors, out int warnings)
         {
             Record(nameof(OpenDoc6));
             errors = 0;
             warnings = 0;
+            if (OpenRefused)
+            {
+                return null;
+            }
+
             var document = new object();
             _open[path] = document;
             return document;
+        }
+
+        /// <summary>Decision 136A's check: SOLIDWORKS honoured the read-only option.</summary>
+        public bool IsOpenedReadOnly(object document)
+        {
+            Record(nameof(IsOpenedReadOnly));
+            return true;
         }
 
         public void CloseDoc(string path)
@@ -3070,7 +5051,9 @@ public sealed class ToolServiceWiringTests
     /// <summary>The three delegates <see cref="SwReviewAddIn"/> supplies, and what they saw.</summary>
     private sealed class GateWorld
     {
+        private readonly List<Action> _looks = new List<Action>();
         private int _next;
+        private int _busyQuestions;
 
         public bool DocumentOpen { get; set; } = true;
 
@@ -3078,14 +5061,102 @@ public sealed class ToolServiceWiringTests
         public string DocumentPath { get; set; } = @"C:\models\bracket.sldasm";
 
         /// <summary>
-        /// The active document as <c>SwReviewAddIn.CurrentDocument</c> reports it - a saved path
-        /// and nothing else - because what the gate decides from is the document, not a bool: a
-        /// drawing is open and is still not something a scope can be attached to.
+        /// The active document's configuration, which the next start is bound to as an attach binds
+        /// to the active one; none by default, as the cases before owner decision 152A had it.
         /// </summary>
-        public PageDocument? Active() => DocumentOpen ? new PageDocument(DocumentPath, null) : null;
+        public string? Configuration { get; set; }
+
+        /// <summary>
+        /// The active document as <c>SwReviewAddIn.CurrentDocument</c> reports it - a saved path
+        /// and its configuration - because what the gate decides from is the document, not a bool:
+        /// a drawing is open and is still not something a scope can be attached to.
+        /// </summary>
+        public PageDocument? Active()
+        {
+            PageDocument? active = DocumentOpen ? new PageDocument(DocumentPath, Configuration) : null;
+            AfterActive?.Invoke();
+            return active;
+        }
+
+        /// <summary>Runs once a reading of the active document is made, before the gate has it: a switch that lands just after it.</summary>
+        public Action? AfterActive { get; set; }
+
+        /// <summary>
+        /// How the next start spells the document it attaches to, when not as <see cref="DocumentPath"/>
+        /// does: SOLIDWORKS names a document as it was opened (the 152A review's R3).
+        /// </summary>
+        public Func<string>? AttachSpelling { get; set; }
 
         /// <summary>A review turn or a remodel run is holding the bridge.</summary>
         public bool Busy { get; set; }
+
+        /// <summary>How many times the gate has asked whether work holds the bridge.</summary>
+        public int BusyQuestions => Volatile.Read(ref _busyQuestions);
+
+        /// <summary>
+        /// Whether the exact held copy of a waiting plan is the path made active (004 T180), as the
+        /// Remodel host answers it; null passes the gate none, as before T180.
+        /// </summary>
+        public Func<string, string, bool>? Preserve { get; set; }
+
+        /// <summary>Runs inside the start delegate once the service exists, before the gate has it.</summary>
+        public Action? AfterAttach { get; set; }
+
+        /// <summary>
+        /// Whether the gate gets its own <c>later</c> - the one the add-in gets, a poll later on the
+        /// thread pool - rather than this world's, which keeps each look until a case runs it.
+        /// </summary>
+        public bool TheGatesOwnLater { get; set; }
+
+        /// <summary>
+        /// The time on the gate's clock (owner decision 158A), off which it reads when each hold was
+        /// taken and how long it has held. It stands still until a case moves it.
+        /// </summary>
+        public TimeSpan Clock { get; set; }
+
+        /// <summary>
+        /// Whether the gate gets its own clock - the one the add-in gets - rather than
+        /// <see cref="Clock"/>.
+        /// </summary>
+        public bool TheGatesOwnClock { get; set; }
+
+        /// <summary>
+        /// How long a hold holds back a follow, when a case sets it; by default the gate's own,
+        /// <see cref="ToolServiceGate.HoldLimit"/>, the one the add-in gets.
+        /// </summary>
+        public TimeSpan? HoldLimit { get; set; }
+
+        /// <summary>
+        /// How many looks again the gate has asked for and none has run yet (owner decision 152A):
+        /// the gate hands each to its <c>later</c>, which waits a poll in the add-in and keeps it
+        /// here, so a case runs it when it says.
+        /// </summary>
+        public int LooksWaiting
+        {
+            get
+            {
+                lock (_looks)
+                {
+                    return _looks.Count;
+                }
+            }
+        }
+
+        /// <summary>Runs every look waiting now, as the polls coming due would; a look asked for meanwhile waits.</summary>
+        public void RunLooks()
+        {
+            Action[] due;
+            lock (_looks)
+            {
+                due = _looks.ToArray();
+                _looks.Clear();
+            }
+
+            foreach (Action look in due)
+            {
+                look();
+            }
+        }
 
         /// <summary>Set to make the busy question throw, as an unanswering backend would.</summary>
         public Exception? BusyFailure { get; set; }
@@ -3131,10 +5202,23 @@ public sealed class ToolServiceWiringTests
             },
             (what, failure) => Reports.Add(failure == null ? what : what + " " + failure.Message),
             schedule,
-            Asked);
+            Asked,
+            preserveAttachment: Preserve,
+            later: TheGatesOwnLater
+                ? (Action<Action>?)null
+                : look =>
+                {
+                    lock (_looks)
+                    {
+                        _looks.Add(look);
+                    }
+                },
+            clock: TheGatesOwnClock ? (Func<TimeSpan>?)null : () => Clock,
+            holdLimit: HoldLimit);
 
         private bool Asked()
         {
+            Interlocked.Increment(ref _busyQuestions);
             OnBusy?.Invoke();
 
             if (BusyFailure != null)
@@ -3154,8 +5238,9 @@ public sealed class ToolServiceWiringTests
                 throw Failure;
             }
 
-            var service = new FakeToolService(++_next, DocumentPath);
+            var service = new FakeToolService(++_next, AttachSpelling?.Invoke() ?? DocumentPath, Configuration);
             Services.Add(service);
+            AfterAttach?.Invoke();
             return service;
         }
     }

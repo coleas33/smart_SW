@@ -9,15 +9,17 @@ namespace SwReview.Extractor.Guard;
 ///
 /// <see cref="ReadOnlyGuard"/> is a denylist because the reviewer's read surface is unbounded
 /// and grows every phase. The re-modeler is the inverse: its write surface is the closed set
-/// of twenty keys in <see cref="AllowedKeys"/>, and it is exactly the workload that finds a
+/// of keys in <see cref="AllowedKeys"/> - twenty, and twenty-one since owner decision 148A
+/// (2026-10-20) put the open of the copy among them - and it is exactly the workload that finds a
 /// denylist's gaps - the read-only list blocked <c>InsertFeatureTreeFolder2</c> through its
 /// <c>InsertFeature</c> prefix while leaving <c>FeatureFillet3</c>, <c>FeatureRevolve2</c>,
 /// <c>InsertPart3</c> and <c>SetSuppression2</c>'s neighbours wide open. Decision 21A
 /// (2026-09-25) closed that creation family in <see cref="ReadOnlyGuard"/>, but a denylist still
-/// cannot enumerate a write surface: <c>IFeatureManager.MoveToFolder</c> and <c>IModelDoc2.Save</c>
-/// pass it as bare names.
+/// cannot enumerate a write surface: <c>IModelDoc2.DeleteConfiguration2</c> passes it as a bare name,
+/// as <c>IModelDoc2.Save</c> did until decision 140A and <c>IFeatureManager.MoveToFolder</c> until
+/// decision 144A (both 2026-10-19) refused them.
 ///
-/// Three answers, in this order:
+/// Four answers, in this order:
 ///   1. a key on <see cref="AllowedKeys"/>, matched <b>ordinally</b> so a mis-spelling fails
 ///      closed rather than widening the surface, returns;
 ///   2. a member on <see cref="ExcludedMembers"/> is refused however it is spelled;
@@ -29,8 +31,15 @@ namespace SwReview.Extractor.Guard;
 /// This guard adds nothing to <see cref="ReadOnlyGuard"/> and reads nothing from it but the
 /// answer to <c>Assert</c>. Stage 2 gets a second, additive allowlist reviewed on its own;
 /// this list is never widened to accommodate it.
+///
+/// Since owner decision 151A (2026-10-20; feature 011 research R13.1) answers 1, 3 and 4 are
+/// <see cref="AllowlistGuard"/>'s, the rule the product's three allowlist guards share, with this
+/// guard's bare names the read-only guard's answer (<see cref="BareNamePolicy.ReadOnlyGuardsAnswer"/>);
+/// answer 2 stays this guard's own, explicit in <see cref="RefuseByName"/>, which the shared rule asks
+/// after the keys and before the rest, as here. This class keeps its keys, its refusals by name, its
+/// words and its construction sites.
 /// </summary>
-public sealed class RemodelGuard : ICallGuard
+public sealed class RemodelGuard : AllowlistGuard
 {
     /// <summary>
     /// The stage-1 write surface, exactly as contracts/guard-allowlist.md tabulates it. Every
@@ -90,6 +99,15 @@ public sealed class RemodelGuard : ICallGuard
 
         // Close the tagged copy.
         "ISldWorks.CloseDoc",
+
+        // Open the copy at its own path, Silent | LoadModel = 17, never ReadOnly or ViewOnly
+        // (remodel.open step 8), behind the copy's path check and with the opened document's path
+        // asserted after it. Owner decision 148A (2026-10-20; feature 011 research R12.2): it was
+        // gated by the bare name the read-only guard left allowed, so every read-only gate let a
+        // writable open through; the read-only guard refuses the bare name now, and this key is the
+        // sixth that overrides a read-only denial. The pane seat's guard and probe remodel's allow the
+        // same key for their own opens.
+        "ISldWorks.OpenDoc7",
     };
 
     /// <summary>
@@ -100,15 +118,17 @@ public sealed class RemodelGuard : ICallGuard
     /// (VERIFIED), so a call to it cannot be verified; <c>StartRecordingUndoObject</c> and
     /// <c>FinishRecordingUndoObject2</c> are the mechanism this design decided not to rely on,
     /// and an unused allowlist entry is the accidental widening the allowlist exists to
-    /// prevent; <c>SetReadOnlyState</c> changes a file's writability behind the engineer.
-    /// Feature 003 (tasks T087) left these four families to feature 004's guard work, and 004
-    /// adds nothing to <see cref="ReadOnlyGuard"/>, so they are refused here.
+    /// prevent. Feature 003 (tasks T087) left these families to feature 004's guard work, and
+    /// 004 adds nothing to <see cref="ReadOnlyGuard"/>, so they are refused here.
+    /// <c>SetReadOnlyState</c>, which changes a file's writability behind the engineer, was the
+    /// fifth until decision 140A (2026-10-19) had <see cref="ReadOnlyGuard"/> refuse it.
     ///
     /// Everything else in that exclusion table is already refused: by <see cref="ReadOnlyGuard"/>
     /// for a bare name (<c>SaveAs3</c>, <c>SetSaveFlag</c>, <c>EditRebuild3</c>,
     /// <c>ModifyDefinition</c>, the suppression members, <c>SetSystemValue*</c>, the
-    /// <c>FeatureCut*</c> / <c>FeatureExtrusion*</c> / <c>InsertFeature*</c> families and, since
-    /// decision 21A, the rest of the creation family), and by
+    /// <c>FeatureCut*</c> / <c>FeatureExtrusion*</c> / <c>InsertFeature*</c> families, since
+    /// decision 21A the rest of the creation family, and since decision 140A
+    /// <c>SetReadOnlyState</c>), and by
     /// rule 3 above for any interface-qualified key that is not on the allowlist -
     /// <c>IModelDoc2.EditDelete</c>, <c>IDimension.set_Name</c>, <c>IEntity.Delete2</c> and
     /// the rest of the creation family among them.
@@ -119,64 +139,54 @@ public sealed class RemodelGuard : ICallGuard
         "EditRedo2",
         "StartRecordingUndoObject",
         "FinishRecordingUndoObject2",
-        "SetReadOnlyState",
     };
 
     /// <summary>The stage-1 allowlist, for reading: the tests assert it as an exact table.</summary>
-    public static readonly IReadOnlyCollection<string> AllowedKeys = AllowedKeySet;
+    public static readonly IReadOnlyCollection<string> AllowedKeys = new ReadOnlySet<string>(AllowedKeySet);
 
     /// <summary>The members this guard refuses itself, for reading.</summary>
-    public static readonly IReadOnlyCollection<string> ExcludedMembers = ExcludedMemberSet;
+    public static readonly IReadOnlyCollection<string> ExcludedMembers = new ReadOnlySet<string>(ExcludedMemberSet);
 
     /// <summary>
     /// True when <paramref name="key"/> is one of the stage-1 write keys - the question
     /// "was that call a write?", asked by the tool service's remodel observer so the log
     /// records a target path for every mutating call and for nothing else (T058).
     ///
-    /// It is a lookup on the same set <see cref="Assert"/> uses, ordinal and O(1), rather than
-    /// a scan of <see cref="AllowedKeys"/>: it runs inside every gated interop call, on the
-    /// SOLIDWORKS thread.
+    /// It is a lookup on the same set <see cref="AllowlistGuard.Assert"/> is built with, ordinal and
+    /// O(1), rather than a scan of <see cref="AllowedKeys"/>: it runs inside every gated interop call,
+    /// on the SOLIDWORKS thread. (Since decision 151A the shared rule matches its own ordinal copy of
+    /// the set, made once per guard.)
     /// </summary>
     public static bool IsAllowlisted(string? key) =>
         !string.IsNullOrWhiteSpace(key) && AllowedKeySet.Contains(key!.Trim());
 
-    /// <inheritdoc />
-    public void Assert(string interopMemberName)
+    /// <summary>
+    /// The stage-1 keys; a bare member name - what the remodel family's read call sites pass, exactly
+    /// as the reviewer's do - is the read-only guard's answer, unchanged.
+    /// </summary>
+    public RemodelGuard()
+        : base(AllowedKeySet)
     {
-        if (string.IsNullOrWhiteSpace(interopMemberName))
-        {
-            throw new ArgumentException(
-                "An interop member name is required.", nameof(interopMemberName));
-        }
+    }
 
-        string key = interopMemberName.Trim();
-
-        if (AllowedKeySet.Contains(key))
-        {
-            return;
-        }
-
-        string member = CallKey.BareName(key);
-
-        if (ExcludedMemberSet.Contains(member))
+    /// <summary>
+    /// Answer 2, this guard's own: a member on <see cref="ExcludedMembers"/> is refused however it is
+    /// spelled, bare or qualified with any interface, in words that say it is excluded by name.
+    /// </summary>
+    protected override void RefuseByName(string key)
+    {
+        if (ExcludedMemberSet.Contains(CallKey.BareName(key)))
         {
             throw new MutatingCallError(
                 key,
                 $"{key} is excluded from the stage-1 re-modeler surface by name "
                 + "(contracts/guard-allowlist.md).");
         }
-
-        if (CallKey.IsQualified(key))
-        {
-            throw new MutatingCallError(
-                key,
-                $"{key} is not on the stage-1 re-modeler allowlist. The re-modeler's write "
-                + "surface is a closed set (contracts/guard-allowlist.md); stage 2 gets its "
-                + "own additive list.");
-        }
-
-        // A bare member name is a read call site, in the remodel family exactly as in the
-        // reviewer's. The read-only rules apply to it unchanged.
-        ReadOnlyGuard.Assert(key);
     }
+
+    /// <inheritdoc />
+    protected override string Refusal(string key) =>
+        $"{key} is not on the stage-1 re-modeler allowlist. The re-modeler's write "
+        + "surface is a closed set (contracts/guard-allowlist.md); stage 2 gets its "
+        + "own additive list.";
 }

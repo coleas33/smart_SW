@@ -20,7 +20,8 @@ src/swreview/
   checks/       deterministic checks; the only source of a verdict
   tools/        the curated tool surface the model is given
   agent/        settings.py (provider, model, effort, key source, redaction),
-                providers/ (protocol, schema generation, OpenAI, Gemini, fake),
+                providers/ (protocol, schema generation, OpenAI, Gemini, fake; the
+                Gemini adapter is deferred by owner decision 94A),
                 runner.py, prompts/, checklist
   chat/         the Task Pane chat backend (loopback HTTP + SSE)
   mcp/          the read-only stdio toolset an external CLI connects to
@@ -47,14 +48,21 @@ environment (it calls the real API). A checkout with neither runs green.
 `review` and `benchmark run` take `--provider openai|gemini`, `--model <id>` and
 `--effort low|medium|high|xhigh`. The default model is the provider's own and lives in one
 place, `src/swreview/agent/settings.py`; no command line or session carries a hard-coded
-model id. There is no Anthropic dependency.
+model id. There is no Anthropic dependency. OpenAI is the only provider in use: owner
+decision 94A ([014 research](../specs/014-design-review-eval/research.md)) defers the Gemini
+work. The Gemini adapter and `--provider gemini` are still in the code.
 
-The key is never an argument. It is read from the pane's settings file first and the
-environment second (`OPENAI_API_KEY`; for Gemini `GOOGLE_API_KEY` ahead of
-`GEMINI_API_KEY`), and the session records which of the two it came from. It is held as a
-`SecretStr` excluded from every dump, and a redaction filter masks it in log records and in
-provider error text before either reaches a run folder. `swreview audit-secrets <dir>...`
-is the check that it never did.
+The key is never an argument. The reviewer reads it from the environment (`OPENAI_API_KEY`;
+for the deferred Gemini adapter `GOOGLE_API_KEY` ahead of `GEMINI_API_KEY`) and never reads
+the pane's settings file: inside SOLIDWORKS the add-in reads that file, where a saved key wins
+over the workstation's environment, and hands the key to the backend in the backend's
+environment. The session records where the key came from as `key_source`: `settings` for the
+key saved in the pane, whose provider the add-in names when it starts the backend
+(`chat serve --settings-key-provider`, owner decision 138A), `env` for a key from the
+environment, and `none` without one; a command-line run records `env` or `none`. The key is
+held as a `SecretStr` excluded from every dump, and a redaction filter masks it in log
+records and in provider error text before either reaches a run folder.
+`swreview audit-secrets <dir>...` is the check that it never did.
 
 ## Third-party licenses
 

@@ -77,6 +77,29 @@ public static class SwSessionConfiguration
             ? null
             : session.Gate.Call("Configuration.Name", () => configuration.Name);
     }
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X1): the name of the configuration active in the
+    /// session's document now - which a switch in SOLIDWORKS changes, where
+    /// <see cref="ConfigurationName"/> answers the one the session was bound to - read through the
+    /// session's gate, the reads <see cref="SwSession.Attach"/> makes, or null when the document reports
+    /// none. What the in-process bridge's live commands compare with the configuration they attached in.
+    /// </summary>
+    public static string? ActiveConfigurationName(this ISwSession session)
+    {
+        if (session == null)
+        {
+            throw new ArgumentNullException(nameof(session));
+        }
+
+        IModelDoc2 document = session.Document;
+        var configuration = session.Gate.Call(
+            "ConfigurationManager.ActiveConfiguration",
+            () => document.ConfigurationManager?.ActiveConfiguration) as IConfiguration;
+        return configuration == null
+            ? null
+            : session.Gate.Call("Configuration.Name", () => configuration.Name);
+    }
 }
 
 /// <summary>
@@ -112,9 +135,10 @@ public sealed class SwSession : ISwSession
     /// <summary>
     /// Opens a session on <paramref name="documentPath"/>, or on the active document when
     /// it is null. A document that is already open is used as it stands; a part or assembly
-    /// that is not is opened READ ONLY, which is the only file-opening call the extractor makes.
-    /// A drawing is refused (<see cref="AttachPurpose.Model"/>): this is the form every caller
-    /// but the extraction uses, and each of them needs a configuration.
+    /// that is not is opened READ ONLY by <see cref="OpenReadOnly"/>, one of the extractor's
+    /// file-opening calls (decision 137A: not the only one; <see cref="OpenReadOnly"/> names the
+    /// others). A drawing is refused (<see cref="AttachPurpose.Model"/>): this is the form every
+    /// caller but the extraction uses, and each of them needs a configuration.
     /// </summary>
     public static SwSession Attach(
         ISldWorks swApp, string? documentPath, string? configurationName, SwGate? gate = null)
@@ -329,9 +353,17 @@ public sealed class SwSession : ISwSession
     }
 
     /// <summary>
-    /// The one file-opening call in the extractor. Read-only and silent; the document is
-    /// left open afterwards so persistent references stay resolvable for a later
-    /// <c>resolve</c> or <c>capture</c>.
+    /// The console attach's open: a part or assembly named to <see cref="Attach"/> or
+    /// <see cref="AttachForDump"/> that is not open (<c>swreview-extract --doc</c>, among others) is
+    /// opened with <c>OpenDoc6</c>, read-only and silent. The document is left open afterwards so
+    /// persistent references stay resolvable for a later <c>resolve</c> or <c>capture</c>.
+    ///
+    /// It is one of the extractor's file-opening calls, not the only one (decision 137A,
+    /// 2026-10-19): feature 011 opens a drawing the engineer confirmed, read-only and hidden,
+    /// through <see cref="DrawingOpenScope"/> (<c>ISldWorks.OpenDoc6</c> under
+    /// <c>DrawingOpenGuard</c>, which probe D14 also runs), and feature 004 opens the re-modeler's
+    /// own copy (<c>remodel.open</c>) and reopens <c>probe remodel</c>'s throwaway part with
+    /// <c>OpenDoc7</c>.
     ///
     /// The existence check lives HERE, after <c>GetOpenDocumentByName</c> has already said
     /// no, and nowhere earlier. Mapped drives and EPDM vault views are per logon session, so
@@ -342,6 +374,17 @@ public sealed class SwSession : ISwSession
     /// Parts and assemblies only (feature 011, contracts/attach.md section 4): a drawing that is
     /// not open is refused here, before the existence check and before any open, by
     /// <see cref="NotOpenRefusal"/>.
+    ///
+    /// Checked read-only (decision 136A, 2026-10-19): the options ask for read-only, and only the
+    /// document says whether SOLIDWORKS honoured them. It is asked <c>IsOpenedReadOnly()</c>
+    /// through the gate before it is handed on; one that is not open read-only, or will not say,
+    /// is refused and closed again with <c>CloseDoc</c> through the gate, after the identity check
+    /// feature 011's drawing open uses (<see cref="ReadOnlyOpen"/>, which both share), and never
+    /// read. A document <c>GetOpenDocumentByName</c> answered was not opened here: it is not asked
+    /// and never closed. Nor is one the open answers with and says SOLIDWORKS already had open
+    /// (decision 136A's review, <see cref="FileLoadErrors.SayAlreadyOpen"/>) - opened by the engineer
+    /// after the lookup, held by an open assembly, or open under another spelling of its path: it
+    /// is used as it stands, as before decision 136A.
     /// </summary>
     private static IModelDoc2 OpenReadOnly(
         ISldWorks swApp, string documentPath, AttachPurpose purpose, SwGate gate)
@@ -381,7 +424,35 @@ public sealed class SwSession : ISwSession
                 + $"({FileLoadErrors.Describe(errors, warnings)}).");
         }
 
-        return document;
+        if (FileLoadErrors.SayAlreadyOpen(errors, warnings))
+        {
+            return document;
+        }
+
+        IModelDoc2 opened = document;
+        string? notReadOnly = ReadOnlyOpen.Refusal(
+            gate,
+            opened.IsOpenedReadOnly,
+            errors,
+            warnings,
+            () => ReadOnlyOpen.Close(
+                gate,
+                () => swApp.GetOpenDocumentByName(documentPath),
+                "CloseDoc",
+                () => swApp.CloseDoc(documentPath),
+                opened,
+                documentPath,
+                "the extractor"),
+            documentPath,
+            out Exception? checkFailure);
+        if (notReadOnly != null)
+        {
+            throw checkFailure == null
+                ? new InvalidOperationException(notReadOnly)
+                : new InvalidOperationException(notReadOnly, checkFailure);
+        }
+
+        return opened;
     }
 
     private static IConfiguration ActiveConfiguration(IModelDoc2 document, SwGate gate)

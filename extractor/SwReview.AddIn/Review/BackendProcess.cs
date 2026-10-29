@@ -73,6 +73,15 @@ public sealed class BackendStartOptions
     /// <summary>`--allow-origin`; the page's virtual host, fixed by pane-host-messages.md.</summary>
     public string AllowOrigin { get; set; } = "https://swreview.invalid";
 
+    /// <summary>
+    /// `--settings-key-provider`: the provider whose key variables in <see cref="Environment"/>
+    /// hold the key saved in the pane's settings, or null when they hold no saved key (owner
+    /// decision 138A). The backend finds the key in its environment either way and cannot
+    /// tell by itself where it came from; this is how its sessions record `key_source:
+    /// settings`. It names a provider and never carries a key.
+    /// </summary>
+    public string? SettingsKeyProvider { get; set; }
+
     public string? WorkingDirectory { get; set; }
 
     /// <summary>Credentials and endpoint overrides. The only channel a key travels on (FR-015).</summary>
@@ -102,6 +111,13 @@ public sealed class BackendStartOptions
 
     /// <summary>`GET /health` with the bearer token; injectable so the tests need no server.</summary>
     public Func<string, string, bool>? HealthProbe { get; set; }
+
+    /// <summary>
+    /// Ends a start no longer wanted - the add-in unloading - without waiting out the handshake
+    /// and health timeouts: the child is stopped and the start throws. A start asked for after it
+    /// is cancelled starts nothing.
+    /// </summary>
+    public CancellationToken Cancellation { get; set; }
 }
 
 /// <summary>The backend could not be started. The message is safe to show and to log.</summary>
@@ -148,6 +164,9 @@ public sealed class BackendStartException : Exception
 /// </summary>
 public sealed class BackendProcess : IDisposable
 {
+    /// <summary>How a start ended through <see cref="BackendStartOptions.Cancellation"/> begins.</summary>
+    private const string StoppedBeforeReady = "the backend start was stopped before the backend was ready";
+
     private readonly ChildProcess _child;
     private readonly JobObject _tree;
     private readonly TimeSpan _stopGrace;
@@ -206,6 +225,13 @@ public sealed class BackendProcess : IDisposable
         if (options == null)
         {
             throw new ArgumentNullException(nameof(options));
+        }
+
+        // Before a log is opened or a child started: a start asked for once it is no longer
+        // wanted starts nothing at all.
+        if (options.Cancellation.IsCancellationRequested)
+        {
+            throw new BackendStartException(StoppedBeforeReady + ", so nothing was started.");
         }
 
         string[] secrets = options.Secrets.Where(secret => !string.IsNullOrWhiteSpace(secret)).ToArray();
@@ -283,7 +309,9 @@ public sealed class BackendProcess : IDisposable
 
             child.Resume();
 
-            if (!handshakeSeen.Wait(options.HandshakeTimeout))
+            // Throws OperationCanceledException when the start is no longer wanted, which the
+            // catch below turns into a start failure once the child is stopped.
+            if (!handshakeSeen.Wait(options.HandshakeTimeout, options.Cancellation))
             {
                 throw Fail(
                     child,
@@ -374,6 +402,12 @@ public sealed class BackendProcess : IDisposable
             if (failure is BackendStartException)
             {
                 throw;
+            }
+
+            if (failure is OperationCanceledException)
+            {
+                throw new BackendStartException(
+                    StoppedBeforeReady + $"; the child was stopped (log: {options.LogPath})", processId, failure);
             }
 
             throw new BackendStartException(
@@ -516,6 +550,12 @@ public sealed class BackendProcess : IDisposable
             yield return "--run-root";
             yield return options.RunRoot!;
         }
+
+        if (!string.IsNullOrWhiteSpace(options.SettingsKeyProvider))
+        {
+            yield return "--settings-key-provider";
+            yield return options.SettingsKeyProvider!;
+        }
     }
 
     private static StreamWriter OpenLog(string path)
@@ -610,6 +650,14 @@ public sealed class BackendProcess : IDisposable
 
         while (true)
         {
+            // A start no longer wanted stops here, between probes, rather than at the deadline;
+            // the caller stops the child.
+            if (options.Cancellation.IsCancellationRequested)
+            {
+                throw new BackendStartException(
+                    StoppedBeforeReady + $"; the child was stopped (log: {LogPath})", ProcessId);
+            }
+
             if (_child.HasExited)
             {
                 throw new BackendStartException(
@@ -675,11 +723,16 @@ public sealed class BackendProcess : IDisposable
 /// disk, so restarting the backend under it would lose the turn silently (chat-api.md,
 /// "Shutdown and settings changes"); the pane refuses instead and offers Save again when the
 /// turn ends.
+///
+/// The message is what an engineer reads when a save is refused before anything is written,
+/// so it says that nothing was saved: it used to say "settings are saved once it finishes",
+/// which no code does (owner decision 143A). A turn that starts after that check is the one
+/// case whose settings are saved, and the review host says so with a sentence of its own.
 /// </summary>
 public sealed class TurnRunningException : Exception
 {
     public TurnRunningException()
-        : base("a review turn is running; settings are saved once it finishes. "
+        : base("a review turn is running, so the settings were not saved. "
             + "Stop the turn, or wait for it to end, and press Save again.")
     {
     }
@@ -695,6 +748,12 @@ public sealed class TurnRunningException : Exception
 /// The rule lives here rather than in <see cref="ReviewHost"/> so there is one place that can
 /// say no - the host's `settings.save` handler and any future caller (an add-in reload, a
 /// crash restart) go through the same gate.
+///
+/// It starts nothing of its own accord: every start is the review host's - the add-in's first
+/// (`ReviewHost.FirstStart`) and every restart - made under the host's restart lock and recording
+/// the settings the backend then runs with (owner decision 153A, `ReviewHost.StartWith`). A start
+/// added here - a restart after a crash, say - must go through it, or that record, and every
+/// session made from it, drifts from the backend that runs.
 /// </summary>
 public sealed class BackendSupervisor : IDisposable
 {

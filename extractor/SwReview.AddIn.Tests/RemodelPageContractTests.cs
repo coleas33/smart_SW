@@ -402,10 +402,41 @@ public sealed class RemodelPageContractTests
         Assert.Contains("reorder", text);
         Assert.Contains("Fillet3", text);
 
-        // The failed change names its bridge error code and the sentence beside it, rather than
-        // being a row that simply says "failed".
-        Assert.Contains("ReorderRefused", text);
-        Assert.Contains("the anchor moved", text);
+        // The failed change names its bridge error code and where to read why, rather than being a
+        // row that simply says "failed". *Changed deliberately 2026-10-21 (owner decision 159A, on
+        // review; 004 T227, research R19.9):* where to read why, by the button's label, in place of
+        // the executor's own sentence, which can name the copy's full path.
+        Assert.Contains("ReorderRefused. Press Open report to see why.", text);
+        Assert.DoesNotContain("the anchor moved", text);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T227; research R19.9, R19.8 item 4): a change that did not hold is
+    /// shown in plain words that name no path - its code, and where to read why, by the button's label - where its row
+    /// printed the executor's own sentence (`remodel/apply.py`, `str(exc)`), which can name the copy's full path. That
+    /// sentence stays where the run records it: the change's record and the report in the run folder. A change pushed
+    /// while the run applies is shown the same way, and a code that is not one - here a path - is left out.
+    /// </summary>
+    [Fact]
+    public void AChangeThatDidNotHoldIsShownInPlainWordsThatNameNoPath()
+    {
+        string said = JsonSerializer.Serialize(
+            @"the bridge refused the reorder in 'C:\Fictional\runs\20260101-000000-FICT-remodel\copy\FICT-bracket-RMS.SLDPRT'");
+        JsonElement rendered = RenderMutated(
+            "result.changes[1].error = " + said + ";",
+            "var pushed = " + RemodelResultSample.LiveChangeJson() + ";"
+            + "pushed.status = 'rolled_back';"
+            + "pushed.error_code = " + JsonSerializer.Serialize(@"C:\Fictional\FICT-code") + ";"
+            + "pushed.error = " + said + ";"
+            + "append(pushed);"
+            + "var rows = document.querySelectorAll('#changes .change .error');"
+            + "return JSON.stringify({ok: true, "
+            + "failed: document.querySelector('#changes .change[data-seq=\"2\"] .error').textContent, "
+            + "pushed: rows[rows.length - 1].textContent});");
+
+        Assert.True(rendered.GetProperty("ok").GetBoolean(), rendered.ToString());
+        Assert.Equal("ReorderRefused. Press Open report to see why.", rendered.GetProperty("failed").GetString());
+        Assert.Equal("Press Open report to see why.", rendered.GetProperty("pushed").GetString());
     }
 
     /// <summary>
@@ -636,6 +667,122 @@ public sealed class RemodelPageContractTests
     }
 
     /// <summary>
+    /// Owner decision 148A (feature 011 T188, research R12.4): Open copy is offered as Discard copy is - not
+    /// while a run is running. Over the real transport, both are pressable once the plan is made, neither
+    /// from <c>remodel.started</c> until the run reaches a terminal status, and both again after it.
+    /// </summary>
+    [Fact]
+    public void OpenCopyAndDiscardCopyAreNotOfferedWhileARunRuns()
+    {
+        var states = new List<string>();
+        HostStub? stub = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                states.Add("planned " + await Offered(page));
+                await Click(page, "start-run");
+                states.Add("started " + await Offered(page));
+                stub!.Post("status", new { stage = "applying", message = "Applying change 3 of 12." });
+                await Settled(page);
+                states.Add("applying " + await Offered(page));
+                stub!.Post("status", new { stage = "ready", message = "The run ended 'saved'." });
+                await Settled(page);
+                states.Add("ended " + await Offered(page));
+            });
+
+        Assert.Equal(
+            new[]
+            {
+                "planned open-copy discard-copy",
+                "started -",
+                "applying -",
+                "ended open-copy discard-copy",
+            },
+            states);
+        Assert.Equal(1, stub!.Starts);
+    }
+
+    /// <summary>
+    /// Owner decision 148A's second review (feature 011 T197, research R12.8a): nor while a plan is being
+    /// made - the host's "a plan or a run". With an earlier run on screen, Open copy pressed mid-plan waited
+    /// behind the plan on the host's one remodel message thread and was served, once the plan ended, on the
+    /// earlier run's copy while the page showed the new plan; Discard copy likewise, its "deleted" words then
+    /// shown beside the new plan. Neither is offered from the press of Remodel until the plan is answered,
+    /// and a press in between sends nothing.
+    /// </summary>
+    [Fact]
+    public void OpenCopyAndDiscardCopyAreNotOfferedWhileAPlanIsBeingMade()
+    {
+        var states = new List<string>();
+        HostStub? stub = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                states.Add("planned " + await Offered(page));
+
+                stub!.WithholdsPlanAnswers = true;
+                await Click(page, "plan-run");
+                states.Add("planning " + await Offered(page));
+                await Click(page, "open-copy");
+                await Click(page, "discard-copy");
+
+                stub.AnswerTheWithheldPlan();
+                await Settled(page);
+                states.Add("planned again " + await Offered(page));
+            });
+
+        Assert.Equal(
+            new[]
+            {
+                "planned open-copy discard-copy",
+                "planning -",
+                "planned again open-copy discard-copy",
+            },
+            states);
+        Assert.Equal(2, stub!.Plans);
+        Assert.DoesNotContain("remodel.open_copy", stub.Received);
+        Assert.DoesNotContain("remodel.discard_copy", stub.Received);
+    }
+
+    /// <summary>Decision 148A: the host's refusal of Open copy during a run names the button by its label and no path.</summary>
+    [Fact]
+    public void TheOpenCopyRefusalNamesItsButtonByItsLabelAndNoPath()
+    {
+        string sentence = RemodelHost.OpenCopyWhileARunIsInProgressMessage;
+
+        Assert.Contains("Press " + ButtonLabel("open-copy") + " again", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("/", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain(@":\", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("run_dir", sentence, StringComparison.Ordinal);
+    }
+
+    /// <summary>The two copy buttons the page offers now, by id, or "-" for neither (decision 148A).</summary>
+    private static async Task<string> Offered(CoreWebView2 page)
+    {
+        var offered = new List<string>();
+        foreach (string id in new[] { "open-copy", "discard-copy" })
+        {
+            if (!await Disabled(page, id))
+            {
+                offered.Add(id);
+            }
+        }
+
+        return offered.Count == 0 ? "-" : string.Join(" ", offered);
+    }
+
+    /// <summary>
     /// Decision 22A over the real transport: a Start the host refuses because the tool service
     /// re-attached after the plan. The page prints the host's sentence verbatim - it has no
     /// words file and invents none - and, since no run began and no terminal `status` is
@@ -684,6 +831,43 @@ public sealed class RemodelPageContractTests
         // host answers the same refusal again, which the host's own tests pin.
         Assert.False(disabled["start-run"]);
         Assert.Equal(1, stub!.Starts);
+    }
+
+    /// <summary>
+    /// A refused Start leaves nothing in the run status line, as a refused plan already does: no
+    /// run began, and the line the press set - "Running...", or the host's word that a settings
+    /// restart comes first (owner decision 145A, found on review) - is no longer true. The banner
+    /// says why.
+    /// </summary>
+    [Fact]
+    public void ARefusedStartLeavesNothingInTheRunStatusLine()
+    {
+        HostStub? stub = null;
+        string? status = null;
+        string? banner = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page =>
+            {
+                stub = new HostStub(
+                    page, startRefusal: ("TurnRunning", "FICT a review turn holds the settings restart back."));
+            },
+            async page =>
+            {
+                await Settled(page);
+                await page.ExecuteScriptAsync("document.getElementById('plan-run').click()");
+                await Settled(page);
+                await page.ExecuteScriptAsync("document.getElementById('start-run').click()");
+                await Settled(page);
+
+                status = await TextOf(page, "run-status");
+                banner = await TextOf(page, "banner");
+            });
+
+        Assert.Equal(1, stub!.Starts);
+        Assert.Equal(string.Empty, status);
+        Assert.Equal("FICT a review turn holds the settings restart back.", banner);
     }
 
     /// <summary>
@@ -843,6 +1027,62 @@ public sealed class RemodelPageContractTests
     {
         Assert.Contains("press " + ButtonLabel("plan-again"), RemodelHost.PlanClosedMessage, StringComparison.Ordinal);
         Assert.Contains("press " + ButtonLabel("plan-run"), RemodelHost.SourceIsRemodelCopyMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Owner decision 155A (004 T189): the refusals that named a path - an unsaved part, a run this tab no
+    /// longer has, and the stop when the copy is gone - name the way on by the label of the button the
+    /// page gives it, read from the page itself. The refusal of a part that references other files names
+    /// no button: pressing again changes nothing.
+    /// </summary>
+    [Fact]
+    public void TheRefusalsThatNamedAPathNameTheirButtonByItsLabel()
+    {
+        string plan = ButtonLabel("plan-run");
+
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.DocumentDirtyMessage, StringComparison.Ordinal);
+        Assert.EndsWith("Press " + plan + " to plan again.", RemodelHost.RunNotFoundMessage, StringComparison.Ordinal);
+        Assert.EndsWith("press " + plan + " to plan again.", RemodelHost.CopyGoneMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(plan, RemodelHost.ExternalReferencesMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 T208): the tab's words for a failure whose own sentence can name a path send whoever needs
+    /// that sentence to the log by the label of the button that opens it, and name the way on by its button's label, read
+    /// from the page itself.
+    /// </summary>
+    [Fact]
+    public void TheWordsForAFailureThatCanNameAPathNameTheirButtonsByTheirLabels()
+    {
+        string log = "Press " + ButtonLabel("open-log") + " to see why";
+        string plan = ButtonLabel("plan-run");
+
+        foreach (string sentence in new[]
+                 {
+                     RemodelHost.UnexpectedFailureMessage,
+                     RemodelHost.BackendFailedMessage,
+                     RemodelHost.RunFolderNotMadeMessage,
+                     RemodelHost.RunCloseNotAnsweredMessage,
+                     RemodelHost.OpenCopyFailedMessage,
+                     RemodelHost.DiscardCopyFailedMessage,
+                     RemodelHost.DiscardStateNotWrittenMessage,
+                     RemodelHost.BackendNotRestartedMessage,
+                     RemodelHost.ShowFailedMessage,
+                     RemodelHost.NotOpenedMessage,
+                 })
+        {
+            Assert.Contains(log, sentence, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("press " + plan + " to plan again.", RemodelHost.BackendFailedMessage, StringComparison.Ordinal);
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.NotAPartOnDiskMessage, StringComparison.Ordinal);
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.BridgeNotAnsweringMessage, StringComparison.Ordinal);
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.BackendNotAnsweringMessage, StringComparison.Ordinal);
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.RunFolderNotMadeMessage, StringComparison.Ordinal);
+        Assert.EndsWith("then press " + plan + " again.", RemodelHost.EarlierPlanNotClosedMessage, StringComparison.Ordinal);
+        Assert.Contains("then press " + ButtonLabel("open-copy") + " again.", RemodelHost.OpenCopyFailedMessage, StringComparison.Ordinal);
+        Assert.Contains("then press " + ButtonLabel("discard-copy") + " again.", RemodelHost.DiscardCopyFailedMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(ButtonLabel("open-log"), RemodelHost.LogFolderNotOpenedMessage, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1312,6 +1552,385 @@ public sealed class RemodelPageContractTests
     }
 
     /// <summary>
+    /// Owner decision 155A, test first (004 T193; feature 011 research R12.9 item 9): a page that loads
+    /// again while its run runs starts from `init` alone, and `init.latest_run.running` says the run is in
+    /// flight. The page shows the run running, as the page that pressed Start did: Stop pressable, and
+    /// neither Remodel a copy, Start, Open copy nor Discard copy offered - the host refuses each while the
+    /// run holds it. Stop works: it is sent, and the run's end, which the host tells once the run has
+    /// finalized, ends the running state and offers them again. Before, the page offered all four and
+    /// disabled Stop. *Changed deliberately 2026-10-21 (owner decision 159A, 004 research R19):* the stub
+    /// answers Stop in the order the host uses - the Stop's word, the run's last word, then the answer -
+    /// where it answered at once, an order the host never produces; what this pins holds in both.
+    /// </summary>
+    [Fact]
+    public void APageLoadedAgainWhileItsRunRunsShowsItRunningAndCanStopIt()
+    {
+        HostStub? stub = null;
+        var states = new List<string>();
+        string? runStatus = null;
+        int startsAtTheEnd = -1;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                await Click(page, "start-run");
+
+                stub!.LatestRun = LatestRun("applying", running: true);
+                await Reload(page);
+                states.Add("reloaded " + await Pressable(page));
+                runStatus = await TextOf(page, "run-status");
+
+                await Click(page, "stop-run");
+                states.Add("stopped " + await Pressable(page));
+                startsAtTheEnd = stub.Starts;
+            });
+
+        Assert.Equal(
+            new[]
+            {
+                "reloaded stop-run",
+                "stopped plan-run start-run open-copy discard-copy",
+            },
+            states);
+        Assert.Equal("Running...", runStatus);
+        Assert.Contains("remodel.stop", stub!.Received);
+        Assert.Equal(1, startsAtTheEnd);
+    }
+
+    /// <summary>
+    /// Owner decision 155A (004 T193): the run shown running after a reload ends as a run this page started
+    /// does, at the host's terminal status, which offers the copy actions again.
+    /// </summary>
+    [Fact]
+    public void ARunShownRunningAfterAReloadEndsAtItsTerminalStatus()
+    {
+        HostStub? stub = null;
+        var states = new List<string>();
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+
+                stub!.LatestRun = LatestRun("verifying", running: true);
+                await Reload(page);
+                states.Add("reloaded " + await Pressable(page));
+
+                stub.Post("status", new { stage = "ready", message = "The run ended 'saved'." });
+                await Settled(page);
+                states.Add("ended " + await Pressable(page));
+            });
+
+        Assert.Equal(
+            new[]
+            {
+                "reloaded stop-run",
+                "ended plan-run start-run open-copy discard-copy",
+            },
+            states);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, test first (004 T206; research R18.7 item 5): a run the engineer stopped ends, on the page, on
+    /// its true end. The host tells a stopped run's end as it tells any - its last word once the executor has finalized
+    /// and the host is free - and answers Stop after it; the page wrote that answer into the run line last, so the line
+    /// ended on "Stopping. 2 change(s) applied ..." over the run's last word. The stub posts in the order the host uses:
+    /// the Stop's word, the run's last word, then the answer. A run that ends in `error` leaves the line empty, the banner
+    /// saying how it ended, as a refused plan or Start leaves it, where the line kept the Stop's "Stopping: ...".
+    /// </summary>
+    [Theory]
+    [InlineData("ready")]
+    [InlineData("error")]
+    public void AStoppedRunsLineEndsOnTheRunsEndAndNotOnTheAnswerToStop(string stage)
+    {
+        const string failed = "The run ended without saving the copy. The report says why.";
+        HostStub? stub = null;
+        string? line = null;
+        string? banner = null;
+        string? offered = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page =>
+            {
+                stub = new HostStub(page)
+                {
+                    StopEndsWith = (stage, stage == "ready" ? HostStub.StoppedRunsEnd : failed),
+                };
+            },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                await Click(page, "start-run");
+                await Click(page, "stop-run");
+
+                line = await TextOf(page, "run-status");
+                banner = await Banner(page);
+                offered = await Pressable(page);
+            });
+
+        Assert.Contains("remodel.stop", stub!.Received);
+        Assert.Equal(stage == "ready" ? HostStub.StoppedRunsEnd : string.Empty, line);
+        if (stage == "error")
+        {
+            Assert.Equal(failed, banner);
+        }
+
+        Assert.Equal("plan-run start-run open-copy discard-copy", offered);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T215; research R19.9; the race review's finding R1): a page that
+    /// loads again asks afresh, and the host answers an earlier load's request - its Stop, answered at the run's end
+    /// since 159A - under that load's id, to whichever load the pane shows then
+    /// (<c>RemodelHostTests.EveryStopIsAnsweredUnderItsOwnIdThoughThePageLoadedAgain</c>). The page numbered its
+    /// requests from `m1` at every load, so that answer was taken for this load's request with the same id: here `m6`,
+    /// the earlier load's Stop and this load's sixth request - ready, the result, Open report, Open run folder and View
+    /// log, then the result its run's last word makes it ask for. The result's own reply was dropped and the result view
+    /// emptied.
+    /// </summary>
+    [Fact]
+    public void AnEarlierLoadsAnswerToStopIsNeverTakenForTheResultOfThePageThatLoadedAgain()
+    {
+        HostStub? stub = null;
+        string? before = null;
+        string? after = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                stub!.LatestRun = LatestRun("applying", running: true);
+                await Reload(page);
+                await Click(page, "open-report");
+                await Click(page, "open-folder");
+                await Click(page, "open-log");
+                before = await TextOf(page, "run-state");
+
+                stub.Post("status", new { stage = "ready", message = HostStub.StoppedRunsEnd });
+                page.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    type = "remodel.stopped",
+                    id = "m6",
+                    payload = new { changes_applied = 2 },
+                }));
+                await Settled(page);
+                after = await TextOf(page, "run-state");
+            });
+
+        Assert.StartsWith("State: saved", before);
+        Assert.Equal(before, after);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T215; research R19.9; the race review's finding R1): a reply to a
+    /// request this load never sent - an earlier load's, answered after this one loaded - is not this page's to show. An
+    /// `error` carrying such an id was shown in the banner as if the host had refused something this page asked.
+    /// </summary>
+    [Fact]
+    public void AReplyToARequestThisLoadNeverSentLeavesTheBannerAsItWas()
+    {
+        string? banner = null;
+        bool hidden = false;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { _ = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                page.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    type = "error",
+                    id = "m3",
+                    payload = new
+                    {
+                        error_class = "RunNotFound",
+                        message = "no remodel run is in flight, so there is nothing to stop.",
+                        retryable = false,
+                    },
+                }));
+                await Settled(page);
+                banner = await Banner(page);
+                hidden = await Hidden(page, "banner");
+            });
+
+        Assert.Equal(string.Empty, banner);
+        Assert.True(hidden);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review, test first (004 T221; research R19.9; the race review's finding R4): a Stop the page
+    /// sent as the run ended crosses its last word, and the host, free, answers it `RunNotFound` (159A;
+    /// <c>RemodelHostTests.AStopThatArrivesOnceItsRunHasEndedIsAnsweredAtOnceAndStoresNothing</c>). That answer put its
+    /// words in the banner over the one the run's `error` put there, which says how the run ended. Every way a run is
+    /// freed posts a terminal `status`, so the answer adds nothing.
+    /// </summary>
+    [Fact]
+    public void AStopThatCrossesARunsErrorEndLeavesTheBannerSayingHowTheRunEnded()
+    {
+        const string failed = "The run ended without saving the copy. The report says why.";
+        HostStub? stub = null;
+        string? banner = null;
+        string? offered = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page =>
+            {
+                stub = new HostStub(page)
+                {
+                    StopEndsWith = ("error", failed),
+                    StopCrossesTheRunsEnd = true,
+                };
+            },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                await Click(page, "start-run");
+                await Click(page, "stop-run");
+                banner = await Banner(page);
+                offered = await Pressable(page);
+            });
+
+        Assert.Contains("remodel.stop", stub!.Received);
+        Assert.Equal(failed, banner);
+        Assert.Equal("plan-run start-run open-copy discard-copy", offered);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's M4): the second of the two ways out the
+    /// `remodel.stop` row describes, pinned on its own side. This host answers Stop only after the run's terminal
+    /// `status`, so the page hears the end from that status (R19.2); an answer no terminal `status` has preceded - an
+    /// order this host never produces (research R19.8, item 1) - ends the run on the page and writes the answer into the
+    /// run line.
+    /// </summary>
+    [Fact]
+    public void AnAnswerToStopThatNoTerminalStatusPrecededEndsTheRunOnItsWords()
+    {
+        HostStub? stub = null;
+        string? line = null;
+        string? offered = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page) { StopEndsWith = null }; },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                await Click(page, "start-run");
+                await Click(page, "stop-run");
+                line = await TextOf(page, "run-status");
+                offered = await Pressable(page);
+            });
+
+        Assert.Contains("remodel.stop", stub!.Received);
+        Assert.Equal(
+            "Stopping. 2 change(s) applied; the change in flight is finished and the artifacts are finalized first.",
+            line);
+        Assert.Equal("plan-run start-run open-copy discard-copy", offered);
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's M4): R19.2's other side. Only an `error` that ends a
+    /// run clears the run line; one while no run is running - here the add-in's word that the backend did not start, after
+    /// a plan - puts up its banner and leaves the line as it was.
+    /// </summary>
+    [Fact]
+    public void AnErrorWhileNoRunIsRunningLeavesTheRunLineAsItWas()
+    {
+        HostStub? stub = null;
+        string? before = null;
+        string? after = null;
+        string? banner = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                before = await TextOf(page, "run-status");
+
+                stub!.Post("status", new { stage = "error", message = RemodelHost.BackendDidNotStartMessage, lifecycle = true });
+                await Settled(page);
+                after = await TextOf(page, "run-status");
+                banner = await Banner(page);
+            });
+
+        Assert.Equal("Planned. Press Start to apply the plan to the copy.", before);
+        Assert.Equal(before, after);
+        Assert.Equal(RemodelHost.BackendDidNotStartMessage, banner);
+    }
+
+    /// <summary>The run buttons the page offers now, by id, in the page's order, or "-" for none (owner decision 155A).</summary>
+    private static async Task<string> Pressable(CoreWebView2 page)
+    {
+        var pressable = new List<string>();
+        foreach (string id in new[] { "plan-run", "start-run", "stop-run", "open-copy", "discard-copy" })
+        {
+            if (!await Disabled(page, id))
+            {
+                pressable.Add(id);
+            }
+        }
+
+        return pressable.Count == 0 ? "-" : string.Join(" ", pressable);
+    }
+
+    /// <summary>`init.latest_run` for the first plan's folder in <paramref name="state"/>, as `RemodelHost.SendInit` writes it with a run in flight or not (owner decision 155A), and the run's last word while it runs (owner decision 159A, on the final review).</summary>
+    private static object LatestRun(string state, bool running, string? stage = null, string? message = null) => new
+    {
+        run_dir = HostStub.RunDir,
+        at = "2026-09-16T14:22:01.0000000",
+        state,
+        plan_lost = (string?)null,
+        running,
+        status = message == null ? null : new { stage, message },
+    };
+
+    /// <summary>
+    /// Owner decision 159A, on the final review, test first (004 T251; its nit): a page that loads again while its run runs
+    /// writes the run's last word, which <c>init.latest_run.status</c> carries - the backend not answering, told once, above
+    /// all - where it wrote "Running..." over it.
+    /// </summary>
+    [Fact]
+    public void APageLoadedAgainWhileItsRunRunsShowsTheRunsLastWord()
+    {
+        HostStub? stub = null;
+        string? runStatus = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                await Click(page, "start-run");
+
+                stub!.LatestRun = LatestRun("applying", running: true, "applying", "FICT the review backend is not answering.");
+                await Reload(page);
+                runStatus = await TextOf(page, "run-status");
+            });
+
+        Assert.Equal("FICT the review backend is not answering.", runStatus);
+    }
+
+    /// <summary>
     /// The notice's line reaches the DOM as text, like every other string on this page: markup
     /// in it builds no element and runs nothing. The host's sentence carries none, and the page
     /// does not take that on trust.
@@ -1543,6 +2162,18 @@ public sealed class RemodelPageContractTests
         /// <summary>How many `remodel.start` messages the page has posted.</summary>
         public int Starts { get; private set; }
 
+        /// <summary>The type of every message the page has posted, in order (decision 148A's second review).</summary>
+        public List<string> Received { get; } = new List<string>();
+
+        /// <summary>
+        /// Decision 148A's second review (feature 011 T197): when set, a `remodel.plan` is not answered until
+        /// <see cref="AnswerTheWithheldPlan"/> - the page waits, as it waits while `RemodelHost` makes a plan.
+        /// </summary>
+        public bool WithholdsPlanAnswers { get; set; }
+
+        /// <summary>The id of the `remodel.plan` not answered yet under <see cref="WithholdsPlanAnswers"/>.</summary>
+        private string? _withheldPlan;
+
         public int Plans { get; private set; }
 
         /// <summary>
@@ -1566,6 +2197,25 @@ public sealed class RemodelPageContractTests
         /// </summary>
         public bool ClosesTheHeldPlanOnPlanAgain { get; set; }
 
+        /// <summary>
+        /// Owner decision 159A: the last word of a run the engineer stopped, which `remodel.stop` is answered after,
+        /// as `RemodelHost.Execute` tells a run's end: `ready` with the state the run ended in, by default. Null on the
+        /// decision's review (004 T229): the answer with no terminal `status` before it, an order this host never
+        /// produces, for the second of the two ways out the `remodel.stop` row describes.
+        /// </summary>
+        public (string Stage, string Message)? StopEndsWith { get; set; } = ("ready", StoppedRunsEnd);
+
+        /// <summary>
+        /// Owner decision 159A, on review (004 T221; the race review's finding R4): when set, `remodel.stop` crosses the
+        /// run's end - the run's last word (<see cref="StopEndsWith"/>) reaches the page first, and the Stop finds the host
+        /// free and is answered `RunNotFound`, as `RemodelHost` answers a Stop decided once the run has ended.
+        /// </summary>
+        public bool StopCrossesTheRunsEnd { get; set; }
+
+        /// <summary>What `RemodelHost.Execute` tells the page as a stopped run ends: its state, `truncated`, and where to look.</summary>
+        public const string StoppedRunsEnd =
+            "The run ended 'truncated'. Open the report for the change list, the grade and the geometry comparison.";
+
         /// <summary>The folder the <paramref name="plan"/>th accepted `remodel.plan` is answered with.</summary>
         public static string RunDirFor(int plan) => plan == 1 ? RunDir : RunDir + "-" + plan;
 
@@ -1581,6 +2231,7 @@ public sealed class RemodelPageContractTests
                 ? value.GetString()
                 : null;
 
+            Received.Add(type);
             switch (type)
             {
                 case "ready":
@@ -1623,17 +2274,13 @@ public sealed class RemodelPageContractTests
                         return;
                     }
 
-                    if (ClosesTheHeldPlanOnPlanAgain && _planned > 0)
+                    if (WithholdsPlanAnswers)
                     {
-                        Post("remodel.plan_lost", new { run_dir = RunDirFor(_planned), message = RemodelHost.PlanClosedMessage });
+                        _withheldPlan = id;
+                        return;
                     }
 
-                    _planned++;
-                    Reply("remodel.planned", id, new
-                    {
-                        run_dir = RunDirFor(_planned),
-                        plan_summary = Parse(RemodelResultSample.PlanSummaryJson()),
-                    });
+                    AnswerPlan(id);
                     return;
                 case "remodel.start":
                     Starts++;
@@ -1653,10 +2300,62 @@ public sealed class RemodelPageContractTests
                 case "remodel.result":
                     Reply("remodel.result", id, Parse(RemodelResultSample.ResultJson()));
                     return;
+                case "remodel.stop":
+                    if (StopCrossesTheRunsEnd)
+                    {
+                        // A Stop the page sent as the run ended (159A, on review): the run's last word, posted once the
+                        // host is free, reaches the page first, and the Stop, decided after the freeing, is answered at once.
+                        (string Stage, string Message) end = StopEndsWith
+                            ?? throw new InvalidOperationException("a Stop crosses the end of a run that has one");
+                        Post("status", new { stage = end.Stage, message = end.Message });
+                        Reply("error", id, new
+                        {
+                            error_class = "RunNotFound",
+                            message = "no remodel run is in flight, so there is nothing to stop.",
+                            retryable = false,
+                        });
+                        return;
+                    }
+
+                    // As `RemodelHost` answers it (owner decision 159A): its word that the run is stopping as the
+                    // Stop reaches the run; then, once the executor has finalized and the host is free, the run's last
+                    // word; then the answer. Until 159A this stub answered at once, an order the host never produces.
+                    Post("status", new { stage = "applying", message = RemodelHost.StoppingMessage });
+                    if (StopEndsWith.HasValue)
+                    {
+                        Post("status", new { stage = StopEndsWith.Value.Stage, message = StopEndsWith.Value.Message });
+                    }
+
+                    Reply("remodel.stopped", id, new { changes_applied = 2 });
+                    return;
                 default:
                     Reply("ok", id, new { });
                     return;
             }
+        }
+
+        /// <summary>Answers the plan withheld under <see cref="WithholdsPlanAnswers"/>, as `RemodelHost` answers one once it is made.</summary>
+        public void AnswerTheWithheldPlan()
+        {
+            string id = _withheldPlan ?? throw new InvalidOperationException("no remodel.plan is withheld");
+            _withheldPlan = null;
+            AnswerPlan(id);
+        }
+
+        /// <summary>A plan's answer: a folder of its own, after the held plan's notice when one is held.</summary>
+        private void AnswerPlan(string? id)
+        {
+            if (ClosesTheHeldPlanOnPlanAgain && _planned > 0)
+            {
+                Post("remodel.plan_lost", new { run_dir = RunDirFor(_planned), message = RemodelHost.PlanClosedMessage });
+            }
+
+            _planned++;
+            Reply("remodel.planned", id, new
+            {
+                run_dir = RunDirFor(_planned),
+                plan_summary = Parse(RemodelResultSample.PlanSummaryJson()),
+            });
         }
 
         private static JsonElement Parse(string json) =>
@@ -1993,9 +2692,10 @@ public sealed class RemodelPageContractTests
                 }
             }
 
-            // A parser that quietly matched nothing would make every test above vacuous.
+            // A parser that quietly matched nothing would make every test above vacuous. Seven
+            // unsolicited rows since owner decision 145A added `backend.restarted`.
             Assert.True(
-                pageToHost.Count == 11 && unsolicited.Count == 6 && hostToPage.Count >= 8,
+                pageToHost.Count == 11 && unsolicited.Count == 7 && hostToPage.Count >= 8,
                 $"contracts/pane-remodel-messages.md did not parse: {pageToHost.Count} "
                     + $"page-to-host rows ({Join(pageToHost)}), {unsolicited.Count} unsolicited "
                     + $"rows ({Join(unsolicited)}). Did the table or heading shape change?");

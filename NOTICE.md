@@ -46,7 +46,7 @@ Declared in `reviewer/pyproject.toml`; installed, not vendored.
 | Package | License | Used for |
 |---------|---------|----------|
 | `openai` | Apache-2.0 | The default provider adapter (Responses API). |
-| `google-genai` | Apache-2.0 | The Gemini provider adapter. |
+| `google-genai` | Apache-2.0 | The Gemini provider adapter (present; Gemini work is deferred by owner decision 94A, [014 research](specs/014-design-review-eval/research.md)). |
 | `mcp` | MIT | The stdio MCP server that exposes the read-only toolset to an external CLI. |
 | `starlette` | BSD-3-Clause | The loopback HTTP app behind the Task Pane chat backend. |
 | `sse-starlette` | BSD-3-Clause | Server-sent events for that backend's event stream. |
@@ -63,7 +63,9 @@ Declared in `reviewer/pyproject.toml`; installed, not vendored.
 | `embreex` (optional `raycast` extra) | BSD-2-Clause; bundles Intel Embree, Apache-2.0 | Accelerated ray casting for the tool-envelope check. |
 
 There is no Anthropic dependency: the reviewer runs on OpenAI or Gemini through its own
-provider layer (`reviewer/src/swreview/agent/providers/`).
+provider layer (`reviewer/src/swreview/agent/providers/`). OpenAI is the only provider in use:
+owner decision 94A ([014 research](specs/014-design-review-eval/research.md)) defers the Gemini
+work. The Gemini adapter is still in the code.
 
 ## .NET runtime dependencies
 

@@ -4,7 +4,7 @@
   "assembly_version": "32.5.0.48",
   "swconst_version": "32.5.0.48",
   "product": "SOLIDWORKS 2024 SP5",
-  "generated_at": "2026-10-14T01:15:51Z",
+  "generated_at": "2026-10-20T12:24:31Z",
   "generated_by": "swreview-extract probe interop --emit-manifest",
   "members": [
     {
@@ -502,6 +502,25 @@
     },
     {
       "interface": "ISldWorks",
+      "member": "OpenDoc7",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Specification",
+          "type": "System.Object"
+        }
+      ],
+      "returns": "SolidWorks.Interop.sldworks.ModelDoc2",
+      "used_by": [
+        "remodel.open",
+        "remodel.open_copy"
+      ],
+      "allowlisted": true,
+      "note": "opens the copy at its own path with Silent | LoadModel = 17, never ReadOnly or ViewOnly; T181: the pane seat's remodel.open_copy reopens a copy the engineer closed through the same open request; decision 148A: called by this qualified key by remodel.open, on the stage-1 allowlist, and by the pane seat under its own guard"
+    },
+    {
+      "interface": "ISldWorks",
       "member": "GetOpenDocumentByName",
       "kind": "method",
       "arity": 1,
@@ -523,25 +542,6 @@
       ],
       "allowlisted": false,
       "note": "reaches the engineer's already-open source, and is VerifyTarget check 3 on the copy; T181: the pane seat finds the copy with it before it activates it; T179: IRemodelSeat.IsDocumentOpen, the read that confirms the copy's close"
-    },
-    {
-      "interface": "ISldWorks",
-      "member": "OpenDoc7",
-      "kind": "method",
-      "arity": 1,
-      "parameters": [
-        {
-          "name": "Specification",
-          "type": "System.Object"
-        }
-      ],
-      "returns": "SolidWorks.Interop.sldworks.ModelDoc2",
-      "used_by": [
-        "remodel.open",
-        "remodel.open_copy"
-      ],
-      "allowlisted": false,
-      "note": "opens the copy at its own path with Silent | LoadModel = 17, never ReadOnly or ViewOnly; T181: the pane seat's remodel.open_copy reopens a copy the engineer closed through the same open request"
     },
     {
       "interface": "ISldWorks",

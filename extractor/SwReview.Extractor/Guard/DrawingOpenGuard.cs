@@ -21,8 +21,13 @@ namespace SwReview.Extractor.Guard;
 /// only by <c>Sw/DrawingOpenScope.cs</c>. Of the three keys only <c>DocumentVisible</c>
 /// overrides a read-only denial (guard.md section 1's shared row); <c>OpenDoc6</c> and
 /// <c>CloseDoc</c> are exclusions of guard.md section 3.
+///
+/// Since owner decision 151A (2026-10-20; research R13.1) the three answers are
+/// <see cref="AllowlistGuard"/>'s, the rule the product's three allowlist guards share: this class
+/// keeps its keys, its words for a refusal and its one construction site, and its bare names are
+/// the read-only guard's answer (<see cref="BareNamePolicy.ReadOnlyGuardsAnswer"/>).
 /// </summary>
-public sealed class DrawingOpenGuard : ICallGuard
+public sealed class DrawingOpenGuard : AllowlistGuard
 {
     /// <summary>
     /// <c>ISldWorks.DocumentVisible(false, swDocDRAWING = 3)</c> before the open, and
@@ -51,32 +56,18 @@ public sealed class DrawingOpenGuard : ICallGuard
     };
 
     /// <summary>The allowlist, for reading: the tests assert it as an exact set.</summary>
-    public static readonly IReadOnlyCollection<string> AllowedKeys = AllowedKeySet;
+    public static readonly IReadOnlyCollection<string> AllowedKeys = new ReadOnlySet<string>(AllowedKeySet);
+
+    /// <summary>
+    /// The seam's three keys; a bare name - every read - is the read-only guard's answer, unchanged.
+    /// </summary>
+    public DrawingOpenGuard()
+        : base(AllowedKeySet)
+    {
+    }
 
     /// <inheritdoc />
-    public void Assert(string interopMemberName)
-    {
-        if (string.IsNullOrWhiteSpace(interopMemberName))
-        {
-            throw new ArgumentException("An interop member name is required.", nameof(interopMemberName));
-        }
-
-        string key = interopMemberName.Trim();
-
-        if (AllowedKeySet.Contains(key))
-        {
-            return;
-        }
-
-        if (CallKey.IsQualified(key))
-        {
-            throw new MutatingCallError(
-                key,
-                $"{key} is not on the confirmed drawing's allowlist ({DocumentVisibleKey}, {OpenDocKey}, "
-                + $"{CloseDocKey}; specs/004-resilient-remodeler/contracts/guard-allowlist.md).");
-        }
-
-        // A bare member name is a read call site. The read-only rules apply to it unchanged.
-        ReadOnlyGuard.Assert(key);
-    }
+    protected override string Refusal(string key) =>
+        $"{key} is not on the confirmed drawing's allowlist ({DocumentVisibleKey}, {OpenDocKey}, "
+        + $"{CloseDocKey}; specs/004-resilient-remodeler/contracts/guard-allowlist.md).";
 }

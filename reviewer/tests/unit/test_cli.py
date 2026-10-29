@@ -17,13 +17,14 @@ CLI resolved reach the test on the provider it built, which is how `--provider`,
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import re
 import shutil
 import subprocess
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -72,8 +73,10 @@ from tests.unit.test_benchmark_set_summary import (
 from tests.unit.test_rerender import (
     NAMED_COMPONENT,
     PLACEHOLDER,
+    REPORT_TITLE,
     REVIEW_FOLDER,
     copied,
+    standards_folder_holding_its_package,
     standards_run_folder,
 )
 from tests.unit.test_review_summary import BIG_ASSEMBLY
@@ -583,6 +586,73 @@ def test_review_on_gemini_resolves_enterprise_from_the_environment(
     assert settings.key_source == "env"
 
 
+# --- a command-line run never claims the pane's saved key (owner decision 138A) ---
+
+
+def _commands(command: Any, words: tuple[str, ...] = ()) -> Iterator[tuple[str, Any]]:
+    """Every command under `command`, each with the words that invoke it."""
+    yield " ".join(words), command
+    for name, child in getattr(command, "commands", {}).items():
+        yield from _commands(child, (*words, name))
+
+
+def test_only_chat_serve_takes_the_settings_key_provider() -> None:
+    """Owner decision 138A: `--settings-key-provider` is the add-in's statement about the
+    backend it starts - the key it copied into that environment is the one saved in the pane -
+    so it is an option of `chat serve` and of no other command. `review`, `benchmark run` and
+    any command added later have no way to be told it."""
+    import typer.main
+
+    taking = [
+        words
+        for words, command in _commands(typer.main.get_command(cli.app))
+        if any("--settings-key-provider" in getattr(param, "opts", ()) for param in command.params)
+    ]
+
+    assert taking == ["chat serve"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param(("review", "package", "--out", "run"), id="review"),
+        pytest.param(
+            ("benchmark", "run", "--set", "set.json", "--out", "runs"), id="benchmark-run"
+        ),
+    ],
+)
+def test_a_command_line_review_refuses_the_settings_key_provider(
+    command: tuple[str, ...],
+) -> None:
+    """Typed on a review's command line the marker is a usage error and nothing runs, so a
+    command-line run records `env` or `none` and never `settings`."""
+    result = invoke(*command, "--settings-key-provider", "openai")
+
+    assert result.exit_code == 2
+    assert "--settings-key-provider" in plain_one_line(result.stderr)
+
+
+def test_only_the_chat_backend_tells_from_env_where_its_key_came_from() -> None:
+    """The same rule one layer down: `ProviderSettings.from_env` records an environment key as
+    `settings` only when told which provider's key the add-in copied there, and the chat
+    backend is the one caller in the package that tells it - so the command line and the
+    benchmark runner cannot claim the saved key, whatever the environment they run in holds."""
+    package = Path(cli.__file__).parent
+    callers = sorted(
+        path.relative_to(package).as_posix()
+        for path in package.rglob("*.py")
+        if any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "from_env"
+            and any(keyword.arg == "settings_key_provider" for keyword in node.keywords)
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        )
+    )
+
+    assert callers == ["chat/server.py"]
+
+
 def test_a_provider_error_that_echoes_the_key_is_redacted_in_the_event_stream(
     tmp_package_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -913,6 +983,26 @@ def test_report_keeps_a_standards_folder_s_verdict_header(tmp_path: Path) -> Non
     run_dir = standards_run_folder(tmp_path)
     shutil.copy(tmp_path / "package" / PACKAGE_FILE_NAME, run_dir / PACKAGE_FILE_NAME)
     written = (run_dir / REPORT_FILE).read_text(encoding="utf-8")
+    (run_dir / REPORT_FILE).unlink()
+
+    result = invoke("report", str(run_dir / "session.json"))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (run_dir / REPORT_FILE).read_text(encoding="utf-8") == written
+
+
+def test_report_gives_a_review_written_into_a_standards_folder_no_verdict_header(
+    tmp_path: Path,
+) -> None:
+    """`swreview review --out` into a standards check's folder writes its session over the
+    check's, and its report with no verdict header. `check.json` still names the check's
+    session, so the session in the folder is the review's: `swreview report` renders it as the
+    review wrote it (139A)."""
+    run_dir = standards_folder_holding_its_package(tmp_path)
+    reviewed = invoke("review", str(run_dir), "--out", str(run_dir), "--provider", "fake")
+    assert reviewed.exit_code == 0, reviewed.stdout + reviewed.stderr
+    written = (run_dir / REPORT_FILE).read_text(encoding="utf-8")
+    assert written.startswith(REPORT_TITLE)
     (run_dir / REPORT_FILE).unlink()
 
     result = invoke("report", str(run_dir / "session.json"))

@@ -29,8 +29,9 @@ namespace SwReview.AddIn.Tests;
 /// and tooltip the pane can show and fails on the word, wherever it comes back.
 ///
 /// <b>The order is visible.</b> The step strip sits above the tabs and is always there:
-/// open a document, extract evidence, then review or ask - each of them done or pending, with
-/// the reason it is pending, so "the Review button did nothing" has an answer on screen.
+/// open a document, extract evidence, then review (or ask, while the Ask tab is shown) - each of
+/// them done or pending, with the reason it is pending, so "the Review button did nothing" has an
+/// answer on screen.
 /// </summary>
 public sealed class TaskPaneGuidanceTests
 {
@@ -157,7 +158,7 @@ public sealed class TaskPaneGuidanceTests
                 {
                     "1 Open a document - pending: no document open",
                     "2 Extract evidence - pending: no evidence for this session yet",
-                    "3 Review or Ask - pending: no document open",
+                    "3 Review - pending: no document open",
                 },
                 pane.Steps.Lines.ToArray());
         });
@@ -177,7 +178,7 @@ public sealed class TaskPaneGuidanceTests
                 {
                     "1 Open a document - done: ready",
                     "2 Extract evidence - pending: no evidence for this session yet",
-                    "3 Review or Ask - pending: no evidence for this session yet",
+                    "3 Review - pending: no evidence for this session yet",
                 },
                 pane.Steps.Lines.ToArray());
         });
@@ -197,7 +198,7 @@ public sealed class TaskPaneGuidanceTests
                 {
                     "1 Open a document - done: ready",
                     "2 Extract evidence - done: ready",
-                    "3 Review or Ask - done: ready",
+                    "3 Review - done: ready",
                 },
                 pane.Steps.Lines.ToArray());
         });
@@ -226,7 +227,7 @@ public sealed class TaskPaneGuidanceTests
                 {
                     "1 Open a document - pending: no document open",
                     "2 Extract evidence - done: ready",
-                    "3 Review or Ask - pending: no document open",
+                    "3 Review - pending: no document open",
                 },
                 pane.Steps.Lines.ToArray());
         });
@@ -245,6 +246,45 @@ public sealed class TaskPaneGuidanceTests
 
             Assert.True(escaped == null, "A failing step callback reached SOLIDWORKS: " + escaped);
             Assert.Equal(3, pane.Steps.Lines.Count);
+        });
+    }
+
+    /// <summary>
+    /// Step 3 names the tabs it is done on as the pane shows them: Review, and Ask only while the
+    /// pane shows that tab (<see cref="TaskPaneControl.AskTabShown"/>). It read "Review or Ask"
+    /// from the day the Ask tab was hidden, 2026-09-19, sending an engineer to a tab that was not
+    /// there (owner decision 139A). The pane tells the strip its tabs, so both settings of the
+    /// switch are written out here: the second is the line the strip renders when Ask is shown.
+    /// </summary>
+    [Fact]
+    public void TheThirdStepNamesTheAskTabOnlyWhenThePaneShowsIt()
+    {
+        StaHost.Run(form =>
+        {
+            using (var hidden = new StepStrip(new[] { "Review" }))
+            using (var shown = new StepStrip(new[] { "Review", "Ask" }))
+            {
+                form.Controls.Add(hidden);
+                form.Controls.Add(shown);
+
+                Assert.Equal("3 Review - pending: no document open", hidden.Lines[2]);
+                Assert.Equal("3 Review or Ask - pending: no document open", shown.Lines[2]);
+            }
+
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>A strip told no tab for step 3 would render "3  - pending", a step with nowhere
+    /// to do it, so it is refused when it is built.</summary>
+    [Fact]
+    public void AStepStripToldNoTabForTheThirdStepIsRefused()
+    {
+        StaHost.Run(form =>
+        {
+            Assert.Throws<ArgumentException>(() => new StepStrip(Array.Empty<string>()));
+            Assert.Throws<ArgumentNullException>(() => new StepStrip(null!));
+            return Task.CompletedTask;
         });
     }
 
@@ -283,7 +323,7 @@ public sealed class TaskPaneGuidanceTests
                         {
                             "1 Open a document - done: ready",
                             "2 Extract evidence - done: ready",
-                            "3 Review or Ask - done: ready",
+                            "3 Review - done: ready",
                         },
                         pane.Steps.Lines.ToArray());
                 },
@@ -334,7 +374,7 @@ public sealed class TaskPaneGuidanceTests
                         {
                             "1 Open a document - done: ready",
                             "2 Extract evidence - done: ready",
-                            "3 Review or Ask - done: ready",
+                            "3 Review - done: ready",
                         },
                         pane.Steps.Lines.ToArray());
                 },
@@ -391,7 +431,7 @@ public sealed class TaskPaneGuidanceTests
     {
         StaHost.Run(form =>
         {
-            using (var strip = new StepStrip())
+            using (var strip = new StepStrip(new[] { "Review" }))
             {
                 form.Controls.Add(strip);
 
@@ -609,8 +649,8 @@ public sealed class TaskPaneGuidanceTests
 
             Assert.Equal(
                 "Writes package.json, the evidence package describing the open document "
-                    + "(components, mates, holes, fasteners, geometry). The reviewer and the Ask "
-                    + "tab read this file instead of the live model.",
+                    + "(components, mates, holes, fasteners, geometry). The reviewer reads this "
+                    + "file instead of the live model.",
                 panel.ToolTipFor(ButtonNamed(panel, "Extract evidence")));
             Assert.Equal(
                 "Adds interference results to the evidence package.",
@@ -625,6 +665,27 @@ public sealed class TaskPaneGuidanceTests
         });
     }
 
+    /// <summary>
+    /// The Extract evidence tooltip says what reads the file it writes, and the Ask tab reads it
+    /// only while the pane shows that tab (owner decision 139A). Both settings of
+    /// <see cref="TaskPaneControl.AskTabShown"/> are written out, because a test cannot flip the
+    /// switch; the second is the sentence the tooltip carried before the tab was hidden.
+    /// </summary>
+    [Fact]
+    public void TheExtractTooltipNamesTheAskTabOnlyWhileThePaneShowsIt()
+    {
+        Assert.Equal(
+            "Writes package.json, the evidence package describing the open document "
+                + "(components, mates, holes, fasteners, geometry). The reviewer reads this file "
+                + "instead of the live model.",
+            ActionsPanel.DumpToolTipFor(askTabShown: false));
+        Assert.Equal(
+            "Writes package.json, the evidence package describing the open document "
+                + "(components, mates, holes, fasteners, geometry). The reviewer and the Ask tab "
+                + "read this file instead of the live model.",
+            ActionsPanel.DumpToolTipFor(askTabShown: true));
+    }
+
     // ---- the word itself --------------------------------------------------------------------
 
     [Fact]
@@ -632,21 +693,7 @@ public sealed class TaskPaneGuidanceTests
     {
         WithPane((pane, options) =>
         {
-            var said = new List<string>();
-            foreach (Control control in Descendants(pane))
-            {
-                said.Add(control.Text ?? string.Empty);
-                if (control is TabPage tab)
-                {
-                    said.Add(tab.ToolTipText ?? string.Empty);
-                }
-            }
-
-            said.AddRange(
-                new[] { "Extract evidence", "Interference", "Capture selection" }
-                    .Select(caption => pane.Actions.ToolTipFor(ButtonNamed(pane.Actions, caption))));
-
-            string[] offenders = said
+            string[] offenders = EverythingThePaneSays(pane)
                 .Where(text => Regex.IsMatch(text ?? string.Empty, @"\bIR\b"))
                 .ToArray();
 
@@ -654,6 +701,52 @@ public sealed class TaskPaneGuidanceTests
                 offenders.Length == 0,
                 "The pane still says IR at the engineer: " + string.Join(" | ", offenders));
         });
+    }
+
+    /// <summary>
+    /// The Ask tab is hidden (<see cref="TaskPaneControl.AskTabShown"/>), so nothing the pane
+    /// shows may name it. The step strip and the Extract evidence tooltip both did from the day
+    /// it was hidden (owner decision 139A); the sweep is the one the IR rule uses, so a string
+    /// added later that names the tab fails here too.
+    /// </summary>
+    [Fact]
+    public void NothingThePaneShowsNamesTheHiddenAskTab()
+    {
+        Assert.False(TaskPaneControl.AskTabShown, "AskTabShown is on; this sweep is for the hidden tab.");
+
+        WithPane((pane, options) =>
+        {
+            string[] offenders = EverythingThePaneSays(pane)
+                .Where(text => Regex.IsMatch(text ?? string.Empty, @"\bAsk\b"))
+                .ToArray();
+
+            Assert.True(
+                offenders.Length == 0,
+                "The pane names the hidden Ask tab: " + string.Join(" | ", offenders));
+        });
+    }
+
+    /// <summary>
+    /// Every caption, banner, status line and tooltip the pane shows before WebView2 starts: the
+    /// text of every control, every tab's tooltip, and the three Extract buttons' tooltips. The
+    /// one list both sweeps above read.
+    /// </summary>
+    private static List<string> EverythingThePaneSays(TaskPaneControl pane)
+    {
+        var said = new List<string>();
+        foreach (Control control in Descendants(pane))
+        {
+            said.Add(control.Text ?? string.Empty);
+            if (control is TabPage tab)
+            {
+                said.Add(tab.ToolTipText ?? string.Empty);
+            }
+        }
+
+        said.AddRange(
+            new[] { "Extract evidence", "Interference", "Capture selection" }
+                .Select(caption => pane.Actions.ToolTipFor(ButtonNamed(pane.Actions, caption))));
+        return said;
     }
 
     /// <summary>

@@ -9,11 +9,13 @@ namespace SwReview.AddIn.Model;
 public sealed class ModelCheckHostOptions
 {
     /// <param name="channel">Where replies and unsolicited messages go.</param>
-    /// <param name="runRoot">The run root in force, read fresh: a settings save moves it.</param>
+    /// <param name="runRoot">The run root in force, read fresh: the restart a settings save makes moves it.</param>
     public ModelCheckHostOptions(IPageChannel channel, Func<string> runRoot)
     {
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
+        RunRootsInForce = () => new[] { RunRoot() };
+        RunRootForANewRun = () => RunRoot();
     }
 
     public IPageChannel Channel { get; }
@@ -21,10 +23,36 @@ public sealed class ModelCheckHostOptions
     public Func<string> RunRoot { get; }
 
     /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, the one in force among them (owner
+    /// decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open - its report
+    /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
+    /// </summary>
+    public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
+
+    /// <summary>
+    /// The run root a check's folder is made under, read once to judge it and make the folder (owner decision 154A,
+    /// with 153A's record of the settings in force), and again once the extraction is over (the reviews of 154A's
+    /// merge, N6): the run root in force, or null while a start of the backend under way would bring another into
+    /// force - the backend coming up makes runs only under its own, and may yet fail and leave the one it would
+    /// replace - which `check.start` refuses. The run root in force by default.
+    /// </summary>
+    public Func<string?> RunRootForANewRun { get; set; }
+
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
+
+    /// <summary>
     /// The backend's endpoint, or null before it is listening. The page calls the check routes
     /// itself with what `init` carries, so this is the whole of the host's involvement with it.
     /// </summary>
     public Func<BackendEndpoint?> Backend { get; set; } = () => null;
+
+    /// <summary>A failed start with no backend up, remembered by the Review host (owner decision 160A).</summary>
+    public Func<bool> BackendStartFailed { get; set; } = () => false;
 
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
@@ -65,6 +93,19 @@ public sealed class ModelCheckHostOptions
 
     /// <summary>Values that must never reach the page (FR-015).</summary>
     public Func<IEnumerable<string?>> Secrets { get; set; } = () => new string?[0];
+
+    /// <summary>
+    /// What the run root rule reads of Windows (owner decision 154A): a share, a mapped or substituted drive,
+    /// a link. Windows itself by default; injected so a test fakes each without making one.
+    /// </summary>
+    public IRunRootProbe RunRootProbe { get; set; } = Native.WindowsRunRootProbe.Instance;
+
+    /// <summary>
+    /// Owner decision 157A: how a Model check holds a settings restart back - the gate it begins through, the word on
+    /// a restart ahead, the hand-over's limit and its clock (<see cref="CheckHoldOptions"/>) - handed on whole to the
+    /// check pane. The add-in sets the gate and the word through the review host. No restart to wait for, by default.
+    /// </summary>
+    public CheckHoldOptions Hold { get; } = new CheckHoldOptions();
 }
 
 /// <summary>
@@ -96,11 +137,15 @@ public sealed class ModelCheckHostOptions
 /// `entity.show` resolves `document_id` through the package that was just written and the Ask
 /// tab opens in the same place (FR-028).
 ///
-/// What it does own is the order of one `check.start`, and it is not negotiable. The refusals
-/// come first because a dump is SOLIDWORKS time. The run folder is created before the dump
-/// because the dump writes into it. The folder is registered before the reply, so a
-/// `POST /checks/rms` the page sends the instant it sees `check.extracted` resolves ids
-/// through the right folder.
+/// What it does own is the first half of one `check.start`: its refusals, which come first
+/// because a dump is SOLIDWORKS time. Once they are behind it the start is the collaborator's,
+/// written once for both check tabs in this tab's words (<see cref="CheckPaneHost.RunCheck"/>,
+/// the reviews of owner decision 157A): the check begins through the review host's gate, reads
+/// the run root and the document again once the gate is passed, creates the run folder before
+/// the dump because the dump writes into it, registers the folder before the reply, so a
+/// `POST /checks/rms` the page sends the instant it sees `check.extracted` resolves ids through
+/// the right folder, and holds a settings restart back until the page's evaluation of it has
+/// been answered.
 ///
 /// Threading: <see cref="Receive"/> is not re-entrant, and must not run on the SOLIDWORKS UI
 /// thread - a dump occupies the application thread for as long as it takes. The caller
@@ -114,8 +159,29 @@ public sealed class ModelCheckHost : IDisposable
     /// <summary>The one message type this host answers itself.</summary>
     private const string StartType = "check.start";
 
+    /// <summary>What a refused `check.start` did not do, in its words (owner decision 154A).</summary>
+    private const string NothingChecked = "nothing was checked";
+
+    /// <summary>What a refused `check.start` says to do once the cause is gone (owner decision 154A).</summary>
+    private const string PressAgain = "press Model check again";
+
+    /// <summary>
+    /// What the page is told before the gate when a settings restart stands before the press (owner decision 157A),
+    /// posted as `status {stage: "backend_starting"}`.
+    /// </summary>
+    public const string CheckAfterRestartMessage = PaneActions.WaitingForTheRestart + "reading the feature tree...";
+
+    /// <summary>
+    /// What a `check.start` whose document changed while its gate waited through a settings restart is refused with,
+    /// `DocumentChanged` (owner decision 157A): no path, and the way on.
+    /// </summary>
+    public const string DocumentChangedMessage =
+        "The active document or its configuration changed after Model check was pressed, so nothing was checked. "
+        + "Make the part you want checked the active document and press Model check again.";
+
     private readonly ModelCheckHostOptions _options;
     private readonly CheckPaneHost _pane;
+    private readonly CheckStart _start;
 
     public ModelCheckHost(ModelCheckHostOptions options)
     {
@@ -127,7 +193,11 @@ public sealed class ModelCheckHost : IDisposable
         _pane = new CheckPaneHost(new CheckPaneHostOptions(
             options.Channel, () => options.RunRoot(), StartType, StartCheck)
         {
+            RunRootsInForce = () => options.RunRootsInForce(),
+            RunRootSaved = () => options.RunRootSaved(),
+            RunRootProbe = () => options.RunRootProbe,
             Backend = () => options.Backend(),
+            BackendStartFailed = () => options.BackendStartFailed(),
             CurrentDocument = () => options.CurrentDocument(),
 
             // What `init` reads the newest check back by after a restart, from the folder names
@@ -149,7 +219,40 @@ public sealed class ModelCheckHost : IDisposable
             LogFolder = () => options.LogFolder(),
             Now = () => options.Now(),
             Secrets = () => options.Secrets(),
+
+            // Owner decision 157A: a check holds a settings restart back, beginning through the review host's gate.
+            Hold = options.Hold,
         });
+
+        // Owner decision 157A, the reviews: what is this tab's own in a check's start once its refusals are behind it;
+        // the start itself is the check pane's, written once for both tabs.
+        _start = new CheckStart(
+            noDocument: "open the part you want checked in SOLIDWORKS first: the feature tree is read "
+                + "from the active document.",
+            refuses: Refused,
+            dump: () => options.Dump,
+            restartFirst: CheckAfterRestartMessage,
+            documentChanged: DocumentChangedMessage,
+            nothingChecked: NothingChecked,
+            pressAgain: PressAgain,
+            runRootForANewRun: () => options.RunRootForANewRun(),
+            createFolder: RunFolders.CreateForCheck,
+            folder: "the check folder",
+            reading: document => $"Reading the feature tree of {document}...",
+
+            // The hole, fastener, face and mesh phases are most of a dump's cost and no RMS rule reads any of them.
+            // The package records that this profile ran, so a thin package is never mistaken for a model with no
+            // holes in it (FR-022, RK-19).
+            profile: DumpProfile.ModelCheck,
+            during: "the feature tree was read",
+            next: ". Checking the model...",
+            extractedType: "check.extracted",
+            counts: summary => new Dictionary<string, object?>
+            {
+                { "documents", summary.Documents },
+                { "features", summary.Features },
+                { "equations", summary.Equations },
+            });
     }
 
     /// <summary>The checks this host ran, oldest first.</summary>
@@ -173,8 +276,26 @@ public sealed class ModelCheckHost : IDisposable
     /// <summary>Posts one `status`, with every secret masked out of it (FR-015).</summary>
     public void PostStatus(string stage, string message) => _pane.PostStatus(stage, message);
 
+    /// <summary><see cref="PostStatus(string, string)"/>, marked as the add-in's own word on the backend when <paramref name="lifecycle"/> (owner decision 145A).</summary>
+    public void PostStatus(string stage, string message, bool lifecycle) => _pane.PostStatus(stage, message, lifecycle);
+
     /// <summary>Tells the page which document the pane is looking at now, or that there is none.</summary>
     public void DocumentChanged() => _pane.DocumentChanged();
+
+    /// <summary>Tells the page the backend was restarted with saved settings (owner decision 145A).</summary>
+    public void BackendRestarted() => _pane.BackendRestarted();
+
+    /// <summary>
+    /// Whether a Model check holds a settings restart back (owner decision 157A,
+    /// <see cref="CheckPaneHost.CheckInProgress"/>): what the review host's restart reads, under its own lock.
+    /// </summary>
+    public bool CheckInProgress => _pane.CheckInProgress;
+
+    /// <summary>
+    /// The pane's proxy takes over the hold of the check whose run it evaluates, while the evaluation is out (owner
+    /// decision 157A, <see cref="CheckPaneHost.HoldEvaluation"/>); null when no check of this tab waits for it.
+    /// </summary>
+    public IDisposable? HoldEvaluation(string runDirectory, string? token) => _pane.HoldEvaluation(runDirectory, token);
 
     public void Dispose() => _pane.Dispose();
 
@@ -185,113 +306,29 @@ public sealed class ModelCheckHost : IDisposable
     /// dump the open part into it with the reduced profile, register the folder as the pane's
     /// latest run, and tell the page where it is. The page does the rest.
     /// </summary>
-    private void StartCheck(string? id)
+    private void StartCheck(string? id) => _pane.StartCheck(id, _start);
+
+    /// <summary>
+    /// This tab's own refusal of the active document, after the shared ones (<see cref="CheckPaneHost.StartCheck"/>):
+    /// a document that is not a part. Answers whether it refused the press, having sent the refusal.
+    /// </summary>
+    private bool Refused(string? id, PageDocument document)
     {
-        PaneActions actions = _pane.Actions;
-
-        PageDocument? document = _options.CurrentDocument();
-        if (document == null)
+        if (string.Equals(document.Kind, PartKind, StringComparison.Ordinal))
         {
-            actions.SendError(
-                id,
-                "NoDocument",
-                "open the part you want checked in SOLIDWORKS first: the feature tree is read "
-                + "from the active document.",
-                retryable: true);
-            return;
+            return false;
         }
 
-        if (_options.Dump == null)
-        {
-            actions.SendError(
-                id,
-                "NotAttached",
-                "the add-in is not attached to a SOLIDWORKS session, so nothing can be extracted.",
-                retryable: true);
-            return;
-        }
-
-        if (!string.Equals(document.Kind, PartKind, StringComparison.Ordinal))
-        {
-            // The rule family is written about a part's feature tree. An assembly answered with
-            // 34 unresolved rules would read as a bad design rather than as a scope this
-            // increment does not cover, so the refusal names the scope instead.
-            actions.SendError(
-                id,
-                "NotAPart",
-                "the Model check reads a part's feature tree, and the active document is "
-                + (document.Kind == null ? "not a SOLIDWORKS part" : "a " + document.Kind)
-                + ". Open the part on its own and press Model check again.",
-                retryable: true);
-            return;
-        }
-
-        string runDirectory;
-        try
-        {
-            runDirectory = RunFolders.CreateForCheck(
-                _options.RunRoot(), document.Path, _options.Now());
-        }
-        catch (Exception failure)
-        {
-            PostStatus("error", failure.Message);
-            actions.SendError(
-                id,
-                "RunFolderFailed",
-                $"the check folder could not be created under '{_options.RunRoot()}': "
-                + failure.Message,
-                retryable: false);
-            return;
-        }
-
-        DumpSummary summary;
-        PostStatus(
-            "extracting",
-            $"Reading the feature tree of {RunFolders.DocumentName(document.Path)}...");
-        try
-        {
-            summary = _options.Dump.Run(
-                runDirectory,
-                message => PostStatus("extracting", message),
-
-                // The hole, fastener, face and mesh phases are most of a dump's cost and no RMS
-                // rule reads any of them. The package records that this profile ran, so a thin
-                // package is never mistaken for a model with no holes in it (FR-022, RK-19).
-                DumpProfile.ModelCheck);
-        }
-        catch (Exception failure)
-        {
-            // The folder is left behind on purpose: whatever the dump did write is the evidence
-            // for why it stopped (constitution Principle I). It is not registered, because a
-            // half-written package must not become the folder Show and the Ask tab read from.
-            PostStatus("error", failure.Message);
-            actions.SendError(id, "ExtractionFailed", failure.Message, retryable: true);
-            return;
-        }
-
-        TrackCheck(runDirectory);
-
-        PostStatus(
-            "ready",
-            (summary.Gaps == 0 ? "Extracted" : $"Extracted with {summary.Gaps} gaps")
-                + DumpSummary.UnexaminedClause(summary.Unexamined)
-                + ". Checking the model...");
-
-        actions.Send("check.extracted", id, new Dictionary<string, object?>
-        {
-            { "run_dir", runDirectory },
-            { "document", document.Path },
-            { "configuration", document.Configuration },
-            {
-                "counts",
-                new Dictionary<string, object?>
-                {
-                    { "documents", summary.Documents },
-                    { "features", summary.Features },
-                    { "equations", summary.Equations },
-                }
-            },
-            { "gaps", summary.Gaps },
-        });
+        // The rule family is written about a part's feature tree. An assembly answered with
+        // 34 unresolved rules would read as a bad design rather than as a scope this
+        // increment does not cover, so the refusal names the scope instead.
+        _pane.Actions.SendError(
+            id,
+            "NotAPart",
+            "the Model check reads a part's feature tree, and the active document is "
+            + (document.Kind == null ? "not a SOLIDWORKS part" : "a " + document.Kind)
+            + ". Open the part on its own and press Model check again.",
+            retryable: true);
+        return true;
     }
 }

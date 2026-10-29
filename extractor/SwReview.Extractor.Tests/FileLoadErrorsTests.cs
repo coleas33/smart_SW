@@ -169,4 +169,34 @@ public class FileLoadErrorsTests
         // success.
         Assert.Equal("error 0 (none), warning 0 (none)", FileLoadErrors.Describe(0, 0));
     }
+
+    // ---- already open (decision 136A's review, 2026-10-19) --------------------------
+
+    /// <summary>
+    /// An open that answers with a document SOLIDWORKS already had open says so - in the warnings
+    /// (swFileLoadWarning_AlreadyOpen), or in the errors enum's older twin (swFileAlreadyOpenWarn) -
+    /// and such a document was not opened by that call: the read-only opens use it as it stands and
+    /// never close it. swFileWithSameTitleAlreadyOpen is another file of the same name, not this one.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 128, true)]
+    [InlineData(512, 0, true)]
+    [InlineData(512, 128, true)]
+    [InlineData(2, 128 | 2, true)]
+    [InlineData(0, 0, false)]
+    [InlineData(0, 2, false)]
+    [InlineData(0, 127, false)]
+    [InlineData(65536, 0, false)]
+    [InlineData(511, 0x001FFF7F, false)]
+    public void SayAlreadyOpen_IsEitherEnumsAlreadyOpenBit(int errors, int warnings, bool expected)
+    {
+        Assert.Equal(expected, FileLoadErrors.SayAlreadyOpen(errors, warnings));
+    }
+
+    [Fact]
+    public void TheAlreadyOpenBitsAreTheOnesTheTablesNameSo()
+    {
+        Assert.Equal("swFileLoadWarning_AlreadyOpen", FileLoadErrors.DescribeWarnings(FileLoadErrors.AlreadyOpenWarning));
+        Assert.Equal("swFileAlreadyOpenWarn", FileLoadErrors.DescribeErrors(FileLoadErrors.AlreadyOpenError));
+    }
 }

@@ -163,7 +163,7 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 ## How long it takes
 
-About **14 hours 10 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
+About **14 hours 15 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
 steps 4 to 6. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
 inside steps 3.1, 4.1, 4.5, 5.1 and 5.2; feature 004's three items (decision 18A) about 40
 minutes more: the FeatureWorks record at step 1.7 (5 minutes), the owner's parts at step 5.1 (10
@@ -175,8 +175,9 @@ retest of 2026-09-28's U25 to U27 about 35 minutes more: step 4.9 (15 minutes) a
 to C and the read-only option (20 minutes); feature 015's unticked review and Send at step 4.10
 about 35 minutes more (decision 4A): two SOLIDWORKS restarts, the waiting review sent, and the big
 assembly's unticked review and timings; feature 014's smoke checks at step 4.11 take 10 minutes
-more, reading step 4.1's review without another paid review. The next sitting, which runs the
-retest first and then starts at step 2.4 after its update, needs about 13 hours 40 minutes. Keep
+more, reading step 4.1's review without another paid review; and decision 144A's check of the
+re-modeler's pane seat at step 5.3's item B (011 T171) about 5 minutes more. The next sitting, which
+runs the retest first and then starts at step 2.4 after its update, needs about 13 hours 45 minutes. Keep
 SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
 the review chips of steps 4.4 and 4.5 live only as long as the SOLIDWORKS session. Before the
 sitting, allow **half a day** to find and note documents C to N, Q and S, and the components of
@@ -189,7 +190,7 @@ A and B step 3.1 asks about (section 0.2), while the owner names the parts P; a 
 | 2 | Profile and key, the profile's version 4, and lever 14's live test | 40 min |
 | 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
 | 4 | The pane reviews, with the findings by type, the timing of A's review, A again with the version 4 profile, a drawing active, and A unticked then sent, with B's timings and A's smoke checks | 5 h |
-| 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel (the retest's box and crash capture first), the Gemini test | 1 h 25 min |
+| 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel (the retest's box, with the pane seat's gate, and crash capture first), the Gemini test | 1 h 30 min |
 | 5.5 | The older build and back: two builds, two SOLIDWORKS restarts, two reviews of A | 1 h |
 | 5.6 | The re-modeler probes: three runs with no document open, and the three options checked | 25 min |
 | 6 | Handoff | 45 min |
@@ -920,8 +921,9 @@ rule 5 says what to copy from them. After each run look at:
   `sheet activation: none`, `document opening: none` and `display state: none`, and the last line
   `gate log: the confirmed open's guard (DrawingOpenGuard, D14 only): none` on every run but
   step 3.9's. At step 3.9 that last line lists what the confirmed open's guard saw: in run 1
-  `GetOpenDocumentByName, ISldWorks.DocumentVisible, ISldWorks.OpenDoc6, ISldWorks.CloseDoc`, in
-  run 2 `GetOpenDocumentByName` alone.
+  `GetOpenDocumentByName, ISldWorks.DocumentVisible, ISldWorks.OpenDoc6, IsOpenedReadOnly, ISldWorks.CloseDoc`
+  (the read-only check of decision 136A, 2026-10-19, is the one bare read after the open), in run 2
+  `GetOpenDocumentByName` alone.
 
 Pass: exit code 0 and the gate log as above. Fail: exit code 1, or any of those words other than
 `none`: copy the lines into the findings document. A line `stopped: <Type> 0x<number>` or
@@ -1334,13 +1336,15 @@ the development machine (section 3.10).
    swreview-extract probe drawings --out "$H\probes" --doc "<full path of part J>" --probe D14; "exit code: $LASTEXITCODE"
    ```
 
-   Pass: the D14 section reads, line for line (the sheet, view, gap and document counts are J's
-   own; the views must be at least 1):
+   Pass: the D14 section reads, line for line (the sheet, view, gap and document counts are J's own;
+   the views must be at least 1; the codes after `answered` are whatever SOLIDWORKS answered the
+   open, named as the product names them):
 
    ```text
      drawing open before the probe: false
-     OpenDoc6: type 3, options 3 (ReadOnly 2 yes, Silent 1 yes, ViewOnly 4 no, RapidDraft 8 no, LoadModel 16 no), configuration ""
+     OpenDoc6: type 3, options 3 (ReadOnly 2 yes, Silent 1 yes, ViewOnly 4 no, RapidDraft 8 no, LoadModel 16 no), configuration ""; answered error <n> (<names>), warning <n> (<names>)
      DocumentVisible: false (type 3), then true (type 3)
+     IsOpenedReadOnly: true
      outcome: opened by the probe and closed
      active document unchanged: during true, after true
      foreground window unchanged: during true, after true
@@ -1364,6 +1368,7 @@ the development machine (section 3.10).
      drawing open before the probe: true
      OpenDoc6: not called
      DocumentVisible: not called
+     IsOpenedReadOnly: not called
      outcome: already open, read as it stood and left open
      active document unchanged: during true, after true
      foreground window unchanged: during true, after true
@@ -1380,10 +1385,13 @@ the development machine (section 3.10).
 
    and the drawing is still open afterwards.
 
-The last line of each D14 section is the probe's own reading; any `not as required: ...` there is
-a fail and names what failed. Record: both report file names, both last lines, the `open
-documents` and `left loaded afterwards` lines (recorded, never a fail), and every line that
-differs from the blocks above. Change nothing: section 3.10 says who sets the switch.
+The last line of each D14 section is the probe's own reading; any `not as required: ...` there is a
+fail and names what failed. Record: both report file names, both last lines, the `open documents`
+and `left loaded afterwards` lines (recorded, never a fail), the first report's `OpenDoc6` line
+whole, and every line that differs from the blocks above. The codes on that line show whether
+SOLIDWORKS sets an already-open bit (`swFileLoadWarning_AlreadyOpen` or `swFileAlreadyOpenWarn`) on
+a fresh open (011 decision 136A, 2026-10-19): with either there, the probe reads the drawing as
+already open, and its last line fails. Change nothing: section 3.10 says who sets the switch.
 
 **013 T142.** These two reports decide whether the development machine sets
 `DrawingOpenScope.SeatValidated` after the sitting (section 3.10); this sitting runs with it off.
@@ -1405,12 +1413,14 @@ holds:
 
 1. Both D14 reports of step 3.9 exist, on the same part J, each with exit code 0.
 2. The drawing-closed report matches the first block of step 3.9 line for line: type 3, options 3
-   with only ReadOnly and Silent, configuration `""`; hidden then shown again, type 3; opened by the
+   with only ReadOnly and Silent, configuration `""`; hidden then shown again, type 3; the opened
+   drawing answers `IsOpenedReadOnly: true` (decision 136A, 2026-10-19); opened by the
    probe and closed; the active document and the window in front unchanged, during and after; at
    least one view read; the file's size, write time and SHA-256 unchanged; no save flag raised by
    the run; afterwards not open and not locked; the three seam keys; `every answer as required`.
-3. The drawing-open report matches the second block: nothing opened, hidden or closed; `seam keys
-   gated: none`; the drawing still open; the same unchanged lines; `every answer as required`.
+3. The drawing-open report matches the second block: nothing opened, hidden, asked
+   `IsOpenedReadOnly` or closed; `seam keys gated: none`; the drawing still open; the same
+   unchanged lines; `every answer as required`.
 4. Both reports' read-only gate log says `mutating members: none` and `refusals: none`.
 5. No drawing window appeared during the first run, and the drawing stayed open after the second.
 
@@ -2108,7 +2118,7 @@ not found on S-2, as you know them to be. Record: A-plate's drawing's printed li
 and for S-1 and S-2 the export-control check's bucket; never the statement's text or anything
 else of a title block.
 
-### 5.3 Remodel [004 T185; 004 T186]
+### 5.3 Remodel [004 T185; 004 T186; 011 T171]
 
 This build gives the Remodel tab its seat (feature 004's seat adapter, 004 T152 to T160, and its
 teardown, 004 T167): **Remodel a copy plans on a copy** the tab makes in its own run folder, never
@@ -2152,8 +2162,36 @@ B. **A throwaway box, before any real part.** In the ordinary window:
    ```
 
    Pass: the phases end with `open_record.written`; the last two lines end
-   `stage=before get_Density` and `stage=after get_Density`; the count is 60 or more. Then use
-   **Discard copy**, close the box without saving, and go on to item 1 below with part J.
+   `stage=before get_Density` and `stage=after get_Density`; the count is 60 or more.
+
+   Then the pane seat's own gate (011 T171): press **Open copy**. Pass: the copy opens again - the
+   plan let it go - and is the active document, its window's name ending in `-RMS`. Close that
+   window, choosing **Don't Save** if SOLIDWORKS asks; then press **Start**, which this build refuses
+   by its switch before SOLIDWORKS is asked anything; then:
+
+   ```powershell
+   Select-String -LiteralPath (Join-Path $run.FullName 'remodel.log') -SimpleMatch '] seat=' | ForEach-Object { $_.Line.Substring($_.Line.IndexOf('] seat=') + 2) }
+   ```
+
+   Pass: exactly four lines - the plan's activation of the copy before its dump,
+   `seat=activate_before_dump begin` and then
+   `seat=activate_before_dump status=ok outcome=activated gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3,ActiveDoc`,
+   and the open, `seat=open_copy begin` and then
+   `seat=open_copy status=ok outcome=opened gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7,GetPathName`
+   - none with `refused=` or `error=`. A line with either is a fail, and so is a `begin` line with no
+   line after it: write each down whole (they name no path).
+
+   *Added 2026-10-20 (decision 148A, 011 T171):* the plan opened the copy through the bridge by the
+   open's qualified key, which the bare name no longer passes for. Then:
+
+   ```powershell
+   Select-String -LiteralPath (Join-Path $run.FullName 'remodel.log') -SimpleMatch 'command=remodel.open status=' | ForEach-Object { ($_.Line -split ' ' | Where-Object { $_ -like 'status=*' -or $_ -like 'gated=*' -or $_ -like 'refused=*' }) -join ' ' }
+   ```
+
+   Pass: one line, `status=ok`, whose `gated=` list names `ISldWorks.OpenDoc7` and not `OpenDoc7` on
+   its own, with no `refused=`. Otherwise it is a fail: write the line down as printed (it names
+   members, no path). Then use **Discard copy**, close the box without saving, and go on to item 1
+   below with part J.
 C. **If SOLIDWORKS closes, freezes or shows its own error report** at item B or at any item below:
    stop the step, and before you restart SOLIDWORKS:
    1. write down the time on the clock, and whether SOLIDWORKS froze first, vanished at once, or
@@ -2228,8 +2266,9 @@ Record: pass or fail; the refusal if Remodel a copy was refused; how long the pl
 (004 T182 sets the add-in's wait on the copy's open from it); and any line saying not everything
 could be put back. For the retest: item A done or `no administrator rights`; item B's last phase,
 last two `stage=` lines and count; J's `IsReadOnly` and the read-only option as noted; and, if
-SOLIDWORKS closed, item C's six answers. No part name, run folder name or path goes in the findings
-document.
+SOLIDWORKS closed, item C's six answers. For 011 T171: whether Open copy opened the copy, and item
+B's four `seat=` lines as pass or fail, a failing line written whole. No part name, run folder name
+or path goes in the findings document.
 
 **What the Start switch waits on.** The development machine sets it (`RemodelStart.SeatValidated`,
 in a commit of its own) only once a sitting has proved, in this order: first step 5.6's blocking
@@ -2327,7 +2366,7 @@ entity. Record: both answers. The registration survives both builds; nothing to 
 Settings now shows a different provider, model or no key, close SOLIDWORKS and put the copy back:
 `Copy-Item "$env:APPDATA\SwReview\settings.json.before-5.5" "$env:APPDATA\SwReview\settings.json"`.
 
-### 5.6 The re-modeler probes, with no document open: last [004 T033 to T039]
+### 5.6 The re-modeler probes, with no document open: last [004 T033 to T039; 011 T171]
 
 Feature 004's Phase 2 probes (the owner's decision 18A). `swreview-extract probe remodel` builds a
 throwaway part of its own inside the folder it is given, changes it on purpose to see what this
@@ -2403,6 +2442,11 @@ SOLIDWORKS until someone answers it, and PROBE-1 asks for one on purpose.
      or `false`, `verdict: verified`, `refuted` or `unresolved`, and its `"reason":` sentence. An
      `"error":` line in place of the reason means the probe threw, and its verdict is
      `unresolved`.
+   - *Added 2026-10-20 (decision 148A, 011 T171):* after the first run, PROBE-12 reopens the part
+     it saved by the open's qualified key. Pass: the run's `interop members:` line names
+     `ISldWorks.OpenDoc7` and not `OpenDoc7` on its own, and PROBE-12's lines carry a `"reason":`,
+     not an `"error":`. An `"error":` line for PROBE-12 is a fail: write `error` and whether it
+     names `OpenDoc7`, never the error's text, which may hold a path.
 5. **What each probe asks.** Research R10 and quickstart Scenario 4 of
    `specs/004-resilient-remodeler` hold the whole question and what a bad answer costs.
 

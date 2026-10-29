@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using SolidWorks.Interop.sldworks;
 using SwReview.AddIn.Remodel.Seat;
 using SwReview.AddIn.Review;
@@ -145,8 +146,10 @@ public sealed class SwGateRecorder : ISwGateObserver
 /// is whatever document the run is open on at that instant.
 ///
 /// <b>Unknown stays unknown.</b> A write made before <c>remodel.open</c> has built the scope -
-/// the three user-preference toggles and the modal-suppression flag, which name no document -
-/// records <see cref="NoTarget"/> rather than the copy path that does not exist yet.
+/// the three user-preference toggles and the modal-suppression flag, which name no document, and
+/// since owner decision 148A the open of the copy, <c>ISldWorks.OpenDoc7</c>, whose key is on the
+/// allowlist now - records <see cref="NoTarget"/> rather than the copy path that has no scope yet;
+/// the toggles are written first, so the open's line names no target it did not already.
 /// </summary>
 public sealed class RemodelGateRecorder : ISwGateObserver
 {
@@ -632,15 +635,16 @@ public sealed class ToolServiceOptions
     public TimeSpan InvokeTimeout { get; set; } = InProcPipeServer.DefaultInvokeTimeout;
 
     /// <summary>
-    /// Feature 011 T074. The run folder of a review this add-in started, looked up by the
-    /// folder's own name (<see cref="ReviewHost.ReviewRunDirectory"/>), or null for a run it did
-    /// not start. The one lookup <c>drawing.read</c> resolves its <c>run_id</c> through
-    /// (specs/011-drawing-context/contracts/confirmed-open.md section 2, item 1); asked on the
-    /// application thread, per request. Null - the default - is a host that keeps no review
-    /// records, and then the command has no source and answers that this bridge cannot read a
-    /// drawing.
+    /// Feature 011 T074. The review session a run id names - since decision 141A (2026-10-19), the
+    /// latest review this add-in started in the run folder of that name, which holds the folder
+    /// and the session's count of failed opens (<see cref="ReviewHost.DrawingReadSession"/>) - or
+    /// null for a run it did not start. The one lookup <c>drawing.read</c> resolves its
+    /// <c>run_id</c> through (specs/011-drawing-context/contracts/confirmed-open.md section 2,
+    /// item 1); asked on the application thread, per request. Null - the default - is a host that
+    /// keeps no review records, and then the command has no source and answers that this bridge
+    /// cannot read a drawing.
     /// </summary>
-    public Func<string, string?>? ReviewRunDirectory { get; set; }
+    public Func<string, ConfirmedDrawingSession?>? DrawingReadSession { get; set; }
 
     /// <summary>How long <see cref="ToolServiceHost.Start"/> waits for the attach to run.</summary>
     public TimeSpan AttachTimeout { get; set; } = TimeSpan.FromSeconds(60);
@@ -661,6 +665,15 @@ public sealed class ToolServiceOptions
     /// callback that throws is written to the tool-service log and goes no further.
     /// </summary>
     public Action<RemodelSessionEnd>? RemodelSessionEnded { get; set; }
+
+    /// <summary>
+    /// 004 T188: begins an optional scope on the application thread before the bridge's open,
+    /// disposed there after the entire open and any failed unwind. The add-in uses it to defer
+    /// following the copy's configuration while native open calls can raise document events.
+    /// Null or a null returned scope does nothing. Begin/disposal failures are logged and never
+    /// change the open's result; the returned scope, not a later callback, owns the matching exit.
+    /// </summary>
+    public Func<IDisposable?>? BeginRemodelOpen { get; set; }
 
     public Func<DateTime> Now { get; set; } = () => DateTime.Now;
 }
@@ -728,6 +741,7 @@ public sealed class ToolServiceHost : IToolService
         bool remodelSeatAvailable,
         ISwSession session,
         string documentPath,
+        string configuration,
         string captureDirectory)
     {
         _server = server;
@@ -744,6 +758,7 @@ public sealed class ToolServiceHost : IToolService
         RemodelSeatAvailable = remodelSeatAvailable;
         Session = session;
         DocumentPath = documentPath;
+        Configuration = configuration;
         CaptureDirectory = captureDirectory;
     }
 
@@ -781,15 +796,24 @@ public sealed class ToolServiceHost : IToolService
     /// <summary>The document the scope is bound to; component ids only mean anything for it.</summary>
     public string DocumentPath { get; }
 
+    /// <summary>
+    /// Owner decision 152A: the configuration the scope is bound to - the one the attach found
+    /// active, and the one this service's bridge answers to <c>ping</c>, both read from the attach
+    /// (<see cref="Attached.Configuration"/>). A review is handed this bridge only while it serves the
+    /// review's document and configuration.
+    /// </summary>
+    public string? Configuration { get; }
+
     public string CaptureDirectory { get; }
 
     /// <summary>The SC-004 artifact.</summary>
     public string LogPath => _log.Path;
 
     /// <summary>
-    /// One timestamped line into this launch's log, for the gate: the only thing it has to say
-    /// is why it is leaving this service attached to a document the engineer has switched away
-    /// from, which belongs beside the <c>attached to ...</c> line rather than in the add-in log.
+    /// One timestamped line into this launch's log, for the gate: what it has to say is why it is
+    /// leaving this service attached to a document the engineer has switched away from, or since
+    /// owner decision 158A that a hold held past its limit no longer keeps it attached by itself,
+    /// which belongs beside the <c>attached to ...</c> line rather than in the add-in log.
     /// </summary>
     public void WriteLog(string line) => _log.WriteLine(line);
 
@@ -868,6 +892,7 @@ public sealed class ToolServiceHost : IToolService
         // application thread the routine runs on; a listener that throws is written down here and
         // goes no further (lane D's defaults, 2026-09-27).
         attached.Services.RemodelSessionEnded = outcome => TellSessionEnded(options, log, outcome);
+        attached.Services.BeginRemodelOpen = () => BeginOpenScope(options, log);
 
         IBridgeDispatcher chain = RequestChain(
             dispatcher, attached.DocumentIsOpen, attached.DocumentPath, recorder, log.Write);
@@ -905,6 +930,7 @@ public sealed class ToolServiceHost : IToolService
             attached.Services.RemodelSeat != null,
             attached.Session,
             attached.DocumentPath,
+            attached.Configuration,
             captureDirectory);
     }
 
@@ -977,6 +1003,76 @@ public sealed class ToolServiceHost : IToolService
                 return true;
             },
             _invokeTimeout);
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): ends the remodel session this service's bridge holds for
+    /// exactly the run whose folder is <paramref name="runDirectory"/>, through the routine
+    /// <c>remodel.close</c> runs (<see cref="SwBridgeDispatcher.EndRemodelSessionOf"/>), when a settings
+    /// restart is about to move the run root and the review backend that would have sent that close has
+    /// exited. On the application thread, where the dispatcher lives: inline when called from it, otherwise
+    /// posted and waited for within <see cref="ToolServiceOptions.TeardownTimeout"/>, the bound the same
+    /// routine gets at a teardown. One line goes to this service's log and, when a session was ended, to
+    /// the run's <c>remodel.log</c>, its gated set the routine's own, as a teardown's does; the add-in hears
+    /// the outcome through <see cref="ToolServiceOptions.RemodelSessionEnded"/>. Everything is checked again
+    /// on the application thread, when the call runs - this service not stopped, and the session that
+    /// run's - so a call whose wait was given up, and that runs later, ends nothing else. Throws after
+    /// <see cref="Dispose"/>, whose teardown ends whatever session there was, and when the application thread
+    /// cannot be reached or does not answer in time.
+    /// </summary>
+    public void EndRemodelSessionOf(string runDirectory)
+    {
+        if (runDirectory == null)
+        {
+            throw new ArgumentNullException(nameof(runDirectory));
+        }
+
+        if (_invoker.IsApplicationThread)
+        {
+            EndRemodelSessionOfHere(runDirectory, "inline");
+            return;
+        }
+
+        OnApplicationThread(
+            _invoker,
+            () =>
+            {
+                EndRemodelSessionOfHere(runDirectory, "posted");
+                return true;
+            },
+            _teardownTimeout);
+    }
+
+    /// <summary>
+    /// On the application thread: <see cref="EndRemodelSessionOf"/>'s checks and close, then its one line. A service that
+    /// has stopped - before the call, or while it waited to run - ends nothing here: its own teardown ends whatever session
+    /// it held. The gated set is the close's own, as a teardown's is (<see cref="EndRemodelSession(bool)"/>).
+    /// </summary>
+    private void EndRemodelSessionOfHere(string runDirectory, string thread)
+    {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(
+                nameof(ToolServiceHost), "this tool service has stopped; its own teardown ends whatever remodel session it held.");
+        }
+
+        _recorder.Drain();
+        RemodelSessionEnd? outcome = _dispatcher.EndRemodelSessionOf(runDirectory);
+        SwGateActivity activity = _recorder.Drain();
+
+        string opening = "remodel close in process thread=" + thread;
+        if (outcome == null)
+        {
+            // The folder's last name, read without Path, which throws on a folder that is not a path.
+            string named = runDirectory.TrimEnd('\\', '/');
+            named = named.Substring(named.LastIndexOfAny(new[] { '\\', '/' }) + 1);
+            _log.WriteLine(opening + " run=" + named + " nothing closed: this bridge holds no session of that run");
+            return;
+        }
+
+        string line = SessionEndLine(new DateTimeOffset(_now()), outcome, activity, opening) + System.Environment.NewLine;
+        _log.Write(line);
+        new RemodelRunLog(() => outcome.RunDirectory).Write(line);
     }
 
     /// <summary>
@@ -1083,7 +1179,16 @@ public sealed class ToolServiceHost : IToolService
     /// differently. Like every line here it carries no secret: nothing it is built from has one.
     /// </summary>
     public static string TeardownLine(
-        DateTimeOffset at, RemodelSessionEnd outcome, SwGateActivity activity, string thread)
+        DateTimeOffset at, RemodelSessionEnd outcome, SwGateActivity activity, string thread) =>
+        SessionEndLine(at, outcome, activity, "remodel teardown thread=" + thread);
+
+    /// <summary>
+    /// A line for one run of the end-of-session routine, after <paramref name="opening"/>: a teardown's
+    /// (<see cref="TeardownLine"/>), or since owner decision 161A an in-process close's
+    /// (<see cref="EndRemodelSessionOf"/>), so the two write the outcome the same way.
+    /// </summary>
+    private static string SessionEndLine(
+        DateTimeOffset at, RemodelSessionEnd outcome, SwGateActivity activity, string opening)
     {
         if (outcome == null)
         {
@@ -1097,7 +1202,7 @@ public sealed class ToolServiceHost : IToolService
 
         var line = new StringBuilder(200);
         line.Append(ToolServiceLog.Stamp(at));
-        line.Append("remodel teardown thread=").Append(thread);
+        line.Append(opening);
 
         if (!outcome.HadSession)
         {
@@ -1157,6 +1262,60 @@ public sealed class ToolServiceHost : IToolService
         }
     }
 
+    private static IDisposable? BeginOpenScope(ToolServiceOptions options, ToolServiceLog log)
+    {
+        Func<IDisposable?>? begin = options.BeginRemodelOpen;
+        if (begin == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            IDisposable? scope = begin();
+            return scope == null ? null : new LoggedOpenScope(scope, log);
+        }
+        catch (Exception failure)
+        {
+            LogOpenScopeFailure(log, "begin", failure);
+            return null;
+        }
+    }
+
+    private static void LogOpenScopeFailure(ToolServiceLog log, string step, Exception failure) =>
+        log.WriteLine("remodel.open scope could not " + step + ": "
+            + failure.GetType().Name + ": " + failure.Message);
+
+    private sealed class LoggedOpenScope : IDisposable
+    {
+        private IDisposable? _scope;
+        private readonly ToolServiceLog _log;
+
+        public LoggedOpenScope(IDisposable scope, ToolServiceLog log)
+        {
+            _scope = scope;
+            _log = log;
+        }
+
+        public void Dispose()
+        {
+            IDisposable? scope = Interlocked.Exchange(ref _scope, null);
+            if (scope == null)
+            {
+                return;
+            }
+
+            try
+            {
+                scope.Dispose();
+            }
+            catch (Exception failure)
+            {
+                LogOpenScopeFailure(_log, "dispose", failure);
+            }
+        }
+    }
+
     /// <summary>
     /// The request path around <paramref name="dispatcher"/>, outermost first: the log describes
     /// the answer that actually goes out, including one rewritten because the document went away.
@@ -1183,10 +1342,12 @@ public sealed class ToolServiceHost : IToolService
     /// answers that this bridge cannot read a drawing.
     ///
     /// <b>The run comes from the review host's records, never from the request.</b>
-    /// <paramref name="reviewRunDirectory"/> is <see cref="ReviewHost.ReviewRunDirectory"/>: the
+    /// <paramref name="drawingReadSession"/> is <see cref="ReviewHost.DrawingReadSession"/>: the
     /// id is compared with a review record's folder name and nothing else, so a Model check's,
     /// Standards run's or remodel run's record, an unknown id and a path spelling all answer null,
-    /// which the confirmed read refuses naming the id before anything is opened.
+    /// which the confirmed read refuses naming the id before anything is opened. What it answers is
+    /// the latest review session of that folder, whose count of failed opens the read keeps
+    /// (decision 141A), so the count outlives this source, which every attach builds anew.
     ///
     /// <b>On the application thread.</b> Built by <see cref="Attach"/>, which runs there, over
     /// seams bound to the attached session; <see cref="InProcPipeServer"/> posts every request to
@@ -1205,7 +1366,7 @@ public sealed class ToolServiceHost : IToolService
     /// still read, since reading it opens nothing.
     /// </summary>
     internal static IConfirmedDrawingSource? ConfirmedDrawingSource(
-        Func<string, string?>? reviewRunDirectory,
+        Func<string, ConfirmedDrawingSession?>? drawingReadSession,
         string attachedDocumentPath,
         SwGateRecorder recorder,
         IDrawingOpenHost host,
@@ -1214,13 +1375,13 @@ public sealed class ToolServiceHost : IToolService
         IDocumentSource documents,
         IManifestSource manifest)
     {
-        if (reviewRunDirectory == null)
+        if (drawingReadSession == null)
         {
             return null;
         }
 
         return new ConfirmedDrawingRead(
-            reviewRunDirectory,
+            drawingReadSession,
             attachedDocumentPath,
             File.Exists,
             new DrawingOpenScope(host, recorder, seatValidated),
@@ -1286,6 +1447,13 @@ public sealed class ToolServiceHost : IToolService
             DocumentPath = documentPath,
             Configuration = session.Configuration.Name,
 
+            // Owner decision 152A, on the Codex review (X1): a switch of configuration re-attaches
+            // nothing (004, decision 22A), and the live commands run on the configuration active when
+            // they run, mapped through the component table walked in this one. So each asks first and
+            // is refused while another is active; every request runs on the application thread, where
+            // this reading is made too.
+            ActiveConfiguration = () => session.ActiveConfigurationName(),
+
             // Lever 10a. Review scope only, which the ScopedSecretPolicy enforces: a mesh
             // fetch writes a file and can take seconds, so it is not general chat's to call.
             TessellateSource = scope.TessellateSource(),
@@ -1301,7 +1469,7 @@ public sealed class ToolServiceHost : IToolService
             // read into the review's package through the review host's own records, over the
             // drawing phase, the document phase and the manifest of this session's gate.
             ConfirmedDrawings = ConfirmedDrawingSource(
-                options.ReviewRunDirectory,
+                options.DrawingReadSession,
                 documentPath,
                 recorder,
                 new SwDrawingOpenHost(options.SwApp),

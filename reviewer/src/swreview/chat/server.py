@@ -120,12 +120,16 @@ from swreview.checks.rms.run import (
     RmsCheckRun,
     RmsRunError,
     RmsScope,
-    is_check_folder,
     read_rms_check,
     run_rms_check,
 )
 from swreview.checks.rules.family import waiver_invalidity
-from swreview.checks.rules.run import CHECK_FILE_NAME, check_record
+from swreview.checks.rules.run import (
+    CHECK_FILE_NAME,
+    check_record,
+    is_check_folder,
+    session_replaced,
+)
 from swreview.checks.standards.profile import SETTING_NAME, ProfileError, ProfileUnreadable
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
 from swreview.checks.standards.registry import STANDARDS_FAMILY
@@ -139,6 +143,7 @@ from swreview.engineering_context.models import ContextArtifact
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
+from swreview.remodel.artifacts import grade_side_of
 from swreview.report.attention import rank
 from swreview.report.attention_record import ATTENTION_FILE_NAME
 from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
@@ -227,9 +232,30 @@ class ChatError(Exception):
 
 
 class InvalidRunDir(ChatError):
-    """`run_dir` broke the path rule (`chat-api.md`, Path rule for `run_dir`)."""
+    """`run_dir` broke the path rule (`chat-api.md`, Path rule for `run_dir`; `resolve_run_dir`).
+
+    The path rule's alone (owner decision 146A). A folder that passes it and already holds
+    another run's files is `RunDirTaken`: this class's sentence in the words file sends the
+    engineer to the run root in Settings, which is the way on from the path rule and from
+    nothing else.
+    """
 
     error_class = "InvalidRunDir"
+
+
+class RunDirTaken(ChatError):
+    """`run_dir` already holds another run's files, which this start may not write over.
+
+    Every refusal `_claim_run_dir` makes for what a folder holds (owner decisions 142A and
+    146A): a re-modeler grade's folder, whatever it holds, to any start; a check's folder to a
+    Retry, and a Standards check's to a start as well; any other folder that holds a session to
+    a start. A class of its own because the page shows its class's sentence first, and the way
+    on from all of these is a new run folder, where the path rule's, `InvalidRunDir`'s, is the
+    run root in Settings. A chat that is live on the folder, or being set up in it, is
+    `RunDirInUse`.
+    """
+
+    error_class = "RunDirTaken"
 
 
 class InvalidPackage(ChatError):
@@ -258,6 +284,9 @@ class InvalidTiming(ChatError):
 
 
 class UnknownChat(ChatError):
+    """No chat of that id on this backend: a route's `chat_id`, or a Retry's `retry_of` into
+    a folder that holds a session (`_require_retried`)."""
+
     status = 404
     error_class = "UnknownChat"
 
@@ -297,7 +326,8 @@ class TurnRunning(ChatError):
 
 
 class RunDirInUse(ChatError):
-    """A live chat already holds this run folder (`_claim_run_dir`)."""
+    """A live chat already holds this run folder (`_claim_run_dir`), or, to a Retry, the
+    session the folder holds is not the one its chat wrote (`_require_retried`)."""
 
     status = 409
     error_class = "RunDirInUse"
@@ -376,9 +406,9 @@ class UnknownReview(ChatError):
 
     `GET /reviews/{run_id}` (feature 009, contracts/sessions.md section 4) takes a folder
     name, so every way it can fail - a name the path rule refuses, no such folder, no
-    `session.json`, a check folder, a file that cannot be read - is this one 404 naming only
-    the id, as `UnknownCheck` is: a route that said *why* would be a way to probe the
-    workstation.
+    `session.json`, a check's own folder or one whose check record cannot show whose its
+    session is, a file that cannot be read - is this one 404 naming only the id, as
+    `UnknownCheck` is: a route that said *why* would be a way to probe the workstation.
     """
 
     status = 404
@@ -547,6 +577,12 @@ def _record_id(path: Path) -> str | None:
         return None
     session_id = record.get("session_id") if isinstance(record, dict) else None
     return session_id if isinstance(session_id, str) else None
+
+
+def _session_in(path: Path) -> str | None:
+    """The session one of `SESSION_FILES` belongs to: the one a stream's first event starts,
+    or the one a record holds; `None` when the file cannot be read as either."""
+    return _stream_session_id(path) if path.name == EVENTS_FILE_NAME else _record_id(path)
 
 
 def _next_free_index(run_dir: Path) -> int:
@@ -1187,6 +1223,7 @@ class ChatServer:
         bridge_factory: Callable[[str, str | None], Any] | None = None,
         development: bool = False,
         secrets: Sequence[str] | None = None,
+        settings_key_provider: ProviderName | None = None,
     ) -> None:
         self.token = token
         self.allow_origin = allow_origin
@@ -1196,6 +1233,7 @@ class ChatServer:
         self.bridge_factory = bridge_factory
         self.development = development
         self.secrets = tuple(secrets) if secrets is not None else environment_secrets()
+        self.settings_key_provider = settings_key_provider
         self.chats: dict[UUID, ChatSession] = {}
         self._workers: dict[UUID, ThreadPoolExecutor] = {}
         self._pending_run_dirs: set[Path] = set()
@@ -1769,14 +1807,22 @@ class ChatServer:
     def _read_review(self, review_dir: Path) -> dict[str, Any]:
         """The snapshot of the review `review_dir` holds, read-only; blocking.
 
-        A folder holding `check.json` is a Model check or Standards run, whose own route is
-        `GET /checks/{check_id}`; a folder with no `session.json` has no review; a file that
-        cannot be read or does not validate is a review that can no longer be restored. All
-        three are `UnknownReview`.
+        A folder with no `session.json` has no review, and a file that cannot be read or does
+        not validate is a review that can no longer be restored. A folder holding `check.json`
+        is its check's while that record names the `session.json` beside it, and its route is
+        `GET /checks/{check_id}`. A review that claimed it - a Model check's folder handed to a
+        review (feature 003 User Story 6 scenario 11) - moved the check's session aside and put
+        its own in `session.json`, so the record names another session and the folder's
+        session is the review's, which is restored (owner decision 146A); the check's, at
+        `session.N.json`, is never read here. A record that cannot be read, or names no
+        session, cannot show whose the session is, and nothing is guessed through
+        (`session_replaced`). Every refusal is `UnknownReview`.
         """
         unknown = UnknownReview(f"no review {review_dir.name!r} under the run root")
         session_file = review_dir / SESSION_FILE_NAME
-        if (review_dir / CHECK_FILE_NAME).exists() or not session_file.is_file():
+        if not session_file.is_file():
+            raise unknown
+        if (review_dir / CHECK_FILE_NAME).exists() and not session_replaced(review_dir):
             raise unknown
         try:
             session = load_session(session_file)
@@ -2101,14 +2147,17 @@ class ChatServer:
         """The provider settings for one session: the request, then the environment.
 
         The settings *file* is never read here - the add-in owns it and passes the key in
-        the environment - so `from_env` sees no settings key and resolves `key_source`
-        from the environment or reports `none`.
+        the environment - so `from_env` finds the key there. It records `settings` for the
+        provider the add-in named when it started this backend, whose key it copied there
+        from the pane (`--settings-key-provider`, owner decision 138A), `env` for any other
+        key it finds, and `none` when there is none.
         """
         try:
             return ProviderSettings.from_env(
                 provider=body.get("provider") or DEFAULT_PROVIDER,
                 model=body.get("model") or None,
                 effort=body.get("effort") or None,
+                settings_key_provider=self.settings_key_provider,
             )
         except ValueError as exc:
             raise UnknownProvider(self.redact(str(exc))) from exc
@@ -2139,8 +2188,10 @@ class ChatServer:
         already been shown, and `session.json` holds only the later of the two sessions.
 
         So: a folder a live chat is reviewing is a 409, and a folder that already holds a
-        session is a 400 - unless this request is the Retry that replaces it, which
-        `_rotate_previous` moves the old pair aside for rather than writing over.
+        session is a 400, `RunDirTaken` - unless this request is the Retry that replaces it,
+        which `_rotate_previous` moves the old pair aside for rather than writing over. It has
+        to be that Retry (owner decision 142A): `_require_retried` holds a Retry to the chat
+        that wrote the session, so one naming any other chat moves nothing.
 
         A Model check's folder is the one other exception, and for the same reason read
         the other way: a check writes `session.json` and **no** `events.jsonl`, so there
@@ -2150,6 +2201,20 @@ class ChatServer:
         session aside, so the check's record survives as `session.1.json` rather than
         being written over, and the folder stops answering `GET /checks/{check_id}`
         because its `check.json` no longer names the session that is in it.
+
+        That exception is a start's, and the rms family's alone (owner decision 142A). A
+        Retry is refused on a check's folder of every family, which holds no review session
+        for it to replace, and a start on a Standards check's folder, which feature 007 left
+        unclaimable (its FR-021 names the rms check's folder only): one 400 with one wording
+        from both routes. `is_check_folder` knows every family's folder, and the family is
+        the record's own, as `GET /checks/{check_id}` reads it.
+
+        The re-modeler's grade is an rms record too, and no request claims its folder (owner
+        decision 146A): the grade is its remodel run's, whose `rms-<side>.json` names its
+        session and report. It is told from a Model check's folder by the run's layout
+        (`grade_side_of`), the record being the same, and refused before the folder's files are
+        looked at, so whatever it holds: a start into it before the grade is written found no
+        session, and the grade would then have written over the review.
 
         A re-run (feature 015, `recheck`; `contracts/recheck.md` section 2) re-runs a waiting
         review's checks in its own folder, so the session it holds is its point, not a
@@ -2175,12 +2240,93 @@ class ChatServer:
             )
         if recheck:
             return None
-        if retry_of is None and _session_files(run_dir) and not is_check_folder(run_dir):
-            raise InvalidRunDir(
-                f"{run_dir} already holds a review session; retry it with 'retry_of' or "
-                f"review into a new run folder"
+        side = grade_side_of(run_dir)
+        if side is not None:
+            raise RunDirTaken(
+                f"{run_dir} is the folder of the {side} grade of the remodel run in "
+                f"{run_dir.parent}: a review never claims a grade's folder, which only the "
+                "remodel run writes; review into a new run folder"
             )
+        if not _session_files(run_dir):
+            return None
+        if is_check_folder(run_dir):
+            family = self._family_of(run_dir)
+            if retry_of is None and family == RMS_FAMILY.check_file_family:
+                return None
+            raise RunDirTaken(
+                f"{run_dir} holds the {family} check that ran in it and no review session: "
+                "a Retry replaces only a review's session, and only a Model check's folder "
+                "is handed to a new review; review into a new run folder"
+            )
+        if retry_of is None:
+            # "a session", not "a review session": it is a review's as a rule, but a remodel
+            # run's own folder holds the re-modeler's, and a check's folder whose record cannot
+            # be read holds the check's, which `is_check_folder` cannot tell from a review's.
+            raise RunDirTaken(
+                f"{run_dir} already holds a session that a start does not write over: review "
+                "into a new run folder, or retry the chat that wrote it with 'retry_of'"
+            )
+        self._require_retried(run_dir, retry_of)
         return None
+
+    def _require_retried(self, run_dir: Path, retry_of: UUID) -> None:
+        """Refuse a Retry into `run_dir` unless `retry_of` names the chat whose session it holds.
+
+        Owner decision 142A. A Retry claims a folder that already holds a session to replace
+        that session, which `_rotate_previous` moves aside, so the chat it names must be the
+        one that wrote it. `retry_of` is a chat id (`contracts/chat-api.md`), which no file in
+        the folder records, so the chat is one this backend holds: none by that id is `404
+        UnknownChat`; one that reviewed another folder, or whose review session a session file
+        here does not belong to - `session.json`'s record, the session `events.jsonl` opens
+        with, whichever the folder holds - is `409 RunDirInUse`, the folder being another
+        session's. Neither refusal moves anything.
+
+        The cases each one decides:
+
+        - `UnknownChat`: an id this backend never issued; a start that failed after writing its
+          stream, whose chat was never registered; and every chat from before a restart. A
+          settings save restarts the backend, so a Retry that reuses its failed chat's folder -
+          a context review's (owner decision 108A) - is refused after one. The pane's own
+          Retry extracts into a new folder, which holds no session, and never comes here;
+        - `RunDirInUse`: a chat of another folder; the attempt a later Retry replaced, whose
+          session is `session.N.json` by then; a session file replaced by hand; and one that
+          cannot be read, which cannot be shown to be the chat's and is not guessed through.
+          The ids in the files are compared as this backend writes them, as `_rotate_kept`
+          compares them; `retry_of` itself was read as a uuid (`_uuid`).
+
+        The claim runs on the event loop with no await before the folder is reserved, so two
+        Retries of one chat cannot both pass: the second meets the first's reservation or its
+        live chat, and once that one has ended, a folder that holds its session.
+        """
+        retried = self.chats.get(retry_of)
+        if retried is None:
+            raise UnknownChat(
+                f"no chat {retry_of} on this backend: {run_dir} holds a session, and a Retry "
+                "replaces it only for the chat that wrote it, which this backend no longer "
+                "holds or never did; review into a new run folder"
+            )
+        if retried.run_dir != run_dir:
+            raise RunDirInUse(
+                f"chat {retry_of} reviewed {retried.run_dir}, not {run_dir}: a Retry replaces "
+                "only the session its own chat wrote; review into a new run folder"
+            )
+        wrote = str(retried.review_session_id)
+        strays: list[str] = []
+        for path in _session_files(run_dir):
+            found = _session_in(path)
+            if found == wrote:
+                continue
+            strays.append(
+                f"its {path.name} belongs to session {found}"
+                if found is not None
+                else f"its {path.name} cannot be read as one session's"
+            )
+        if strays:
+            raise RunDirInUse(
+                f"{run_dir} does not hold the session chat {retry_of} wrote ({wrote}): "
+                f"{'; '.join(strays)}; a Retry replaces only the session its folder holds, so "
+                "retry the chat that wrote it or review into a new run folder"
+            )
 
     def _attachment_of(
         self,
@@ -2666,6 +2812,7 @@ def create_app(
     remodel_bridge_factory: Callable[[str, str | None], Any] | None = None,
     development: bool = False,
     secrets: Sequence[str] | None = None,
+    settings_key_provider: ProviderName | None = None,
 ) -> Starlette:
     """The chat backend as an ASGI application.
 
@@ -2685,6 +2832,10 @@ def create_app(
             commands and nothing else, and a review's bridge authorizes none of them.
         development: List the scripted provider in `GET /health` (FR-027).
         secrets: What error text is masked of; the process environment otherwise.
+        settings_key_provider: The provider whose key the add-in copied into this process's
+            environment from the pane's saved settings (owner decision 138A): its sessions
+            record `key_source: settings`. `None` when the add-in said no such thing, and
+            then every key found in the environment is recorded as `env`.
     """
     server = ChatServer(
         token=token,
@@ -2695,6 +2846,7 @@ def create_app(
         bridge_factory=bridge_factory,
         development=development,
         secrets=secrets,
+        settings_key_provider=settings_key_provider,
     )
 
     # Imported here rather than at module scope so `chat/remodel.py` may import this

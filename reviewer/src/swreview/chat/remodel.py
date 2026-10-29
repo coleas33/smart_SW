@@ -41,7 +41,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
+import time
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -101,6 +103,7 @@ __all__ = [
     "NotAPart",
     "NotModelCheck",
     "PackageAfterRefused",
+    "PackageAfterStopped",
     "PackageAfterTimeout",
     "PackageMissing",
     "RemodelJob",
@@ -156,6 +159,15 @@ Ten minutes, because the dump is another process's thread doing real work on a l
 and a run that waited forever would hold a worker thread and a document open with nobody
 left to answer it. Injectable so a test can drive the expiry without waiting."""
 
+STOP_LOOK_S = 0.1
+"""How often a wait for the after-dump looks for a Stop asked for while it waits (owner decision
+159A, on the final review: S1). The arrival of the dump ends the wait at once either way."""
+
+JOB_ID = re.compile(r"[0-9a-f]{32}")
+"""A job id the add-in names for its Start: 32 lowercase hexadecimal characters, as a minted one
+is (`uuid4().hex`) and as the add-in's `Guid` writes one (owner decision 159A, on the final
+review: S3)."""
+
 JOB_RUNNING = "running"
 JOB_AWAITING = "awaiting_package_after"
 JOB_FINISHED = "finished"
@@ -172,9 +184,15 @@ class NotAPart(ChatError):
 
 
 class DocumentDirty(ChatError):
-    """`source_dirty`. The source is never saved by this feature, so the engineer saves it."""
+    """`source_dirty`. The source is never saved by this feature, so the engineer saves it.
+
+    Retryable (owner decision 159A, 004 research R19): saving the part, or closing it unsaved and
+    opening it again, makes the same press succeed, as the add-in's own reading of the probe's
+    signals has always said; the class carried two flags until then.
+    """
 
     error_class = "DocumentDirty"
+    retryable = True
 
 
 class ExternalReferences(ChatError):
@@ -187,7 +205,8 @@ class ScopeRefused(ChatError):
     """The scope gate refused, or the bridge says the scope was not probed or has changed.
 
     The message names **every** failing signal and never only the first: a message that
-    named one of two reasons would send the engineer back twice (`research.md` R4.1).
+    named one of two reasons would send the engineer back twice (`research.md` R4.1). The
+    bridge's two codes carry plain words instead, which name no path (`SCOPE_REFUSAL_WORDS`).
     """
 
     error_class = "ScopeRefused"
@@ -272,6 +291,16 @@ class PackageAfterTimeout(RuntimeError):
     """
 
 
+class PackageAfterStopped(RuntimeError):
+    """The engineer stopped the run while it waited for the add-in's after-dump.
+
+    Owner decision 159A, on the final review (S1): the wait listened for the dump alone, so a
+    Stop asked for while it waited for a dump that was never coming ended nothing before the
+    wait's bound. Raised and reported as `PackageAfterTimeout` is: the run was never verified
+    or saved, and every change it applied is in the change log.
+    """
+
+
 BRIDGE_REFUSALS: Mapping[str, type[ChatError]] = {
     "not_a_part": NotAPart,
     "source_dirty": DocumentDirty,
@@ -289,13 +318,50 @@ is short on purpose: the codes it does not list are the ones a run meets *after*
 is open, and those are the executor's to record against the change it was making rather
 than an HTTP refusal for a route to answer."""
 
+SCOPE_REFUSAL_WORDS: Mapping[str, str] = {
+    "scope_not_probed": (
+        "The part to be copied is not one this remodel checked, so nothing was copied and no new "
+        "plan was made. Your part was not changed. Make your part the active document and press "
+        "Remodel a copy again."
+    ),
+    "scope_changed": (
+        "The part, or the copy made of it, no longer reads as it did when this remodel checked it, "
+        "so the remodel stopped and no new plan was made. Your part was not changed. Press "
+        "Remodel a copy again to check it afresh; if the same happens again, the copy reads "
+        "differently from your part once SOLIDWORKS opens it, and this part cannot be remodeled "
+        "as it stands."
+    ),
+}
+"""What the Remodel tab reads for the two codes `ScopeRefused` carries (owner decision 149A).
+
+The bridge's own sentences can name the probe it was handed and the source's full path - both
+paths, for a probe minted for another file - and the page prints a refusal's message as it is, on
+a tab whose words name no path. `scope_not_probed` is raised at the open's first step, before
+anything is copied: the open names a file no probe of the bridge's session was minted for, which
+since 145A is a part made active between the plan's second reading of the document and its probe.
+`scope_changed` is raised before the copy, when the source can no longer be read as it was
+probed, or after it, when the copy does not read as the probe did; the bridge's unwind then
+deletes the copy when it can. Each sentence is true of every refusal under its code and vouches,
+as the tab's own refusals of a plan do (`RemodelHost`), for the engineer's part alone, never for
+the copy. Pressing again probes afresh: a reason the gate reads is then named by it, the read-only
+option among them, while a copy that reads differently from the part does so on every press,
+which `scope_changed`'s sentence says. The bridge's sentence goes to the log (`_refusal`)."""
+
 PREEXISTING_REBUILD_ERRORS = "preexisting_rebuild_errors"
 """The one refusal that is not an error body; see `RemodelServer._open`."""
 
 
 def _refusal(exc: RemodelError) -> ChatError:
-    """The host's `error_code` as the class the page switches on, with its own sentence."""
-    return BRIDGE_REFUSALS.get(exc.error_code, RunFolderFailed)(str(exc))
+    """The host's `error_code` as the class the page switches on, with its own sentence - or, for
+    the two codes `ScopeRefused` carries, the plain words the page prints instead, the host's
+    sentence logged for whoever reads the backend's log (owner decision 149A). The process-wide
+    log redactor masks every secret in that line, as in every other (`chat/__main__.py`)."""
+    refusal = BRIDGE_REFUSALS.get(exc.error_code, RunFolderFailed)
+    plain = SCOPE_REFUSAL_WORDS.get(exc.error_code)
+    if plain is None:
+        return refusal(str(exc))
+    logger.warning("the bridge refused with %s: %s", exc.error_code, exc)
+    return refusal(plain)
 
 
 def _unavailable(what: str, detail: str | None = None) -> BridgeUnavailable:
@@ -362,7 +428,20 @@ class RemodelJob:
     """The live fan-out, fed as an `EventSink` listener; the file is the run's own."""
 
     stop: threading.Event = field(default_factory=threading.Event)
-    """Set by `POST .../stop`; read by `apply_changes` **between** changes."""
+    """Set by `POST .../stop` (`request_stop`); read by `apply_changes` **between** changes."""
+
+    stops: int = 0
+    """How many distinct Stops `POST .../stop` has asked for (owner decision 159A). One asked
+    for while the job waits for its after-dump ends that wait; one the apply loop honoured before
+    the wait began does not. Written by the route's handler alone, on the event loop, and read by
+    the worker. A retry naming the same `stop_id` is the same Stop; a legacy unnamed request is
+    counted separately because it carries no identity to compare."""
+
+    _stop_ids: set[str] = field(default_factory=set, init=False, repr=False)
+    _after_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _after_closed: bool = field(default=False, init=False, repr=False)
+    """The rendezvous closes before its worker finalizes the run; a live job can have stopped
+    accepting a dump. The lock chooses one package or closure, independently of worker status."""
 
     arrived: threading.Event = field(default_factory=threading.Event)
     """Set when the add-in's after-dump has been handed over, or abandoned at shutdown."""
@@ -385,29 +464,87 @@ class RemodelJob:
         This is `run_remodel`'s `dump_after`. The run is between phase C and the grade, the
         copy is open and every change is recorded, so the only two honest outcomes are the
         package or an exception: returning a stale or empty one would grade the wrong tree.
+
+        Owner decision 159A, on the final review (S1): a Stop asked for while it waits ends the
+        wait, since the dump it waits for may never come - the add-in could not write it, or the
+        backend refused it - and the run then held the host for the wait's whole bound. A Stop
+        asked for before the wait began is the apply loop's, honoured between changes: that run is
+        verified and saved as truncated, so its wait goes on. The dump's arrival outranks a Stop.
         """
-        self.state = JOB_AWAITING
+        waiting = False
         try:
-            arrived = self.arrived.wait(self.timeout_s)
-            package = self.package
-            if not arrived or package is None:
-                raise PackageAfterTimeout(
-                    f"{PACKAGE_AFTER} never arrived: the add-in had "
-                    f"{self.timeout_s:g}s to dump the copy after the last change and the "
-                    "run cannot be graded without it"
-                )
-            return package
+            with self._after_lock:
+                asked = self.stops
+                if self.package is None and not self._after_closed and self.live:
+                    waiting = True
+                    self.state = JOB_AWAITING
+            deadline = time.monotonic() + self.timeout_s
+            while True:
+                with self._after_lock:
+                    # A timed Event.wait can answer False just before a package arrives. The
+                    # package and closure are decided together, so acceptance before this check
+                    # outranks a new Stop or expiry, and a refusal closes before the worker leaves.
+                    if self.package is not None:
+                        return self.package
+                    remaining = deadline - time.monotonic()
+                    if not self._after_closed and self.live and self.stops > asked:
+                        self._after_closed = True
+                        raise PackageAfterStopped(
+                            f"{PACKAGE_AFTER} never arrived: the engineer stopped the run while it "
+                            "waited for the dump of the copy after the last change"
+                        )
+                    if self._after_closed or not self.live or remaining <= 0:
+                        self._after_closed = True
+                        raise PackageAfterTimeout(
+                            f"{PACKAGE_AFTER} never arrived: the add-in had "
+                            f"{self.timeout_s:g}s to dump the copy after the last change and the "
+                            "run cannot be graded without it"
+                        )
+                self.arrived.wait(min(remaining, STOP_LOOK_S))
         finally:
-            if self.state == JOB_AWAITING:
-                self.state = JOB_RUNNING
+            with self._after_lock:
+                self._after_closed = True
+                if waiting and self.state == JOB_AWAITING:
+                    self.state = JOB_RUNNING
 
     def deliver(self, package: EvidencePackage) -> None:
-        self.package = package
-        self.arrived.set()
+        """Accept the first validated package, or refuse one whose rendezvous has ended.
+
+        The caller loads the file before this lock, so a load begun while the wait was open is
+        checked again here. The worker can still be finalizing failed evidence after its wait
+        closed, and a later package must neither claim acceptance nor replace its first reading.
+        """
+        with self._after_lock:
+            if self.package is not None:
+                raise PackageAfterRefused("this run already accepted its after-dump")
+            if self._after_closed or not self.live:
+                raise PackageAfterRefused("this run no longer waits for its after-dump")
+            self.package = package
+            self._after_closed = True
+            self.arrived.set()
+
+    def request_stop(self, stop_id: str | None = None) -> None:
+        """The engineer's Stop, as `POST .../stop` asks for it: the flag the apply loop reads
+        between changes, and the end of a wait for the after-dump under way as it is asked.
+
+        Its identity, count and the wait-entry snapshot share the rendezvous lock. A lost reply
+        retried after the apply loop ends must not become a new Stop that cancels the healthy
+        after-dump wait. A new Stop does not close the wait until the worker decides it: a package
+        accepted before that decision still outranks the Stop.
+        """
+        with self._after_lock:
+            if stop_id is not None:
+                if stop_id in self._stop_ids:
+                    return
+                self._stop_ids.add(stop_id)
+            self.stops += 1
+            self.stop.set()
 
     def abandon(self) -> None:
         """Release a waiting run at shutdown: the wait ends and the run fails honestly."""
-        self.arrived.set()
+        with self._after_lock:
+            self._after_closed = True
+            self.arrived.set()
 
     # --- what the poll reads ------------------------------------------------------
 
@@ -420,11 +557,17 @@ class RemodelJob:
         return self.state in (JOB_RUNNING, JOB_AWAITING)
 
     def finish(self) -> None:
-        self.state = JOB_FINISHED
+        with self._after_lock:
+            self._after_closed = True
+            self.state = JOB_FINISHED
+            self.arrived.set()
 
     def fail(self, message: str) -> None:
-        self.error = message
-        self.state = JOB_FAILED
+        with self._after_lock:
+            self._after_closed = True
+            self.error = message
+            self.state = JOB_FAILED
+            self.arrived.set()
 
 
 # --- reading the run folder ----------------------------------------------------------------
@@ -443,8 +586,16 @@ def _changes(run_dir: Path) -> tuple[ChangeRecord, ...]:
     if not path.is_file():
         return ()
     records: list[ChangeRecord] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        text = line.strip()
+    for raw in path.read_bytes().splitlines():
+        # Owner decision 159A, on the final review (its probe P-B): the file was read whole with
+        # strict UTF-8, so a poll that came while a line holding a character of more than one
+        # byte was half written answered 500, which the add-in reads as a backend not answering.
+        # Each line is decoded on its own, and one that will not decode is skipped as one that
+        # will not validate is: a torn line is the next poll's.
+        try:
+            text = raw.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            continue
         if not text:
             continue
         try:
@@ -609,6 +760,7 @@ class RemodelServer:
         self.package_after_timeout = package_after_timeout
         self.jobs: dict[str, RemodelJob] = {}
         self._workers: dict[str, ThreadPoolExecutor] = {}
+        self._starting = threading.Lock()
 
     # --- endpoints ------------------------------------------------------------------
 
@@ -633,7 +785,7 @@ class RemodelServer:
         source_path = _text(body.get("source_path"), "source_path")
         probe_id = _text(body.get("probe_id"), "probe_id")
         configuration = body.get("configuration")
-        client = self._client(body)
+        client = self._client(body, run_dir.name)
         return JSONResponse(
             await run_in_threadpool(
                 partial(
@@ -661,9 +813,10 @@ class RemodelServer:
         """
         body = await _json(request)
         run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
+        job_id = _job_id(body.get("job_id"))
         settings = self.settings(body)
-        client = self._client(body)
-        job = await run_in_threadpool(partial(self._start, run_dir, client, settings))
+        client = self._client(body, run_dir.name)
+        job = await run_in_threadpool(partial(self._start, run_dir, client, settings, job_id))
         return JSONResponse({"job_id": job.job_id, "chat_id": job.job_id}, status_code=201)
 
     async def run_state(self, request: Request) -> Response:
@@ -701,11 +854,18 @@ class RemodelServer:
     async def stop_run(self, request: Request) -> Response:
         """`POST /remodel/runs/{job_id}/stop`: set the flag the apply loop reads.
 
-        Idempotent, like `POST /sessions/{chat_id}/stop`: a second press says nothing new,
-        and a run that has already finished is not turned into a failure by one.
+        An identified Stop is idempotent across delivery retries; a distinct identity can end
+        a later after-dump wait. Legacy requests without an identity retain their old meaning.
+        A run that has already finished is not turned into a failure by a Stop.
         """
         job = self._job(request)
-        job.stop.set()
+        body = await _json(request)
+        stop_id = body.get("stop_id")
+        if stop_id is not None and (
+            not isinstance(stop_id, str) or JOB_ID.fullmatch(stop_id) is None
+        ):
+            raise ChatError("stop_id names a Stop as 32 lowercase hexadecimal characters")
+        job.request_stop(stop_id)
         return JSONResponse({"stopping": True})
 
     async def close_copy(self, request: Request) -> Response:
@@ -713,7 +873,7 @@ class RemodelServer:
         body = await _json(request)
         run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
         discard = bool(body.get("discard_copy"))
-        client = self._client(body)
+        client = self._client(body, run_dir.name)
         return JSONResponse(
             await run_in_threadpool(partial(self._close, client, discard, run_dir))
         )
@@ -916,8 +1076,29 @@ class RemodelServer:
         return {"plan_summary": plan_summary_row(plan, document, load_table())}
 
     def _start(
-        self, run_dir: Path, client: Any, settings: ProviderSettings
+        self, run_dir: Path, client: Any, settings: ProviderSettings, job_id: str | None = None
     ) -> RemodelJob:
+        """One Start, or the job it already made.
+
+        Owner decision 159A, on the final review (S3; older than 159A): a Start whose answer was
+        lost may still have made its job, so the add-in names the job it starts and asks the same
+        Start again until one is answered. The same Start asked again is answered with the job it
+        made, whatever that job has done since, and starts no second run; under one lock, so a
+        Start and the same Start asked again cannot both make one.
+        """
+        with self._starting:
+            return self._start_once(run_dir, client, settings, job_id)
+
+    def _start_once(
+        self, run_dir: Path, client: Any, settings: ProviderSettings, job_id: str | None
+    ) -> RemodelJob:
+        made = None if job_id is None else self.jobs.get(job_id)
+        if made is not None:
+            if made.run_dir != run_dir:
+                raise ChatError(
+                    f"job {job_id} is another run folder's; a Start names a job of its own"
+                )
+            return made
         # The live job is read first, because it is the most specific fact and it explains
         # the other two: a run past its first few milliseconds has moved its own plan off
         # `planned` (`judge` records `judging`) and opened its own change log, so both of
@@ -954,7 +1135,7 @@ class RemodelServer:
             plan_path(run_dir).read_text(encoding="utf-8")
         )
         job = RemodelJob(
-            job_id=uuid4().hex,
+            job_id=job_id or uuid4().hex,
             run_dir=run_dir,
             timeout_s=self.package_after_timeout,
         )
@@ -1077,11 +1258,16 @@ class RemodelServer:
 
     # --- the bridge, the job and the worker ------------------------------------------
 
-    def _client(self, body: Mapping[str, Any]) -> Any:
-        """The `remodel.*` client this request's bridge config names.
+    def _client(self, body: Mapping[str, Any], run_id: str | None = None) -> Any:
+        """The `remodel.*` client this request's bridge config names, acting for `run_id`.
 
         The secret travels from the pane to the client and stops there: it is never written
         to the run folder, never echoed in a reply and never in an error body.
+
+        `run_id` is the run folder's own name, the id `remodel.open` is given (owner decision
+        159A, protocol 1.5): every command the client sends after the open names it, so the
+        bridge refuses this run's command once another run's session holds it. The probe acts for
+        no run; every other route acts for the run in its `run_dir`.
         """
         bridge = body.get("bridge")
         if not isinstance(bridge, Mapping):
@@ -1091,9 +1277,13 @@ class RemodelServer:
             )
         pipe = str(bridge.get("pipe") or DEFAULT_PIPE_NAME)
         secret = str(bridge.get("secret") or "") or None
-        if self.bridge_factory is not None:
-            return self.bridge_factory(pipe, secret)
-        return RemodelClient(pipe, secret)
+        client = (
+            self.bridge_factory(pipe, secret)
+            if self.bridge_factory is not None
+            else RemodelClient(pipe, secret)
+        )
+        client.run_id = run_id
+        return client
 
     def _job(self, request: Request) -> RemodelJob:
         job_id = str(request.path_params["job_id"])
@@ -1148,6 +1338,19 @@ class RemodelServer:
         for worker in self._workers.values():
             worker.shutdown(wait=False)
         self._workers.clear()
+
+
+def _job_id(raw: Any) -> str | None:
+    """The job id a Start names, or `None` for one that names none and gets a minted one.
+
+    Owner decision 159A, on the final review (S3): 32 lowercase hexadecimal characters
+    (`JOB_ID`); anything else is refused before anything starts.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or JOB_ID.fullmatch(raw) is None:
+        raise ChatError("job_id names a job as 32 lowercase hexadecimal characters")
+    return raw
 
 
 def _field(reply: Any, name: str) -> Any:

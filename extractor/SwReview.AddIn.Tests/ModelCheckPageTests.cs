@@ -1075,6 +1075,13 @@ public sealed class ModelCheckPageTests
         Assert.Contains("EX-009", state.GetProperty("said").GetString()!);
         Assert.Contains("EX-009", state.GetProperty("exception").GetString()!);
 
+        // An Accept whose re-read is shown says so on the row and the check's line, and nothing in
+        // the banner: the notice for a re-read that was dropped or failed (owner decision 150A) is
+        // not this one's (150A review, S2).
+        Assert.True(
+            state.GetProperty("banner").ValueKind == JsonValueKind.Null,
+            "The banner is up after an Accept whose re-read was shown: " + state.GetProperty("banner").GetRawText());
+
         // The accept, then the re-read: the page asks the backend what the result is now rather
         // than deciding it (there is one evaluation entry point, FR-024).
         Assert.Equal(
@@ -1296,6 +1303,7 @@ public sealed class ModelCheckPageTests
       grade: document.getElementById('grade').textContent,
       said: document.getElementById('check-state').textContent,
       exception: acceptedRow() ? acceptedRow().textContent : '',
+      banner: document.getElementById('banner').hidden ? null : document.getElementById('banner').textContent,
       calls: window.__calls
     });
   } catch (error) {

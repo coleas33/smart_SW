@@ -126,6 +126,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 5.3 | 004 T185: crash capture set, or `no administrator rights` (item A) | | | |
 | 5.3 | 004 T185: the box planned; the phases end `open_record.written`, the last two `stage=` lines and the count (item B) | | | |
 | 5.3 | 004 T185: if SOLIDWORKS closed: item C's six answers, and what was kept | | | |
+| 5.3 | 011 T171: the box's Open copy, then Start; exactly four `seat=` lines in `remodel.log`, the activation's and the open's, none with `refused=` or `error=`; and the plan's `remodel.open` line, `status=ok`, `gated=` naming `ISldWorks.OpenDoc7`, no `refused=` (item B; decision 148A) | | | |
 | 5.3 | 004 T186: J checked in: planned with the read-only option not ticked, or refused naming it with the option ticked; `IsReadOnly` unchanged | | | |
 | 5.4 | 008 T106: the live Gemini test | | | |
 | 5.5 | 009 T082: Show before and after the fix | | | |
@@ -136,6 +137,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 5.6 | 004 T037: PROBE-12 and PROBE-13, the tag and the copy of an open part | | | |
 | 5.6 | 004 T038: PROBE-5, PROBE-9, PROBE-10, PROBE-11 and PROBE-20 | | | |
 | 5.6 | 004 T039: PROBE-8, the tolerance calibration | | | |
+| 5.6 | 011 T171: the first run's `interop members:` line naming `ISldWorks.OpenDoc7`, and PROBE-12's lines with a reason, no `error` (decision 148A) | | | |
 | 5.6 | SOLIDWORKS's three options as they were before the probes | | | |
 | 6.0 | real files unchanged at the end | | | |
 | 6.1 | no key in a file (first audit) | | | |

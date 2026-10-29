@@ -282,6 +282,19 @@ public sealed class BridgeServices
     public string? Configuration { get; set; }
 
     /// <summary>
+    /// Owner decision 152A, on the Codex review (X1): the name of the configuration active in the
+    /// attached document now, read on the thread the commands run on, or null on a host that does
+    /// not compare it. The four live commands - <c>capture</c>, <c>measure</c>, <c>interference</c>
+    /// and <c>tessellate</c> - run on the document's active configuration and map what they find
+    /// through <see cref="Components"/>, walked in <see cref="Configuration"/>; a switch of
+    /// configuration re-attaches nothing (004, decision 22A). So each of them asks this first and is
+    /// refused while it is not <see cref="Configuration"/>
+    /// (<see cref="SwBridgeDispatcher.ConfigurationChangedPrefix"/>). The add-in's in-process host
+    /// sets it; the console host does not (Serve/PROTOCOL.md).
+    /// </summary>
+    public Func<string?>? ActiveConfiguration { get; set; }
+
+    /// <summary>
     /// Feature 005, lever 10a. The mesh export <c>tessellate</c> calls, or null on a bridge
     /// that answers no mesh fetch. Null is the default, so a host hands the command a source
     /// deliberately, and a host that has not answers with a sentence rather than with an
@@ -335,6 +348,14 @@ public sealed class BridgeServices
     public Action<RemodelSessionEnd>? RemodelSessionEnded { get; set; }
 
     /// <summary>
+    /// 004 T188: an optional host scope around the whole <c>remodel.open</c> handler, from
+    /// before its first step until after successful publication or failed-open unwind. The
+    /// returned scope is disposed on the request's thread, after its opening directory clears.
+    /// Null listens to none. Begin and disposal failures never change the command's answer.
+    /// </summary>
+    public Func<IDisposable?>? BeginRemodelOpen { get; set; }
+
+    /// <summary>
     /// U27 (2026-09-28): where the before, after and failed markers around each native step of
     /// <c>remodel.open</c> and <c>remodel.geometry</c> go, as <c>(command, marker)</c>
     /// (<see cref="RemodelStageMarkers"/>). A native process crash cannot be caught by Dispatch,
@@ -362,13 +383,26 @@ public sealed class BridgeServices
 ///     <see cref="NoSecretPolicy"/> and this is a no-op; the add-in's in-process host
 ///     passes a <see cref="ScopedSecretPolicy"/>, which is where <c>interference</c> is
 ///     actually withheld from general chat.
-///   * <see cref="ReadOnlyGuard"/> is asked about the command name, so a request that names
-///     a mutating API - <c>Save3</c>, <c>FeatureCut4</c> - is refused before anything runs.
-///     Everything the handlers then call goes through <c>SwGate</c>, which asks again.
+///   * the command name is judged against the bridge's own fixed set,
+///     <see cref="AnsweredCommands"/>, so a request that names anything else - a mutating API,
+///     <c>Save3</c> or <c>FeatureCut4</c>, above all - is refused as an unknown command before
+///     anything runs. Everything the handlers then call goes through <c>SwGate</c>, whose guard
+///     judges each interop member: the read-only guard, or for the <c>remodel.*</c> family
+///     <see cref="RemodelGuard"/>. *Amended 2026-10-19 (decision 140A)*: the name was handed to
+///     <see cref="ReadOnlyGuard"/> until then, which judges a qualified name by the part after the
+///     dot, so <c>remodel.close</c>, <c>remodel.save</c> and <c>remodel.rebuild</c> were judged as
+///     <c>Close</c>, <c>Save</c> and <c>Rebuild</c> and none of those members could be denied. A
+///     command name is not an interop member, and no guard sees one now.
 ///   * A <see cref="CircuitOpenError"/> becomes <c>circuit_open</c> rather than an error, so
 ///     the client can stop asking instead of retrying a dead session.
 ///   * The response carries the elapsed milliseconds, because a bridge call that took eight
 ///     seconds is information the reviewer's timing report wants.
+///
+/// And one thing happens to the four live commands - <c>capture</c>, <c>measure</c>,
+/// <c>interference</c> and <c>tessellate</c> - once the secret and the name are judged: on a host
+/// that reads the attached document's active configuration
+/// (<see cref="BridgeServices.ActiveConfiguration"/>), each is refused, before it runs, while that is
+/// not the configuration the bridge attached in (owner decision 152A, on the Codex review: X1).
 /// </summary>
 public sealed class SwBridgeDispatcher : IBridgeDispatcher
 {
@@ -381,17 +415,59 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// again: everything 1.1 speaks is unchanged and it adds one command, <c>tessellate</c>. 1.3
     /// (feature 011) adds one more, <c>drawing.read</c>, and changes nothing else. 1.4 (feature 013)
     /// adds one member to the <c>ping</c> answer, <c>drawing_read</c>, and changes nothing else.
+    /// 1.5 (owner decision 159A) has every <c>remodel.*</c> command after <c>remodel.open</c> name
+    /// its run, <c>run_id</c>, and refuses one that names another run or none; the other commands
+    /// are unchanged.
     /// <c>ping</c> reports this value and a client compares against it
     /// (<c>PROTOCOL_VERSION</c> in <c>reviewer/src/swreview/bridge/client.py</c>), so it is
     /// what the document says it is or the two ends have already come apart.
     /// </summary>
-    public const string ProtocolVersion = "1.4";
+    public const string ProtocolVersion = "1.5";
 
     /// <summary>
     /// The whole of what a refused request is told (T045). One word, the same for a wrong
     /// secret, a missing one, and a valid one asking for a command outside its scope.
     /// </summary>
     public const string UnauthorizedError = "unauthorized";
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X1): the opening of what a live command answers while
+    /// the attached document's active configuration is not the one this bridge attached in
+    /// (<see cref="BridgeServices.ActiveConfiguration"/>), and the part of it a client can match on, as
+    /// <c>document no longer open</c> is; the rest of the sentence is for the engineer
+    /// (<see cref="ConfigurationChangedError"/>).
+    /// </summary>
+    public const string ConfigurationChangedPrefix = "configuration changed";
+
+    /// <summary>
+    /// The whole refusal: which configuration of which document this bridge answers about, which one
+    /// is active instead, and the way on. Named for the document, as the closed-document answer is,
+    /// because the engineer reads it against the model in front of them. The way on holds whatever
+    /// happened to the configuration (on review, N5): the name is what is compared, and one renamed
+    /// since cannot be made active again under its old name, so a new review is offered beside it.
+    /// </summary>
+    public static string ConfigurationChangedError(string? documentPath, string? bound, string? active) =>
+        ConfigurationChangedPrefix + ": this bridge answers about configuration '" + bound + "' of "
+        + (documentPath ?? "the document it attached to") + ", and "
+        + (active == null ? "no configuration can be read as active" : "'" + active + "' is active")
+        + " now, so a live command would answer about another configuration than the one extracted. Make "
+        + "the configuration you started with active again, or press Review to start a new review.";
+
+    /// <summary>
+    /// Decision 140A (2026-10-19): every command this bridge answers - its own fixed set, the six
+    /// of <see cref="BridgeCommands.All"/> and the twelve of <see cref="RemodelCommands.All"/>, in
+    /// that order. <see cref="Dispatch"/> answers a name on this list and refuses any other as an
+    /// unknown command before anything runs.
+    /// </summary>
+    public static readonly IReadOnlyList<string> AnsweredCommands =
+        BridgeCommands.All.Concat(RemodelCommands.All).ToArray();
+
+    /// <summary>
+    /// Whether <paramref name="command"/> is one of <see cref="AnsweredCommands"/>, by exact,
+    /// ordinal name: no other case, no space around it, and no command for null.
+    /// </summary>
+    public static bool Answers(string? command) =>
+        command != null && AnsweredCommands.Contains(command, StringComparer.Ordinal);
 
     private readonly BridgeServices _services;
     private readonly ISecretPolicy _secrets;
@@ -501,11 +577,15 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 // named ever touches SOLIDWORKS. The secret itself is not echoed.
                 response = BridgeResponse.Failed(request.Id, UnauthorizedError);
             }
+            else if (!Answers(request.Command))
+            {
+                // Decision 140A: the name is judged here, against the bridge's own fixed set, and
+                // never handed to a guard - it is not an interop member. Anything else, a mutating
+                // API's name ("Save3") above all, is refused before any handler is looked up.
+                response = UnknownCommand(request);
+            }
             else
             {
-                // The guard sees the command name itself, so "command": "Save3" cannot reach
-                // a handler even if one were ever added for it.
-                ReadOnlyGuard.Assert(request.Command);
                 response = Run(request);
             }
         }
@@ -547,16 +627,16 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 return BridgeResponse.Ok(request.Id, Ping());
 
             case BridgeCommands.Capture:
-                return Capture(request);
+                return RefusedForAnotherConfiguration(request) ?? Capture(request);
 
             case BridgeCommands.Measure:
-                return Measure(request);
+                return RefusedForAnotherConfiguration(request) ?? Measure(request);
 
             case BridgeCommands.Interference:
-                return Interference(request);
+                return RefusedForAnotherConfiguration(request) ?? Interference(request);
 
             case BridgeCommands.Tessellate:
-                return Tessellate(request);
+                return RefusedForAnotherConfiguration(request) ?? Tessellate(request);
 
             case BridgeCommands.DrawingRead:
                 return DrawingRead(request);
@@ -567,11 +647,58 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                     return Remodel(request);
                 }
 
-                return BridgeResponse.Failed(
-                    request.Id,
-                    $"Unknown command '{request.Command}'. This bridge answers "
-                    + string.Join(", ", BridgeCommands.All) + ".");
+                // Dispatch refuses every name outside AnsweredCommands before it calls this, and each
+                // name on the list has a case above or a row of RemodelCommandTable, so a name that
+                // gets here is this class's mistake, not a request to refuse. Edited deliberately on
+                // decision 140A's review (2026-10-19): it answered as an unknown command, the very
+                // answer Dispatch gives, so no test could tell whether Dispatch's check was there.
+                throw new InvalidOperationException(
+                    $"No handler for the bridge command '{request.Command}': Dispatch passes only the names "
+                    + "of AnsweredCommands, and each of them has one.");
         }
+    }
+
+    /// <summary>
+    /// The refusal of a name the bridge does not answer. It names the six commands of
+    /// <see cref="BridgeCommands.All"/>, as it always has, and not the twelve of the <c>remodel.*</c>
+    /// family, which no caller this sentence reaches can use. The add-in's host refuses an unknown
+    /// name as unauthorized before it gets here (<see cref="ScopedSecretPolicy"/>), and authorizes
+    /// the family to its remodel secret alone. The console host, whose <see cref="NoSecretPolicy"/>
+    /// lets every name through, answers the family as well, and the family refuses each command: a
+    /// change command first, while Start is switched off, and every one because that host builds no
+    /// seat - which <c>remodel.probe_scope</c> and <c>remodel.open</c> need, and without which no
+    /// open makes the run the others need.
+    /// </summary>
+    private static BridgeResponse UnknownCommand(BridgeRequest request) =>
+        BridgeResponse.Failed(
+            request.Id,
+            $"Unknown command '{request.Command}'. This bridge answers "
+            + string.Join(", ", BridgeCommands.All) + ".");
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X1): a live command's refusal while the attached
+    /// document's active configuration is not the one this bridge attached in, by its name exactly, or
+    /// null to run the command. Asked after the secret and the name (<see cref="Dispatch"/>), so a
+    /// refused caller still reaches nothing, and before the command, so nothing is run or written on
+    /// another configuration. The add-in's host serves each request in one call on the SOLIDWORKS
+    /// application thread, where the engineer's switch is made too, so none lands between this reading
+    /// and the command's end. A host that reads no active configuration compares nothing
+    /// (<see cref="BridgeServices.ActiveConfiguration"/>); a reading that throws is answered as any
+    /// failure is (<see cref="Dispatch"/>), with nothing run.
+    /// </summary>
+    private BridgeResponse? RefusedForAnotherConfiguration(BridgeRequest request)
+    {
+        Func<string?>? activeConfiguration = _services.ActiveConfiguration;
+        if (activeConfiguration == null)
+        {
+            return null;
+        }
+
+        string? active = activeConfiguration();
+        return string.Equals(active, _services.Configuration, StringComparison.Ordinal)
+            ? null
+            : BridgeResponse.Failed(
+                request.Id, ConfigurationChangedError(_services.DocumentPath, _services.Configuration, active));
     }
 
     private PingResult Ping() => new PingResult
@@ -786,10 +913,13 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     // =================================================================================
 
     /// <summary>
-    /// <c>OpenDoc7</c>, as the gate is told about it. A read as far as
-    /// <see cref="ReadOnlyGuard"/> is concerned, and recorded so the log shows what was opened.
+    /// <c>ISldWorks.OpenDoc7</c>, the open of the copy, by its key on <see cref="RemodelGuard"/>'s
+    /// stage-1 allowlist (owner decision 148A, 2026-10-20; feature 011 research R12.2). It was the bare
+    /// <c>OpenDoc7</c>, which the read-only guard left allowed, so every read-only gate let a writable
+    /// open through; the read-only guard refuses the bare name now. Recorded so the log shows what was
+    /// opened, and the step's marker in <c>remodel.log</c>.
     /// </summary>
-    private const string OpenDocMember = "OpenDoc7";
+    private const string OpenDocKey = "ISldWorks.OpenDoc7";
 
     /// <summary><c>ICustomPropertyManager.Add3</c>: the session tag, written before any scope exists.</summary>
     private const string TagMember = "ICustomPropertyManager.Add3";
@@ -867,7 +997,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 return BridgeResponse.Ok(request.Id, Open(request));
 
             case RemodelCommands.Snapshot:
-                return BridgeResponse.Ok(request.Id, Snapshot(Session()));
+                return BridgeResponse.Ok(request.Id, Snapshot(Session(request)));
 
             case RemodelCommands.Rename:
                 return BridgeResponse.Ok(request.Id, Rename(request));
@@ -888,7 +1018,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 return BridgeResponse.Ok(request.Id, Rebuild(request));
 
             case RemodelCommands.Geometry:
-                return BridgeResponse.Ok(request.Id, Geometry(Session()));
+                return BridgeResponse.Ok(request.Id, Geometry(Session(request)));
 
             case RemodelCommands.Save:
                 return BridgeResponse.Ok(request.Id, Save(request));
@@ -951,13 +1081,32 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         // fresh bind. Whether there was one is still step 4's refusal, so the order is unchanged.
         string? boundRunRoot = TakeRunRoot();
         _openingRunDirectory = string.IsNullOrWhiteSpace(boundRunRoot) ? null : boundRunRoot;
+        Func<IDisposable?>? begin = _services.BeginRemodelOpen;
+        IDisposable? openScope = null;
         try
         {
+            try
+            {
+                openScope = begin?.Invoke();
+            }
+            catch (Exception)
+            {
+                // A host observer is not part of the remodel verdict or its mutation guard.
+            }
+
             return OpenIn(request, boundRunRoot, Stage(RemodelCommands.Open));
         }
         finally
         {
             _openingRunDirectory = null;
+            try
+            {
+                openScope?.Dispose();
+            }
+            catch (Exception)
+            {
+                // The open and its unwind have their own outcome, unchanged by an observer.
+            }
         }
     }
 
@@ -986,10 +1135,12 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
         // 4. The save target, before a byte is written. The run folder is the HOST's - see
         // BridgeServices.RemodelRunRoot - and never one derived from the request, or both of
-        // this step's clauses would be satisfied by whatever path the client sent.
+        // this step's clauses would be satisfied by whatever path the client sent. Owner decision
+        // 148A (feature 011 research R12.3): the copy's path is taken by the one rule the pane seat
+        // takes it by, which refuses a '..' segment and a device path rather than canonicalize the
+        // one away and take the other, and answers the canonical form used from here on.
         string runDirectory = RunRoot(boundRunRoot);
-        string copy = System.IO.Path.GetFullPath(parameters.CopyPath.Trim());
-        string declaredRun = RemodelCopy.RunDirectoryOf(copy);
+        (string copy, string declaredRun) = RemodelCopy.CopyOf(parameters.CopyPath);
 
         if (!string.Equals(declaredRun, runDirectory, StringComparison.OrdinalIgnoreCase))
         {
@@ -1049,8 +1200,8 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             // 8. Silent | LoadModel = 17 exactly, then the two-sided assertion.
             document = RemodelStageMarkers.Around(
                 stage,
-                OpenDocMember,
-                () => _remodelGate.Call(OpenDocMember, () => seat.OpenDocument(copy, RemodelCopy.OpenOptions)));
+                OpenDocKey,
+                () => _remodelGate.Call(OpenDocKey, () => seat.OpenDocument(copy, RemodelCopy.OpenOptions)));
             if (document == null)
             {
                 throw new RemodelCopyError(
@@ -1370,7 +1521,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelRenameResult Rename(BridgeRequest request)
     {
         RemodelRenameParams parameters = RemodelRenameParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             ResolvedFeature target = session.Resolve(parameters.PersistRef);
@@ -1396,7 +1547,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelReorderResult Reorder(BridgeRequest request)
     {
         RemodelReorderParams parameters = RemodelReorderParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             // The tree walk comes first, and the whole of it: it is one GetFeaturesInOrder plus one
@@ -1482,7 +1633,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 + "copied.");
         }
 
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             return string.Equals(parameters.Op, RemodelFolderOps.Rename, StringComparison.Ordinal)
@@ -1673,7 +1824,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelDescribeResult Describe(BridgeRequest request)
     {
         RemodelDescribeParams parameters = RemodelDescribeParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             ResolvedFeature target = session.Resolve(parameters.PersistRef);
@@ -1705,7 +1856,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelEquationResult EquationChange(BridgeRequest request)
     {
         RemodelEquationParams parameters = RemodelEquationParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             IEquationTarget equations = session.Gate.Call(EquationManagerMember, () => session.Document.Equations);
@@ -1879,7 +2030,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelRebuildResult Rebuild(BridgeRequest request)
     {
         RemodelRebuildParams parameters = RemodelRebuildParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         return session.WithSettings(Seat(), () =>
         {
             IRemodelDocument document = session.Document;
@@ -1995,7 +2146,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelSaveResult Save(BridgeRequest request)
     {
         RemodelSaveParams parameters = RemodelSaveParams.Read(request);
-        RemodelSession session = Session();
+        RemodelSession session = Session(request);
         if (!string.Equals(parameters.Verdict, RemodelGateVerdicts.Pass, StringComparison.Ordinal)
             || session.GeometryReadings < RemodelGateVerdicts.ReadingsAVerdictNeeds)
         {
@@ -2123,7 +2274,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private RemodelCloseResult Close(BridgeRequest request)
     {
         RemodelCloseParams parameters = RemodelCloseParams.Read(request);
-        string copy = Session().Scope.CopyPath;
+        string copy = Session(request).Scope.CopyPath;
 
         RemodelSessionEnd outcome = EndRemodelSession(RemodelSessionEnd.ReasonClose);
 
@@ -2265,6 +2416,48 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
         Tell(outcome);
         return outcome;
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): ends the session of exactly the run whose folder is
+    /// <paramref name="runDirectory"/>, through <see cref="EndRemodelSession"/> for
+    /// <see cref="RemodelSessionEnd.ReasonClose"/> - the routine <c>remodel.close</c> runs: verified,
+    /// untagged and closed unsaved, the settings put back, nothing saved and nothing deleted - and
+    /// nothing else. Its one caller is the add-in's tool service, when a settings restart is about to
+    /// move the run root and the review backend that would have sent that close has exited.
+    ///
+    /// The session is that run's only when both hold: the folder's name is the run id the open was
+    /// given, compared exactly, as <see cref="Session(BridgeRequest)"/> compares a command's
+    /// <c>run_id</c>; and the whole folder, canonicalized, is the scope's own - which a <c>run_id</c>
+    /// cannot say, so a run of the same name under another run root is not this one. Otherwise - no
+    /// session, another run's, or a folder that is not a path - it calls nothing, changes nothing, the
+    /// bound run root included, and answers null. On the application thread, like every command.
+    /// </summary>
+    public RemodelSessionEnd? EndRemodelSessionOf(string runDirectory)
+    {
+        RemodelSession? session = _session;
+        if (session == null || string.IsNullOrWhiteSpace(runDirectory))
+        {
+            return null;
+        }
+
+        string folder;
+        try
+        {
+            folder = System.IO.Path.GetFullPath(runDirectory.Trim()).TrimEnd(System.IO.Path.DirectorySeparatorChar);
+        }
+        catch (Exception error) when (RemodelScope.IsPathError(error))
+        {
+            return null;
+        }
+
+        if (!string.Equals(System.IO.Path.GetFileName(folder), session.Scope.RunId, StringComparison.Ordinal)
+            || !string.Equals(folder, session.Scope.RunDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return EndRemodelSession(RemodelSessionEnd.ReasonClose);
     }
 
     /// <summary>
@@ -2559,17 +2752,38 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             + "SOLIDWORKS.");
 
     /// <summary>
-    /// The run, or the refusal every command after <c>remodel.open</c> answers with when there
-    /// is no run. It is reported as <c>target_mismatch</c> - the degenerate case of
-    /// <c>VerifyTarget</c>, where there is no target at all - because the caller is a client
-    /// that skipped <c>remodel.open</c>, and that is a bug in the caller rather than a
-    /// condition of the part.
+    /// The run <paramref name="request"/> is for, or the refusal every command after
+    /// <c>remodel.open</c> answers with when there is no run. It is reported as
+    /// <c>target_mismatch</c> - the degenerate case of <c>VerifyTarget</c>, where there is no
+    /// target at all - because the caller is a client that skipped <c>remodel.open</c>, and that
+    /// is a bug in the caller rather than a condition of the part.
+    ///
+    /// Owner decision 159A, on Codex's review of the merge (C1, defence in depth): the request
+    /// names its run, <c>run_id</c>, and the session is its only when the open was given that
+    /// id: compared exactly, as <c>VerifyTarget</c> compares the copy's tag. One that names none
+    /// is <c>bad_request</c>, and one that names another run is <c>session_mismatch</c>, before
+    /// anything is read or written - so a run's worker that outlived its session cannot have its
+    /// next change carried out on the next run's copy, which passes every check
+    /// <c>VerifyTarget</c> makes because it is that run's own.
     /// </summary>
-    private RemodelSession Session() =>
-        _session ?? throw new RemodelCommandError(
+    private RemodelSession Session(BridgeRequest request)
+    {
+        RemodelSession session = _session ?? throw new RemodelCommandError(
             RemodelErrorCodes.TargetMismatch,
             "remodel.open has not returned in this bridge session, so there is no copy for this "
             + "command to act on.");
+        string runId = BridgeParams.RequiredString(request, RemodelCommandTable.RunParameter);
+        if (!string.Equals(runId, session.Scope.RunId, StringComparison.Ordinal))
+        {
+            throw new RemodelCommandError(
+                RemodelErrorCodes.SessionMismatch,
+                $"'{request.Command}' was sent for run '{runId}', and the copy open on this bridge "
+                + $"belongs to run '{session.Scope.RunId}'. One run's command is never carried out "
+                + "on another run's copy, so nothing was read or written.");
+        }
+
+        return session;
+    }
 
     /// <summary>
     /// Deletes the copy on a refusal that happens after it exists. A copy that will not delete

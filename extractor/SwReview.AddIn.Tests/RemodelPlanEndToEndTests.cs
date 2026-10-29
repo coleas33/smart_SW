@@ -109,6 +109,17 @@ public sealed class RemodelPlanEndToEndTests
                 Assert.Single(world.Solidworks.Application.Calls, call => call.Member == "ActivateDoc3").Arguments[0]);
             Assert.True(File.Exists(Path.Combine(runDirectory, "package-before.json")));
 
+            // Decision 144A (feature 011 T163, T174): the activation went through the pane seat's own
+            // gate, and the run folder's remodel.log has its two lines - the begin line, then the copy
+            // activated with every call it made, nothing refused.
+            List<string> seat = PlanWorld.SeatLines(runDirectory);
+            Assert.Equal(2, seat.Count);
+            Assert.EndsWith(" seat=activate_before_dump begin", seat[0], StringComparison.Ordinal);
+            Assert.EndsWith(
+                " seat=activate_before_dump status=ok outcome=activated gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3,ActiveDoc",
+                seat[1],
+                StringComparison.Ordinal);
+
             // 004 T176: the session is over before the page hears the plan was made - the copy closed
             // unsaved and still in copy/, the tag off, CommandInProgress set for the open and back,
             // last - and nothing was left, so no status error was posted.
@@ -151,6 +162,85 @@ public sealed class RemodelPlanEndToEndTests
     }
 
     /// <summary>
+    /// Decision 144A (feature 011 T163): Open copy after a plan - whose session closed the copy, since
+    /// Start is switched off (004 T176) - opens the copy again through the pane seat's own gate, at its
+    /// own path and writable (the request <c>Silent</c> and <c>LoadModel</c>, never <c>ReadOnly</c> or
+    /// <c>ViewOnly</c>), and the run folder's remodel.log has the open's line beside the plan's, with
+    /// nothing refused.
+    /// </summary>
+    [Fact]
+    public void OpenCopyAfterAPlanOpensTheCopyAgainWritableThroughThePaneSeatsGate()
+    {
+        using (var world = new PlanWorld())
+        {
+            world.Receive("remodel.plan", "p1");
+            string runDirectory = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            string copyPath = Path.GetFullPath(RemodelCopy.CopyPathFor(runDirectory, world.SourcePath));
+            Assert.False(world.Solidworks.CopyOpen);
+            int requestCalls = world.Solidworks.Specification.Calls.Count;
+
+            world.Receive("remodel.open_copy", "o1", new { run_dir = runDirectory });
+
+            world.Reply("ok", "o1");
+            Assert.True(world.Solidworks.CopyOpen);
+            Assert.Equal(copyPath, world.Solidworks.CopyPath);
+            Assert.Equal(
+                new object?[] { copyPath },
+                world.Solidworks.Application.Calls.Last(call => call.Member == "GetOpenDocSpec").Arguments);
+            Assert.Equal(2, world.Solidworks.Application.Calls.Count(call => call.Member == "OpenDoc7"));
+            Assert.Equal(
+                new[]
+                {
+                    "set_DocumentType 1", "set_Silent True", "set_ReadOnly False", "set_ViewOnly False", "set_LoadModel True",
+                },
+                world.Solidworks.Specification.Calls.Skip(requestCalls)
+                    .Select(call => call.Member + " " + string.Join(",", call.Arguments)));
+
+            List<string> seat = PlanWorld.SeatLines(runDirectory);
+            Assert.Equal(4, seat.Count);
+            Assert.EndsWith(" seat=open_copy begin", seat[2], StringComparison.Ordinal);
+            Assert.EndsWith(
+                " seat=open_copy status=ok outcome=opened gated=GetOpenDocumentByName,GetOpenDocSpec,ISldWorks.OpenDoc7,GetPathName",
+                seat[3],
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(seat, line => line.Contains(" refused=") || line.Contains(" error="));
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 148A (feature 011 T186, research R12.3; R11.8 item 5): a run root the setting spells
+    /// with a parent segment - <c>...\work\..\runs</c> - plans, and its copy opens again after the plan.
+    /// The run folder is made in its full form, so the folder the bridge binds, the copy path it is sent,
+    /// and the copy the pane seat is handed for the activation before the dump and for Open copy are the
+    /// run's copy by the one rule both seats take it by. Made as the root was spelled, the folder carried
+    /// the segment, the seat refused the copy's path, and every plan ended <c>CopyNotActive</c>.
+    /// </summary>
+    [Fact]
+    public void APlanUnderARunRootSpeltWithAParentSegmentPlansAndItsCopyOpensAgain()
+    {
+        using (var world = new PlanWorld(root => Path.Combine(root, "work", "..", "runs")))
+        {
+            world.Receive("remodel.plan", "p1");
+
+            string runDirectory = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+            Assert.Equal(Path.GetFullPath(Path.Combine(world.RunRoot, Path.GetFileName(runDirectory))), runDirectory);
+            Assert.DoesNotContain("..", runDirectory.Split('\\'));
+            List<string> seat = PlanWorld.SeatLines(runDirectory);
+            Assert.EndsWith(
+                " seat=activate_before_dump status=ok outcome=activated gated=GetOpenDocumentByName,GetPathName,GetTitle,ISldWorks.ActivateDoc3,ActiveDoc",
+                seat[1],
+                StringComparison.Ordinal);
+
+            world.Receive("remodel.open_copy", "o1", new { run_dir = runDirectory });
+
+            world.Reply("ok", "o1");
+            Assert.True(world.Solidworks.CopyOpen);
+            Assert.Equal(Path.GetFullPath(RemodelCopy.CopyPathFor(runDirectory, world.SourcePath)), world.Solidworks.CopyPath);
+            Assert.DoesNotContain(PlanWorld.SeatLines(runDirectory), line => line.Contains(" refused=") || line.Contains(" error="));
+        }
+    }
+
+    /// <summary>
     /// T167's words through 004 T176's close: the plan's session ends as the plan is made, and here
     /// the three toggles cannot be put back, so the page is told, in one status error before it hears
     /// the plan was made, which settings were left, by their Tools &gt; Options labels. The plan is
@@ -176,7 +266,8 @@ public sealed class RemodelPlanEndToEndTests
                     return null;
                 });
                 int rebuilds = world.Solidworks.Copy.Document.Calls.Count(call => call.Member == "ForceRebuild3");
-                PipeReply command = world.Remodel(RemodelCommands.Rebuild, new { force = false });
+                PipeReply command = world.Remodel(
+                    RemodelCommands.Rebuild, new { run_id = world.Backend.OpenedRunId, force = false });
                 Assert.Equal(BridgeStatus.Error, command.Status);
                 Assert.Equal(rebuilds + 1, world.Solidworks.Copy.Document.Calls.Count(call => call.Member == "ForceRebuild3"));
                 Assert.True(world.Solidworks.CopyOpen);
@@ -206,11 +297,13 @@ public sealed class RemodelPlanEndToEndTests
     /// <summary>
     /// T167 and decision 24A in this build (004 T176): a plan waiting for Start holds no session, so
     /// when the tool service stops - a re-attach or an unload - its teardown finds nothing to end and
-    /// makes no SOLIDWORKS call, and the page hears only that the plan is lost, never a teardown's
-    /// failure after it.
+    /// makes no SOLIDWORKS call, and the page hears nothing of it: no teardown's failure, and - owner
+    /// decision 159A (004 research R19) - no lost plan, since the plan's session was closed at the plan
+    /// and the stop took nothing from it. *Changed deliberately 2026-10-21 (159A):* the page heard the
+    /// plan was lost, and this case was named for it; what else it pins is as it was.
     /// </summary>
     [Fact]
-    public void AToolServiceThatStopsWhileAPlanWaitsFindsNoSessionAndThePageHearsOnlyThatThePlanIsLost()
+    public void AToolServiceThatStopsWhileAPlanWaitsFindsNoSessionAndThePageHearsNothingOfIt()
     {
         using (var world = new PlanWorld())
         {
@@ -222,11 +315,71 @@ public sealed class RemodelPlanEndToEndTests
             world.Gate.Dispose();
 
             List<JsonElement> told = world.PostedSince(before);
-            JsonElement lost = Assert.Single(told, message => message.GetProperty("type").GetString() == "remodel.plan_lost");
-            Assert.Equal(RemodelHost.PlanLostMessage, lost.GetProperty("payload").GetProperty("message").GetString());
+            Assert.DoesNotContain(told, message => message.GetProperty("type").GetString() == "remodel.plan_lost");
             Assert.Empty(world.StatusErrors(before));
             Assert.Equal(calls, world.Solidworks.Application.Calls.Count);
             Assert.False(world.Solidworks.CopyOpen);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on review (004 T229; the mutation review's M1 - a guard). In the real chain a plan's own close
+    /// at the plan, while Start is switched off, is told as every session's ending is (T167), so the host marks the plan's
+    /// session ended as well as closed at the plan. Only the rule that an ended session loses no plan closed at the plan
+    /// (<c>RemodelHost.IsLostPlan</c>) keeps such a plan from being told lost the moment it is made: the page hears nothing
+    /// of a lost plan, and `init` says none is. The host's own tests close no session this way - their close reports no
+    /// ending - so this case is that rule's pin.
+    /// </summary>
+    [Fact]
+    public void AStartOffPlansOwnCloseInTheRealChainNeverTellsItLost()
+    {
+        using (var world = new PlanWorld())
+        {
+            world.Receive("remodel.plan", "p1");
+            world.Reply("remodel.planned", "p1");
+
+            Assert.True(world.Host!.LatestRun!.SessionClosedAtPlan);
+            Assert.True(world.Host.LatestRun.SessionEnded);
+            Assert.DoesNotContain(
+                world.PostedSince(0), message => message.GetProperty("type").GetString() == "remodel.plan_lost");
+            world.Receive("ready", "r1");
+            Assert.Equal(
+                JsonValueKind.Null,
+                world.Reply("init", "r1").GetProperty("latest_run").GetProperty("plan_lost").ValueKind);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 155A (004 T191): the run report reads `remodel.open`'s completed request line in the
+    /// run's `remodel.log` as a request whose calls name no document - `target=(none)`, the line the
+    /// report's own fixture of it carries (`test_remodel_report.py`, `OPEN_LINE`) - because every allowlisted
+    /// call the open makes, the settings it changes, the open of the copy and the copy's tag, rollback and
+    /// rebuild, comes before the bridge holds the run's session. A guard, true before the decision and
+    /// after it, which tells whoever changes what the recorder names that the report's words read it.
+    /// </summary>
+    [Fact]
+    public void TheOpensRequestLineInTheRunsLogNamesNoDocument()
+    {
+        using (var world = new PlanWorld())
+        {
+            world.Receive("remodel.plan", "p1");
+            string runDirectory = world.Reply("remodel.planned", "p1").GetProperty("run_dir").GetString()!;
+
+            string open = Assert.Single(
+                File.ReadAllLines(Path.Combine(runDirectory, RemodelRunLog.FileName)),
+                line => line.Contains(" command=remodel.open status="));
+            Assert.EndsWith(" target=" + RemodelGateRecorder.NoTarget, open, StringComparison.Ordinal);
+            string[] gated = open.Substring(open.IndexOf(" gated=", StringComparison.Ordinal) + " gated=".Length)
+                .Split(' ')[0]
+                .Split(',');
+            foreach (string key in new[]
+                     {
+                         "ISldWorks.SetUserPreferenceToggle", "ISldWorks.set_CommandInProgress", "ISldWorks.OpenDoc7",
+                         "ICustomPropertyManager.Add3", "IFeatureManager.EditRollback", "IModelDoc2.ForceRebuild3",
+                     })
+            {
+                Assert.Contains(key, gated);
+            }
         }
     }
 
@@ -245,9 +398,20 @@ public sealed class RemodelPlanEndToEndTests
         private readonly RemodelHost _host;
 
         public PlanWorld()
+            : this(null)
+        {
+        }
+
+        /// <param name="spellRunRoot">
+        /// Decision 148A (T186): how the setting spells the run root the host is given, from the folder
+        /// that holds it; null spells it as <see cref="RunRoot"/> is. <see cref="RunRoot"/> stays the
+        /// canonical form, the folder every spelling names.
+        /// </param>
+        public PlanWorld(Func<string, string>? spellRunRoot)
         {
             _root = Path.Combine(Path.GetTempPath(), "swreview-plan-e2e", Guid.NewGuid().ToString("N"));
             RunRoot = Path.Combine(_root, "runs");
+            string runRootAsSet = spellRunRoot == null ? RunRoot : spellRunRoot(_root);
             SourcePath = Path.Combine(_root, "work", "bracket.SLDPRT");
             Directory.CreateDirectory(RunRoot);
             Directory.CreateDirectory(Path.GetDirectoryName(SourcePath)!);
@@ -279,8 +443,11 @@ public sealed class RemodelPlanEndToEndTests
             var endpoint = new BackendEndpoint(51234, "0FAKEtoken");
             PageDocument Document() => new PageDocument(SourcePath, "Default");
 
-            _host = new RemodelHost(new RemodelHostOptions(new ListChannel(_posted), () => RunRoot)
+            _host = new RemodelHost(new RemodelHostOptions(new ListChannel(_posted), () => runRootAsSet)
             {
+                // Every folder local and reached by its own path, not Windows' answer for the temp folder (the
+                // reviews' N11): this suite is about the plan, not the run root rule.
+                RunRootProbe = FakeRunRootProbe.Local(),
                 Backend = () => endpoint,
                 CurrentDocument = Document,
                 RemodelAvailability = () => Gate.RemodelCapability,
@@ -368,6 +535,18 @@ public sealed class RemodelPlanEndToEndTests
                     && message.GetProperty("payload").GetProperty("stage").GetString() == "error")
                 .ToList();
 
+        /// <summary>
+        /// The pane seat's lines of the run folder's <c>remodel.log</c>, in order (decision 144A): each
+        /// stamped, then <c>seat=</c>, as <see cref="RemodelRunLog"/> writes every line of that file.
+        /// </summary>
+        public static List<string> SeatLines(string runDirectory)
+        {
+            string log = Path.Combine(runDirectory, RemodelRunLog.FileName);
+            return File.Exists(log)
+                ? File.ReadAllLines(log).Where(line => line.Contains("] seat=")).ToList()
+                : new List<string>();
+        }
+
         /// <summary>A <c>remodel.*</c> command straight to the bridge, with the remodel secret.</summary>
         public PipeReply Remodel(string command, object parameters)
         {
@@ -439,6 +618,12 @@ public sealed class RemodelPlanEndToEndTests
 
         public Action? BeforeClose { get; set; }
 
+        /// <summary>
+        /// The run the last open was for: the run folder's own name, which every command after the
+        /// open names (owner decision 159A, protocol 1.5).
+        /// </summary>
+        public string? OpenedRunId { get; private set; }
+
         public RemodelProbeReply Probe(RemodelProbeRequest request)
         {
             _log.Add("backend:probe");
@@ -452,6 +637,7 @@ public sealed class RemodelPlanEndToEndTests
         {
             _log.Add("backend:open");
             string copyPath = RemodelCopy.CopyPathFor(request.RunDirectory, request.SourcePath);
+            OpenedRunId = Path.GetFileName(request.RunDirectory);
             Answered(
                 request.Bridge,
                 RemodelCommands.Open,
@@ -459,12 +645,12 @@ public sealed class RemodelPlanEndToEndTests
                 {
                     source_path = request.SourcePath,
                     copy_path = copyPath,
-                    run_id = Path.GetFileName(request.RunDirectory),
+                    run_id = OpenedRunId,
                     probe_id = request.ProbeId,
                 });
 
             _log.Add("backend:geometry");
-            Answered(request.Bridge, RemodelCommands.Geometry, new { });
+            Answered(request.Bridge, RemodelCommands.Geometry, new { run_id = OpenedRunId });
             return new RemodelOpenReply(copyPath, 0, copyPresent: true);
         }
 
@@ -490,13 +676,16 @@ public sealed class RemodelPlanEndToEndTests
 
         public void PackageAfter(string jobId, string packagePath) => throw new NotSupportedException();
 
-        public void Stop(string jobId) => throw new NotSupportedException();
+        public void Stop(string jobId, string stopId) => throw new NotSupportedException();
 
         public void Close(RemodelCloseRequest request)
         {
             BeforeClose?.Invoke();
             _log.Add("backend:close");
-            Answered(request.Bridge, RemodelCommands.Close, new { discard_copy = request.DiscardCopy });
+            Answered(
+                request.Bridge,
+                RemodelCommands.Close,
+                new { run_id = Path.GetFileName(request.RunDirectory), discard_copy = request.DiscardCopy });
         }
 
         private static JsonElement Answered(BridgeConfig bridge, string command, object parameters)

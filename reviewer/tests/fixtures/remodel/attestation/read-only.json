@@ -1,0 +1,15 @@
+{
+  "path": "C:\\Fictional\\bracket.SLDPRT",
+  "length_bytes": 22,
+  "last_write_utc": "2026-09-16T14:22:01Z",
+  "sha256": "f16b104aca31f5ec92bebbe785576fd80ca56b5fa15506e15f26403ac143ecf6",
+  "source_design_id": "dsn:4f2a91c0d3b7",
+  "recorded_at": "2026-09-16T14:22:01Z",
+  "rechecked_at": null,
+  "matches": null,
+  "vault_path": null,
+  "vault_revision": null,
+  "copy_path": "C:\\Fictional\\runs\\r\\copy\\bracket-RMS.SLDPRT",
+  "copy_sha256_after_save": null,
+  "read_only": true
+}

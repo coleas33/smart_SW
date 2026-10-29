@@ -662,3 +662,222 @@ def test_the_replaced_read_only_file_key_is_refused() -> None:
 def test_the_five_send_errors_are_exact_contract_sentences() -> None:
     errors = load_words().labels.errors
     assert {key: errors.get(key) for key in SEND_ERRORS} == SEND_ERRORS
+
+
+RESTART_HOLDS = {
+    "TurnRunning": "A review turn is still running. Wait for it to finish, or press Stop.",
+    "RemodelRunning": "A remodel run is in progress. Wait for it to finish, then try again.",
+    "CheckRunning": (
+        "A Model check or Standards check is in progress. Wait for it to finish, then try again."
+    ),
+    "BackendUnavailable": (
+        "The review backend is not running or not answering. Save Settings to start it again, "
+        "then retry."
+    ),
+    "RemodelCleanupPending": (
+        "A copy an earlier remodel left open in SOLIDWORKS could not be closed, so the saved "
+        "settings are not in force yet. Save the earlier folder for runs in Settings again, then "
+        "try again."
+    ),
+}
+"""The classes the add-in refuses a new review or a turn call with while the backend waits to be
+restarted with settings saved during a turn (owner decision 143A): one for each thing that can
+hold that restart back - a turn, a remodel run, a check (owner decision 157A), a backend that does
+not answer, and a remodel copy whose close before the run root moves was not answered (owner
+decision 159A, 004 research R22) - so the sentence the page shows is true of what holds it. The
+last names the way out that works even when the backend does not answer, since waiting does
+not end it (changed deliberately 2026-10-27, R22.10 and R22.11).
+`RemodelRunning`, `CheckRunning` and `RemodelCleanupPending` are the add-in's own classes; the
+backend never sends them."""
+
+
+def test_each_thing_that_holds_a_restart_back_has_a_true_sentence() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in RESTART_HOLDS} == RESTART_HOLDS
+
+
+SAVE_NOT_RESTARTED = {
+    "BackendNotRestarted": (
+        "The settings are saved, but the review backend did not restart with them. "
+        "Save Settings again to retry the restart."
+    ),
+}
+"""The class the add-in answers a settings save with when the save's restart fails, whatever it
+threw (owner decision 150A): the settings are written and in force in the host before the backend
+is restarted, so the sentence says they are saved, that the backend did not restart, and that saving
+again retries the restart; the message in the fold gives the reason. `HostError`'s sentence, which
+such a save used to meet, says nothing of either. The add-in's own class; the backend never sends
+it."""
+
+
+def test_a_save_whose_restart_failed_says_the_settings_are_saved() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in SAVE_NOT_RESTARTED} == SAVE_NOT_RESTARTED
+
+
+def test_a_save_during_unload_says_saved_and_stopping_without_a_retry() -> None:
+    assert load_words().labels.errors.get("AddInStopping") == (
+        "The settings are saved. The add-in is stopping; nothing else needs doing."
+    )
+
+
+RUN_DIR_REFUSALS = {
+    "InvalidRunDir": (
+        "The backend refused the run folder's path: it writes only into a local folder inside "
+        "the run root. Check the run root in Settings."
+    ),
+    "RunDirTaken": (
+        "This run folder already holds another run's files, which a new review must not write "
+        "over. Press Review to start the review in a new run folder."
+    ),
+}
+"""The two classes a run folder is refused with before anything is written (owner decision 146A).
+`InvalidRunDir` is the path rule's alone, and its sentence states the rule rather than that the
+folder is outside the run root, which is untrue of a network path under a network run root or of
+a path spelled with `..`. `RunDirTaken` is every refusal `chat/server.py`'s `_claim_run_dir`
+makes for a folder that already holds another run's files - a check's, a re-modeler grade's, a
+review's or any other session - which `InvalidRunDir`'s old sentence, "The run folder is not
+inside the run root. Check the run root in Settings.", sent to the wrong place. The page shows a
+class's sentence first and its message in a fold, so each sentence is true of every refusal that
+carries its class, and says what to do."""
+
+
+def test_each_refusal_of_a_run_folder_says_what_is_true_of_it() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in RUN_DIR_REFUSALS} == RUN_DIR_REFUSALS
+
+
+DOCUMENT_CHANGED = {
+    "DocumentChanged": (
+        "The active document or its configuration changed while the review was starting, so "
+        "the review did not start. Make the part or assembly and the configuration you want "
+        "reviewed active, then press Review again."
+    ),
+}
+"""The class the add-in refuses a new review with when the active document, read again once the
+backend is ready, is not the one read when the review was asked for (owner decision 149A): a
+settings restart the start makes or waits for takes seconds, in which the engineer can make
+another document active, and the dump attaches to whatever is active when it runs. The add-in's
+own class, as on the Remodel tab, whose page prints its message and reads no words file; the
+backend never sends it. The sentence names no path and says what to do.
+
+Changed deliberately for owner decision 152A, on the Codex review (X1), 2026-10-20: the add-in
+also refuses a new review with it once the evidence is extracted, when the document or its
+configuration changed during the extraction - a configuration switch re-attaches nothing, and the
+live checks would run on the configuration active then - so "nothing was extracted" is no longer
+true of every refusal it heads, and the way on names the configuration."""
+
+
+def test_a_review_whose_document_changed_as_it_started_says_so_and_what_to_do() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in DOCUMENT_CHANGED} == DOCUMENT_CHANGED
+
+
+BRIDGE_ON_ANOTHER_DOCUMENT = {
+    "BridgeOnAnotherDocument": (
+        "The SOLIDWORKS bridge is not attached to this review's document yet, so the review did "
+        "not start. It follows the active document once no review turn or remodel holds it. Wait "
+        "a moment, then try again."
+    ),
+}
+"""The class the add-in refuses a review's start with when the bridge the session would be given
+is not on the review's document and configuration (owner decision 152A): the tool service it
+belongs to is left on another document while a review turn or a remodel holds it, and for a moment
+after a switch, and the session's live checks run over it and write into the review's package. The
+add-in's own class, true of every start that carries it - a new review, a Retry, a context review
+and a Recheck - so the way on is "try again", and the tool service is asked to follow the active
+document as the refusal is made. The backend never sends it. The sentence names no path."""
+
+
+def test_a_review_whose_bridge_is_on_another_document_says_so_and_what_to_do() -> None:
+    errors = load_words().labels.errors
+    labels = {key: errors.get(key) for key in BRIDGE_ON_ANOTHER_DOCUMENT}
+    assert labels == BRIDGE_ON_ANOTHER_DOCUMENT
+
+
+RUN_ROOT_REFUSED = {
+    "RunRootRefused": (
+        "Runs are made only in a local folder reached by its own path - not on a network share, "
+        "not through a link, and with folder names Windows can use: none longer than 255 "
+        'characters, none with \\ / : * ? " < > | or a control character, none ending in a space '
+        "or a period - and the add-in must be able to check that it is one. Choose a local folder "
+        "for runs in Settings."
+    ),
+}
+"""The class the add-in refuses every run start with when the run root is not a local folder
+reached by its own path - on a network share, reached through a link, or written as a device path
+(owner decision 154A) - or could not be checked, a part of its path unreadable (the reviews'
+finding F2), before anything is made; and the class of the note a settings save answers with when
+the folder chosen for runs, or the run root it leaves in force, is one, though the save goes through
+(the owner's follow-up, "A Field + don't block"). The backend writes only into a local folder and
+resolves the run folder it is sent, so such a root failed deep in a run. The sentence states the
+rule, true of each of the four, and the way on, the run-root field in Settings - true of a start and
+of a save alike, so it says nothing of what was or was not saved. The add-in's own class; the
+backend never sends it. No path: the message in the fold says which of the four it is. Since the
+reviews of 154A's merge (F1), a fifth: a folder name ending in a space or a period, which Windows
+reads both with and without it, so the add-in's run folders and the backend's run root were two
+folders; the sentence names it. Since the review of owner decision 160A, a sixth, which 160A refuses
+too: a name Windows cannot use for a folder - longer than 255 characters, or with a character no
+name can have - which the sentence names, with those characters, so that the words the engineer sees
+say what to take out."""
+
+
+def test_a_run_root_on_a_share_or_through_a_link_is_refused_with_the_way_on() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in RUN_ROOT_REFUSED} == RUN_ROOT_REFUSED
+
+
+RUN_ROOT_CHANGED = {
+    "RunRootChanged": (
+        "This run's folder is under a run root that is no longer in force, and runs go on only "
+        "under the one in force. Start the run again."
+    ),
+}
+"""The class the add-in refuses a run that would go on in a run folder under a run root a settings
+save has since moved with (the reviews of decision 154A, finding F6): a restored review's Recheck,
+a review with saved context and a context review's Retry, and a review whose run root moved while
+its evidence was extracted - each hands the backend a folder under the old run root, which the
+backend, started with the new one, would refuse deep in the run. The sentence says what is true of
+each and the way on; the message in the fold says which run and what to press. The add-in's own
+class; the backend never sends it. No path."""
+
+
+def test_a_run_under_a_run_root_no_longer_in_force_is_refused_with_the_way_on() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in RUN_ROOT_CHANGED} == RUN_ROOT_CHANGED
+
+
+RUN_ROOT_NOT_FULL_PATH = {
+    "RunRootNotFullPath": (
+        "The folder for runs must be written as a full path, starting with its drive letter. "
+        "Type the folder's full path in Settings."
+    ),
+}
+"""The class of the note a settings save answers with when the folder chosen for runs is not
+written as a full path (the reviews of decision 154A, finding F7): resolved against the current
+folder, the add-in and the backend can each read it as another folder, so that one field is not
+saved and every other is. The add-in's own class; the backend never sends it. No path."""
+
+
+def test_a_folder_for_runs_that_is_not_a_full_path_is_not_saved_with_the_way_on() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in RUN_ROOT_NOT_FULL_PATH} == RUN_ROOT_NOT_FULL_PATH
+
+
+RUN_ROOT_CHOSEN_NOT_IN_FORCE = {
+    "RunRootChosenNotInForce": (
+        "The folder for runs in force is refused, and the one chosen in Settings is not in force "
+        "until the review backend restarts with it. Save the settings again to retry the restart."
+    ),
+}
+"""The class the add-in refuses a run start with when the run root in force is one the rule refuses
+while another folder chosen for runs in Settings is not in force yet, its save's restart having
+failed (the reviews of 154A's merge, N4): the way on is the restart that brings the folder chosen
+in, not a folder chosen again, which the engineer has just done. The add-in's own class; the
+backend never sends it. No path: the message in the fold says what the run root in force is."""
+
+
+def test_a_start_refused_while_a_folder_chosen_is_not_in_force_says_to_retry_the_restart() -> None:
+    errors = load_words().labels.errors
+    chosen = {key: errors.get(key) for key in RUN_ROOT_CHOSEN_NOT_IN_FORCE}
+    assert chosen == RUN_ROOT_CHOSEN_NOT_IN_FORCE

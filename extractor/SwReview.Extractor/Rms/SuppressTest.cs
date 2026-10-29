@@ -303,18 +303,26 @@ public sealed class SuppressTest
     /// <summary>
     /// The refusal for a document the engineer has not opened, said in one place.
     ///
-    /// The extractor's only file-opening call is <c>SwSession.OpenReadOnly</c>, which opens
-    /// read-only and silent so a dump can never change a reviewed model. That is the wrong
+    /// <c>SwSession.Attach</c> opens a named part or assembly that is not open through
+    /// <c>SwSession.OpenReadOnly</c>, read-only and silent so a dump can never change a
+    /// reviewed model; it is one of the extractor's file-opening calls, not the only one
+    /// (decision 137A). That is the wrong
     /// door for this command: a read-only document answers false to every
     /// <c>SetSuppression2</c>, so the run would record <c>not_applied</c> for every planned
     /// feature, rebuild nothing, restore nothing - and it would have opened the engineer's
     /// part in their session to do it. The command refuses instead, and the engineer opens
     /// the part themselves.
+    ///
+    /// No other door is any better (decision 147A): every file-opening call the extractor makes
+    /// opens the engineer's documents read-only, and the only ones that open a file for writing -
+    /// feature 004's, of the re-modeler's own copy and of <c>probe remodel</c>'s throwaway part -
+    /// open a file the extractor made. So the sentence says the extractor opens the engineer's
+    /// documents only read-only, not that it has one open path.
     /// </summary>
     public static string DocumentNotOpenMessage(string documentPath) =>
         $"'{documentPath}' is not open in SOLIDWORKS. Open it with write access first: "
-        + "suppress-test never opens a document, because the extractor's only open path is "
-        + "read-only and a read-only document cannot be suppressed.";
+        + "suppress-test never opens a document, because the extractor opens your documents only "
+        + "read-only, and a read-only document cannot be suppressed.";
 
     /// <summary>
     /// The lines the command writes to <c>suppress-test.log</c> and stderr: what the run

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
@@ -36,7 +37,7 @@ public interface IWebViewEnvironmentFactory
 /// whose default folder is shared with SOLIDWORKS' own WebView2 usage and with every other
 /// add-in in the process (contracts/pane-host-messages.md). A second environment created over a
 /// user data folder that is already open with different options fails at runtime, so the pane
-/// creates exactly one and both tabs share it.
+/// creates exactly one and every WebView2 tab shares it.
 ///
 /// The folder is named for the add-in rather than for the process: WebView2 supports several
 /// instances of the same application over one user data folder, and the options here never
@@ -140,35 +141,66 @@ public sealed class TaskPaneOptions
     /// </summary>
     public Func<ProxiedRequest, ProxiedResponse> ProxySend { get; set; } = BackendProxyHandler.Send;
 
+    /// <summary>
+    /// Asked before the pane sends on a page call that would start a turn - a follow-up, an
+    /// answer, a Send: a refusal is answered instead, and null sends the call on. While the
+    /// backend waits to be restarted with settings saved during a turn, such a call is for a chat
+    /// of the backend being replaced, and the review host answers it (owner decision 143A,
+    /// <see cref="ReviewHost.PageTurnRefusal"/>). A callback for the reason
+    /// <see cref="Backend"/> is one: the pane is built before the review host.
+    /// </summary>
+    public Func<BackendRequestException?> PageTurnRefusal { get; set; } = () => null;
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds the tool service's attachment while a page
+    /// call that would start a turn is out (<see cref="BackendProxyHandler"/>), or null when no service
+    /// is listening to hold, and the call goes on as before. The add-in answers it through the gate
+    /// (`ToolServiceGate.HoldAttachment`), a callback for the reason <see cref="Backend"/> is one: the
+    /// pane is built before the gate. By default there is no gate, and nothing is held.
+    /// </summary>
+    public Func<IDisposable?> HoldToolService { get; set; } = () => ToolServiceHold.Nothing;
+
+    /// <summary>
+    /// Owner decision 157A: the hold a Model check or a Standards check keeps on a settings restart, taken over for a
+    /// check page's evaluation of the check whose run is in the folder it names, asked with the bearer token the
+    /// evaluation carries, while the call is out (<see cref="BackendProxyHandler"/>), or null when no check waits for
+    /// that evaluation, and the call goes on as before. The add-in answers it through the two check hosts, a callback
+    /// for the reason <see cref="Backend"/> is one: the pane is built before them. By default no check holds anything.
+    /// </summary>
+    public Func<string, string?, IDisposable?> HoldCheckEvaluation { get; set; } = (_, __) => null;
+
     private static string DefaultWebFolder() =>
         Path.Combine(Path.GetDirectoryName(typeof(TaskPaneOptions).Assembly.Location) ?? ".", "web");
 }
 
 /// <summary>
-/// The Task Pane: <b>Review</b> (the chat page in WebView2), <b>Ask</b> (the CLI terminal,
-/// US3), <b>Extract</b> (the three buttons that write an evidence package by hand),
-/// <b>Model check</b> (the rule grade, tab 4, with no provider and no key) and
-/// <b>Remodel</b> (tab 5: reorganize a copy of the open part, feature 004).
+/// The Task Pane shows five tabs: <b>Review</b> (the chat page in WebView2), <b>Extract</b>
+/// (the three buttons that write an evidence package by hand), <b>Model check</b> (the rule
+/// grade, tab 4, with no provider and no key), <b>Remodel</b> (tab 5: reorganize a copy of the
+/// open part, feature 004) and <b>Standards</b> (tab 6: the release-standards check, feature
+/// 006, with no provider and no key). A sixth, <b>Ask</b> (the CLI terminal, US3), is built
+/// but has been hidden since 2026-09-19 (<see cref="AskTabShown"/>).
 ///
 /// The tabs are named for what the engineer gets, not for what the code does, and each one
 /// carries the same sentence twice - as a banner across the top of the tab and as the tab's
 /// tooltip - because a pane whose tabs are nouns tells a first-time user nothing about
-/// which of them to press. Above all four is the <see cref="StepStrip"/>: open a document,
+/// which of them to press. Above every tab is the <see cref="StepStrip"/>: open a document,
 /// extract evidence, review or ask, each done or pending with the reason. None of this is
 /// decoration; every one of these sentences replaces a question the pane was being asked.
 ///
 /// Five rules live here because nowhere else can enforce them:
 ///
 /// <b>One environment for the process.</b> <see cref="EnvironmentAsync"/> creates it once and
-/// hands the same task to every caller, so all four WebView2 tabs share one browser
+/// hands the same task to every caller, so every WebView2 tab shares one browser
 /// process over one user data folder. Two environments over the same folder with different
 /// options fail at runtime (contracts/pane-host-messages.md).
 ///
-/// <b>The fourth and fifth tabs are loaded when they are opened.</b>
-/// <see cref="ActivateModelCheckAsync"/> and <see cref="ActivateRemodelAsync"/> run on the
-/// first selection of their tab rather than at add-in load, and a failure ends as the same
-/// fallback panel the eager tabs get (T083, T121). Five tabs loaded up front would cost four
-/// renderer processes inside the SOLIDWORKS process before anything was pressed (RK-11).
+/// <b>The fourth, fifth and sixth tabs are loaded when they are opened.</b>
+/// <see cref="ActivateModelCheckAsync"/>, <see cref="ActivateRemodelAsync"/> and
+/// <see cref="ActivateStandardsAsync"/> run on the first selection of their tab rather than at
+/// add-in load, and a failure ends as the same fallback panel the eager tabs get (T083, T121,
+/// T081). Six tabs loaded up front would cost five renderer processes inside the SOLIDWORKS
+/// process before anything was pressed (RK-11).
 ///
 /// <b>Nothing thrown here reaches SOLIDWORKS.</b> <see cref="InitializeAsync"/> never throws.
 /// The add-in is loaded in-process and an exception out of a Task Pane control on the
@@ -359,7 +391,11 @@ public sealed class TaskPaneControl : UserControl
         // Through the options rather than from captured values: the backend is started after
         // the pane is built, and a `settings.save` replaces it with a child on another port.
         _proxy = new BackendProxyHandler(
-            () => _options.Backend(), request => _options.ProxySend(request));
+            () => _options.Backend(),
+            request => _options.ProxySend(request),
+            () => _options.PageTurnRefusal(),
+            () => _options.HoldToolService(),
+            (runDirectory, token) => _options.HoldCheckEvaluation(runDirectory, token));
         _files = new PageFileServer(_options.WebFolder);
 
         _reviewTab = NewTab("Review", ReviewPurpose, Note("Starting the review page..."));
@@ -391,7 +427,9 @@ public sealed class TaskPaneControl : UserControl
         // Sixth, and after the five that were already here: no existing tab moves (FR-035).
         _tabs.TabPages.Add(_standardsTab);
 
-        _steps = new StepStrip { Dock = DockStyle.Top };
+        // Step 3 is done on the Review tab, and on the Ask tab while the pane shows it: the strip
+        // is told the captions the tab list holds, so it never names a hidden tab (139A).
+        _steps = new StepStrip(CaptionsShown(_reviewTab, _terminalTab)) { Dock = DockStyle.Top };
 
         // The strip's one action (T084). The strip says what the evidence is; the tab that
         // extracts the rest of it is this pane's business, so the pane answers.
@@ -416,6 +454,10 @@ public sealed class TaskPaneControl : UserControl
 
         RefreshSteps();
     }
+
+    /// <summary>The captions of those of <paramref name="tabs"/> the pane shows, in that order.</summary>
+    private string[] CaptionsShown(params TabPage[] tabs) =>
+        tabs.Where(tab => _tabs.TabPages.Contains(tab)).Select(tab => tab.Text).ToArray();
 
     /// <summary>The three buttons: Extract evidence, Interference, Capture selection.</summary>
     public ActionsPanel Actions => _actions;
@@ -1169,18 +1211,40 @@ public sealed class TaskPaneControl : UserControl
     {
         var panel = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(8) };
 
+        // Every tab the pane shows is a WebView2 page except Extract, which is WinForms and still
+        // works. They are named from the tab list itself, so the sentence follows AskTabShown
+        // and any tab added later (owner decision 139A).
+        string[] unavailable = _tabs.TabPages.Cast<TabPage>()
+            .Where(tab => !ReferenceEquals(tab, _actionsTab))
+            .Select(tab => tab.Text)
+            .ToArray();
+
         // DockStyle.Top stacks in reverse order of addition, so these are added bottom-first.
         panel.Controls.Add(Note("Details: " + failure.Message));
         panel.Controls.Add(Copyable(_options.RunRoot));
         panel.Controls.Add(Note("Reviews are written to:"));
         panel.Controls.Add(Copyable(RuntimeDownloadUrl));
         panel.Controls.Add(Note("Install the Evergreen runtime from:"));
-        panel.Controls.Add(Note(
-            "The Microsoft Edge WebView2 runtime is not available, so the Review, Ask and "
-            + "Model check tabs cannot be shown. The Extract tab still works."));
+        panel.Controls.Add(Note(RuntimeMissingSentence(unavailable, _actionsTab.Text)));
 
         return panel;
     }
+
+    /// <summary>
+    /// The fallback panel's first sentence: the tabs that cannot be shown, as one list in the
+    /// pane's order, and the one that still works. Written out by hand, it named the hidden Ask
+    /// tab and left out Remodel and Standards (owner decision 139A).
+    /// </summary>
+    internal static string RuntimeMissingSentence(
+        IReadOnlyList<string> unavailable, string stillWorks) =>
+        "The Microsoft Edge WebView2 runtime is not available, so the " + ListOf(unavailable)
+        + " tabs cannot be shown. The " + stillWorks + " tab still works.";
+
+    /// <summary>"A", "A and B", "A, B and C": the names as one list, in their order.</summary>
+    private static string ListOf(IReadOnlyList<string> names) =>
+        names.Count < 2
+            ? string.Concat(names)
+            : string.Join(", ", names.Take(names.Count - 1)) + " and " + names[names.Count - 1];
 
     private static Label Note(string text) => new Label
     {
@@ -1235,6 +1299,8 @@ public sealed class TaskPaneControl : UserControl
         {
             if (InvokeRequired)
             {
+                // Queued, never waited for (IPageChannel; owner decision 155A's review): a host can post
+                // under a lock SOLIDWORKS' application thread - this pane's - takes.
                 BeginInvoke(new Action<Func<WebView2?>, string>(PostOnUiThread), view, json);
                 return;
             }
@@ -1244,6 +1310,48 @@ public sealed class TaskPaneControl : UserControl
         catch (Exception)
         {
             // The pane closed between the check and the call. There is nobody left to tell.
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="action"/> on this pane's thread - SOLIDWORKS' application
+    /// thread - behind every message posted to a page before it, so it runs once those have been delivered, however
+    /// long another tab's extraction holds the thread meanwhile. Queued and never waited for, as a post is. Run at once
+    /// when it cannot be queued - the pane closed, or never shown - so what waits for it never waits for good; and a
+    /// failure inside it stays inside it, on SOLIDWORKS' thread.
+    /// </summary>
+    public void AfterPosts(Action action)
+    {
+        if (action == null)
+        {
+            throw new ArgumentNullException(nameof(action));
+        }
+
+        try
+        {
+            if (!IsDisposed && IsHandleCreated)
+            {
+                BeginInvoke(new Action(() => RunAfterPosts(action)));
+                return;
+            }
+        }
+        catch (Exception)
+        {
+            // The pane closed between the check and the call: nothing is left to deliver behind.
+        }
+
+        RunAfterPosts(action);
+    }
+
+    private static void RunAfterPosts(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception)
+        {
+            // Never out of a callback on SOLIDWORKS' application thread.
         }
     }
 
@@ -1290,7 +1398,7 @@ public sealed class TaskPaneControl : UserControl
 
 /// <summary>
 /// The three steps, above the tabs and always visible: open a document, extract evidence,
-/// then review or ask.
+/// then review (or ask, while the Ask tab is shown).
 ///
 /// It exists because the pane had no order in it. Three tabs, all reachable, all of them
 /// answering "there is no document" or "there is no package" in their own words and in their
@@ -1306,9 +1414,10 @@ public sealed class TaskPaneControl : UserControl
 ///
 /// It decides nothing. The three facts it renders are answered by the add-in and by the pane
 /// through <see cref="TaskPaneOptions.DocumentPresent"/>,
-/// <see cref="TaskPaneOptions.EvidencePresent"/> and <see cref="RunFolders.ProfileOf"/>, and
-/// the button raises an event rather than starting anything, which is what makes the whole
-/// strip testable with no SOLIDWORKS and no WebView2 at all.
+/// <see cref="TaskPaneOptions.EvidencePresent"/> and <see cref="RunFolders.ProfileOf"/>, the
+/// tabs step 3 names are the pane's, and the button raises an event rather than starting
+/// anything, which is what makes the whole strip testable with no SOLIDWORKS and no WebView2 at
+/// all.
 /// </summary>
 public sealed class StepStrip : UserControl
 {
@@ -1379,8 +1488,26 @@ public sealed class StepStrip : UserControl
     private readonly Label _noticeText;
     private readonly Button _extractFull;
 
-    public StepStrip()
+    /// <summary>Step 3's name: "3" and the tabs it is done on, as the pane named them.</summary>
+    private readonly string _workStep;
+
+    /// <param name="workTabs">The tabs step 3 is done on, as the pane shows them: Review, and
+    /// Ask while that tab is shown. The pane names them from its own tab list rather than the
+    /// strip writing them here, so the step cannot send an engineer to a tab the pane does not
+    /// show (owner decision 139A).</param>
+    public StepStrip(IReadOnlyList<string> workTabs)
     {
+        if (workTabs == null)
+        {
+            throw new ArgumentNullException(nameof(workTabs));
+        }
+
+        if (workTabs.Count == 0)
+        {
+            throw new ArgumentException("step 3 names at least one tab", nameof(workTabs));
+        }
+
+        _workStep = "3 " + string.Join(" or ", workTabs);
         _work = Row();
         _noticeText = Row();
         _extractFull = new Button
@@ -1447,8 +1574,8 @@ public sealed class StepStrip : UserControl
     /// Review was ready and watch the button do nothing - which is the complaint this strip
     /// exists to answer, printed by the strip itself.
     ///
-    /// Its reason is the first thing in the way, because an engineer reading "Review or Ask -
-    /// pending" wants the blocker, not a pointer to another line of the strip.
+    /// Its reason is the first thing in the way, because an engineer reading "Review - pending"
+    /// wants the blocker, not a pointer to another line of the strip.
     /// </summary>
     /// <param name="document">Whether a document is open.</param>
     /// <param name="evidence">Whether this session's run folder holds an evidence package.</param>
@@ -1463,7 +1590,7 @@ public sealed class StepStrip : UserControl
 
         Set(_document, "1 Open a document", document, document ? Ready : NoDocument);
         Set(_evidence, "2 Extract evidence", evidence, evidence ? Ready : NoEvidence);
-        Set(_work, "3 Review or Ask", ready, ready ? Ready : (document ? NoEvidence : NoDocument));
+        Set(_work, _workStep, ready, ready ? Ready : (document ? NoEvidence : NoDocument));
 
         string? sentence = null;
         if (reducedProfile != null)
@@ -1594,11 +1721,23 @@ public sealed class ActionsPanel : UserControl
         Controls.Add(_outputBox);
     }
 
-    /// <summary>What <b>Extract evidence</b> writes, in the words an engineer uses.</summary>
-    public const string DumpToolTip =
+    /// <summary>
+    /// What <b>Extract evidence</b> writes, in the words an engineer uses, and what reads it: the
+    /// Ask tab only while the pane shows it (<see cref="TaskPaneControl.AskTabShown"/>, owner
+    /// decision 139A).
+    /// </summary>
+    public static readonly string DumpToolTip = DumpToolTipFor(TaskPaneControl.AskTabShown);
+
+    /// <summary>
+    /// <see cref="DumpToolTip"/> for either setting of the switch, so a test can pin both: the
+    /// shown one is the sentence the tooltip carried before the Ask tab was hidden.
+    /// </summary>
+    internal static string DumpToolTipFor(bool askTabShown) =>
         "Writes package.json, the evidence package describing the open document (components, "
-        + "mates, holes, fasteners, geometry). The reviewer and the Ask tab read this file "
-        + "instead of the live model.";
+        + "mates, holes, fasteners, geometry). "
+        + (askTabShown
+            ? "The reviewer and the Ask tab read this file instead of the live model."
+            : "The reviewer reads this file instead of the live model.");
 
     /// <summary>What <b>Interference</b> adds to that same file.</summary>
     public const string InterferenceToolTip =

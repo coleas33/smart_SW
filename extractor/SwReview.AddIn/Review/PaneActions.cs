@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using SwReview.AddIn.Settings;
 
@@ -87,11 +88,33 @@ public sealed class PaneActionsOptions
         Channel = channel ?? throw new ArgumentNullException(nameof(channel));
         RunRoot = runRoot ?? throw new ArgumentNullException(nameof(runRoot));
         Runs = runs ?? throw new ArgumentNullException(nameof(runs));
+        RunRootsInForce = () => new[] { RunRoot() };
     }
 
     public IPageChannel Channel { get; }
 
     public Func<string> RunRoot { get; }
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, the one in force among them (owner
+    /// decision 154A, the reviews' finding F6): a run made under any of them is this pane's to open - its report
+    /// and its folder - after a settings save has moved the run root. The run root in force alone by default.
+    /// </summary>
+    public Func<IReadOnlyList<string>> RunRootsInForce { get; set; }
+
+    /// <summary>
+    /// The run root saved in the Review tab's Settings, which the next restart brings into force, or null when no
+    /// review host knows it (the reviews of 154A's merge, N4): a run start refused for the run root in force while
+    /// another is saved says to retry the restart, not to choose a folder again. None by default.
+    /// </summary>
+    public Func<string?> RunRootSaved { get; set; } = () => null;
+
+    /// <summary>
+    /// What the run root rule reads of Windows: the rule judges a run start's root with it
+    /// (<see cref="PaneActions.RefusedRunRoot"/>), and the run folders are handed it when a folder is held to the run
+    /// root (the review of owner decision 160A) - one probe, and one way in. Windows' own by default.
+    /// </summary>
+    public Func<IRunRootProbe> RunRootProbe { get; set; } = () => Native.WindowsRunRootProbe.Instance;
 
     public PaneRunLookup Runs { get; }
 
@@ -112,6 +135,15 @@ public sealed class PaneActionsOptions
     /// under a live host (FR-015).
     /// </summary>
     public Func<IEnumerable<string?>> Secrets { get; set; } = () => new string?[0];
+
+    /// <summary>
+    /// Owner decision 159A (004 research R19): the words a failure one of these rows caught reaches the page in, given
+    /// the row that caught it - `log.open`, `report.open`, `folder.open`, or `entity.show` for a Show, whichever row
+    /// asked for it (<see cref="PaneActions.ShowPersistRef"/>) - and the failure. Its own message by default, as every
+    /// tab but the Remodel tab prints it; the Remodel host answers with its own words, since a failure's message can
+    /// name a path, and logs the failure.
+    /// </summary>
+    public Func<string, Exception, string> FailureWords { get; set; } = (row, failure) => failure.Message;
 }
 
 /// <summary>
@@ -280,7 +312,7 @@ public sealed class PaneActions
             // -1 is not a swPersistReferencedObjectStates_e value: SOLIDWORKS never answered
             // at all (a modal dialog on the application thread, a closed document, an open
             // circuit), which is a different thing from a reference that resolved to nothing.
-            outcome = EntityShowOutcome.NotShown(-1, failure.Message, null);
+            outcome = EntityShowOutcome.NotShown(-1, _options.FailureWords("entity.show", failure), null);
         }
 
         SendEntityShown(id, outcome);
@@ -332,7 +364,7 @@ public sealed class PaneActions
 
         // Containment before existence: a path outside the run root is refused as such, and
         // is not probed for what happens to be on disk there.
-        if (!TrySafePath(id, report, _options.RunRoot(), out string full))
+        if (!TrySafePath(id, report, _options.RunRootsInForce(), out string full))
         {
             return;
         }
@@ -348,7 +380,7 @@ public sealed class PaneActions
             return;
         }
 
-        Open(id, full);
+        Open(id, full, "report.open");
     }
 
     private void OpenRunFolder(string? id, JsonElement payload)
@@ -358,7 +390,7 @@ public sealed class PaneActions
             return;
         }
 
-        Shell(id, runDirectory, _options.RunRoot());
+        Shell(id, runDirectory, _options.RunRootsInForce(), "folder.open");
     }
 
     private void OpenLogFolder(string? id)
@@ -372,11 +404,11 @@ public sealed class PaneActions
         }
         catch (Exception failure)
         {
-            SendError(id, "OpenFailed", failure.Message, retryable: false);
+            SendError(id, "OpenFailed", _options.FailureWords("log.open", failure), retryable: false);
             return;
         }
 
-        Shell(id, folder, folder);
+        Shell(id, folder, new[] { folder }, "log.open");
     }
 
     /// <summary>
@@ -413,29 +445,28 @@ public sealed class PaneActions
     }
 
     /// <summary>
-    /// Canonicalizes <paramref name="path"/>, refuses anything that is not inside
-    /// <paramref name="root"/>, and opens what is left (pane-host-messages.md: "Every resolved
+    /// Canonicalizes <paramref name="path"/>, refuses anything that is not inside one of
+    /// <paramref name="roots"/>, and opens what is left (pane-host-messages.md: "Every resolved
     /// path is canonicalized and must be a descendant of `run_root` (or the log folder) before
-    /// it reaches `ShellExecute`").
+    /// it reaches `ShellExecute`") - every run root in force this session, so a run made under one
+    /// a settings save has since moved still opens (owner decision 154A, the reviews' finding F6).
     /// </summary>
-    private void Shell(string? id, string path, string root)
+    private void Shell(string? id, string path, IReadOnlyList<string> roots, string row)
     {
-        if (TrySafePath(id, path, root, out string full))
+        if (TrySafePath(id, path, roots, out string full))
         {
-            Open(id, full);
+            Open(id, full, row);
         }
     }
 
-    /// <summary>Canonicalizes and refuses anything that is not inside <paramref name="root"/>.</summary>
-    private bool TrySafePath(string? id, string path, string root, out string full)
+    /// <summary>Canonicalizes and refuses anything that is not inside one of <paramref name="roots"/>.</summary>
+    private bool TrySafePath(string? id, string path, IReadOnlyList<string> roots, out string full)
     {
         full = string.Empty;
 
-        string fullRoot;
         try
         {
             full = System.IO.Path.GetFullPath(path);
-            fullRoot = System.IO.Path.GetFullPath(root);
         }
         catch (Exception)
         {
@@ -445,7 +476,9 @@ public sealed class PaneActions
 
         // UNC and Win32 device paths are refused by name as well as by containment: a run root
         // that is itself a share would otherwise make `\\server\share\...` a descendant.
-        if (full.StartsWith(@"\\", StringComparison.Ordinal) || !Contains(fullRoot, full))
+        string canonical = full;
+        if (full.StartsWith(@"\\", StringComparison.Ordinal)
+            || !roots.Any(root => RunFolders.IsUnder(canonical, root, _options.RunRootProbe())))
         {
             SendError(
                 id,
@@ -458,7 +491,8 @@ public sealed class PaneActions
         return true;
     }
 
-    private void Open(string? id, string path)
+    /// <param name="row">The row that asked, which <see cref="PaneActionsOptions.FailureWords"/> is given.</param>
+    private void Open(string? id, string path, string row)
     {
         try
         {
@@ -466,27 +500,13 @@ public sealed class PaneActions
         }
         catch (Exception failure)
         {
-            SendError(id, "OpenFailed", failure.Message, retryable: false);
+            SendError(id, "OpenFailed", _options.FailureWords(row, failure), retryable: false);
             return;
         }
 
         Send("ok", id, new Dictionary<string, object?>());
     }
 
-    /// <summary>Whether <paramref name="candidate"/> is <paramref name="root"/> or below it.</summary>
-    private static bool Contains(string root, string candidate)
-    {
-        string trimmed = root.TrimEnd(System.IO.Path.DirectorySeparatorChar);
-        if (string.Equals(trimmed, candidate.TrimEnd(System.IO.Path.DirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return candidate.StartsWith(
-            trimmed + System.IO.Path.DirectorySeparatorChar,
-            StringComparison.OrdinalIgnoreCase);
-    }
 
     // ---- the envelope -------------------------------------------------------------------
 
@@ -510,16 +530,138 @@ public sealed class PaneActions
         }
     }
 
-    /// <summary>Sends one `error`, with the message masked (FR-015).</summary>
-    public void SendError(string? id, string errorClass, string message, bool retryable)
+    /// <summary>
+    /// Owner decision 154A: refuses a run start whose run root the run root rule refuses
+    /// (<see cref="RunRootRule"/>: on a network share, reached through a link, or written as a device path), and
+    /// says whether it did. The one refusal every host makes, written once: <c>error {error_class:
+    /// "RunRootRefused"}</c>, not retryable - pressing again cannot help until a local folder for runs is
+    /// chosen in the Review tab's Settings (the owner's follow-up) - in the rule's words for what the root is,
+    /// with the host's own <paramref name="notDone"/> and <paramref name="wayOn"/>, and no path. Each caller
+    /// asks before it does anything else, so a refused start reads, makes and restarts nothing.
+    ///
+    /// The reviews of 154A's merge, N4: while another folder is saved for runs than the run root in force - a save
+    /// chose it and its restart failed - the engineer has chosen a folder already, so the refusal is
+    /// <c>RunRootChosenNotInForce</c>, whose way on is the restart that brings the folder chosen in
+    /// (<see cref="RunRootRule.ChosenNotInForceRefusal"/>); the saved folder is told apart from the one in force by
+    /// <see cref="RunRootRule.SameRunRoot"/>.
+    /// </summary>
+    /// <param name="runRoot">The run root in force, the one the start would make its folder under, judged with the
+    /// owner's probe (<see cref="PaneActionsOptions.RunRootProbe"/>), the one the run folders are handed.</param>
+    /// <param name="notDone">What was not done, true of this host: "nothing was checked".</param>
+    /// <param name="where">Where the Settings are, seen from this tab: <see cref="RunRootRule.InSettings"/>, or
+    /// <see cref="RunRootRule.InSettingsOnTheReviewTab"/>.</param>
+    /// <param name="wayOn">What to do once the root is a local folder: "press Model check again".</param>
+    public bool RefusedRunRoot(string? id, string runRoot, string notDone, string where, string wayOn)
     {
-        Send("error", id, new Dictionary<string, object?>
+        RunRootVerdict verdict = RunRootRule.Judge(runRoot, _options.RunRootProbe());
+        if (verdict == RunRootVerdict.Accepted)
+        {
+            return false;
+        }
+
+        string? saved = _options.RunRootSaved();
+        if (saved != null && !RunRootRule.SameRunRoot(saved, runRoot))
+        {
+            SendError(
+                id, "RunRootChosenNotInForce", RunRootRule.ChosenNotInForceRefusal(verdict, notDone, where, wayOn), retryable: false);
+            return true;
+        }
+
+        SendError(id, "RunRootRefused", RunRootRule.Refusal(verdict, notDone, where, wayOn), retryable: false);
+        return true;
+    }
+
+    /// <summary>
+    /// The reviews of decision 154A, N8, written once for every start that passes a gate (owner decision 157A): the
+    /// run root a start goes on under once its gate is passed - the gate can make a waiting settings restart, which
+    /// can bring another run root into force - from <paramref name="runRootNow"/>, the run root for a new run read
+    /// again then. None, while a start of the backend under way would bring another in, is answered as a start then is
+    /// (<see cref="SendRunRootMoving"/>); the one <paramref name="judged"/> before the gate, as written, is gone on
+    /// under; another is judged again (<see cref="RefusedRunRoot"/>). Null once the press is answered with a refusal.
+    /// </summary>
+    public string? RunRootToUse(
+        string? id, string judged, string? runRootNow, string notDone, string where, string wayOn)
+    {
+        if (runRootNow == null)
+        {
+            SendRunRootMoving(id, notDone, wayOn);
+            return null;
+        }
+
+        if (string.Equals(runRootNow, judged, StringComparison.Ordinal))
+        {
+            return runRootNow;
+        }
+
+        return RefusedRunRoot(id, runRootNow, notDone, where, wayOn) ? null : runRootNow;
+    }
+
+    /// <summary>
+    /// How a page's word on a settings restart before a press begins (owner decisions 145A and 157A), posted as
+    /// `status {stage: "backend_starting"}` before the gate when a restart stands before the press, the press's own
+    /// words after it: true whether the gate makes the restart, waits for one being made, or finds a turn or a backend
+    /// that does not answer holding it back and refuses the press (145A's third review). The Remodel tab's and the
+    /// check tabs' alike.
+    /// </summary>
+    public const string WaitingForTheRestart =
+        "Waiting for the review backend to restart with the saved settings, then ";
+
+    /// <summary>
+    /// The reviews of 154A's merge, N6: whether a Model check or a Standards run, whose folder was made before its
+    /// extraction, is answered here because the run root moved meanwhile. Since owner decision 157A a check holds every
+    /// settings restart back from its gate until its evaluation has been answered while a backend is up, so no restart
+    /// moves the run root during the extraction then; a start that brings a backend up where there was none - a save's
+    /// made with no backend up, or the add-in's first start - still can, since nothing holds it back, and the backend
+    /// would refuse the folder at the page's first call. <paramref name="runRootNow"/> is the run root for a new run
+    /// read again once the extraction is over: none, while a start of the backend under way would bring another in, is
+    /// answered as a start then is (<see cref="SendRunRootMoving"/>); one that no longer holds the folder,
+    /// <c>RunRootChanged</c>, not retryable, in the rule's words (<see cref="RunRootRule.ChangedRefusal"/>). The
+    /// folder is left as the evidence.
+    /// </summary>
+    public bool AnsweredForAMovedRunRoot(
+        string? id, string runDirectory, string? runRootNow, string during, string notDone, string wayOn)
+    {
+        if (runRootNow == null)
+        {
+            SendRunRootMoving(id, notDone, wayOn);
+            return true;
+        }
+
+        if (!RunFolders.IsUnder(runDirectory, runRootNow, _options.RunRootProbe()))
+        {
+            SendError(id, "RunRootChanged", RunRootRule.ChangedRefusal(during, notDone, wayOn), retryable: false);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Owner decision 154A, with 153A's record of the settings in force: refuses a run start on the Model check,
+    /// Standards or Remodel tab while a start of the backend under way would bring another run root into force
+    /// (<c>ReviewHost.RunRootForANewRun</c> answering none) - <c>error {error_class: "BackendUnavailable"}</c>, as a
+    /// review asked for while a start is under way is refused, and retryable, since the start ends in seconds -
+    /// in the rule's words (<see cref="RunRootRule.MovingRefusal"/>) with the host's own
+    /// <paramref name="notDone"/> and <paramref name="wayOn"/>. Written once for the three.
+    /// </summary>
+    public void SendRunRootMoving(string? id, string notDone, string wayOn) =>
+        SendError(id, "BackendUnavailable", RunRootRule.MovingRefusal(notDone, wayOn), retryable: true);
+
+    /// <summary>Sends one `error`, with the message masked (FR-015).</summary>
+    public void SendError(string? id, string errorClass, string message, bool retryable) =>
+        Send("error", id, ErrorPayload(errorClass, message, retryable));
+
+    /// <summary>
+    /// One `error`'s payload, with the message masked (FR-015): what <see cref="SendError"/> sends, and what an
+    /// answer that carries an error's shape inside it - a save's `run_root_refusal` - carries.
+    /// </summary>
+    public Dictionary<string, object?> ErrorPayload(string errorClass, string message, bool retryable) =>
+        new Dictionary<string, object?>
         {
             { "error_class", errorClass },
             { "message", Redact(message) },
             { "retryable", retryable },
-        });
-    }
+        };
 
     /// <summary>
     /// Posts one `status` message with every secret masked out of it.
@@ -528,11 +670,51 @@ public sealed class PaneActions
     /// carry a key - a launcher failure, a key-resolution failure, anything thrown before the
     /// redacting wrapper - arrive verbatim, and the caller has no way to mask them (FR-015).
     /// </summary>
-    public void PostStatus(string stage, string message) =>
-        Send("status", null, new Dictionary<string, object?>
+    public void PostStatus(string stage, string message) => PostStatus(stage, message, lifecycle: false);
+
+    /// <summary><see cref="PostStatus(string, string)"/>, marked `lifecycle: true` when <paramref name="lifecycle"/>.</summary>
+    /// <param name="stage">The stage.</param>
+    /// <param name="message">The message, masked here.</param>
+    /// <param name="lifecycle">Whether this is the add-in's own word on the backend - its start, or
+    /// a restart that failed: a banner the page put up for such an `error` comes down once a later
+    /// `init` names a backend, and no other banner does (owner decision 145A, third review), and the
+    /// page's backend strip says the backend is not running from such an `error` until then (owner
+    /// decision 150A). Nothing else is so marked.</param>
+    public void PostStatus(string stage, string message, bool lifecycle)
+    {
+        Dictionary<string, object?> payload = StatusPayload(stage, message);
+        if (lifecycle)
+        {
+            payload["lifecycle"] = true;
+        }
+
+        Send("status", null, payload);
+    }
+
+    /// <summary>
+    /// A `status` payload - the stage, and the message with every secret masked - for a sender that
+    /// adds a field of its own before it sends it (the Review host's `settings_not_in_force`, owner
+    /// decision 153A). Every `status` is built here, in one shape.
+    /// </summary>
+    internal Dictionary<string, object?> StatusPayload(string stage, string message) =>
+        new Dictionary<string, object?>
         {
             { "stage", stage },
             { "message", Redact(message) },
+        };
+
+    /// <summary>
+    /// Tells the page the backend was restarted with saved settings, so the port and token of its
+    /// last `init` are the old backend's and it asks `ready` again (owner decisions 143A and 145A):
+    /// `backend.restarted {sentences}`. <paramref name="sentences"/> are the host's own sentences
+    /// about a restart that waited, which the page takes off its banner - the Review tab's - or
+    /// none, for a page that was shown none. One message in one shape for every page that holds
+    /// the backend's port and token, sent from one place.
+    /// </summary>
+    public void PostBackendRestarted(IReadOnlyList<string> sentences) =>
+        Send("backend.restarted", null, new Dictionary<string, object?>
+        {
+            { "sentences", sentences ?? throw new ArgumentNullException(nameof(sentences)) },
         });
 
     /// <summary>Masks every configured secret in anything headed for the page or the log.</summary>

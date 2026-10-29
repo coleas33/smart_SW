@@ -912,6 +912,11 @@ public class DrawingProbeTests : IDisposable
 
     // ---- D14 (contracts/confirmed-open.md, T077) -------------------------------------------------
 
+    /// <summary>
+    /// Edited deliberately for decision 136A (2026-10-19): the report records what the opened
+    /// drawing answered to the seam's <c>IsOpenedReadOnly</c> check; and, on its second review, the
+    /// load errors and warnings the open answered, at the end of the <c>OpenDoc6</c> line.
+    /// </summary>
     [Fact]
     public void D14_OpensTheClosedDrawingReadOnlyAndHiddenReadsItClosesItAndProvesNothingChanged()
     {
@@ -922,8 +927,9 @@ public class DrawingProbeTests : IDisposable
                 "  run on: a reviewed part whose same-name drawing is not open, then the same with the drawing open",
                 "  drawing open before the probe: false",
                 "  OpenDoc6: type 3, options 3 (ReadOnly 2 yes, Silent 1 yes, ViewOnly 4 no, RapidDraft 8 no, "
-                    + "LoadModel 16 no), configuration \"\"",
+                    + "LoadModel 16 no), configuration \"\"; answered error 0 (none), warning 0 (none)",
                 "  DocumentVisible: false (type 3), then true (type 3)",
+                "  IsOpenedReadOnly: true",
                 "  outcome: opened by the probe and closed",
                 "  active document unchanged: during true, after true",
                 "  foreground window unchanged: during true, after true",
@@ -950,6 +956,10 @@ public class DrawingProbeTests : IDisposable
         Assert.Null(drawing.ReviewedDocumentId);
     }
 
+    /// <summary>
+    /// Edited deliberately for decision 136A (2026-10-19): the seam asks the drawing it opened
+    /// whether SOLIDWORKS opened it read-only, after the restore and before the read.
+    /// </summary>
     [Fact]
     public void D14_TheOpenGoesThroughTheConfirmedOpensSeamInItsOrder()
     {
@@ -963,6 +973,7 @@ public class DrawingProbeTests : IDisposable
                 "DocumentVisible False 3",
                 "OpenDoc6 " + DrawingPath + " 3 3 ",
                 "DocumentVisible True 3",
+                "IsOpenedReadOnly opened",
                 "OpenDocument " + DrawingPath,
                 "CloseDoc " + DrawingPath,
                 "OpenDocument " + DrawingPath,
@@ -982,6 +993,10 @@ public class DrawingProbeTests : IDisposable
         Assert.Empty(_seamObserver.Refusals);
     }
 
+    /// <summary>
+    /// Edited deliberately for decision 136A (2026-10-19): a drawing already open is not asked
+    /// whether it is open read-only, and the report says so.
+    /// </summary>
     [Fact]
     public void D14_WithTheDrawingAlreadyOpenGatesNoVisibilityOpenOrCloseKeyAndLeavesItOpen()
     {
@@ -995,6 +1010,7 @@ public class DrawingProbeTests : IDisposable
                 "  drawing open before the probe: true",
                 "  OpenDoc6: not called",
                 "  DocumentVisible: not called",
+                "  IsOpenedReadOnly: not called",
                 "  outcome: already open, read as it stood and left open",
                 "  active document unchanged: during true, after true",
                 "  foreground window unchanged: during true, after true",
@@ -1055,6 +1071,166 @@ public class DrawingProbeTests : IDisposable
         Assert.Contains("  afterwards: GetOpenDocumentByName answers false; an exclusive read open succeeded", lines);
         Assert.Contains("  active document unchanged: during not taken, after true", lines);
         Assert.Contains("  against confirmed-open.md: not as required: the open, the drawing's views", lines);
+    }
+
+    /// <summary>
+    /// Decision 136A (2026-10-19): a drawing SOLIDWORKS opened but not read-only is said, refused by
+    /// the seam unread and closed again, and fails the probe's reading as "the read-only state".
+    /// </summary>
+    [Fact]
+    public void D14_ADrawingSolidWorksDidNotOpenReadOnlyIsSaidClosedAndFailsTheReadOnlyState()
+    {
+        _host.Seam.OpenedReadOnly = false;
+
+        IReadOnlyList<string> lines = Section(RunOnPart("D14"), "D14");
+
+        Assert.Contains("  IsOpenedReadOnly: false", lines);
+        Assert.Contains(
+            "  outcome: refused: SOLIDWORKS opened '<drawing>', but not read-only (IsOpenedReadOnly answered false; "
+                + FileLoadErrors.Describe(0, 0) + "), so it was not read; it was closed again.",
+            lines);
+        Assert.Contains("  drawing as read: not read (the drawing was not opened)", lines);
+        Assert.Contains("  afterwards: GetOpenDocumentByName answers false; an exclusive read open succeeded", lines);
+        Assert.Contains("CloseDoc " + DrawingPath, _host.Seam.Calls.Select(call => call.ToString()));
+        Assert.Equal(
+            "  against confirmed-open.md: not as required: the read-only state, the open, the drawing's views",
+            lines.Last());
+    }
+
+    /// <summary>
+    /// A check that throws is said as its type and HRESULT, never its message - which may name the
+    /// drawing - and fails the read-only state as a false answer does.
+    /// </summary>
+    [Fact]
+    public void D14_ACheckThatThrowsIsSaidAsItsTypeAndHresultAndFailsTheReadOnlyState()
+    {
+        _host.Seam.ReadOnlyFailure = new COMException("busy", unchecked((int)0x8001010A));
+
+        IReadOnlyList<string> lines = Section(RunOnPart("D14"), "D14");
+
+        Assert.Contains("  IsOpenedReadOnly: failed (COMException 0x8001010A)", lines);
+        Assert.StartsWith("  against confirmed-open.md: not as required: the read-only state, the open", lines.Last(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An open SOLIDWORKS refuses returns no drawing to ask, so the read-only state is not judged:
+    /// the open is what failed.
+    /// </summary>
+    [Fact]
+    public void D14_AnOpenThatReturnedNoDrawingAsksNothingAndIsNotJudgedOnTheReadOnlyState()
+    {
+        _host.Seam.OpenAnswersNull = true;
+
+        IReadOnlyList<string> lines = Section(RunOnPart("D14"), "D14");
+
+        Assert.Contains("  IsOpenedReadOnly: not called", lines);
+        Assert.DoesNotContain("the read-only state", lines.Last(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Decision 136A's review (2026-10-19): the reading names only what failed. When the restore of
+    /// new drawings' visibility fails, the seam refuses before it asks <c>IsOpenedReadOnly</c>, so the
+    /// read-only state is not judged: the open is what failed.
+    /// </summary>
+    [Fact]
+    public void D14_ARestoreThatFailsIsNotJudgedOnTheReadOnlyStateItNeverAsked()
+    {
+        _host.Seam.RestoreFailure = new COMException("restore failed", unchecked((int)0x80004005));
+
+        IReadOnlyList<string> lines = Section(RunOnPart("D14"), "D14");
+
+        Assert.Contains("  IsOpenedReadOnly: not called", lines);
+        Assert.Equal(
+            "  against confirmed-open.md: not as required: the open, the drawing's views",
+            lines.Last());
+    }
+
+    /// <summary>
+    /// Decision 136A's second review (2026-10-19): the reading's read-only rule. A drawing the seam
+    /// opened and read must have answered, and answered true: without an answer the seam's check did
+    /// not run - a seam that skipped it printed "IsOpenedReadOnly: not called" beside "opened by the
+    /// probe and closed" and still read "every answer as required". A check the seam never reached,
+    /// with no drawing returned or a restore that failed, is not judged; every answer given must be
+    /// true. The answers are written "true", "false" or "failed" (a check that threw), comma-separated.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "true", true)]
+    [InlineData(true, "", false)]
+    [InlineData(true, "false", false)]
+    [InlineData(true, "failed", false)]
+    [InlineData(true, "true,false", false)]
+    [InlineData(false, "", true)]
+    [InlineData(false, "false", false)]
+    [InlineData(false, "failed", false)]
+    public void D14_TheReadOnlyStateIsAsRequiredOnlyWhenEveryAnswerIsTrueAndADrawingTheSeamOpenedAnswered(
+        bool openedBySeam, string answers, bool expected)
+    {
+        IReadOnlyCollection<bool?> given = answers.Length == 0
+            ? Array.Empty<bool?>()
+            : answers.Split(',').Select(answer => answer == "failed" ? (bool?)null : bool.Parse(answer)).ToList();
+
+        Assert.Equal(expected, DrawingOpenProbe.ReadOnlyAsRequired(openedBySeam, given));
+    }
+
+    /// <summary>
+    /// Decision 136A's review (2026-10-19): an open that says SOLIDWORKS already had the drawing open
+    /// - here, though the probe's own lookup did not find it - did not open it, so the seam reads it
+    /// as it stands, never asks or closes it, and the probe's reading fails the seam keys it gated
+    /// reaching it, which the seat then reads as this case.
+    /// </summary>
+    [Fact]
+    public void D14_AnOpenThatSaysTheDrawingWasAlreadyOpenIsReadAsItStoodLeftOpenAndFailsTheSeamKeys()
+    {
+        _host.Seam.OpenWarnings = 128;
+
+        IReadOnlyList<string> lines = Section(RunOnPart("D14"), "D14");
+
+        Assert.Contains("  drawing open before the probe: false", lines);
+        Assert.Contains("  IsOpenedReadOnly: not called", lines);
+        Assert.Contains("  outcome: already open, read as it stood and left open", lines);
+        Assert.Contains("  afterwards: GetOpenDocumentByName answers true; an exclusive read open succeeded", lines);
+        Assert.Contains("  with the drawing already open, no visibility, open or close key was gated: false", lines);
+        Assert.DoesNotContain(_host.Seam.Calls, call => call.Name == "CloseDoc" || call.Name == "IsOpenedReadOnly");
+        Assert.Equal("  against confirmed-open.md: not as required: the seam keys", lines.Last());
+    }
+
+    /// <summary>
+    /// Decision 136A's second review (2026-10-19): the <c>OpenDoc6</c> line ends with the load errors
+    /// and warnings the open answered, as <see cref="FileLoadErrors.Describe"/> writes them, so the
+    /// seat sees whether SOLIDWORKS sets an already-open bit - on a fresh open, and on a drawing it
+    /// had open under another spelling of its path - whatever the open returned.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 0x2020, false)]
+    [InlineData(0, 128, false)]
+    [InlineData(512, 0, false)]
+    [InlineData(2, 0, true)]
+    public void D14_TheOpenDoc6LineEndsWithTheLoadErrorsAndWarningsTheOpenAnswered(int errors, int warnings, bool answersNull)
+    {
+        _host.Seam.OpenErrors = errors;
+        _host.Seam.OpenWarnings = warnings;
+        _host.Seam.OpenAnswersNull = answersNull;
+
+        IReadOnlyList<string> lines = Section(RunOnPart("D14"), "D14");
+
+        string openDoc = Assert.Single(lines, line => line.StartsWith("  OpenDoc6: ", StringComparison.Ordinal));
+        Assert.EndsWith(
+            "configuration \"\"; answered " + FileLoadErrors.Describe(errors, warnings), openDoc, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Decision 136A's second review (2026-10-19): an <c>OpenDoc6</c> that throws answers no codes,
+    /// and the line says so rather than printing the zeros the seam started with.
+    /// </summary>
+    [Fact]
+    public void D14_AnOpenDoc6ThatThrowsSaysItAnsweredNoCodes()
+    {
+        _host.Seam.OpenFailure = new COMException("busy", unchecked((int)0x8001010A));
+
+        IReadOnlyList<string> lines = Section(RunOnPart("D14"), "D14");
+
+        string openDoc = Assert.Single(lines, line => line.StartsWith("  OpenDoc6: ", StringComparison.Ordinal));
+        Assert.EndsWith("configuration \"\"; threw, so it answered no codes", openDoc, StringComparison.Ordinal);
     }
 
     [Fact]

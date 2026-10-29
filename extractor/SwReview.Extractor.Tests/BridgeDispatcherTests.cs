@@ -53,15 +53,24 @@ public class BridgeDispatcherTests : IDisposable
         Assert.Contains("interference", response.Error!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Edited deliberately for decision 140A (2026-10-19). This test was
+    /// <c>Dispatch_CommandNamedAfterAMutatingApi_IsRefusedByTheGuard</c>: the dispatcher handed the
+    /// command name to <see cref="ReadOnlyGuard"/>, which refused "Save3" as a member that modifies
+    /// the model. A command name is not an interop member, so the dispatcher now judges it against
+    /// its own fixed set (<see cref="SwBridgeDispatcher.Answers"/>), and a mutating API's name is no
+    /// command of it: refused as unknown, before anything runs. The refusal is kept and made
+    /// stronger - nothing was touched - and only its sentence changed.
+    /// </summary>
     [Fact]
-    public void Dispatch_CommandNamedAfterAMutatingApi_IsRefusedByTheGuard()
+    public void Dispatch_CommandNamedAfterAMutatingApi_IsRefusedAsUnknownBeforeAnythingRuns()
     {
-        // The guard sees the command name itself, so a handler for it could never be added
-        // by accident (research R4).
         BridgeResponse response = Dispatch(Request("1", "Save3"));
 
         Assert.Equal(BridgeStatus.Error, response.Status);
-        Assert.Contains("read-only", response.Error!, StringComparison.Ordinal);
+        Assert.StartsWith("Unknown command 'Save3'.", response.Error!, StringComparison.Ordinal);
+        Assert.Null(response.Result);
+        Assert.Empty(_captureView.Calls);
     }
 
     [Fact]
@@ -86,6 +95,177 @@ public class BridgeDispatcherTests : IDisposable
         Assert.Null(response.Result);
     }
 
+    // ---- the bridge's own commands (decision 140A) ------------------------------------
+    //
+    // A command name is not an interop member. Until decision 140A (2026-10-19) the dispatcher
+    // handed every name to ReadOnlyGuard, which judges a qualified name by the part after the dot,
+    // so remodel.close, remodel.save and remodel.rebuild were judged as Close, Save and Rebuild and
+    // none of the three members could be denied (011 research R8.5). The dispatcher now answers
+    // exactly its own fixed set and refuses every other name as unknown before anything runs; what
+    // a command then calls is judged, as before, by the guard of the gate it calls through.
+
+    /// <summary>
+    /// The set, spelled out rather than rebuilt from the constants, so a command added to either
+    /// family is a deliberate edit here as well as in the secret scopes.
+    /// </summary>
+    [Fact]
+    public void TheBridgeAnswersExactlyItsOwnFixedSet()
+    {
+        Assert.Equal(
+            new[]
+            {
+                "ping", "capture", "measure", "interference", "tessellate", "drawing.read",
+                "remodel.probe_scope", "remodel.open", "remodel.snapshot", "remodel.rename",
+                "remodel.reorder", "remodel.folder", "remodel.describe", "remodel.equation",
+                "remodel.rebuild", "remodel.geometry", "remodel.save", "remodel.close",
+            },
+            SwBridgeDispatcher.AnsweredCommands);
+        Assert.Equal(BridgeCommands.All.Concat(RemodelCommands.All), SwBridgeDispatcher.AnsweredCommands);
+        Assert.Equal(
+            RemodelCommands.All,
+            RemodelCommandTable.Commands.Select(shape => shape.Command));
+
+        foreach (string command in SwBridgeDispatcher.AnsweredCommands)
+        {
+            Assert.True(SwBridgeDispatcher.Answers(command), command + " is not answered.");
+        }
+    }
+
+    /// <summary>
+    /// Every name outside the set is refused as an unknown command, whatever it is: a mutating
+    /// member's name, bare or qualified, which the read-only guard refused before decision 140A
+    /// with its own sentence; a command's own member half; a command in another case or with a
+    /// space; a name that merely starts with <c>remodel.</c>; and no name at all. Nothing behind
+    /// the dispatcher is touched.
+    /// </summary>
+    [Theory]
+    [InlineData("Save3")]
+    [InlineData("FeatureCut4")]
+    [InlineData("IModelDoc2.Save3")]
+    [InlineData("IModelDoc2.Close")]
+    [InlineData("ISldWorks.CloseDoc")]
+    [InlineData("Close")]
+    [InlineData("Save")]
+    [InlineData("Rebuild")]
+    [InlineData("close")]
+    [InlineData("save")]
+    [InlineData("rebuild")]
+    [InlineData("read")]
+    [InlineData("Ping")]
+    [InlineData("PING")]
+    [InlineData(" ping")]
+    [InlineData("ping ")]
+    [InlineData("Drawing.Read")]
+    [InlineData("drawing.read ")]
+    [InlineData("remodel.Close")]
+    [InlineData("REMODEL.SAVE")]
+    [InlineData("remodel.rebuild ")]
+    [InlineData(" remodel.close")]
+    [InlineData("remodel.")]
+    [InlineData("remodel")]
+    [InlineData("remodel.save3")]
+    [InlineData("remodel.Save3")]
+    [InlineData("remodel.dissolve")]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void ANameOutsideTheSet_IsRefusedAsUnknownBeforeAnythingRuns(string command)
+    {
+        var measure = new FakeMeasureSource("no measure source in this test");
+        var interference = new FakeInterferenceSource(new FakeInterferenceDetector());
+        var drawings = new FakeConfirmedDrawings();
+        var dispatcher = new SwBridgeDispatcher(
+            new BridgeServices(_captureView, measure, interference, Index(null), _captureDirectory)
+            {
+                ConfirmedDrawings = drawings,
+            },
+            NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(Request("1", command));
+
+        Assert.False(SwBridgeDispatcher.Answers(command));
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.StartsWith($"Unknown command '{command}'.", response.Error!, StringComparison.Ordinal);
+        Assert.Contains(BridgeCommands.Interference, response.Error!, StringComparison.Ordinal);
+        Assert.Null(response.Result);
+        Assert.Empty(_captureView.Calls);
+        Assert.Null(measure.LastA);
+        Assert.Equal(0, interference.OpenCount);
+        Assert.Empty(drawings.Calls);
+    }
+
+    /// <summary>A request built in process with no command at all is refused the same way.</summary>
+    [Fact]
+    public void ANullCommand_IsRefusedAsUnknownToo()
+    {
+        BridgeResponse response = Dispatch(new BridgeRequest { Id = "1", Command = null! });
+
+        Assert.False(SwBridgeDispatcher.Answers(null));
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.StartsWith("Unknown command ''.", response.Error!, StringComparison.Ordinal);
+        Assert.Null(response.Result);
+    }
+
+    /// <summary>
+    /// What the read-only guard says of a command's name is no reason to refuse it: the guard
+    /// refuses <c>Close</c>, <c>Save</c> and <c>Rebuild</c> since decision 140A, and
+    /// <c>remodel.close</c>, <c>remodel.save</c> and <c>remodel.rebuild</c> are still looked up
+    /// and reach the remodel family, which on this bridge - no remodel seat, and the Start switch as
+    /// shipped - refuses them for one of those reasons instead. Their writes are judged where they
+    /// are made, by the re-modeler's own guard (<c>RemodelFinishHandlerTests</c>).
+    /// </summary>
+    [Fact]
+    public void NoAnsweredCommandIsRefusedForWhatTheReadOnlyGuardSaysOfItsName()
+    {
+        foreach (string half in new[] { "Close", "Save", "Rebuild" })
+        {
+            Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(half));
+        }
+
+        SwBridgeDispatcher dispatcher = NewDispatcher(_captureView);
+        foreach (string command in SwBridgeDispatcher.AnsweredCommands)
+        {
+            string error = dispatcher.Dispatch(Request("1", command)).Error ?? string.Empty;
+
+            Assert.DoesNotContain("Unknown command", error, StringComparison.Ordinal);
+            Assert.DoesNotContain("modifies the model", error, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Decision 140A's review (2026-10-19): a name the dispatcher answers that no handler takes is a
+    /// mistake in the dispatcher, which says so, rather than an unknown command - so a command added
+    /// to <see cref="SwBridgeDispatcher.AnsweredCommands"/> without its handler fails here, and the
+    /// refusal of every other name is <see cref="SwBridgeDispatcher.Dispatch"/>'s check alone, which
+    /// <see cref="ANameOutsideTheSet_IsRefusedAsUnknownBeforeAnythingRuns"/> sees.
+    ///
+    /// Edited deliberately on the decision's second pass, the same day: it looked for <c>Run</c>'s
+    /// mistake only, so a <c>remodel.*</c> command whose case was gone from the remodel family's own
+    /// switch answered that family's "has no handler for it" and passed. It looks for both now, with
+    /// Start switched on, so the six change commands reach that switch too rather than being refused
+    /// before it.
+    /// </summary>
+    [Fact]
+    public void EveryAnsweredCommandReachesItsHandler()
+    {
+        // Run's default, and the remodel family's own default in Remodel.
+        string[] mistakes = { "No handler for the bridge command", "has no handler for it" };
+
+        SwBridgeDispatcher dispatcher = NewDispatcher(_captureView, startValidated: true);
+        var unhandled = new List<string>();
+        foreach (string command in SwBridgeDispatcher.AnsweredCommands)
+        {
+            string error = dispatcher.Dispatch(Request("1", command)).Error ?? string.Empty;
+            if (mistakes.Any(mistake => error.IndexOf(mistake, StringComparison.Ordinal) >= 0))
+            {
+                unhandled.Add(command + " (" + error + ")");
+            }
+        }
+
+        Assert.True(
+            unhandled.Count == 0,
+            "Commands the bridge answers that reach no handler: " + string.Join("; ", unhandled));
+    }
+
     // ---- ping --------------------------------------------------------------------
 
     [Fact]
@@ -103,8 +283,10 @@ public class BridgeDispatcherTests : IDisposable
         // so remodel_client.py's REMODEL_PROTOCOL_VERSION is the version that family needs
         // rather than the version a host must report. Edited deliberately by feature 011 T071:
         // 1.3 adds `drawing.read`, additively. Edited deliberately by feature 013 T072: 1.4 adds
-        // `drawing_read` to this answer, additively.
-        Assert.Equal("1.4", result.Protocol);
+        // `drawing_read` to this answer, additively. Edited deliberately by owner decision 159A
+        // (004 T240): 1.5 has every remodel.* command after remodel.open name its run, so
+        // REMODEL_PROTOCOL_VERSION is 1.5 as well.
+        Assert.Equal("1.5", result.Protocol);
         Assert.Equal(SwBridgeDispatcher.ProtocolVersion, result.Protocol);
         Assert.Equal(@"C:\work\bracket-assy.SLDASM", result.Document);
         Assert.Equal("Default", result.Configuration);
@@ -625,9 +807,11 @@ public class BridgeDispatcherTests : IDisposable
     public void RemodelRename_TakesAPersistRefAndANewName_AndHasNoDimensionForm()
     {
         // FR-030: v1 addresses no dimension at all, and IDimension.set_Name is off the
-        // stage-1 allowlist, so there is nowhere for a dimension form to arrive.
+        // stage-1 allowlist, so there is nowhere for a dimension form to arrive. Edited
+        // deliberately by owner decision 159A (004 T240): every command on the scope names its
+        // run first, run_id, so the list is the run and then the rename's own two.
         Assert.Equal(
-            new[] { "persist_ref", "new_name" },
+            new[] { "run_id", "persist_ref", "new_name" },
             RemodelCommandTable.For(RemodelCommands.Rename).ParameterNames);
 
         Assert.All(
@@ -726,7 +910,7 @@ public class BridgeDispatcherTests : IDisposable
         // One row of contracts/bridge-remodel.md's command table per assertion, read off the
         // wire rather than off the property names, because the wire is what the Python client
         // sees. remodel.geometry's GeometryReading is the one row not here: it is the geometry
-        // phase's record, and the command's shape - no parameters at all, because there is
+        // phase's record, and the command's shape - no parameter but its run, because there is
         // nothing to name - is asserted in the table cases above.
         Assert.Equal(
             new[] { "probe_id", "source_path", "scope_signals" },
@@ -1037,12 +1221,18 @@ public class BridgeDispatcherTests : IDisposable
         Assert.Contains("cannot read a drawing", response.Error!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Edited deliberately for decision 140A (2026-10-19): this test was
+    /// <c>DrawingRead_IsOneOfTheCommandsTheBridgeAnswersAndPassesTheReadOnlyGuard</c>, and its
+    /// <c>ReadOnlyGuard.Assert("drawing.read")</c> held while the dispatcher handed command names to
+    /// that guard. It no longer does, so what has to hold is that the dispatcher answers the command.
+    /// </summary>
     [Fact]
-    public void DrawingRead_IsOneOfTheCommandsTheBridgeAnswersAndPassesTheReadOnlyGuard()
+    public void DrawingRead_IsOneOfTheCommandsTheBridgeAnswers()
     {
         Assert.Contains(BridgeCommands.DrawingRead, BridgeCommands.All);
         Assert.Equal("drawing.read", BridgeCommands.DrawingRead);
-        ReadOnlyGuard.Assert(BridgeCommands.DrawingRead);
+        Assert.True(SwBridgeDispatcher.Answers(BridgeCommands.DrawingRead));
         Assert.False(RemodelCommands.IsRemodelCommand(BridgeCommands.DrawingRead));
     }
 
@@ -1107,6 +1297,267 @@ public class BridgeDispatcherTests : IDisposable
         }
     }
 
+    // ---- the live commands answer of the bound configuration (owner decision 152A, X1) -------
+    //
+    // The Codex review of 152A, X1: capture, measure, interference and tessellate run on the attached
+    // document's active configuration and map what they find through the component table walked in
+    // the configuration the bridge attached in, and a switch of configuration re-attaches nothing
+    // (004, decision 22A) - so another configuration's interference rows entered a review through the
+    // bound one's table. A host that reads the active configuration (BridgeServices.ActiveConfiguration)
+    // has each of the four ask it first, after the secret and the name, and refuse while it is not the
+    // bound one; nothing runs, so nothing is written.
+
+    /// <summary>The four live commands, each with parameters that would otherwise run it.</summary>
+    public static IEnumerable<object[]> LiveCommands() => new[]
+    {
+        new object[] { BridgeCommands.Capture, "{\"persist_ref\":\"cmVm\",\"view\":\"iso\"}" },
+        new object[] { BridgeCommands.Measure, "{\"persist_ref_a\":\"aa\",\"persist_ref_b\":\"bb\"}" },
+        new object[] { BridgeCommands.Interference, "{}" },
+        new object[] { BridgeCommands.Tessellate, "{\"component_id\":\"cmp:0002\"}" },
+    };
+
+    /// <summary>
+    /// The refusal word for word. Changed deliberately on the review of the Codex fixes (N5,
+    /// 2026-10-21): its way on was "Make 'Default' active again in SOLIDWORKS.", which cannot be done
+    /// once that configuration is renamed - the name is what is compared - and every live command was
+    /// then refused with it; the way on now holds either way.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(LiveCommands))]
+    public void ALiveCommandWhileAnotherConfigurationIsActiveIsRefusedAndRunsNothing(string command, string parameters)
+    {
+        var live = new LiveSources();
+        int asked = 0;
+
+        BridgeResponse response = live.Dispatcher(this, () =>
+        {
+            asked++;
+            return "FICT-machined";
+        }).Dispatch(Request("9", command, parameters));
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Null(response.Result);
+        Assert.Equal(
+            "configuration changed: this bridge answers about configuration 'Default' of C:\\work\\bracket-assy.SLDASM, "
+            + "and 'FICT-machined' is active now, so a live command would answer about another configuration than "
+            + "the one extracted. Make the configuration you started with active again, or press Review to start "
+            + "a new review.",
+            response.Error);
+        Assert.StartsWith(SwBridgeDispatcher.ConfigurationChangedPrefix + ": ", response.Error!, StringComparison.Ordinal);
+        Assert.Equal(1, asked);
+        live.AssertNothingRan();
+    }
+
+    [Theory]
+    [MemberData(nameof(LiveCommands))]
+    public void ALiveCommandWhileTheBoundConfigurationIsActiveRunsAsBefore(string command, string parameters)
+    {
+        var live = new LiveSources();
+        int asked = 0;
+
+        BridgeResponse response = live.Dispatcher(this, () =>
+        {
+            asked++;
+            return "Default";
+        }).Dispatch(Request("9", command, parameters));
+
+        Assert.Equal(BridgeStatus.Ok, response.Status);
+        Assert.Equal(1, asked);
+        Assert.Equal(1, live.Ran(command));
+    }
+
+    /// <summary>
+    /// The configuration is the one attached in exactly, by its name, as the pane's one rule compares
+    /// it; a host that cannot read one as active - no configuration answered - is refused too, in words
+    /// that say so; and a host that reads none (the console host) compares nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("default", true)]
+    [InlineData("Default ", true)]
+    [InlineData(null, true)]
+    [InlineData("Default", false)]
+    public void TheConfigurationIsTheOneAttachedInExactly(string? active, bool refused)
+    {
+        var live = new LiveSources();
+
+        BridgeResponse response = live.Dispatcher(this, () => active)
+            .Dispatch(Request("9", BridgeCommands.Capture, "{\"persist_ref\":\"cmVm\",\"view\":\"iso\"}"));
+
+        Assert.Equal(refused ? BridgeStatus.Error : BridgeStatus.Ok, response.Status);
+        Assert.Equal(refused ? 0 : 1, live.Ran(BridgeCommands.Capture));
+        if (refused)
+        {
+            Assert.Equal(SwBridgeDispatcher.ConfigurationChangedError(@"C:\work\bracket-assy.SLDASM", "Default", active), response.Error);
+        }
+
+        if (active == null)
+        {
+            Assert.Contains("no configuration can be read as active now", response.Error!, StringComparison.Ordinal);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(LiveCommands))]
+    public void AHostThatReadsNoActiveConfigurationComparesNothing(string command, string parameters)
+    {
+        var live = new LiveSources();
+
+        BridgeResponse response = live.Dispatcher(this, activeConfiguration: null)
+            .Dispatch(Request("9", command, parameters));
+
+        Assert.Equal(BridgeStatus.Ok, response.Status);
+        Assert.Equal(1, live.Ran(command));
+    }
+
+    /// <summary>
+    /// A reading that throws runs nothing: the command is answered as any failure is, never run on a
+    /// configuration nobody could name.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(LiveCommands))]
+    public void AReadingThatThrowsRunsNothing(string command, string parameters)
+    {
+        var live = new LiveSources();
+
+        BridgeResponse response = live.Dispatcher(this, () => throw new InvalidOperationException("FICT: no answer"))
+            .Dispatch(Request("9", command, parameters));
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Equal("InvalidOperationException: FICT: no answer", response.Error);
+        live.AssertNothingRan();
+    }
+
+    /// <summary>
+    /// Only the four live commands ask. `ping` answers the attachment's own record, `drawing.read`
+    /// reads a confirmed drawing whatever the model shows, and the remodel family works on its copy:
+    /// none of them is refused, and none asks.
+    /// </summary>
+    [Theory]
+    [InlineData("ping", null)]
+    [InlineData("drawing.read", "{\"run_id\":\"20261019-101500-FICT\",\"document_id\":\"doc:0007\"}")]
+    [InlineData("remodel.probe_scope", "{}")]
+    public void ACommandThatIsNotLiveIsNotAsked(string command, string? parameters)
+    {
+        var live = new LiveSources();
+
+        BridgeResponse response = live.Dispatcher(this, () => throw new InvalidOperationException("asked"))
+            .Dispatch(Request("9", command, parameters));
+
+        Assert.DoesNotContain("asked", response.Error ?? string.Empty, StringComparison.Ordinal);
+        if (command == BridgeCommands.Ping)
+        {
+            var ping = Assert.IsType<PingResult>(response.Result);
+            Assert.Equal("Default", ping.Configuration);
+        }
+
+        if (command == BridgeCommands.DrawingRead)
+        {
+            Assert.Equal(BridgeStatus.Ok, response.Status);
+        }
+    }
+
+    /// <summary>
+    /// The secret and the name come first: a refused secret and an unknown name are answered as
+    /// before, and SOLIDWORKS is asked nothing - not even the configuration.
+    /// </summary>
+    [Theory]
+    [InlineData("{\"id\":\"9\",\"command\":\"capture\",\"secret\":\"FICT-wrong\",\"params\":{\"persist_ref\":\"cmVm\"}}", "unauthorized")]
+    [InlineData("{\"id\":\"9\",\"command\":\"Save3\",\"secret\":\"FICT-review\"}", "unauthorized")]
+    [InlineData("{\"id\":\"9\",\"command\":\"Save3\"}", "Unknown command 'Save3'.")]
+    public void TheSecretAndTheNameAreJudgedBeforeTheConfigurationIsAsked(string line, string answer)
+    {
+        var live = new LiveSources();
+        int asked = 0;
+        Func<string?> active = () =>
+        {
+            asked++;
+            return "FICT-machined";
+        };
+        SwBridgeDispatcher dispatcher = line.Contains("secret")
+            ? live.Dispatcher(this, active, new ScopedSecretPolicy("FICT-review", "FICT-chat", "FICT-remodel"))
+            : live.Dispatcher(this, active);
+
+        BridgeResponse response = dispatcher.Dispatch(JsonSerializer.Deserialize<BridgeRequest>(line, BridgeCodec.Options)!);
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.StartsWith(answer, response.Error!, StringComparison.Ordinal);
+        Assert.Equal(0, asked);
+        live.AssertNothingRan();
+    }
+
+    /// <summary>The live sources a dispatcher is built over, each counting the calls that reached it.</summary>
+    private sealed class LiveSources
+    {
+        public FakeCaptureView Capture { get; } = new FakeCaptureView();
+
+        public FakeMeasureSource Measure { get; } = new FakeMeasureSource(new MeasureReading(1.0, 1.0, 0.0, 0.0));
+
+        public FakeInterferenceDetector Interference { get; } = new FakeInterferenceDetector();
+
+        public CountingTessellateSource Tessellate { get; } = new CountingTessellateSource();
+
+        public FakeConfirmedDrawings Drawings { get; } = new FakeConfirmedDrawings();
+
+        public SwBridgeDispatcher Dispatcher(
+            BridgeDispatcherTests tests, Func<string?>? activeConfiguration, ISecretPolicy? secrets = null)
+        {
+            var services = new BridgeServices(
+                Capture,
+                Measure,
+                new FakeInterferenceSource(Interference),
+                Index(null),
+                tests._captureDirectory)
+            {
+                SwVersion = "32.5.0",
+                DocumentPath = @"C:\work\bracket-assy.SLDASM",
+                Configuration = "Default",
+                ActiveConfiguration = activeConfiguration,
+                TessellateSource = Tessellate,
+                ConfirmedDrawings = Drawings,
+            };
+
+            return new SwBridgeDispatcher(services, secrets ?? NoSecretPolicy.Instance);
+        }
+
+        /// <summary>How many times <paramref name="command"/>'s source was reached.</summary>
+        public int Ran(string command)
+        {
+            switch (command)
+            {
+                case BridgeCommands.Capture:
+                    return Capture.Calls.Count > 0 ? 1 : 0;
+                case BridgeCommands.Measure:
+                    return Measure.LastA != null ? 1 : 0;
+                case BridgeCommands.Interference:
+                    return Interference.Scopes.Count;
+                case BridgeCommands.Tessellate:
+                    return Tessellate.Calls;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(command), command, "not a live command");
+            }
+        }
+
+        public void AssertNothingRan()
+        {
+            Assert.Empty(Capture.Calls);
+            Assert.Null(Measure.LastA);
+            Assert.Empty(Interference.Scopes);
+            Assert.Equal(0, Tessellate.Calls);
+        }
+    }
+
+    /// <summary>A mesh export that counts its calls and answers no body.</summary>
+    private sealed class CountingTessellateSource : ITessellateSource
+    {
+        public int Calls { get; private set; }
+
+        public TessellateCommandResult Tessellate(string componentId, string packageDirectory)
+        {
+            Calls++;
+            return new TessellateCommandResult();
+        }
+    }
+
     // ---- helpers -----------------------------------------------------------------
 
     private static BridgeRequest Request(string id, string command, string? paramsJson = null)
@@ -1130,11 +1581,14 @@ public class BridgeDispatcherTests : IDisposable
         return NewDispatcher(capture ?? _captureView, measure, interference, handles).Dispatch(request);
     }
 
+    /// <param name="startValidated">The Start switch (004 T172); null builds the dispatcher with the
+    /// switch as shipped, <see cref="RemodelStart.SeatValidated"/>.</param>
     private SwBridgeDispatcher NewDispatcher(
         FakeCaptureView capture,
         IMeasureSource? measure = null,
         FakeInterferenceDetector? interference = null,
-        FakeComponent[]? handles = null)
+        FakeComponent[]? handles = null,
+        bool? startValidated = null)
     {
         var services = new BridgeServices(
             capture,
@@ -1150,7 +1604,9 @@ public class BridgeDispatcherTests : IDisposable
 
         // The command handling, with the secret question answered "yes" - the scopes have
         // their own tests in BridgeSecretPolicyTests.
-        return new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        return startValidated == null
+            ? new SwBridgeDispatcher(services, NoSecretPolicy.Instance)
+            : new SwBridgeDispatcher(services, NoSecretPolicy.Instance, startValidated.Value);
     }
 
     /// <summary>

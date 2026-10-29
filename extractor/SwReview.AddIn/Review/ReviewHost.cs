@@ -101,6 +101,9 @@ public sealed class PageDocument
 /// </summary>
 public sealed class SessionRecord
 {
+    /// <summary>The last <see cref="Sequence"/> given out, across every record of the process.</summary>
+    private static long _lastSequence;
+
     private SessionRecord(
         string? chatId, string runDirectory, bool isCheck, PageDocument? document, DateTimeOffset? startedAt)
     {
@@ -109,6 +112,8 @@ public sealed class SessionRecord
         IsCheck = isCheck;
         Document = document;
         StartedAt = startedAt;
+        Sequence = Interlocked.Increment(ref _lastSequence);
+        ConfirmedDrawings = new Extractor.Dump.ConfirmedDrawingSession(RunDirectory);
     }
 
     public SessionRecord(string chatId, string runDirectory)
@@ -155,6 +160,22 @@ public sealed class SessionRecord
 
     /// <summary>The extraction a context review was started on, for a Retry's ready status.</summary>
     public DumpSummary? ContextExtraction { get; set; }
+
+    /// <summary>
+    /// Feature 011, decision 141A (2026-10-19): what the confirmed drawing read keeps for this
+    /// review session - its run folder and the opens it attempted that left no drawing record. Each
+    /// record has its own, so a Retry or Recheck in the same run folder, which is a new record,
+    /// starts its own count, and the count goes when the record does. A <c>drawing.read</c> reaches
+    /// it only through <see cref="ReviewHost.DrawingReadSession"/>.
+    /// </summary>
+    public Extractor.Dump.ConfirmedDrawingSession ConfirmedDrawings { get; }
+
+    /// <summary>
+    /// The order this record was made in among every record of the process (decision 141A): the
+    /// latest of a run folder's reviews is the session a <c>drawing.read</c> belongs to, also when a
+    /// Recheck put it in an earlier record's place in the list.
+    /// </summary>
+    internal long Sequence { get; }
 
     /// <summary>
     /// Whether this run is a Model check.
@@ -229,6 +250,34 @@ public sealed class ReviewHostOptions
     /// <summary>The in-process tool service, once it is listening (T048); null before that.</summary>
     public BridgeConfig? Bridge { get; set; }
 
+    /// <summary>
+    /// Owner decision 152A: the document and configuration the tool service behind a bridge is
+    /// attached to - what that bridge answers to `ping` - or null when no service listening now has
+    /// the bridge's pipe. Asked at every review session's start with the bridge the session is about
+    /// to be given; in the add-in, the tool-service gate's answer. None by default: a host given a
+    /// <see cref="Bridge"/> and nothing to ask about it refuses every start rather than hand over a
+    /// bridge whose document it cannot vouch for.
+    /// </summary>
+    public Func<BridgeConfig, PageDocument?> BridgeDocument { get; set; } = _ => null;
+
+    /// <summary>
+    /// Owner decision 152A: asks the tool service to follow the active document - once no review
+    /// turn or remodel holds the bridge - as a review start refused for a bridge on another document
+    /// does, so that the next press can find it on the review's. Nothing by default.
+    /// </summary>
+    public Action FollowActiveDocument { get; set; } = () => { };
+
+    /// <summary>
+    /// Owner decision 152A, on the Codex review (X2): holds the tool service's attachment for a review
+    /// session being made - from before the bridge it is given is read until the session is tracked, so
+    /// that a follow of the active document neither takes that bridge down while `POST /sessions` runs
+    /// the review's checks over it, nor before the gate's busy question can see the session's turn - or
+    /// null when no service is listening to hold, and the session is given what is published, as
+    /// before. The add-in answers it through the gate (`ToolServiceGate.HoldAttachment`). By default
+    /// there is no gate, and nothing is held.
+    /// </summary>
+    public Func<IDisposable?> HoldToolService { get; set; } = () => ToolServiceHold.Nothing;
+
     /// <summary>Who the review and its dispositions are attributed to.</summary>
     public string Engineer { get; set; } = System.Environment.UserName;
 
@@ -238,6 +287,90 @@ public sealed class ReviewHostOptions
     /// <summary>Reads one environment variable; injected so no test mutates the process.</summary>
     public Func<string, string?> Environment { get; set; } =
         System.Environment.GetEnvironmentVariable;
+
+    /// <summary>
+    /// How often the host asks whether the turn a settings restart waits for has ended (owner
+    /// decision 143A). A second: it bounds only how long the backend keeps the old settings with
+    /// nothing running, since a new review makes the restart itself and a page call that would
+    /// start a turn is not sent to the old backend; and it costs one `GET /sessions/{chat_id}` per
+    /// review per poll, and only while a restart waits.
+    /// </summary>
+    public TimeSpan RestartPoll { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Whether the backend is busy with work other than a review turn that a restart would end -
+    /// a remodel run (feature 004) - asked before the turns are asked of the backend, whenever a
+    /// restart for settings saved during a turn looks at what holds it back (owner decision 143A),
+    /// and again under the restart's own lock by every restart, a save's made at once included
+    /// (owner decision 145A). Read under that lock, so it must be quick and must not block. False
+    /// when the caller has none.
+    /// </summary>
+    public Func<bool> BackendBusy { get; set; } = () => false;
+
+    /// <summary>
+    /// Owner decision 157A: whether a Model check is in progress - from the gate it begins through
+    /// (<see cref="ReviewHost.BeginCheck"/>) until the page's evaluation of it has been answered - which a
+    /// restart would leave evaluated on a backend that restarted under it. Read with
+    /// <see cref="BackendBusy"/>, under the restart's own lock, so it must be quick and must not block, and only
+    /// while a backend is up. False when the caller has no Model check tab.
+    /// </summary>
+    public Func<bool> ModelCheckInProgress { get; set; } = () => false;
+
+    /// <summary>...whether a Standards check is in progress, read as <see cref="ModelCheckInProgress"/> is.</summary>
+    public Func<bool> StandardsCheckInProgress { get; set; } = () => false;
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22): before a restart that moves the run root stops the backend in force, ends
+    /// every remodel session the Remodel tab left on the bridge under the run root that is leaving - given it - through
+    /// that backend, the one that accepts those run folders; and answers whether each close was answered. False holds the
+    /// restart back: nothing is stopped, the saved settings stay saved and the run root in force stays in force, and the
+    /// next caller of the restart tries again. Asked under the restart's own lock, once no work holds the restart and no
+    /// turn runs, and only while a backend is up. A delegate that throws is a close not answered. True when the caller
+    /// has no Remodel tab.
+    /// </summary>
+    public Func<string, bool> EndRemodelSessionsLeftUnder { get; set; } = _ => true;
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): with no backend up to close through - the one in force has exited - ends, in
+    /// process, every remodel session the Remodel tab left on the bridge under the run root that is leaving, given it,
+    /// before a restart that moves the run root starts the next backend. Asked under the restart's own lock, once no work
+    /// holds the restart, and only then. Whatever it does or throws, the restart goes on: holding it would leave no backend
+    /// at all, and a session it could not close stays as it was, until a re-attach or an unload ends it. Nothing when the
+    /// caller has no Remodel tab.
+    /// </summary>
+    public Action<string> EndRemodelSessionsInProcessLeftUnder { get; set; } = _ => { };
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22.12): whether the Remodel tab still holds a session on the bridge, on the
+    /// attachment listening now, under the run root given - what <see cref="EndRemodelSessionsLeftUnder"/> would close.
+    /// Read, never acted on: it closes nothing and asks no backend. False when the caller has no Remodel tab.
+    /// </summary>
+    public Func<string, bool> RemodelSessionLeftUnder { get; set; } = _ => false;
+
+    /// <summary>
+    /// Tells every other tab that holds the backend's port and token - Model check, Standards and
+    /// Remodel - that the backend was restarted with saved settings, so each asks for its `init`
+    /// again (owner decision 145A). Called after every restart this host makes, a save's made at
+    /// once or one made after it waited, and never after one that failed; the Review page is told
+    /// by the save's reply or by `backend.restarted`. Nothing when the caller has no other tab.
+    /// </summary>
+    public Action BackendRestarted { get; set; } = () => { };
+
+    /// <summary>
+    /// Tells every other tab that holds the backend's port and token that a restart this host made
+    /// failed once the old backend had stopped, with the failure, masked (owner decision 145A, found
+    /// on review): no backend answers the token those tabs hold, and they are told as a failed first
+    /// start is told to every page, `status {stage: "error"}`. A restart that failed before it
+    /// stopped anything left the old backend up, and is not told to them; the Review page is told of
+    /// every failure by this host itself. Nothing when the caller has no other tab.
+    /// </summary>
+    public Action<string> BackendRestartFailed { get; set; } = _ => { };
+
+    /// <summary>
+    /// What the run root rule reads of Windows (owner decision 154A): a share, a mapped or substituted drive,
+    /// a link. Windows itself by default; injected so a test fakes each without making one.
+    /// </summary>
+    public IRunRootProbe RunRootProbe { get; set; } = Native.WindowsRunRootProbe.Instance;
 
     internal static string DefaultLogFolder() => System.IO.Path.Combine(
         System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
@@ -267,7 +400,18 @@ public sealed class ReviewHostOptions
 ///
 /// <b>`settings.save` is refused, whole, while a turn is running.</b> Not partially applied
 /// and not queued: a running turn owns process state that is not on disk, so the file is not
-/// written and the backend is not restarted (chat-api.md).
+/// written and the backend is not restarted (chat-api.md). The one exception is a turn that
+/// starts after that check and before the restart, which the backend refuses with the file
+/// already written: the restart then waits until nothing holds it back, and a new review waits
+/// for the restart rather than running on the old backend (owner decision 143A,
+/// <see cref="DeferredRestart"/>). A remodel run is treated as a turn (owner decision 145A): a
+/// save made during one is kept and its restart waits for the run, and a run begins only once no
+/// restart waits (<see cref="BeginRemodelRun"/>). So is a check, a Model check or a Standards check,
+/// from its gate until the page's evaluation of it has been answered, while a backend is up (owner
+/// decision 157A, <see cref="BeginCheck"/>). The saved settings are in force once the backend
+/// has restarted with them, and not before (owner decision 153A): a restart that fails before it
+/// stops the old backend leaves that backend's settings in force, which every session takes, and
+/// `init` says so.
 ///
 /// <b>A model the provider does not offer is refused, and the fresh list is pushed with the
 /// refusal</b>, so the engineer re-picks from what exists instead of meeting it later as an
@@ -335,7 +479,107 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     private readonly EventStreamPump _events;
 
+    /// <summary>
+    /// The backend restart a save could not make because a turn had started, made once no turn
+    /// runs (owner decision 143A). Every restart this host makes goes through it, so two never
+    /// overlap and the one made last reads the settings saved last.
+    /// </summary>
+    private readonly DeferredRestart _restart;
+
     private UserSettings _settings;
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, each once (<see cref="RunRootRule.SameRunRoot"/>), in
+    /// the order it came into force (owner decision 154A, the reviews' finding F6): a run made under any of them is
+    /// this pane's to open, and a re-modeler's copy under any of them is a copy, after a save has moved the run
+    /// root. The run root of the settings loaded, then each one a start of the backend brings into force - the
+    /// add-in's first and every restart that succeeds - appended by <see cref="StartWith"/> just before it records
+    /// the settings in force (<see cref="_inForce"/>), so the run root in force is always among them. Replaced
+    /// whole, never changed in place, under the restart's own lock, so a reader on another tab's thread holds a
+    /// list that stays as it read it.
+    /// </summary>
+    private volatile string[] _runRootsInForce;
+
+    /// <summary>
+    /// Owner decision 153A: the settings the backend that is up was started with - the settings in
+    /// force. The backend reads the key, the base URL and Gemini Enterprise from the environment it
+    /// was started with, and a session takes its provider, model and effort from these, never from
+    /// the saved ones (<see cref="_settings"/>): a restart that fails before it stops the old
+    /// backend leaves it up with its environment, and a session of the saved provider on it paired
+    /// one provider's settings with another's credentials. Every start of the backend goes through
+    /// this host - the add-in's first (<see cref="FirstStart"/>, found on review) and every restart -
+    /// and records these once it has succeeded, and never when it fails (<see cref="StartWith"/>).
+    /// Taken from the settings loaded when the host is built, which the first start is made with
+    /// unless a save comes first; meaningful only while a backend is up: with none, nothing is in
+    /// force. Written under the restart's own lock and read from the page pump, a whole reference
+    /// either way. A start publishes the backend's endpoint before it records these: while it is under
+    /// way, <see cref="_starting"/> holds the settings it was made with. Their run root is the run root
+    /// in force, which every tab reads (owner decision 154A, <see cref="RunRoot"/>).
+    /// </summary>
+    private volatile UserSettings _inForce;
+
+    /// <summary>
+    /// Owner decision 153A, found on Codex's re-review (R1): the settings a start of the backend under way
+    /// was made with - the first or a restart - from just before it starts the backend until it has
+    /// recorded them in force (<see cref="_inForce"/>), or has thrown; null while none is under way. A
+    /// start publishes the backend's endpoint before it records the settings it was made with, and until
+    /// then the backend that is up runs with these, not with the ones recorded: so whatever reads the
+    /// settings in force with that backend - whether the saved settings are in force, and a session's
+    /// provider, model and effort - takes nothing of them while a start is under way. The keys masked are
+    /// not read from here but from <see cref="_keysStarted"/>, which outlasts the start (the fourth review,
+    /// S1). Written by <see cref="StartWith"/> alone, under the restart's own lock, so starts never
+    /// overlap; read from any thread, a whole reference either way.
+    /// </summary>
+    private volatile UserSettings? _starting;
+
+    /// <summary>
+    /// Owner decision 160A: whether the last start of the backend this host made - the add-in's first or a
+    /// restart - threw. Taken off as each start begins and set when one throws, both by <see cref="StartWith"/>
+    /// alone, under the restart's own lock; read from any thread. Remembered for a page that loads, or loads
+    /// again, after the failure's `status` was posted (<see cref="BackendStartFailed"/>).
+    /// </summary>
+    private volatile bool _lastStartFailed;
+
+    /// <summary>
+    /// Owner decisions 157A and 160A: the add-in is unloading - set first thing in <see cref="StopRestarting"/>,
+    /// before the page pumps and other hosts stop, and as <see cref="Dispose"/> begins. A save that has
+    /// written its settings reads it before its restart, in its catch and after a restart returns, and is
+    /// answered `AddInStopping` rather than told to save again (<see cref="SendSavedWhileStopping"/>).
+    /// </summary>
+    private volatile bool _stopping;
+
+    /// <summary>
+    /// Owner decision 160A: whether the last start or restart failed with no backend up and none being started -
+    /// what every tab's `init` says as `backend_start_failed`, this host's and, handed on by the add-in, the
+    /// Model check, Standards and Remodel hosts'. False while a backend is up, an old one a restart that failed
+    /// before it stopped it left among them.
+    /// </summary>
+    public bool BackendStartFailed => _starting == null && _lastStartFailed && _options.Backend.Endpoint == null;
+
+    /// <summary>
+    /// Owner decision 153A, found on the fourth review (S1): every key a start of the backend has been made
+    /// with since the host was built - the first start's and every restart's, made or failed - each once,
+    /// in the order made. A start's failure is told once the start is no longer under way: a restart that
+    /// waited tells it in its `status` and its word to every other tab, and the add-in tells the first
+    /// start's in its `status` and its log line. By then a save made meanwhile can have replaced the saved
+    /// key, and nothing records the key the failed start was made with, which its failure can name; nor
+    /// can one place for the last start's key hold it, since that save's own restart can be made before
+    /// the add-in tells the first start's failure. So every key a start was made with is masked
+    /// (<see cref="KeysToMask"/>). Appended by <see cref="StartWith"/> alone, under the restart's own
+    /// lock, before the start is made; replaced whole and never changed, so a reader on any thread takes
+    /// a whole array.
+    /// </summary>
+    private volatile string[] _keysStarted = new string[0];
+
+    /// <summary>
+    /// The number of the last reading of whether the saved settings are in force (owner decision 153A,
+    /// found on review, C2); guarded by <see cref="_inForceReading"/>.
+    /// </summary>
+    private long _inForceReadings;
+
+    /// <summary>The lock a reading of whether the saved settings are in force is taken and numbered under.</summary>
+    private readonly object _inForceReading = new object();
+
     private string? _settingsError;
     private PreparedContext? _preparedContext;
     private long _contextGeneration;
@@ -358,7 +602,9 @@ public sealed class ReviewHost : IDisposable
         _options = options ?? throw new ArgumentNullException(nameof(options));
         SettingsLoadResult loaded = UserSettings.Load(options.SettingsPath, options.BuildMode);
         _settings = loaded.Settings;
+        _inForce = loaded.Settings;
         _settingsError = loaded.Error;
+        _runRootsInForce = new[] { _inForce.RunRoot };
 
         _runs = new PaneRunLookup(
             "chat_id",
@@ -367,12 +613,15 @@ public sealed class ReviewHost : IDisposable
                 + "know which folder to open.",
             chatId => FindSession(chatId)?.RunDirectory);
 
-        _actions = new PaneActions(new PaneActionsOptions(options.Channel, () => _settings.RunRoot, _runs)
+        _actions = new PaneActions(new PaneActionsOptions(options.Channel, () => RunRoot, _runs)
         {
+            RunRootsInForce = () => RunRootsInForce,
+            RunRootSaved = () => _settings.RunRoot,
+            RunRootProbe = () => _options.RunRootProbe,
             LogFolder = () => _options.LogFolder,
             EntityResolver = () => _options.EntityResolver,
             Opener = () => _options.Opener,
-            Secrets = () => new[] { _settings.ResolveApiKey(_options.Environment).Key },
+            Secrets = KeysToMask,
         });
 
         // Both callbacks run on the pump's reader thread. They go out through `Post`, which is
@@ -391,10 +640,116 @@ public sealed class ReviewHost : IDisposable
                 { "chat_id", chatId },
                 { "reason", Redact(reason) },
             }));
+
+        _restart = new DeferredRestart(
+            RestartHeldBack,
+            WorkInProgress,
+            RestartWithSavedSettings,
+            () => ReportUnlessStopping(() =>
+            {
+                _actions.PostBackendRestarted(RestartSentences);
+                TellTheOtherTabs();
+            }),
+            failure => ReportUnlessStopping(() =>
+            {
+                PostRestartFailed(failure);
+                TellTheOtherTabsTheRestartFailed(failure);
+            }),
+            () => ReportUnlessStopping(() => PostStatus("error", CleanupLeftBehind() ? CleanupHoldsTheRestartPromise : RestartNotAnswered)),
+            () => ReportUnlessStopping(() => PostStatus("error", CleanupHoldsTheRestartPromise)),
+            options.RestartPoll);
     }
 
-    /// <summary>The settings in force. Replaced by a successful `settings.save`.</summary>
+    /// <summary>
+    /// The review of owner decision 160A (D1): what a restart that waited says once it has been made, has failed,
+    /// or has met a backend that does not answer - said only while the add-in is not unloading. One that ends as
+    /// SOLIDWORKS unloads the add-in - the backend client's disposal ends the start, or the start returns first -
+    /// is told to nobody, neither the Review page nor the other tabs: no page waits on an answer, since the save was
+    /// answered when it was made; the pages go with the add-in; and the saved settings are on disk, which the
+    /// add-in's next start starts the backend with, so neither "save the settings again" nor "the backend
+    /// restarted" is true of what comes next. A save that meets the unload is answered `AddInStopping` (owner
+    /// decision 160A, item 8), since its page waits on it.
+    /// </summary>
+    private void ReportUnlessStopping(Action report)
+    {
+        if (!_stopping)
+        {
+            report();
+        }
+    }
+
+    /// <summary>
+    /// The saved settings: what the Settings form shows and a restart is made with. Replaced by a
+    /// `settings.save` that writes them, and in force once the backend has been restarted with them
+    /// (owner decision 153A).
+    /// </summary>
     public UserSettings Settings => _settings;
+
+    /// <summary>
+    /// The run root in force (owner decision 154A, the owner's follow-up): the one in the record of the settings
+    /// the backend that is up was started with (owner decision 153A, <see cref="_inForce"/>), under which every
+    /// tab makes its run folders and looks for its latest run - the backend refuses a run folder outside it
+    /// (<c>resolve_run_dir</c>) and finds its newest review and check under it. So it moves exactly when that
+    /// record does: at the add-in's first start and at every restart that succeeds, and never otherwise - the
+    /// settings loaded's until the first start, which is made with them unless a save comes first. A folder
+    /// chosen for runs in a save is written at once (<see cref="Settings"/>), and comes into force with the start
+    /// that starts the backend with it. Read on every tab's thread, a whole record either way.
+    /// </summary>
+    public string RunRoot => _inForce.RunRoot;
+
+    /// <summary>
+    /// Every run root that has been in force in this SOLIDWORKS session, each once, in the order it came into
+    /// force (owner decision 154A, the reviews' finding F6), <see cref="RunRoot"/> among them.
+    /// </summary>
+    public IReadOnlyList<string> RunRootsInForce => _runRootsInForce;
+
+    /// <summary>
+    /// The run root a new run's folder is made under (owner decision 154A, with 153A's record of the settings in
+    /// force): <see cref="RunRoot"/>, or null while a start of the backend under way would bring another run root
+    /// into force. Such a start publishes the backend's endpoint before it records the settings it was made with,
+    /// and can still fail and leave the backend it would replace, so until it ends neither run root is the one the
+    /// backend up makes runs under, and a run made under either can be refused deep in it; the Model check,
+    /// Standards and Remodel tabs refuse a start while it is null. A start under way that keeps the run root moves
+    /// nothing, and runs go on. The start under way is read before the record, as 153A reads it: one no longer
+    /// under way has recorded its settings, and only one begun after this reading is not seen - as one begun just
+    /// after the run root was read, while the run is made, is not.
+    /// </summary>
+    public string? RunRootForANewRun()
+    {
+        UserSettings? starting = _starting;
+        UserSettings inForce = _inForce;
+        return starting != null && !RunRootRule.SameRunRoot(starting.RunRoot, inForce.RunRoot) ? null : inForce.RunRoot;
+    }
+
+    /// <summary>
+    /// The keys no page and no log may show (FR-015): the saved key, and the key the backend that is
+    /// up was started with - the same one once a restart has put the saved settings in force, and
+    /// until then the one that backend holds, and could quote (owner decision 153A, found on review) -
+    /// and every key a start has been made with (<see cref="_keysStarted"/>): the backend a start under
+    /// way starts holds its key before it is recorded, and a start that failed is told after it, when a
+    /// save made meanwhile can have left its key neither saved nor recorded (found on Codex's re-review,
+    /// R1, and on the fourth review, S1). Each once. What this host masks, and what the add-in hands
+    /// every other host to mask. The saved and recorded keys are resolved per call, as the key changes
+    /// under a live host; a start's is the key it was made with.
+    /// </summary>
+    public IReadOnlyList<string?> KeysToMask()
+    {
+        var keys = new List<string?>
+        {
+            _settings.ResolveApiKey(_options.Environment).Key,
+            _inForce.ResolveApiKey(_options.Environment).Key,
+        };
+        keys.AddRange(_keysStarted);
+        return keys.Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// Whether a settings restart stands before new work: one waits to be made, or one is being
+    /// made now (owner decision 145A, found on review). The add-in hands it to the Remodel host,
+    /// which tells its page a plan or a Start makes the restart first; the gate itself
+    /// (<see cref="BeginRemodelRun"/>) decides.
+    /// </summary>
+    public bool RestartAhead => _restart.Ahead;
 
     /// <summary>
     /// The chats this host started, newest last. A snapshot: the list itself is guarded, and a
@@ -606,8 +961,72 @@ public sealed class ReviewHost : IDisposable
     /// <summary>A tracked folder without its trailing separator, so one folder spelt two ways is one.</summary>
     private static string SameFolder(string runDirectory) => runDirectory.TrimEnd('\\', '/');
 
-    /// <summary>Whether any chat this host started has a turn in flight.</summary>
-    public bool AnyTurnRunning()
+    /// <summary>
+    /// Feature 011, decision 141A (2026-10-19): the review session a <c>drawing.read</c> naming
+    /// <paramref name="runId"/> belongs to, as the confirmed read keeps it, or null. The folder is
+    /// <see cref="ReviewRunDirectory"/>'s, by every rule it keeps; the session is the latest review
+    /// this host started in that folder and still tracks - a Recheck's, or a context review's
+    /// Retry's, once one has started there - since a new session in a folder takes over its reads
+    /// from the earlier one, which a context review's Retry leaves tracked beside it. Each record
+    /// holds its own (<see cref="SessionRecord.ConfirmedDrawings"/>), so a new session starts its own
+    /// count of failed opens, and nothing a request supplies but the run id resolved here chooses or
+    /// makes one. Asked on the SOLIDWORKS application thread, through the list's lock like the lookup.
+    /// </summary>
+    public Extractor.Dump.ConfirmedDrawingSession? DrawingReadSession(string? runId)
+    {
+        string? folder = ReviewRunDirectory(runId);
+        if (folder == null)
+        {
+            return null;
+        }
+
+        string same = SameFolder(folder);
+        return Reviews()
+            .Where(review => string.Equals(SameFolder(review.RunDirectory), same, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(review => review.Sequence)
+            .LastOrDefault()
+            ?.ConfirmedDrawings;
+    }
+
+    /// <summary>What the backend says of the turns of the chats this host started.</summary>
+    private enum TurnsSeen
+    {
+        /// <summary>No chat has a turn running, by every answer the backend gave.</summary>
+        None,
+
+        /// <summary>A chat has a turn running.</summary>
+        Running,
+
+        /// <summary>
+        /// No chat was seen running, and of one at least the backend gave no answer that rules a
+        /// turn out (<see cref="RulesOutATurn"/>).
+        /// </summary>
+        NoAnswer,
+    }
+
+    /// <summary>
+    /// Whether any chat this host started has a turn in flight. A chat the backend gives no usable
+    /// answer about counts as none here: refusing every save because the backend is down would
+    /// leave the engineer unable to fix the settings that are keeping it down.
+    /// </summary>
+    public bool AnyTurnRunning() => LookAtTheTurns(stopAtNoAnswer: false) == TurnsSeen.Running;
+
+    /// <summary>
+    /// Whether a turn may be running on a chat this host started (owner decision 152A, the review's
+    /// R1): one is seen running, or the backend gives no usable answer about one - not knowing whether
+    /// a turn runs is not knowing that none does, as the settings restart reads it (143A) - and none
+    /// with no backend process at all, which runs no turn. What the tool-service gate asks before it
+    /// takes the bridge down (`SwReviewAddIn`), which cannot be undone, and asks every second while a
+    /// follow is owed; <see cref="AnyTurnRunning"/>, which a save asks, reads no answer as none.
+    /// </summary>
+    public bool TurnMayBeRunning() =>
+        _options.Backend.Endpoint != null && LookAtTheTurns(stopAtNoAnswer: true) != TurnsSeen.None;
+
+    /// <param name="stopAtNoAnswer">Stop at the first chat the backend gives no usable answer
+    /// about, as the restart for saved settings does (owner decision 143A): such a chat holds it
+    /// back whatever the other chats say, and its look must cost one round trip's timeout, not one
+    /// per chat.</param>
+    private TurnsSeen LookAtTheTurns(bool stopAtNoAnswer)
     {
         // A snapshot, because this is asked from the tool-service gate's thread while the page
         // pump may be tracking a `review.start` or a Model check: enumerating the live list
@@ -620,6 +1039,7 @@ public sealed class ReviewHost : IDisposable
             sessions = _sessions.ToArray();
         }
 
+        bool unanswered = false;
         foreach (SessionRecord session in sessions)
         {
             // A check has no chat, so there is no chat id to ask the backend about. Skipped
@@ -634,19 +1054,39 @@ public sealed class ReviewHost : IDisposable
             {
                 if (_options.Backend.IsTurnRunning(session.ChatId))
                 {
-                    return true;
+                    return TurnsSeen.Running;
                 }
+            }
+            catch (BackendRequestException refusal) when (RulesOutATurn(refusal))
+            {
+                // No turn of this chat runs here: the backend does not hold it, or could not.
             }
             catch (Exception)
             {
-                // A backend that cannot be asked has no turn worth protecting: refusing every
-                // save because the backend is down would leave the engineer unable to fix the
-                // settings that are keeping it down.
+                // No usable answer: none at all - the connection was refused, reset or timed out,
+                // or the reply broke off - or one that rules nothing out.
+                if (stopAtNoAnswer)
+                {
+                    return TurnsSeen.NoAnswer;
+                }
+
+                unanswered = true;
             }
         }
 
-        return false;
+        return unanswered ? TurnsSeen.NoAnswer : TurnsSeen.None;
     }
+
+    /// <summary>
+    /// The refusals of `GET /sessions/{chat_id}` that rule a turn out, besides a readable state:
+    /// 404 `UnknownChat`, a chat this backend does not hold - one found on disk, or one an earlier
+    /// backend held - and 400 `InvalidRequest`, an id it could not hold. Every other answer - a
+    /// 5xx, a body that is not the backend's own, any other refusal - says nothing of the turn,
+    /// and neither does no answer at all (owner decision 143A).
+    /// </summary>
+    private static bool RulesOutATurn(BackendRequestException refusal) =>
+        (refusal.Status == 404 && refusal.ErrorClass == "UnknownChat")
+        || (refusal.Status == 400 && refusal.ErrorClass == "InvalidRequest");
 
     /// <summary>Handles one message from the page. Never throws.</summary>
     public void Receive(string json)
@@ -704,6 +1144,9 @@ public sealed class ReviewHost : IDisposable
 
     public void Dispose()
     {
+        // First, so no save or deferred restart reports to tabs that are stopping, and nothing asks the backend
+        // about a turn or restarts it once the host is going. The add-in takes this step before the other hosts go.
+        StopRestarting();
         _events.Dispose();
         lock (_sessionsLock)
         {
@@ -741,7 +1184,7 @@ public sealed class ReviewHost : IDisposable
                 return;
 
             case "settings.get":
-                SendSettings("settings", id);
+                SendSettings("settings", id, runRootNote: null);
                 return;
 
             case "send_when_checked.save":
@@ -806,6 +1249,7 @@ public sealed class ReviewHost : IDisposable
         BackendEndpoint? endpoint = _options.Backend.Endpoint;
         ResolvedApiKey key = _settings.ResolveApiKey(_options.Environment);
         PageDocument? document = _options.CurrentDocument();
+        (string? notInForce, long notInForceRevision) = ReadSettingsNotInForce();
 
         Send("init", id, new Dictionary<string, object?>
         {
@@ -826,14 +1270,20 @@ public sealed class ReviewHost : IDisposable
                     }
             },
             { "token", endpoint?.Token },
+            { "backend_start_failed", endpoint == null && BackendStartFailed },
             { "settings", View(_settings) },
             { "key_source", key.Source },
-            { "run_root", _settings.RunRoot },
+            { "run_root", RunRoot },
             { "providers", Providers() },
             { "document", DocumentPayload(document) },
             { "review_preparation", _options.PrepareReview != null },
             { "engineering_context", _options.Dump != null },
             { "engineering_selection", _options.EngineeringSelection != null },
+
+            // Owner decision 153A: in every `init`, so a page that loads or reloads is told too;
+            // with the number of the reading, so an older one delivered late changes nothing (C2).
+            { "settings_not_in_force", notInForce },
+            { "settings_not_in_force_revision", notInForceRevision },
         });
 
         ReportSettingsProblems(key);
@@ -898,14 +1348,16 @@ public sealed class ReviewHost : IDisposable
 
     // ---- settings -----------------------------------------------------------------------
 
-    private void SendSettings(string type, string? id)
+    private void SendSettings(string type, string? id, Dictionary<string, object?>? runRootNote)
     {
         ResolvedApiKey key = _settings.ResolveApiKey(_options.Environment);
-        Send(type, id, new Dictionary<string, object?>
+        var answer = new Dictionary<string, object?>
         {
             { "settings", View(_settings) },
             { "key_source", key.Source },
-        });
+        };
+        AddRunRootNote(answer, runRootNote);
+        Send(type, id, answer);
         ReportSettingsProblems(key);
     }
 
@@ -1023,34 +1475,99 @@ public sealed class ReviewHost : IDisposable
             next.SetApiKey(null);
         }
 
+        // Owner decision 154A, the owner's follow-up ("A Field + don't block"): a save never fails for the run
+        // root. The folder chosen for runs is written only when the run root rule accepts it, and the answer
+        // says when it, or the run root left in force, is refused.
+        Dictionary<string, object?>? runRootNote = ChooseRunRoot(payload, next);
+
         if (!PersistSettings(next, id))
         {
             return;
         }
 
+        if (_stopping)
+        {
+            SendSavedWhileStopping(id, runRootNote);
+            return;
+        }
+
         ResolvedApiKey key = next.ResolveApiKey(_options.Environment);
-        string? restartFailure = null;
+        string? promise = null;
         try
         {
-            _options.Backend.Restart(next, key);
+            if (!_restart.Now(
+                    () =>
+                    {
+                        RestartWith(next, key);
+
+                        // The Review page learns of a restart made now from the reply; the other tabs from this,
+                        // told under the restart's own lock as every other restart tells them (owner decision 157A,
+                        // the reviews): a check whose gate waited on that lock for this restart is told of it before
+                        // it begins, so before its page is handed a run to evaluate with the token of the backend
+                        // the restart replaced. Once the add-in starts unloading, no other tab is told (160A).
+                        if (!_stopping) TellTheOtherTabs();
+                    },
+                    out DeferredRestart.Hold waitsFor,
+                    out DeferredRestart.Work busyWith))
+            {
+                // A turn started between the gate above and here, or a remodel run or a check is in
+                // progress, which the restart would end. The settings are already written, so the honest
+                // answer is "saved, not yet in force" - and the restart waits for what holds it
+                // back rather than being dropped, and the sentence names it (owner decisions 143A,
+                // 145A and 157A).
+                promise = Promise(waitsFor, busyWith);
+            }
         }
-        catch (TurnRunningException)
+        catch (Exception failure)
         {
-            // A turn started between the gate above and here. The settings are already written,
-            // so the honest answer is "saved, not yet in force".
-            restartFailure = "the settings are saved; the backend restarts when the running turn ends.";
-        }
-        catch (BackendStartException failure)
-        {
-            restartFailure = failure.Message;
+            if (_stopping)
+            {
+                SendSavedWhileStopping(id, runRootNote);
+                return;
+            }
+
+            // Whatever the restart threw - a BackendStartException, or anything outside that
+            // wrapper, such as the new backend's log not opened - the settings are written and
+            // saved here, and only the restart failed: the save says so, with the reason, masked,
+            // and retryable, since saving again retries the restart (owner decision 150A). Until a
+            // restart succeeds the settings in force are the ones the backend there is - the old
+            // one, or none - was started with, which `init` says (owner decision 153A). The other
+            // tabs are told as for any failure, which only a backend no longer up does (owner
+            // decision 145A).
+            // The save was written all the same, so its answer still says what it says of the run root.
+            TellTheOtherTabsTheRestartFailed(failure);
+            Dictionary<string, object?> notRestarted = _actions.ErrorPayload(
+                "BackendNotRestarted", SavedNotRestarted + failure.Message, retryable: true);
+            AddRunRootNote(notRestarted, runRootNote);
+            Send("error", id, notRestarted);
+            return;
         }
 
-        SendSettings("settings.saved", id);
-
-        if (restartFailure != null)
+        if (_stopping)
         {
-            PostStatus("error", restartFailure);
+            SendSavedWhileStopping(id, runRootNote);
+            return;
         }
+
+        SendSettings("settings.saved", id, runRootNote);
+
+        if (promise != null)
+        {
+            PostStatus("error", promise);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 160A: the answer to a save whose settings were written while the add-in unloads -
+    /// `AddInStopping`, not retryable: the settings are saved, and nothing else needs doing, where
+    /// `BackendNotRestarted` would say to save again. It still says what the save says of the run root.
+    /// </summary>
+    private void SendSavedWhileStopping(string? id, Dictionary<string, object?>? runRootNote)
+    {
+        Dictionary<string, object?> stopping = _actions.ErrorPayload(
+            "AddInStopping", "The settings are saved. The add-in is stopping; nothing else needs doing.", retryable: false);
+        AddRunRootNote(stopping, runRootNote);
+        Send("error", id, stopping);
     }
 
     private void SaveSendWhenChecked(string? id, JsonElement payload)
@@ -1066,6 +1583,82 @@ public sealed class ReviewHost : IDisposable
         if (PersistSettings(next, id))
         {
             Send("send_when_checked.saved", id, new { send_when_checked = next.SendsWhenChecked });
+        }
+    }
+
+    /// <summary>
+    /// The run root a save writes, and what its answer says of it (owner decision 154A, the owner's follow-up,
+    /// "A Field + don't block"): a save never fails for the run root. A folder chosen for runs that differs
+    /// from the run root the settings name must be written as a full path (the reviews' finding F7) and is
+    /// judged by the run root rule: written in full and accepted, it is written into <paramref name="next"/>;
+    /// otherwise it is the one field not saved, and the note says so. Otherwise the run root the settings name
+    /// is kept - a relative one in the file too, which keeps working - and when the rule refuses it the note
+    /// says every run is refused until it is changed. The note is shaped as an `error`, not retryable; null when
+    /// there is nothing to say.
+    /// </summary>
+    private Dictionary<string, object?>? ChooseRunRoot(JsonElement payload, UserSettings next)
+    {
+        string? chosen = ChosenRunRoot(payload);
+        if (chosen != null && !string.Equals(chosen, _settings.RunRoot, StringComparison.Ordinal))
+        {
+            // Owner decision 159A (004 research R22.12): the run root in force, as written - a relative one the settings
+            // file named included - may be chosen back, still judged by the rule below, so a restart waiting to move it
+            // can be given up: the way out a remodel close not answered names.
+            if (!RunRootRule.IsFullPath(chosen) && !RunRootRule.SameRunRoot(chosen, _inForce.RunRoot))
+            {
+                return _actions.ErrorPayload("RunRootNotFullPath", RunRootRule.NotFullPathRefusal, retryable: false);
+            }
+
+            RunRootVerdict verdict = RunRootRule.Judge(chosen, _options.RunRootProbe);
+            if (verdict != RunRootVerdict.Accepted)
+            {
+                return _actions.ErrorPayload("RunRootRefused", RunRootRule.ChosenRefusal(verdict), retryable: false);
+            }
+
+            next.RunRoot = chosen;
+            return null;
+        }
+
+        RunRootVerdict kept = RunRootRule.Judge(next.RunRoot, _options.RunRootProbe);
+        return kept == RunRootVerdict.Accepted
+            ? null
+            : _actions.ErrorPayload("RunRootRefused", RunRootRule.KeptRefusal(kept), retryable: false);
+    }
+
+    /// <summary>
+    /// The folder a save chooses for runs: `run_root`, trimmed as every text field is, and an empty one the
+    /// default run root, as a blank run root in the settings file is. Null when the save names none - absent,
+    /// null or not text - which leaves the run root as it is. The reviews of 154A's merge, F2: Explorer's
+    /// "Copy as path" puts a path in double quotes, so one pair around the whole is taken off, and what it held
+    /// trimmed again; a quote on one side alone is left for the full-path and folder-name checks.
+    /// </summary>
+    private static string? ChosenRunRoot(JsonElement payload)
+    {
+        string? text = Text(payload, "run_root");
+        if (text == null)
+        {
+            return null;
+        }
+
+        string trimmed = text.Trim();
+        if (trimmed.Length >= 2 && trimmed[0] == '"' && trimmed[trimmed.Length - 1] == '"')
+        {
+            trimmed = trimmed.Substring(1, trimmed.Length - 2).Trim();
+        }
+
+        return trimmed.Length == 0 ? UserSettings.DefaultRunRoot() : trimmed;
+    }
+
+    /// <summary>
+    /// What a save says of the run root (owner decision 154A, the owner's follow-up), when there is anything to
+    /// say: `run_root_refusal`, the note <see cref="ChooseRunRoot"/> made, on the save's answer -
+    /// `settings.saved`, or the `error` of a save whose restart failed.
+    /// </summary>
+    private static void AddRunRootNote(Dictionary<string, object?> answer, Dictionary<string, object?>? runRootNote)
+    {
+        if (runRootNote != null)
+        {
+            answer["run_root_refusal"] = runRootNote;
         }
     }
 
@@ -1104,6 +1697,1007 @@ public sealed class ReviewHost : IDisposable
         }
 
         PostStatus("error", string.Join(" ", problems.ToArray()));
+    }
+
+    // ---- a restart for settings saved during a turn, a remodel run or a check (143A, 145A, 157A) --
+
+    /// <summary>
+    /// The Review tab's sentence for a save whose restart waits, naming what it waits for (owner decisions 143A,
+    /// 145A and 157A): the settings are written and saved in the host, and the backend is restarted with them once
+    /// nothing holds it back - "the settings are saved; the backend restarts when the running turn ends." for a turn
+    /// that started during the save, and so for a remodel run, a check, or any of them together.
+    /// </summary>
+    private static string PromiseFor(bool turn, DeferredRestart.Work work) =>
+        "the settings are saved; the backend restarts when " + EndsOf(WhatHoldsTheRestart(turn, work)) + ".";
+
+    /// <summary>
+    /// What the page is told when the watcher stops looking at a backend that does not answer
+    /// (<see cref="DeferredRestart.UnansweredLooks"/>): the restart has not been made, it still
+    /// waits for the next review, follow-up, remodel run or check, and a save made now - which asks
+    /// whether a turn runs leniently - restarts the backend. "The saved settings", since owner
+    /// decision 145A: a save made during a remodel run was not made during a turn; and a check since
+    /// owner decision 157A, which makes a check make the restart first too. Saving again is still the
+    /// way on, because the watcher reads work - a remodel run or a check - before the turns, so it says
+    /// this only once no work holds the restart, and no work can begin while the backend gives no answer.
+    /// </summary>
+    private const string RestartNotAnswered =
+        "the review backend is not answering, so it has not been restarted with the saved settings yet. "
+        + "It will be before the next review, follow-up, remodel run or check, once it answers; to restart it "
+        + "now, save the settings again.";
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22): what a save whose restart would move the run root says while a copy the
+    /// Remodel tab left open under the run root in force is not closed - the close the restart makes first, through the
+    /// backend in force, was not answered - and what the watcher says when it meets that close not answered, and stops.
+    /// R22.11: it names the earlier folder for runs saved again as the way out, not the same settings saved again, which
+    /// only asks the close again - a hung backend never answers it.
+    /// </summary>
+    private const string CleanupHoldsTheRestartPromise =
+        "the settings are saved; the backend restarts with them once the copy an earlier remodel left open in SOLIDWORKS "
+        + "is closed. That is tried again before the next review, follow-up, remodel run or check; if it cannot be "
+        + "closed, save the earlier folder for runs in Settings again.";
+
+    /// <summary>
+    /// The host's sentences about a restart that waits, as `backend.restarted` carries them once it
+    /// is made: the page takes whichever of them is on its banner off it, and nothing else there.
+    /// Every promise a save can make - a turn, a remodel run, one check or a check on each check tab,
+    /// alone or together (owner decision 157A) - then the watcher's word.
+    /// </summary>
+    private static readonly string[] RestartSentences = EveryRestartSentence();
+
+    /// <summary>
+    /// <see cref="RestartSentences"/>: every promise, 145A's three first, in the order their parts are
+    /// counted - the checks, then the remodel run, then the turn - then <see cref="RestartNotAnswered"/>, then
+    /// <see cref="CleanupHoldsTheRestartPromise"/> (owner decision 159A).
+    /// </summary>
+    private static string[] EveryRestartSentence()
+    {
+        var sentences = new List<string>();
+        foreach (DeferredRestart.Work checks in new[]
+                 {
+                     DeferredRestart.Work.None,
+                     DeferredRestart.Work.ModelCheck,
+                     DeferredRestart.Work.ModelCheck | DeferredRestart.Work.StandardsCheck,
+                 })
+        {
+            foreach (bool remodelRun in new[] { false, true })
+            {
+                foreach (bool turn in new[] { false, true })
+                {
+                    if (turn || remodelRun || checks != DeferredRestart.Work.None)
+                    {
+                        sentences.Add(PromiseFor(turn, remodelRun ? checks | DeferredRestart.Work.RemodelRun : checks));
+                    }
+                }
+            }
+        }
+
+        sentences.Add(RestartNotAnswered);
+        sentences.Add(CleanupHoldsTheRestartPromise);
+        return sentences.ToArray();
+    }
+
+    /// <summary>
+    /// What a restart that waits waits for, named as the Review tab's sentences name it (owner decisions 143A, 145A
+    /// and 157A), in that order: "the running turn", "the remodel run", and "the running check" - or "the running
+    /// checks" for a check on each check tab. Work whose kind is not known is named as a remodel run, as 145A named a
+    /// reading that throws; and so is work with nothing named at all, which no caller gives.
+    /// </summary>
+    private static List<string> WhatHoldsTheRestart(bool turn, DeferredRestart.Work work)
+    {
+        var named = new List<string>();
+        if (turn)
+        {
+            named.Add("the running turn");
+        }
+
+        int checks = ChecksAmong(work);
+        if (RemodelRunAmong(work) || (named.Count == 0 && checks == 0))
+        {
+            named.Add("the remodel run");
+        }
+
+        if (checks == 1)
+        {
+            named.Add("the running check");
+        }
+        else if (checks > 1)
+        {
+            named.Add("the running checks");
+        }
+
+        return named;
+    }
+
+    /// <summary>
+    /// What holds the restart back, joined - "and" before the last - with the verb that agrees: "the running
+    /// check ends", "the running checks end", "the running turn, the remodel run and the running check end".
+    /// </summary>
+    private static string EndsOf(List<string> named)
+    {
+        string joined = named.Count == 1
+            ? named[0]
+            : string.Join(", ", named.Take(named.Count - 1)) + " and " + named[named.Count - 1];
+        bool one = named.Count == 1 && named[0] != "the running checks";
+        return joined + (one ? " ends" : " end");
+    }
+
+    /// <summary>Whether a remodel run is among the work - or work whose kind is not known, which is read as one.</summary>
+    private static bool RemodelRunAmong(DeferredRestart.Work work) =>
+        (work & (DeferredRestart.Work.RemodelRun | DeferredRestart.Work.Unknown)) != 0;
+
+    /// <summary>How many checks are among the work: none, one, or one on each check tab.</summary>
+    private static int ChecksAmong(DeferredRestart.Work work) =>
+        ((work & DeferredRestart.Work.ModelCheck) != 0 ? 1 : 0) + ((work & DeferredRestart.Work.StandardsCheck) != 0 ? 1 : 0);
+
+    /// <summary>
+    /// How the answer to a save whose restart failed begins, the reason after it (owner decision
+    /// 150A): the settings are written and saved here before the backend is restarted, so the save
+    /// was kept and only the restart failed, and saving again retries it. The reason goes last
+    /// because a restart's failure need not end in a full stop.
+    /// </summary>
+    private const string SavedNotRestarted =
+        "the settings are saved, but the review backend did not restart with them. " + RetryTheRestart
+        + " The restart failed: ";
+
+    // ---- the way on once the backend did not start (owner decision 150A, found on review) ------
+
+    /// <summary>
+    /// What the Review tab is told to do once the add-in's first start of the backend failed: the
+    /// settings are saved on this tab, and a save starts the backend, none running included.
+    /// </summary>
+    internal const string StartItAgain = "Save Settings to start it again.";
+
+    /// <summary>...what every other tab is told once the backend did not start: it has no Save of its own.</summary>
+    internal const string StartItAgainOnTheReviewTab = "Save Settings on the Review tab to start it again.";
+
+    /// <summary>
+    /// ...what the Review tab is told once a restart that waited for a turn or a remodel run failed:
+    /// true whether the restart stopped the old backend or failed before it did, so not "start".
+    /// </summary>
+    private const string RetryTheRestart = "Save the settings again to retry the restart.";
+
+    /// <summary>
+    /// The add-in's word that the backend did not start, as a page's banner shows it: the failure,
+    /// then the way on (owner decision 150A, found on review). The way on is a sentence of its own,
+    /// so a failure that does not end in one - "... (log: &lt;path&gt;)" - is given a full stop.
+    /// </summary>
+    internal static string WithTheWayOn(string failure, string wayOn)
+    {
+        string said = (failure ?? string.Empty).TrimEnd();
+        if (said.Length == 0)
+        {
+            return wayOn;
+        }
+
+        char last = said[said.Length - 1];
+        return said + (last == '.' || last == '!' || last == '?' ? " " : ". ") + wayOn;
+    }
+
+    // ---- the settings in force (owner decision 153A) ------------------------------------------
+
+    /// <summary>
+    /// What the Review tab is told while the backend that is up was started with settings other than
+    /// the saved ones - a restart failed before it stopped the old backend - and what reviews take
+    /// meanwhile, ending with the way on: saving again retries the restart.
+    /// </summary>
+    private const string NotInForce = NotInForceAsReviewsRun + ". " + RetryTheRestart;
+
+    /// <summary>
+    /// What the Review tab is told instead while the run root saved is not the one in force (owner decision 154A,
+    /// with 153A's record): 153A's sentence, and where every tab makes its runs meanwhile - the backend makes runs
+    /// only under the run root it was started with, and every tab makes them there, not in the folder the Settings
+    /// panel's field shows. Said whether the run root alone differs or other settings with it; never when it does
+    /// not, when the folder the field shows is the one runs are made in.
+    /// </summary>
+    private const string NotInForceWithTheRunRoot =
+        NotInForceAsReviewsRun + ", and every tab makes its runs in the folder for runs it was started with, not the "
+        + "one saved. " + RetryTheRestart;
+
+    /// <summary>What both sentences say first: the saved settings are not in force, and what reviews run with.</summary>
+    private const string NotInForceAsReviewsRun =
+        "The saved settings are not in force yet: the review backend did not restart with them, so reviews "
+        + "run with the settings it was started with";
+
+    /// <summary>
+    /// What the Review tab is told instead while the run root saved is not the one in force and the one in force is
+    /// itself one the rule refuses (the reviews of 154A's merge, N4): no tab makes runs there - every start is
+    /// refused - so the sentence says no run can start until the backend restarts with the settings saved, where
+    /// <see cref="NotInForceWithTheRunRoot"/> would say where runs are made, and none is.
+    /// </summary>
+    private const string NotInForceWhileTheRunRootIsRefused =
+        "The saved settings are not in force yet: the review backend did not restart with them, and no run can start "
+        + "until it does, since the folder for runs it was started with is refused. " + RetryTheRestart;
+
+    /// <summary>
+    /// <see cref="NotInForce"/> while it is true, or null: never with no backend up - nothing is in
+    /// force, and the add-in's word that the backend did not start or restart says how to go on
+    /// (owner decision 150A) - nor while a restart waits or is being made, when 143A's and 145A's
+    /// promise is the true sentence, saving again is not the way on, and nothing new runs on the old
+    /// backend before it is made; nor while a start is under way (<see cref="_starting"/>), which publishes
+    /// the backend's endpoint before it records the settings it was made with, so the backend up runs with
+    /// those while the ones recorded are older (found on Codex's re-review, R1); and otherwise only while
+    /// the saved settings differ from the ones in force (<see cref="SameBackendSettings"/>) - and then
+    /// <see cref="NotInForceWithTheRunRoot"/> when the run root saved is not the one in force (owner
+    /// decision 154A), or <see cref="NotInForceWhileTheRunRootIsRefused"/> when the one in force is one the
+    /// rule refuses (the reviews of 154A's merge, N4) - judged here, and the rule reads nothing over the
+    /// network or through a link before it refuses, so the restart's lock waits on no share. The endpoint is
+    /// read before the start under way: a start whose endpoint was read is still under way, or has recorded
+    /// its settings. Read by `init`, and by a restart that waited and failed for its way on, under the
+    /// restart's lock, which is taken before the state's (<see cref="DeferredRestart.Ahead"/>).
+    /// </summary>
+    private string? SettingsNotInForce()
+    {
+        if (_options.Backend.Endpoint == null || _restart.Ahead || _starting != null)
+        {
+            return null;
+        }
+
+        // One reading of each, so the sentence is chosen by the settings it weighed.
+        UserSettings saved = _settings;
+        UserSettings inForce = _inForce;
+        if (SameBackendSettings(saved, inForce, _options.Environment))
+        {
+            return null;
+        }
+
+        if (RunRootRule.SameRunRoot(saved.RunRoot, inForce.RunRoot))
+        {
+            return NotInForce;
+        }
+
+        return RunRootRule.Judge(inForce.RunRoot, _options.RunRootProbe) == RunRootVerdict.Accepted
+            ? NotInForceWithTheRunRoot
+            : NotInForceWhileTheRunRootIsRefused;
+    }
+
+    /// <summary>
+    /// Found on review (C2): one reading of <see cref="SettingsNotInForce"/> and its number, one past the
+    /// last reading's, both taken under one lock, so the numbers follow the order of the readings. `init`
+    /// and the word that a restart which waited failed carry both, and the Review page takes a reading
+    /// only when its number is above the last it took: an `init` read before such a failure and delivered
+    /// after its word - the posts go out from different threads - cannot take the sentence off. Posted
+    /// outside the lock, in whatever order; the numbers decide. Taken under the restart's lock by the
+    /// failure's word, which is taken before this lock, never after it.
+    /// </summary>
+    private (string? Sentence, long Revision) ReadSettingsNotInForce()
+    {
+        lock (_inForceReading)
+        {
+            return (SettingsNotInForce(), ++_inForceReadings);
+        }
+    }
+
+    /// <summary>
+    /// The Review tab's word that a restart which waited has failed: `status {stage: "error"}` with
+    /// the failure, masked, as a failed start is reported, and the way on after it (owner decision
+    /// 150A, review) - when the old backend is still up with other settings than the saved ones, the
+    /// sentence that says so, which ends with that way on. Found on review of 153A: this is the one
+    /// word after which the settings in force can differ from the saved ones with no `init` to say
+    /// so, so it carries `settings_not_in_force` as `init` does - the sentence, or null - and the
+    /// page holds it from here. Called under the restart's lock. Marked as the backend's own word
+    /// (`lifecycle`) when no backend is up - exactly when the other tabs are told
+    /// (<see cref="TellTheOtherTabsTheRestartFailed"/>) - since that mark, and a save's
+    /// `BackendNotRestarted`, are what tell the page's strip the backend is not running (the review of
+    /// owner decision 160A, S3).
+    /// </summary>
+    private void PostRestartFailed(Exception failure)
+    {
+        (string? notInForce, long revision) = ReadSettingsNotInForce();
+        Dictionary<string, object?> payload =
+            _actions.StatusPayload("error", WithTheWayOn(failure.Message, notInForce ?? RetryTheRestart));
+        payload["settings_not_in_force"] = notInForce;
+        payload["settings_not_in_force_revision"] = revision;
+        if (_options.Backend.Endpoint == null)
+        {
+            payload["lifecycle"] = true;
+        }
+
+        Send("status", null, payload);
+    }
+
+    /// <summary>
+    /// Whether a backend started with <paramref name="inForce"/> runs with <paramref name="saved"/>:
+    /// the same provider, model and effort, which a session takes, and the same key, base URL and
+    /// Gemini Enterprise project and location, which a save writes and the backend's start reads -
+    /// each as the start reads it for the provider, by the rules it starts the backend with
+    /// (`BackendClient.StartOptions`, `BaseUrlFor`, `ReadsGeminiEnterprise`): the base URL for openai
+    /// alone, trimmed, a blank one none, and Gemini Enterprise for gemini alone (found on review).
+    /// The key as it resolves, by its value and where it came from, and not as it is stored, since
+    /// DPAPI stores the same key anew each time it is typed. And the run root, which a save writes
+    /// since owner decision 154A's follow-up and the start hands the backend, which makes runs only
+    /// under it - by <see cref="RunRootRule.SameRunRoot"/>, ignoring letter case, as a folder is named. Python,
+    /// which the start reads too, is no part of a save, which keeps the one the add-in loaded, so it
+    /// cannot differ; nor are the Send box and the Standards profile, which the backend is not started
+    /// with.
+    /// </summary>
+    private static bool SameBackendSettings(UserSettings saved, UserSettings inForce, Func<string, string?> environment)
+    {
+        ResolvedApiKey savedKey = saved.ResolveApiKey(environment);
+        ResolvedApiKey keyInForce = inForce.ResolveApiKey(environment);
+        return RunRootRule.SameRunRoot(saved.RunRoot, inForce.RunRoot)
+            && string.Equals(saved.Provider, inForce.Provider, StringComparison.Ordinal)
+            && string.Equals(saved.Model, inForce.Model, StringComparison.Ordinal)
+            && string.Equals(saved.Effort, inForce.Effort, StringComparison.Ordinal)
+            && string.Equals(savedKey.Key, keyInForce.Key, StringComparison.Ordinal)
+            && string.Equals(savedKey.Source, keyInForce.Source, StringComparison.Ordinal)
+            && string.Equals(BackendClient.BaseUrlFor(saved), BackendClient.BaseUrlFor(inForce), StringComparison.Ordinal)
+            && (!BackendClient.ReadsGeminiEnterprise(saved)
+                || (string.Equals(saved.GeminiEnterprise?.Project, inForce.GeminiEnterprise?.Project, StringComparison.Ordinal)
+                    && string.Equals(saved.GeminiEnterprise?.Location, inForce.GeminiEnterprise?.Location, StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The sentence for a save whose restart waits, naming what it waits for (owner decisions 145A and 157A):
+    /// a turn that started during the save, which the backend's own check found; or the work in progress the
+    /// restart read under its lock - a remodel run, a check, or both - and a turn that started during the save
+    /// as well, which is asked of the backend now, since the work was read before the backend's own check could
+    /// be reached. A backend that gives no answer about a chat is no turn here: the sentence names the work, and
+    /// the watcher says, once the work is over, if the backend still does not answer.
+    /// </summary>
+    private string Promise(DeferredRestart.Hold waitsFor, DeferredRestart.Work work)
+    {
+        if (waitsFor == DeferredRestart.Hold.Cleanup)
+        {
+            return CleanupHoldsTheRestartPromise;
+        }
+
+        if (waitsFor != DeferredRestart.Hold.Work)
+        {
+            return PromiseFor(turn: true, DeferredRestart.Work.None);
+        }
+
+        return PromiseFor(LookAtTheTurns(stopAtNoAnswer: true) == TurnsSeen.Running, work);
+    }
+
+    /// <summary>A new review, or a page call that would start a turn, while a turn holds the restart back.</summary>
+    private const string TurnHoldsTheRestart =
+        "the backend restarts with the saved settings when the running turn ends, and nothing new starts "
+        + "before then. Wait for the turn to end, or press Stop, then try again.";
+
+    /// <summary>
+    /// ...while work the restart would end holds it back (owner decisions 145A and 157A), naming it: "the backend
+    /// restarts with the saved settings when the remodel run ends, and nothing new starts before then. Wait for
+    /// the run to end, then try again." for a remodel run, as 145A wrote it, and so for a check, the checks on both
+    /// check tabs, or a remodel run and a check together, which are waited for together.
+    /// </summary>
+    private static string WorkHoldsTheRestart(DeferredRestart.Work work)
+    {
+        List<string> named = WhatHoldsTheRestart(turn: false, work);
+        string waitFor = named.Count > 1 ? "them"
+            : RemodelRunAmong(work) ? "the run"
+            : ChecksAmong(work) == 1 ? "the check"
+            : "the checks";
+        return "the backend restarts with the saved settings when " + EndsOf(named)
+            + ", and nothing new starts before then. Wait for " + waitFor + " to end, then try again.";
+    }
+
+    /// <summary>
+    /// The refusal for work the restart would end that holds it back (owner decisions 145A and 157A): under
+    /// `RemodelRunning` when a remodel run is among the work - a remodel run is in progress, as that class's
+    /// sentence on the Review tab says - and `CheckRunning` when only checks are; in words that name all of it.
+    /// </summary>
+    private static BackendRequestException WorkHoldsIt(DeferredRestart.Work work, bool retryable) =>
+        RemodelRunAmong(work)
+            ? new BackendRequestException("RemodelRunning", WorkHoldsTheRestart(work), retryable)
+            : new BackendRequestException("CheckRunning", WorkHoldsTheRestart(work), retryable);
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22): a new review, or a page call that would start a turn, while a remodel copy's
+    /// close, which a restart that moves the run root makes first, has not been answered. Each such call asks it again.
+    /// It ends with the ways out (R22.10, on review): a backend or bridge that does not answer never ends the wait, but
+    /// another document made active re-attaches the bridge, whose teardown ends the session, and the earlier folder for
+    /// runs saved again leaves the run root where it is.
+    /// </summary>
+    private const string CleanupHoldsTheRestart =
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
+        + "with the saved settings, and nothing new starts before then. " + CleanupWayOut;
+
+    /// <summary>...work - "remodel run" or "check" - refused so, through the gate it begins through.</summary>
+    private static string CleanupHoldsTheWork(string work) =>
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
+        + "with the saved settings, and no " + work + " starts before then. " + CleanupWayOut;
+
+    /// <summary>The ways out <see cref="CleanupHoldsTheRestart"/> and <see cref="CleanupHoldsTheWork"/> end with.</summary>
+    private const string CleanupWayOut =
+        "Make another document active in SOLIDWORKS, or save the earlier folder for runs in Settings again, then try again.";
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22.11, Codex's second review): a new review, or a page call that would start a
+    /// turn, while a remodel close holds the restart (<see cref="CleanupLeftBehind"/>, R22.12) and the backend gives no
+    /// answer whether a turn runs.
+    /// Saving the same settings again would only ask the close again, and another document made active does not
+    /// re-attach while a turn may be running (the tool-service gate's <see cref="TurnMayBeRunning"/>). The earlier folder
+    /// for runs saved again does: that restart keeps the run root, closes nothing, and replaces the backend, whose own
+    /// check reads no answer as no turn.
+    /// </summary>
+    private const string CleanupNoAnswerHoldsTheRestart =
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, and the review backend is not answering, "
+        + "so it has not been restarted with the saved settings, and nothing new starts before then. " + EarlierRootWayOut;
+
+    /// <summary>...work - "remodel run" or "check" - refused so, through the gate it begins through.</summary>
+    private static string CleanupNoAnswerHoldsTheWork(string work) =>
+        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, and the review backend is not answering, "
+        + "so it has not been restarted with the saved settings, and no " + work + " starts before then. " + EarlierRootWayOut;
+
+    /// <summary>The way out that works whether or not the backend answers (R22.11).</summary>
+    private const string EarlierRootWayOut = "Save the earlier folder for runs in Settings again, then try again.";
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22.12, Codex's third review): whether a remodel close holds the waiting restart
+    /// now - read, not remembered: the saved run root is not the one in force, so the restart would move it, and the
+    /// Remodel tab still holds a session under the one in force (<see cref="ReviewHostOptions.RemodelSessionLeftUnder"/>),
+    /// which the restart would close first. A close that ended late, a re-attach, a newer save and a restart made all
+    /// change the answer by themselves, with nothing to forget or race. Asked when a look finds the backend not answering,
+    /// to choose between the cleanup's words and the backend's own - and by the watcher under the restart's lock, which
+    /// the cleanup itself reads the tool service under. A reading that throws is read as a session left: its way out,
+    /// the earlier folder for runs saved again, works either way.
+    /// </summary>
+    private bool CleanupLeftBehind()
+    {
+        string inForce = _inForce.RunRoot;
+        if (RunRootRule.SameRunRoot(_settings.RunRoot, inForce))
+        {
+            return false;
+        }
+
+        try
+        {
+            return _options.RemodelSessionLeftUnder(inForce);
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>...while the backend does not answer whether a turn runs.</summary>
+    private const string NoAnswerHoldsTheRestart =
+        "the review backend did not answer whether a turn is running, so it has not been restarted with "
+        + "the saved settings, and nothing new starts before then. Save the settings again to restart "
+        + "it, then try again.";
+
+    /// <summary>
+    /// Work - a remodel run, a plan or a Start (owner decision 145A), or a check (owner decision 157A) - refused
+    /// while a turn holds the restart back. On the Remodel tab, whose own Stop stops the run, and on a check tab,
+    /// which has no Stop, so it names the Review tab's, which stops the turn: "...and no remodel run starts before
+    /// then. ...", or "...and no check starts before then. ...".
+    /// </summary>
+    private static string TurnHoldsTheWork(string work) =>
+        "the backend restarts with the saved settings when the running review turn ends, and no " + work
+        + " starts before then. Wait for the turn to end, or press Stop on the Review tab, then try again.";
+
+    /// <summary>...while the backend does not answer whether a turn runs; the settings are saved on the Review tab.</summary>
+    private static string NoAnswerHoldsTheWork(string work) =>
+        "the review backend did not answer whether a turn is running, so it has not been restarted with the "
+        + "saved settings, and no " + work + " starts before then. Save the settings again on the Review tab "
+        + "to restart it, then try again.";
+
+    /// <summary>
+    /// Which work the restart would end is in progress (owner decisions 145A and 157A): a remodel run
+    /// (<see cref="ReviewHostOptions.BackendBusy"/>), which a restart would end with its copy half changed; a
+    /// Model check and a Standards check (<see cref="ReviewHostOptions.ModelCheckInProgress"/>,
+    /// <see cref="ReviewHostOptions.StandardsCheckInProgress"/>), which a restart would leave evaluated on a
+    /// backend that restarted under it - and so only while a backend is up. With none, the restart is what brings
+    /// back the backend a check's evaluation needs, as 143A's look reads no backend: holding it would waste the very
+    /// extraction the check holds it for, since an extraction asks no backend and lasts minutes. A remodel run holds
+    /// it even then (145A), since every call it makes then fails and it cannot last. The restart's one reading,
+    /// before its look and under its own lock; the endpoint is read without a lock. Not knowing whether work is in
+    /// progress is not knowing that none is: a reading that throws is that work in progress.
+    /// </summary>
+    private DeferredRestart.Work WorkInProgress()
+    {
+        DeferredRestart.Work work = DeferredRestart.Work.None;
+        if (InProgress(_options.BackendBusy))
+        {
+            work |= DeferredRestart.Work.RemodelRun;
+        }
+
+        if (_options.Backend.Endpoint == null)
+        {
+            return work;
+        }
+
+        if (InProgress(_options.ModelCheckInProgress))
+        {
+            work |= DeferredRestart.Work.ModelCheck;
+        }
+
+        if (InProgress(_options.StandardsCheckInProgress))
+        {
+            work |= DeferredRestart.Work.StandardsCheck;
+        }
+
+        return work;
+    }
+
+    /// <summary>One reading of work in progress; a reading that throws is read as work in progress.</summary>
+    private static bool InProgress(Func<bool> reading)
+    {
+        try
+        {
+            return reading();
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// What the backend says holds the restart back. Read in the order the add-in can know it: no backend
+    /// process at all holds nothing - the restart is what brings one back; then the turns, asked of the
+    /// backend: a turn running, or a backend that gave no answer, since not knowing whether a turn runs is not
+    /// knowing that none does. Work in progress - a remodel run, a check - is the restart's own reading
+    /// (<see cref="WorkInProgress"/>), which it reads before this look, since the add-in knows it without
+    /// asking the backend (owner decision 145A read the run here, and 157A moved it there, with the checks), and
+    /// again under its own lock, after it. A remodel run still in progress holds the restart back even with no
+    /// backend: it cannot last, since every call it makes then fails. A check does not: with no backend up it
+    /// holds nothing, since the restart is what brings back the backend its evaluation needs (157A, T236).
+    /// </summary>
+    private DeferredRestart.Hold RestartHeldBack()
+    {
+        if (_options.Backend.Endpoint == null)
+        {
+            return DeferredRestart.Hold.None;
+        }
+
+        switch (LookAtTheTurns(stopAtNoAnswer: true))
+        {
+            case TurnsSeen.Running:
+                return DeferredRestart.Hold.Turn;
+
+            case TurnsSeen.NoAnswer:
+                return DeferredRestart.Hold.NoAnswer;
+
+            default:
+                return DeferredRestart.Hold.None;
+        }
+    }
+
+    /// <summary>
+    /// The restart <see cref="_restart"/> makes once nothing holds it back: the saved settings now -
+    /// the last ones saved, however many saves the turn saw - with the key resolved from them now,
+    /// so the backend is started with that provider's key and names it as the saved key's provider
+    /// (owner decision 138A).
+    /// </summary>
+    private void RestartWithSavedSettings()
+    {
+        UserSettings settings = _settings;
+        RestartWith(settings, settings.ResolveApiKey(_options.Environment));
+    }
+
+    /// <summary>
+    /// Owner decision 153A, found on review (C1): the add-in's first start of the backend, made through
+    /// <paramref name="start"/> - the backend client's own start - under the lock every restart this host
+    /// makes holds (<see cref="DeferredRestart.First"/>), and by the transition every restart records the
+    /// settings in force by (<see cref="StartWith"/>): with the settings saved at that moment and the key
+    /// resolved from them then, recorded once the start has succeeded. The add-in queues it when it
+    /// loads, and a save on the page pump can come first. One whose restart has started the backend is
+    /// left as it is - the first start finds it up and starts nothing - since a second start, with the
+    /// settings loaded, would replace it while the saved ones stay recorded, and one with the saved
+    /// settings would end any review already running on it. One whose restart failed left no backend,
+    /// and the first start makes one with the settings saved then. Throws what the start throws, having
+    /// recorded nothing, and <see cref="ObjectDisposedException"/> once the host is disposed.
+    /// </summary>
+    /// <returns>True when this started the backend; false when a restart had started it already.</returns>
+    public bool FirstStart(Action<UserSettings, ResolvedApiKey> start)
+    {
+        if (start == null)
+        {
+            throw new ArgumentNullException(nameof(start));
+        }
+
+        return _restart.First(() =>
+        {
+            if (_options.Backend.Endpoint != null)
+            {
+                return false;
+            }
+
+            UserSettings settings = _settings;
+            StartWith(settings, settings.ResolveApiKey(_options.Environment), start);
+            return true;
+        });
+    }
+
+    /// <summary>
+    /// Every restart this host makes - a save's made at once, and one made after it waited: the
+    /// backend restarted with <paramref name="settings"/> (<see cref="StartWith"/>), once the Remodel tab has closed what
+    /// it left under a run root the restart moves (<see cref="EndTheRemodelSessionsTheRunRootLeaves"/>).
+    /// </summary>
+    private void RestartWith(UserSettings settings, ResolvedApiKey key)
+    {
+        EndTheRemodelSessionsTheRunRootLeaves(settings);
+        StartWith(settings, key, _options.Backend.Restart);
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22): the cleanup a restart that moves the run root makes before it stops the
+    /// backend in force. A remodel session the Remodel tab left on the bridge - a failed plan's, a waiting plan's, a finished
+    /// run's, whose close was not answered - can be closed only through a backend that takes its run folder, and only the
+    /// backend in force does: the restarted one would refuse it (<c>resolve_run_dir</c>) before the bridge, every later plan
+    /// asking again. So it is closed first, here, under the restart's own lock, after the work that holds a restart back has
+    /// been read under it, and once no turn runs - asked first, as the backend's own check asks it again - so a restart that
+    /// would wait anyway sends nothing. A close not answered, or a Remodel tab that throws, throws
+    /// <see cref="RemodelCleanupPendingException"/>: nothing is stopped, the saved settings stay saved and the run root in
+    /// force stays in force, and the restart waits for the next caller to ask again. Nothing is asked of a restart that keeps
+    /// the run root. With no backend up there is none to close through, and the restart is what brings one back: since owner
+    /// decision 161A (004 research R24) those sessions are closed in process instead
+    /// (<see cref="EndTheRemodelSessionsInProcess"/>), and the restart goes on whatever that does.
+    /// </summary>
+    private void EndTheRemodelSessionsTheRunRootLeaves(UserSettings settings)
+    {
+        string leaving = _inForce.RunRoot;
+        if (RunRootRule.SameRunRoot(settings.RunRoot, leaving))
+        {
+            return;
+        }
+
+        if (_options.Backend.Endpoint == null)
+        {
+            EndTheRemodelSessionsInProcess(leaving);
+            return;
+        }
+
+        if (AnyTurnRunning())
+        {
+            throw new TurnRunningException();
+        }
+
+        bool answered;
+        try
+        {
+            answered = _options.EndRemodelSessionsLeftUnder(leaving);
+        }
+        catch (Exception)
+        {
+            // Not knowing whether the session was closed is not knowing that it was.
+            answered = false;
+        }
+
+        if (!answered)
+        {
+            throw new RemodelCleanupPendingException();
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 161A (004 research R24): with the backend in force gone, the Remodel tab closes in process what it left
+    /// under <paramref name="leaving"/> (<see cref="ReviewHostOptions.EndRemodelSessionsInProcessLeftUnder"/>), under the
+    /// restart's own lock, before the next backend starts. It holds nothing back: holding the restart would leave no backend
+    /// at all. A session it could not close stays as it was, the Remodel tab logging why; a throw is read the same way.
+    /// </summary>
+    private void EndTheRemodelSessionsInProcess(string leaving)
+    {
+        try
+        {
+            _options.EndRemodelSessionsInProcessLeftUnder(leaving);
+        }
+        catch (Exception)
+        {
+            // Not closed: the leftover stays as it was, until a re-attach or an unload ends it, and the restart goes on. The
+            // Remodel host logs its own failures (004 research R24.11); this host keeps no log, so only a delegate that is
+            // not the Remodel host's could throw here unsaid.
+        }
+    }
+
+    /// <summary>
+    /// Every start of the backend this host makes - the add-in's first, and every restart: the backend
+    /// started through <paramref name="start"/> with <paramref name="settings"/>, which are in force once
+    /// it has been (owner decision 153A, <see cref="_inForce"/>). Not before: whatever the start throws -
+    /// a turn the backend's own check found, which changed nothing, or a failure, before the old backend
+    /// stopped or after - leaves the settings in force as they were, and with no backend up nothing is in
+    /// force whatever they say. Called under the restart's own lock. From just before the start until the
+    /// settings are recorded, or the start has thrown, they are the start under way's
+    /// (<see cref="_starting"/>), since the start publishes the backend's endpoint before it returns
+    /// (found on Codex's re-review, R1); and from just before the start its key is among the keys masked,
+    /// and stays there (<see cref="_keysStarted"/>, the fourth review, S1). Their run root is the run root in
+    /// force from then on (owner decision 154A, <see cref="RunRoot"/>), and joins the run roots in force
+    /// (<see cref="_runRootsInForce"/>) just before.
+    /// </summary>
+    private void StartWith(UserSettings settings, ResolvedApiKey key, Action<UserSettings, ResolvedApiKey> start)
+    {
+        // Before the start, and kept: the backend it starts holds the key from then on, and its failure,
+        // which can name the key, is told once it is no longer under way (the fourth review, S1).
+        string? startedWith = key.Key;
+        if (!string.IsNullOrEmpty(startedWith) && Array.IndexOf(_keysStarted, startedWith) < 0)
+        {
+            _keysStarted = _keysStarted.Concat(new[] { startedWith! }).ToArray();
+        }
+
+        // The mark comes off only once the settings are recorded, or the start has thrown, never before:
+        // a reader that finds no start under way finds the settings of the backend up recorded.
+        _starting = settings;
+        bool lastStartFailed = _lastStartFailed;
+        _lastStartFailed = false;
+        try
+        {
+            start(settings, key);
+
+            // Owner decision 154A (the reviews' F6): the run root the start brought in joins those in force this
+            // session before it is the one in force, so whoever finds it in force finds it among them.
+            if (!_runRootsInForce.Any(runRoot => RunRootRule.SameRunRoot(runRoot, settings.RunRoot)))
+            {
+                _runRootsInForce = _runRootsInForce.Concat(new[] { settings.RunRoot }).ToArray();
+            }
+
+            _inForce = settings;
+        }
+        catch (TurnRunningException)
+        {
+            // Refused, not failed (the review of owner decision 160A, D3): the backend's own check found a turn
+            // and changed nothing, so the backend up is the one that was, and the last start made is the one that
+            // was - failed or not, as it was marked.
+            _lastStartFailed = lastStartFailed;
+            throw;
+        }
+        catch
+        {
+            // Made, and failed, whatever it threw: a BackendStartException, or anything outside that wrapper.
+            _lastStartFailed = true;
+            throw;
+        }
+        finally
+        {
+            _starting = null;
+        }
+    }
+
+    /// <summary>
+    /// Tells every other tab that holds the backend's port and token that this host has just
+    /// restarted the backend (owner decision 145A, <see cref="ReviewHostOptions.BackendRestarted"/>).
+    /// Never throws: a tab that cannot be told must not turn a restart that was made into a save
+    /// answered with an error, or into a restart reported as failed.
+    /// </summary>
+    private void TellTheOtherTabs()
+    {
+        try
+        {
+            _options.BackendRestarted();
+        }
+        catch (Exception)
+        {
+            // Each host's post swallows its own failures; this guards anything else the add-in does.
+        }
+    }
+
+    /// <summary>
+    /// A restart this host made failed (owner decision 145A, found on review). When the old backend
+    /// stopped with it - no backend is up, so the port and token every other tab holds answer
+    /// nothing - those tabs are told, with the failure masked, as a failed first start is told to
+    /// every page (<see cref="ReviewHostOptions.BackendRestartFailed"/>). One that failed before it
+    /// stopped anything left the old backend up, and their tokens with it: they are told nothing.
+    /// Never throws, for the reason <see cref="TellTheOtherTabs"/> gives.
+    /// </summary>
+    private void TellTheOtherTabsTheRestartFailed(Exception failure)
+    {
+        try
+        {
+            if (_options.Backend.Endpoint == null)
+            {
+                _options.BackendRestartFailed(Redact(failure.Message));
+            }
+        }
+        catch (Exception)
+        {
+            // Each host's post swallows its own failures; this guards anything else the add-in does.
+        }
+    }
+
+    /// <summary>
+    /// The refusal for what holds the restart back, or null when nothing does: the error class
+    /// whose next step is true of it, the words for it, and the flag the backend gives a call it
+    /// refuses for such a reason - its `TurnRunning` is not retryable (chat/server.py), work - a
+    /// remodel run or a check (owner decision 157A), which <paramref name="work"/> names - is answered
+    /// as a turn is, and a backend that does not answer as the proxy answers one that is not there.
+    /// </summary>
+    private BackendRequestException? HeldBackBy(DeferredRestart.Outcome outcome, DeferredRestart.Work work)
+    {
+        switch (outcome)
+        {
+            case DeferredRestart.Outcome.TurnRunning:
+                return new BackendRequestException("TurnRunning", TurnHoldsTheRestart, retryable: false);
+
+            case DeferredRestart.Outcome.WorkInProgress:
+                return WorkHoldsIt(work, retryable: false);
+
+            case DeferredRestart.Outcome.NotAnswered:
+                return CleanupLeftBehind()
+                    ? new BackendRequestException("RemodelCleanupPending", CleanupNoAnswerHoldsTheRestart, retryable: true)
+                    : new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheRestart, retryable: true);
+
+            case DeferredRestart.Outcome.CleanupPending:
+                return new BackendRequestException("RemodelCleanupPending", CleanupHoldsTheRestart, retryable: true);
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Makes the restart that settings saved during a turn wait for before a new review uses the
+    /// backend, or waits for the one being made, so the review runs on the restarted backend
+    /// with those settings and never on the old one. Answers false, having sent the refusal, when
+    /// it cannot: something still holds the restart back, and the refusal says what; or the
+    /// restart failed - this call's, or the one it waited for - which whoever made it has
+    /// reported, a save in its own answer (owner decision 150A) and any other caller in a `status`
+    /// with the way on, and that failure is this review's answer too. True when nothing waits, or
+    /// once the restart has been made.
+    /// </summary>
+    private bool RestartedForNewReview(string? id)
+    {
+        DeferredRestart.Outcome outcome = _restart.Apply(out Exception? failure, out DeferredRestart.Work busyWith);
+        BackendRequestException? held = HeldBackBy(outcome, busyWith);
+        if (held != null)
+        {
+            // Retryable, as this host's other refusals of a review are: it can be pressed again
+            // once what holds it back has ended.
+            SendError(id, held.ErrorClass, held.Message, retryable: true);
+            return false;
+        }
+
+        if (outcome == DeferredRestart.Outcome.Failed)
+        {
+            BackendRequestException failed = RestartFailed(failure!);
+            SendError(id, failed.ErrorClass, failed.Message, failed.Retryable);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// What a page call that would start a turn is answered with once the restart has ended the
+    /// chat it was for.
+    /// </summary>
+    private const string ChatEndedWithTheRestart =
+        "the backend restarted with the saved settings, and this review's chat ended with the backend "
+        + "it ran on. Press Review to review again with the new settings.";
+
+    /// <summary>
+    /// The pane proxy's question (owner decision 143A): what a page call that would start a turn
+    /// - a follow-up, an answer, a Send - is answered with while the backend waits to be
+    /// restarted with settings saved during a turn, or null to send it on as always. Such a call
+    /// is for a chat of the backend being replaced, so it is never sent: while something holds
+    /// the restart back it is refused, saying what; otherwise the restart is made first, or
+    /// waited for. Once one has been made the call is answered `UnknownChat` - the class, status
+    /// and flag the restarted backend would answer it with, since that backend does not hold the
+    /// chat - in words that say why; when the restart failed, made by this call or by the one it
+    /// waited for, the call is answered with that failure, the old backend perhaps still up and
+    /// holding its chat. Never throws, and asks nothing when nothing waits.
+    /// </summary>
+    public BackendRequestException? PageTurnRefusal()
+    {
+        DeferredRestart.Outcome outcome = _restart.Apply(out Exception? failure, out DeferredRestart.Work busyWith);
+        BackendRequestException? held = HeldBackBy(outcome, busyWith);
+        if (held != null)
+        {
+            return held;
+        }
+
+        switch (outcome)
+        {
+            case DeferredRestart.Outcome.NotPending:
+                return null;
+
+            case DeferredRestart.Outcome.Restarted:
+            case DeferredRestart.Outcome.RestartedMeanwhile:
+                // The backend the call was for has gone, and the chat with it.
+                return new BackendRequestException("UnknownChat", ChatEndedWithTheRestart, retryable: false);
+
+            case DeferredRestart.Outcome.Failed:
+                return RestartFailed(failure!);
+
+            default:
+                return StoppingWithTheAddIn();
+        }
+    }
+
+    /// <summary>
+    /// The answer to a new review, a page call or a remodel run when the restart it made or waited
+    /// for failed: the failure, masked, as the backend's own `BackendUnavailable`, retryable. One
+    /// copy for the three answers that give it.
+    /// </summary>
+    private BackendRequestException RestartFailed(Exception failure) =>
+        new BackendRequestException("BackendUnavailable", Redact(failure.Message), retryable: true);
+
+    /// <summary>
+    /// The answer once the add-in is unloading, and its backend with it
+    /// (<see cref="DeferredRestart.Outcome.Stopped"/>). One copy for the two answers that give it.
+    /// </summary>
+    private static BackendRequestException StoppingWithTheAddIn() =>
+        new BackendRequestException("BackendUnavailable", "the review backend is stopping with the add-in.", retryable: false);
+
+    /// <summary>
+    /// Owner decision 145A: the gate a remodel run - a plan or a Start - begins through, from the
+    /// Remodel page's own pump, so that it is treated as a turn. A settings restart that waits is
+    /// made first, as a new review makes it, or the one being made is waited for - a save's made at
+    /// once included - and then <paramref name="begin"/>, which marks the run in progress, runs
+    /// under the restart's own lock (<see cref="DeferredRestart.Begin"/>): no restart can begin
+    /// under the run, and none is under way when it begins, so the run never meets a backend that
+    /// is going, nor runs on the old one with settings saved since.
+    ///
+    /// Null once <paramref name="begin"/> has run. Otherwise the refusal, and it has not run: while
+    /// something holds the restart back, what - a turn (`TurnRunning`), a backend that does not
+    /// answer (`BackendUnavailable`), or work in progress: a check (`CheckRunning`, owner decision
+    /// 157A), or a remodel run (`RemodelRunning`), which only a reading that throws can give, since
+    /// the Remodel host refuses a second run itself - in words for the Remodel tab; the failure of the
+    /// restart this call made or waited for (`BackendUnavailable`), masked; or the add-in unloading.
+    /// Retryable, as this host's refusals of a review are, except the last. Throws only what
+    /// <paramref name="begin"/> throws.
+    /// </summary>
+    public BackendRequestException? BeginRemodelRun(Action begin) => BeginWork(begin, "remodel run");
+
+    /// <summary>
+    /// Owner decision 157A: the gate a check - a Model check or a Standards check - begins through, from its
+    /// tab's own pump, so that it is treated as a turn, as a remodel run is (<see cref="BeginRemodelRun"/>): a
+    /// settings restart that waits is made first, or the one being made is waited for, and then
+    /// <paramref name="begin"/>, which marks the check in progress, runs under the restart's own lock. No
+    /// restart can begin under the check, and none is under way when it begins, so the check's extraction is
+    /// never wasted on a backend that restarted under it, nor made for the old one with settings saved since.
+    /// Answered as <see cref="BeginRemodelRun"/> answers, in words for a check tab.
+    /// </summary>
+    public BackendRequestException? BeginCheck(Action begin) => BeginWork(begin, "check");
+
+    /// <summary>
+    /// Owner decision 157A, the reviews: runs <paramref name="step"/> while no settings restart can begin or be made,
+    /// making none, and answers its answer (<see cref="DeferredRestart.WhileNoneRuns"/>); false once the host is
+    /// disposed. A check's evaluation takes back a hold whose time has passed in it, from the pane's proxy, if the
+    /// token it carries is the token of the backend up now - so a page held up past its minute is still held, unless
+    /// a restart was made meanwhile or the backend stopped.
+    /// </summary>
+    public bool WhileNoRestartRuns(Func<bool> step) => _restart.WhileNoneRuns(step);
+
+    /// <summary>
+    /// The race review of owner decision 157A: stops every settings restart that has not begun, and its watcher, as
+    /// disposing the host does first - for the add-in's unload, before the hosts whose work holds a restart back, a
+    /// remodel run or a check, let their holds go with them, so none is made in the moment before this host goes, on a
+    /// backend about to be stopped. The host is marked as stopping before the watcher is waited for (160A), so a
+    /// save or deferred completion in that wait, or while the other hosts stop, says only what is true of unloading.
+    /// Nothing begins through the gate after it. Doing it again, or disposing the host after it, does nothing more.
+    /// </summary>
+    public void StopRestarting()
+    {
+        _stopping = true;
+        _restart.Dispose();
+    }
+
+    /// <summary>
+    /// The one gate work the restart would end begins through (owner decisions 145A and 157A): the
+    /// restart's <see cref="DeferredRestart.Begin(Action, out Exception?, out DeferredRestart.Work)"/>, its outcome
+    /// answered in words for the tab the <paramref name="work"/> - "remodel run" or "check" - is pressed on.
+    /// </summary>
+    private BackendRequestException? BeginWork(Action begin, string work)
+    {
+        DeferredRestart.Outcome outcome = _restart.Begin(begin, out Exception? failure, out DeferredRestart.Work busyWith);
+        switch (outcome)
+        {
+            case DeferredRestart.Outcome.NotPending:
+            case DeferredRestart.Outcome.Restarted:
+            case DeferredRestart.Outcome.RestartedMeanwhile:
+                return null;
+
+            case DeferredRestart.Outcome.TurnRunning:
+                return new BackendRequestException("TurnRunning", TurnHoldsTheWork(work), retryable: true);
+
+            case DeferredRestart.Outcome.WorkInProgress:
+                return WorkHoldsIt(busyWith, retryable: true);
+
+            case DeferredRestart.Outcome.NotAnswered:
+                return CleanupLeftBehind()
+                    ? new BackendRequestException("RemodelCleanupPending", CleanupNoAnswerHoldsTheWork(work), retryable: true)
+                    : new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheWork(work), retryable: true);
+
+            case DeferredRestart.Outcome.CleanupPending:
+                return new BackendRequestException("RemodelCleanupPending", CleanupHoldsTheWork(work), retryable: true);
+
+            case DeferredRestart.Outcome.Failed:
+                return RestartFailed(failure!);
+
+            default:
+                return StoppingWithTheAddIn();
+        }
     }
 
     // ---- models -------------------------------------------------------------------------
@@ -1184,7 +2778,7 @@ public sealed class ReviewHost : IDisposable
         if (document == null || !document.IsAttachable) return;
         if (Reviews().Any(record => document.IsSameDocument(record.Document))) return;
 
-        SessionRecord? found = RunFolders.FindNotSentReview(_settings.RunRoot, document, _options.OpenSessionHead);
+        SessionRecord? found = RunFolders.FindNotSentReview(RunRoot, document, _options.OpenSessionHead, _options.RunRootProbe);
         if (found == null) return;
         lock (_sessionsLock)
         {
@@ -1357,6 +2951,10 @@ public sealed class ReviewHost : IDisposable
             SendError(id, "TurnRunning", "Stop the running review before changing engineering context.", true);
             return false;
         }
+        if (!RestartedForNewReview(id))
+        {
+            return false;
+        }
         if (_options.Backend.Endpoint == null)
         {
             SendError(id, "BackendUnavailable", "The review backend is not running yet.", true);
@@ -1370,6 +2968,8 @@ public sealed class ReviewHost : IDisposable
         long generation = ExpirePreparedContext();
         _preparationId = null;
         _preparedDocument = null;
+        string judged = RunRoot;
+        if (RunRootRefused(id, judged)) return;
         if (!ContextReady(id)) return;
         PageDocument? document = _options.CurrentDocument();
         if (document == null || !document.IsAttachable)
@@ -1382,9 +2982,11 @@ public sealed class ReviewHost : IDisposable
             SendError(id, "NotAttached", "Evidence extraction is not available in this host.", true);
             return;
         }
+        string? runRoot = RunRootToUse(id, judged);
+        if (runRoot == null) return;
         try
         {
-            string directory = RunFolders.CreateForDocument(_settings.RunRoot, document.Path, _options.Now());
+            string directory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now(), _options.RunRootProbe);
             PostStatus("extracting", "Extracting saved evidence for engineering context; no review tokens used.");
             DumpSummary summary = _options.Dump.Run(directory, message => PostStatus("extracting", message));
             if (!SameDocument(_options.CurrentDocument(), document)
@@ -1474,6 +3076,8 @@ public sealed class ReviewHost : IDisposable
 
     private void ReviewContext(string? id, JsonElement payload)
     {
+        string judged = RunRoot;
+        if (RunRootRefused(id, judged)) return;
         PreparedContext? prepared = CurrentContext(id, payload);
         if (prepared == null) return;
         string? contextId = Text(payload, "context_id");
@@ -1487,6 +3091,7 @@ public sealed class ReviewHost : IDisposable
         // Wait here as it does for review.start, and the record, status and reply say which.
         bool started = CreateReviewSession(prepared.Document, prepared.Directory, null,
             _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, prepared.Summary,
+            judged, ContextReviewRunRootChanged,
             attachment: new EngineeringContextAttachment(contextId!, head!, prepared.Sha256));
         if (started) _preparedContext = null;
     }
@@ -1496,6 +3101,11 @@ public sealed class ReviewHost : IDisposable
         ExpirePreparedContext();
         _preparationId = null;
         _preparedDocument = null;
+        if (RunRootRefused(id, RunRoot))
+        {
+            return;
+        }
+
         PageDocument? document = _options.CurrentDocument();
         if (document != null && document.Kind == "drawing")
         {
@@ -1518,6 +3128,24 @@ public sealed class ReviewHost : IDisposable
             SendError(id, "TurnRunning", "Stop the running review before preparing another.", true);
             return;
         }
+
+        // The final reviews of 157A: the preparation reads the whole component tree on SOLIDWORKS' application thread,
+        // where a check's page waits to evaluate, so it passes the gate the review's start passes - refused while a
+        // restart waits that something holds back, a check's evaluation among them, which a read in front of it would
+        // hold up past its minute; and a restart nothing holds back made first, as the start would make it.
+        if (!RestartedForNewReview(id))
+        {
+            return;
+        }
+
+        // ...and, as after every gate that can wait (owner decision 149A), the document is read again before anything
+        // is read from it: always, and a review of another document than the one it was asked for is refused.
+        if (!document.IsSameDocument(_options.CurrentDocument()))
+        {
+            SendError(id, "DocumentChanged", DocumentChangedMessage, retryable: true);
+            return;
+        }
+
         PostStatus("preparing", "Reading component availability before the review...");
         ReviewPreparation preparation;
         try
@@ -1549,6 +3177,15 @@ public sealed class ReviewHost : IDisposable
     private void StartReview(string? id, JsonElement payload)
     {
         ExpirePreparedContext();
+
+        // Owner decision 154A: first, before the document is read or the backend readied - which can make a
+        // waiting settings restart - and so before a review, a Retry or a context review's Retry makes anything.
+        string judged = RunRoot;
+        if (RunRootRefused(id, judged))
+        {
+            return;
+        }
+
         PageDocument? document = _options.CurrentDocument();
         if (document == null)
         {
@@ -1588,7 +3225,7 @@ public sealed class ReviewHost : IDisposable
         SessionRecord? retried = retryOf == null ? null : FindSession(retryOf);
         if (retried?.EngineeringContext != null)
         {
-            RetryContextReview(id, document, retried);
+            RetryContextReview(id, document, retried, judged);
             return;
         }
 
@@ -1607,10 +3244,43 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
+        // Owner decision 149A: the document was read before the backend was ready, and getting it
+        // ready can make or wait for a settings restart - seconds, in which the engineer can make
+        // another document active - while the dump attaches to whatever is active when it runs.
+        // Read again now, before anything is made: a review of another document than the one it
+        // was asked for is refused in plain words, rather than its evidence put in a run folder
+        // named for this one. Always, not only after a restart, as Plan reads its document again
+        // after its gate (RemodelHost.Plan): one rule, true of any change between the readings.
+        if (!document.IsSameDocument(_options.CurrentDocument()))
+        {
+            SendError(id, "DocumentChanged", DocumentChangedMessage, retryable: true);
+            return;
+        }
+
+        // The reviews of decision 154A, N8: getting the backend ready can make a waiting settings restart, which
+        // can bring another run root into force; it is judged before the run folder is made under it.
+        string? runRoot = RunRootToUse(id, judged);
+        if (runRoot == null)
+        {
+            return;
+        }
+
+        // Owner decision 152A: the session will be given the tool service's bridge, and its live
+        // checks run over whatever document that is attached to. Asked before anything is made, so
+        // a bridge left on another document costs no extraction; asked again at the session, which
+        // is given the bridge read then (CreateReviewSession). After the run root (merged with 154A,
+        // 2026-10-21), as at the session: 154A judges the run root before anything is asked or made
+        // under it, and this asks the tool service (corrected on the final reviews, N1).
+        if (!BridgeServes(document))
+        {
+            RefuseBridgeElsewhere(id, BridgeElsewhereBeforeExtractionMessage);
+            return;
+        }
+
         string runDirectory;
         try
         {
-            runDirectory = RunFolders.CreateForDocument(_settings.RunRoot, document.Path, _options.Now());
+            runDirectory = RunFolders.CreateForDocument(runRoot, document.Path, _options.Now(), _options.RunRootProbe);
         }
         catch (Exception failure)
         {
@@ -1618,7 +3288,7 @@ public sealed class ReviewHost : IDisposable
             SendError(
                 id,
                 "RunFolderFailed",
-                $"the run folder could not be created under '{_settings.RunRoot}': {failure.Message}",
+                $"the run folder could not be created under '{runRoot}': {failure.Message}",
                 retryable: false);
             return;
         }
@@ -1642,8 +3312,35 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
-        CreateReviewSession(document, runDirectory, Blank(Text(payload, "retry_of")),
-            _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, summary);
+        // Owner decision 152A, on the Codex review (X1): the extraction runs on the SOLIDWORKS
+        // application thread in one call, so a switch made during it - of document or of configuration -
+        // lands as it ends. A switch of configuration re-attaches nothing (004, decision 22A), so the
+        // bridge asked about at the session still serves the review's configuration by its record, while
+        // the session's live checks run on the one active then - which the bridge now refuses, one by
+        // one, so the review would run half. So the document is read again now, the last moment before
+        // the session is given the bridge, and a change is refused as before the extraction, in words
+        // true here. The run folder keeps what was extracted, as one whose extraction fails keeps its own.
+        // And on the review of those fixes (S2): the dump attaches to whatever is active as it begins,
+        // which can be another document than both readings - switched after the second, and back during
+        // the extraction - so what it says it extracted is compared too, and a dump that says nothing is
+        // not taken for the review's.
+        if (!document.IsSameDocument(summary.Extracted) || !document.IsSameDocument(_options.CurrentDocument()))
+        {
+            SendError(id, "DocumentChanged", DocumentChangedAtTheSessionMessage, retryable: true);
+            PostStatus("ready", ExtractedButNotReviewedStatus);
+            return;
+        }
+
+        if (!CreateReviewSession(document, runDirectory, Blank(Text(payload, "retry_of")),
+            _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, summary,
+            runRoot, NewReviewRunRootChanged))
+        {
+            // Refused at its session after all - a start of the backend under way (153A), a run root
+            // moved while it extracted (154A), its bridge moved to another document (152A) - and the
+            // status line is told the extraction is over here too, rather than left saying it is
+            // extracting: nothing is left half made.
+            PostStatus("ready", ExtractedButNotReviewedStatus);
+        }
     }
 
     /// <summary>
@@ -1653,11 +3350,11 @@ public sealed class ReviewHost : IDisposable
     /// `retry_of`, through the one gated session path, Send or Wait from the box. The backend
     /// validates the head again and refuses a changed context with its conflict.
     /// </summary>
-    private void RetryContextReview(string? id, PageDocument document, SessionRecord retried)
+    private void RetryContextReview(string? id, PageDocument document, SessionRecord retried, string judged)
     {
         if (!document.IsSameDocument(retried.Document))
         {
-            SendError(id, "ReviewNotActive", "Open or switch to the reviewed document and configuration before retrying its review with saved context.", retryable: true);
+            SendContextRetryNotActive(id);
             return;
         }
         if (!BackendReady(id))
@@ -1665,11 +3362,88 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
+        // Owner decision 149A, found on review: a context Retry extracts nothing, but its checks run
+        // first, and the first of them, the live interference check, runs over the bridge the
+        // session is given - the tool service's, which follows the active document - and writes its
+        // rows into this review's package. Getting the backend ready can make or wait for a settings
+        // restart, in which the engineer can make another document active, so the document is read
+        // again now, and a change is refused as a Retry pressed on another document is.
+        if (!document.IsSameDocument(_options.CurrentDocument()))
+        {
+            SendContextRetryNotActive(id);
+            return;
+        }
+
         CreateReviewSession(retried.Document, retried.RunDirectory, retried.ChatId,
             _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id,
             retried.ContextExtraction ?? new DumpSummary(retried.RunDirectory, 0, 0),
+            judged, ContextRetryRunRootChanged,
             attachment: retried.EngineeringContext);
     }
+
+    /// <summary>
+    /// A context review's Retry refused because the review's document is not the active one - when
+    /// Retry is pressed, or once the backend is ready (owner decision 149A) - written once, so both
+    /// give the one answer and the one way on: the review's own document, then Retry, which keeps
+    /// the saved context.
+    /// </summary>
+    private void SendContextRetryNotActive(string? id) =>
+        SendError(id, "ReviewNotActive", "Open or switch to the reviewed document and configuration before retrying its review with saved context.", retryable: true);
+
+    /// <summary>
+    /// Owner decision 154A: a Review-tab start - a preparation, a review, a Retry, a Recheck, context evidence
+    /// and a review with it - refuses a run root in force the run root rule refuses, in this tab's words,
+    /// before it does anything else: each hands the backend a run folder under the run root in force, which
+    /// the backend refuses on a share and spells otherwise through a link. Written once for every start on the
+    /// tab.
+    /// </summary>
+    private bool RunRootRefused(string? id, string runRoot) =>
+        _actions.RefusedRunRoot(id, runRoot, "nothing was started", RunRootRule.InSettings, "try again");
+
+    /// <summary>
+    /// The run root a start goes on under once the backend is ready (the reviews of decision 154A, N8): the run
+    /// root in force, judged again when a start of the backend made since moved it from <paramref name="judged"/> -
+    /// the restart the readiness check made, waiting since a save during a turn, before the run's folder is made;
+    /// and the add-in's first start, under way when the start began, which can end while the evidence is
+    /// extracted. Null once the start is answered with the refusal. Not a save's own restart: the page's
+    /// messages are handled one at a time, so no save is made while a start runs (corrected on the reviews of
+    /// 154A's merge, N5).
+    /// </summary>
+    private string? RunRootToUse(string? id, string judged)
+    {
+        string inForce = RunRoot;
+        if (string.Equals(inForce, judged, StringComparison.Ordinal))
+        {
+            return inForce;
+        }
+
+        return RunRootRefused(id, inForce) ? null : inForce;
+    }
+
+    /// <summary>
+    /// What a run answers, <c>RunRootChanged</c>, when the folder it would go on in is under a run root a settings
+    /// save has since moved (the reviews of decision 154A, finding F6): the backend makes runs only under the run
+    /// root it was started with, and would refuse the folder deep in the run. One sentence for each start, each
+    /// with its way on; no path.
+    /// </summary>
+    private const string RecheckRunRootChanged =
+        "this review's run folder is under a run root that is no longer in force, and the backend makes runs only "
+        + "under the one in force, so its checks were not run again. Press Review to review the model again.";
+
+    /// <inheritdoc cref="RecheckRunRootChanged"/>
+    private const string ContextReviewRunRootChanged =
+        "the saved context evidence is in a run folder under a run root that is no longer in force, and the backend "
+        + "makes runs only under the one in force, so its review was not started. Extract the context evidence again.";
+
+    /// <inheritdoc cref="RecheckRunRootChanged"/>
+    private const string ContextRetryRunRootChanged =
+        "this review's run folder is under a run root that is no longer in force, and the backend makes runs only "
+        + "under the one in force, so it was not retried. Press Review to review the model again.";
+
+    /// <inheritdoc cref="RecheckRunRootChanged"/>
+    private const string NewReviewRunRootChanged =
+        "the run root changed while the evidence was extracted, and the backend makes runs only under the one in "
+        + "force, so the review was not started. Press Review again.";
 
     private bool CanReviewDocument(PageDocument document, string? id)
     {
@@ -1680,6 +3454,12 @@ public sealed class ReviewHost : IDisposable
 
     private void RecheckReview(string? id, JsonElement payload)
     {
+        string judged = RunRoot;
+        if (RunRootRefused(id, judged))
+        {
+            return;
+        }
+
         string? chatId = Blank(Text(payload, "chat_id"));
         if (chatId == null)
         {
@@ -1695,18 +3475,158 @@ public sealed class ReviewHost : IDisposable
         }
 
         CreateReviewSession(record.Document, record.RunDirectory, chatId, ReviewMode.Recheck, id,
-            new DumpSummary(record.RunDirectory, 0, 0), replacing: record);
+            new DumpSummary(record.RunDirectory, 0, 0), judged, RecheckRunRootChanged, replacing: record);
     }
+
+    /// <summary>
+    /// What `review.start` answers when the active document, read again once the backend is ready,
+    /// is not the one read when the start began (owner decision 149A): its path, ignoring case, or
+    /// its configuration changed - while a settings restart was made or waited for, or in the
+    /// moment before. True of a configuration switched alone and of no document at all. No path:
+    /// the class's label says what to do, and this sits behind it in the page's fold.
+    /// </summary>
+    private const string DocumentChangedMessage =
+        "the active document or its configuration changed after the review was asked for, so nothing "
+        + "was extracted and no run folder was made. Make the part or assembly you want reviewed the "
+        + "active document, then press Review again.";
+
+    /// <summary>
+    /// ...and what it answers when the active document, read again once the evidence is extracted, is
+    /// not the review's (owner decision 152A, on the Codex review: X1) - a switch made during the
+    /// extraction, a configuration's above all, which re-attaches no bridge. The run folder keeps what
+    /// was extracted. No path, as <see cref="DocumentChangedMessage"/> names none.
+    /// </summary>
+    private const string DocumentChangedAtTheSessionMessage =
+        "the active document or its configuration changed while the evidence was extracted, so no review "
+        + "session was started and no check ran. Make the part or assembly and the configuration you want "
+        + "reviewed active again, then press Review again.";
+
+    /// <summary>
+    /// The status a new review refused after its extraction ends the extraction's statuses with (owner
+    /// decision 152A, on the Codex review): the extraction is over, and nothing was sent.
+    /// </summary>
+    private const string ExtractedButNotReviewedStatus =
+        "Evidence extracted, but no review was started; no review tokens used.";
+
+    /// <summary>
+    /// What a new review is refused with when the bridge it would be given is not on its document
+    /// and configuration, read before anything is made (owner decision 152A). No path, as
+    /// <see cref="DocumentChangedMessage"/> names none.
+    /// </summary>
+    private const string BridgeElsewhereBeforeExtractionMessage =
+        "the SOLIDWORKS bridge this review would be given is not attached to the review's document and "
+        + "configuration, so nothing was extracted and no run folder was made. It follows the active "
+        + "document once no review turn or remodel holds it: wait a moment, then press Review again.";
+
+    /// <summary>
+    /// ...and what any start is refused with at its session (owner decision 152A): true of every
+    /// start that makes one, a new review whose bridge moved while it extracted among them, whose
+    /// run folder keeps the evidence just extracted, as one whose extraction fails keeps its own.
+    /// </summary>
+    private const string BridgeElsewhereAtTheSessionMessage =
+        "the SOLIDWORKS bridge this review would be given is not attached to the review's document and "
+        + "configuration, so no review session was started and no check ran. It follows the active "
+        + "document once no review turn or remodel holds it: wait a moment, then try again.";
+
+    /// <summary>
+    /// Owner decision 152A, on the final review (C1): the hold a session's start takes, and the bridge it
+    /// would hand over, read under it. The hold is asked for first and the bridge read after, so a bridge
+    /// read under a hold is vouched for by the bridge check - which asks the gate whether the service
+    /// listening now, the one held, has its pipe. A hold the gate cannot give - no service listening as it
+    /// was asked for, a re-attach under way - can be followed by a bridge that re-attach published since,
+    /// which nothing would hold while `POST /sessions` is out, and a follow could take it down under the
+    /// review's first checks; so with a bridge published, the hold is asked for again, and the bridge read
+    /// again under it. Answers the hold, or null when there is still none to be had: the caller then hands
+    /// over no bridge - refusing one published, giving none when none is.
+    /// </summary>
+    private IDisposable? HoldForTheBridge(out BridgeConfig? bridge)
+    {
+        IDisposable? hold = _options.HoldToolService();
+        bridge = _options.Bridge;
+        if (hold == null && bridge != null)
+        {
+            hold = _options.HoldToolService();
+            bridge = _options.Bridge;
+        }
+
+        return hold;
+    }
+
+    /// <summary>
+    /// Owner decision 152A: whether the bridge published now - the one a session made now would be
+    /// given - serves <paramref name="document"/>.
+    /// </summary>
+    private bool BridgeServes(PageDocument? document) => BridgeServes(document, _options.Bridge);
+
+    /// <summary>
+    /// Owner decision 152A: whether <paramref name="bridge"/> serves <paramref name="document"/>, by
+    /// the pane's one rule (<see cref="PageDocument.IsSameDocument(PageDocument)"/>: the path ignoring
+    /// case, the configuration exactly), asked of the tool service's record of its attach - what its
+    /// `ping` answers. No bridge at all is no refusal: no tool service is listening, the session is
+    /// given none, and the backend runs no live check and says so, as before 152A. A bridge no
+    /// service listening now has, and an answer that cannot be had, serve no document.
+    /// </summary>
+    private bool BridgeServes(PageDocument? document, BridgeConfig? bridge)
+    {
+        if (bridge == null)
+        {
+            return true;
+        }
+
+        PageDocument? served;
+        try
+        {
+            served = _options.BridgeDocument(bridge);
+        }
+        catch (Exception)
+        {
+            served = null;
+        }
+
+        return document != null && document.IsSameDocument(served);
+    }
+
+    /// <summary>
+    /// Refuses a start whose bridge is not on its document (owner decision 152A), retryable, and asks
+    /// the tool service to follow the active document - the review's, which every start has checked
+    /// is active - so that the next press can find the bridge there: at once when nothing holds it,
+    /// once the hold ends when a review turn or a remodel does.
+    /// </summary>
+    private void RefuseBridgeElsewhere(string? id, string message)
+    {
+        try
+        {
+            _options.FollowActiveDocument();
+        }
+        catch (Exception)
+        {
+            // Asking is a courtesy to the next press; the refusal stands either way.
+        }
+
+        SendError(id, "BridgeOnAnotherDocument", message, retryable: true);
+    }
+
+    /// <summary>
+    /// What a review asked for before the backend is up is refused with, retryable - and one whose
+    /// session would be made while a start of it is under way (owner decision 153A, found on Codex's
+    /// re-review, R1).
+    /// </summary>
+    private const string BackendNotRunningYet =
+        "the review backend is not running yet, so there is nowhere to send the review. "
+        + "Check the log, then press Review again.";
 
     private bool BackendReady(string? id)
     {
+        if (!RestartedForNewReview(id)) return false;
         if (_options.Backend.Endpoint != null) return true;
-        SendError(id, "BackendUnavailable",
-            "the review backend is not running yet, so there is nowhere to send the review. "
-            + "Check the log, then press Review again.", retryable: true);
+        SendError(id, "BackendUnavailable", BackendNotRunningYet, retryable: true);
         return false;
     }
 
+    /// <param name="judgedRunRoot">The run root the start judged, or made its folder under: judged again if a
+    /// restart has moved the run root in force since (the reviews of decision 154A, N8).</param>
+    /// <param name="runRootChangedWords">What the start answers when <paramref name="runDirectory"/> is not under
+    /// the run root in force, which the backend would refuse (the reviews' finding F6).</param>
     /// <param name="replacing">The record a re-run replaces (`ReviewMode.Recheck` only): its
     /// place in the list and its own model status are kept, even if it was forgotten meanwhile.</param>
     /// <param name="attachment">Feature 016's saved context for this review, or null (owner decision
@@ -1714,8 +3634,8 @@ public sealed class ReviewHost : IDisposable
     /// <returns>Whether the session was created; false after a refusal already answered.</returns>
     private bool CreateReviewSession(
         PageDocument? document, string runDirectory, string? previousChatId, ReviewMode mode,
-        string? id, DumpSummary summary, SessionRecord? replacing = null,
-        EngineeringContextAttachment? attachment = null)
+        string? id, DumpSummary summary, string judgedRunRoot, string runRootChangedWords,
+        SessionRecord? replacing = null, EngineeringContextAttachment? attachment = null)
     {
         PageDocument? active = mode == ReviewMode.Recheck ? _options.CurrentDocument() : document;
         if (active != null && !CanReviewDocument(active, id))
@@ -1733,11 +3653,77 @@ public sealed class ReviewHost : IDisposable
             {
                 return false;
             }
+        }
 
+        // Found on Codex's re-review (R1): not while a start is under way, which publishes the backend's
+        // endpoint before it records the settings it was made with, so the settings in force are not yet
+        // those of the backend up. Refused as a review asked for before the backend is up is; read before
+        // the settings in force, so a start no longer under way has recorded them, and before a recheck's
+        // `checking` status, which nothing would take off after this refusal (the fourth review, N5).
+        if (_starting != null)
+        {
+            SendError(id, "BackendUnavailable", BackendNotRunningYet, retryable: true);
+            return false;
+        }
+
+        // The reviews of decision 154A, N8 and finding F6: every restart this start could meet is made by now - the
+        // backend is ready - and the backend makes runs only under the run root it was started with. So a run root
+        // that moved since the start judged it is judged again, and the run's folder - made before, by this start
+        // or an earlier one - must lie under it, or the start is answered here rather than by the backend's rule:
+        // before a Recheck's `checking` status, which nothing would take off after this refusal, as 153A's above.
+        string? runRoot = RunRootToUse(id, judgedRunRoot);
+        if (runRoot == null)
+        {
+            return false;
+        }
+
+        if (!RunFolders.IsUnder(runDirectory, runRoot, _options.RunRootProbe))
+        {
+            SendError(id, "RunRootChanged", runRootChangedWords, retryable: false);
+            return false;
+        }
+
+        // Owner decision 152A, on the Codex review (X2): the tool service is held from before the bridge
+        // is read until the session is tracked, at the end of this method - `POST /sessions` runs the
+        // review's checks over the bridge, and the gate's busy question sees the session's turn only
+        // once it is tracked - so a follow whose question was answered before this session existed
+        // does not take the bridge down under it. And no bridge is handed over unheld (the final
+        // review, C1): one published with no hold to be had is held at a second asking, or refused
+        // below (HoldForTheBridge). With nothing published, the session is given none, as before.
+        using IDisposable? hold = HoldForTheBridge(out BridgeConfig? bridge);
+
+        // Owner decision 152A: every start that makes a session - a new review, a Retry, a context
+        // review and its Retry, a Recheck - asks which document the bridge it hands over serves, and
+        // hands over only one on the review's. The bridge is read once, here, and that one is given:
+        // a pipe serves one attachment for its whole life, so a session given it either reaches the
+        // document asked about or nothing. Merged with 153A and 154A (2026-10-21), it is asked last,
+        // in the order those two leave: 153A reads a start under way before anything of the settings
+        // in force, the run root among them, and 154A judges the run root, and the folder under it,
+        // before anything is asked or made under it - and the hold and this question ask the tool
+        // service, and a refusal asks it to follow (corrected on the final reviews, N1). So the
+        // session is given the bridge checked here, a run folder under the run root in force checked
+        // above, and the settings in force read below.
+        if ((hold == null && bridge != null) || !BridgeServes(document, bridge))
+        {
+            // Nothing runs over this bridge: let it go before the tool service is asked to follow,
+            // which a hold still held would put off a poll.
+            hold?.Dispose();
+            RefuseBridgeElsewhere(id, BridgeElsewhereAtTheSessionMessage);
+            return false;
+        }
+
+        if (mode == ReviewMode.Recheck)
+        {
             // A recheck replaces this tracked chat; a fresh start instead sends the earlier
             // chat id as retry_of. Rechecks never ask the backend for a fresh retry.
             PostStatus("checking", "Checking the saved evidence again...");
         }
+
+        // Owner decision 153A: the provider, model and effort the backend was started with, which are
+        // the saved ones once a restart has put them in force. Until then the backend runs with the
+        // environment it was started with - the key, the base URL, Gemini Enterprise - and a session
+        // of the saved settings on it would pair one provider's settings with another's credentials.
+        UserSettings inForce = _inForce;
         ChatSessionHandle handle;
         try
         {
@@ -1745,11 +3731,11 @@ public sealed class ReviewHost : IDisposable
             // dump, its refusal follows the same error status and reply path as any request.
             handle = _options.Backend.CreateSession(new NewSessionRequest(
                 runDirectory,
-                _settings.Provider,
-                _settings.Model,
-                _settings.Effort,
+                inForce.Provider,
+                inForce.Model,
+                inForce.Effort,
                 _options.Engineer,
-                _options.Bridge,
+                bridge,
                 // FR-028: the page's Retry on an error card starts a fresh chat that says
                 // which one it is replacing, so the pair can be read back in the run folder.
                 mode == ReviewMode.Recheck ? null : previousChatId,
@@ -1810,6 +3796,14 @@ public sealed class ReviewHost : IDisposable
     /// call site has to remember (FR-015).
     /// </summary>
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
+
+    /// <summary>
+    /// <see cref="PostStatus(string, string)"/>, marked `lifecycle: true` when <paramref name="lifecycle"/>: the
+    /// add-in's own word that the backend did not start, as every other tab's host marks it. That word, and a save's
+    /// `BackendNotRestarted`, are what tell the Review page's strip the backend is not running; no other `error` does
+    /// (the review of owner decision 160A, S3).
+    /// </summary>
+    public void PostStatus(string stage, string message, bool lifecycle) => _actions.PostStatus(stage, message, lifecycle);
 
     /// <summary>
     /// The ready status a review posts once the dump and the chat session both exist: the

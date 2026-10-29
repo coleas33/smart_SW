@@ -205,8 +205,8 @@ so are the last two.
 
 | type | payload | host action |
 |------|---------|-------------|
-| `ready` | `{}` | Reply `init` `{backend: {port, origin}, token, run_root, profile_path: str \| null, document: {path, configuration, kind} \| null, latest_check: {run_dir, at} \| null}`. **[D]** `profile_path` is the configured path or null; `latest_check` names only the newest **`-standards`** folder, never a model check folder (FR-034). |
-| `standards.start` **[D]** | `{}` **[D]** | Refuse with `error {error_class: "NoDocument"}`, `"NotAttached"`, `"NeverSaved"` **[D]**, `"UnsupportedKind"` **[D]** (the document is not a part, an assembly or a drawing), or `"NoProfile"` **[D]** (no profile path is configured, or the file at it cannot be read) - **the profile check happens before anything is created or dumped, and a refusal writes no run folder** (FR-002). Otherwise create the check run folder, run the `Standards` profile dump in process, register the folder as the pane's latest run, and reply `standards.extracted {run_dir, document, configuration, counts: {documents, features, cut_list_items, drawing_sheets}, gaps}` **[D]**. Progress via `status`. The host stops here: the page calls `POST /checks/standards` itself. |
+| `ready` | `{}` | Reply `init` `{backend: {port, origin}, token, backend_start_failed: boolean, run_root, profile_path: str \| null, document: {path, configuration, kind} \| null, latest_check: {run_dir, at} \| null}`. **[D]** `profile_path` is the configured path or null; `latest_check` names only the newest **`-standards`** folder, never a model check folder (FR-034). *Amended 2026-10-21 (feature 002, owner decision 160A):* `init` also carries `backend_start_failed: boolean`, true only while no backend is up and none is being started, after the last start or restart - the add-in's first or a save's - failed: false before the first start, while one is under way, and while a backend is up - the old one, too, when a restart failed before it stopped it. It is the review host's word, handed to this host by the add-in, and an `init` that names a backend never says it. A page that loads, or loads again, after the failure's `status`, which it never saw, and is told `true` says "Backend not running" on its strip, where it said "Backend starting", and, when its banner says nothing else, "The backend is not running. Save Settings on the Review tab to start it again." as the add-in's word on the backend (`lifecycle`), which an `init` that names a backend takes down; one that names none and says `false` leaves the page as it was told. |
+| `standards.start` **[D]** | `{}` **[D]** | Refuse with `error {error_class: "NoDocument"}`, `"NotAttached"`, `"NeverSaved"` **[D]**, `"UnsupportedKind"` **[D]** (the document is not a part, an assembly or a drawing), or `"NoProfile"` **[D]** (no profile path is configured, or the file at it cannot be read) - **the profile check happens before anything is created or dumped, and a refusal writes no run folder** (FR-002). Otherwise create the check run folder, run the `Standards` profile dump in process, register the folder as the pane's latest run, and reply `standards.extracted {run_dir, document, configuration, counts: {documents, features, cut_list_items, drawing_sheets}, gaps}` **[D]**. Progress via `status`. The host stops here: the page calls `POST /checks/standards` itself. *Amended 2026-10-20 (feature 002, owner decision 154A):* refused first, before every other refusal, `RunRootRefused`, not retryable, when the run root is on a network share, reached through a link or written as a device path, or could not be checked, in words the page prints whole - what the root is, that nothing was checked, and the way on, a local folder chosen for runs in the Review tab's Settings, and Standards check pressed again - with no path; no run folder is made and nothing is extracted (002 `pane-host-messages.md`, "The run root rule"). *Amended 2026-10-21 (feature 002, owner decision 154A, with 153A's record of the settings in force):* refused first, before the run root is judged, `BackendUnavailable`, retryable, while a start of the backend under way would bring another run root into force, in words the page prints whole - the review backend is being started with another folder for runs, nothing was checked, and Standards check pressed again in a moment - with nothing made; the run root is read once, so the one judged is the one the run folder is made under (002 `pane-host-messages.md`, "The run root rule"). *Amended on the reviews of owner decision 154A's merge (feature 002), 2026-10-21:* the run root is read again once the extraction is over, and a run whose folder it no longer holds is answered `RunRootChanged`, not retryable, in words the page prints whole - the run root changed while the document was read, nothing was checked, Standards check pressed again - or, while a start that would bring another in is under way, `BackendUnavailable`, retryable, rather than `standards.extracted`; the folder is left and not registered (N6). A start refused for the run root in force while another folder chosen for runs is not in force is `RunRootChosenNotInForce`, whose way on is to save the settings again on the Review tab to retry the restart (N4; 002 `pane-host-messages.md`, "The run root rule"). *Amended 2026-10-21 (feature 002, owner decision 157A):* begun through the review host's restart gate as `check.start` is, in this tab's words, and the run holds a settings restart back until the page's `POST /checks/standards` has been answered (below). |
 | `entity.show` | `{persist_ref, persist_ref_scope, component_id}` | **Identical to the Review and Model check rows**, delegated to `PaneActions`; reply `entity.shown {ok, state_code, message, full_path \| null}`. |
 | `report.open` | `{run_id}` | Delegated to `PaneActions`; the path comes from the host's own record, never from the page. |
 | `folder.open` | `{run_id}` | Delegated to `PaneActions`. |
@@ -229,15 +229,39 @@ it decides document kind from the last three characters of a path that is empty 
 
 | type | payload |
 |------|---------|
-| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
+| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}`. *Amended 2026-10-19 (feature 002, owner decision 145A, found on review):* `error` also when a settings restart failed once the old backend had stopped, with the failure, masked, as a failed first start is told: no backend answers the token of the page's last `init`. *Amended on the third review the same day:* the add-in marks its own word on the backend - `backend_starting`, `ready`, and `error` for a failed start or restart - `lifecycle: true`, and the page takes down a banner it put up for such an `error` once a later `init` names a backend; no other banner *Amended 2026-10-20 (feature 002, owner decision 150A):* from such an `error` the page's backend strip says "Backend not running" until an `init` names a backend - through an `init` that names none, and whatever banner is put up meanwhile - where it followed `init` alone and said "Backend ready" under that banner; any other `error` leaves the strip as it was *Amended on the 150A review, 2026-10-20 (feature 002, owner decision 150A):* the add-in's `error` - a first start that failed, or a settings restart that failed once the old backend had stopped - ends with the way on, "Save Settings on the Review tab to start it again.": the failure is followed by a full stop when it does not end in one, then that sentence |
 | `document.changed` | `{path, configuration, kind} \| null` when the active document changes |
-| `backend.stopped` | `{exit_code, log_path}` |
+| `backend.stopped` | `{exit_code, log_path}`. *Amended 2026-10-20 (feature 002, owner decision 150A):* the page says "The backend stopped. Save Settings on the Review tab to start it again.": the add-in starts the backend when it loads and a settings save, made on the Review tab, restarts it, so reopening the pane, which the sentence named before, starts nothing. No host posts it |
+| `backend.restarted` | `{sentences}` - *added 2026-10-19 (feature 002, owner decision 145A):* the add-in restarted the backend with saved settings, a save's restart made at once or one made after it waited (feature 002 `pane-host-messages.md`, `settings.save`). `sentences` is empty: the Review tab's sentences about a restart that waited are shown there alone |
 
 Identical to the Model check page's table, including the two backend stages and why they are
 here: a tab opened while the backend was starting was given a null endpoint in `init`, so
 `status {stage: "ready"}` is its cue to re-send `ready` and take the endpoint from the fresh
 `init`; the page re-asks only while it holds no endpoint, so the host's own end-of-extraction
-`ready` does not re-initialise it in the middle of a check.
+`ready` does not re-initialise it in the middle of a check. *Amended 2026-10-19 (owner decision
+145A):* `backend.restarted` is its cue too, whatever it holds, since the restarted backend refuses
+the token of its last `init`: it re-sends `ready` - once more after an `init` already on its way -
+takes the new port and token, and keeps the check on screen without reading its latest check
+again. *Amended 2026-10-19 (feature 002, owner decision 145A, found on review):* as on the Model
+check page, a call made while such an `init` is on its way waits for it, answered or refused, a
+latest check the old token could not read is read again by the next `init` until it is read or a
+check is pressed, and an Accept's re-read is shown only while its check is the one on screen
+(third review the same day). *Amended 2026-10-20 (feature 002, owner decision 150A):* a re-read
+not shown is said in the banner, with the exception the Accept wrote, as on the Model check page;
+its words say a newer check was "pressed", not shown, since this page clears its verdict when a
+check fails before anything is graded, and a dropped re-read may then leave no check on screen.
+
+*Amended 2026-10-21 (feature 002, owner decision 157A):* a Standards check holds a settings restart back
+as a Model check does (`contracts/model-check.md`, section 3), from its gate until the page's
+`POST /checks/standards` has been answered, in this tab's words: before the gate, while a restart stands
+before the press, `status {stage: "backend_starting", message: "Waiting for the review backend to
+restart with the saved settings, then reading the document..."}`; a document that changed while the gate
+waited is refused `DocumentChanged`, retryable, "The active document or its configuration changed after
+Standards check was pressed, so nothing was checked. Make the document you want graded the active document
+and press Standards check again."; and a check that holds a waiting restart back - on the Model check tab, or
+this tab's own earlier one whose run still waits for its evaluation, as after a reload - refuses this one
+`CheckRunning`. The minute is counted from the reply's delivery, and a late evaluation held again, as there.
+Re-reads and Accepts are not held, as there.
 
 `kind` is what the page decides with. **[D]** The Model check page uses it to say whether a
 check can run at all, because only a part can be model-checked; here **all three kinds can be
@@ -251,6 +275,10 @@ Each check creates `<run_root>/<yyyyMMdd-HHmmss>-<doc>-standards` **[D]** throug
 `RunFolders`, the same helper the review, the terminal and the model check use, with the same
 collision suffix. Two runs in the same second on the same document get different ids from that
 suffix, so two records never share an id and the page always reads back the run it asked for.
+*Amended 2026-10-20 (feature 011, owner decision 148A; its research R12.3 and R12.8):* the folder,
+the collision suffix's too, is made in its full form - named under `Path.GetFullPath` of the run
+root, whatever spelling the setting holds - and `RunFolders.NewestCheckFolder` answers in the same
+form, so a folder made is spelled as the same folder found.
 
 ```
 package.json      the Standards-profile dump; extractor.profile == "standards"
@@ -390,3 +418,15 @@ general-chat session and every other tab carry no standards run, so none of them
 
 No provider is constructed and no API key is read when it runs, on this path or any other
 standards path (FR-045).
+
+*Amended 2026-10-21 (feature 002, owner decision 160A):* `standards.start` refuses a run root no folder can be made
+under - a character no folder can have, or a folder name longer than 255 characters - as it refuses every run root
+the rule refuses, before anything is made or extracted; and the run folder is made, and the newest run found, under
+the run root's long-name form (002 [pane-host-messages.md](../../002-task-pane-assistant/contracts/pane-host-messages.md),
+"The run root rule").
+
+*Amended 2026-10-21 (feature 002, owner decision 160A):* an Accept whose check is not shown again - its re-read
+failed, or a newer check was pressed first - says so in a place of its own beside the check's status, where it
+shared the banner with a check that fails, whichever came last staying. A failed check clears this page's result,
+so the place is outside it, and the failure keeps the banner, in either order; the notice comes down once a result
+is shown, which says where the check stands (002 [research.md](../../002-task-pane-assistant/research.md), 160A).

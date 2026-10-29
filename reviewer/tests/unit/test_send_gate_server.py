@@ -349,10 +349,26 @@ def test_a_failed_start_is_unregistered_and_releases_its_pending_folder(
     assert pending[0].state is ChatState.FAILED
     assert pending[0].run is None
     assert owner._pending_run_dirs == set()
-    owner._claim_run_dir(run_dir.resolve(), pending[0].chat_id)
-    # Stream debris retains today's disk rule; Retry permits a fresh claim.
-    monkeypatch.undo()
-    waiting_chat(client, run_dir, retry_of=str(pending[0].chat_id))
+    never_registered = str(pending[0].chat_id)
+    if point == "setup":
+        # Nothing was written, so the folder holds no session for a Retry to replace, and a
+        # Retry naming a chat this backend never registered still claims it afresh.
+        owner._claim_run_dir(run_dir.resolve(), pending[0].chat_id)
+        monkeypatch.undo()
+        waiting_chat(client, run_dir, retry_of=never_registered)
+    else:
+        # Stream debris keeps today's disk rule, and no stale RunDirInUse stands before it.
+        # Edited deliberately for owner decision 142A, which ends "Retry permits a fresh
+        # claim" here: a Retry claims a folder that holds a session only for the chat that
+        # wrote it, and this backend never registered that one, so the debris stays put.
+        with pytest.raises(server.UnknownChat):
+            owner._claim_run_dir(run_dir.resolve(), pending[0].chat_id)
+        monkeypatch.undo()
+        before = files_in(run_dir)
+        retry = client.post("/sessions", json=waiting_body(run_dir, retry_of=never_registered))
+        assert retry.status_code == 404, retry.text
+        assert retry.json() == chat.unknown_chat_refusal(run_dir, never_registered)
+        assert files_in(run_dir) == before
     assert provider_control.built == []
 
 

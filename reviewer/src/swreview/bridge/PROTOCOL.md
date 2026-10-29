@@ -1,7 +1,7 @@
 # Bridge protocol (Python side)
 
 **The authoritative protocol is
-`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.4). That
+`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.5). That
 file describes what `SwReview.Extractor.Console.exe serve --pipe <name>` speaks;
 `swreview.bridge.client` is written against it, and
 `reviewer/tests/unit/test_bridge_client.py` is the executable copy of what this client
@@ -44,9 +44,9 @@ exception (`BridgeError.result`) and `swreview.tools.bridge` appends it to the p
 `gaps`: the request is visible as something extraction could not provide rather than being
 lost with the error message.
 
-## The three refusals the host makes
+## The four refusals the host makes
 
-`BridgeError` has three named subclasses, so the tool layer can say which refusal happened
+`BridgeError` has four named subclasses, so the tool layer can say which refusal happened
 instead of only that the bridge said no. All are `BridgeError`, so a caller that catches
 the base type cannot crash on any of them, and each becomes `failed` coverage (or, for
 `drawing.read`, an `unresolved` confirmed-open item) the same way.
@@ -55,6 +55,7 @@ the base type cannot crash on any of them, and each becomes `failed` coverage (o
 |-------------|--------|-----------------------|
 | `error` whose text starts with `unauthorized` | `BridgeUnauthorizedError` | Opens the circuit at once |
 | `error` whose text contains `no longer open` | `BridgeDocumentClosedError` | None: the count is left exactly where it was |
+| `error` whose text starts with `configuration changed` | `BridgeConfigurationChangedError` | None: the count is left exactly where it was |
 | any other `error` answer to `drawing.read` (`REFUSING_COMMANDS`) | `BridgeRefusedError` | None: the count is left exactly where it was |
 
 A refused secret never becomes accepted and every attempt is logged on the host side, so
@@ -68,6 +69,17 @@ package; any live action fails with a clear 'document no longer open' error and 
 failed coverage" - a breaker message in its place would hide why the bridge went quiet.
 The match is on `no longer open` as a case-insensitive substring, so the contract's
 sentence and a fuller one around it are both recognised.
+
+A live command refused for another configuration (owner decision 152A) is the same kind of
+answer: the add-in's host refuses `capture`, `measure`, `interference` and `tessellate`, before
+they run, while the attached document's active configuration is not the one its bridge attached
+in, and answers again once it is (the host's `Serve/PROTOCOL.md`, Errors that are not command
+failures). Counted, three such refusals opened the circuit for the rest of a review run, or of
+the general-chat terminal's session, even after the configuration was switched back; so it is
+not counted, and live calls go on once it is (decided on review for the owner, who may revert;
+002 `research.md`, 152A). The match is at the start of the host's text, case-insensitively, as
+`unauthorized`'s is: the host opens its sentence with it, and a SOLIDWORKS failure that merely
+mentions a configuration change is counted like any other.
 
 A refused `drawing.read` (feature 011) is the same kind of answer: the host resolves the run,
 the package and the drawing from its own records and refuses, with a sentence, whatever it
@@ -90,10 +102,20 @@ breaker below - it counts once - and is not asked again. The backend offers the 
 only on `opens_closed`, and asks for the mode only when a custom or unclear document has a
 candidate, so a review without one never pings.
 
+## The `remodel.*` family's run (1.5)
+
+`swreview.bridge.remodel_client.RemodelClient` speaks the `remodel.*` family
+(`specs/004-resilient-remodeler/contracts/bridge-remodel.md`), not `COMMANDS`. Since protocol 1.5
+(owner decision 159A) it acts for one run, `run_id`, the run folder's own name: it opens that run and
+no other, and every command it sends after `remodel.open` carries `run_id`, first, so the host
+carries the command out only on that run's session and refuses another run's as `session_mismatch`
+(`RemodelTargetError`). A client given no run sends nothing after the open. The backend's routes
+build their clients for the run in their `run_dir` (`chat/remodel.py`); the probe acts for none.
+
 ## Circuit breaker
 
 `status: "circuit_open"` from the host, or `CIRCUIT_LIMIT` (3) consecutive failures of any
-kind but the two uncounted refusals above, opens the circuit locally: every further call raises `BridgeOpenError` naming the
+kind but the three uncounted refusals above, opens the circuit locally: every further call raises `BridgeOpenError` naming the
 last error without touching the pipe. The host does not recover without a restart, and the
 review is better off continuing offline with honest `failed` coverage. One success resets
 the count (a local trip only - a host that answered `circuit_open` will keep doing so).

@@ -59,18 +59,27 @@ from swreview.agent.settings import (
 )
 from swreview.chat.server import SESSION_FILES, _sse, build_provider, create_app
 from swreview.chat.sessions import ChatSession, ChatState
+from swreview.checks.rms.run import is_check_folder
+from swreview.checks.rules.run import session_replaced
+from swreview.checks.standards.run import run_standards_check
 from swreview.ir.loader import save_package
+from swreview.ir.models import EvidencePackage
 from swreview.prerun import DIGEST_HEADER, RMS_PRERUN_TOOLS
+from swreview.remodel.artifacts import GradedRun, grade_remodel_run, write_package
 from swreview.report.attention import rank
 from swreview.report.attention_record import (
     ATTENTION_FILE_NAME,
     read_attention_record,
     write_attention_record,
 )
-from swreview.report.session import Timing, load_session
+from swreview.report.session import Timing, load_session, save_session
 from tests.support.attention import CHECK_FOLDER as ATTENTION_CHECK_FOLDER
 from tests.support.contracts import contract_path, contract_validator
+from tests.support.features import feature, folder
 from tests.support.packages import build_package
+from tests.support.remodel import remodel_package
+from tests.support.replay import folder_hashes
+from tests.unit import test_chat_standards_routes as standards
 
 ORIGIN = "https://swreview.invalid"
 OTHER_ORIGIN = "https://evil.example"
@@ -789,13 +798,17 @@ def test_a_second_chat_on_a_run_dir_a_live_chat_holds_is_refused(
 def test_a_run_dir_that_already_holds_a_session_is_refused_without_a_retry(
     client: TestClient, run_dir: Path
 ) -> None:
-    """A second session in the folder would restart `seq` mid-file and lose the first."""
+    """A second session in the folder would restart `seq` mid-file and lose the first.
+
+    `RunDirTaken`, not `InvalidRunDir` (owner decision 146A): the folder is inside the run root,
+    and the path rule's sentence sent the engineer to Settings for a folder that only holds
+    another run's files."""
     settle(client, start_session(client, run_dir)["chat_id"])
 
     response = client.post("/sessions", json=session_body(run_dir))
 
     assert response.status_code == 400
-    assert response.json()["error_class"] == "InvalidRunDir"
+    assert response.json() == held_session_refusal(run_dir)
 
 
 def test_a_retry_into_the_same_run_dir_starts_a_clean_stream_and_keeps_the_old_one(
@@ -890,8 +903,7 @@ def test_a_retry_cannot_claim_a_folder_until_the_previous_render_finishes(
     assert str(read_attention_record(run_dir).session_id) == second["review_session_id"]
 
 
-@pytest.fixture
-def check_run_dir(run_root: Path) -> Path:
+def model_check_folder(run_root: Path) -> Path:
     """An RMS check folder inside the run root, holding its own `attention.json`.
 
     The committed fixture rather than a live `run_rms_check`: this module's package has no
@@ -902,6 +914,58 @@ def check_run_dir(run_root: Path) -> Path:
     session = load_session(target / "session.json")
     write_attention_record(target, rank(session), session.session_id)
     return target
+
+
+@pytest.fixture
+def check_run_dir(run_root: Path) -> Path:
+    """`model_check_folder`, for the tests that need only the Model check's."""
+    return model_check_folder(run_root)
+
+
+def standards_check_folder(run_root: Path) -> Path:
+    """A Standards check's folder: the seeded golden graded against the fictional profile A."""
+    target = run_root / "20261019-101600-assy-standards"
+    target.mkdir()
+    shutil.copy2(standards.SEEDED_PACKAGE, target / "package.json")
+    run_standards_check(target, standards.PROFILE_A, target, run_root=run_root)
+    return target
+
+
+REMODEL_RUN = "20261019-101500-bracket-remodel"
+"""A remodel run's folder in the run root, as `RunFolders.CreateForRemodel` names one."""
+
+
+def remodel_copy_package() -> EvidencePackage:
+    """The `ModelCheck` dump of a remodel run's copy: one core feature and one detail."""
+    tree = [
+        folder("3-Core", feature("Boss-Extrude1", "Extrusion", description="")),
+        folder("4-Detail", feature("Hole1", "HoleWzd")),
+    ]
+    return remodel_package(tree, document_id="doc:copy", name="bracket-RMS")
+
+
+def graded_remodel_run(run_root: Path) -> GradedRun:
+    """A remodel run that graded its copy before and after: `rms-before/` and `rms-after/`."""
+    remodel_run = run_root / REMODEL_RUN
+    remodel_run.mkdir()
+    package = remodel_copy_package()
+    return grade_remodel_run(
+        remodel_run, before=package, after=package, source_design_id="dsn:FICT-source"
+    )
+
+
+def grade_check_folder(run_root: Path) -> Path:
+    """The re-modeler's grade of the copy at open: `rms-before/` under its remodel run."""
+    return graded_remodel_run(run_root).before.check_file.parent
+
+
+CHECK_FOLDERS: dict[str, tuple[str, Callable[[Path], Path]]] = {
+    "model check": ("rms", model_check_folder),
+    "standards check": ("standards", standards_check_folder),
+    "re-modeler grade": ("rms", grade_check_folder),
+}
+"""Every check's folder a run root holds, by kind: the family its `check.json` records, and
+how it is built. The re-modeler's grade is `run_rms_check`'s own record, so it is `rms`."""
 
 
 def test_a_review_claiming_a_check_folder_rotates_its_record_beside_its_session(
@@ -946,6 +1010,637 @@ def test_the_record_is_not_in_session_files(run_dir: Path) -> None:
     assert ATTENTION_FILE_NAME not in SESSION_FILES
 
 
+# --- a Retry replaces only the session it names, and never a check's (owner decision 142A)
+
+
+def check_folder_refusal(check_dir: Path, family: str) -> dict[str, Any]:
+    """The one body a check's folder is refused with, by a Retry and by a start alike.
+
+    `RunDirTaken` since owner decision 146A, where 142A answered `InvalidRunDir`: the page shows
+    a class's sentence first, and `InvalidRunDir`'s is the path rule's."""
+    return {
+        "error_class": "RunDirTaken",
+        "message": (
+            f"{check_dir.resolve()} holds the {family} check that ran in it and no review "
+            "session: a Retry replaces only a review's session, and only a Model check's "
+            "folder is handed to a new review; review into a new run folder"
+        ),
+        "retryable": False,
+    }
+
+
+def grade_refusal(grade_dir: Path, side: str) -> dict[str, Any]:
+    """The body a start or a Retry meets on a re-modeler grade's folder (owner decision 146A)."""
+    folder = grade_dir.resolve()
+    return {
+        "error_class": "RunDirTaken",
+        "message": (
+            f"{folder} is the folder of the {side} grade of the remodel run in {folder.parent}: "
+            "a review never claims a grade's folder, which only the remodel run writes; review "
+            "into a new run folder"
+        ),
+        "retryable": False,
+    }
+
+
+def held_session_refusal(run_dir: Path) -> dict[str, Any]:
+    """A start into a folder that already holds a session and is no check's to hand over.
+
+    "a session", not "a review session" (owner decision 146A): the folder's session is a
+    review's as a rule, but it may be a remodel run's, or a check's whose record cannot be read."""
+    return {
+        "error_class": "RunDirTaken",
+        "message": (
+            f"{run_dir.resolve()} already holds a session that a start does not write over: "
+            "review into a new run folder, or retry the chat that wrote it with 'retry_of'"
+        ),
+        "retryable": False,
+    }
+
+
+def unknown_chat_refusal(run_dir: Path, chat_id: str) -> dict[str, Any]:
+    """A Retry into a folder that holds a session, naming a chat this backend does not hold."""
+    return {
+        "error_class": "UnknownChat",
+        "message": (
+            f"no chat {chat_id} on this backend: {run_dir.resolve()} holds a session, and a "
+            "Retry replaces it only for the chat that wrote it, which this backend no longer "
+            "holds or never did; review into a new run folder"
+        ),
+        "retryable": False,
+    }
+
+
+def stray_session_refusal(run_dir: Path, chat_id: str, wrote: str, *held: str) -> dict[str, Any]:
+    """A Retry naming a chat whose session `run_dir` does not hold; `held` names, file by
+    file, what each session file there that is not `wrote`'s holds instead."""
+    return {
+        "error_class": "RunDirInUse",
+        "message": (
+            f"{run_dir.resolve()} does not hold the session chat {chat_id} wrote ({wrote}): "
+            f"{'; '.join(held)}; a Retry replaces only the session its folder holds, so retry "
+            "the chat that wrote it or review into a new run folder"
+        ),
+        "retryable": False,
+    }
+
+
+@pytest.mark.parametrize("kind", list(CHECK_FOLDERS))
+def test_is_check_folder_recognises_every_family_s_folder(run_root: Path, kind: str) -> None:
+    """The question both routes ask of a folder that holds a session. It read the folder
+    through the rms record, so a standards check's folder was no check folder to it."""
+    _, build = CHECK_FOLDERS[kind]
+
+    assert is_check_folder(build(run_root))
+
+
+def test_a_standards_folder_whose_session_its_record_does_not_name_is_no_check_folder(
+    run_root: Path,
+) -> None:
+    """The other half, for the family that was missing: whatever the family, a folder is
+    its check only while `check.json` names the `session.json` beside it."""
+    check_dir = standards_check_folder(run_root)
+    session = load_session(check_dir / "session.json")
+    save_session(session.model_copy(update={"session_id": uuid4()}), check_dir / "session.json")
+
+    assert not is_check_folder(check_dir)
+
+
+@pytest.mark.parametrize("kind", list(CHECK_FOLDERS))
+def test_session_replaced_tells_a_check_s_own_session_from_one_in_its_place(
+    run_root: Path, kind: str
+) -> None:
+    """What `GET /reviews` asks of a folder holding `check.json` (owner decision 146A): the
+    check's own session is not replaced, and another session in its place - a review's, which
+    moved the check's aside - is, whatever the family. It answers `is_check_folder`'s question
+    the other way round only where both records can be read."""
+    _, build = CHECK_FOLDERS[kind]
+    check_dir = build(run_root)
+    assert (session_replaced(check_dir), is_check_folder(check_dir)) == (False, True)
+
+    session = load_session(check_dir / "session.json")
+    save_session(session.model_copy(update={"session_id": uuid4()}), check_dir / "session.json")
+
+    assert (session_replaced(check_dir), is_check_folder(check_dir)) == (True, False)
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        "no record",
+        "an unreadable record",
+        "a record that is no object",
+        "a record naming no session",
+        "no session",
+        "an unreadable session",
+    ],
+)
+def test_session_replaced_guesses_nothing_where_a_record_cannot_be_read(
+    check_run_dir: Path, broken: str
+) -> None:
+    """A session in the check's place, then each way the folder can fail to show whose it is:
+    every one answers no, so `GET /reviews` restores nothing it cannot show is a review's. A
+    record that names no session read as one naming another before 146A ("the record describes
+    session None"); it is a record that cannot be read now, to every caller alike."""
+    session = load_session(check_run_dir / "session.json")
+    save_session(session.model_copy(update={"session_id": uuid4()}), check_run_dir / "session.json")
+    assert session_replaced(check_run_dir)
+    record = check_run_dir / "check.json"
+    if broken == "no record":
+        record.unlink()
+    elif broken == "an unreadable record":
+        record.write_text("{ not json", encoding="utf-8")
+    elif broken == "a record that is no object":
+        record.write_text("[]", encoding="utf-8")
+    elif broken == "a record naming no session":
+        body = json.loads(record.read_text(encoding="utf-8"))
+        del body["session_id"]
+        record.write_text(json.dumps(body), encoding="utf-8")
+    elif broken == "no session":
+        (check_run_dir / "session.json").unlink()
+    else:
+        (check_run_dir / "session.json").write_text("{ not json", encoding="utf-8")
+
+    assert not session_replaced(check_run_dir)
+    assert not is_check_folder(check_run_dir)
+
+
+@pytest.mark.parametrize("named", ["a chat this backend holds", "an id it never issued"])
+@pytest.mark.parametrize("kind", list(CHECK_FOLDERS))
+def test_a_retry_is_refused_on_every_family_s_check_folder_and_moves_nothing(
+    app: Any,
+    client: TestClient,
+    run_dir: Path,
+    run_root: Path,
+    provider_control: ProviderControl,
+    kind: str,
+    named: str,
+) -> None:
+    """A check's folder holds no review session for a Retry to replace. Before 142A a Retry
+    skipped the folder check, so any `retry_of` rotated the check's session aside and wrote
+    a review into its folder. The folder is refused before the chat is looked up, so a chat
+    this backend holds and an id it never issued meet the same 400.
+
+    A grade's folder is refused with the grade's words since owner decision 146A, which a
+    start meets too, where 142A refused it as any check's."""
+    family, build = CHECK_FOLDERS[kind]
+    reviewed = start_session(client, run_dir)
+    settle(client, reviewed["chat_id"])
+    check_dir = build(run_root)
+    before = folder_hashes(check_dir)
+    built = len(provider_control.built)
+    retry_of = reviewed["chat_id"] if named == "a chat this backend holds" else str(uuid4())
+
+    response = client.post("/sessions", json=session_body(check_dir, retry_of=retry_of))
+
+    assert response.status_code == 400
+    assert response.json() == (
+        grade_refusal(check_dir, "before")
+        if kind == "re-modeler grade"
+        else check_folder_refusal(check_dir, family)
+    )
+    assert folder_hashes(check_dir) == before
+    assert list(app.state.server.chats) == [UUID(reviewed["chat_id"])]
+    assert len(provider_control.built) == built
+
+
+def test_a_start_on_a_standards_folder_is_refused_with_the_body_a_retry_gets(
+    client: TestClient, run_root: Path, provider_control: ProviderControl
+) -> None:
+    """One 400, one class and one wording for a check's folder, from both routes. A start
+    was refused here already, but as "a review session" to "retry with 'retry_of'": the
+    standards check was no check to `is_check_folder`, and the Retry it pointed to is now
+    refused too."""
+    check_dir = standards_check_folder(run_root)
+    before = folder_hashes(check_dir)
+
+    start = client.post("/sessions", json=session_body(check_dir))
+    retry = client.post("/sessions", json=session_body(check_dir, retry_of=str(uuid4())))
+
+    assert (start.status_code, retry.status_code) == (400, 400)
+    assert start.json() == retry.json() == check_folder_refusal(check_dir, "standards")
+    assert folder_hashes(check_dir) == before
+    assert provider_control.built == []
+
+
+def test_a_start_still_claims_a_model_check_s_folder(client: TestClient, run_root: Path) -> None:
+    """Unchanged by 142A and 146A. Feature 003's User Story 6 scenario 11 hands a Model check's
+    folder to a review, which rotates the check's session aside (feature 007 FR-021). Its case
+    for the re-modeler's grade, which a start claimed as the same rms record, is gone: owner
+    decision 146A refuses a grade's folder to every start (below)."""
+    check_dir = model_check_folder(run_root)
+    check_session = load_session(check_dir / "session.json").session_id
+
+    settle(client, start_session(client, check_dir)["chat_id"])
+
+    assert load_session(check_dir / "session.1.json").session_id == check_session
+    assert load_session(check_dir / "session.json").session_id != check_session
+
+
+# --- a review never claims a re-modeler grade's folder (owner decision 146A) ---------------
+
+
+@pytest.mark.parametrize("side", ["before", "after"])
+def test_a_start_on_a_re_modeler_grade_s_folder_is_refused_and_moves_nothing(
+    app: Any, client: TestClient, run_root: Path, provider_control: ProviderControl, side: str
+) -> None:
+    """A grade's `check.json` is `run_rms_check`'s own rms record, so 142A's rule took the folder
+    for a Model check's and a start claimed it: the grade's session went aside, the review
+    wrote over the grade's `report.md`, and the run's `rms-<side>.json` then named the review's
+    files. A grade is its remodel run's, and nothing in the run's folder moves."""
+    graded = graded_remodel_run(run_root)
+    grade_dir = getattr(graded, side).check_file.parent
+    before = folder_hashes(graded.run_dir)
+
+    response = client.post("/sessions", json=session_body(grade_dir))
+
+    assert response.status_code == 400
+    assert response.json() == grade_refusal(grade_dir, side)
+    assert folder_hashes(graded.run_dir) == before
+    named = json.loads((graded.run_dir / f"rms-{side}.json").read_text(encoding="utf-8"))
+    assert load_session(graded.run_dir / named["session"]).session_id == (
+        getattr(graded, side).session.session_id
+    )
+    assert app.state.server.chats == {}
+    assert provider_control.built == []
+
+
+def test_a_grade_s_folder_is_refused_before_its_grade_is_written(
+    app: Any, client: TestClient, run_root: Path, provider_control: ProviderControl
+) -> None:
+    """`grade_remodel_run` files a side's dump in the grade's folder, and beside it, before it
+    grades anything. Until the grade's session was written the folder held none, so a start
+    claimed it - and the grade would then have written its own session and report over the
+    review's. A grade's folder is refused whatever it holds."""
+    remodel_run = run_root / REMODEL_RUN
+    remodel_run.mkdir()
+    write_package(remodel_run, remodel_copy_package(), side="before")
+    grade_dir = remodel_run / "rms-before"
+    before = folder_hashes(remodel_run)
+
+    response = client.post("/sessions", json=session_body(grade_dir))
+
+    assert response.status_code == 400
+    assert response.json() == grade_refusal(grade_dir, "before")
+    assert folder_hashes(remodel_run) == before
+    assert app.state.server.chats == {}
+    assert provider_control.built == []
+
+
+def test_a_model_check_s_folder_named_like_a_grade_s_is_still_claimed(
+    client: TestClient, run_root: Path
+) -> None:
+    """A grade's folder is told by its remodel run's layout - its side's dump filed beside it -
+    and neither by its record, which is a Model check's too, nor by its name alone: a Model
+    check's folder called `rms-before` in the run root is handed to a review as any is."""
+    check_dir = run_root / "rms-before"
+    shutil.copytree(ATTENTION_CHECK_FOLDER, check_dir)
+    check_session = load_session(check_dir / "session.json").session_id
+
+    settle(client, start_session(client, check_dir)["chat_id"])
+
+    assert load_session(check_dir / "session.1.json").session_id == check_session
+
+
+def test_a_re_run_naming_a_grade_s_folder_is_refused_as_no_waiting_review(
+    client: TestClient, run_root: Path
+) -> None:
+    """A re-run (`recheck`, feature 015) re-runs a waiting review in its own folder, so the
+    grade's refusal is not asked of it: the grade's session waits for nothing, and the re-run
+    is refused `NotWaiting` with nothing moved, as before 146A."""
+    graded = graded_remodel_run(run_root)
+    grade_dir = graded.before.check_file.parent
+    before = folder_hashes(graded.run_dir)
+
+    response = client.post(
+        "/sessions", json=session_body(grade_dir, send_when_checked=False, recheck=True)
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error_class"] == "NotWaiting"
+    assert folder_hashes(graded.run_dir) == before
+
+
+def test_a_retry_naming_no_chat_this_backend_holds_is_refused_and_moves_nothing(
+    client: TestClient, run_dir: Path, provider_control: ProviderControl
+) -> None:
+    """`retry_of` must name the chat whose session the folder holds; an id this backend
+    never issued names none, so nothing is rotated and no provider is built."""
+    first = start_session(client, run_dir)
+    settle(client, first["chat_id"])
+    before = folder_hashes(run_dir)
+    built = len(provider_control.built)
+    stranger = str(uuid4())
+
+    response = client.post("/sessions", json=session_body(run_dir, retry_of=stranger))
+
+    assert response.status_code == 404
+    assert response.json() == unknown_chat_refusal(run_dir, stranger)
+    assert folder_hashes(run_dir) == before
+    assert len(provider_control.built) == built
+
+
+def test_a_retry_a_restarted_backend_cannot_tie_to_the_folder_is_refused(
+    client: TestClient,
+    run_dir: Path,
+    run_root: Path,
+    provider_control: ProviderControl,
+    models: Models,
+) -> None:
+    """What 142A costs (research, 142A): a settings save restarts the backend, which then
+    holds none of the chats before it and so cannot tell that the session in the folder is
+    the one the Retry names. The pane's own Retry extracts into a new folder and is not
+    affected; a context review's Retry in its own folder (108A) is refused after one."""
+    first = start_session(client, run_dir)
+    settle(client, first["chat_id"])
+    before = folder_hashes(run_dir)
+    restarted = create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=provider_control.factory,
+        list_models=models,
+    )
+
+    with TestClient(
+        restarted, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}
+    ) as fresh:
+        response = fresh.post("/sessions", json=session_body(run_dir, retry_of=first["chat_id"]))
+
+    assert response.status_code == 404
+    assert response.json() == unknown_chat_refusal(run_dir, first["chat_id"])
+    assert folder_hashes(run_dir) == before
+
+
+def test_a_retry_into_a_folder_holding_no_session_needs_no_chat_this_backend_holds(
+    client: TestClient, run_dir: Path
+) -> None:
+    """Unchanged by 142A, and what the pane's own Retry does: it extracts into a new folder,
+    which holds no session to replace, so the chat it names need not be one this backend
+    still holds. The link is recorded only for a chat it holds (FR-028)."""
+    response = client.post("/sessions", json=session_body(run_dir, retry_of=str(uuid4())))
+
+    assert response.status_code == 201, response.text
+    settle(client, response.json()["chat_id"])
+    assert load_session(run_dir / "session.json").retry_of is None
+
+
+def test_a_retry_naming_another_folder_s_chat_is_refused_and_moves_nothing(
+    client: TestClient, run_dir: Path, run_root: Path, tmp_package_dir: Path
+) -> None:
+    other = run_root / "20260913-120500-bracket"
+    shutil.copytree(tmp_package_dir, other)
+    elsewhere = start_session(client, other)
+    settle(client, elsewhere["chat_id"])
+    settle(client, start_session(client, run_dir)["chat_id"])
+    before = folder_hashes(run_dir)
+
+    response = client.post(
+        "/sessions", json=session_body(run_dir, retry_of=elsewhere["chat_id"])
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error_class": "RunDirInUse",
+        "message": (
+            f"chat {elsewhere['chat_id']} reviewed {other.resolve()}, not {run_dir.resolve()}: "
+            "a Retry replaces only the session its own chat wrote; review into a new run folder"
+        ),
+        "retryable": False,
+    }
+    assert folder_hashes(run_dir) == before
+
+
+def test_a_retry_of_a_retry_names_the_latest_attempt_not_the_one_it_replaced(
+    client: TestClient, run_dir: Path
+) -> None:
+    """The folder already rotated: the first attempt's session is `session.1.json` now, so a
+    Retry naming it would rotate its successor's aside. Naming the successor still works."""
+    first = start_session(client, run_dir)
+    settle(client, first["chat_id"])
+    second = start_session(client, run_dir, retry_of=first["chat_id"])
+    settle(client, second["chat_id"])
+    before = folder_hashes(run_dir)
+
+    stale = client.post("/sessions", json=session_body(run_dir, retry_of=first["chat_id"]))
+
+    assert stale.status_code == 409
+    assert stale.json() == stray_session_refusal(
+        run_dir,
+        first["chat_id"],
+        first["review_session_id"],
+        f"its events.jsonl belongs to session {second['review_session_id']}",
+        f"its session.json belongs to session {second['review_session_id']}",
+    )
+    assert folder_hashes(run_dir) == before
+
+    third = start_session(client, run_dir, retry_of=second["chat_id"])
+    settle(client, third["chat_id"])
+    assert [
+        str(load_session(run_dir / name).session_id)
+        for name in ("session.1.json", "session.2.json", "session.json")
+    ] == [first["review_session_id"], second["review_session_id"], third["review_session_id"]]
+    assert str(load_session(run_dir / "session.json").retry_of) == second["review_session_id"]
+
+
+def test_a_review_that_claimed_a_model_check_s_folder_is_retried_there_by_its_own_chat(
+    client: TestClient, check_run_dir: Path
+) -> None:
+    """The folder keeps its `check.json`, but once the review's session is beside it, it is no
+    check's folder (`is_check_folder`): the review's own chat retries it like any review's."""
+    check_session = str(load_session(check_run_dir / "session.json").session_id)
+    review = start_session(client, check_run_dir)
+    settle(client, review["chat_id"])
+
+    retry = start_session(client, check_run_dir, retry_of=review["chat_id"])
+    settle(client, retry["chat_id"])
+
+    assert [
+        str(load_session(check_run_dir / name).session_id)
+        for name in ("session.1.json", "session.2.json", "session.json")
+    ] == [check_session, review["review_session_id"], retry["review_session_id"]]
+
+
+@pytest.mark.parametrize("missing", ["session.json", "events.jsonl"])
+def test_a_retry_tells_the_session_by_the_file_the_folder_still_holds(
+    client: TestClient, run_dir: Path, missing: str
+) -> None:
+    """A folder holding one of the two session files is still that session's: the record
+    alone (a stream deleted by hand) or the stream alone (no record written yet)."""
+    first = start_session(client, run_dir)
+    settle(client, first["chat_id"])
+    (run_dir / missing).unlink()
+
+    second = start_session(client, run_dir, retry_of=first["chat_id"])
+    settle(client, second["chat_id"])
+
+    if missing == "session.json":
+        stream = (run_dir / "events.1.jsonl").read_text(encoding="utf-8").splitlines()
+        assert json.loads(stream[0])["body"]["session_id"] == first["review_session_id"]
+        assert not (run_dir / "session.1.json").exists()
+    else:
+        record = load_session(run_dir / "session.1.json")
+        assert str(record.session_id) == first["review_session_id"]
+        assert not (run_dir / "events.1.jsonl").exists()
+
+
+@pytest.mark.parametrize(
+    "case", ["an unreadable record", "an unreadable stream", "another session's record"]
+)
+def test_a_retry_is_refused_where_a_session_file_is_not_its_chat_s(
+    client: TestClient, run_dir: Path, case: str
+) -> None:
+    """Every session file the folder holds must name the chat's session. One that cannot be
+    read cannot be shown to be its, so the Retry is refused rather than guessed through."""
+    first = start_session(client, run_dir)
+    settle(client, first["chat_id"])
+    if case == "an unreadable record":
+        (run_dir / "session.json").write_text("not a session record", encoding="utf-8")
+        held = "its session.json cannot be read as one session's"
+    elif case == "an unreadable stream":
+        (run_dir / "events.jsonl").write_text("not an event\n", encoding="utf-8")
+        held = "its events.jsonl cannot be read as one session's"
+    else:
+        stranger = uuid4()
+        session = load_session(run_dir / "session.json")
+        save_session(session.model_copy(update={"session_id": stranger}), run_dir / "session.json")
+        held = f"its session.json belongs to session {stranger}"
+    before = folder_hashes(run_dir)
+
+    response = client.post("/sessions", json=session_body(run_dir, retry_of=first["chat_id"]))
+
+    assert response.status_code == 409
+    assert response.json() == stray_session_refusal(
+        run_dir, first["chat_id"], first["review_session_id"], held
+    )
+    assert folder_hashes(run_dir) == before
+
+
+@pytest.mark.parametrize("spelling", ["upper case", "braces", "urn", "no hyphens"])
+def test_a_retry_matches_its_chat_however_the_id_is_spelled(
+    client: TestClient, run_dir: Path, spelling: str
+) -> None:
+    """`retry_of` is read as a uuid, not compared as text, so these name the same chat."""
+    first = start_session(client, run_dir)
+    settle(client, first["chat_id"])
+    chat_id = first["chat_id"]
+    spelled = {
+        "upper case": chat_id.upper(),
+        "braces": "{" + chat_id + "}",
+        "urn": f"urn:uuid:{chat_id}",
+        "no hyphens": UUID(chat_id).hex,
+    }[spelling]
+
+    second = start_session(client, run_dir, retry_of=spelled)
+    settle(client, second["chat_id"])
+
+    assert client.get(f"/sessions/{second['chat_id']}").json()["retry_of"] == chat_id
+    assert str(load_session(run_dir / "session.json").retry_of) == first["review_session_id"]
+
+
+@pytest.mark.parametrize(
+    "spell",
+    [
+        lambda chat_id: "not-a-uuid",
+        lambda chat_id: "   ",
+        lambda chat_id: f" {chat_id} ",
+        lambda chat_id: 42,
+        lambda chat_id: True,
+    ],
+    ids=["not-a-uuid", "blank", "padded", "a number", "a boolean"],
+)
+def test_a_retry_of_that_is_no_uuid_is_refused_before_the_folder_is_looked_at(
+    client: TestClient, run_dir: Path, spell: Callable[[str], Any]
+) -> None:
+    first = start_session(client, run_dir)
+    settle(client, first["chat_id"])
+    raw = spell(first["chat_id"])
+    before = folder_hashes(run_dir)
+
+    response = client.post("/sessions", json=session_body(run_dir, retry_of=raw))
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error_class": "InvalidRequest",
+        "message": f"retry_of must be a uuid, got {raw!r}",
+        "retryable": False,
+    }
+    assert folder_hashes(run_dir) == before
+
+
+def test_an_empty_retry_of_is_no_retry_and_meets_a_start_s_refusal(
+    client: TestClient, run_dir: Path
+) -> None:
+    """The start's refusal is `RunDirTaken` with words true of any session (owner decision
+    146A), where 142A pinned `InvalidRunDir` and "already holds a review session"."""
+    first = start_session(client, run_dir)
+    settle(client, first["chat_id"])
+
+    response = client.post("/sessions", json=session_body(run_dir, retry_of=""))
+
+    assert response.status_code == 400
+    assert response.json() == held_session_refusal(run_dir)
+
+
+@pytest.mark.parametrize("record", ["not json", "names no session"])
+def test_a_start_on_a_check_s_folder_whose_record_cannot_be_read_is_told_it_holds_a_session(
+    client: TestClient, check_run_dir: Path, provider_control: ProviderControl, record: str
+) -> None:
+    """A check's folder whose `check.json` cannot show whose its session is, is no check's folder
+    (`is_check_folder`), so a start meets the refusal for any folder that holds a session. The
+    session there is the check's, not a review's, so the words name a session and no review
+    (owner decision 146A); and nothing is guessed through, so nothing moves."""
+    check_file = check_run_dir / "check.json"
+    if record == "not json":
+        check_file.write_text("{ not json", encoding="utf-8")
+    else:
+        body = json.loads(check_file.read_text(encoding="utf-8"))
+        del body["session_id"]
+        check_file.write_text(json.dumps(body), encoding="utf-8")
+    before = folder_hashes(check_run_dir)
+
+    response = client.post("/sessions", json=session_body(check_run_dir))
+
+    assert response.status_code == 400
+    assert response.json() == held_session_refusal(check_run_dir)
+    assert folder_hashes(check_run_dir) == before
+    assert provider_control.built == []
+
+
+def test_two_retries_of_one_chat_rotate_its_folder_once(
+    client: TestClient, run_dir: Path, provider_control: ProviderControl
+) -> None:
+    """Concurrent Retries of one chat: the first holds the folder while it runs, so the
+    second meets the live chat; once that one ends, the folder holds its session and not
+    the retried chat's, so the second is refused again and nothing rotates twice."""
+    first = start_session(client, run_dir)
+    settle(client, first["chat_id"])
+    provider_control.hold()
+    winner = start_session(client, run_dir, retry_of=first["chat_id"])
+    assert provider_control.started.wait(TIMEOUT_S)
+
+    during = client.post("/sessions", json=session_body(run_dir, retry_of=first["chat_id"]))
+    provider_control.release()
+    settle(client, winner["chat_id"])
+    after = client.post("/sessions", json=session_body(run_dir, retry_of=first["chat_id"]))
+
+    assert during.status_code == 409
+    assert during.json()["message"] == (
+        f"chat {winner['chat_id']} is already reviewing {run_dir.resolve()}; "
+        "one chat per run folder"
+    )
+    assert after.status_code == 409
+    assert after.json() == stray_session_refusal(
+        run_dir,
+        first["chat_id"],
+        first["review_session_id"],
+        f"its events.jsonl belongs to session {winner['review_session_id']}",
+        f"its session.json belongs to session {winner['review_session_id']}",
+    )
+    assert (run_dir / "session.1.json").is_file()
+    assert not (run_dir / "session.2.json").exists()
+
+
 def test_the_provider_settings_come_from_the_request_and_the_environment(
     client: TestClient, run_dir: Path, provider_control: ProviderControl
 ) -> None:
@@ -956,6 +1651,150 @@ def test_the_provider_settings_come_from_the_request_and_the_environment(
     assert settings.model == "fake-2"
     assert settings.effort == "low"
     assert settings.key_source == "none"
+
+
+# --- where the key came from: the add-in's marker (owner decision 138A) ----------------
+
+PANE_KEY = "fict" + "-pane-saved-" + "0138a"
+"""The key saved in the pane, as the add-in copies it into the backend's environment. Built
+from fragments and not provider-shaped."""
+
+WORKSTATION_KEY = "fict" + "-workstation-" + "0138a"
+"""A key the workstation exports for itself, which the backend inherits from SLDWORKS.exe."""
+
+KEY_VARIABLES = ("OPENAI_API_KEY", "OPENAI_BASE_URL", "GOOGLE_API_KEY", "GEMINI_API_KEY")
+
+
+@pytest.fixture
+def no_provider_keys(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+    """The backend's environment holds no key until a test puts one there, whatever the
+    workstation running the suite exports."""
+    for name in KEY_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    return monkeypatch
+
+
+def marked_app(
+    run_root: Path,
+    marker: ProviderName | None,
+    provider_factory: Callable[[ProviderSettings], AgentProvider] | None,
+    models: Models,
+) -> Any:
+    """The backend as the add-in starts it, saying (or not) whose key is the saved one."""
+    return create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=provider_factory,
+        list_models=models,
+        settings_key_provider=marker,
+    )
+
+
+@pytest.mark.parametrize(
+    ("marker", "recorded"),
+    [(ProviderName.OPENAI, "settings"), (None, "env")],
+    ids=["marked", "unmarked"],
+)
+def test_a_pane_review_records_where_its_key_came_from(
+    run_root: Path,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    models: Models,
+    no_provider_keys: pytest.MonkeyPatch,
+    marker: ProviderName | None,
+    recorded: str,
+) -> None:
+    """Owner decision 138A. The add-in copies the key into the backend's environment either
+    way; only its marker says the key is the one saved in the pane, and `session.json`
+    records `settings` then, `env` without it - never the key itself."""
+    no_provider_keys.setenv("OPENAI_API_KEY", PANE_KEY)
+    app = marked_app(run_root, marker, provider_control.factory, models)
+
+    with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as pane:
+        chat_id = start_session(pane, run_dir, provider="openai", model=None)["chat_id"]
+        settle(pane, chat_id)
+
+    assert [settings.key_source for settings in provider_control.built] == [recorded]
+    written = (run_dir / "session.json").read_text(encoding="utf-8")
+    assert json.loads(written)["provider_info"]["key_source"] == recorded
+    assert PANE_KEY not in written
+    assert PANE_KEY not in (run_dir / "events.jsonl").read_text(encoding="utf-8")
+
+
+def test_the_marker_names_one_provider_so_another_providers_key_records_env(
+    run_root: Path,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    models: Models,
+    no_provider_keys: pytest.MonkeyPatch,
+) -> None:
+    """The saved key was copied under OpenAI's variable; a Gemini session - posted after a
+    provider change the backend has not restarted for yet - reads the workstation's own key,
+    and that is `env`, not the credential saved in the pane."""
+    no_provider_keys.setenv("OPENAI_API_KEY", PANE_KEY)
+    no_provider_keys.setenv("GOOGLE_API_KEY", WORKSTATION_KEY)
+    app = marked_app(run_root, ProviderName.OPENAI, provider_control.factory, models)
+
+    with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as pane:
+        chat_id = start_session(pane, run_dir, provider="gemini", model=None)["chat_id"]
+        settle(pane, chat_id)
+
+    [settings] = provider_control.built
+    assert settings.provider is ProviderName.GEMINI
+    assert settings.key_source == "env"
+    session = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
+    assert session["provider_info"]["key_source"] == "env"
+
+
+@pytest.mark.parametrize("marker", [None, ProviderName.OPENAI], ids=["unmarked", "marked"])
+def test_a_marked_backend_with_no_key_refuses_a_review_as_it_always_has(
+    run_root: Path,
+    run_dir: Path,
+    models: Models,
+    no_provider_keys: pytest.MonkeyPatch,
+    marker: ProviderName | None,
+) -> None:
+    """The marker is a statement about a key, never a key: with none in the environment a
+    ticked review meets the product's own adapter refusing to start without one, marked or
+    not (`build_provider`, the real factory; nothing reaches a network)."""
+    app = marked_app(run_root, marker, None, models)
+
+    with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as pane:
+        response = pane.post("/sessions", json=session_body(run_dir, provider="openai", model=None))
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "error_class": "ValueError",
+        "message": "an OpenAI adapter needs either an api_key or a ready-made client",
+        "retryable": True,
+    }
+
+
+@pytest.mark.parametrize("marker", [None, ProviderName.OPENAI], ids=["unmarked", "marked"])
+def test_a_marked_backend_with_no_key_refuses_send_as_it_always_has(
+    run_root: Path,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    models: Models,
+    no_provider_keys: pytest.MonkeyPatch,
+    marker: ProviderName | None,
+) -> None:
+    """The waiting path of the same rule: the checks run and record `none`, and Send is the
+    existing `409 NoCredential`, marked or not."""
+    app = marked_app(run_root, marker, provider_control.factory, models)
+
+    with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as pane:
+        chat_id = start_session(
+            pane, run_dir, provider="openai", model=None, send_when_checked=False
+        )["chat_id"]
+        response = pane.post(f"/sessions/{chat_id}/send", json={})
+
+    assert response.status_code == 409
+    assert response.json()["error_class"] == "NoCredential"
+    session = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
+    assert session["provider_info"]["key_source"] == "none"
+    assert provider_control.built == []
 
 
 @pytest.mark.parametrize(

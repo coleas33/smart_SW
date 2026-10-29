@@ -75,6 +75,7 @@ from swreview.checks.rules.run import (
     check_record,
     close_session,
     coverage_rows,
+    is_check_folder,
     recorded_call,
     recorded_session,
     store_to_grade_against,
@@ -572,18 +573,3 @@ def read_rms_check(check_dir: Path | str) -> RmsCheckRun:
                 path=directory / CHECK_FILE_NAME, error=f"{type(exc).__name__}: {exc}"
             )
         ) from exc
-
-
-def is_check_folder(directory: Path | str) -> bool:
-    """Whether `directory` holds a check record naming the session that is in it.
-
-    What `POST /sessions` asks before refusing a folder that already holds a session: a
-    check's `session.json` is not a review's - a check writes no event stream, which is
-    what that rule protects - so a review may claim the folder a check wrote (User Story 6
-    scenario 11).
-    """
-    try:
-        read_rms_check(directory)
-    except NotACheckError:
-        return False
-    return True

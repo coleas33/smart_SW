@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
+from swreview.agent.runner import start_review
 from swreview.checks.standards.run import CHECK_FILE_NAME, run_standards_check
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
 from swreview.report.attention import rank
@@ -78,6 +80,39 @@ def standards_run_folder(tmp_path: Path) -> Path:
     save_package(package, package_dir)
     run = run_standards_check(package_dir, STANDARDS_PROFILE, tmp_path / "standards-run")
     return run.report_file.parent
+
+
+def standards_folder_holding_its_package(tmp_path: Path) -> Path:
+    """`standards_run_folder` with the package beside the session, as a pane check's folder is."""
+    run_dir = standards_run_folder(tmp_path)
+    shutil.copy(tmp_path / "package" / PACKAGE_FILE_NAME, run_dir / PACKAGE_FILE_NAME)
+    return run_dir
+
+
+def claim_with_a_review(run_dir: Path) -> None:
+    """Claim `run_dir` with a review, as the pane's backend does, and play the review in it.
+
+    The claim is `chat/server.py`'s `_rotate_previous`: the folder's `session.json` and
+    `attention.json` move aside to index 1, and `check.json` stays, still naming the check's
+    session. The review is played in the folder with the scripted provider, and its report is
+    written by `ReviewRun.write_views`, which the pane calls after every turn: `report.md` is
+    then the review's report as it was first written.
+    """
+    for name in ("session.json", ATTENTION_FILE_NAME):
+        current = run_dir / name
+        current.rename(current.with_name(f"{current.stem}.1{current.suffix}"))
+    run = start_review(
+        run_dir,
+        run_dir,
+        provider=FakeProvider(
+            script=[ScriptedTurn(text="nothing to report", tool_calls=())], model="fake-1"
+        ),
+    )
+    try:
+        run.start()
+        run.write_views(save=False, best_effort=False)
+    finally:
+        run.close()
 
 
 # --- 1. a review folder ----------------------------------------------------------------
@@ -183,14 +218,17 @@ def test_the_record_it_writes_is_the_ranking_the_report_was_rendered_from(
 
 
 def test_an_rms_check_folder_gets_no_verdict_header(tmp_path: Path) -> None:
-    """`check.json` names the `rms` family, which writes no header of its own."""
+    """`check.json` names the `rms` family, which writes no header of its own, and names the
+    folder's session, so the body renders as a check's: no model ran (132A)."""
     run_dir = copied(CHECK_FOLDER, tmp_path)
 
     report = rerender_run_folder(run_dir).read_text(encoding="utf-8")
 
     assert report.startswith(REPORT_TITLE)
     session = load_session(run_dir / "session.json")
-    assert report == render_report(session, load_package(run_dir).package, ranking=rank(session))
+    assert report == render_report(
+        session, load_package(run_dir).package, ranking=rank(session), check_run=True
+    )
 
 
 def test_a_standards_folder_keeps_its_verdict_header_byte_for_byte(tmp_path: Path) -> None:
@@ -209,11 +247,61 @@ def test_a_standards_folder_holding_its_package_re_renders_byte_for_byte(
     tmp_path: Path,
 ) -> None:
     """Header and body: with the package beside it, nothing about the file changes."""
-    run_dir = standards_run_folder(tmp_path)
-    shutil.copy(tmp_path / "package" / PACKAGE_FILE_NAME, run_dir / PACKAGE_FILE_NAME)
+    run_dir = standards_folder_holding_its_package(tmp_path)
     written = (run_dir / "report.md").read_text(encoding="utf-8")
 
     assert rerender_run_folder(run_dir).read_text(encoding="utf-8") == written
+
+
+def test_a_review_that_claimed_a_standards_folder_re_renders_as_it_was_first_written(
+    tmp_path: Path,
+) -> None:
+    """No verdict header, because the review's report was written without one (139A).
+
+    `ReviewRun.write_views` renders a review's report with no header, and `check.json` still
+    names the check's session, now `session.1.json`: the header is that session's alone, as
+    the check's model line is (132A).
+    """
+    run_dir = standards_folder_holding_its_package(tmp_path)
+    claim_with_a_review(run_dir)
+    written = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert written.startswith(REPORT_TITLE)
+
+    report = rerender_run_folder(run_dir).read_text(encoding="utf-8")
+
+    assert report == written
+
+
+def test_the_check_s_session_a_review_rotated_aside_keeps_its_verdict_header_byte_for_byte(
+    tmp_path: Path,
+) -> None:
+    """`swreview report session.1.json`: `check.json` still names that session, so it renders
+    as the check wrote it, header and body."""
+    run_dir = standards_folder_holding_its_package(tmp_path)
+    written = (run_dir / "report.md").read_text(encoding="utf-8")
+    claim_with_a_review(run_dir)
+
+    report, _ = render_folder_report(run_dir, load_session(run_dir / "session.1.json"))
+
+    assert report == written
+
+
+def test_an_unreadable_verdict_refuses_only_the_session_whose_header_it_rebuilds(
+    tmp_path: Path,
+) -> None:
+    """The check's session is refused, as before; the review's re-renders, because its report
+    never carried the header the verdict would have rebuilt (139A)."""
+    run_dir = standards_folder_holding_its_package(tmp_path)
+    claim_with_a_review(run_dir)
+    written = (run_dir / "report.md").read_text(encoding="utf-8")
+    check_file = run_dir / CHECK_FILE_NAME
+    record = json.loads(check_file.read_text(encoding="utf-8"))
+    del record["verdict"]
+    check_file.write_text(json.dumps(record), encoding="utf-8")
+
+    assert rerender_run_folder(run_dir).read_text(encoding="utf-8") == written
+    with pytest.raises(ValueError, match=re.escape(str(check_file))):
+        render_folder_report(run_dir, load_session(run_dir / "session.1.json"))
 
 
 def test_a_check_record_that_cannot_be_read_is_refused(tmp_path: Path) -> None:

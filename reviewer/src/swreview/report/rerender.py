@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
 from swreview.ir.models import EvidencePackage
@@ -77,7 +77,8 @@ def rerender_run_folder(run_dir: Path | str, *, package: EvidencePackage | None 
     """Re-render a run folder's report and record from its own files; return the report path.
 
     Reads `session.json` (required), `package.json` (when the folder holds one) and
-    `check.json` (for a standards folder's verdict header), ranks the session once, and
+    `check.json` (for whether the session is the check's own, which ran no model and, in a
+    standards folder, carries the verdict header), ranks the session once, and
     writes `report.md` and `attention.json` from that one `Ranking` - the same object, so
     the section the report prints and the record beside it can never disagree (research
     R2.7). Nothing else in the folder is touched, and nothing at all is written when any of
@@ -100,7 +101,8 @@ def rerender_run_folder(run_dir: Path | str, *, package: EvidencePackage | None 
         FileNotFoundError: the folder holds no `session.json`; a benchmark run root, whose
             sessions sit one level down, is named as such and pointed at `benchmark time`
             through a `ValueError` instead.
-        ValueError: a benchmark run root, or a `check.json` whose verdict cannot be read.
+        ValueError: a benchmark run root, or a `check.json` whose verdict cannot be read
+            when the session is the check's own.
         pydantic.ValidationError: a `session.json` or `package.json` this build cannot read.
     """
     directory = Path(run_dir)
@@ -119,19 +121,27 @@ def render_folder_report(
     """`session`'s report as the folder it sits in renders it, and the ranking it printed.
 
     Reads `package.json` (when the folder holds one, and the caller passed none) and
-    `check.json` (a standards folder's verdict header), and writes nothing: the text and the
+    `check.json` (whether `session` is the check's own, whose report names no model and, in a
+    standards folder, opens with the verdict header), and writes nothing: the text and the
     ranking are the caller's to write, so the one command that must not write a record,
     `swreview report`, renders exactly what `rerender_run_folder` writes as `report.md`.
 
     Raises:
-        ValueError: a `check.json` whose verdict cannot be read.
+        ValueError: a `check.json` whose verdict cannot be read when `session` is the check's
+            own.
         pydantic.ValidationError: a `package.json` this build cannot read.
     """
     directory = Path(run_dir)
     package = package if package is not None else _package_of(directory)
-    header = _header_of(directory, session)
+    record = _check_record_of(directory)
+    # The session is the check's own only while `check.json` names it: a review that claimed
+    # the folder rotated the check's session aside, and that review ran a model (132A). The
+    # verdict header is the check's too: a review's report is written without one (139A).
+    check_run = record is not None and str(record.get("session_id")) == str(session.session_id)
+    header = _header_of(directory, record, session) if record is not None and check_run else ""
     ranking = rank(session)
-    return header + render_report(session, package, ranking=ranking), ranking
+    report = render_report(session, package, ranking=ranking, check_run=check_run)
+    return header + report, ranking
 
 
 def run_folder_session(run_dir: Path | str) -> Path:
@@ -178,22 +188,15 @@ def _package_of(directory: Path) -> EvidencePackage | None:
     return load_package(directory).package
 
 
-def _header_of(directory: Path, session: ReviewSession) -> str:
-    """The standards verdict header to re-prepend, or `""` for every other folder.
+def _check_record_of(directory: Path) -> dict[str, Any] | None:
+    """The folder's `check.json` as an object, or `None` when the folder holds none.
 
-    The two standards names are imported here rather than at the top of the module because
-    `swreview.checks.standards` imports its own check modules on import, and those reach
-    `checks/rules/run.py`, which imports this module for the run folder's file names. A
-    module-level import would close that cycle; a call-time one - taken only for a folder
-    that actually holds a `check.json` - keeps the report layer importable on its own.
+    Raises:
+        ValueError: a `check.json` that is not JSON, or not a JSON object.
     """
     check_file = directory / CHECK_FILE_NAME
     if not check_file.is_file():
-        return ""
-
-    from swreview.checks.standards.registry import STANDARDS_FAMILY
-    from swreview.checks.standards.verdict import verdict_header
-
+        return None
     try:
         record = json.loads(check_file.read_text(encoding="utf-8"))
     except ValueError as exc:
@@ -204,11 +207,28 @@ def _header_of(directory: Path, session: ReviewSession) -> str:
                 path=check_file, error=f"it is a {type(record).__name__}, not an object"
             )
         )
+    return record
+
+
+def _header_of(directory: Path, record: dict[str, Any], session: ReviewSession) -> str:
+    """The standards verdict header to re-prepend, or `""` for every other family.
+
+    The two standards names are imported here rather than at the top of the module because
+    `swreview.checks.standards` imports its own check modules on import, and those reach
+    `checks/rules/run.py`, which imports this module for the run folder's file names. A
+    module-level import would close that cycle; a call-time one - taken only for a folder
+    that actually holds a `check.json` - keeps the report layer importable on its own.
+    """
+    from swreview.checks.standards.registry import STANDARDS_FAMILY
+    from swreview.checks.standards.verdict import verdict_header
+
     if record.get("family") != STANDARDS_FAMILY.check_file_family:
         return ""
     try:
         return verdict_header(session.design_id, record["verdict"])
     except (KeyError, TypeError) as exc:
         raise ValueError(
-            UNREADABLE_CHECK_RECORD.format(path=check_file, error=f"{type(exc).__name__}: {exc}")
+            UNREADABLE_CHECK_RECORD.format(
+                path=directory / CHECK_FILE_NAME, error=f"{type(exc).__name__}: {exc}"
+            )
         ) from exc

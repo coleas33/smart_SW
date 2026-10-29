@@ -59,30 +59,108 @@ $drawingFamilies = @(
 )
 $familyCount = $drawingFamilies.Count
 
+# Decision 136A (2026-10-19) completed the rows: every member of the open, activate, new, load,
+# close and quit families of ISldWorks, IModelDoc2 and IModelDocExtension, in every spelling the
+# interop declares - the COM twins (IOpenDoc*, IActivateDoc*, INew*) and bare LoadFile, LoadAddIn and
+# LoadAdminSettingsFile above all - is named below, and DocumentLifecycleFamilyTests (GuardTests.cs)
+# reflects the interop with the family grammar to prove the rows complete. The members left allowed
+# (OpenDoc6 and CloseDoc; NewDocument until decision 144A and OpenDoc7 until decision 148A) are named
+# as well, so the "Not denied" table says why.
+#
+# Decision 140A (2026-10-19) refuses IModelDoc2's Close, which 136A had to leave allowed, and Save
+# and Rebuild, IModelDocExtension's Rebuild with them: the bridge judges its commands against its own
+# fixed set and no longer hands their names to ReadOnlyGuard, which had judged remodel.close,
+# remodel.save and remodel.rebuild by their member halves.
+#
+# The same decision names every member of the save, rename, move and copy, replace, release and lock,
+# read-only and rebuild families of these three interfaces and of IPartDoc, IAssemblyDoc and, on the
+# decision's review, IFeatureManager (three rows more; the drawing families' are writers of their
+# family rows already) that the guard did not refuse yet, and SaveBMP, which stays allowed for the
+# reason below (as MoveToFolder did until decision 144A). DocumentWriteFamilyTests (GuardTests.cs)
+# reflects the interop with that family grammar to prove the rows complete. Three kinds of member are refused
+# already and are not named here: those Guard/ReadOnlyGuard.cs denies (Save3, SaveAs3, SetSaveFlag,
+# EditRebuild3, ForceRebuild3, ForceRebuildAll, and InsertFeatureReplaceFace by its InsertFeature
+# prefix); those this table's drawing rows deny by a bare name the document types share (EditRebuild,
+# ForceRebuild); and those decision 21A's creation table denies (MoveOrCopy, RotateOrCopy,
+# ScaleOrCopy, SaveSelection) - list-creation-members.ps1 reads this table's names as already denied,
+# so naming one here would move it out of that table.
+#
+# Decision 144A (2026-10-19) reads 136A's families on IAssemblyDoc too, as a fourth interface: its
+# row names every member of the open, activate, new, load, close and quit families there - component
+# documents opened, reloaded or created, a reference loaded, the ground plane activated, the isolate
+# and temporary-fix-group modes left - and DocumentLifecycleFamilyTests reads IAssemblyDoc to prove
+# the row complete. The row also names Isolate, the mode ExitIsolate leaves, which the reader prefix
+# Is had taken for a reader by its letters and which no grammar of these interfaces reads; the same
+# decision reads the prefixes as whole words, and DrawingFamilyCompletenessTests holds every name
+# they took only by their letters, on the 34 interfaces, to a refusal.
 $sharedRows = [ordered]@{
     'ISldWorks' = @(
         'ActivateDoc', 'ActivateDoc2', 'ActivateDoc3', 'DocumentVisible', 'CloseAllDocuments',
         'CloseAndReopen', 'CloseAndReopen2', 'QuitDoc', 'NewDocument', 'NewDrawing', 'NewDrawing2',
         'NewPart', 'NewAssembly', 'OpenDoc', 'OpenDoc2', 'OpenDoc3', 'OpenDoc4', 'OpenDoc7',
         'OpenDocSilent', 'OpenModelConfiguration', 'LoadFile2', 'LoadFile3', 'LoadFile4',
-        'RunMacro', 'RunMacro2', 'RunCommand', 'RunAttachedMacro', 'RunJournalCmd'
+        'RunMacro', 'RunMacro2', 'RunCommand', 'RunAttachedMacro', 'RunJournalCmd',
+        'IActivateDoc', 'IActivateDoc2', 'IActivateDoc3', 'IOpenDoc', 'IOpenDoc2', 'IOpenDoc3',
+        'IOpenDoc4', 'IOpenDoc5', 'IOpenDocSilent', 'INewDocument', 'INewDocument2', 'INewDrawing',
+        'INewDrawing2', 'INewPart', 'INewAssembly', 'LoadFile', 'LoadAddIn', 'LoadAdminSettingsFile',
+        'UnloadAddIn', 'ExitApp', 'ActivateTaskPane', 'CloseUserNotification', 'CreateNewWindow',
+        'PresetNewDrawingParameters', 'SetNewFilename', 'AddFileOpenItem', 'AddFileOpenItem2',
+        'AddFileOpenItem3', 'RemoveFileOpenItem', 'RemoveFileOpenItem2', 'OpenDoc6', 'CloseDoc',
+        'AddFileSaveAsItem', 'AddFileSaveAsItem2', 'RemoveFileSaveAsItem', 'RemoveFileSaveAsItem2',
+        'RunBatchSaveProcess', 'SaveSettings', 'ShowBatchSaveTo3DExperienceDlg',
+        'MoveDocument', 'IMoveDocument', 'CopyDocument', 'ICopyDocument', 'CopyAppearance',
+        'ReplaceReferencedDocument'
+    )
+    'IModelDoc2' = @(
+        'Close', 'Quit', 'FileReload', 'ReloadOrReplace', 'CloseFamilyTable', 'ClosePrintPreview',
+        'ActivateSelectedFeature', 'ActivateFeatureMgrView', 'DeActivateFeatureMgrView',
+        'Save', 'Rebuild',
+        'Save2', 'SaveAs', 'SaveAs2', 'SaveAs4', 'SaveAsSilent', 'SaveSilent', 'SetSaveAsFileName',
+        'SaveBMP', 'EditCopy', 'ForceReleaseLocks', 'IRelease3rdPartyStorage', 'Lock', 'UnLock',
+        'LockAllExternalReferences', 'UnlockAllExternalReferences', 'LockFramePoint',
+        'UnlockFramePoint', 'LockLightToModel', 'SetReadOnlyState'
     )
     'IModelDocExtension' = @(
         'SetUserPreferenceInteger', 'SetUserPreferenceString', 'SetUserPreferenceDouble',
-        'SetUserPreferenceTextFormat'
+        'SetUserPreferenceTextFormat', 'LoadDraftingStandard', 'ReloadOrReplace', 'CloseMessageBar',
+        'CloseUserNotification',
+        'Rebuild',
+        'SaveAs', 'SaveAs2', 'SaveDeFeaturedFile', 'SaveDraftingStandard', 'SavePackAndGo',
+        'SaveTo3DExperience', 'SaveViewToSolidworks', 'RenameDocument', 'RenameDraftingStandard',
+        'MoveDecal', 'CopyDraftingStandard', 'IRelease3rdPartyStorageStore', 'ReleaseStream',
+        'EditRebuildAll', 'set_ShowPartRebuildIndicators'
+    )
+    'IPartDoc' = @(
+        'SaveToFile', 'SaveToFile2', 'SaveToFile3'
+    )
+    'IAssemblyDoc' = @(
+        'SaveIsolate', 'CopyWithMates', 'CopyWithMates2', 'ReplaceComponents', 'ReplaceComponents2',
+        'ReplacePLMComponents', 'ForceRebuild2', 'set_EnableAssemblyRebuild',
+        'OpenCompFile', 'SelectiveOpen', 'ComponentReload', 'ComponentReload2', 'IComponentReload2',
+        'IComponentReload3', 'InsertNewPart', 'InsertNewPart2', 'InsertNewAssembly', 'InsertNewVirtualPart',
+        'InsertNewVirtualAssembly', 'InsertLoadReference', 'ActivateGroundPlane', 'ExitIsolate',
+        'TemporaryFixGroupExit', 'Isolate'
+    )
+    'IFeatureManager' = @(
+        'MoveRotateLiveSectionPlane', 'set_MoveSizeFeatures', 'MoveToFolder'
     )
 }
 
 # ---- section 2: the writer grammar --------------------------------------------------------
 
-$writerPattern = '^(set_|Set|ISet|Add|IAdd|Insert|IInsert|Delete|Remove|Edit|Modify|Change|Reset|' +
-    'Activate|Attach|Detach|Update|Replace|Break|Hide|Show|Move|Align|Suppress|Unsuppress|Rebuild|' +
-    'Convert|Create|ICreate|Make|Lock|Unlock|Sort|Split|Merge|Rotate|Scale|Flip|Link|Unlink|Import|' +
+# Decision 144A (2026-10-19): the COM twin's I may come before every verb, where it came before four
+# (ISet, IAdd, IInsert, ICreate) and the twins of other verbs passed (IDrawingDoc.IEditSelectedGtol,
+# IMakeCustomSymbol2, INewGtol, IReorderSheets, IView.ISelectEntity); and Isolate, the display writer
+# beside Hide and Show, is a verb (IDrawingDoc.IsolateChangedDimensions), which the reader prefix Is
+# had hidden until the prefixes were read as whole words.
+$writerPattern = '^(set_|I?(Set|Add|Insert|Delete|Remove|Edit|Modify|Change|Reset|' +
+    'Activate|Attach|Detach|Update|Replace|Break|Hide|Show|Isolate|Move|Align|Suppress|Unsuppress|Rebuild|' +
+    'Convert|Create|Make|Lock|Unlock|Sort|Split|Merge|Rotate|Scale|Flip|Link|Unlink|Import|' +
     'Explode|Clear|Apply|Restore|Save|Dissolve|Expand|Collapse|Reload|Rename|New|Paste|Copy|Cut|Drag|' +
     'Close|Quit|Open|Load|Unload|Regenerate|Reorder|Auto|Dimension|Reverse|Swap|Toggle|Enable|' +
-    'Disable|Select|Purge|Relink|Resolve|Crop|Unbreak|Force|Hatch|Offset|Position|Freeze|Unfreeze)'
+    'Disable|Select|Purge|Relink|Resolve|Crop|Unbreak|Force|Hatch|Offset|Position|Freeze|Unfreeze))'
 
-# The reader prefixes ($ReaderPrefixes, Test-Reader) are guard-table-helpers.ps1's.
+# The reader rule ($ReaderPattern, Test-Reader) is guard-table-helpers.ps1's.
 function Test-Writer([string] $name) {
     if (Test-Reader $name) { return $false }
     return [regex]::IsMatch($name, $writerPattern)
@@ -92,9 +170,21 @@ function Test-Writer([string] $name) {
 
 $guard = Read-GuardSources $extractor
 $exclusions = New-GuardExclusions $guard
-$exclusions['OpenDoc6'] = "the extractor's one sanctioned read-only open of a model (``SwSession.OpenReadOnly``); the confirmed drawing's open calls the qualified key through its own allowlist guard (``contracts/confirmed-open.md``)"
-$exclusions['OpenDoc7'] = "feature 004's open of the re-modeler's own copy (``remodel.open``, a bare read call site under ``RemodelGuard``) and ``probe remodel``'s reopen of its throwaway part; found by the read audit (T003)"
-$exclusions['NewDocument'] = "``probe remodel``'s throwaway part (feature 004 T032, under ``RemodelProbeGuard``, which exempts only the members ``ReadOnlyGuard`` refused when it was written); found by the read audit (T003)"
+$exclusions['OpenDoc6'] = "the console attach's read-only open of a part or assembly (``SwSession.OpenReadOnly``), checked with ``IsOpenedReadOnly`` after it (decision 136A); the confirmed drawing's open calls the qualified key through its own allowlist guard (``contracts/confirmed-open.md``)"
+$exclusions['SaveBMP'] = "the capture's image of a view: ``SwCaptureView`` gates the bare name on the session's read-only gate and has it write a bitmap of the graphics window beside the capture's PNG, at the PNG's name with ``.bmp``. ``SaveBMP`` writes to whatever path it is handed, a document's included, and a guard judges names, never paths: what keeps this path an image is the capture's own code, which names the PNG under the ``captures`` folder of the directory the host chose and checks its extension with ``AssertSaveAs`` first. ``SaveAs3`` stays refused (decision 140A; corrected on its review, which found this said ``SaveBMP`` cannot write a document)"
+
+# Decision 144A (2026-10-19) withdrew two exclusions: NewDocument, which creates probe remodel's
+# throwaway part, and MoveToFolder, PROBE-5's move into a folder. Only probe remodel calls them, so
+# the shared rows refuse them now and RemodelProbeGuard's run-scoped members exempt them for its one
+# gate, as they exempt ForceRebuild3 and SaveAs3.
+
+# Decision 148A (2026-10-20) withdrew OpenDoc7, a writable open, both as the named exclusion it was -
+# remodel.open's open of the copy and probe remodel's reopen of its throwaway part, both gated by the
+# bare name - and as the bare name of a stage-1 key, which ISldWorks.OpenDoc7 became: the two callers
+# name it by that key now, as the pane seat does, under RemodelGuard, RemodelProbeGuard and
+# RemodelSeatGuard, so the shared ISldWorks row refuses the bare name, and the key is the sixth that
+# overrides a read-only denial (Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes).
+$exclusions.Remove('OpenDoc7')
 
 function Test-AlreadyDenied([string] $name) {
     return (Test-DeniedBy $name $guard.BaseDenied $guard.BasePrefixes)
@@ -167,7 +257,7 @@ if ($CSharp) {
 
 $out = New-Object System.Collections.Generic.List[string]
 $out.Add('**Feature 011 (drawing context, read only)** refuses, before any new drawing read lands, every')
-$out.Add("writer of the $familyCount drawing families and the named members of the two shared families")
+$out.Add("writer of the $familyCount drawing families and the named members of the $($sharedRows.Count) shared families")
 $out.Add('(`011-drawing-context/contracts/guard.md`). **This section is generated, never transcribed**: it')
 $out.Add('is the output of `extractor/tools/list-writer-members.ps1` over `SolidWorks.Interop.sldworks`')
 $out.Add("$version, read as metadata, and ``Guard/ReadOnlyGuard.Drawing.cs`` is generated by the same run")

@@ -99,7 +99,16 @@ before the development machine sets the Start switch (`RemodelStart.SeatValidate
 of its own), in this order: first step 21's blocking probes - PROBE-1, 2, 3, 4 and 12 (004 T033
 to T035 and 004 T037) - each `verified`; then step 5.3's Plan on one real part's copy, part J, with
 that part's hash unchanged. 004 T180, what a plan holds while Start is on, is decided on the
-development machine before the switch too.
+development machine before the switch too. *Added 2026-10-19 (decision 144A):* the pane seat calls
+SOLIDWORKS through a gate of its own in this build, so step 5.3's item B, on the box before its
+Discard, also runs 011 T171: Open copy, then Start, and the run's `remodel.log` must hold exactly
+four `seat=` lines - a begin line and an outcome line for the plan's activation of the copy, and
+the same for the open - none with `refused=` or `error=`. *Added 2026-10-20 (decision 148A):* the
+seat's guard is a closed allowlist and `OpenDoc7` is called by its qualified key at every caller, so
+T171 also reads the plan's `remodel.open` line in the same `remodel.log` (`status=ok`, its `gated=`
+naming `ISldWorks.OpenDoc7`, no `refused=`), and at step 21's first run PROBE-12's reopen (the run's
+`interop members:` line naming `ISldWorks.OpenDoc7`, PROBE-12's lines with a reason and no
+`error`).
 
 Two more the owner asked for on 2026-09-27, with step 20:
 

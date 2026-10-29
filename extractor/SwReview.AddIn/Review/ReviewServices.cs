@@ -37,6 +37,8 @@ public sealed class DumpSummary
     /// Standards profile runs the phase that produces them, and the Standards tab reports the
     /// count so a run over a weldment says what it read.</param>
     /// <param name="drawingSheets">Drawing sheets in the package, or null; same rule.</param>
+    /// <param name="extracted">The document and configuration the dump attached to and extracted,
+    /// or null when the dump did not say (owner decision 152A, on review: S2).</param>
     public DumpSummary(
         string packageFilePath,
         int components,
@@ -46,8 +48,10 @@ public sealed class DumpSummary
         int? features = null,
         int? equations = null,
         int? cutListItems = null,
-        int? drawingSheets = null)
+        int? drawingSheets = null,
+        PageDocument? extracted = null)
     {
+        Extracted = extracted;
         PackageFilePath = packageFilePath ?? throw new ArgumentNullException(nameof(packageFilePath));
         Components = components;
         Gaps = gaps;
@@ -87,6 +91,14 @@ public sealed class DumpSummary
 
     /// <summary>Drawing sheets in the package; null when the dump did not report a count.</summary>
     public int? DrawingSheets { get; }
+
+    /// <summary>
+    /// Owner decision 152A, on the review of its Codex fixes (S2): the document and configuration the
+    /// dump attached to - the active one when it began, which can be another than any reading made
+    /// before it - or null when the dump did not say. A new review is made only of evidence its dump
+    /// says is of the review's document.
+    /// </summary>
+    public PageDocument? Extracted { get; }
 
     /// <summary>
     /// The clause a ready status appends for component instances a dump never read - lightweight

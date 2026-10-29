@@ -131,6 +131,59 @@ public sealed class ActiveConfigurationWatchTests
         Assert.Equal(new[] { "subscribe assembly", "unsubscribe assembly" }, world.Calls.ToArray());
     }
 
+    [Fact]
+    public void ADisposedWatchNeverSubscribesAgain()
+    {
+        var world = new World();
+        world.Watch.Follow(new FakeDocument("part"));
+        world.Watch.Dispose();
+
+        world.Watch.Follow(new FakeDocument("assembly"));
+
+        Assert.Equal(new[] { "subscribe part", "unsubscribe part" }, world.Calls);
+    }
+
+    [Fact]
+    public void DisposalDuringUnsubscribePreventsTheNextSubscription()
+    {
+        var world = new World();
+        world.Watch.Follow(new FakeDocument("part"));
+        world.DuringUnsubscribe = world.Watch.Dispose;
+
+        world.Watch.Follow(new FakeDocument("assembly"));
+
+        Assert.Equal(new[] { "subscribe part", "unsubscribe part" }, world.Calls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DisposalDuringSubscribeRemovesTheJustAddedSubscription(bool unsubscribeThrows)
+    {
+        var world = new World();
+        world.DuringSubscribe = world.Watch.Dispose;
+        if (unsubscribeThrows) world.UnsubscribeFailure = new InvalidOperationException("FICT the document is gone.");
+
+        world.Watch.Follow(new FakeDocument("part"));
+        world.Watch.Dispose();
+        world.Watch.Follow(new FakeDocument("assembly"));
+
+        Assert.Equal(new[] { "subscribe part", "unsubscribe part" }, world.Calls);
+    }
+
+    [Fact]
+    public void ADisposedWatchIgnoresALateConfigurationCallback()
+    {
+        var world = new World();
+        world.Watch.Follow(new FakeDocument("part"));
+        Func<int> late = world.Sink!;
+        world.UnsubscribeFailure = new InvalidOperationException("FICT the document is gone.");
+        world.Watch.Dispose();
+
+        Assert.Equal(0, late());
+        Assert.Equal(0, world.Changes);
+    }
+
     /// <summary>The sink it subscribes is one delegate, so unsubscribing names the same handler it subscribed.</summary>
     [Fact]
     public void TheSameSinkIsSubscribedAndUnsubscribed()
@@ -167,12 +220,14 @@ public sealed class ActiveConfigurationWatchTests
 
                     Calls.Add("subscribe " + fake.Kind);
                     Sink = sink;
+                    DuringSubscribe?.Invoke();
                     return true;
                 },
                 (document, sink) =>
                 {
                     Calls.Add("unsubscribe " + ((FakeDocument)document).Kind);
                     Unsubscribed = sink;
+                    DuringUnsubscribe?.Invoke();
                     if (UnsubscribeFailure != null)
                     {
                         throw UnsubscribeFailure;
@@ -197,6 +252,10 @@ public sealed class ActiveConfigurationWatchTests
         public Func<int>? Unsubscribed { get; private set; }
 
         public Exception? UnsubscribeFailure { get; set; }
+
+        public Action? DuringSubscribe { get; set; }
+
+        public Action? DuringUnsubscribe { get; set; }
 
         public int Changes { get; private set; }
 

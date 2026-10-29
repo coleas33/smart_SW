@@ -13,7 +13,8 @@ namespace SwReview.Extractor.Tests;
 ///
 /// <see cref="ReadOnlyGuard"/> is a denylist because the reviewer's read surface is unbounded;
 /// <see cref="RemodelGuard"/> is an allowlist because the re-modeler's write surface is a
-/// closed set of twenty interface-qualified keys. The two layers answer different questions -
+/// closed set of interface-qualified keys - twenty, and since owner decision 148A (2026-10-20)
+/// twenty-one with the open of the copy. The two layers answer different questions -
 /// which member may be called at all, and (in <see cref="RemodelScope"/>) which document it
 /// may be called on - because a call guard never sees the document: it is captured inside the
 /// lambda at <c>SwGate.Call("GetChildren", () =&gt; component.GetChildren())</c>.
@@ -23,7 +24,10 @@ public class RemodelGuardTests
     /// <summary>
     /// The stage-1 allowlist, exactly as contracts/guard-allowlist.md tabulates it. This
     /// array is the specification; a key added to <see cref="RemodelGuard"/> without a row
-    /// here fails <see cref="AllowedKeys_AreExactlyTheStage1Allowlist"/>.
+    /// here fails <see cref="AllowedKeys_AreExactlyTheStage1Allowlist"/>. Edited deliberately for
+    /// owner decision 148A (2026-10-20, feature 011 T184): <c>ISldWorks.OpenDoc7</c>, the open of the
+    /// copy <c>remodel.open</c> makes, which it called by the bare name the read-only guard left
+    /// allowed and calls by this key now, the bare name refused.
     /// </summary>
     public static readonly string[] Stage1Allowlist =
     {
@@ -47,6 +51,7 @@ public class RemodelGuardTests
         "ISldWorks.SetUserPreferenceToggle",
         "ISldWorks.set_CommandInProgress",
         "ISldWorks.CloseDoc",
+        "ISldWorks.OpenDoc7",
     };
 
     /// <summary>
@@ -62,9 +67,14 @@ public class RemodelGuardTests
     /// generated from the interop into the "Feature 011" table of the same file, and read from
     /// there rather than typed a second time (<see cref="DrawingFamilyDenylistTests"/>). Every one
     /// of them is a narrowing: none is on the stage-1 allowlist, so
-    /// <see cref="Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive"/> and
+    /// <see cref="Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes"/> and
     /// <see cref="RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse"/>
-    /// answer exactly as they did before it.
+    /// answer exactly as they did before it. Decision 140A's names (2026-10-19) are a narrowing too,
+    /// and the five keys did not move; but one of them, <c>SetReadOnlyState</c>, was a member the
+    /// remodel guard refused itself, so it left that list (<see cref="ExpectedRemodelExclusions"/>).
+    /// Decision 148A (2026-10-20) is the one that is not a narrowing alone: the "Feature 011" table
+    /// refuses the bare <c>OpenDoc7</c> now, and <c>ISldWorks.OpenDoc7</c> joined the allowlist with it,
+    /// so the keys that override a read-only denial are six (<see cref="KeysThatOverrideAReadOnlyDenial"/>).
     /// </summary>
     private static readonly string[] ExpectedDeniedMembers = new[]
     {
@@ -199,10 +209,12 @@ public class RemodelGuardTests
     };
 
     /// <summary>
-    /// The five allowlist keys that needed the allowlist to pass: every other key is a member
-    /// the read-only denylist never covered. This is the whole of the remodel feature's
-    /// widening, one row per key, and it is asserted as a set so a denial added upstream
-    /// cannot enlarge it unnoticed.
+    /// The allowlist keys that needed the allowlist to pass: every other key is a member the
+    /// read-only denylist never covered. This is the whole of the remodel feature's widening, one
+    /// row per key, and it is asserted as a set so a denial added upstream cannot enlarge it
+    /// unnoticed. Five until owner decision 148A (2026-10-20, feature 011 T184), which refused the
+    /// bare <c>OpenDoc7</c> and put the open of the copy on the allowlist by its qualified key:
+    /// six, edited deliberately.
     /// </summary>
     private static readonly string[] KeysThatOverrideAReadOnlyDenial =
     {
@@ -211,14 +223,20 @@ public class RemodelGuardTests
         "IModelDoc2.ForceRebuild3",
         "IModelDoc2.Save3",
         "ICustomPropertyManager.Delete2",
+        "ISldWorks.OpenDoc7",
     };
 
     /// <summary>
     /// The members contracts/guard-allowlist.md excludes that <see cref="ReadOnlyGuard"/>
     /// does not already refuse, so the remodel guard has to refuse them itself: the UI undo
     /// stack (<c>EditUndo2</c> returns void, VERIFIED, so it cannot be verified, and it is
-    /// shared with the engineer) and the read-only-state flag. Feature 003's T087 left these
-    /// to feature 004's guard work, and 004 adds nothing to <see cref="ReadOnlyGuard"/>.
+    /// shared with the engineer). Feature 003's T087 left these to feature 004's guard work,
+    /// and 004 adds nothing to <see cref="ReadOnlyGuard"/>. Edited deliberately for decision 140A
+    /// (2026-10-19), as <see cref="RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse"/>
+    /// asks: the read-only-state flag, <c>SetReadOnlyState</c>, is refused by
+    /// <see cref="ReadOnlyGuard"/> now, so it left this list rather than be kept in two places; this
+    /// guard still refuses it, qualified by its rule for a key off the allowlist and bare by the
+    /// read-only guard's answer (<see cref="Assert_ExcludedMember_IsRefused"/>).
     /// </summary>
     private static readonly string[] ExpectedRemodelExclusions =
     {
@@ -226,7 +244,6 @@ public class RemodelGuardTests
         "EditRedo2",
         "StartRecordingUndoObject",
         "FinishRecordingUndoObject2",
-        "SetReadOnlyState",
     };
 
     private static RemodelGuard Guard() => new RemodelGuard();
@@ -243,7 +260,7 @@ public class RemodelGuardTests
             + string.Join(", ", expected.Except(actual)) + "; missing from this test: "
             + string.Join(", ", actual.Except(expected)) + ".");
         Assert.Equal(Stage1Allowlist.Length, RemodelGuard.AllowedKeys.Count);
-        Assert.Equal(20, RemodelGuard.AllowedKeys.Count);
+        Assert.Equal(21, RemodelGuard.AllowedKeys.Count);
     }
 
     [Theory]
@@ -267,9 +284,24 @@ public class RemodelGuardTests
     [InlineData("ISldWorks.SetUserPreferenceToggle")]
     [InlineData("ISldWorks.set_CommandInProgress")]
     [InlineData("ISldWorks.CloseDoc")]
+    [InlineData("ISldWorks.OpenDoc7")]
     public void Assert_AllowlistedKey_Passes(string key)
     {
         Guard().Assert(key);
+    }
+
+    /// <summary>
+    /// Owner decision 148A (2026-10-20, feature 011 T184): <c>remodel.open</c> opens the copy by the
+    /// qualified key <c>ISldWorks.OpenDoc7</c>, which this guard allows, ordinally; the bare name, the
+    /// read-only guard's answer, is refused, as is the key spelled in another case.
+    /// </summary>
+    [Fact]
+    public void Assert_TheOpenOfTheCopyPassesByItsQualifiedKeyAndIsRefusedBare()
+    {
+        Guard().Assert("ISldWorks.OpenDoc7");
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("OpenDoc7"));
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("isldworks.opendoc7"));
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("ISldWorks.OpenDoc6"));
     }
 
     /// <summary>
@@ -409,17 +441,23 @@ public class RemodelGuardTests
     /// <summary>
     /// The denylist's known gaps are why the write surface is keyed by interface. Decision 21A
     /// closed the creation family (<see cref="Assert_BareCreationMember_IsRefusedSinceDecision21A"/>),
-    /// but a denylist still cannot enumerate every writer: <c>IFeatureManager.MoveToFolder</c>
-    /// moves features into a folder and no denial names it, so a bare key passes. It is refused
-    /// the moment it is spelled as the qualified key every write call site is required to use
-    /// (<see cref="CallKey.AssertQualified"/>), which is the property this guard actually rests on.
+    /// but a denylist still cannot enumerate every writer: <c>IModelDoc2.DeleteConfiguration2</c>
+    /// deletes a configuration and no denial names it (011 research R10.4 item 3, recorded for the
+    /// owner), so a bare key passes. It is refused the moment it is spelled as the qualified key every
+    /// write call site is required to use (<see cref="CallKey.AssertQualified"/>), which is the
+    /// property this guard actually rests on. Edited deliberately for decision 144A (2026-10-19): the
+    /// example was <c>IFeatureManager.MoveToFolder</c>, which the read-only guard refuses now, so the
+    /// remodel guard refuses it bare as well (011 research R10.4 item 5).
     /// </summary>
     [Fact]
     public void Assert_BareWriterTheDenylistMisses_PassesWhichIsWhyWritesAreQualified()
     {
-        Guard().Assert("MoveToFolder");
+        Guard().Assert("DeleteConfiguration2");
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("IModelDoc2.DeleteConfiguration2"));
+        Assert.Throws<ArgumentException>(() => CallKey.AssertQualified("DeleteConfiguration2"));
+
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("MoveToFolder"));
         Assert.Throws<MutatingCallError>(() => Guard().Assert("IFeatureManager.MoveToFolder"));
-        Assert.Throws<ArgumentException>(() => CallKey.AssertQualified("MoveToFolder"));
     }
 
     /// <summary>
@@ -490,11 +528,13 @@ public class RemodelGuardTests
     /// <summary>
     /// The set assertion contracts/guard-allowlist.md asks for: the allowlist keys that the
     /// read-only denied surface refuses - every key that needed the allowlist to pass - are
-    /// exactly five, so a denial added upstream cannot silently widen the remodel surface,
-    /// and an allowlist key added here cannot silently override one.
+    /// exactly the declared ones, so a denial added upstream cannot silently widen the remodel
+    /// surface, and an allowlist key added here cannot silently override one. Renamed deliberately
+    /// for owner decision 148A (2026-10-20, feature 011 T184), which made them six: it was
+    /// <c>Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive</c>.
     /// </summary>
     [Fact]
-    public void Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive()
+    public void Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredOnes()
     {
         var overriding = new HashSet<string>(
             RemodelGuard.AllowedKeys.Where(key => ReadOnlyGuardRefuses(CallKey.BareName(key))),
@@ -598,7 +638,7 @@ public class RemodelSaveTargetTests
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.slddrw")]
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS")]
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.png")]
-    // The copy path spelled differently: another case, or an 8.3 short name.
+    // Another case, or a fictional short spelling whose folder does not exist to expand it.
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\BRACKET-RMS.SLDPRT")]
     [InlineData(@"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.sldprt")]
     [InlineData(@"C:\runs\202609~1\copy\bracket-RMS.SLDPRT")]
@@ -611,6 +651,66 @@ public class RemodelSaveTargetTests
         Assert.Equal("Save3", refusal.MemberName);
         Assert.False(string.IsNullOrWhiteSpace(refusal.Message));
     }
+
+    [Fact]
+    public void AssertSaveTarget_TheRefusalDescribesTheCanonicalPathComparison()
+    {
+        const string candidate = @"C:\runs\20260916-142201-bracket-remodel\copy\other-RMS.SLDPRT";
+        MutatingCallError refusal = Assert.Throws<MutatingCallError>(
+            () => RemodelScope.AssertSaveTarget(candidate, CopyPath, RunDirectory, SourcePath));
+
+        Assert.Contains("The canonical paths must match exactly, including letter case.", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("8.3", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the refusal's words and 004's contract say of an 8.3 spelling (owner decision 160A, on its review),
+    /// tested on the real disk: a copy that exists, spelled with the short names Windows gave its folders, is
+    /// canonicalized to the copy by <c>Path.GetFullPath</c> and passes, while the same short spelling of a copy
+    /// not there - nothing on the disk to expand it - is refused. On a volume that makes no 8.3 names,
+    /// <c>GetShortPathName</c> answers the long path, and the case checks only that the copy passes as spelled.
+    /// </summary>
+    [Fact]
+    public void AssertSaveTarget_AnExistingCopySpeltWithItsShortNames_Passes()
+    {
+        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SwReview.SaveTarget.Tests", Guid.NewGuid().ToString("N"));
+        string runDirectory = System.IO.Path.Combine(root, "20260916-142201-bracket-remodel");
+        string copyFolder = System.IO.Path.Combine(runDirectory, "copy");
+        string copyPath = System.IO.Path.Combine(copyFolder, "bracket-RMS.SLDPRT");
+        System.IO.Directory.CreateDirectory(copyFolder);
+        System.IO.File.WriteAllText(copyPath, string.Empty);
+        try
+        {
+            string shortCopy = System.IO.Path.Combine(ShortPathOf(copyFolder), "bracket-RMS.SLDPRT");
+            RemodelScope.AssertSaveTarget(shortCopy, copyPath, runDirectory, SourcePath);
+
+            if (shortCopy.IndexOf('~') >= 0)
+            {
+                System.IO.Directory.Delete(runDirectory, recursive: true);
+                Assert.Throws<MutatingCallError>(
+                    () => RemodelScope.AssertSaveTarget(shortCopy, copyPath, runDirectory, SourcePath));
+            }
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(root))
+            {
+                System.IO.Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>The path as Windows spells it with each folder's 8.3 short name, where the volume makes them.</summary>
+    private static string ShortPathOf(string path)
+    {
+        var buffer = new System.Text.StringBuilder(1024);
+        uint length = GetShortPathName(path, buffer, (uint)buffer.Capacity);
+        Assert.True(length > 0 && length < buffer.Capacity, "GetShortPathName failed: " + System.Runtime.InteropServices.Marshal.GetLastWin32Error());
+        return buffer.ToString();
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetShortPathName(string longPath, System.Text.StringBuilder shortPath, uint size);
 
     [Fact]
     public void AssertSaveTarget_TheSource_IsRefusedByName()

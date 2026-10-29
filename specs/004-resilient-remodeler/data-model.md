@@ -506,12 +506,22 @@ probe.
 | `length_bytes` | int | |
 | `last_write_utc` | ISO 8601 | |
 | `sha256` | str | |
+| `read_only` | bool \| null | The source file's filesystem ReadOnly bit recorded before copying (T188/T269 to T272). Null means not recorded or the optional attribute read was unavailable. This is not an ACL, vault permission or SOLIDWORKS document-open mode; false grants no write permission |
 | `source_design_id` | str | `DocumentIds.DesignId(path)` under the same normalization `DocumentIds` uses (trim, `/` to `\\`, lowercase), computed at copy time. **This is what the exceptions carry-forward matches on** (`contracts/run-artifacts.md`). The plan's `document_id` and this run's package `design_id` stay the **copy's** and are not overloaded; the copy's path is unique to the run, so they can never match a prior run's |
 | `recorded_at` | ISO 8601 | Before the copy is made |
 | `rechecked_at` | ISO 8601 \| null | At report time |
 | `matches` | bool \| null | All three re-checked values equal. **`False` is a hard failure of the run**, whatever the copy looks like |
 | `vault_path`, `vault_revision` | str \| null | EPDM source; the copy is taken out of the vault into the run folder. Null means **not read by this build** until T139 adds a vault read (section 4.1's amendment of 2026-09-26) |
 | `copy_path`, `copy_sha256_after_save` | str, str \| null | Recorded so the artifact in the run folder is identifiable later |
+
+*Added 2026-10-24 (T188; research R20):* `read_only` is optional for legacy bridge replies,
+plans and artifacts; omission loads as null. When present it must be an exact Boolean or null,
+never a number or string. The nine existing recorded fields remain required and unknown fields
+remain refused. Both `plan.json`'s `source` and `source-attestation.json` retain the same metadata.
+Reading an old artifact does not rewrite it; an explicit later write may add `read_only: null`.
+The size/time/hash recheck does not reread or compare this metadata, and `matches` still reports
+only those three values. Expected failures of the extra attribute read become unknown; mandatory
+source evidence failures remain failures.
 
 ---
 
@@ -533,7 +543,11 @@ provider constructed in either call.
 ## 7. Run folder layout
 
 Created by the existing `RunFolders` helper (`extractor/SwReview.AddIn/Review/RunFolders.cs`), so
-the naming convention stays in one place: `<run_root>/<yyyyMMdd-HHmmss>-<doc>-remodel/`.
+the naming convention stays in one place: `<run_root>/<yyyyMMdd-HHmmss>-<doc>-remodel/`. *Amended
+2026-10-20 (feature 011, owner decision 148A):* made in its full form, under `Path.GetFullPath` of the
+run root (`contracts/run-artifacts.md`). *Amended 2026-10-20 (feature 002, owner decision 154A):* never
+under a run root on a network share, reached through a link or written as a device path, or could not be checked, which a plan
+and a Start refuse first (`contracts/run-artifacts.md`).
 
 | Path | Written by | Contains |
 |---|---|---|
@@ -542,12 +556,13 @@ the naming convention stays in one place: `<run_root>/<yyyyMMdd-HHmmss>-<doc>-re
 | `changes.jsonl` | `remodel/apply.py` | Two `ChangeRecord` lines per change |
 | `package-before.json`, `package-after.json` | the extractor, ModelCheck profile | The copy's tree at open and after the last change |
 | `rms-before.json`, `rms-after.json` | `checks/rms/run.py` | Rule results, no LLM |
+| `rms-before/`, `rms-after/` | `remodel/artifacts.py` | Each side's grade run folder, which no review claims; `contracts/run-artifacts.md` (*added 2026-10-19, owner decision 146A*) |
 | `grades.json` | `checks/rms/grade.py` | Section 6 |
 | `geometry.json` | `remodel/geometry.py` | The `GeometryReading`s and the `GateResult` |
 | `source-attestation.json` | `remodel/runner.py` | Section 5 |
 | `report.md` | `remodel/runner.py` | Change list, grade delta, geometry comparison, rebuild list with a reason each |
 | `events.jsonl`, `session.json` | the shared `EventSink` and `SessionSink` | Section 10 |
-| `remodel.log` | the bridge host | One line per request: command, elapsed, gated members, target path |
+| `remodel.log` | the bridge host; and its `seat=` lines, the re-modeler's pane seat (feature 011, owner decision 144A) | One line per request: command, elapsed, gated members, target path. *Amended 2026-10-20 (decision 144A's second review)*: the request lines are the `id=` and `command=` lines, a begin line and a completed line per request since 2026-09-28; the pane seat writes its `seat=` lines beside them, two per action; a count of requests counts request lines only (`contracts/run-artifacts.md`) |
 
 **Discard** closes the copy without saving and deletes `copy/` only. Every other file stays:
 deleting the folder would lose the evidence Principle VI asks for, and "what did it propose?"

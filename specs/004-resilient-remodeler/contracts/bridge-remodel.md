@@ -35,6 +35,22 @@ maps a refusal to a class without matching on prose. `error` still carries the s
 engineer reads. This uses the same "except where noted" allowance 1.0 grants `capture`, which
 returns its `Gap` on an error.
 
+## Internal copy-open observation
+
+The optional `BridgeServices.BeginRemodelOpen` callback is an application-thread host hook,
+not a command, tool or wire field. The dispatcher calls it once before `OpenIn` and disposes
+its exact returned scope in the existing `Open` finally, after successful session publication
+or failed-open unwind. A missing callback or null scope preserves console behavior. Observer
+failures do not change the request's result; the add-in service logs them best-effort.
+
+The add-in uses that scope only to defer active-configuration subscription following. Requests
+coalesce until the last scope exits, then queued application-thread work resolves the latest
+active document. Queued work rechecks the scope because native open can pump UI callbacks.
+Unloading or replacing the watch invalidates its old coordinator before disposal. Document-change
+fan-out, copy-loss handling and bridge attachment holds remain immediate. This hook grants no
+document access or write permission and changes no request or reply shape. Native open timing
+and failed-unwind behavior remain part of pilot-workstation acceptance (R21).
+
 ## Authorization
 
 `ScopedSecretPolicy` gains a third scope. `ToolServiceHost` mints `RemodelSecret` alongside
@@ -68,23 +84,59 @@ and indices change on every reorder.
 **Every key in a command's `Params` cell is always present on the wire**, with `null` for a value
 this call has none of and `[]` for an absent list; `bridge/remodel_client.py` composes the whole
 object for every command, so a handler reads a fixed set of keys and never has to tell "absent"
-from "null". `remodel.snapshot` and `remodel.geometry` send `params: {}`, which is the whole
+from "null". `remodel.snapshot` and `remodel.geometry` send `params: {run_id}`, which is the whole
 shape and not an abbreviation of one.
+
+**Every command after `remodel.open` names its run.** *Added 2026-10-21 (owner decision 159A, on
+Codex's review of the merge, defence in depth; protocol 1.5; `research.md` R19.15):* `run_id`, first
+in its `Params`, is the id `remodel.open` was given - the run folder's own name, which the open tags
+the copy with and the session keeps. The bridge reads it as it reads the open's, trimmed of any
+space around it, then compares it exactly - case and all - with its session's before anything is
+read or written: no session is `target_mismatch`, as before, whatever run the command
+names; a command naming no run, or one that is not a non-empty string, is `bad_request`; and one
+naming another run is `session_mismatch`, the session it reached left as it was. Until then a
+command after the open named no run, and the bridge carried it out on whatever session it held: a
+run's worker that outlived its session - the add-in took a status poll the backend did not answer
+for the run's end, closed the session and was free, and the next plan opened its copy on the same
+bridge - had its next change carried out on the next run's copy, which passes every check
+`VerifyTarget` makes because it is that run's own. `run_id` names a run, not a document: no path is
+added to any command, and the property below is unchanged.
+
+*Noted 2026-10-27 (owner decision 159A; `research.md` R22); the bridge is unchanged:* `run_id` is the
+folder's name, so two runs of one name under two run roots are one run here. What keeps an old run's
+close from a run of the same name under a new run root is the backend's run-root judging
+(`backend-remodel.md`), and the add-in's order: it closes what the Remodel tab left under the run root
+in force through the backend serving it before a settings restart moves the run root, and no run
+under the new one is planned while that close is unanswered. No new entry into the end-of-session
+routine is added: a session whose backend has exited is still ended only by a re-attach's or an
+unload's teardown, which R22 records as a known defect before Start.
+
+*Amended 2026-10-27 (owner decision 161A; `research.md` R24); the protocol is unchanged:* one entry
+into the end-of-session routine is added, in process and in no command:
+`SwBridgeDispatcher.EndRemodelSessionOf(runDirectory)`, the tool service's only, for a settings
+restart that would move the run root after the backend serving the run root in force has exited. It
+ends the session only when it is that run's by the check a command's `run_id` gets - the folder's
+name equal to the run id the open was given, exactly - and by one `run_id` cannot make: the whole
+folder, canonicalized, is the scope's own, so a run of the same name under another run root is not
+this one. It then runs `EndRemodelSession(remodel.close)`, as `remodel.close` with `discard_copy:
+false` does: verified, untagged and closed unsaved, the settings put back, nothing deleted, the host
+told. Otherwise it calls nothing and changes nothing, the bound run root included. No command, secret,
+guard key or allowlist entry is added, and no path reaches the bridge from a request.
 
 | Command | Params | Result on `ok` |
 |---------|--------|----------------|
 | `remodel.probe_scope` | `{source_path}` | `{probe_id, source_path, scope_signals}` |
 | `remodel.open` | `{source_path, copy_path, run_id, probe_id}` | `{document_path, tag, feature_count, scope_signals, configurations[], document_length_unit, source_attestation}` |
-| `remodel.snapshot` | `{}` | `{order[], names{}, descriptions{}, equations[], unreadable_equation_indexes[], rebuild_errors, feature_count}` |
-| `remodel.rename` | `{persist_ref, new_name}` | `{previous_name, new_name}` |
-| `remodel.reorder` | `{feature_persist_ref, anchor_persist_ref, location}` | `{previous_anchor_persist_ref, previous_location, previous_index, new_index}` |
-| `remodel.folder` | `{op, name, member_persist_refs[], folder_persist_ref}` | `{folder_persist_ref, name, member_persist_refs[]}` |
-| `remodel.describe` | `{persist_ref, text}` | `{previous_text}` |
-| `remodel.equation` | `{op, index, text, which_configs}` | `{index, count_before, count_after, previous_text, round_trip_text, helper_path}` |
-| `remodel.rebuild` | `{force}` | `{rebuild_errors, whats_wrong[], elapsed_ms, feature_errors[]}` |
-| `remodel.geometry` | `{}` | `GeometryReading` |
-| `remodel.save` | `{verdict}` | `{path, errors, warnings, save_flag_after}` |
-| `remodel.close` | `{discard_copy}` | `{closed, copy_deleted}` |
+| `remodel.snapshot` | `{run_id}` | `{order[], names{}, descriptions{}, equations[], unreadable_equation_indexes[], rebuild_errors, feature_count}` |
+| `remodel.rename` | `{run_id, persist_ref, new_name}` | `{previous_name, new_name}` |
+| `remodel.reorder` | `{run_id, feature_persist_ref, anchor_persist_ref, location}` | `{previous_anchor_persist_ref, previous_location, previous_index, new_index}` |
+| `remodel.folder` | `{run_id, op, name, member_persist_refs[], folder_persist_ref}` | `{folder_persist_ref, name, member_persist_refs[]}` |
+| `remodel.describe` | `{run_id, persist_ref, text}` | `{previous_text}` |
+| `remodel.equation` | `{run_id, op, index, text, which_configs}` | `{index, count_before, count_after, previous_text, round_trip_text, helper_path}` |
+| `remodel.rebuild` | `{run_id, force}` | `{rebuild_errors, whats_wrong[], elapsed_ms, feature_errors[]}` |
+| `remodel.geometry` | `{run_id}` | `GeometryReading` |
+| `remodel.save` | `{run_id, verdict}` | `{path, errors, warnings, save_flag_after}` |
+| `remodel.close` | `{run_id, discard_copy}` | `{closed, copy_deleted}` |
 
 ### `remodel.probe_scope`
 
@@ -185,13 +237,25 @@ Sequence, in order, with the call that performs each step:
    read-only referenced documents" option was turned on since the probe is refused
    `scope_changed`, before the copy.
 4. `copy_path` passes `AssertSaveTarget` (`guard-allowlist.md`): inside this run's folder,
-   canonicalized, `.SLDPRT`, not the source, not another run's copy.
+   canonicalized, `.SLDPRT`, not the source, not another run's copy. *Amended 2026-10-20 (feature
+   011, owner decision 148A; its research R12.3):* first, the path is taken by the one rule both seats
+   take the run's copy by, `RemodelCopy.CopyOf` - a full path, a drive's or a share's, never a device
+   path, with no `..` segment, to a part in a run folder's `copy/`, the run folder not a root - which
+   answers its canonical form, used from here on; any other path is refused as a save target is,
+   `guard_refused` naming `Save3`, before anything is recorded. Until then a `..` was canonicalized
+   away and a device path taken. The run folder it names must be the one the host bound, as before.
 5. Record the source attestation: absolute path, length, `LastWriteTimeUtc`, SHA-256, and, when
    the path is inside an EPDM vault, the vault path and the revision as read from the vault. An
    EPDM part is **copied out, never refused for vault reasons**. *Amended 2026-09-26 (default
    taken 2026-09-26, the owner may revise; `tasks.md` T155, T139):* until T139 adds a vault read
    the seat's `GetVault` answers null and both vault fields are recorded null, which means "not
    read by this build", never "not in a vault" (`data-model.md` section 4.1).
+   *Added 2026-10-24 (T188; T269 to T272, research R20):* also record the source filesystem
+   ReadOnly bit as nullable `read_only` beside the hash. An expected I/O, access or security
+   failure of this optional read records null; mandatory path/length/time/hash failures still
+   fail the open. The reply retains all nine required recorded fields and may add only this
+   optional metadata field (`data-model.md` section 5). Old replies which omit it remain readable
+   as unknown. This reads no SOLIDWORKS member and grants no write permission.
 6. Set the three system toggles through `ISldWorks.SetUserPreferenceToggle` -
    `swInputDimValOnCreate = 10`, `swShowErrorsEveryRebuild = 77`,
    `swWarnSaveUpdateErrors = 329` (all VERIFIED values) - plus the separately allowlisted
@@ -219,7 +283,10 @@ Sequence, in order, with the call that performs each step:
    - or, if even that fails, the sentence says where it was left.
 8. `OpenDoc7` with `Silent | LoadModel = 17` exactly, and **never** `ReadOnly(2)` or
    `ViewOnly(4)` (VERIFIED values; asserted as an integer in a unit test). Then assert
-   `GetPathName()` equals `copy_path` and does not equal `source_path`.
+   `GetPathName()` equals `copy_path` and does not equal `source_path`. *Amended 2026-10-20 (feature
+   011, owner decision 148A):* gated by its qualified key, `ISldWorks.OpenDoc7`, on the stage-1
+   allowlist (`guard-allowlist.md`), where it was gated by the bare name `ReadOnlyGuard` left allowed;
+   the read-only guard refuses the bare name now. Its marker is the key.
 9. Tag: `ICustomPropertyManager.Add3("SwReviewRemodelRun", 30, run_id, 2)` and read back with
    `Get4` (both VERIFIED; **UNVERIFIED that the round trip works on 2024, PROBE-12, blocking**,
    because it is one of `VerifyTarget`'s four checks). Failure is `tag_failed`.
@@ -597,7 +664,20 @@ attachment: `ToolServiceHost.Start` builds one, behind a pipe name minted fresh 
 When the add-in re-attaches the tool service (`ToolServiceGate.FollowDocument`, on a document
 switch with nothing holding the bridge), the old dispatcher goes with its pipe and the new one
 has no session. **The session does not survive the re-attach**; nothing in this protocol carries
-it across, and no command is added to do so.
+it across, and no command is added to do so. *Amended 2026-10-20 (owner decision 152A):* the
+add-in re-attaches it too once a turn, a plan or a run that held the bridge across a switch ends,
+and when a review asks it to follow the active document; a plan's session goes with the old
+attachment as it does at a switch, except while its exact held copy is the active document (T180).
+The pane's own check of a review session's bridge reads the attachment's record of the document
+and configuration it was bound to - the values `ping` answers - from the add-in's gate, not over
+the pipe. *Amended 2026-10-20 (owner decision 152A, on the Codex review):* a plan and a run hold
+the attachment through the add-in's gate while they run, so a follow does not take it down under
+them, even one whose busy question was answered before they began (`pane-remodel-messages.md`,
+decision 22A's section); the `remodel.*` family is not asked the configuration the review's live
+commands are (Serve/PROTOCOL.md). *Amended 2026-10-21 (owner decision 158A):* a hold by itself keeps
+a follow back for an hour at most; a plan or a run still going past it is not followed away from all
+the same, since the add-in's busy question reads it in progress (`pane-remodel-messages.md`, decision
+22A's section).
 
 The pane refuses Start first: `RemodelHost` records the attachment each plan was made on and
 answers `remodel.start` with `SessionLost` when it is not the one listening now, before any
@@ -605,7 +685,11 @@ answers `remodel.start` with `SessionLost` when it is not the one listening now,
 is the backstop for the one window the pane cannot close - a re-attach that lands between the
 pane's check and the backend's first bridge call: every command after `remodel.open` reaches a
 dispatcher with no session and is answered `target_mismatch` ("remodel.open has not returned in
-this bridge session") before any write, so the run changes nothing either way.
+this bridge session") before any write, so the run changes nothing either way. *Amended 2026-10-21
+(owner decision 159A, on Codex's review; `research.md` R19.15):* and on the attachment it was made
+on, a session another run holds answers this run's commands `session_mismatch`, before any read or
+write ("The commands", above), so a run's worker that outlived its session cannot reach the next
+run's copy there either.
 
 What the discarded session leaves on the seat - the system toggles `remodel.open` set, and the
 copy still open in SOLIDWORKS, since neither the dispatcher nor `ToolServiceHost.Dispose` ends a
@@ -616,7 +700,9 @@ revise; research R13.1):* the teardown ends it ("Ending a session", next).
 
 *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167; the routine and
 its hosting landed 2026-09-27, lane D).* A session ends in one routine, `SwBridgeDispatcher.EndRemodelSession(reason)`, whatever
-ends it: `remodel.close`, a tool-service re-attach, or an add-in unload.
+ends it: `remodel.close`, a tool-service re-attach, or an add-in unload. *Amended 2026-10-27 (owner
+decision 161A; `research.md` R24):* and the tool service's in-process close of one run's session before
+a run-root change with the backend gone (`EndRemodelSessionOf`, above), for the reason `remodel.close`.
 
 1. `VerifyTarget` (`guard-allowlist.md`).
 2. When it passes, remove the session tag (`ICustomPropertyManager.Delete2`) and close the copy
@@ -736,6 +822,7 @@ stays unknown and is never guessed into the nearest class.
 | `tag_failed` | The session tag did not write or did not read back | `RemodelTargetError` | Run aborts; the copy is deleted |
 | `preexisting_rebuild_errors` | The part was already broken at baseline | `RemodelPreflightError` | Refused **after** the copy exists, because the reading needs a rollback and a rebuild; the handler deletes the copy and closes the document before it answers |
 | `target_mismatch` | One of `VerifyTarget`'s four checks failed | `RemodelTargetError` | Run aborts with the change log intact |
+| `session_mismatch` | A command after `remodel.open` names another run than the one whose session the bridge holds ("The commands"; owner decision 159A, protocol 1.5) | `RemodelTargetError` | Refused before any read or write, the session it reached left as it was; the run that sent it aborts with its change log intact |
 | `guard_refused` | The member is not on the stage-1 allowlist | `RemodelGuardError` | Run aborts; this is a bug, not a condition |
 | `persist_ref_unresolved` | `GetObjectByPersistReference3` returned an error code | `RemodelAddressError` | The change fails and the run stops |
 | `reorder_refused` | `ReorderFeature` returned `false` | `RemodelContractError` | Contract violation: stop, discard the copy |
@@ -808,10 +895,17 @@ the transport. Every other method is named for its command.
 - **`error_code` becomes a class, unchanged.** `ERROR_CLASSES` is the table above, token for
   token, and the exception carries `error_code` and `detail` as the host sent them.
 - **An open circuit is a value, not an exception** (see "Error codes" above).
+- **It acts for one run** (owner decision 159A, protocol 1.5). `RemodelClient(run_id=...)`, the run
+  folder's own name; every route of `backend-remodel.md` but the probe builds its client for the run
+  in its `run_dir`. It opens that run and no other, and adds `run_id` to every command after the
+  open, first; a client given no run sends nothing after the open. The run is the client's and not
+  a method's argument, so a plan's change `params` and an inverse's stay the method's arguments.
 
 The client declares `REMODEL_PROTOCOL_VERSION = "1.1"`. `PROTOCOL_VERSION` in `client.py` stays
 `"1.0"`: the review client needs only the 1.0 envelope, and 1.1 is additive, so it keeps working
-against a host serving this family.
+against a host serving this family. *Amended 2026-10-21 (owner decision 159A):* both are `"1.5"`
+now: the family needs a host that refuses another run's command, and the review client's commands
+are unchanged.
 
 ## Logging
 

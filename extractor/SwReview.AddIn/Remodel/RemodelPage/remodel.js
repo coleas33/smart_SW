@@ -68,8 +68,32 @@
    */
   var NO_SEAT_MESSAGE = 'Remodel is not in this build yet. This tab will not change the open part.';
 
+  /**
+   * What the strip says from the add-in's word that the backend did not start until an `init`
+   * names a backend (owner decision 150A).
+   */
+  var NOT_RUNNING = 'Backend not running';
+  var START_IT_AGAIN = 'The backend is not running. Save Settings on the Review tab to start it again.';
+
+  /**
+   * Where a change that did not hold says to read why, by the button's label (owner decision 159A,
+   * on review): the run's own words for it can name the copy's full path.
+   */
+  var CHANGE_DID_NOT_HOLD = 'Press Open report to see why.';
+
+  /** What a change's error code is shown as: a code, never a sentence or a path (159A, on review). */
+  var ERROR_CODE = /^[A-Za-z][A-Za-z0-9_.-]*$/;
+
   var pending = Object.create(null);
   var nextId = 0;
+
+  /**
+   * What this load's request ids begin with, so no two loads of the page share one (owner decision
+   * 159A, on review): the host answers a request of an earlier load - its Stop, at the run's end -
+   * under that load's id, after the page has loaded again, and an id numbered from `m1` at every
+   * load was this load's too, which took that answer for its own request's.
+   */
+  var idPrefix = 'm' + Date.now().toString(36) + Math.floor(Math.random() * 0x100000000).toString(36) + '-';
 
   var state = {
     backend: null,
@@ -94,7 +118,35 @@
     lostRunDirectory: null,
 
     /** Whether a `ready` is in flight, so a second status does not ask again on top of it. */
-    initPending: false
+    initPending: false,
+
+    /**
+     * A `backend.restarted` arrived while a `ready` was in flight: ask once more after it, since
+     * the host may have read that `init` before the new backend was up (owner decision 145A).
+     */
+    initAgain: false,
+
+    /** A discarded first init must still load its latest run once fresh state arrives. */
+    initAgainLoadsLatest: false,
+
+    /** A lifecycle failure invalidates every init request already in flight (160A's final review). */
+    backendFailureRevision: 0,
+
+    /**
+     * Whether the last banner put up is the add-in's word that the backend did not start - a
+     * failed start or restart, `status {stage: "error", lifecycle: true}`. The next `init` that
+     * names a backend takes it down; no other banner, a run's or a teardown's included (owner
+     * decision 145A, third review).
+     */
+    lifecycleBanner: false,
+
+    /**
+     * Whether the add-in's last word on the backend is that it did not start, and no `init` has
+     * named a backend since: the strip says it is not running until one does (owner decision
+     * 150A). Not the banner's mark above, which any banner put up since clears while the backend
+     * is still not running.
+     */
+    notRunning: false
   };
 
   var ui = {};
@@ -102,7 +154,7 @@
   // ---- transport: the host ----------------------------------------------------------------
 
   function send(type, payload) {
-    var id = 'm' + (++nextId);
+    var id = idPrefix + (++nextId);
     var message = { type: type, id: id, payload: payload || {} };
     return new Promise(function (resolve, reject) {
       pending[id] = { resolve: resolve, reject: reject };
@@ -129,6 +181,13 @@
       } else {
         waiting.resolve(message.payload || {});
       }
+      return;
+    }
+
+    if (typeof message.id === 'string' && message.id) {
+      // A reply to a request this load did not send - an earlier load's, answered after this one
+      // loaded (owner decision 159A, on review). The host's own messages carry no id, so this is no
+      // word to this page, an `error` included.
       return;
     }
 
@@ -173,7 +232,18 @@
       case 'backend.stopped':
         state.backend = null;
         state.token = null;
-        renderBackendState('The backend stopped. Reopen the pane to start it again.', true);
+        renderBackendState('The backend stopped. Save Settings on the Review tab to start it again.', true);
+        return;
+      case 'backend.restarted':
+        // Owner decision 145A: the host restarted the backend with saved settings, so the port
+        // and token of the last `init` are the old backend's. The page asks again - once more
+        // after an `init` already on its way - and leaves the run on screen as it is: its record
+        // is the run folder, which the restart does not touch (`requestInit(false)`).
+        if (state.initPending) {
+          state.initAgain = true;
+        } else {
+          requestInit(false);
+        }
         return;
       case 'error':
         showBanner(asError(message.payload).message);
@@ -251,8 +321,11 @@
         return refreshResult();
       })
       .catch(function (error) {
-        // The start was refused, so no run began and no terminal `status` is coming.
+        // The start was refused, so no run began and no terminal `status` is coming. The line the
+        // press set - "Running...", or the host's word that a settings restart comes first - is no
+        // longer true; the banner says why (owner decision 145A, found on review).
         showBanner(error.message);
+        setRunStatus('');
         endRun();
       });
   }
@@ -309,17 +382,29 @@
   function stopRun() {
     send('remodel.stop', {})
       .then(function (stopped) {
+        // The host answers this only once the executor has finalized, after the run's terminal
+        // `status`, which has already ended the run and written its end into the run line. That
+        // line stands (owner decision 159A): this answer, written over it, left a stopped run's
+        // line saying it was stopping. Only a page no terminal `status` has reached hears the end
+        // from this answer: the second of the two ways out, not a second ending.
+        if (!state.running) {
+          return;
+        }
+
         setRunStatus(
           'Stopping. ' + dom.scalar(stopped.changes_applied)
             + ' change(s) applied; the change in flight is finished and the artifacts are '
             + 'finalized first.');
-
-        // The host answers this only once the executor has finalized, so the run is over by
-        // the time it arrives. Normally the terminal `status` has already ended it; this is
-        // the second of the two ways out, not a second ending.
         endRun();
       })
       .catch(function (error) {
+        // A Stop that crossed the run's end finds the host free (owner decision 159A, on review).
+        // Every way a run is freed posts its terminal `status`, whose banner says how the run ended,
+        // so this answer has nothing to add, and is not put over it.
+        if (error.errorClass === 'RunNotFound') {
+          return;
+        }
+
         showBanner(error.message);
       });
   }
@@ -651,10 +736,14 @@
     row.appendChild(head);
 
     if (change.error_code || change.error) {
+      // Owner decision 159A, on review: its code and where to read why, by the button's label - not
+      // the executor's own sentence, which can name the copy's full path. That sentence stays where
+      // the run records it: the change's record and the report in the run folder.
+      var code = dom.scalar(change.error_code);
       row.appendChild(dom.el(
         'p',
         'error',
-        dom.scalar(change.error_code) + (change.error ? ': ' + dom.scalar(change.error) : '')));
+        (ERROR_CODE.test(code) ? code + '. ' : '') + CHANGE_DID_NOT_HOLD));
     }
 
     if (change.status === 'attempting') {
@@ -937,8 +1026,13 @@
     ui.planLost.hidden = !lost;
     ui.planAgain.disabled = ui.planRun.disabled;
     ui.stopRun.disabled = !state.running;
-    ui.openCopy.disabled = !hasRun;
-    ui.discardCopy.disabled = !hasRun || state.running;
+    // Owner decision 148A: neither copy action while a plan is made or a run runs. The host refuses
+    // Open copy while either is in flight - opening the copy would change the document SOLIDWORKS has
+    // active under a run - and Discard copy while its run is; and a press mid-plan waits behind the plan
+    // on the host's one message thread, then acts on the earlier run's copy while this page shows the
+    // new plan (feature 011 research R12.8a).
+    ui.openCopy.disabled = !hasRun || busy;
+    ui.discardCopy.disabled = !hasRun || busy;
     ui.openReport.disabled = !hasRun;
     ui.openFolder.disabled = !hasRun;
   }
@@ -949,12 +1043,30 @@
     // The two terminal stages: the host posts one of them once phases B to D have finished,
     // whether they finished, were stopped or failed. They are what ends the running state, and
     // until one of them arrives the run is still running and Stop is still pressable.
+    var endsARun = (stage === 'ready' || stage === 'error') && state.running;
     if (stage === 'ready' || stage === 'error') {
       endRun();
     }
 
     if (stage === 'error') {
+      if (endsARun) {
+        // Owner decision 159A: a run that ends in an error leaves no stage of its own in the run
+        // line - "Applying ...", or the Stop's "Stopping: ..." - which would say it is still
+        // going; the banner says how it ended, as a refused plan or Start leaves the line.
+        setRunStatus('');
+      }
+
       showBanner(payload.message || 'the run stopped');
+      state.lifecycleBanner = payload.lifecycle === true;
+      if (state.lifecycleBanner) {
+        state.backendFailureRevision++;
+        // The add-in's word that the backend did not start: the strip says so until an `init`
+        // names a backend (owner decision 150A).
+        state.notRunning = true;
+        state.backend = null;
+        state.token = null;
+        renderBackendState(NOT_RUNNING, true);
+      }
       return;
     }
 
@@ -962,8 +1074,13 @@
       // The backend finished starting after this page was given its `init`, so the endpoint it
       // holds is null. Ask again, as the other pages do. Guarded on `state.backend` so the
       // host's own end-of-phase `status {stage: "ready"}` does not re-initialise the page in
-      // the middle of a run.
-      requestInit();
+      // the middle of a run. One more ask after an `init` already on its way, which may have been
+      // read before the backend was up (the review of owner decision 160A, D2).
+      if (state.initPending) {
+        state.initAgain = true;
+      } else {
+        requestInit(true);
+      }
     }
 
     setRunStatus((payload && payload.message) || '');
@@ -990,6 +1107,7 @@
   }
 
   function showBanner(message) {
+    state.lifecycleBanner = false;
     dom.clear(ui.banner);
     dom.write(ui.banner, message || '');
     ui.banner.hidden = !message;
@@ -1076,7 +1194,7 @@
     renderResult(null);
     renderPlan(null);
 
-    requestInit();
+    requestInit(true);
   }
 
   function openRun(type) {
@@ -1089,24 +1207,49 @@
     });
   }
 
-  /** Ask the host for `init` and apply it. */
-  function requestInit() {
+  /**
+   * Ask the host for `init` and apply it.
+   *
+   * `loadLatest` is false when the page asks because the backend was restarted (owner decision
+   * 145A): the run on screen is the one the page was showing, the host reads it out of its run
+   * folder rather than from the backend, and reading it again would only re-render what the
+   * engineer is looking at. `initAgain` asks once more after an `init` a restart arrived during.
+   */
+  function requestInit(loadLatest) {
     if (state.initPending) {
       return;
     }
 
     state.initPending = true;
+    var failureRevision = state.backendFailureRevision;
     send('ready', {})
-      .then(applyInit)
+      .then(function (payload) {
+        if (failureRevision !== state.backendFailureRevision) {
+          return;
+        }
+        applyInit(payload, loadLatest);
+      })
       .catch(function (error) {
-        showBanner(error.message);
+        if (failureRevision === state.backendFailureRevision) {
+          showBanner(error.message);
+        }
       })
       .then(function () {
         state.initPending = false;
+        if (failureRevision !== state.backendFailureRevision) {
+          state.initAgain = true;
+          state.initAgainLoadsLatest = state.initAgainLoadsLatest || loadLatest;
+        }
+        if (state.initAgain) {
+          var loadLatestAgain = state.initAgainLoadsLatest;
+          state.initAgain = false;
+          state.initAgainLoadsLatest = false;
+          requestInit(loadLatestAgain);
+        }
       });
   }
 
-  function applyInit(payload) {
+  function applyInit(payload, loadLatest) {
     state.backend = payload.backend || null;
     state.token = payload.token || null;
     state.runRoot = payload.run_root || null;
@@ -1120,14 +1263,42 @@
 
     renderDocument();
     renderLimits();
-    renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', !state.backend);
+    if (state.backend) {
+      state.notRunning = false;
+    } else if (payload.backend_start_failed === true) {
+      // A page opened after the failure missed its status (owner decision 160A).
+      state.notRunning = true;
+      if (ui.banner.hidden) {
+        showBanner(START_IT_AGAIN);
+        state.lifecycleBanner = true;
+      }
+    }
+    renderBackendState(
+      state.backend ? 'Backend ready' : (state.notRunning ? NOT_RUNNING : 'Backend starting'),
+      !state.backend);
+    if (state.backend && state.lifecycleBanner) {
+      // The add-in's word that the backend did not start is no longer true: one is up.
+      hideBanner();
+    }
 
     if (!state.remodelAvailable) {
-      showBanner(state.remodelAvailabilityMessage || NO_SEAT_MESSAGE);
+      showRemodelUnavailable();
     }
 
     var latest = payload.latest_run;
-    if (latest && latest.run_dir) {
+    if (loadLatest && latest && latest.run_dir) {
+      // Owner decision 155A: a run in flight in the host - this page loaded again while it runs - is
+      // shown running, as the page that pressed Start showed it: Stop pressable, and none of the actions
+      // the host refuses while the run holds it. Its terminal status or the answer to Stop ends it, as
+      // for any run. An `init` that says no run is in flight never ends a run this page shows running:
+      // only those two do.
+      if (latest.running === true) {
+        state.running = true;
+        // Owner decision 159A, on the final review: the run's last word, which the page that never loaded again shows -
+        // the backend not answering, told once, among them - or "Running..." from a host that sends none.
+        setRunStatus(latest.status && latest.status.message ? String(latest.status.message) : 'Running...');
+      }
+
       renderRun(latest.run_dir);
 
       // Decision 24A, amended on review: the host tells a lost plan once, so a page that has
@@ -1138,6 +1309,15 @@
 
       refreshResult();
     }
+  }
+
+  function showRemodelUnavailable() {
+    // Both can be true after a failed start: keep the seat's refusal and the backend's way on,
+    // including a capability push or an init read before that failure (owner decision 160A).
+    var failedStart = state.notRunning && !state.backend;
+    var availability = state.remodelAvailabilityMessage || NO_SEAT_MESSAGE;
+    showBanner(availability + (failedStart ? ' ' + START_IT_AGAIN : ''));
+    state.lifecycleBanner = failedStart;
   }
 
   function applyRemodelCapability(remodel) {
@@ -1155,14 +1335,20 @@
       : null;
 
     if (!state.remodelAvailable && state.remodelAvailabilityMessage) {
-      showBanner(state.remodelAvailabilityMessage);
+      showRemodelUnavailable();
     } else if (state.remodelAvailable
         && !wasAvailable
         && previousMessage
-        && ui.banner.textContent === previousMessage) {
+        && (ui.banner.textContent === previousMessage
+          || ui.banner.textContent === previousMessage + ' ' + START_IT_AGAIN)) {
       // Clear only the banner this capability check created; an unrelated error that arrived
       // while the seat was attaching remains visible for the engineer.
-      hideBanner();
+      if (state.notRunning && !state.backend) {
+        showBanner(START_IT_AGAIN);
+        state.lifecycleBanner = true;
+      } else {
+        hideBanner();
+      }
     }
     renderControls();
   }

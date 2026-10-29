@@ -469,8 +469,10 @@ public class CommandLineOptionsTests
     {
         // contracts/cli.md row 20: the run is read-only and "activates no sheet". The gate is
         // built HERE, not left to SwSession's default, so the guard it carries is a decision
-        // the test can see - and it is the READ-ONLY guard, never the suppress-test one,
-        // which is the only other ICallGuard in the product.
+        // the test can see - and it is the READ-ONLY guard, never the suppress-test one or
+        // another of the product's guards. (Corrected on decision 144A's second review: this
+        // called the suppress-test's the only other ICallGuard in the product; there are five
+        // beside the read-only one, GuardSweep.ProductGates.)
         var observer = new RecordingGateObserver();
         SwGate gate = Program.StandardsProbeGate(observer);
 
@@ -646,6 +648,24 @@ public class CommandLineOptionsTests
         Assert.Contains(lines, line => line.StartsWith("  display state: ShowNamedView2  (watched:"));
     }
 
+    /// <summary>
+    /// Owner decision 148A's review (feature 011 T193, research R12.8): since the decision every open in
+    /// the product is spelled with its interface - <c>ISldWorks.OpenDoc7</c> at each of its callers - so a
+    /// claim reads a gated member by its member half, as the read-only guard judges it: a gate log that
+    /// holds a qualified key names the member it watched for, and never prints "none" beside it.
+    /// </summary>
+    [Fact]
+    public void StandardsProbe_GateLogNamesWhatWasTouchedHoweverTheKeyIsSpelled()
+    {
+        IReadOnlyList<string> lines = Program.StandardsProbeGateLogLines(
+            new[] { "IDrawingDoc.ActivateSheet", "ISldWorks.OpenDoc7", "ISldWorks.ActivateDoc3", "IModelDoc2.ShowNamedView2" },
+            new MutatingCallError[0]);
+
+        Assert.Contains(lines, line => line.StartsWith("  sheet activation: ActivateSheet  (watched:"));
+        Assert.Contains(lines, line => line.StartsWith("  document opening: OpenDoc7, ActivateDoc3  (watched:"));
+        Assert.Contains(lines, line => line.StartsWith("  display state: ShowNamedView2  (watched:"));
+    }
+
     [Fact]
     public void StandardsProbe_GateLogNamesEveryRefusal()
     {
@@ -688,8 +708,8 @@ public class CommandLineOptionsTests
     [Fact]
     public void StandardsProbe_RefusesADocumentThatIsNotAlreadyOpen()
     {
-        // SwSession.Attach would otherwise OPEN the named document read-only - the
-        // extractor's one file-opening call - and contracts/cli.md says this run opens no
+        // SwSession.Attach would otherwise OPEN the named document read-only - the console
+        // attach's open, SwSession.OpenReadOnly - and contracts/cli.md says this run opens no
         // document. The refusal names the document and says why, before SOLIDWORKS is asked
         // for anything else.
         string message = Program.StandardsProbeDocumentNotOpenMessage(@"C:\vault\frame.SLDDRW");

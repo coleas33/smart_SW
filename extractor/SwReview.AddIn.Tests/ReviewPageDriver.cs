@@ -77,6 +77,15 @@ internal sealed class ReviewPageDriver
     /// <summary>What `settings.save` answers: null for `settings.saved`, or an `error` payload.</summary>
     public object? SettingsSaveError { get; set; }
 
+    /// <summary>The run root the settings name, as the Settings field shows it (owner decision 154A, follow-up).</summary>
+    public string RunRoot { get; set; } = @"C:\SwReviewRuns";
+
+    /// <summary>
+    /// What a `settings.saved` says of the run root (owner decision 154A, follow-up): null for nothing, or the
+    /// `run_root_refusal` it carries - `{error_class, message, retryable}`.
+    /// </summary>
+    public object? RunRootRefusal { get; set; }
+
     /// <summary>What `review.start` answers instead of `review.started`, when set: an `error` payload.</summary>
     public object? ReviewStartError { get; set; }
 
@@ -173,7 +182,41 @@ internal sealed class ReviewPageDriver
 
     public string KeySource { get; set; } = "settings";
 
+    /// <summary>Whether every `init` names no backend and no token, as the host's does while none is up.</summary>
+    public bool NoBackend { get; set; }
+
+    /// <summary>
+    /// What `init` carries as `backend_start_failed`: whether the last start or restart failed with no backend
+    /// up (owner decision 160A).
+    /// </summary>
+    public bool BackendStartFailed { get; set; }
+
+    /// <summary>
+    /// What `init` carries as `settings_not_in_force`: the host's sentence while the backend that is
+    /// up runs with settings other than the saved ones (owner decision 153A), or null.
+    /// </summary>
+    public string? SettingsNotInForce { get; set; }
+
+    /// <summary>
+    /// What `init` carries as `settings_not_in_force_revision`: the number of the host's reading of
+    /// whether the saved settings are in force (owner decision 153A, found on review), or null for none.
+    /// </summary>
+    public long? SettingsNotInForceRevision { get; set; }
+
     public object? SendWhenCheckedSaveError { get; set; }
+
+    /// <summary>Holds each `settings.save` until <see cref="ReleaseSettingsSave"/>: a save whose restart is being made.</summary>
+    public bool HoldSettingsSave { get; set; }
+
+    private readonly Queue<string> _heldSettingsSaves = new Queue<string>();
+
+    /// <summary>Answers the oldest held `settings.save` as it would be answered now.</summary>
+    public async Task ReleaseSettingsSave()
+    {
+        Assert.NotEmpty(_heldSettingsSaves);
+        AnswerSettingsSave(_heldSettingsSaves.Dequeue());
+        await OffscreenReviewPage.Settled(Page);
+    }
 
     public bool HoldSendWhenCheckedSave { get; set; }
 
@@ -564,12 +607,69 @@ var h = {
         Answer(type, id, payload);
     }
 
+    /// <summary>
+    /// Holds every `ready` after the boot until <see cref="ReleaseReady"/>: an `init` on its way,
+    /// as one is while the host's pump answers it.
+    /// </summary>
+    public bool HoldReady { get; set; }
+
+    private readonly Queue<string> _heldReady = new Queue<string>();
+
+    /// <summary>How many `ready` messages are held, unanswered.</summary>
+    public int HeldReady => _heldReady.Count;
+
+    /// <summary>
+    /// Answers every held `ready`, in order, with the `init` the host would give now - or, with
+    /// <paramref name="backendUp"/> false, the one it gives while a restart is being made, when
+    /// there is no backend to name: no endpoint and no token - or, with <paramref name="token"/>,
+    /// one the host read before a restart, naming the backend that held that token.
+    /// </summary>
+    public async Task ReleaseReady(bool backendUp = true, string? token = null)
+    {
+        Assert.NotEmpty(_heldReady);
+        HoldReady = false;
+        while (_heldReady.Count > 0)
+        {
+            Reply("init", _heldReady.Dequeue(), Init(backendUp, token));
+        }
+
+        await OffscreenReviewPage.Settled(Page);
+    }
+
+    /// <summary>
+    /// Answers the oldest held `ready`, and goes on holding the rest. Optional endpoint and token arguments
+    /// name a backend the host read before a lifecycle failure, as <see cref="ReleaseReady"/> does.
+    /// </summary>
+    public async Task ReleaseOneReady(bool backendUp = true, string? token = null)
+    {
+        Assert.NotEmpty(_heldReady);
+        Reply("init", _heldReady.Dequeue(), Init(backendUp, token));
+        await OffscreenReviewPage.Settled(Page);
+    }
+
+    /// <summary>Refuses the oldest held init request while keeping any fresh request held separately.</summary>
+    public async Task RefuseOneReady()
+    {
+        Assert.NotEmpty(_heldReady);
+        Reply("error", _heldReady.Dequeue(), new
+        {
+            error_class = "HostError",
+            message = "FICT the host could not give its earlier init.",
+            retryable = false,
+        });
+        await OffscreenReviewPage.Settled(Page);
+    }
+
     private void Answer(string type, string id, JsonElement payload)
     {
         switch (type)
         {
             case "ready":
-                if (_booted)
+                if (_booted && HoldReady)
+                {
+                    _heldReady.Enqueue(id);
+                }
+                else if (_booted)
                 {
                     Reply("init", id, Init());
                 }
@@ -656,18 +756,30 @@ var h = {
                 return;
 
             case "settings.save":
-                if (SettingsSaveError != null)
-                {
-                    Reply("error", id, SettingsSaveError);
-                    return;
-                }
-
-                Reply("settings.saved", id, new { settings = Settings(), key_source = "settings" });
+                if (HoldSettingsSave) _heldSettingsSaves.Enqueue(id);
+                else AnswerSettingsSave(id);
                 return;
 
             default:
                 return;
         }
+    }
+
+    private void AnswerSettingsSave(string id)
+    {
+        if (SettingsSaveError != null)
+        {
+            Reply("error", id, SettingsSaveError);
+            return;
+        }
+
+        if (RunRootRefusal != null)
+        {
+            Reply("settings.saved", id, new { settings = Settings(), key_source = "settings", run_root_refusal = RunRootRefusal });
+            return;
+        }
+
+        Reply("settings.saved", id, new { settings = Settings(), key_source = "settings" });
     }
 
     private void AnswerRecheck(string id, string chatId)
@@ -715,18 +827,27 @@ var h = {
     private void Reply(string type, string id, object payload) =>
         Page.PostWebMessageAsJson(JsonSerializer.Serialize(new { type, id, payload }));
 
-    private object Init() => new
+    /// <summary>
+    /// The `init` the host answers `ready` with; with <paramref name="backendUp"/> false, the one
+    /// it answers while a restart is being made, with no backend and no token to name; with
+    /// <paramref name="token"/>, one naming the backend that held it rather than the current one.
+    /// </summary>
+    private object Init(bool backendUp = true, string? token = null) => new
     {
-        backend = new { port = 51999, origin = Origin },
-        token = BackendToken,
+        backend = backendUp && !NoBackend ? new { port = 51999, origin = Origin } : null,
+        token = backendUp && !NoBackend ? token ?? BackendToken : null,
+        backend_start_failed = BackendStartFailed,
         settings = Settings(),
         key_source = KeySource,
         engineering_context = ContextPrepared != null,
         engineering_selection = ContextSelected != null,
-        run_root = @"C:\SwReviewRuns",
+        run_root = RunRoot,
         providers = new[] { "openai", "gemini" },
         document = Document,
         review_preparation = PreparationReply != null,
+        // With no backend nothing is in force, and the host says nothing of it (owner decision 153A).
+        settings_not_in_force = backendUp ? SettingsNotInForce : null,
+        settings_not_in_force_revision = SettingsNotInForceRevision,
     };
 
     private object Settings() => new
@@ -740,7 +861,7 @@ var h = {
         gemini_enterprise = (object?)null,
         terminal_cli = "codex",
         python = "uv",
-        run_root = @"C:\SwReviewRuns",
+        run_root = RunRoot,
     };
 
     /// <summary>

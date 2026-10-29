@@ -101,15 +101,22 @@ public sealed class RemodelOpenReply
 /// <summary>`POST /remodel/runs`: phases B to D, on a worker thread in the backend.</summary>
 public sealed class RemodelRunRequest
 {
-    public RemodelRunRequest(string runDirectory, BridgeConfig bridge)
+    public RemodelRunRequest(string runDirectory, BridgeConfig bridge, string jobId)
     {
         RunDirectory = runDirectory ?? throw new ArgumentNullException(nameof(runDirectory));
         Bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
+        JobId = jobId ?? throw new ArgumentNullException(nameof(jobId));
     }
 
     public string RunDirectory { get; }
 
     public BridgeConfig Bridge { get; }
+
+    /// <summary>
+    /// The job this Start makes (owner decision 159A, on the final review: S3): 32 lowercase hexadecimal characters,
+    /// chosen by the pipeline, so a Start whose answer was lost can be asked again and be answered with the job it made.
+    /// </summary>
+    public string JobId { get; }
 }
 
 /// <summary>The change the executor is inside, as `remodel.progress` reports it.</summary>
@@ -271,8 +278,11 @@ public interface IRemodelBackend
     /// </summary>
     void PackageAfter(string jobId, string packagePath);
 
-    /// <summary>`POST /remodel/runs/{job_id}/stop`. Idempotent.</summary>
-    void Stop(string jobId);
+    /// <summary>
+    /// `POST /remodel/runs/{job_id}/stop`. A Stop intent, named by 32 lowercase hexadecimal
+    /// characters. Every retry uses the same id; a later cancellation uses a new one.
+    /// </summary>
+    void Stop(string jobId, string stopId);
 
     /// <summary>`POST /remodel/close`. A copy that is not open is a no-op.</summary>
     void Close(RemodelCloseRequest request);

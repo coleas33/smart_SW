@@ -37,6 +37,21 @@ internal static class LabelsSample
 
     public const string InvalidSettings = "Check the provider, the model and the effort, then save again.";
 
+    /// <summary>A save whose restart failed (owner decision 150A): the words file's sentence for it.</summary>
+    public const string BackendNotRestarted =
+        "The settings are saved, but the review backend did not restart with them. Save Settings again to retry the restart.";
+
+    public const string AddInStopping =
+        "The settings are saved. The add-in is stopping; nothing else needs doing.";
+
+    /// <summary>
+    /// A run root the run root rule refuses (owner decision 154A): the words file's sentence for it, true since the
+    /// reviews of 154A's merge (F1) of a folder name ending in a space or a period too, and since the review of owner
+    /// decision 160A of a name Windows cannot use for a folder.
+    /// </summary>
+    public const string RunRootRefused =
+        "Runs are made only in a local folder reached by its own path - not on a network share, not through a link, and with folder names Windows can use: none longer than 255 characters, none with \\ / : * ? \" < > | or a control character, none ending in a space or a period - and the add-in must be able to check that it is one. Choose a local folder for runs in Settings.";
+
     public static string Json() => JsonSerializer.Serialize(Value());
 
     public static object Value() => new Dictionary<string, object>
@@ -101,6 +116,9 @@ internal static class LabelsSample
                 { "DrawingActive", DrawingActive },
                 { "AlreadyAnswered", AlreadyAnswered },
                 { "InvalidSettings", InvalidSettings },
+                { "BackendNotRestarted", BackendNotRestarted },
+                { "AddInStopping", AddInStopping },
+                { "RunRootRefused", RunRootRefused },
             }
         },
     };

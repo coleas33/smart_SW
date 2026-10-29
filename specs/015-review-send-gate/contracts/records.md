@@ -119,7 +119,8 @@ checks (`review-flow.md` section 1 step 4); a re-run sets its own.
 
 | `model_status` | Lines (in place of `- Model:` and `- Provider:`) |
 |---|---|
-| absent (sent at once, or before this feature) | today's, unchanged |
+| absent, on a review (sent at once, or before this feature) | today's, unchanged |
+| absent, on a check's own session (*amended 2026-10-19, owner decision 132A*) | `- Model: not sent to the model (checked by code only)`, as `not_sent` |
 | `not_sent` | `- Model: not sent to the model (checked by code only)` |
 | `send_failed` | `- Model: not sent to the model; the last attempt failed at {at}: {reason}` |
 | `sent` | today's `- Model:` and `- Provider:` lines, then `- Sent to the model: {sent_at} (checks finished {checked_at})` and, when there were failed attempts, `- Earlier attempts that failed: {n}` |
@@ -129,6 +130,13 @@ Because a re-run carries the earlier state and failures, a re-run of a failed se
 `send_failed` line, and `{n}` counts every failed attempt before the Send that got an answer, those
 made before a restart included. No not-sent report names a model or a provider as having run
 (SC-009).
+
+*Amended 2026-10-19 (owner decision 132A):* a check's own session (a Model check's, a Standards
+check's, the re-modeler's grade) constructs no provider, yet records the model `new_session` stamps
+on every session, and its report printed that model as if it had run. Rendered with
+`check_run=True`, it prints the `not_sent` line and no `- Provider:` line, where the check writes
+its report and wherever `report/rerender.py` re-renders its folder. A session is the check's own
+while the folder's `check.json` names it, so a review that claimed the folder keeps its own lines.
 
 ## 5. The transcript's events
 

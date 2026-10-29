@@ -47,6 +47,23 @@ public enum RemodelRunPhase
 }
 
 /// <summary>
+/// Why the host sent a run's close, and so whose end a `remodel.close` end of that run is (<see cref="RemodelRun.CloseSentFor"/>,
+/// <see cref="RemodelRun.ClosedFor"/>). The bridge tells a close's end before the close is answered, so the cause is
+/// marked before the close goes (owner decision 159A, 004 research R22.10; owner decision 162A, research R23).
+/// </summary>
+internal enum RemodelCloseCause
+{
+    /// <summary>No close of this kind: an end is a re-attach's, a teardown's, planning again's or a plan's own.</summary>
+    None,
+
+    /// <summary>Closed before a settings restart moved the run root (owner decision 159A, 004 research R22).</summary>
+    RunRoot,
+
+    /// <summary>Closed by the engineer's Discard copy (owner decision 162A, 004 research R23).</summary>
+    Discard,
+}
+
+/// <summary>
 /// One re-modeler run this host started: the folder, the copy, and the one flag that can stop
 /// it.
 ///
@@ -68,6 +85,9 @@ public sealed class RemodelRun
     private bool _closedByPlanAgain;
     private bool _sessionClosedAtPlan;
     private bool _sessionEnded;
+    private int _closedFor;
+    private int _closeSentFor;
+    private Tuple<string, string>? _lastStatus;
 
     internal RemodelRun(
         string runDirectory, string copyPath, DateTime at, string? toolServiceAttachment)
@@ -121,8 +141,9 @@ public sealed class RemodelRun
     /// ended this plan's bridge session as soon as the plan was made, because Start is switched off
     /// in this build and no Start could use it, and the bridge answered that close. A plan marked
     /// so holds no session: no close is sent for it again - not by Discard, not by planning again -
-    /// and it is <b>not</b> lost, since nothing it needs went away. Set once, by the host that
-    /// planned it, and never cleared. Volatile for the reason <see cref="ClosedByPlanAgain"/> is.
+    /// and it is <b>not</b> lost, since nothing it needs went away; nor, owner decision 159A, by a
+    /// re-attach or a teardown later, which have no session of it to take. Set once, by the host
+    /// that planned it, and never cleared. Volatile for the reason <see cref="ClosedByPlanAgain"/> is.
     /// </summary>
     public bool SessionClosedAtPlan => Volatile.Read(ref _sessionClosedAtPlan);
 
@@ -135,6 +156,63 @@ public sealed class RemodelRun
     public bool SessionEnded => Volatile.Read(ref _sessionEnded);
 
     internal void MarkSessionEnded() => Volatile.Write(ref _sessionEnded, true);
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22): whether the host ended this run's session before a settings restart moved
+    /// the run root - through the backend in force, the only one that accepts this run's folder - so the session ended
+    /// (<see cref="SessionEnded"/>) and a plan is lost in <c>RemodelHost.PlanClosedForRunRootMessage</c>'s words. Set
+    /// once, never cleared. Volatile for the reason <see cref="ClosedByPlanAgain"/> is.
+    /// </summary>
+    public bool ClosedForRunRoot => ClosedFor == RemodelCloseCause.RunRoot;
+
+    /// <summary>
+    /// Why the host's own close ended this run's session: before the run root moved (<see cref="ClosedForRunRoot"/>), or
+    /// the engineer's Discard (owner decision 162A, 004 research R23), which no notice tells lost; none otherwise.
+    /// Recorded once: the first cause recorded wins, and a later close answered with no session left - a run-root
+    /// change's close that a Discard pressed meanwhile beat to the session - never overwrites it (R23.7).
+    /// </summary>
+    internal RemodelCloseCause ClosedFor => (RemodelCloseCause)Volatile.Read(ref _closedFor);
+
+    /// <summary>Marks the session ended, and why (<see cref="ClosedFor"/>) when no cause is recorded yet.</summary>
+    internal void MarkSessionClosedFor(RemodelCloseCause cause)
+    {
+        Interlocked.CompareExchange(ref _closedFor, (int)cause, (int)RemodelCloseCause.None);
+        MarkSessionEnded();
+    }
+
+    /// <summary>
+    /// Owner decision 159A (004 research R22.10, Codex's review), and 162A (research R23): why the host sent this run's
+    /// close - before a settings restart moved the run root, or the engineer's Discard - answered or not. The bridge
+    /// tells a close's end (<c>RemodelHost.SessionEnded</c>, reason <c>remodel.close</c>) before the close is answered,
+    /// or after a wait abandoned; this says whose end it is, so the session is marked <see cref="ClosedFor"/> that cause
+    /// there and not merely ended. It ends nothing itself, and is never cleared. The engineer's Discard outranks the run
+    /// root's close (R23.7): Discard always marks it, and the run root's close only while nothing is marked, so an end
+    /// that could be either close's is the Discard's, whichever was sent first.
+    /// </summary>
+    internal RemodelCloseCause CloseSentFor => (RemodelCloseCause)Volatile.Read(ref _closeSentFor);
+
+    internal void MarkCloseSentFor(RemodelCloseCause cause)
+    {
+        if (cause == RemodelCloseCause.Discard)
+        {
+            Volatile.Write(ref _closeSentFor, (int)cause);
+        }
+        else
+        {
+            Interlocked.CompareExchange(ref _closeSentFor, (int)cause, (int)RemodelCloseCause.None);
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 159A, on the final review: the stage and the words of the last status posted for this run while it
+    /// ran - what a page that never loaded again shows, the backend not answering, told once, among them - so a page that
+    /// loads again mid-run is told them too (<c>init.latest_run.status</c>). Null until the run posts one. Volatile, since
+    /// the run's thread writes it and the message thread reads it.
+    /// </summary>
+    public Tuple<string, string>? LastStatus => Volatile.Read(ref _lastStatus);
+
+    internal void RememberStatus(string stage, string message) =>
+        Volatile.Write(ref _lastStatus, Tuple.Create(stage, message));
 
 
     /// <summary>
@@ -150,6 +228,13 @@ public sealed class RemodelRun
     public bool StopRequested => Interlocked.CompareExchange(ref _stop, 0, 0) != 0;
 
     internal void RequestStop() => Interlocked.Exchange(ref _stop, 1);
+
+    /// <summary>
+    /// Owner decision 159A, on review: takes back a stop asked for while a Start whose run was never handed to its
+    /// scheduler held the run - the copy going away as it failed - so the plan, which stays startable, carries no stop
+    /// into its next run (<c>RemodelHost.LetGoOfARunNeverHandedOn</c>).
+    /// </summary>
+    internal void WithdrawStop() => Interlocked.Exchange(ref _stop, 0);
 
     /// <summary>
     /// Claims the one `remodel.plan_lost` this run's plan is told with (decision 24A): true the

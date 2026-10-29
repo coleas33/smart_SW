@@ -363,9 +363,10 @@ public static class Program
         { "ActivateSheet", "ActivateView", "SheetNext", "SheetPrevious" };
 
     /// <summary>
-    /// The members whose absence is "opens no document". <c>OpenDoc6</c> is the extractor's
-    /// one file-opening call (<c>SwSession.OpenReadOnly</c>); the other three are the
-    /// neighbouring ways in, listed so the claim does not rest on one spelling.
+    /// The members whose absence is "opens no document". <c>OpenDoc6</c> is the console attach's
+    /// open of a part or assembly (<c>SwSession.OpenReadOnly</c>), one of the extractor's
+    /// file-opening calls (decision 137A); the other three are the neighbouring ways in, listed
+    /// so the claim does not rest on one spelling.
     /// </summary>
     internal static readonly string[] StandardsProbeDocumentOpeningMembers =
         { "OpenDoc6", "OpenDoc7", "LoadFile4", "ActivateDoc3" };
@@ -403,15 +404,18 @@ public static class Program
     /// the distinct member names reach the gate log the command prints at the end
     /// (contracts/cli.md row 20). Built here rather than left to <c>SwSession</c>'s default,
     /// so the guard this command carries is a decision the option tests can see - and it is
-    /// never <see cref="SuppressTestGuard"/>, the only other <c>ICallGuard</c> in the product.
+    /// never <see cref="SuppressTestGuard"/> or another of the product's guards. (Corrected on
+    /// decision 144A's second review: this called the suppress-test's guard the only other
+    /// <c>ICallGuard</c> in the product; there are five beside the read-only one.)
     /// </summary>
     internal static SwGate StandardsProbeGate(RecordingGateObserver observer) =>
         new SwGate(new CircuitBreaker(), ReadOnlyCallGuard.Instance) { Observer = observer };
 
     /// <summary>
     /// Why <c>probe standards</c> will not run on a document that is not already open:
-    /// <c>SwSession.Attach</c> would open it read-only - the extractor's one file-opening
-    /// call - and this command's own gate log is the proof that it opened nothing.
+    /// <c>SwSession.Attach</c> would open it read-only - the console attach's open,
+    /// <c>SwSession.OpenReadOnly</c> - and this command's own gate log is the proof that it
+    /// opened nothing.
     /// </summary>
     internal static string StandardsProbeDocumentNotOpenMessage(string documentPath) =>
         $"'{documentPath}' is not open in SOLIDWORKS. Open it first: probe standards opens no "
@@ -475,7 +479,13 @@ public static class Program
         };
     }
 
-    /// <summary>One gate-log claim: what of <paramref name="watched"/> the run actually touched.</summary>
+    /// <summary>
+    /// One gate-log claim: what of <paramref name="watched"/> the run actually touched. A member the gate
+    /// was asked about by its interface-qualified key is read by its member half, as the read-only guard
+    /// judges it (owner decision 148A's review, feature 011 research R12.8): every open in the product is
+    /// spelled <c>ISldWorks.OpenDoc7</c> since that decision, and a claim that read the key whole would
+    /// print "none" beside it.
+    /// </summary>
     private static string Claim(string name, IReadOnlyList<string> members, string[] watched)
     {
         var touched = new List<string>();
@@ -483,7 +493,7 @@ public static class Program
         {
             foreach (string seen in members)
             {
-                if (string.Equals(seen, member, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(CallKey.BareName(seen), member, StringComparison.OrdinalIgnoreCase))
                 {
                     touched.Add(member);
                     break;
@@ -2061,8 +2071,8 @@ public static class Program
                 ISldWorks swApp = Connect(allowStart, log);
 
                 // SwSession.Attach would OPEN a named document that is not open, read-only -
-                // the extractor's one file-opening call. This run opens nothing, so a document
-                // that is not open is refused here, before anything else is asked of it.
+                // the console attach's open, SwSession.OpenReadOnly. This run opens nothing, so a
+                // document that is not open is refused here, before anything else is asked of it.
                 if (!string.IsNullOrWhiteSpace(documentPath) && !IsOpenDocument(gate, swApp, documentPath!))
                 {
                     throw new InvalidOperationException(
@@ -3400,7 +3410,7 @@ public static class Program
                 SwGate gate = SuppressTestGate(observer);
 
                 // The document must ALREADY be open. SwSession.Attach would otherwise open it
-                // through the extractor's one open path, which is read-only and silent - and a
+                // through the console attach's open, which is read-only and silent - and a
                 // read-only document answers false to every SetSuppression2, so the run would
                 // record not_applied for every planned feature and prove nothing, having
                 // opened the engineer's part to do it.
