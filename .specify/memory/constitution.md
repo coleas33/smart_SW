@@ -1,6 +1,6 @@
 <!--
 Sync Impact Report
-- Version change: 1.1.0 → 1.2.0 (owner decision 134A, 2026-10-19)
+- Version change: 1.1.0 → 1.2.0 (owner decision 134A, 2026-10-19; merged on the owner's go, 2026-10-28)
 - Bump: MINOR. A Technical Constraint is added, and the read-only rule gains a clarification with
   conditions and bounds of its own (materially expanded guidance). No principle is removed or
   redefined, no exception is added, and no guard changes.
@@ -320,4 +320,4 @@ the runtime guidance for day-to-day agent behavior and MUST stay consistent with
   creation and at each review gate. Violations are either fixed or justified in the
   plan's Complexity Tracking table.
 
-**Version**: 1.2.0 | **Ratified**: 2026-09-12 | **Last Amended**: 2026-10-19
+**Version**: 1.2.0 | **Ratified**: 2026-09-12 | **Last Amended**: 2026-10-28
