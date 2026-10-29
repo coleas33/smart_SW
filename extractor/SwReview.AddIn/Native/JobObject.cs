@@ -1,6 +1,8 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace SwReview.AddIn.Native;
 
@@ -23,6 +25,7 @@ namespace SwReview.AddIn.Native;
 /// </summary>
 public sealed class JobObject : IDisposable
 {
+    private const int JobObjectBasicAccountingInformation = 1;
     private const int JobObjectExtendedLimitInformation = 9;
     private const uint JobObjectLimitKillOnJobClose = 0x00002000;
     private const uint ProcessQueryLimitedInformation = 0x1000;
@@ -101,6 +104,62 @@ public sealed class JobObject : IDisposable
         }
     }
 
+    /// <summary>
+    /// Owner decision 163A (004 research R25): ends every process still in the job now, and waits until none is left, for
+    /// at most <paramref name="bound"/>. Closing the job ends them too, but returns at once, while they may still run; this
+    /// answers only once they have exited. Never throws: a job that cannot be ended or asked answers false, as one with a
+    /// process left when the bound is up does.
+    /// </summary>
+    /// <returns>True once no process is left in the job; false otherwise.</returns>
+    public bool EndAll(TimeSpan bound)
+    {
+        if (_handle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        try
+        {
+            // Its answer is not needed: whether any process is left is asked below either way.
+            TerminateJobObject(_handle, 1);
+            Stopwatch clock = Stopwatch.StartNew();
+            while (true)
+            {
+                if (ActiveProcesses() == 0)
+                {
+                    return true;
+                }
+
+                if (clock.Elapsed >= bound)
+                {
+                    return false;
+                }
+
+                Thread.Sleep(10);
+            }
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>How many processes are in the job now.</summary>
+    private uint ActiveProcesses()
+    {
+        if (!QueryInformationJobObject(
+                _handle,
+                JobObjectBasicAccountingInformation,
+                out JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting,
+                (uint)Marshal.SizeOf(typeof(JOBOBJECT_BASIC_ACCOUNTING_INFORMATION)),
+                IntPtr.Zero))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "QueryInformationJobObject(basic accounting) failed");
+        }
+
+        return accounting.ActiveProcesses;
+    }
+
     /// <summary>Closes the job, which kills everything still in it.</summary>
     public void Dispose()
     {
@@ -117,6 +176,19 @@ public sealed class JobObject : IDisposable
         {
             throw new ObjectDisposedException(nameof(JobObject));
         }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_BASIC_ACCOUNTING_INFORMATION
+    {
+        public long TotalUserTime;
+        public long TotalKernelTime;
+        public long ThisPeriodTotalUserTime;
+        public long ThisPeriodTotalKernelTime;
+        public uint TotalPageFaultCount;
+        public uint TotalProcesses;
+        public uint ActiveProcesses;
+        public uint TotalTerminatedProcesses;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -166,6 +238,15 @@ public sealed class JobObject : IDisposable
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool TerminateJobObject(IntPtr job, uint exitCode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool QueryInformationJobObject(
+        IntPtr job, int infoClass, out JOBOBJECT_BASIC_ACCOUNTING_INFORMATION info, uint infoLength, IntPtr returnLength);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

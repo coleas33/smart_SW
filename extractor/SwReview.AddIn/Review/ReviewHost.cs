@@ -322,16 +322,18 @@ public sealed class ReviewHostOptions
     /// <summary>
     /// Owner decision 159A (004 research R22): before a restart that moves the run root stops the backend in force, ends
     /// every remodel session the Remodel tab left on the bridge under the run root that is leaving - given it - through
-    /// that backend, the one that accepts those run folders; and answers whether each close was answered. False holds the
-    /// restart back: nothing is stopped, the saved settings stay saved and the run root in force stays in force, and the
-    /// next caller of the restart tries again. Asked under the restart's own lock, once no work holds the restart and no
-    /// turn runs, and only while a backend is up. A delegate that throws is a close not answered. True when the caller
-    /// has no Remodel tab.
+    /// that backend, the one that accepts those run folders; and answers whether each close was answered. Asked under the
+    /// restart's own lock, once no work holds the restart and no turn runs, and only while a backend is up. A delegate
+    /// that throws is a close not answered. Since owner decision 163A (004 research R25) a close not answered no longer
+    /// holds the restart back: the backend in force is stopped, and once it has exited, what is left is closed in process
+    /// (<see cref="EndRemodelSessionsInProcessLeftUnder"/>) before the next backend starts. True when the caller has no
+    /// Remodel tab.
     /// </summary>
     public Func<string, bool> EndRemodelSessionsLeftUnder { get; set; } = _ => true;
 
     /// <summary>
-    /// Owner decision 161A (004 research R24): with no backend up to close through - the one in force has exited - ends, in
+    /// Owner decision 161A (004 research R24): with no backend up to close through - the one in force has exited, or since
+    /// owner decision 163A (004 research R25) was stopped, and has exited, after its close was not answered - ends, in
     /// process, every remodel session the Remodel tab left on the bridge under the run root that is leaving, given it,
     /// before a restart that moves the run root starts the next backend. Asked under the restart's own lock, once no work
     /// holds the restart, and only then. Whatever it does or throws, the restart goes on: holding it would leave no backend
@@ -339,13 +341,6 @@ public sealed class ReviewHostOptions
     /// caller has no Remodel tab.
     /// </summary>
     public Action<string> EndRemodelSessionsInProcessLeftUnder { get; set; } = _ => { };
-
-    /// <summary>
-    /// Owner decision 159A (004 research R22.12): whether the Remodel tab still holds a session on the bridge, on the
-    /// attachment listening now, under the run root given - what <see cref="EndRemodelSessionsLeftUnder"/> would close.
-    /// Read, never acted on: it closes nothing and asks no backend. False when the caller has no Remodel tab.
-    /// </summary>
-    public Func<string, bool> RemodelSessionLeftUnder { get; set; } = _ => false;
 
     /// <summary>
     /// Tells every other tab that holds the backend's port and token - Model check, Standards and
@@ -655,8 +650,7 @@ public sealed class ReviewHost : IDisposable
                 PostRestartFailed(failure);
                 TellTheOtherTabsTheRestartFailed(failure);
             }),
-            () => ReportUnlessStopping(() => PostStatus("error", CleanupLeftBehind() ? CleanupHoldsTheRestartPromise : RestartNotAnswered)),
-            () => ReportUnlessStopping(() => PostStatus("error", CleanupHoldsTheRestartPromise)),
+            () => ReportUnlessStopping(() => PostStatus("error", RestartNotAnswered)),
             options.RestartPoll);
     }
 
@@ -1726,18 +1720,6 @@ public sealed class ReviewHost : IDisposable
         + "now, save the settings again.";
 
     /// <summary>
-    /// Owner decision 159A (004 research R22): what a save whose restart would move the run root says while a copy the
-    /// Remodel tab left open under the run root in force is not closed - the close the restart makes first, through the
-    /// backend in force, was not answered - and what the watcher says when it meets that close not answered, and stops.
-    /// R22.11: it names the earlier folder for runs saved again as the way out, not the same settings saved again, which
-    /// only asks the close again - a hung backend never answers it.
-    /// </summary>
-    private const string CleanupHoldsTheRestartPromise =
-        "the settings are saved; the backend restarts with them once the copy an earlier remodel left open in SOLIDWORKS "
-        + "is closed. That is tried again before the next review, follow-up, remodel run or check; if it cannot be "
-        + "closed, save the earlier folder for runs in Settings again.";
-
-    /// <summary>
     /// The host's sentences about a restart that waits, as `backend.restarted` carries them once it
     /// is made: the page takes whichever of them is on its banner off it, and nothing else there.
     /// Every promise a save can make - a turn, a remodel run, one check or a check on each check tab,
@@ -1747,8 +1729,7 @@ public sealed class ReviewHost : IDisposable
 
     /// <summary>
     /// <see cref="RestartSentences"/>: every promise, 145A's three first, in the order their parts are
-    /// counted - the checks, then the remodel run, then the turn - then <see cref="RestartNotAnswered"/>, then
-    /// <see cref="CleanupHoldsTheRestartPromise"/> (owner decision 159A).
+    /// counted - the checks, then the remodel run, then the turn - then <see cref="RestartNotAnswered"/>.
     /// </summary>
     private static string[] EveryRestartSentence()
     {
@@ -1773,7 +1754,6 @@ public sealed class ReviewHost : IDisposable
         }
 
         sentences.Add(RestartNotAnswered);
-        sentences.Add(CleanupHoldsTheRestartPromise);
         return sentences.ToArray();
     }
 
@@ -2037,11 +2017,6 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     private string Promise(DeferredRestart.Hold waitsFor, DeferredRestart.Work work)
     {
-        if (waitsFor == DeferredRestart.Hold.Cleanup)
-        {
-            return CleanupHoldsTheRestartPromise;
-        }
-
         if (waitsFor != DeferredRestart.Hold.Work)
         {
             return PromiseFor(turn: true, DeferredRestart.Work.None);
@@ -2081,75 +2056,6 @@ public sealed class ReviewHost : IDisposable
         RemodelRunAmong(work)
             ? new BackendRequestException("RemodelRunning", WorkHoldsTheRestart(work), retryable)
             : new BackendRequestException("CheckRunning", WorkHoldsTheRestart(work), retryable);
-
-    /// <summary>
-    /// Owner decision 159A (004 research R22): a new review, or a page call that would start a turn, while a remodel copy's
-    /// close, which a restart that moves the run root makes first, has not been answered. Each such call asks it again.
-    /// It ends with the ways out (R22.10, on review): a backend or bridge that does not answer never ends the wait, but
-    /// another document made active re-attaches the bridge, whose teardown ends the session, and the earlier folder for
-    /// runs saved again leaves the run root where it is.
-    /// </summary>
-    private const string CleanupHoldsTheRestart =
-        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
-        + "with the saved settings, and nothing new starts before then. " + CleanupWayOut;
-
-    /// <summary>...work - "remodel run" or "check" - refused so, through the gate it begins through.</summary>
-    private static string CleanupHoldsTheWork(string work) =>
-        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
-        + "with the saved settings, and no " + work + " starts before then. " + CleanupWayOut;
-
-    /// <summary>The ways out <see cref="CleanupHoldsTheRestart"/> and <see cref="CleanupHoldsTheWork"/> end with.</summary>
-    private const string CleanupWayOut =
-        "Make another document active in SOLIDWORKS, or save the earlier folder for runs in Settings again, then try again.";
-
-    /// <summary>
-    /// Owner decision 159A (004 research R22.11, Codex's second review): a new review, or a page call that would start a
-    /// turn, while a remodel close holds the restart (<see cref="CleanupLeftBehind"/>, R22.12) and the backend gives no
-    /// answer whether a turn runs.
-    /// Saving the same settings again would only ask the close again, and another document made active does not
-    /// re-attach while a turn may be running (the tool-service gate's <see cref="TurnMayBeRunning"/>). The earlier folder
-    /// for runs saved again does: that restart keeps the run root, closes nothing, and replaces the backend, whose own
-    /// check reads no answer as no turn.
-    /// </summary>
-    private const string CleanupNoAnswerHoldsTheRestart =
-        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, and the review backend is not answering, "
-        + "so it has not been restarted with the saved settings, and nothing new starts before then. " + EarlierRootWayOut;
-
-    /// <summary>...work - "remodel run" or "check" - refused so, through the gate it begins through.</summary>
-    private static string CleanupNoAnswerHoldsTheWork(string work) =>
-        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, and the review backend is not answering, "
-        + "so it has not been restarted with the saved settings, and no " + work + " starts before then. " + EarlierRootWayOut;
-
-    /// <summary>The way out that works whether or not the backend answers (R22.11).</summary>
-    private const string EarlierRootWayOut = "Save the earlier folder for runs in Settings again, then try again.";
-
-    /// <summary>
-    /// Owner decision 159A (004 research R22.12, Codex's third review): whether a remodel close holds the waiting restart
-    /// now - read, not remembered: the saved run root is not the one in force, so the restart would move it, and the
-    /// Remodel tab still holds a session under the one in force (<see cref="ReviewHostOptions.RemodelSessionLeftUnder"/>),
-    /// which the restart would close first. A close that ended late, a re-attach, a newer save and a restart made all
-    /// change the answer by themselves, with nothing to forget or race. Asked when a look finds the backend not answering,
-    /// to choose between the cleanup's words and the backend's own - and by the watcher under the restart's lock, which
-    /// the cleanup itself reads the tool service under. A reading that throws is read as a session left: its way out,
-    /// the earlier folder for runs saved again, works either way.
-    /// </summary>
-    private bool CleanupLeftBehind()
-    {
-        string inForce = _inForce.RunRoot;
-        if (RunRootRule.SameRunRoot(_settings.RunRoot, inForce))
-        {
-            return false;
-        }
-
-        try
-        {
-            return _options.RemodelSessionLeftUnder(inForce);
-        }
-        catch (Exception)
-        {
-            return true;
-        }
-    }
 
     /// <summary>...while the backend does not answer whether a turn runs.</summary>
     private const string NoAnswerHoldsTheRestart =
@@ -2304,12 +2210,27 @@ public sealed class ReviewHost : IDisposable
     /// <summary>
     /// Every restart this host makes - a save's made at once, and one made after it waited: the
     /// backend restarted with <paramref name="settings"/> (<see cref="StartWith"/>), once the Remodel tab has closed what
-    /// it left under a run root the restart moves (<see cref="EndTheRemodelSessionsTheRunRootLeaves"/>).
+    /// it left under a run root the restart moves (<see cref="EndTheRemodelSessionsTheRunRootLeaves"/>). Owner decision 163A
+    /// (004 research R25): when that close, through the backend in force, was not answered, the start under way first
+    /// stops that backend, and once it has exited closes what is left in process
+    /// (<see cref="StopTheOldBackendThenEndTheRemodelSessionsInProcess"/>), then starts the next one - all inside
+    /// <see cref="StartWith"/>, so its marks hold for the stop too: a start is under way from the stop on, and a start that
+    /// then fails is a start that failed with no backend up.
     /// </summary>
     private void RestartWith(UserSettings settings, ResolvedApiKey key)
     {
-        EndTheRemodelSessionsTheRunRootLeaves(settings);
-        StartWith(settings, key, _options.Backend.Restart);
+        string leaving = _inForce.RunRoot;
+        if (EndTheRemodelSessionsTheRunRootLeaves(settings, leaving))
+        {
+            StartWith(settings, key, _options.Backend.Restart);
+            return;
+        }
+
+        StartWith(settings, key, (next, nextKey) =>
+        {
+            StopTheOldBackendThenEndTheRemodelSessionsInProcess(leaving);
+            _options.Backend.Restart(next, nextKey);
+        });
     }
 
     /// <summary>
@@ -2319,25 +2240,25 @@ public sealed class ReviewHost : IDisposable
     /// backend in force does: the restarted one would refuse it (<c>resolve_run_dir</c>) before the bridge, every later plan
     /// asking again. So it is closed first, here, under the restart's own lock, after the work that holds a restart back has
     /// been read under it, and once no turn runs - asked first, as the backend's own check asks it again - so a restart that
-    /// would wait anyway sends nothing. A close not answered, or a Remodel tab that throws, throws
-    /// <see cref="RemodelCleanupPendingException"/>: nothing is stopped, the saved settings stay saved and the run root in
-    /// force stays in force, and the restart waits for the next caller to ask again. Nothing is asked of a restart that keeps
-    /// the run root. With no backend up there is none to close through, and the restart is what brings one back: since owner
-    /// decision 161A (004 research R24) those sessions are closed in process instead
-    /// (<see cref="EndTheRemodelSessionsInProcess"/>), and the restart goes on whatever that does.
+    /// would wait anyway sends nothing. Nothing is asked of a restart that keeps the run root. With no backend up there is
+    /// none to close through, and the restart is what brings one back: since owner decision 161A (004 research R24) those
+    /// sessions are closed in process instead (<see cref="EndTheRemodelSessionsInProcess"/>), and the restart goes on
+    /// whatever that does.
     /// </summary>
-    private void EndTheRemodelSessionsTheRunRootLeaves(UserSettings settings)
+    /// <returns>True when nothing is left to close through a backend that is up - the run root kept, no backend up, or the
+    /// close answered; false when the close was not answered, or the Remodel tab threw, which since owner decision 163A
+    /// (004 research R25) holds nothing back: the restart stops the backend in force first.</returns>
+    private bool EndTheRemodelSessionsTheRunRootLeaves(UserSettings settings, string leaving)
     {
-        string leaving = _inForce.RunRoot;
         if (RunRootRule.SameRunRoot(settings.RunRoot, leaving))
         {
-            return;
+            return true;
         }
 
         if (_options.Backend.Endpoint == null)
         {
             EndTheRemodelSessionsInProcess(leaving);
-            return;
+            return true;
         }
 
         if (AnyTurnRunning())
@@ -2345,20 +2266,40 @@ public sealed class ReviewHost : IDisposable
             throw new TurnRunningException();
         }
 
-        bool answered;
         try
         {
-            answered = _options.EndRemodelSessionsLeftUnder(leaving);
+            return _options.EndRemodelSessionsLeftUnder(leaving);
         }
         catch (Exception)
         {
             // Not knowing whether the session was closed is not knowing that it was.
-            answered = false;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 163A (004 research R25): the close through the backend in force was not answered - that backend is
+    /// stuck, timing out, unreachable, or slow - so the restart no longer waits for it. It stops that backend, refusing as
+    /// <c>BackendSupervisor.Restart</c> does while a turn runs, and only once every process of it has exited, so that it can
+    /// send the bridge no further command, closes what the Remodel tab left under <paramref name="leaving"/> in process,
+    /// through decision 161A's path (<see cref="EndTheRemodelSessionsInProcess"/>). A stop that does not reach that exit
+    /// within its bound closes nothing in process - the backend's log says so - and the restart goes on, the leftover staying
+    /// until a re-attach or an unload, as 161A's fallback leaves one. Called under the restart's own lock, as the start's
+    /// first step. Nothing is stopped once the add-in has begun to unload: the unload stops the backend itself, and the tool
+    /// service's teardown ends what was left.
+    /// </summary>
+    /// <exception cref="TurnRunningException">A turn is running; nothing was stopped.</exception>
+    /// <exception cref="ObjectDisposedException">The add-in is unloading; nothing was stopped.</exception>
+    private void StopTheOldBackendThenEndTheRemodelSessionsInProcess(string leaving)
+    {
+        if (_stopping)
+        {
+            throw new ObjectDisposedException(null, "the add-in is unloading, so the backend was not restarted.");
         }
 
-        if (!answered)
+        if (_options.Backend.StopForRestart())
         {
-            throw new RemodelCleanupPendingException();
+            EndTheRemodelSessionsInProcess(leaving);
         }
     }
 
@@ -2492,7 +2433,7 @@ public sealed class ReviewHost : IDisposable
     /// remodel run or a check (owner decision 157A), which <paramref name="work"/> names - is answered
     /// as a turn is, and a backend that does not answer as the proxy answers one that is not there.
     /// </summary>
-    private BackendRequestException? HeldBackBy(DeferredRestart.Outcome outcome, DeferredRestart.Work work)
+    private static BackendRequestException? HeldBackBy(DeferredRestart.Outcome outcome, DeferredRestart.Work work)
     {
         switch (outcome)
         {
@@ -2503,12 +2444,7 @@ public sealed class ReviewHost : IDisposable
                 return WorkHoldsIt(work, retryable: false);
 
             case DeferredRestart.Outcome.NotAnswered:
-                return CleanupLeftBehind()
-                    ? new BackendRequestException("RemodelCleanupPending", CleanupNoAnswerHoldsTheRestart, retryable: true)
-                    : new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheRestart, retryable: true);
-
-            case DeferredRestart.Outcome.CleanupPending:
-                return new BackendRequestException("RemodelCleanupPending", CleanupHoldsTheRestart, retryable: true);
+                return new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheRestart, retryable: true);
 
             default:
                 return null;
@@ -2685,12 +2621,7 @@ public sealed class ReviewHost : IDisposable
                 return WorkHoldsIt(busyWith, retryable: true);
 
             case DeferredRestart.Outcome.NotAnswered:
-                return CleanupLeftBehind()
-                    ? new BackendRequestException("RemodelCleanupPending", CleanupNoAnswerHoldsTheWork(work), retryable: true)
-                    : new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheWork(work), retryable: true);
-
-            case DeferredRestart.Outcome.CleanupPending:
-                return new BackendRequestException("RemodelCleanupPending", CleanupHoldsTheWork(work), retryable: true);
+                return new BackendRequestException("BackendUnavailable", NoAnswerHoldsTheWork(work), retryable: true);
 
             case DeferredRestart.Outcome.Failed:
                 return RestartFailed(failure!);

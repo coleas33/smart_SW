@@ -419,17 +419,36 @@ public sealed class BackendProcess : IDisposable
         }
     }
 
-    public void Dispose()
+    public void Dispose() => Stop(TimeSpan.Zero);
+
+    /// <summary>
+    /// Owner decision 163A (004 research R25): <see cref="Dispose"/>, and with a <paramref name="treeExit"/> bound, every
+    /// process of the tree ended and waited for, for at most that long, before the job is closed: answers whether none is
+    /// left, so that whoever stops this backend before acting on the bridge itself knows it can send nothing more. Closing
+    /// the job alone ends the server below the launcher too, but returns while it may still run. A bound of zero - what
+    /// <see cref="Dispose"/> passes, on the unload path - waits for nothing and answers false; so does a second stop.
+    /// </summary>
+    internal bool Stop(TimeSpan treeExit)
     {
         if (_disposed)
         {
-            return;
+            return false;
         }
 
         _disposed = true;
         RequestStop();
         // Kills the child if the request did not, and closes our handles to it...
         _child.Dispose();
+        bool exited = treeExit > TimeSpan.Zero && _tree.EndAll(treeExit);
+        if (treeExit > TimeSpan.Zero && !exited)
+        {
+            Write(
+                _log,
+                _logGate,
+                _secrets,
+                $"a process of the backend had not exited {treeExit.TotalSeconds:0.#} seconds after it was ended");
+        }
+
         // ...and closing the job ends whatever the child started and did not take with it.
         _tree.Dispose();
         lock (_logGate)
@@ -446,6 +465,8 @@ public sealed class BackendProcess : IDisposable
             {
             }
         }
+
+        return exited;
     }
 
     /// <summary>
@@ -757,6 +778,12 @@ public sealed class TurnRunningException : Exception
 /// </summary>
 public sealed class BackendSupervisor : IDisposable
 {
+    /// <summary>
+    /// Owner decision 163A (004 research R25): how long a stop for a restart waits for every process of the old backend to
+    /// have exited, once each has been ended - the bound <c>ChildProcess.Kill</c> waits for the launcher alone.
+    /// </summary>
+    internal static readonly TimeSpan TreeExitBound = TimeSpan.FromSeconds(5);
+
     private readonly Func<bool> _anyTurnRunning;
     private bool _disposed;
 
@@ -798,8 +825,15 @@ public sealed class BackendSupervisor : IDisposable
     /// <exception cref="TurnRunningException">A turn is running; nothing was stopped.</exception>
     public bool StopForRestart()
     {
-        // Inert until 004 T308 (test first, T307).
-        return false;
+        ThrowIfDisposed();
+        if (_anyTurnRunning())
+        {
+            throw new TurnRunningException();
+        }
+
+        bool exited = Current == null || Current.Stop(TreeExitBound);
+        Current = null;
+        return exited;
     }
 
     public void Stop()

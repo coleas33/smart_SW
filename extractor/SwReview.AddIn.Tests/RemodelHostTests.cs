@@ -6510,11 +6510,9 @@ public sealed class RemodelHostTests
             int lateEnds = 0;
             Action theLateClose = () =>
             {
-                // The old backend's close runs on the bridge after all, and the bridge tells its end.
-                Exception? later = world.Pipeline.CloseFailure;
-                world.Pipeline.CloseFailure = null;
-                world.Pipeline.CloseCopy(first);
-                world.Pipeline.CloseFailure = later;
+                // The old backend's close, handed to the bridge before that backend stopped, runs there after all - the
+                // bridge's own end of that run's session, with no backend between any more - and the bridge tells its end.
+                Assert.NotNull(world.Pipeline.EndSessionInProcess(first));
                 world.Host.SessionEnded(new RemodelSessionEnd(
                     RemodelSessionEnd.ReasonClose, first, copy,
                     verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
@@ -6556,7 +6554,7 @@ public sealed class RemodelHostTests
             world.Receive("remodel.plan", "p2", new { });
 
             world.Reply("remodel.planned", "p2");
-            Assert.Equal(new[] { first, first }, world.Pipeline.Closed.Skip(closes));
+            Assert.Equal(new[] { first }, world.Pipeline.Closed.Skip(closes));
             Assert.Equal(Path.Combine(restart.NewRoot, world.ExpectedRunId), world.Host.LatestRun!.RunDirectory);
             Assert.Equal(leftover == "waiting" ? 1 : 0, world.AllPosted("remodel.plan_lost").Length);
         }

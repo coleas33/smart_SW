@@ -2151,9 +2151,10 @@ public sealed class RemodelHost : IDisposable
     /// Owner decision 159A (004 research R22.12, Codex's third review): whether this host still holds a session on the
     /// bridge under <paramref name="runRoot"/> - what <see cref="EndTheSessionsLeftUnder"/> would close, read now and
     /// closing nothing, holding nothing and asking no backend: a failed plan's whose close was not answered, or the latest
-    /// run while it holds its session, on the attachment listening now. The review host reads it when a restart waits
-    /// to move the run root and the backend does not answer, so its words say what holds the restart now - a close that
-    /// ended late, a re-attach or a newer save change the answer by themselves. No pipeline is none.
+    /// run while it holds its session, on the attachment listening now. No pipeline is none. *Changed 2026-10-29 (owner
+    /// decision 164A, 004 research R25):* the review host no longer reads it, since no restart waits for a close and its
+    /// refusals no longer depend on what is left; it stays as the one reading of the walk's two leftovers, which the tests
+    /// assert the walk's effects against - a close that ended late, a re-attach, and the fallback that leaves one.
     /// </summary>
     public bool HoldsASessionLeftUnder(string runRoot)
     {

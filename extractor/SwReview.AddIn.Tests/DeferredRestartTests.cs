@@ -9232,6 +9232,40 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
+    /// Owner decision 163A (004 T308 - a guard added with the fix; research R25, item 2): the old backend is stopped as the
+    /// first step of the start under way, so while what it left is closed in process - no backend up - nothing reads the
+    /// stop as a start that failed, even after an earlier restart failed before it stopped anything: the host's
+    /// <c>BackendStartFailed</c>, which every tab's <c>init</c> carries, stays false until the next backend's start has ended.
+    /// </summary>
+    [Fact]
+    public void WhileTheOldBackendIsStoppedForARestartNoStartIsReadAsFailed()
+    {
+        bool? failedDuringTheClose = null;
+        RestartWorld? opened = null;
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            EndRemodelSessions = _ => false,
+            EndRemodelSessionsInProcess = _ => failedDuringTheClose = opened!.Host.BackendStartFailed,
+        };
+        opened = world;
+        string chosen = ChosenRoot(world);
+        world.Open();
+        world.Backend.EarlyRestartFailure = new BackendStartException("FICT the launcher has gone.");
+        world.Receive("settings.save", "early", Save(effort: "low"));
+        Assert.Equal("BackendNotRestarted", world.Reply("error", "early").GetProperty("error_class").GetString());
+        Assert.NotNull(world.Backend.Endpoint);
+        world.Backend.EarlyRestartFailure = null;
+
+        world.Receive("settings.save", "save", Choosing(chosen, Save(effort: "low")));
+
+        world.Reply("settings.saved", "save");
+        Assert.False(failedDuringTheClose);
+        Assert.Equal(chosen, world.Host.RunRoot);
+        Assert.False(world.Host.BackendStartFailed);
+    }
+
+    /// <summary>
     /// Owner decision 163A (004 T307 - a guard; research R25, item 5): an unload that begins while the close through the old
     /// backend is out stops nothing and closes nothing in process - the unload stops the backend itself, and the tool
     /// service's teardown ends what the Remodel tab left - and the save is answered <c>AddInStopping</c>.
