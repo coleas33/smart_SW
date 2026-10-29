@@ -123,6 +123,17 @@ false` does: verified, untagged and closed unsaved, the settings put back, nothi
 told. Otherwise it calls nothing and changes nothing, the bound run root included. No command, secret,
 guard key or allowlist entry is added, and no path reaches the bridge from a request.
 
+*Amended 2026-10-29 (owner decision 163A's re-review; `research.md` R25.11); the protocol is unchanged:*
+`EndRemodelSessionOf` also records the folder it is asked to end, canonicalized, whether or not a session
+of it was there to close, for the dispatcher's life; a re-attach's new dispatcher starts with none. A
+`remodel.open` whose bound run folder is in that record is refused `target_mismatch` as its first step -
+after the bound folder is taken, as every open takes it, and before the parameters are read, the source
+re-read, a setting written, a copy made or a document opened. Both run on the application thread, so an
+open a stopped backend handed over before the close is closed by it, and one that runs after it is
+refused. `target_mismatch` because it is the existing token for "no target this bridge may act on" -
+what an open with no folder bound, and a command with no session, already get - answered before any
+read or write; no token is added. No command, secret, guard key or allowlist entry is added.
+
 | Command | Params | Result on `ok` |
 |---------|--------|----------------|
 | `remodel.probe_scope` | `{source_path}` | `{probe_id, source_path, scope_signals}` |
@@ -821,7 +832,7 @@ stays unknown and is never guessed into the nearest class.
 | `open_failed` | `OpenDoc7` returned no document or the wrong path | `RemodelTargetError` | Run aborts; the copy is deleted |
 | `tag_failed` | The session tag did not write or did not read back | `RemodelTargetError` | Run aborts; the copy is deleted |
 | `preexisting_rebuild_errors` | The part was already broken at baseline | `RemodelPreflightError` | Refused **after** the copy exists, because the reading needs a rollback and a rebuild; the handler deletes the copy and closes the document before it answers |
-| `target_mismatch` | One of `VerifyTarget`'s four checks failed | `RemodelTargetError` | Run aborts with the change log intact |
+| `target_mismatch` | One of `VerifyTarget`'s four checks failed; *amended 2026-10-29 (R25.11):* or a `remodel.open` of a run folder the host's cleanup ended, refused before any read or write | `RemodelTargetError` | Run aborts with the change log intact |
 | `session_mismatch` | A command after `remodel.open` names another run than the one whose session the bridge holds ("The commands"; owner decision 159A, protocol 1.5) | `RemodelTargetError` | Refused before any read or write, the session it reached left as it was; the run that sent it aborts with its change log intact |
 | `guard_refused` | The member is not on the stage-1 allowlist | `RemodelGuardError` | Run aborts; this is a bug, not a condition |
 | `persist_ref_unresolved` | `GetObjectByPersistReference3` returned an error code | `RemodelAddressError` | The change fails and the run stops |
