@@ -5409,6 +5409,7 @@ No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopp
 - T180 and its owner decision.
 - PROBE-1, PROBE-2, PROBE-3, PROBE-4 and PROBE-12.
 - A real Plan whose source hash stays unchanged.
+- The barrier unwind's close by path (R25.13).
 
 R24.10's first item - the old backend alive but not answering - is settled in code by 163A and leaves
 the list, apart from its seat order (T303).
@@ -5587,7 +5588,7 @@ plan's record go. The open then went on to publish a session nothing tracks.
 **Settled (T317).** `remodel.open` asks `RefuseAFolderEndedByCleanup` again after its last native call
 and immediately before the session is constructed and published. A folder recorded meanwhile throws
 `target_mismatch` inside the open's own `try`, so it fails through the existing failed-open unwind:
-`CloseAfterAFailedOpen` closes the copy the open opened after its identity check, the copy is deleted,
+`CloseAfterAFailedOpen` closes the copy the open opened by its path (`CloseCopyUnsaved`; *corrected by R25.13:* no COM-identity comparison is made at this close), the copy is deleted,
 the four settings are put back, and the host is told the open failed (`ReasonOpenFailed`).
 
 **The points where native code can pump, checked by reading `OpenIn`.** Before the copy: the source
@@ -5639,3 +5640,31 @@ step misses a close pumped by a later one.
   is `i/lf`.
 
 No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.
+
+### R25.13 Final review: the barrier unwind closes by path (T319; 2026-10-29)
+
+Codex's fourth review of `bf41661` found that the recheck fences publication. It raised one finding
+(high), recorded here and not fixed, under the policy set on 159A's review rounds: a narrower
+interleaving found after the fix rounds becomes a Start (T172) prerequisite instead of another round.
+
+**The finding.** The barrier's refusal fails the open through `CloseAfterAFailedOpen`. With a handle
+back, that close is `CloseCopyUnsaved`, which closes by the copy's path and does not compare the
+document open there with the one the open returned. The interleaving needs three things in turn:
+the close in process pumped during the open's last native steps; a second re-entrant action that
+closes and reopens the copy at the same path; and only then the recheck. The unwind would then
+close the replacement document unsaved and delete the copy.
+
+**Why it is recorded, not fixed.**
+- What is closed and deleted is still the run's own copy, in the run's own folder. Nothing outside the
+  copy is touched, so the engineer's design is never at risk.
+- No product path reopens the copy while an open is in flight: the pane seat's Open copy is refused
+  while a plan or run is in flight (148A).
+- The same close by path was already the failed-open unwind for every other failure after `OpenDoc7`
+  (T183, R15.4), before 163A.
+
+R25.12's sentence "closed after the identity check" was wrong for this path. It is corrected there and
+in `contracts/bridge-remodel.md`. The fix Codex recommends would pass the opened document into the
+unwind and compare identities before the close, skipping the close and delete on a mismatch. It joins
+R25.9's list of what Start waits on.
+
+No code changed; no gate is affected beyond the link and line-ending checks.

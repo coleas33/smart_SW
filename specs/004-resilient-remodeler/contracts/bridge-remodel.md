@@ -136,7 +136,7 @@ read or write; no token is added. No command, secret, guard key or allowlist ent
 *Amended on the third review (`research.md` R25.12):* the open asks again after its last native call and
 before its session is published, since a native call such as `OpenDoc7` or the rebuild can pump the
 queue the close was posted to; a folder recorded meanwhile fails the open through its own unwind - the
-copy it opened closed after the identity check and deleted, the settings put back, `remodel.open`'s
+copy it opened closed by its path and deleted (no COM-identity comparison at that close; research R25.13), the settings put back, `remodel.open`'s
 failure told - and answers `target_mismatch`. The backend reads that token as `RunFolderFailed`, which is
 not marked retryable, though another Plan works.
 
