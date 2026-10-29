@@ -926,6 +926,7 @@ public sealed class FakeRemodelDocument : IRemodelDocument
     public bool ForceRebuild(bool topOnly)
     {
         Members.Add(nameof(ForceRebuild));
+        DuringCall?.Invoke(nameof(ForceRebuild));
         LastRebuildTopOnly = topOnly;
         return RebuildAnswer;
     }

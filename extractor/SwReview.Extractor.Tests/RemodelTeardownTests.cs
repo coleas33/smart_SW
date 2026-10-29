@@ -842,6 +842,60 @@ public sealed class RemodelTeardownTests : IDisposable
         Assert.Equal(Path.GetFullPath(folder), _harness.Dispatcher.RemodelRunDirectory);
     }
 
+    /// <summary>
+    /// The review round of owner decision 163A, test first (Codex's third review; 004 T316, research R25.12): a native call
+    /// inside <c>remodel.open</c> can pump the application thread's queue - <c>OpenDoc7</c>, and the rebuild after it - so the
+    /// close in process, posted behind an old open that already passed the barrier at its entry, can run in the middle of
+    /// that open. It finds no session yet, records the folder and answers nothing. The open then must not publish a session:
+    /// it is refused <c>target_mismatch</c> just before it would, through the failed open's own unwind - the copy it opened
+    /// closed, after the identity check, and deleted, the four settings put back, the host told the open failed.
+    /// </summary>
+    [Theory]
+    [InlineData("inside OpenDoc7")]
+    [InlineData("inside the rebuild")]
+    public void ACloseInProcessPumpedInsideAnOpenStopsItPublishingASession(string where)
+    {
+        bool[] idleBefore = RemodelSystemToggles.SuppressedToggles.Select(_harness.Seat.GetUserPreferenceToggle).ToArray();
+        bool commandBefore = _harness.Seat.CommandInProgress;
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+        int asked = 0;
+        RemodelSessionEnd? answered = null;
+        Action<string> pump = member =>
+        {
+            if (member == (where == "inside OpenDoc7" ? nameof(FakeRemodelSeat.OpenDocument) : nameof(FakeRemodelDocument.ForceRebuild)))
+            {
+                asked++;
+                answered = _harness.Dispatcher.EndRemodelSessionOf(_harness.RunDirectory);
+            }
+        };
+        if (where == "inside OpenDoc7")
+        {
+            _harness.Seat.DuringCall = pump;
+        }
+        else
+        {
+            _harness.Copy.DuringCall = pump;
+        }
+
+        BridgeResponse opened = _harness.Dispatch(RemodelCommands.Open, OpenParams(_harness.CopyPath, probeId));
+
+        Assert.Equal(1, asked);
+        Assert.Null(answered);
+        Assert.Equal(RemodelErrorCodes.TargetMismatch, RemodelHarness.Refusal(opened));
+        Assert.Null(_harness.Dispatcher.RemodelRunDirectory);
+        Assert.Null(_harness.Dispatcher.RemodelTargetPath);
+        Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.Closed));
+        Assert.DoesNotContain(_harness.CopyPath, _harness.Seat.OpenDocuments);
+        Assert.False(File.Exists(_harness.CopyPath));
+        Assert.Equal(idleBefore, RemodelSystemToggles.SuppressedToggles.Select(_harness.Seat.GetUserPreferenceToggle).ToArray());
+        Assert.Equal(commandBefore, _harness.Seat.CommandInProgress);
+        RemodelSessionEnd told = Assert.Single(_told);
+        Assert.Equal(RemodelSessionEnd.ReasonOpenFailed, told.Reason);
+        Assert.Empty(told.SettingsOutstanding);
+    }
+
     /// <summary><c>remodel.open</c>'s params for the harness's run, with the copy given.</summary>
     private string OpenParams(string copy, string probeId) =>
         "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath)
