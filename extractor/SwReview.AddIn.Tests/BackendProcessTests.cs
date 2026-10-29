@@ -874,6 +874,199 @@ public sealed class BackendProcessTests
         }
     }
 
+    /// <summary>
+    /// The review round of owner decision 163A, test first (Codex, high; 004 T310, research R25.10): the client's stop for a
+    /// restart, and its restart, hold the start gate while the supervisor asks whether a turn runs - one call per chat, each
+    /// waiting up to 30 seconds on a backend that accepts and never answers. Unloading the add-in disposes the client on the
+    /// SOLIDWORKS thread, which waits for that gate: it waited for every one of those calls. The unload now ends them - the
+    /// call in flight is aborted, and no further one is made - so the client's dispose ends promptly.
+    /// </summary>
+    [Theory]
+    [InlineData("a stop for a restart")]
+    [InlineData("a restart")]
+    public void DisposingTheClientWhileItsTurnScanWaitsOnABackendThatDoesNotAnswerEndsPromptly(string what)
+    {
+        using (var silent = new SilentLoopback())
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        {
+            stub.PrintsHandshake(port: silent.Port);
+            UserSettings settings = UserSettings.Defaults();
+            string launcher = Path.Combine(Path.GetDirectoryName(stub.ScriptPath)!, "swreview.exe");
+            File.WriteAllText(launcher, string.Empty);
+            settings.Python = launcher;
+            settings.RunRoot = stub.RunRoot;
+            ResolvedApiKey key = settings.ResolveApiKey(_ => null);
+
+            BackendClient? client = null;
+            var supervisor = new BackendSupervisor(() =>
+            {
+                // As the review host asks it: each tracked chat in turn, no answer read as no turn.
+                foreach (string chat in new[] { "fict-chat-1", "fict-chat-2", "fict-chat-3" })
+                {
+                    try
+                    {
+                        client!.IsTurnRunning(chat);
+                    }
+                    catch (BackendRequestException)
+                    {
+                    }
+                }
+
+                return false;
+            });
+            supervisor.Start(Options(stub, job));
+            client = new BackendClient(supervisor, Path.GetDirectoryName(stub.LogPath)!, job);
+
+            var making = new Thread(() =>
+            {
+                try
+                {
+                    if (what == "a restart")
+                    {
+                        client.Restart(settings, key);
+                    }
+                    else
+                    {
+                        client.StopForRestart();
+                    }
+                }
+                catch (Exception)
+                {
+                    // Refused once unloading, or stopped: either way it has ended.
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "fict-restart-scanning",
+            };
+            making.Start();
+            Assert.True(silent.Asked.Wait(TimeSpan.FromSeconds(10)), "the turn scan never asked the backend");
+
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var disposing = new Thread(client.Dispose) { IsBackground = true, Name = "fict-unload" };
+            disposing.Start();
+
+            Assert.True(
+                disposing.Join(TimeSpan.FromSeconds(15)),
+                "the client's dispose waited for the turn scan's calls to a backend that does not answer");
+            Assert.True(making.Join(TimeSpan.FromSeconds(15)), "the scan did not end");
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(15), $"the dispose took {clock.Elapsed}");
+            Assert.Equal(1, silent.Connections);
+            supervisor.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The review round of owner decision 163A, test first (mutation X8; 004 T310, research R25.10): a stop for a restart
+    /// with no backend running - none started, or the last one stopped - has nothing that could still reach the bridge, and
+    /// says so: the close in process may go ahead.
+    /// </summary>
+    [Fact]
+    public void AStopForARestartWithNoBackendRunningAnswersThatNothingIsLeft()
+    {
+        using (var supervisor = new BackendSupervisor(() => false))
+        {
+            Assert.Null(supervisor.Current);
+            Assert.True(supervisor.StopForRestart());
+            Assert.True(supervisor.StopForRestart());
+        }
+    }
+
+    /// <summary>
+    /// The review round of owner decision 163A (mutations M86 and X4; 004 T310, research R25.10): the job's end-and-wait
+    /// answers from the job's process count - the kernel's, read through a seam here - and not from the time it took. It
+    /// waits while the count is not zero, and answers that a process is left when the bound runs out first; a closed job
+    /// answers the same, never throwing.
+    /// </summary>
+    [Fact]
+    public void EndingTheJobWaitsForItsProcessCountAndSaysWhenTheBoundRunsOutFirst()
+    {
+        using (var job = new JobObject())
+        {
+            int reads = 0;
+            Assert.True(job.EndAll(TimeSpan.FromSeconds(10), () => ++reads < 4 ? 1u : 0u));
+            Assert.Equal(4, reads);
+
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            Assert.False(job.EndAll(TimeSpan.FromMilliseconds(200), () => 1u));
+            Assert.True(clock.Elapsed >= TimeSpan.FromMilliseconds(200), $"it answered after {clock.Elapsed}");
+
+            Assert.False(job.EndAll(TimeSpan.FromSeconds(1), () => throw new InvalidOperationException("FICT the job cannot be read.")));
+        }
+
+        var closed = new JobObject();
+        closed.Dispose();
+        Assert.False(closed.EndAll(TimeSpan.FromSeconds(1)));
+    }
+
+    /// <summary>
+    /// A loopback port that accepts connections and never answers on them - a backend alive but stuck - counting what it
+    /// accepted. Disposing it closes every connection, so whatever still waits on one ends.
+    /// </summary>
+    private sealed class SilentLoopback : IDisposable
+    {
+        private readonly System.Net.Sockets.TcpListener _listener =
+            new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+
+        private readonly List<System.Net.Sockets.TcpClient> _accepted = new List<System.Net.Sockets.TcpClient>();
+
+        public SilentLoopback()
+        {
+            _listener.Start();
+            Port = ((System.Net.IPEndPoint)_listener.LocalEndpoint).Port;
+            new Thread(Accept) { IsBackground = true, Name = "fict-silent-backend" }.Start();
+        }
+
+        public int Port { get; }
+
+        public ManualResetEventSlim Asked { get; } = new ManualResetEventSlim(false);
+
+        public int Connections
+        {
+            get
+            {
+                lock (_accepted)
+                {
+                    return _accepted.Count;
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            _listener.Stop();
+            lock (_accepted)
+            {
+                foreach (System.Net.Sockets.TcpClient client in _accepted)
+                {
+                    client.Close();
+                }
+            }
+        }
+
+        private void Accept()
+        {
+            try
+            {
+                while (true)
+                {
+                    System.Net.Sockets.TcpClient client = _listener.AcceptTcpClient();
+                    lock (_accepted)
+                    {
+                        _accepted.Add(client);
+                    }
+
+                    Asked.Set();
+                }
+            }
+            catch (Exception)
+            {
+                // Stopped.
+            }
+        }
+    }
+
     [Fact]
     public void DisposeIsIdempotent()
     {

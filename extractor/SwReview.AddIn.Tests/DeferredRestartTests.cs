@@ -9395,6 +9395,39 @@ public sealed class DeferredRestartTests
         Assert.Equal(chosen, Assert.Single(world.Backend.Restarts).Settings.RunRoot);
         Assert.Equal(chosen, world.Host.RunRoot);
         Assert.False(world.Host.RestartAhead);
+
+        // Changed deliberately 2026-10-29 (the review round of 163A, the Opus note; 004 T310, research R25.10), asking more:
+        // with no endpoint the server below the launcher may still be alive, so what is left of the old backend is stopped
+        // and waited for first.
+        Assert.Equal(1, world.Backend.Stops);
+    }
+
+    /// <summary>
+    /// The review round of owner decision 163A, test first (the Opus note, mutation X7; 004 T310, research R25.10): with no
+    /// endpoint up, a stop that does not reach the old backend's exit - the server below its exited launcher still alive -
+    /// closes nothing in process, as for a stuck backend; the restart goes on.
+    /// </summary>
+    [Fact]
+    public void WithNoBackendUpAStopThatDoesNotReachTheOldBackendsExitClosesNothingInProcess()
+    {
+        int inProcess = 0;
+        using var world = new RestartWorld
+        {
+            Poll = TimeSpan.FromMinutes(10),
+            EndRemodelSessionsInProcess = _ => Interlocked.Increment(ref inProcess),
+        };
+        string chosen = ChosenRoot(world);
+        world.Backend.Down = true;
+        world.Backend.StopExits = false;
+        world.Open();
+
+        world.Receive("settings.save", "save", Choosing(chosen, Save(effort: "low")));
+
+        world.Reply("settings.saved", "save");
+        Assert.Equal(1, world.Backend.Stops);
+        Assert.Equal(0, Volatile.Read(ref inProcess));
+        Assert.Equal(chosen, Assert.Single(world.Backend.Restarts).Settings.RunRoot);
+        Assert.Equal(chosen, world.Host.RunRoot);
     }
 
     /// <summary>
@@ -10462,7 +10495,9 @@ public sealed class DeferredRestartTests
             lock (_gate)
             {
                 _stopsAsked++;
-                bool blind = CheckAsksTheSameQuestion && Unanswered();
+
+                // With no backend up the host's question is answered by nothing, which it reads as no turn.
+                bool blind = _down || (CheckAsksTheSameQuestion && Unanswered());
                 if (_running.Count > 0 && !blind)
                 {
                     throw new TurnRunningException();

@@ -111,7 +111,13 @@ public sealed class JobObject : IDisposable
     /// process left when the bound is up does.
     /// </summary>
     /// <returns>True once no process is left in the job; false otherwise.</returns>
-    public bool EndAll(TimeSpan bound)
+    public bool EndAll(TimeSpan bound) => EndAll(bound, ActiveProcesses);
+
+    /// <summary>
+    /// <see cref="EndAll(TimeSpan)"/>, reading the job's process count through <paramref name="activeProcesses"/>: the
+    /// kernel's count in the add-in, a scripted one in a test, since no test process can be made to outlive its end.
+    /// </summary>
+    internal bool EndAll(TimeSpan bound, Func<uint> activeProcesses)
     {
         if (_handle == IntPtr.Zero)
         {
@@ -125,7 +131,7 @@ public sealed class JobObject : IDisposable
             Stopwatch clock = Stopwatch.StartNew();
             while (true)
             {
-                if (ActiveProcesses() == 0)
+                if (activeProcesses() == 0)
                 {
                     return true;
                 }

@@ -6387,7 +6387,10 @@ public sealed class RemodelHostTests
 
             JsonElement error = world.Reply("error", "p2");
             Assert.Equal("InvalidRunDir", error.GetProperty("error_class").GetString());
-            Assert.Equal(FailedPlanCleanupWords, error.GetProperty("message").GetString());
+
+            // Changed deliberately 2026-10-29 (the review round of 163A, Opus S1; 004 T310, research R25.10): the run root in
+            // force has moved off the old run's folder, so the words name the re-attach, the way out that works there.
+            Assert.Equal(LeftoverUnderAnEarlierRunRootWords, error.GetProperty("message").GetString());
             Assert.True(error.GetProperty("retryable").GetBoolean());
             Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
             Assert.Equal(1, world.Pipeline.Count("probe"));
@@ -6811,19 +6814,25 @@ public sealed class RemodelHostTests
     /// does not reach A's exit, when nothing is closed in process at all, since A could still send the bridge a command. The
     /// restart goes on either way, B comes into force under the new run root, and the leftover stays as it was - not marked
     /// closed, nobody told it was lost - until a re-attach or an unload, as decision 161A's fallback leaves it; a failure is
-    /// in the log, masked.
+    /// in the log, masked. *Changed deliberately 2026-10-29 (the review round of 163A, Opus S1; 004 T310, research R25.10),
+    /// asking more:* the leftover is a parameter (a failed plan, a waiting plan, a finished run), and the next plan is pressed.
+    /// Its close of the old run now goes through B, which refuses the folder before the bridge, so it is refused - in words
+    /// that name the way out that works there, another document made active, where "wait a moment" never did - and after
+    /// that re-attach the next plan is made, sending the old run nothing.
     /// </summary>
     [Theory]
-    [InlineData("the close in process fails")]
-    [InlineData("the stop does not reach A's exit")]
-    public void AStuckOldBackendsLeftoverThatCannotBeClosedInProcessStaysAndTheRunRootMovesAnyway(string what)
+    [InlineData("failed", "the close in process fails")]
+    [InlineData("waiting", "the close in process fails")]
+    [InlineData("finished", "the close in process fails")]
+    [InlineData("waiting", "the stop does not reach A's exit")]
+    public void AStuckOldBackendsLeftoverThatCannotBeClosedInProcessStaysAndTheRunRootMovesAnyway(string leftover, string what)
     {
         using (var world = new RemodelWorld())
         using (var restart = new RunRootRestart(world))
         {
             string oldRoot = world.RunRoot;
             string first = world.ExpectedRunDirectory;
-            LeaveASessionOnTheBridge(world, "waiting");
+            LeaveASessionOnTheBridge(world, leftover);
             world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
             bool fails = what == "the close in process fails";
             if (fails)
@@ -6844,8 +6853,12 @@ public sealed class RemodelHostTests
             Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
             Assert.Equal(fails ? new[] { (FirstAttachment, first) } : new (string, string)[0], world.InProcessCloses);
             Assert.True(world.Pipeline.SessionOpen);
-            Assert.False(world.Host.LatestRun!.ClosedForRunRoot);
-            Assert.False(world.Host.LatestRun!.SessionEnded);
+            if (leftover != "failed")
+            {
+                Assert.False(world.Host.LatestRun!.ClosedForRunRoot);
+                Assert.False(world.Host.LatestRun!.SessionEnded);
+            }
+
             Assert.True(world.Host.HoldsASessionLeftUnder(oldRoot));
             Assert.Empty(world.AllPosted("remodel.plan_lost"));
             if (fails)
@@ -6853,8 +6866,46 @@ public sealed class RemodelHostTests
                 Assert.Contains(world.Logged, line => line.Contains("FICT the application thread did not answer"));
                 Assert.DoesNotContain(world.Logged, line => line.Contains("0FAKEtoken"));
             }
+
+            world.Pipeline.CloseFailure = null;
+            world.InProcessCloseFailure = null;
+            int copies = world.Pipeline.Count("copy");
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement refused = world.Reply("error", "p2");
+            Assert.Equal("InvalidRunDir", refused.GetProperty("error_class").GetString());
+            Assert.Equal(LeftoverUnderAnEarlierRunRootWords, refused.GetProperty("message").GetString());
+            Assert.True(refused.GetProperty("retryable").GetBoolean());
+            Assert.Equal(copies, world.Pipeline.Count("copy"));
+            Assert.True(world.Pipeline.SessionOpen);
+
+            // The way out the words name: another document made active re-attaches the tool service, and the next plan,
+            // on the new attachment, sends the old run nothing.
+            var replacement = new FakePipeline
+            {
+                HoldsTheBridgeSession = true,
+                BackendRunRoot = () => restart.Backend.Down ? null : restart.Backend.StartedRoot,
+            };
+            world.Options.Pipeline = replacement;
+            world.Attachment = SecondAttachment;
+
+            world.Receive("remodel.plan", "p3", new { });
+
+            world.Reply("remodel.planned", "p3");
+            Assert.Empty(replacement.Closed);
+            Assert.Equal(Path.Combine(restart.NewRoot, world.ExpectedRunId), world.Host.LatestRun!.RunDirectory);
         }
     }
+
+    /// <summary>
+    /// The review round of owner decision 163A (Opus S1; 004 T310, research R25.10): what a plan is refused with while the
+    /// close of a leftover under a run root no longer in force is not answered - the backend in force refuses its folder
+    /// before the bridge, so waiting never helps; a re-attach does.
+    /// </summary>
+    private const string LeftoverUnderAnEarlierRunRootWords =
+        "Closing the copy an earlier remodel left open under the folder for runs used before was not confirmed, so no new "
+        + "plan was made. Your part was not changed. Make another document active in SOLIDWORKS, then make your part the "
+        + "active document again and press Remodel a copy again.";
 
     /// <summary>
     /// Owner decision 161A, test first (004 T300; research R24): with backend A gone there is no backend to close through, so
@@ -6952,6 +7003,38 @@ public sealed class RemodelHostTests
             Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
             Assert.Empty(world.InProcessCloses);
             Assert.Equal(replaced ? closes : closes + 1, world.Pipeline.Closed.Count);
+        }
+    }
+
+    /// <summary>
+    /// The review round of owner decision 163A, test first (the Opus note; 004 T310, research R25.10): with backend A's
+    /// endpoint gone - its launcher exited - the server below it may still be alive on the bridge, so the restart stops what
+    /// is left of A and waits for it, as for a stuck A, before it closes anything in process; a stop that does not reach that
+    /// exit closes nothing in process, and the restart goes on.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void WithTheOldBackendsEndpointGoneItsProcessesAreWaitedForBeforeTheCloseInProcess(bool exits)
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, "waiting");
+            restart.Backend.Down = true;
+            restart.Backend.StopExits = exits;
+            world.DuringInProcessClose = () => restart.Backend.Steps.Add("close in process");
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(
+                exits ? new[] { "stop", "close in process", "start" } : new[] { "stop", "start" },
+                restart.Backend.Steps);
+            Assert.Equal(exits ? new[] { (FirstAttachment, first) } : new (string, string)[0], world.InProcessCloses);
+            Assert.Equal(!exits, world.Pipeline.SessionOpen);
         }
     }
 
@@ -7055,7 +7138,10 @@ public sealed class RemodelHostTests
 
             JsonElement refused = world.Reply("error", "p2");
             Assert.Equal("InvalidRunDir", refused.GetProperty("error_class").GetString());
-            Assert.Equal(FailedPlanCleanupWords, refused.GetProperty("message").GetString());
+
+            // Changed deliberately 2026-10-29 (the review round of 163A, Opus S1; 004 T310, research R25.10): the folder is
+            // under a run root no longer in force, so the words name the re-attach below, where "wait a moment" never worked.
+            Assert.Equal(LeftoverUnderAnEarlierRunRootWords, refused.GetProperty("message").GetString());
             Assert.True(refused.GetProperty("retryable").GetBoolean());
             Assert.Equal(new[] { first }, world.Pipeline.Closed.Skip(closes));
             Assert.DoesNotContain(restart.NewRoot, world.Pipeline.RootsClosedUnder);
