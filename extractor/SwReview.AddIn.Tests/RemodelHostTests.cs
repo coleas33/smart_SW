@@ -6423,35 +6423,18 @@ public sealed class RemodelHostTests
     // ---- owner decision 159A (004 T277; research R22): a session left under a run root a restart moves --------------
 
     /// <summary>
-    /// What the Review tab says of a save whose restart waits for a remodel copy's close (004 research R22). *Changed
-    /// deliberately 2026-10-27 (owner decision 159A, 004 research R22.11):* it names the earlier folder for runs as the
-    /// way out, where saving again only asked the close again.
-    /// </summary>
-    private const string CleanupPromise =
-        "the settings are saved; the backend restarts with them once the copy an earlier remodel left open in SOLIDWORKS "
-        + "is closed. That is tried again before the next review, follow-up, remodel run or check; if it cannot be "
-        + "closed, save the earlier folder for runs in Settings again.";
-
-    /// <summary>
-    /// What a plan or a Start is refused with while that close holds the restart back (004 research R22). *Changed
-    /// deliberately 2026-10-27 (owner decision 159A, 004 research R22.10, the review's S2):* it names the ways out.
-    /// </summary>
-    private const string CleanupHoldsTheRemodelRun =
-        "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted "
-        + "with the saved settings, and no remodel run starts before then. Make another document active in SOLIDWORKS, "
-        + "or save the earlier folder for runs in Settings again, then try again.";
-
-    /// <summary>
     /// Owner decision 159A, test first (004 T277; research R22): the defect R19.29 named, over the review host's real
     /// settings restart. A failed plan's close was not answered, so its session is still on the bridge, under run root A.
     /// Saving run root B restarted the backend under B at once, and B refuses A's folder before the bridge is reached
-    /// (`resolve_run_dir`), so every later plan retried a close that could never be sent. Now the close goes first, through
-    /// A - the one backend that takes the old run's folder - before A is stopped: while it is not answered B stays saved and
-    /// A in force, a plan is refused retryably and copies nothing, and once it is answered the next plan's gate makes the
-    /// restart and plans under B - a run of the old run's own name, in the other root, which nothing closes for the old run.
+    /// (`resolve_run_dir`), so every later plan retried a close that could never be sent. The close goes first, through A -
+    /// the one backend that takes the old run's folder - before A is stopped. *Changed deliberately 2026-10-29 (owner
+    /// decisions 163A and 164A, 004 T307, research R25):* this case was
+    /// <c>ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot</c>, whose restart waited
+    /// while that close was not answered. Now A is stopped, the session closed in process, and B started on the save; the
+    /// next plan plans under B - a run of the old run's own name, in the other root, which nothing closes for the old run.
     /// </summary>
     [Fact]
-    public void ARunRootChangeWaitsForTheFailedPlansCleanupThroughTheOldBackendThenPlansUnderTheNewRoot()
+    public void ARunRootChangeWhoseFailedPlansCloseIsNotAnsweredClosesItInProcessThenPlansUnderTheNewRoot()
     {
         using (var world = new RemodelWorld())
         using (var restart = new RunRootRestart(world))
@@ -6468,64 +6451,52 @@ public sealed class RemodelHostTests
             restart.Save("save", restart.NewRoot);
 
             restart.Reply("settings.saved", "save");
-            Assert.Equal(CleanupPromise, restart.LastStatus());
-            Assert.Equal(restart.NewRoot, restart.Review.Settings.RunRoot);
-            Assert.Equal(oldRoot, restart.Review.RunRoot);
-            Assert.Empty(restart.Backend.Restarts);
-            Assert.True(restart.Review.RestartAhead);
-            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
-            Assert.Equal(new[] { oldRoot, oldRoot }, world.Pipeline.RootsClosedUnder);
-            Assert.True(world.Pipeline.SessionOpen);
-
-            int probes = world.Pipeline.Count("probe");
-            int copies = world.Pipeline.Count("copy");
-            world.Receive("remodel.plan", "p2", new { });
-
-            JsonElement refused = world.Reply("error", "p2");
-            Assert.Equal("RemodelCleanupPending", refused.GetProperty("error_class").GetString());
-            Assert.Equal(CleanupHoldsTheRemodelRun, refused.GetProperty("message").GetString());
-            Assert.True(refused.GetProperty("retryable").GetBoolean());
-            Assert.Equal(probes, world.Pipeline.Count("probe"));
-            Assert.Equal(copies, world.Pipeline.Count("copy"));
-            Assert.False(world.Host.RunInProgress);
-            Assert.Equal(oldRoot, restart.Review.RunRoot);
-            Assert.Empty(restart.Backend.Restarts);
-            Assert.Equal(new[] { first, first, first }, world.Pipeline.Closed);
-            Assert.True(world.Pipeline.SessionOpen);
-
-            world.Pipeline.CloseFailure = null;
-            world.Receive("remodel.plan", "p3", new { });
-
-            world.Reply("remodel.planned", "p3");
+            Assert.Null(restart.LastStatus());
             Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
             Assert.Equal(restart.NewRoot, Assert.Single(restart.Backend.Restarts).RunRoot);
             Assert.Equal(new[] { false }, restart.Backend.SessionOpenAtEachRestart);
-            Assert.Equal(new[] { first, first, first, first }, world.Pipeline.Closed);
-            Assert.Equal(new[] { oldRoot, oldRoot, oldRoot, oldRoot }, world.Pipeline.RootsClosedUnder);
+            Assert.False(restart.Review.RestartAhead);
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
+            Assert.Equal(new[] { oldRoot, oldRoot }, world.Pipeline.RootsClosedUnder);
+            Assert.Equal(new[] { (FirstAttachment, first) }, world.InProcessCloses);
+            Assert.False(world.Pipeline.SessionOpen);
+            world.Pipeline.CloseFailure = null;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed);
             string second = world.Host.LatestRun!.RunDirectory;
             Assert.Equal(Path.Combine(restart.NewRoot, world.ExpectedRunId), second);
             Assert.True(world.Pipeline.SessionOpen);
 
             // The run of the same name under B holds the bridge now, and nothing names the old run again: planning
             // again closes the new run's session alone, through B.
-            world.Receive("remodel.plan", "p4", new { });
+            world.Receive("remodel.plan", "p3", new { });
 
-            world.Reply("remodel.planned", "p4");
-            Assert.Equal(new[] { first, first, first, first, second }, world.Pipeline.Closed);
+            world.Reply("remodel.planned", "p3");
+            Assert.Equal(new[] { first, first, second }, world.Pipeline.Closed);
             Assert.Equal(restart.NewRoot, world.Pipeline.RootsClosedUnder.Last());
+            Assert.Single(world.InProcessCloses);
         }
     }
 
     /// <summary>
-    /// Owner decision 159A, test first (004 T290; research R22.13, Codex's fourth review): a failed plan's close before the
-    /// run root moves is not answered, so the restart waits; then that abandoned close runs on the bridge after all, and
-    /// the bridge tells its end. A failed plan is never a tracked run, so the end never reached its record: the host went
-    /// on reading a session left under the old run root - a hung backend's callers told to restore it - and the next plan's
-    /// restart sent the close again. Now the end clears that record, and the next plan restarts under the new run root
-    /// sending no close of the old run.
+    /// Owner decision 163A, test first (004 T307; research R25, item 3): a slow old backend, not a hung one. Its close of the
+    /// leftover was not answered in time, but reached the bridge after all, and the bridge tells its end - as that backend
+    /// stops, or once the close in process has been posted, which then finds no session of that run and is answered so
+    /// (004 research R24.11). Either way the leftover is ended once, and as the run root's close (decision 162A's cause, sent
+    /// first by the walk): a waiting plan is told lost once, in its own words; nothing is closed twice; and the next plan,
+    /// under the new run root, sends no close of the old run. *Changed deliberately 2026-10-29:* this case was
+    /// <c>AFailedPlansCloseThatEndsLateLetsTheRunRootMoveWithNoCloseSentAgain</c> (004 T290, R22.13), whose restart waited
+    /// for the late end; its failed-plan row is the "failed" rows here, and T291's record let go is still what they need.
     /// </summary>
-    [Fact]
-    public void AFailedPlansCloseThatEndsLateLetsTheRunRootMoveWithNoCloseSentAgain()
+    [Theory]
+    [InlineData("failed", "as the old backend stops")]
+    [InlineData("waiting", "as the old backend stops")]
+    [InlineData("failed", "inside the close in process")]
+    [InlineData("waiting", "inside the close in process")]
+    public void ASlowOldBackendsCloseThatReachesTheBridgeAfterAllIsNotMadeTwice(string leftover, string when)
     {
         using (var world = new RemodelWorld())
         using (var restart = new RunRootRestart(world))
@@ -6533,29 +6504,61 @@ public sealed class RemodelHostTests
             string oldRoot = world.RunRoot;
             string first = world.ExpectedRunDirectory;
             string copy = world.ExpectedCopyPath;
-            LeaveASessionOnTheBridge(world, "failed");
-            world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
-            restart.Save("save", restart.NewRoot);
-            restart.Reply("settings.saved", "save");
-            Assert.Equal(CleanupPromise, restart.LastStatus());
-            Assert.True(world.Host.HoldsASessionLeftUnder(oldRoot));
-
-            // The abandoned close runs on the bridge after all, and the bridge tells its end.
-            world.Pipeline.CloseFailure = null;
-            world.Pipeline.CloseCopy(first);
-            world.Host.SessionEnded(new RemodelSessionEnd(
-                RemodelSessionEnd.ReasonClose, first, copy,
-                verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
-                settingsOutstanding: new string[0], failures: new string[0]));
+            LeaveASessionOnTheBridge(world, leftover);
             int closes = world.Pipeline.Closed.Count;
+            world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+            int lateEnds = 0;
+            Action theLateClose = () =>
+            {
+                // The old backend's close runs on the bridge after all, and the bridge tells its end.
+                Exception? later = world.Pipeline.CloseFailure;
+                world.Pipeline.CloseFailure = null;
+                world.Pipeline.CloseCopy(first);
+                world.Pipeline.CloseFailure = later;
+                world.Host.SessionEnded(new RemodelSessionEnd(
+                    RemodelSessionEnd.ReasonClose, first, copy,
+                    verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                    settingsOutstanding: new string[0], failures: new string[0]));
+                lateEnds++;
+            };
+            bool asItStops = when == "as the old backend stops";
+            if (asItStops)
+            {
+                restart.Backend.DuringStop = theLateClose;
+            }
+            else
+            {
+                world.DuringInProcessClose = theLateClose;
+            }
 
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(1, lateEnds);
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(new[] { "stop", "start" }, restart.Backend.Steps);
+            Assert.Equal(asItStops ? 0 : 1, world.InProcessCloses.Count);
+            Assert.False(world.Pipeline.SessionOpen);
             Assert.False(world.Host.HoldsASessionLeftUnder(oldRoot));
+            if (leftover == "waiting")
+            {
+                JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
+                Assert.Equal(first, notice.GetProperty("run_dir").GetString());
+                Assert.Equal(RemodelHost.PlanClosedForRunRootMessage, notice.GetProperty("message").GetString());
+                Assert.True(world.Host.LatestRun!.ClosedForRunRoot);
+            }
+            else
+            {
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            }
+
+            world.Pipeline.CloseFailure = null;
             world.Receive("remodel.plan", "p2", new { });
 
             world.Reply("remodel.planned", "p2");
-            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
-            Assert.Equal(closes, world.Pipeline.Closed.Count);
+            Assert.Equal(new[] { first, first }, world.Pipeline.Closed.Skip(closes));
             Assert.Equal(Path.Combine(restart.NewRoot, world.ExpectedRunId), world.Host.LatestRun!.RunDirectory);
+            Assert.Equal(leftover == "waiting" ? 1 : 0, world.AllPosted("remodel.plan_lost").Length);
         }
     }
 
@@ -6657,6 +6660,11 @@ public sealed class RemodelHostTests
             Assert.Equal(new[] { first }, world.Pipeline.Closed.Skip(closes));
             Assert.Equal(oldRoot, world.Pipeline.RootsClosedUnder.Last());
             Assert.False(world.Pipeline.SessionOpen);
+
+            // Owner decision 163A (004 T307; research R25), asking more: a close answered is unchanged - the restart stops
+            // nothing first and closes nothing in process.
+            Assert.Equal(new[] { "start" }, restart.Backend.Steps);
+            Assert.Empty(world.InProcessCloses);
             bool waiting = leftover.StartsWith("waiting", StringComparison.Ordinal);
             if (waiting)
             {
@@ -6726,11 +6734,15 @@ public sealed class RemodelHostTests
 
     /// <summary>
     /// Owner decision 159A, test first (004 T277; research R22): every close that is not an answer - the bridge's silence, a
-    /// close that never reached it, and a failure with no class - holds the restart back: the saved run root stays saved,
-    /// the one in force stays in force, nothing is stopped or started, the session is left as it was, and the failure is in
-    /// the log, masked. *Changed deliberately 2026-10-27 (owner decision 159A, 004 research R22.10, the review's M1):*
-    /// the leftover is a parameter, and a waiting plan (Start on and off) and a finished run are rows beside the failed
-    /// plan, none of them marked closed or told lost: a run's unanswered close let through survived every case before.
+    /// close that never reached it, and a failure with no class - is in the log, masked. *Changed deliberately 2026-10-27
+    /// (owner decision 159A, 004 research R22.10, the review's M1):* the leftover is a parameter, and a waiting plan (Start on
+    /// and off) and a finished run are rows beside the failed plan. *Changed deliberately 2026-10-29 (owner decisions 163A
+    /// and 164A, 004 T307, research R25):* this case was <c>ARunRootChangeWaitsWhileTheOldRunsCloseIsNotAnswered</c>, whose
+    /// restart was held back, nothing stopped or started. Now no such close holds it: backend A is stopped, then - A gone -
+    /// the leftover is closed in process on the attachment it was made on, naming its exact run, and only then is B started
+    /// under the new run root, all on the save, which says nothing more than any restart made at once. A plan so closed is
+    /// told lost once, in its own words, and the run is marked closed for the run root; none is marked from the close not
+    /// answered alone.
     /// </summary>
     [Theory]
     [InlineData("failed", "BridgeUnavailable")]
@@ -6743,32 +6755,105 @@ public sealed class RemodelHostTests
     [InlineData("waiting", "BridgeUnavailable")]
     [InlineData("waiting, Start off", "BridgeUnavailable")]
     [InlineData("finished", "BridgeUnavailable")]
-    public void ARunRootChangeWaitsWhileTheOldRunsCloseIsNotAnswered(string leftover, string failureClass)
+    public void ARunRootChangeWhoseOldRunsCloseIsNotAnsweredStopsTheOldBackendThenClosesItInProcess(string leftover, string failureClass)
     {
         using (var world = new RemodelWorld { StartValidated = leftover != "waiting, Start off" })
         using (var restart = new RunRootRestart(world))
         {
             string oldRoot = world.RunRoot;
+            string first = world.ExpectedRunDirectory;
             LeaveASessionOnTheBridge(world, leftover);
+            int closes = world.Pipeline.Closed.Count;
             world.Pipeline.CloseFailure = failureClass == "exception"
                 ? new IOException("FICT the close could not reach 0FAKEtoken.")
                 : new RemodelRefusal(failureClass, "FICT the close could not reach 0FAKEtoken.", retryable: false);
+            bool? endedBeforeTheClose = null;
+            world.DuringInProcessClose = () =>
+            {
+                restart.Backend.Steps.Add(restart.Backend.Down ? "close in process, A stopped" : "close in process, A up");
+                endedBeforeTheClose = world.Host.LatestRun?.SessionEnded;
+            };
 
             restart.Save("save", restart.NewRoot);
 
             restart.Reply("settings.saved", "save");
-            Assert.Equal(CleanupPromise, restart.LastStatus());
-            Assert.Equal(restart.NewRoot, restart.Review.Settings.RunRoot);
-            Assert.Equal(oldRoot, restart.Review.RunRoot);
-            Assert.Empty(restart.Backend.Restarts);
-            Assert.True(world.Pipeline.SessionOpen);
+            Assert.Null(restart.LastStatus());
+            Assert.Equal(new[] { "stop", "close in process, A stopped", "start" }, restart.Backend.Steps);
+            Assert.Equal(new[] { first }, world.Pipeline.Closed.Skip(closes));
+            Assert.Equal(new[] { (FirstAttachment, first) }, world.InProcessCloses);
+            Assert.False(world.Pipeline.SessionOpen);
+            Assert.Equal(new[] { false }, restart.Backend.SessionOpenAtEachRestart);
+            Assert.Equal(restart.NewRoot, Assert.Single(restart.Backend.Restarts).RunRoot);
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.False(world.Host.HoldsASessionLeftUnder(oldRoot));
             Assert.Contains(world.Logged, line => line.Contains("FICT the close could not reach"));
             Assert.DoesNotContain(world.Logged, line => line.Contains("0FAKEtoken"));
-            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            if (leftover.StartsWith("waiting", StringComparison.Ordinal))
+            {
+                JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
+                Assert.Equal(first, notice.GetProperty("run_dir").GetString());
+                Assert.Equal(RemodelHost.PlanClosedForRunRootMessage, notice.GetProperty("message").GetString());
+            }
+            else
+            {
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            }
+
             if (leftover != "failed")
             {
-                Assert.False(world.Host.LatestRun!.ClosedForRunRoot);
-                Assert.False(world.Host.LatestRun!.SessionEnded);
+                Assert.False(endedBeforeTheClose);
+                Assert.True(world.Host.LatestRun!.ClosedForRunRoot);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 163A, test first (004 T307; research R25, items 1 and the fallback): with backend A stuck, the leftover
+    /// cannot always be closed in process - the close fails (the application thread does not answer in time), or the stop
+    /// does not reach A's exit, when nothing is closed in process at all, since A could still send the bridge a command. The
+    /// restart goes on either way, B comes into force under the new run root, and the leftover stays as it was - not marked
+    /// closed, nobody told it was lost - until a re-attach or an unload, as decision 161A's fallback leaves it; a failure is
+    /// in the log, masked.
+    /// </summary>
+    [Theory]
+    [InlineData("the close in process fails")]
+    [InlineData("the stop does not reach A's exit")]
+    public void AStuckOldBackendsLeftoverThatCannotBeClosedInProcessStaysAndTheRunRootMovesAnyway(string what)
+    {
+        using (var world = new RemodelWorld())
+        using (var restart = new RunRootRestart(world))
+        {
+            string oldRoot = world.RunRoot;
+            string first = world.ExpectedRunDirectory;
+            LeaveASessionOnTheBridge(world, "waiting");
+            world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+            bool fails = what == "the close in process fails";
+            if (fails)
+            {
+                world.InProcessCloseFailure = new TimeoutException("FICT the application thread did not answer for 0FAKEtoken.");
+            }
+            else
+            {
+                restart.Backend.StopExits = false;
+            }
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Null(restart.LastStatus());
+            Assert.Equal(new[] { "stop", "start" }, restart.Backend.Steps);
+            Assert.Equal(restart.NewRoot, Assert.Single(restart.Backend.Restarts).RunRoot);
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(fails ? new[] { (FirstAttachment, first) } : new (string, string)[0], world.InProcessCloses);
+            Assert.True(world.Pipeline.SessionOpen);
+            Assert.False(world.Host.LatestRun!.ClosedForRunRoot);
+            Assert.False(world.Host.LatestRun!.SessionEnded);
+            Assert.True(world.Host.HoldsASessionLeftUnder(oldRoot));
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            if (fails)
+            {
+                Assert.Contains(world.Logged, line => line.Contains("FICT the application thread did not answer"));
+                Assert.DoesNotContain(world.Logged, line => line.Contains("0FAKEtoken"));
             }
         }
     }
@@ -7151,6 +7236,10 @@ public sealed class RemodelHostTests
     /// bridge tells the end inside the close ("inside") or after a close whose answer never came, its wait abandoned
     /// ("late", R22.3): a wait given up on still ends the session when the bridge gets to it. A guard added with the fix
     /// (T282): a teardown's end after a close not answered ("teardown") is no close's, and keeps the re-attach words.
+    /// *Changed deliberately 2026-10-29 (owner decisions 163A and 164A, 004 T307, research R25):* a close not answered no
+    /// longer holds the restart - backend A is stopped and the leftover closed in process - so the "late" and "teardown" rows
+    /// make that close in process not answered too, to keep the session on the bridge for the end they tell; they ask that
+    /// the run root moved where they asked for the cleanup's sentence, which is removed.
     /// </summary>
     [Theory]
     [InlineData("waiting", "inside")]
@@ -7180,18 +7269,15 @@ public sealed class RemodelHostTests
             else
             {
                 world.Pipeline.CloseFailure = new RemodelRefusal("BridgeUnavailable", "FICT the bridge did not answer.", retryable: true);
+                world.InProcessCloseFailure = new TimeoutException("FICT the application thread did not answer.");
             }
 
             restart.Save("save", restart.NewRoot);
 
             restart.Reply("settings.saved", "save");
-            if (when == "inside")
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            if (when != "inside")
             {
-                Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
-            }
-            else
-            {
-                Assert.Equal(CleanupPromise, restart.LastStatus());
                 Assert.Empty(world.AllPosted("remodel.plan_lost"));
                 world.Host.SessionEnded(ended);
             }
@@ -7456,9 +7542,14 @@ public sealed class RemodelHostTests
             world.Pipeline.CloseFailure = notAnswered;
             if (order == "run root, then discard")
             {
+                // Changed deliberately 2026-10-29 (owner decisions 163A and 164A, 004 T307, research R25): a close not answered
+                // no longer holds the restart, so the close in process is made not answered too, to keep the session on the
+                // bridge for the Discard; the run root moved, where the cleanup's sentence, removed, was asked for.
+                world.InProcessCloseFailure = new TimeoutException("FICT the application thread did not answer.");
                 restart.Save("save", restart.NewRoot);
                 restart.Reply("settings.saved", "save");
-                Assert.Equal(CleanupPromise, restart.LastStatus());
+                Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+                world.InProcessCloseFailure = null;
             }
 
             using (new FileStream(run.CopyPath, FileMode.Open, FileAccess.Read, FileShare.None))
@@ -7545,8 +7636,12 @@ public sealed class RemodelHostTests
             {
                 Assert.Empty(restart.Backend.Restarts);
                 Assert.Equal(oldRoot, restart.Review.RunRoot);
-                Assert.NotEqual(CleanupPromise, restart.LastStatus());
             }
+
+            // Changed deliberately 2026-10-29 (owner decisions 163A and 164A, 004 T307, research R25): the cleanup's sentence
+            // this asked was not posted is removed; asking more, nothing is stopped first in any row.
+            Assert.DoesNotContain("stop", restart.Backend.Steps);
+            Assert.Empty(world.InProcessCloses);
         }
     }
 
@@ -10849,7 +10944,6 @@ public sealed class RemodelHostTests
                 BackendBusy = () => world.Host.RunInProgress,
                 EndRemodelSessionsLeftUnder = runRoot => world.Host.EndTheSessionsLeftUnder(runRoot),
                 EndRemodelSessionsInProcessLeftUnder = runRoot => world.Host.EndTheSessionsLeftUnderInProcess(runRoot),
-                RemodelSessionLeftUnder = runRoot => world.Host.HoldsASessionLeftUnder(runRoot),
                 BackendRestarted = () => world.Host.BackendRestarted(),
             });
 
@@ -10973,6 +11067,18 @@ public sealed class RemodelHostTests
         /// <summary>Whether the fake bridge held a session as each restart stopped the old backend.</summary>
         public List<bool> SessionOpenAtEachRestart { get; } = new List<bool>();
 
+        /// <summary>
+        /// What happened to the backends, in order: "stop" for each stop for a restart (owner decision 163A), "start" for
+        /// each restart made; a case adds its own steps between them.
+        /// </summary>
+        public List<string> Steps { get; } = new List<string>();
+
+        /// <summary>Owner decision 163A: whether a stop for a restart reaches the old backend's exit; true by default.</summary>
+        public bool StopExits { get; set; } = true;
+
+        /// <summary>Runs once a stop for a restart has stopped the old backend.</summary>
+        public Action? DuringStop { get; set; }
+
         public BackendEndpoint? Endpoint => Down ? null : new BackendEndpoint(53000 + _generation, "FICT-review-token-" + _generation);
 
         public IReadOnlyList<ModelChoice> ListModels(string provider)
@@ -10994,10 +11100,28 @@ public sealed class RemodelHostTests
             }
 
             SessionOpenAtEachRestart.Add(_sessionOpen());
+            Steps.Add("start");
             Restarts.Add(settings);
             StartedRoot = settings.RunRoot;
             _generation++;
             Down = false;
+        }
+
+        /// <summary>
+        /// Owner decision 163A (004 research R25): the old backend stopped for a restart, refused while a turn runs as
+        /// <see cref="Restart"/> is, and otherwise down from then on, answering <see cref="StopExits"/>.
+        /// </summary>
+        public bool StopForRestart()
+        {
+            if (TurnRunning)
+            {
+                throw new TurnRunningException();
+            }
+
+            Steps.Add("stop");
+            Down = true;
+            DuringStop?.Invoke();
+            return StopExits;
         }
     }
 

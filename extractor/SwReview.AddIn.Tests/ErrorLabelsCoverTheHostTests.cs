@@ -44,11 +44,22 @@ public sealed class ErrorLabelsCoverTheHostTests
                      "NotFound", "OpenFailed", "UnknownChat", "UnknownCheck", "HttpError", "SettingNotSaved", "ReviewNotActive",
                      "RemodelRunning", "DocumentChanged", "BackendNotRestarted", "AddInStopping", "BridgeOnAnotherDocument",
                      "RunRootRefused", "RunRootChanged", "RunRootNotFullPath", "RunRootChosenNotInForce",
-                     "CheckRunning", "RemodelCleanupPending",
+                     "CheckRunning",
                  })
         {
             Assert.Contains(expected, classes);
         }
+    }
+
+    /// <summary>
+    /// Owner decision 164A, test first (004 T307; research R25): no restart waits for a remodel copy's close any more, so the
+    /// host no longer makes <c>RemodelCleanupPending</c>, which 159A added, and the words file keeps no sentence for it
+    /// (<c>test_review_words.py</c>). *Changed deliberately 2026-10-29:* the scan above no longer expects it.
+    /// </summary>
+    [Fact]
+    public void TheRetiredRemodelCleanupClassIsNoLongerMade()
+    {
+        Assert.DoesNotContain("RemodelCleanupPending", ClassesTheReviewTabCanShow());
     }
 
     /// <summary>

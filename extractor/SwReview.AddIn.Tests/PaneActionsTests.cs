@@ -929,6 +929,9 @@ public sealed class PaneActionsTests
         {
         }
 
+        public bool StopForRestart() =>
+            throw new NotSupportedException("the shared rows never restart the backend");
+
         public ChatSessionHandle CreateSession(NewSessionRequest request) =>
             throw new InvalidOperationException("the shared rows never create a session");
     }

@@ -413,6 +413,9 @@ public sealed class RunFoldersStandardsTests : IDisposable
         {
         }
 
+        public bool StopForRestart() =>
+            throw new NotSupportedException("the Standards run-folder cases restart no backend");
+
         public ChatSessionHandle CreateSession(NewSessionRequest request) =>
             throw new InvalidOperationException("a standards run never creates a chat session");
     }

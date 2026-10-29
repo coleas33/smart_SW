@@ -102,6 +102,19 @@ public sealed class BackendClient : IBackendClient, IDisposable
         }
     }
 
+    /// <summary>
+    /// Owner decision 163A (004 research R25): the supervisor's stop for a restart, under the same gate as every start, and
+    /// none once the add-in has begun to unload, whose own disposal stops the backend.
+    /// </summary>
+    public bool StopForRestart()
+    {
+        lock (_gate)
+        {
+            ThrowIfUnloading();
+            return _supervisor.StopForRestart();
+        }
+    }
+
     public IReadOnlyList<ModelChoice> ListModels(string provider)
     {
         JsonElement body = Call(

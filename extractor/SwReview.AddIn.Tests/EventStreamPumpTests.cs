@@ -495,6 +495,9 @@ public sealed class EventStreamPumpTests
 
         public void Restart(UserSettings settings, ResolvedApiKey key) =>
             throw new NotSupportedException("the event stream tests save no settings");
+
+        public bool StopForRestart() =>
+            throw new NotSupportedException("the event stream tests save no settings");
     }
 
     // ---- what the pump reads --------------------------------------------------------------------

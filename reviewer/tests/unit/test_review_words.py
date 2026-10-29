@@ -674,26 +674,27 @@ RESTART_HOLDS = {
         "The review backend is not running or not answering. Save Settings to start it again, "
         "then retry."
     ),
-    "RemodelCleanupPending": (
-        "A copy an earlier remodel left open in SOLIDWORKS could not be closed, so the saved "
-        "settings are not in force yet. Save the earlier folder for runs in Settings again, then "
-        "try again."
-    ),
 }
 """The classes the add-in refuses a new review or a turn call with while the backend waits to be
 restarted with settings saved during a turn (owner decision 143A): one for each thing that can
-hold that restart back - a turn, a remodel run, a check (owner decision 157A), a backend that does
-not answer, and a remodel copy whose close before the run root moves was not answered (owner
-decision 159A, 004 research R22) - so the sentence the page shows is true of what holds it. The
-last names the way out that works even when the backend does not answer, since waiting does
-not end it (changed deliberately 2026-10-27, R22.10 and R22.11).
-`RemodelRunning`, `CheckRunning` and `RemodelCleanupPending` are the add-in's own classes; the
-backend never sends them."""
+hold that restart back - a turn, a remodel run, a check (owner decision 157A) and a backend that
+does not answer - so the sentence the page shows is true of what holds it. Changed deliberately
+2026-10-29 (owner decisions 163A and 164A, 004 research R25): a remodel copy whose close before
+the run root moves is not answered no longer holds the restart, so `RemodelCleanupPending`, which
+owner decision 159A added here, is gone with it. `RemodelRunning` and `CheckRunning` are the
+add-in's own classes; the backend never sends them."""
 
 
 def test_each_thing_that_holds_a_restart_back_has_a_true_sentence() -> None:
     errors = load_words().labels.errors
     assert {key: errors.get(key) for key in RESTART_HOLDS} == RESTART_HOLDS
+
+
+def test_the_retired_remodel_cleanup_class_has_no_sentence() -> None:
+    """Owner decision 164A (004 T307; research R25): no restart waits for a remodel copy's close
+    any more, and the add-in no longer makes `RemodelCleanupPending`, so the words file keeps no
+    sentence for it."""
+    assert "RemodelCleanupPending" not in load_words().labels.errors
 
 
 SAVE_NOT_RESTARTED = {

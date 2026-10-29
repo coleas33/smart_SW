@@ -821,6 +821,59 @@ public sealed class BackendProcessTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 163A, test first (004 T307; research R25, item 1): a restart that closes the old backend's leftover in
+    /// process must know that backend can send the bridge nothing more, so its stop returns only once every process of the
+    /// tree has exited - the launcher and the server below it - and says so. <see cref="BackendProcess.Dispose"/> does not
+    /// wait for the grandchild: closing the job ends it, but later, which is why the cases above wait for it.
+    /// </summary>
+    [Fact]
+    public void AStopForARestartReturnsOnlyOnceTheWholeTreeHasExited()
+    {
+        using (var first = new StubBackend())
+        using (var job = new JobObject())
+        {
+            first.PrintsHandshake(port: 40311).SpawnsAGrandchild();
+
+            using (var supervisor = new BackendSupervisor(() => false))
+            {
+                int launcherPid = supervisor.Start(Options(first, job)).ProcessId;
+                int grandchildPid = first.ReadGrandchildProcessId();
+                Assert.True(ProcessLifetimeTests.IsRunning(grandchildPid));
+
+                Assert.True(supervisor.StopForRestart());
+
+                Assert.False(ProcessLifetimeTests.IsRunning(launcherPid), "the launcher outlived the stop");
+                Assert.False(ProcessLifetimeTests.IsRunning(grandchildPid), "the server below the launcher outlived the stop");
+                Assert.Null(supervisor.Current);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner decision 163A, test first (004 T307; research R25): the stop for a restart keeps the supervisor's one rule - never
+    /// while a turn is running - as <see cref="BackendSupervisor.Restart"/> keeps it, refusing before it stops anything.
+    /// </summary>
+    [Fact]
+    public void AStopForARestartIsRefusedWhileATurnIsRunningAndLeavesTheProcessAlone()
+    {
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        {
+            stub.PrintsHandshake(port: 40321);
+
+            using (var supervisor = new BackendSupervisor(() => true))
+            {
+                BackendProcess before = supervisor.Start(Options(stub, job));
+
+                Assert.Throws<TurnRunningException>(() => supervisor.StopForRestart());
+
+                Assert.Same(before, supervisor.Current);
+                Assert.True(ProcessLifetimeTests.IsRunning(before.ProcessId));
+            }
+        }
+    }
+
     [Fact]
     public void DisposeIsIdempotent()
     {

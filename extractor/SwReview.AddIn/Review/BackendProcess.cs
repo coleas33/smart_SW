@@ -791,6 +791,17 @@ public sealed class BackendSupervisor : IDisposable
         return Start(options);
     }
 
+    /// <summary>
+    /// Owner decision 163A (004 research R25): stops the running backend for a restart that starts the next one - refusing,
+    /// as <see cref="Restart"/> does, while a turn is running - and answers whether every process of it has exited.
+    /// </summary>
+    /// <exception cref="TurnRunningException">A turn is running; nothing was stopped.</exception>
+    public bool StopForRestart()
+    {
+        // Inert until 004 T308 (test first, T307).
+        return false;
+    }
+
     public void Stop()
     {
         Current?.Dispose();

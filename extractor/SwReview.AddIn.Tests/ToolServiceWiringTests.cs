@@ -5265,5 +5265,7 @@ public sealed class ToolServiceWiringTests
         public ChatSessionHandle CreateSession(NewSessionRequest request) => throw new NotSupportedException();
 
         public void Restart(UserSettings settings, ResolvedApiKey key) => throw new NotSupportedException();
+
+        public bool StopForRestart() => throw new NotSupportedException();
     }
 }
