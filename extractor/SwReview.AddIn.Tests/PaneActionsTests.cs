@@ -929,6 +929,10 @@ public sealed class PaneActionsTests
         {
         }
 
+        /// <summary>No backend runs here, so a stop for a restart - asked since the review round of 163A whenever a save moves
+        /// the run root with no endpoint (004 research R25.10) - finds nothing left to stop.</summary>
+        public bool StopForRestart() => true;
+
         public ChatSessionHandle CreateSession(NewSessionRequest request) =>
             throw new InvalidOperationException("the shared rows never create a session");
     }

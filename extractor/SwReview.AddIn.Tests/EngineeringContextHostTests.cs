@@ -561,6 +561,7 @@ public sealed class EngineeringContextHostTests
         public IReadOnlyList<ModelChoice> ListModels(string provider) => new ModelChoice[0];
         public bool IsTurnRunning(string chatId) => Running;
         public void Restart(UserSettings settings, ResolvedApiKey key) { }
+        public bool StopForRestart() => throw new NotSupportedException("the engineering context cases move no run root");
         public BackendRequestException? NextError;
         public ChatSessionHandle CreateSession(NewSessionRequest request)
         {

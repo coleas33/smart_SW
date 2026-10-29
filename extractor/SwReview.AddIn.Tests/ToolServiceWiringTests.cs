@@ -4012,6 +4012,107 @@ public sealed class ToolServiceWiringTests
     }
 
     /// <summary>
+    /// The review round of owner decision 163A, test first (Codex's re-review; 004 T313, research R25.11): the old backend's
+    /// <c>remodel.open</c>, handed to the tool service before that backend was stopped, waits in the pipe server's queue behind
+    /// a request in flight on a busy application thread, while the restart posts its close in process. On the application
+    /// thread the order is then fixed, and either way the run's session is ended once and nothing is left. The close first:
+    /// it finds no session, records the run as ended, and the open that runs after it is refused <c>target_mismatch</c> with
+    /// nothing opened, copied or written. The open first: it opens, and the close after it ends that session.
+    /// </summary>
+    [Theory]
+    [InlineData("the close first")]
+    [InlineData("the open first")]
+    public void AnOldOpenQueuedAroundTheCloseInProcessLeavesNoSessionEitherWay(string order)
+    {
+        using (var release = new ManualResetEventSlim(false))
+        using (var world = new SeatedHostWorld())
+        {
+            world.Host.BindRemodelRun(world.RunDirectory);
+            string probeId = world.Probe();
+            world.Seat.ToggleWrites.Clear();
+            bool closeFirst = order == "the close first";
+            PipeReply? ahead = null;
+            PipeReply? opened = null;
+            Exception? closeFailure = null;
+            var threads = new List<Thread>();
+            void Run(string name, Action work)
+            {
+                var thread = new Thread(() => work()) { IsBackground = true, Name = name };
+                threads.Add(thread);
+                thread.Start();
+            }
+
+            try
+            {
+                // SOLIDWORKS busy, as with a dialog open or a long rebuild.
+                ((IAppThreadInvoker)world.App).Post(() => release.Wait(TimeSpan.FromSeconds(30)));
+                int posted = world.App.Posted;
+
+                if (closeFirst)
+                {
+                    // A request in flight, and the old open queued behind it in the pipe server.
+                    Run("fict-ahead", () => ahead = world.Remodel(RemodelCommands.ProbeScope, new { source_path = world.SourcePath }));
+                    Assert.True(StubBackend.Waits(() => world.App.Posted == posted + 1, 10000), "the request ahead was never posted");
+                    Run("fict-old-open", () => opened = world.Open(probeId));
+                }
+                else
+                {
+                    Run("fict-old-open", () => opened = world.Open(probeId));
+                    Assert.True(StubBackend.Waits(() => world.App.Posted == posted + 1, 10000), "the open was never posted");
+                }
+
+                Run("fict-close-in-process", () =>
+                {
+                    try
+                    {
+                        world.Host.EndRemodelSessionOf(world.RunDirectory);
+                    }
+                    catch (Exception failure)
+                    {
+                        closeFailure = failure;
+                    }
+                });
+                Assert.True(StubBackend.Waits(() => world.App.Posted == posted + 2, 10000), "the close in process was never posted");
+            }
+            finally
+            {
+                release.Set();
+            }
+
+            foreach (Thread thread in threads)
+            {
+                Assert.True(thread.Join(TimeSpan.FromSeconds(30)), thread.Name + " did not finish");
+            }
+
+            Assert.Null(closeFailure);
+            Assert.NotNull(opened);
+            if (closeFirst)
+            {
+                Assert.Equal(BridgeStatus.Ok, ahead!.Status);
+                Assert.Equal(BridgeStatus.Error, opened!.Status);
+                Assert.Equal(RemodelErrorCodes.TargetMismatch, opened.Result.GetProperty("error_code").GetString());
+                Assert.Empty(world.Seat.Opened);
+                Assert.Empty(world.Seat.ToggleWrites);
+                Assert.False(File.Exists(world.CopyPath));
+                Assert.Empty(world.Told);
+                Assert.Contains(world.LogLines, line => line.Contains("remodel close in process thread=posted run=" + world.RunId + " nothing closed"));
+            }
+            else
+            {
+                Assert.Equal(BridgeStatus.Ok, opened!.Status);
+                SeatedHostWorld.Ending ending = Assert.Single(world.Told);
+                Assert.Equal(RemodelSessionEnd.ReasonClose, ending.Outcome.Reason);
+                Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            }
+
+            // Nothing is left for the teardown to end.
+            world.Host.Dispose();
+            Assert.Equal(closeFirst ? 0 : 1, world.Told.Count);
+            Assert.Contains(world.LogLines, logged => logged.EndsWith("reason=tool_service_stopped session=none", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
     /// Owner decision 161A, test first (004 T300; research R24): a folder that is not the open run's - one of the same name
     /// under another run root, which the bridge's <c>run_id</c> alone would take, or another run's - ends nothing: nobody is
     /// told, nothing is closed, the line says so, and the session stays for the run's own teardown.
@@ -5265,5 +5366,7 @@ public sealed class ToolServiceWiringTests
         public ChatSessionHandle CreateSession(NewSessionRequest request) => throw new NotSupportedException();
 
         public void Restart(UserSettings settings, ResolvedApiKey key) => throw new NotSupportedException();
+
+        public bool StopForRestart() => throw new NotSupportedException();
     }
 }

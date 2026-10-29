@@ -102,6 +102,19 @@ public sealed class BackendClient : IBackendClient, IDisposable
         }
     }
 
+    /// <summary>
+    /// Owner decision 163A (004 research R25): the supervisor's stop for a restart, under the same gate as every start, and
+    /// none once the add-in has begun to unload, whose own disposal stops the backend.
+    /// </summary>
+    public bool StopForRestart()
+    {
+        lock (_gate)
+        {
+            ThrowIfUnloading();
+            return _supervisor.StopForRestart();
+        }
+    }
+
     public IReadOnlyList<ModelChoice> ListModels(string provider)
     {
         JsonElement body = Call(
@@ -376,27 +389,33 @@ public sealed class BackendClient : IBackendClient, IDisposable
         request.Headers["Authorization"] = "Bearer " + endpoint.Token;
         request.Accept = "application/json";
 
-        if (body != null)
+        // The review round of owner decision 163A (004 research R25.10): a restart's turn scan asks each chat through here
+        // while it holds the start gate, which the add-in's unload waits for on the SOLIDWORKS thread. The unload aborts the
+        // call in flight, and any made after it - registered once unloading, the abort runs at once - so it waits for none.
+        using (_unloading.Token.Register(request.Abort))
         {
-            byte[] payload = Encoding.UTF8.GetBytes(body);
-            request.ContentType = "application/json";
-            request.ContentLength = payload.Length;
-            using (Stream stream = request.GetRequestStream())
+            try
             {
-                stream.Write(payload, 0, payload.Length);
-            }
-        }
+                if (body != null)
+                {
+                    byte[] payload = Encoding.UTF8.GetBytes(body);
+                    request.ContentType = "application/json";
+                    request.ContentLength = payload.Length;
+                    using (Stream stream = request.GetRequestStream())
+                    {
+                        stream.Write(payload, 0, payload.Length);
+                    }
+                }
 
-        try
-        {
-            using (var response = (HttpWebResponse)request.GetResponse())
-            {
-                return Parse(Read(response));
+                using (var response = (HttpWebResponse)request.GetResponse())
+                {
+                    return Parse(Read(response));
+                }
             }
-        }
-        catch (WebException failure)
-        {
-            throw Failed(failure);
+            catch (WebException failure)
+            {
+                throw Failed(failure);
+            }
         }
     }
 

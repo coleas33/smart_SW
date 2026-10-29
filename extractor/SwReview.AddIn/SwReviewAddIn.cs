@@ -505,13 +505,10 @@ public class SwReviewAddIn : ISwAddin
             // with no Remodel host there is nothing to close.
             EndRemodelSessionsLeftUnder = runRoot => _remodelHost?.EndTheSessionsLeftUnder(runRoot) != false,
 
-            // Owner decision 161A (004 research R24): with that backend gone, the Remodel host closes what it left there in
-            // process instead, through the tool service; read through the field, and with no Remodel host there is nothing.
+            // Owner decision 161A (004 research R24): with that backend gone - or, since owner decision 163A (R25), stopped
+            // and exited after its close was not answered - the Remodel host closes what it left there in process instead,
+            // through the tool service; read through the field, and with no Remodel host there is nothing.
             EndRemodelSessionsInProcessLeftUnder = runRoot => _remodelHost?.EndTheSessionsLeftUnderInProcess(runRoot),
-
-            // Owner decision 159A (004 research R22.12): whether the Remodel host still holds a session under the run root in
-            // force, read, closing nothing, so a restart's refusals say what holds it now; with no Remodel host, none.
-            RemodelSessionLeftUnder = runRoot => _remodelHost?.HoldsASessionLeftUnder(runRoot) == true,
 
             // Owner decision 145A: every other tab that holds the backend's port and token is told
             // after each restart the review host makes, and asks for its `init` again; and told of

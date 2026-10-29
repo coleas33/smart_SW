@@ -508,6 +508,18 @@ public sealed class RemodelHost : IDisposable
         "Closing the copy from the earlier attempt was not confirmed, so no new plan was made. "
         + PartNotChanged + " Wait a moment, then press Remodel a copy again.";
 
+    /// <summary>
+    /// The review round of owner decision 163A (Opus S1; 004 research R25.10): a plan refused because the close of what an
+    /// earlier remodel left - a failed plan's, a waiting plan's or a finished run's session - is not answered, when that
+    /// leftover lies under a run root no longer in force. The backend in force refuses its folder before the bridge every
+    /// time, so waiting never helps; another document made active re-attaches the tool service, after which the leftover's
+    /// session is no longer this attachment's, and the next plan sends it nothing. Plain words, no path.
+    /// </summary>
+    public const string LeftoverUnderAnEarlierRunRootMessage =
+        "Closing the copy an earlier remodel left open under the folder for runs used before was not confirmed, so no new "
+        + "plan was made. " + PartNotChanged + " Make another document active in SOLIDWORKS, then make your part the active "
+        + "document again and press Remodel a copy again.";
+
     /// <summary>The run's first word, as Start hands the run to the pipeline.</summary>
     public const string RunningThePlanMessage = "Running the plan against the copy...";
 
@@ -1813,7 +1825,7 @@ public sealed class RemodelHost : IDisposable
             // `BridgeUnavailable`. Pressing again sends the close again.
             Log("remodel.plan, the earlier plan's close", notAnswered!);
             string errorClass = notAnswered is RemodelRefusal refusal ? refusal.ErrorClass : BridgeUnavailableClass;
-            _actions.SendError(id, errorClass, EarlierPlanNotClosedMessage, retryable: true);
+            _actions.SendError(id, errorClass, NotClosedWords(waiting.RunDirectory, EarlierPlanNotClosedMessage), retryable: true);
             return false;
         }
 
@@ -1846,12 +1858,33 @@ public sealed class RemodelHost : IDisposable
         {
             Log("remodel.plan, the earlier run's close", notAnswered!);
             string errorClass = notAnswered is RemodelRefusal refusal ? refusal.ErrorClass : BridgeUnavailableClass;
-            _actions.SendError(id, errorClass, EarlierRunNotClosedMessage, retryable: true);
+            _actions.SendError(id, errorClass, NotClosedWords(run.RunDirectory, EarlierRunNotClosedMessage), retryable: true);
             return false;
         }
 
         run.MarkSessionEnded();
         return true;
+    }
+
+    /// <summary>
+    /// The review round of owner decision 163A (Opus S1; 004 research R25.10): the words a plan is refused with when the close
+    /// of the leftover in <paramref name="runDirectory"/> is not answered - <paramref name="sameRunRoot"/> while it lies under
+    /// the run root in force, and <see cref="LeftoverUnderAnEarlierRunRootMessage"/> once a restart has moved the run root off
+    /// it (decision 161A's or 163A's fallback left it), where only a re-attach ends it. A run root that cannot be judged keeps
+    /// the plain words.
+    /// </summary>
+    private string NotClosedWords(string runDirectory, string sameRunRoot)
+    {
+        try
+        {
+            return RunFolders.IsUnder(runDirectory, _options.RunRoot(), _options.RunRootProbe)
+                ? sameRunRoot
+                : LeftoverUnderAnEarlierRunRootMessage;
+        }
+        catch (Exception)
+        {
+            return sameRunRoot;
+        }
     }
 
     /// <summary>What the bridge made of one close of a plan's session (004 T173's reading, shared).</summary>
@@ -1994,7 +2027,7 @@ public sealed class RemodelHost : IDisposable
         {
             Log("remodel.plan, the failed plan's close", notAnswered!);
             string errorClass = notAnswered is RemodelRefusal refusal ? refusal.ErrorClass : BridgeUnavailableClass;
-            _actions.SendError(id, errorClass, FailedPlanNotClosedMessage, retryable: true);
+            _actions.SendError(id, errorClass, NotClosedWords(failed.Item1, FailedPlanNotClosedMessage), retryable: true);
             return false;
         }
 
@@ -2151,11 +2184,12 @@ public sealed class RemodelHost : IDisposable
     /// Owner decision 159A (004 research R22.12, Codex's third review): whether this host still holds a session on the
     /// bridge under <paramref name="runRoot"/> - what <see cref="EndTheSessionsLeftUnder"/> would close, read now and
     /// closing nothing, holding nothing and asking no backend: a failed plan's whose close was not answered, or the latest
-    /// run while it holds its session, on the attachment listening now. The review host reads it when a restart waits
-    /// to move the run root and the backend does not answer, so its words say what holds the restart now - a close that
-    /// ended late, a re-attach or a newer save change the answer by themselves. No pipeline is none.
+    /// run while it holds its session, on the attachment listening now. No pipeline is none. *Changed 2026-10-29 (owner
+    /// decision 164A, 004 research R25):* the review host no longer reads it, since no restart waits for a close and its
+    /// refusals no longer depend on what is left; it stays as the one reading of the walk's two leftovers, which the tests
+    /// assert the walk's effects against - a close that ended late, a re-attach, and the fallback that leaves one.
     /// </summary>
-    public bool HoldsASessionLeftUnder(string runRoot)
+    internal bool HoldsASessionLeftUnder(string runRoot)
     {
         if (_options.Pipeline == null)
         {

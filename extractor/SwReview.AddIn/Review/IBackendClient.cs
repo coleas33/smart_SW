@@ -202,4 +202,13 @@ public interface IBackendClient
     /// <exception cref="TurnRunningException">A turn is running; nothing was changed.</exception>
     /// <exception cref="BackendStartException">The new backend would not start.</exception>
     void Restart(UserSettings settings, ResolvedApiKey key);
+
+    /// <summary>
+    /// Owner decision 163A (004 research R25): stops the backend in force for a restart that will start the next one with
+    /// <see cref="Restart"/> - refusing, as that does, while a turn is running - and answers whether every process of it has
+    /// exited, so that it can send the bridge nothing more. Once it is stopped, <see cref="Endpoint"/> is null.
+    /// </summary>
+    /// <exception cref="TurnRunningException">A turn is running; nothing was stopped.</exception>
+    /// <returns>True once the whole backend has exited; false when a process of it was still alive when the bound ran out.</returns>
+    bool StopForRestart();
 }

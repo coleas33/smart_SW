@@ -303,6 +303,10 @@ public sealed class RunFoldersLongNamesTests : IDisposable
                 // moves the run root holds a failed plan's folder and a run's to the run root leaving, with the probe.
                 "RemodelHost.cs IsUnder",
                 "RemodelHost.cs IsUnder",
+
+                // Changed deliberately 2026-10-29 (the review round of 163A, Opus S1; 004 research R25.10): a plan refused for
+                // a leftover's close not answered reads whether the leftover lies under the run root in force, with the probe.
+                "RemodelHost.cs IsUnder",
                 "ReviewHost.cs CreateForDocument",
                 "ReviewHost.cs CreateForDocument",
                 "ReviewHost.cs FindNotSentReview",

@@ -1633,5 +1633,9 @@ public sealed class PageMessageTests
             RestartedWith = settings;
             RestartedKey = key;
         }
+
+        /// <summary>Owner decision 163A: never asked here - no case leaves a run-root close unanswered.</summary>
+        public bool StopForRestart() =>
+            throw new NotSupportedException("the page message cases leave no remodel close unanswered");
     }
 }

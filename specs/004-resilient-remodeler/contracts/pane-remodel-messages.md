@@ -82,7 +82,6 @@ issued, and the host resolves it against its own run record.
 | `BackendUnavailable` | *Named here 2026-10-19; the class was already answered:* the backend is not running (the pipeline's own refusal, before any call). *Added 2026-10-19 (feature 002, owner decision 145A):* also while a settings restart waits and the backend does not answer whether a turn runs - `message` says to save the settings again on the Review tab - when the restart a press made or waited for failed - `message` is the failure, masked - and while the add-in is unloading. *Amended 2026-10-21 (feature 002, owner decision 154A, with 153A's record of the settings in force):* also from `remodel.plan` and `remodel.start` once their gate is passed, while a start of the backend under way would bring another run root into force: `message` says the review backend is being started with another folder for runs, that nothing was copied (a plan) or the plan was not applied (a Start), and Remodel a copy pressed again in a moment; no path. Retryable |
 | `RemodelRunning` | *Added 2026-10-19 (feature 002, owner decision 145A).* A settings restart waits and whether a remodel run is in progress cannot be read, which is read as one in progress. Never answered while the host can read its own run: a second press is `RunInProgress` |
 | `CheckRunning` | *Added 2026-10-21 (feature 002, owner decision 157A, its reviews).* A settings restart waits and a Model check or a Standards check holds it back - from its gate until the page's evaluation of it has been answered: `remodel.plan` and `remodel.start` are refused before anything is called, `message` naming the check, or the checks: "the backend restarts with the saved settings when the running check ends, and nothing new starts before then. Wait for the check to end, then try again." Retryable: pressed again once the check is over, the press makes the restart first |
-| `RemodelCleanupPending` | *Added 2026-10-27 (feature 002 and owner decision 159A; research R22).* A settings restart that would move the run root waits, because a session this host left on the bridge under the run root in force - a failed plan's, a plan waiting for Start, a finished run's - was not closed: the restart closes it first, through the backend in force, the one backend that takes its run folder, and that close was not answered. `remodel.plan` and `remodel.start` are refused through the gate before anything is called, created or recorded; `message` is "a copy an earlier remodel left open in SOLIDWORKS could not be closed, so the backend has not been restarted with the saved settings, and no remodel run starts before then. Make another document active in SOLIDWORKS, or save the earlier folder for runs in Settings again, then try again." - the two ways out, since a backend or bridge that does not answer never ends the wait (research R22.10); while that close holds the restart - a session still left under the run root in force, read when asked (R22.12) - and the backend does not answer whether a turn runs, the message is "a copy an earlier remodel left open in SOLIDWORKS could not be closed, and the review backend is not answering, so it has not been restarted with the saved settings, and no remodel run starts before then. Save the earlier folder for runs in Settings again, then try again." (R22.11) Retryable: each press asks the close again, and once it is answered makes the restart and goes on under the new run root. Never a running turn or a remodel run, and never the restart's failure, which would drop the restart |
 | `DocumentChanged` | *Added 2026-10-19 (feature 002, owner decision 145A, found on review).* `remodel.plan` only: the active document - its path or its configuration - is not the one the press was for when the host reads it again after the settings-restart gate, which can wait through a restart for seconds. Raised before any call: nothing is probed, copied or closed, no folder is made, and an earlier plan waiting for Start is left as it was. `message` names no path. Retryable: the engineer makes their part the active document and presses again |
 | `RunRootChanged` | *Added 2026-10-20 (feature 002, owner decision 154A's reviews, finding F6).* A `remodel.start` whose plan's run folder is not under the run root in force - a settings save moved the run root after the plan - once its gate is passed and before the run begins: the backend makes runs only under the run root it was started with, and would refuse the folder inside the run. `message` says the plan's run folder is under a run root no longer in force, that the plan was not applied, and the way on, Remodel a copy pressed again; no path. Not retryable. A plan made before the move that is still the active document's copy is refused as `SourceIsRemodelCopy` all the same: every run root in force this session is read (002 `pane-host-messages.md`, "The run root rule") |
 | `RunRootRefused` | *Added 2026-10-20 (feature 002, owner decision 154A; 011 research R12.9, items 1 and 2).* The run root is on a network share, reached through a link - a substituted drive, a junction, a symbolic link, any root whose final path differs from its full path other than by letter case - or written as a device path: the backend refuses a run folder on a share on every route, and spells one reached through a link by its final path, which step 4 of `remodel.open` compares with the folder this host binds, so such a root ended every plan. Raised by `remodel.plan` and `remodel.start` first, before anything is asked or made. `message` says which the root is, that nothing was copied (a plan) or the plan was not applied (a Start), and the way on - a local folder chosen for runs in the Review tab's Settings, and Remodel a copy pressed again - and names no path. Not retryable (002 `pane-host-messages.md`, "The run root rule"). *Amended on the reviews of owner decision 154A's merge (feature 002), 2026-10-21:* also a run root with a folder name ending in a space or a period (F1) |
@@ -486,10 +485,9 @@ naming its exact run, through that backend, which takes their folders
 (`RemodelHost.EndTheSessionsLeftUnder`, holding the tool service as a plan does). A close answered -
 closed, or with what it left - ends the leftover as planning again ends it, and the restart goes on;
 a plan so closed is told lost once, in `RemodelHost.PlanClosedForRunRootMessage`, which
-`init.latest_run.plan_lost` and a Start naming it carry too. A close not answered holds the restart:
-the run root saved stays saved, the one in force stays in force, the Review tab says so, and a plan or
-a Start is refused `RemodelCleanupPending` (above), each press asking again. Nothing is sent to a
-replacement attachment; nothing outside the run root in force is closed; and no outside-root close is
+`init.latest_run.plan_lost` and a Start naming it carry too. A close not answered held the restart,
+and a plan or a Start was refused `RemodelCleanupPending` - removed by owner decisions 163A and 164A
+(below). Nothing is sent to a replacement attachment; nothing outside the run root in force is closed; and no outside-root close is
 permitted - once the new run root is in force, the old folder is refused before the bridge, as before.
 With no backend up there is nothing to close through, and the restart, which brings one back, is not
 held: that leftover stays pending as T258 leaves it, each plan refused retryably, until a re-attach's
@@ -505,8 +503,28 @@ the close through the backend does - the failed plan's record let go, a run mark
 root, and a plan so closed told lost once in `RemodelHost.PlanClosedForRunRootMessage`. The restart is
 never held by it: a close not answered - the application thread not answering in time, the service
 gone, another attachment listening - leaves the leftover as before, its failure in the add-in's log,
-and the known defect above applies to that case only. A backend that is up but does not answer is
-unchanged (`RemodelCleanupPending`, above). No word on the tab changes.
+and the known defect above applies to that case only. No word on the tab changes.
+
+*Amended 2026-10-29 (owner decisions 163A and 164A; T307 to T309; research R25):* a backend that is up
+but does not answer the close - stuck, timing out, unreachable, or answering with no class read as an
+answer - no longer holds the restart. The review host stops that backend, waits until it has exited,
+and has this host close the same leftovers in process, as above, before the next backend starts: a
+close answered ends the leftover, a plan so closed told lost once in
+`RemodelHost.PlanClosedForRunRootMessage`, and a close not answered - or a stop that did not reach the
+backend's exit, when nothing is closed in process - leaves it as before, logged, the restart going on.
+A close the old backend had already handed to the bridge ends the run once, whichever runs first, and as
+the run root's close. `RemodelCleanupPending` and its row are removed: no plan or Start is refused for a
+close any more. No word on the tab changes.
+
+*Amended on that decision's review round, 2026-10-29 (T310 to T312; research R25.10):* a leftover left
+under a run root no longer in force - 161A's or 163A's fallback - keeps its record, and a plan refused
+because its close is not answered (the backend in force refuses the folder before the bridge) is told
+`RemodelHost.LeftoverUnderAnEarlierRunRootMessage`, "Closing the copy an earlier remodel left open under
+the folder for runs used before was not confirmed, so no new plan was made. Your part was not changed.
+Make another document active in SOLIDWORKS, then make your part the active document again and press
+Remodel a copy again." - for a failed plan, a waiting plan and a finished run alike, with the class the
+close was refused with - where "wait a moment" never worked; the re-attach ends it. Under the run root
+in force the words are as before.
 
 *Amended 2026-10-22 (T259, T260; research R19.28):* the engineer's Stop and the vanished-copy stop
 remember their `applying` stopping words before posting them, under the existing run-ending lock.

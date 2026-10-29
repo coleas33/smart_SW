@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Guard;
 using SwReview.Extractor.Rms;
@@ -766,6 +767,141 @@ public sealed class RemodelTeardownTests : IDisposable
         Assert.Empty(_harness.Observer.Members);
         Assert.Empty(_told);
     }
+
+    // ---- the review round of owner decision 163A: the in-process close is a barrier ---------
+
+    /// <summary>
+    /// The review round of owner decision 163A, test first (Codex's re-review; 004 T313, research R25.11): the in-process close
+    /// of a run's folder records that run as ended by cleanup, whether or not a session of it was there to close, and a
+    /// <c>remodel.open</c> of that exact folder that runs afterwards - an old backend's open, handed over before it was
+    /// stopped - is refused <c>target_mismatch</c> before it touches SOLIDWORKS: no source re-read, no setting written, no copy
+    /// made, no document opened, no session. The folder is matched as the close matched it, however the host spells it.
+    /// </summary>
+    [Theory]
+    [InlineData("as made")]
+    [InlineData("with a trailing separator")]
+    [InlineData("its run root in another case")]
+    public void AnOpenOfARunEndedInProcessIsRefusedBeforeItTouchesSolidWorks(string spelling)
+    {
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+        string folder = spelling == "with a trailing separator"
+            ? _harness.RunDirectory + Path.DirectorySeparatorChar
+            : spelling == "its run root in another case"
+                ? Path.Combine(_harness.Root.ToUpperInvariant(), RemodelHarness.RunId)
+                : _harness.RunDirectory;
+        Assert.Null(_harness.Dispatcher.EndRemodelSessionOf(folder));
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+        _harness.Seat.ToggleWrites.Clear();
+        int gated = _harness.Observer.Members.Count;
+        int reads = _harness.Seat.Probe.Members.Count + _harness.Seat.Probe.OpenQueries.Count;
+
+        BridgeResponse opened = _harness.Dispatch(RemodelCommands.Open, OpenParams(_harness.CopyPath, probeId));
+
+        Assert.Equal(RemodelErrorCodes.TargetMismatch, RemodelHarness.Refusal(opened));
+        Assert.Equal(reads, _harness.Seat.Probe.Members.Count + _harness.Seat.Probe.OpenQueries.Count);
+        Assert.Empty(_harness.Seat.Opened);
+        Assert.Empty(_harness.Seat.ToggleWrites);
+        Assert.Equal(gated, _harness.Observer.Members.Count);
+        Assert.False(File.Exists(_harness.CopyPath));
+        Assert.Null(_harness.Dispatcher.RemodelRunDirectory);
+        Assert.Null(_harness.Services.RemodelRunRoot);
+        Assert.Empty(_told);
+    }
+
+    /// <summary>
+    /// The review round of owner decision 163A, test first (Codex's re-review; 004 T313, research R25.11): the barrier is the
+    /// exact folder. A run of the same name under the run root that came into force - <c>B\X</c> after <c>A\X</c> was ended
+    /// in process - is another folder, and opens as any run does; so does a later run under the root that was left.
+    /// </summary>
+    [Theory]
+    [InlineData("the same name under the new run root")]
+    [InlineData("another run under the old run root")]
+    public void ARunEndedInProcessHoldsBackNoOtherFolder(string other)
+    {
+        Assert.Null(_harness.Dispatcher.EndRemodelSessionOf(_harness.RunDirectory));
+        string runId = other == "the same name under the new run root" ? RemodelHarness.RunId : "20260916-150000-bracket-remodel";
+        string folder = other == "the same name under the new run root"
+            ? Path.Combine(_harness.Root, "moved", runId)
+            : Path.Combine(_harness.Root, runId);
+        Directory.CreateDirectory(folder);
+        string copy = Path.GetFullPath(RemodelCopy.CopyPathFor(folder, _harness.SourcePath));
+        _harness.Seat.Copy = new FakeRemodelDocument(copy);
+        _harness.Dispatcher.BindRemodelRun(folder);
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+
+        BridgeResponse opened = _harness.DispatchFor(
+            runId,
+            RemodelCommands.Open,
+            "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath)
+            + ",\"copy_path\":" + JsonSerializer.Serialize(copy)
+            + ",\"probe_id\":" + JsonSerializer.Serialize(probeId) + "}");
+
+        RemodelHarness.Ok<RemodelOpenResult>(opened);
+        Assert.Equal(Path.GetFullPath(folder), _harness.Dispatcher.RemodelRunDirectory);
+    }
+
+    /// <summary>
+    /// The review round of owner decision 163A, test first (Codex's third review; 004 T316, research R25.12): a native call
+    /// inside <c>remodel.open</c> can pump the application thread's queue - <c>OpenDoc7</c>, and the rebuild after it - so the
+    /// close in process, posted behind an old open that already passed the barrier at its entry, can run in the middle of
+    /// that open. It finds no session yet, records the folder and answers nothing. The open then must not publish a session:
+    /// it is refused <c>target_mismatch</c> just before it would, through the failed open's own unwind - the copy it opened
+    /// closed, after the identity check, and deleted, the four settings put back, the host told the open failed.
+    /// </summary>
+    [Theory]
+    [InlineData("inside OpenDoc7")]
+    [InlineData("inside the rebuild")]
+    public void ACloseInProcessPumpedInsideAnOpenStopsItPublishingASession(string where)
+    {
+        bool[] idleBefore = RemodelSystemToggles.SuppressedToggles.Select(_harness.Seat.GetUserPreferenceToggle).ToArray();
+        bool commandBefore = _harness.Seat.CommandInProgress;
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+        int asked = 0;
+        RemodelSessionEnd? answered = null;
+        Action<string> pump = member =>
+        {
+            if (member == (where == "inside OpenDoc7" ? nameof(FakeRemodelSeat.OpenDocument) : nameof(FakeRemodelDocument.ForceRebuild)))
+            {
+                asked++;
+                answered = _harness.Dispatcher.EndRemodelSessionOf(_harness.RunDirectory);
+            }
+        };
+        if (where == "inside OpenDoc7")
+        {
+            _harness.Seat.DuringCall = pump;
+        }
+        else
+        {
+            _harness.Copy.DuringCall = pump;
+        }
+
+        BridgeResponse opened = _harness.Dispatch(RemodelCommands.Open, OpenParams(_harness.CopyPath, probeId));
+
+        Assert.Equal(1, asked);
+        Assert.Null(answered);
+        Assert.Equal(RemodelErrorCodes.TargetMismatch, RemodelHarness.Refusal(opened));
+        Assert.Null(_harness.Dispatcher.RemodelRunDirectory);
+        Assert.Null(_harness.Dispatcher.RemodelTargetPath);
+        Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.Closed));
+        Assert.DoesNotContain(_harness.CopyPath, _harness.Seat.OpenDocuments);
+        Assert.False(File.Exists(_harness.CopyPath));
+        Assert.Equal(idleBefore, RemodelSystemToggles.SuppressedToggles.Select(_harness.Seat.GetUserPreferenceToggle).ToArray());
+        Assert.Equal(commandBefore, _harness.Seat.CommandInProgress);
+        RemodelSessionEnd told = Assert.Single(_told);
+        Assert.Equal(RemodelSessionEnd.ReasonOpenFailed, told.Reason);
+        Assert.Empty(told.SettingsOutstanding);
+    }
+
+    /// <summary><c>remodel.open</c>'s params for the harness's run, with the copy given.</summary>
+    private string OpenParams(string copy, string probeId) =>
+        "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath)
+        + ",\"copy_path\":" + JsonSerializer.Serialize(copy)
+        + ",\"run_id\":" + JsonSerializer.Serialize(RemodelHarness.RunId)
+        + ",\"probe_id\":" + JsonSerializer.Serialize(probeId) + "}";
 
     // ---- helpers -------------------------------------------------------------------------
 

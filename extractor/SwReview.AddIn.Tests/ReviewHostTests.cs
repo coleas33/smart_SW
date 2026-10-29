@@ -3494,6 +3494,10 @@ public sealed class ReviewHostTests
             }
         }
 
+        /// <summary>Owner decision 163A: never asked here - no case leaves a run-root close unanswered.</summary>
+        public bool StopForRestart() =>
+            throw new NotSupportedException("the review host cases leave no remodel close unanswered");
+
         public ChatSessionHandle CreateSession(NewSessionRequest request)
         {
             OnCreate?.Invoke(request);
