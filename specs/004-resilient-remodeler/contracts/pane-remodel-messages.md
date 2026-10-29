@@ -516,6 +516,16 @@ A close the old backend had already handed to the bridge ends the run once, whic
 the run root's close. `RemodelCleanupPending` and its row are removed: no plan or Start is refused for a
 close any more. No word on the tab changes.
 
+*Amended on that decision's review round, 2026-10-29 (T310 to T312; research R25.10):* a leftover left
+under a run root no longer in force - 161A's or 163A's fallback - keeps its record, and a plan refused
+because its close is not answered (the backend in force refuses the folder before the bridge) is told
+`RemodelHost.LeftoverUnderAnEarlierRunRootMessage`, "Closing the copy an earlier remodel left open under
+the folder for runs used before was not confirmed, so no new plan was made. Your part was not changed.
+Make another document active in SOLIDWORKS, then make your part the active document again and press
+Remodel a copy again." - for a failed plan, a waiting plan and a finished run alike, with the class the
+close was refused with - where "wait a moment" never worked; the re-attach ends it. Under the run root
+in force the words are as before.
+
 *Amended 2026-10-22 (T259, T260; research R19.28):* the engineer's Stop and the vanished-copy stop
 remember their `applying` stopping words before posting them, under the existing run-ending lock.
 An `init.latest_run.status` while that run remains in flight therefore carries the host's latest word,

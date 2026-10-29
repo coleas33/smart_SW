@@ -55,6 +55,14 @@ the restart goes on. A close this backend had already handed to the bridge runs 
 in process, which then finds no session of that run and is answered so (R24.11), or after it, when it
 finds none itself. Either way the run is ended once. Nothing this backend serves changes.
 
+*Amended on that decision's review round, 2026-10-29 (`research.md` R25.10); no route changes:* with no
+endpoint - the launcher exited - the add-in stops and waits for what is left of the backend in the same
+way before it closes anything in process, since the server below the launcher may still be alive. A
+command this backend handed to the tool service before it stopped, other than that close - a
+`remodel.open` of a plan the add-in gave up on - can still run after the close in process; that order
+is checked at the pilot workstation (T303). Every call the add-in makes to this backend is aborted when
+the add-in unloads.
+
 ## Routes
 
 | Route | Body | Does | Reply |
