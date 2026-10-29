@@ -2242,12 +2242,15 @@ public sealed class ReviewHost : IDisposable
     /// been read under it, and once no turn runs - asked first, as the backend's own check asks it again - so a restart that
     /// would wait anyway sends nothing. Nothing is asked of a restart that keeps the run root. With no backend up there is
     /// none to close through, and the restart is what brings one back: since owner decision 161A (004 research R24) those
-    /// sessions are closed in process instead (<see cref="EndTheRemodelSessionsInProcess"/>), and the restart goes on
-    /// whatever that does.
+    /// sessions are closed in process instead, and the restart goes on whatever that does - since the review round of 163A
+    /// (004 research R25.10) after what is left of the old backend has been stopped and waited for, as for a stuck one
+    /// (<see cref="StopTheOldBackendThenEndTheRemodelSessionsInProcess"/>): no endpoint means its launcher has exited, not
+    /// that the server below it, which holds the bridge's pipe, has.
     /// </summary>
-    /// <returns>True when nothing is left to close through a backend that is up - the run root kept, no backend up, or the
-    /// close answered; false when the close was not answered, or the Remodel tab threw, which since owner decision 163A
-    /// (004 research R25) holds nothing back: the restart stops the backend in force first.</returns>
+    /// <returns>True when the close was made through the backend in force and answered, or nothing is to be closed - the
+    /// run root kept; false when the close was not answered, or the Remodel tab threw, or there is no backend up to close
+    /// through, which since owner decision 163A (004 research R25) holds nothing back: the restart stops the old backend
+    /// first, then closes in process.</returns>
     private bool EndTheRemodelSessionsTheRunRootLeaves(UserSettings settings, string leaving)
     {
         if (RunRootRule.SameRunRoot(settings.RunRoot, leaving))
@@ -2257,8 +2260,7 @@ public sealed class ReviewHost : IDisposable
 
         if (_options.Backend.Endpoint == null)
         {
-            EndTheRemodelSessionsInProcess(leaving);
-            return true;
+            return false;
         }
 
         if (AnyTurnRunning())
