@@ -133,6 +133,12 @@ open a stopped backend handed over before the close is closed by it, and one tha
 refused. `target_mismatch` because it is the existing token for "no target this bridge may act on" -
 what an open with no folder bound, and a command with no session, already get - answered before any
 read or write; no token is added. No command, secret, guard key or allowlist entry is added.
+*Amended on the third review (`research.md` R25.12):* the open asks again after its last native call and
+before its session is published, since a native call such as `OpenDoc7` or the rebuild can pump the
+queue the close was posted to; a folder recorded meanwhile fails the open through its own unwind - the
+copy it opened closed after the identity check and deleted, the settings put back, `remodel.open`'s
+failure told - and answers `target_mismatch`. The backend reads that token as `RunFolderFailed`, which is
+not marked retryable, though another Plan works.
 
 | Command | Params | Result on `ok` |
 |---------|--------|----------------|

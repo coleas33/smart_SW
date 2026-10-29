@@ -5570,3 +5570,72 @@ Every row failed at least one case; none survived.
   is `i/lf`.
 
 No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.
+
+### R25.12 Third review: the barrier rechecked before an open publishes (T316 to T318; 2026-10-29)
+
+Codex's third review of `b670672`: one high finding and one correction. No new owner decision; no guard
+key, allowlist entry, command or write path.
+
+**The finding, checked by reading, holds.** R25.11's barrier was asked only at the open's entry. A
+native call inside `remodel.open` can pump the application thread's queue - the add-in already says so
+of the native open (`ConfigurationFollowCoordinator.cs`, "Native open can pump queued messages, so
+posting alone is not a fence") - so the close in process, posted behind an old open that has passed the
+entry check, can run in the middle of it. `_session` is published only at the end of the open, so that
+close finds no session, records the folder and answers nothing, and the Remodel host lets the failed
+plan's record go. The open then went on to publish a session nothing tracks.
+
+**Settled (T317).** `remodel.open` asks `RefuseAFolderEndedByCleanup` again after its last native call
+and immediately before the session is constructed and published. A folder recorded meanwhile throws
+`target_mismatch` inside the open's own `try`, so it fails through the existing failed-open unwind:
+`CloseAfterAFailedOpen` closes the copy the open opened after its identity check, the copy is deleted,
+the four settings are put back, and the host is told the open failed (`ReasonOpenFailed`).
+
+**The points where native code can pump, checked by reading `OpenIn`.** Before the copy: the source
+re-read (`RecheckSource`: `GetOpenDocumentByName` and the scope reads) and the settings applied
+(`RemodelSystemToggles.Apply`). After it: `OpenDoc7`, the opened-at-copy assertion's reads, the tag
+write, `EditRollbackToEnd`, `GetFeatures` and the rolled-back walk, `ForceRebuild`,
+`GetWhatsWrongCount`, the scope-signal reads, `GetSaveFlag`, `GetLengthUnit`, and the put-back of
+`CommandInProgress` and the idle settings. The recheck follows the last of them, and nothing native runs
+between it and `_session = session`, so a close pumped at any of these points is caught; the entry
+check stays as the one that refuses before anything is touched. `OpenDoc7` and the rebuild are the
+likeliest, and the regression pumps the close from inside each.
+
+**The correction.** R25.11 said an old open that takes a newer run's binding leaves the newer plan
+"refused retryably". The backend maps `target_mismatch` to `RunFolderFailed`, which is not marked
+retryable (`chat/remodel.py`), though pressing Plan again works, since the next plan binds its folder
+afresh. R25.11 is corrected. No contract claims it retryable; `bridge-remodel.md` is amended for the
+second check only.
+
+**Tests first.** T316 (`0be8600`) is the deliberately red commit:
+`ACloseInProcessPumpedInsideAnOpenStopsItPublishingASession` in `RemodelTeardownTests` runs the close
+in process from inside the fake's `OpenDocument`, which stands for `OpenDoc7`, and from inside the copy's
+`ForceRebuild`, whose fake now runs its `DuringCall` hook too. Both rows failed (the open published its
+session). After T317 they ask, and pass: the close answered nothing, no session published, the opened
+copy closed once by the unwind and deleted, no document left open, the settings as they were before the
+open, the host told `ReasonOpenFailed` with nothing outstanding, `target_mismatch`.
+
+**Mutations.** Each alone against `RemodelTeardownTests`, `GuardTests`, the dispatcher's own cases,
+`ToolServiceWiringTests`, `RemodelHostTests` and `DeferredRestartTests` (524 extractor and 1,172 add-in
+cases), restored and sha256 checked equal; afterwards the tree was identical.
+
+| # | Fix taken out | Failed | Cases that failed | Restored |
+|---|---|---|---|---|
+| M98 | `BridgeDispatcher.cs`: the recheck before the session is published | 2 | `ACloseInProcessPumpedInsideAnOpen...` (both rows) | sha256 equal |
+| M99 | `BridgeDispatcher.cs`: the recheck moved to just after `OpenDoc7`, before the rebuild | 1 | `ACloseInProcessPumpedInsideAnOpen...` (inside the rebuild) | sha256 equal |
+
+M99 shows why the check before publishing is the one that matters: a check after any earlier native
+step misses a close pumped by a later one.
+
+**Gates on the final tree.**
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero warnings, zero
+  errors.
+- **C# tests.** 10,216 extractor and 4,276 add-in tests passed, none failed or skipped.
+- **Focused runs.** `RemodelHostTests`, `DeferredRestartTests`, `ReviewHostTests`, `ToolService*`,
+  `BackendProxyHandlerTests` and `ErrorLabelsCoverTheHostTests` (1,421 cases) passed three times
+  in a row.
+- **Python.** Python 3.12 18,275 passed and 6 skipped (the sixth `embreex`, as in R25.8); Python 3.11 18,276 passed and 5 skipped. No Python file changed.
+- **Lint, links and line endings.** `uv run ruff check src tests` passed; `COUNT 0`; every changed file
+  is `i/lf`.
+
+No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.
