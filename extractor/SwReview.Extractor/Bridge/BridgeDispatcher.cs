@@ -1295,6 +1295,13 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 stage, RemodelSystemToggles.CommandInProgressMember, toggles.RestoreCommandInProgress);
             RemodelStageMarkers.Around(stage, "settings.restore_idle", toggles.Restore);
 
+            // The review round of owner decision 163A (004 research R25.12): a native call above - OpenDoc7 above all, and
+            // the rebuild - can pump this thread's queue, so a close in process of this folder posted behind the open can
+            // have run during it, found no session yet and recorded the folder. Asked again here, after the last native
+            // call and before the session exists, a folder recorded meanwhile fails this open through the unwind below:
+            // the copy it opened closed after the identity check and deleted, the settings put back.
+            RefuseAFolderEndedByCleanup(runDirectory);
+
             var session = new RemodelSession(
                 scope, document, _remodelGate, source, attestation, toggles)
             {
@@ -2741,7 +2748,9 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// target this bridge may make there - first of all, before anything is read or written: such an open is an old backend's,
     /// stopped for a restart that moved the run root, whose run was ended by the host's own cleanup. On the application thread,
     /// so the order with that close is fixed: an open that ran first was closed by it, and one that runs after is refused here.
-    /// A folder that will not canonicalize is left to the open's own refusals.
+    /// A folder that will not canonicalize is left to the open's own refusals. Asked twice (004 research R25.12): at the open's
+    /// entry, and again after its last native call and before its session is published, since a native call can pump the
+    /// queue the close was posted to.
     /// </summary>
     private void RefuseAFolderEndedByCleanup(string? boundRunRoot)
     {

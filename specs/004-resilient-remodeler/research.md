@@ -5524,7 +5524,9 @@ route. `git diff 1d2fe20 -- extractor/SwReview.Extractor/Guard` stays empty.
 **Recorded, not fixed.** An old open that runs after the host has bound a *newer* run's folder takes
 that binding, as T158 makes every open take it, and is refused - by the barrier when that folder was
 ended, otherwise by step 4's mismatch with its own `copy_path` - so the newer plan's open finds nothing
-bound and is refused retryably. The old backend's queued commands run right after the close in process,
+bound and is refused `RunFolderFailed`, which the backend maps `target_mismatch` to, not marked retryable -
+though pressing Plan again works, since the next plan binds its folder afresh (*corrected by R25.12*).
+The old backend's queued commands run right after the close in process,
 long before a newer plan is pressed, so this is only reachable by a command delayed past a whole plan;
 it predates 163A.
 
