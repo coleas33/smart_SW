@@ -489,6 +489,15 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private string? _openingRunDirectory;
 
     /// <summary>
+    /// The review round of owner decision 163A (004 research R25.11): every run folder <see cref="EndRemodelSessionOf"/> was
+    /// asked to end, canonicalized - closed or not, since a backend stopped for a restart may still have an open of that
+    /// folder on its way to this thread - and which no <c>remodel.open</c> may use afterwards. Touched on the application
+    /// thread alone, like every command; one entry per run-root change at most, for this dispatcher's life, which a
+    /// re-attach ends with its pipe.
+    /// </summary>
+    private readonly HashSet<string> _endedByCleanup = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// 004 T172: whether Start may run in this build. While false the six change commands
     /// (<see cref="RemodelStart.ChangeCommands"/>) are refused before anything else.
     /// </summary>
@@ -1113,6 +1122,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// <summary><see cref="Open"/>, with the root it took and its markers' writer.</summary>
     private RemodelOpenResult OpenIn(BridgeRequest request, string? boundRunRoot, Action<string> stage)
     {
+        RefuseAFolderEndedByCleanup(boundRunRoot);
         RemodelOpenParams parameters = RemodelOpenParams.Read(request);
         IRemodelSeat seat = Seat();
 
@@ -2435,8 +2445,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// </summary>
     public RemodelSessionEnd? EndRemodelSessionOf(string runDirectory)
     {
-        RemodelSession? session = _session;
-        if (session == null || string.IsNullOrWhiteSpace(runDirectory))
+        if (string.IsNullOrWhiteSpace(runDirectory))
         {
             return null;
         }
@@ -2447,6 +2456,16 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             folder = System.IO.Path.GetFullPath(runDirectory.Trim()).TrimEnd(System.IO.Path.DirectorySeparatorChar);
         }
         catch (Exception error) when (RemodelScope.IsPathError(error))
+        {
+            return null;
+        }
+
+        // The review round of 163A (004 research R25.11): recorded whatever is closed below, so an open of this folder that
+        // the stopped backend handed over and that runs after this is refused (OpenIn).
+        _endedByCleanup.Add(folder);
+
+        RemodelSession? session = _session;
+        if (session == null)
         {
             return null;
         }
@@ -2714,6 +2733,40 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             && root[1] == ':'
             && (root[2] == System.IO.Path.DirectorySeparatorChar
                 || root[2] == System.IO.Path.AltDirectorySeparatorChar);
+    }
+
+    /// <summary>
+    /// The review round of owner decision 163A (004 research R25.11): the barrier behind the close in process. An open whose
+    /// bound run folder <see cref="EndRemodelSessionOf"/> was asked to end is refused <c>target_mismatch</c> - there is no
+    /// target this bridge may make there - first of all, before anything is read or written: such an open is an old backend's,
+    /// stopped for a restart that moved the run root, whose run was ended by the host's own cleanup. On the application thread,
+    /// so the order with that close is fixed: an open that ran first was closed by it, and one that runs after is refused here.
+    /// A folder that will not canonicalize is left to the open's own refusals.
+    /// </summary>
+    private void RefuseAFolderEndedByCleanup(string? boundRunRoot)
+    {
+        if (string.IsNullOrWhiteSpace(boundRunRoot))
+        {
+            return;
+        }
+
+        string folder;
+        try
+        {
+            folder = System.IO.Path.GetFullPath(boundRunRoot!.Trim()).TrimEnd(System.IO.Path.DirectorySeparatorChar);
+        }
+        catch (Exception error) when (RemodelScope.IsPathError(error))
+        {
+            return;
+        }
+
+        if (_endedByCleanup.Contains(folder))
+        {
+            throw new RemodelCommandError(
+                RemodelErrorCodes.TargetMismatch,
+                $"the run folder '{folder}' was ended by the host's own cleanup before the run root moved, so no copy may be "
+                + "opened there on this bridge. Nothing was read or written.");
+        }
     }
 
     /// <summary>The run root the host bound, taken: from here nothing is bound (004 T158).</summary>
