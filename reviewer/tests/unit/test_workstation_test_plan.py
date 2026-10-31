@@ -1427,11 +1427,14 @@ def test_a_message_box_is_answered_only_after_probe_1s_watchdog_has_timed_both_t
 
 
 def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
-    """The run refuses while a document is open, rewrites its ledger as each probe finishes and
-    puts each log line on disk as it is written (004 T330 and T332, decision 166A: a run stopped
-    with Ctrl+C keeps its log and every finished probe's row), and ends with the count line and
-    one BLOCKING line per blocking probe not verified; and it turns off the three options step
-    5.6 notes before the runs and checks after."""
+    """The run refuses while a document is open, starts its ledger before the part is built,
+    rewrites it as each probe finishes and puts each log line on disk as it is written (004 T330,
+    T332 and T342, decision 166A: a run stopped with Ctrl+C keeps its log and every finished
+    probe's row, and an earlier run's ledger never stands for it), logs a thrown probe's exception
+    to the log alone (T342: the ledger keeps its type only, 171A), and ends with the count line
+    and one BLOCKING line per blocking probe not verified; and it turns off the three options step
+    5.6 notes before the runs and checks after. *Changed on purpose by 004 T342 (review findings
+    F2 and F3)*: the recorder is made before the toggles, no longer inside `RunAll`'s call."""
     program = (REPO / "extractor" / "SwReview.Extractor.Console" / "Program.cs").read_text(
         encoding="utf-8"
     )
@@ -1446,13 +1449,17 @@ def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
 
     assert run.index("host.AnyDocumentOpen()") < run.index("host.BuildPart(")
     assert (
-        run.index("RemodelSystemToggles.Within(")
+        run.index("RemodelProbe.AssertPartSavePath(")
+        < run.index("= RemodelProbeLedger.Recorder(")
+        < run.index("RemodelSystemToggles.Within(")
+        < run.index("host.BuildPart(")
         < run.index("RemodelProbeRunner.RunAll(")
-        < run.index("finished: RemodelProbeLedger.Recorder(")
+        < run.index("finished: recorder,")
+        < run.index("threw: (probe, error) => log.WriteError(")
         < run.index("host.ClosePart(")
     )
     assert "RemodelProbeLedger.Write(" not in run
-    write =log[log.index("public void Write(") : log.index("public void WriteError(")]
+    write = log[log.index("public void Write(") : log.index("public void WriteError(")]
     assert "File.AppendAllText(" not in log and "AutoFlush = true" in log
     assert "FileShare.ReadWrite" in log and "ToFile(line)" in write
     fragments = [

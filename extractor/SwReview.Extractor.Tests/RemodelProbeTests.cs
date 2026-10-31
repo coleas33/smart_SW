@@ -670,6 +670,170 @@ public class RemodelProbeTests
         }
     }
 
+    // ---- the review round of the ledger's rewrite (004 T342, decision 166A; research R27.9) ----
+
+    private static void InRunFolder(Action<string> test)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "swreview-probe-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            test(root);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    private static RemodelProbeContext RunContext(string root, FakeRemodelProbeHost host) => new RemodelProbeContext(
+        new RemodelProbePart(new object(), Path.Combine(root, "probe-part", "remodel-probe.SLDPRT"), Array.Empty<object>()),
+        new SwGate(),
+        "32.5.0.48",
+        host,
+        root);
+
+    [Theory]
+    [InlineData("the ledger")]
+    [InlineData("the temporary file")]
+    public void RunAll_WithTheRecorder_AFileHeldAcrossARewrite_EveryProbeStillRunsAndTheLastRewriteHasEveryRow(string held)
+    {
+        // A reader that holds the ledger without sharing its delete (Get-Content, Python's open(),
+        // a sync client) fails File.Replace; one that holds the temporary file fails the write.
+        // Either is a rewrite that fails: it is logged, and the run goes on (review finding F1).
+        InRunFolder(root =>
+        {
+            string[] requested = { "PROBE-4", "PROBE-6", "PROBE-3", "PROBE-21" };
+            string ledger = RemodelProbeLedger.FilePath(root, "32.5.0.48");
+            var logged = new List<string>();
+            FileStream? hold = null;
+            var host = new FakeRemodelProbeHost
+            {
+                GetEquationManagerImpl = _ =>
+                {
+                    hold = held == "the ledger"
+                        ? new FileStream(ledger, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)
+                        : new FileStream(ledger + ".tmp", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                    return new FakeEquationManager();
+                },
+                ReorderFeatureImpl = (part, move, target, location) =>
+                {
+                    hold?.Dispose();
+                    return true;
+                },
+            };
+            IReadOnlyList<RemodelProbeRecord>? records = null;
+
+            try
+            {
+                Exception? thrown = Record.Exception(() => records = RemodelProbeRunner.RunAll(
+                    requested, RunContext(root, host), finished: RemodelProbeLedger.Recorder(root, "32.5.0.48", requested, logged.Add)));
+
+                Assert.Null(thrown);
+                Assert.Equal(requested, records!.Select(record => record.ProbeId));
+                Assert.Equal(requested, RowIds(File.ReadAllText(ledger)));
+                string[] failures = logged.Where(line => line.StartsWith("could not rewrite ", StringComparison.Ordinal)).ToArray();
+                string failure = Assert.Single(failures);
+                Assert.StartsWith("could not rewrite remodel-32.5.0.48.yaml after PROBE-6 (IOException 0x", failure, StringComparison.Ordinal);
+                Assert.DoesNotContain(root, failure, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(new[] { Path.GetFileName(ledger) }, Directory.GetFiles(Path.GetDirectoryName(ledger)!).Select(Path.GetFileName));
+            }
+            finally
+            {
+                hold?.Dispose();
+            }
+        });
+    }
+
+    [Fact]
+    public void Recorder_StartsThisRunsLedger_AnEarlierRunsLedgerNeverStandsForIt()
+    {
+        // A run that hangs in its first probe, rerun into the same folder, must not leave the
+        // earlier run's finished rows standing for it (review finding F2): the recorder writes
+        // this run's requested list and no rows before the first probe starts.
+        InRunFolder(root =>
+        {
+            RemodelProbeLedger.Write(root, "32.5.0.48", new[] { SampleRecord("PROBE-1"), SampleRecord("PROBE-2") });
+            string[] requested = { "PROBE-3", "PROBE-6" };
+            string ledger = RemodelProbeLedger.FilePath(root, "32.5.0.48");
+            var logged = new List<string>();
+            string? whileTheFirstRan = null;
+            int loggedWhileTheFirstRan = -1;
+            var host = new FakeRemodelProbeHost
+            {
+                ReorderFeatureImpl = (part, move, target, location) =>
+                {
+                    whileTheFirstRan ??= File.ReadAllText(ledger);
+                    loggedWhileTheFirstRan = loggedWhileTheFirstRan < 0 ? logged.Count : loggedWhileTheFirstRan;
+                    return true;
+                },
+            };
+
+            RemodelProbeRunner.RunAll(
+                requested, RunContext(root, host), finished: RemodelProbeLedger.Recorder(root, "32.5.0.48", requested, logged.Add));
+
+            Assert.NotNull(whileTheFirstRan);
+            Assert.Empty(RowIds(whileTheFirstRan!));
+            Assert.Equal(requested, RequestedIds(whileTheFirstRan!));
+            Assert.Contains("probes: []\n", whileTheFirstRan!, StringComparison.Ordinal);
+            Assert.Equal(0, loggedWhileTheFirstRan);
+        });
+    }
+
+    [Fact]
+    public void Recorder_ALedgerThatCannotBeStarted_ThrowsBeforeAnyProbeRuns()
+    {
+        // Where the ledger cannot even be started, an earlier run's could stand for this one, so
+        // the run is refused before its part is built (review finding F2).
+        InRunFolder(root =>
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, RemodelProbeLedger.DirectoryName), "a file where the folder goes");
+
+            Assert.Throws<IOException>(() => RemodelProbeLedger.Recorder(root, "32.5.0.48", new[] { "PROBE-3" }, _ => { }));
+        });
+    }
+
+    [Fact]
+    public void Ledger_Write_OverALeftoverTemporaryFile_WritesTheLedgerAndLeavesNothingBesideIt()
+    {
+        // A run killed between the temporary file's write and the replace leaves the temporary
+        // file; the next write takes it over (review finding F6).
+        InRunFolder(root =>
+        {
+            string ledger = RemodelProbeLedger.FilePath(root, "32.5.0.48");
+            Directory.CreateDirectory(Path.GetDirectoryName(ledger)!);
+            File.WriteAllText(ledger + ".tmp", "half of an earlier ledger");
+
+            RemodelProbeLedger.Write(root, "32.5.0.48", new[] { SampleRecord("PROBE-4") });
+
+            Assert.Equal(new[] { "PROBE-4" }, RowIds(File.ReadAllText(ledger)));
+            Assert.Equal(new[] { ledger }, Directory.GetFiles(Path.GetDirectoryName(ledger)!));
+        });
+    }
+
+    [Fact]
+    public void RunAll_ABodyThatThrows_HandsItsExceptionToThrewAndOnlyItsTypeToTheLedger()
+    {
+        // 171A keeps the message out of the ledger; the console hands it to remodel-probe.log, which
+        // is never committed, so a seat failure can still be read - 148A's "whether it names
+        // OpenDoc7" among it (review finding F3).
+        const string fictionalPath = @"C:\Users\FICT-engineer\Designs\FICT-bracket.SLDPRT";
+        var error = new COMException($"OpenDoc7 could not open '{fictionalPath}'.", unchecked((int)0x80004005));
+        var host = new FakeRemodelProbeHost { ReopenPartImpl = _ => throw error };
+        var threw = new List<(string Probe, Exception Error)>();
+
+        IReadOnlyList<RemodelProbeRecord> records = RemodelProbeRunner.RunAll(
+            new[] { "PROBE-12", "PROBE-6" }, RunContext(@"C:\out", host), threw: (probe, thrown) => threw.Add((probe, thrown)));
+
+        var only = Assert.Single(threw);
+        Assert.Equal("PROBE-12", only.Probe);
+        Assert.Same(error, only.Error);
+        Assert.Equal("COMException 0x80004005", records[0].RawResult[RemodelProbeRunner.ErrorKey]);
+    }
+
     // ---- the golden ledger the Python reader is pinned to (004 T336, decision 166A) -------
 
     /// <summary>

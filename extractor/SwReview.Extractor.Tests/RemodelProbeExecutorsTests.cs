@@ -332,18 +332,27 @@ public class RemodelProbeExecutorsTests
     }
 
     [Fact]
-    public void Probe5_ACallThatThrowsWithAPathInItsMessage_RecordsItsTypeAndHresultOnly()
+    public void Probe5_EachCallThatThrowsWithAPathInItsMessage_RecordsItsTypeAndHresultOnly()
     {
         // Owner decision 171A (004 T334): the call's own words may name a path; its type does not.
+        // All three calls throw, so each of the three catches is held to it (004 T342, review
+        // finding F6: with one call throwing, the other two could go back to the message unseen).
         var host = new FakeRemodelProbeHost
         {
+            ReorderFeatureImpl = (_, _, _, _) =>
+                throw new COMException(@"C:\Users\FICT-engineer\Designs\FICT-bracket.SLDPRT is open", unchecked((int)0x80004005)),
             MoveToFolderImpl = (_, _, _, _) =>
                 throw new COMException(@"C:\Users\FICT-engineer\Designs\FICT-bracket.SLDPRT is locked", unchecked((int)0x80004005)),
+            MakeSubFeatureImpl = (_, _, _) =>
+                throw new UnauthorizedAccessException(@"C:\Users\FICT-engineer\Designs\FICT-bracket.SLDPRT is read-only"),
         };
 
         RemodelProbeRecord record = Run("PROBE-5", Context(host));
 
+        Assert.Equal("error: COMException 0x80004005", record.RawResult["reorder_to_folder"]);
         Assert.Equal("error: COMException 0x80004005", record.RawResult["move_to_folder"]);
+        Assert.Equal("error: UnauthorizedAccessException 0x80070005", record.RawResult["make_sub_feature"]);
+        Assert.DoesNotContain(record.RawResult.Values, value => value.Contains("FICT-"));
     }
 
     // ---- PROBE-6: Add3 ---------------------------------------------------------------------

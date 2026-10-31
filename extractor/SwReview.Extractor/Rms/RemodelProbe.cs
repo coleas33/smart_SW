@@ -821,7 +821,8 @@ public static class RemodelProbeRunner
         string probeId,
         RemodelProbeContext context,
         IReadOnlyDictionary<string, RemodelProbeExecutor>? executors = null,
-        Func<long>? elapsedMsFor = null)
+        Func<long>? elapsedMsFor = null,
+        Action<string, Exception>? threw = null)
     {
         if (context == null)
         {
@@ -896,7 +897,8 @@ public static class RemodelProbeRunner
         IReadOnlyList<string> probeIds,
         RemodelProbeContext context,
         IReadOnlyDictionary<string, RemodelProbeExecutor>? executors = null,
-        Action<IReadOnlyList<RemodelProbeRecord>>? finished = null)
+        Action<IReadOnlyList<RemodelProbeRecord>>? finished = null,
+        Action<string, Exception>? threw = null)
     {
         if (probeIds == null)
         {
