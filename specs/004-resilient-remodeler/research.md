@@ -5668,3 +5668,234 @@ unwind and compare identities before the close, skipping the close and delete on
 R25.9's list of what Start waits on.
 
 No code changed; no gate is affected beyond the link and line-ending checks.
+
+## R27 The seat-validation kit, stage 1: crash-safe probe evidence and its reader (decisions 166A and 171A; T330 to T341; 2026-10-31)
+
+**Decisions.** 166A, the owner's, is stage 1 of the seat-validation kit: probe evidence that survives
+a hang or a crash, a reader for the ledger, CI pins that hold each seat switch to committed evidence,
+and fakes tagged with the probe that will check them. 171A lets a scrubbed ledger from the probe's own
+throwaway part be committed under `benchmarks/native/capabilities/` once its exception text is cut to
+the exception's type and a path and name scan passes. Both rows are in `docs/decisions.md` on pull
+request #48. 170A, which the reader applies, makes PROBE-8's numbers the calibration input (T138,
+T187). SOLIDWORKS was not started; everything here is offline and fake-tested, and no switch changes.
+
+### R27.1 The probe log on disk line by line (T330, T331)
+
+`ExtractLog` kept every line in a `StringBuilder` and wrote the file once, in `Dispose`, so a
+`probe remodel` run that hung - PROBE-1's very question - or was stopped with Ctrl+C or crashed left no
+`remodel-probe.log`. It now opens its file once, append, `FileShare.ReadWrite`, auto-flushed, as
+`ExtractionProgress` does, and writes each line as it is logged. An IO failure at the open or at a
+write prints the old "Could not write" line, and the rest goes to the console only; nothing throws. The
+encoding and the append behaviour are unchanged, and so is `SuppressTestTests`.
+
+**Changed on purpose.** `test_workstation_test_plan.py`'s `test_the_lines_step_5_6_reads_are_the_consoles`
+pinned the log written once, in `Dispose`, and the plan's sentence "A run writes its answers file and
+its log only when it ends, so after Ctrl+C neither exists" (step 5.6, item 6). The first now pins the
+line-by-line write; the second is gone, because the sentence is no longer true and the plan documents
+are another lane's (R27.8).
+
+### R27.2 The ledger rewritten as each probe finishes (T332, T333)
+
+`probe remodel` wrote `capabilities/remodel-<version>.yaml` only after `RunAll`, the part's close and
+the settings' restore had all succeeded, so a probe that hung, or any throw after the probes, lost every
+answer. Now:
+
+- `RemodelProbeRunner.RunAll` takes a `finished` callback, called with every row so far as each probe
+  finishes;
+- `RemodelProbeLedger.Recorder(outputDirectory, swVersion, requested, log)` is that callback: it logs
+  `finished PROBE-<n>: <verdict> (<k> of <n>)`, then rewrites the ledger whole through `Write`;
+- `Write` writes a temporary file beside the ledger and replaces the ledger with it (`File.Replace`,
+  or `File.Move` the first time), the `UserSettings.Save` pattern, so a run stopped mid-write leaves the
+  previous ledger, never half of the next;
+- `Render` stays the one renderer and writes a top-level `requested:` list, the probes the run was asked
+  for, before `probes:`, so a ledger a run left behind says which probes never finished. Its items are
+  indented two spaces, `  - "PROBE-1"`, which none of `Show-RemodelLedger`'s four patterns reads;
+- `probe remodel` hands the recorder to `RunAll` inside the toggles and writes no ledger of its own at
+  the end; the end's `Wrote <path>` line names the same file.
+
+What a hang still costs: the row of the probe that hangs, and the settings' restore, as before. The
+regression test reads the file while the third probe's host call is running - what a hang or a kill
+there leaves - and finds the first two rows and all four requested probes.
+
+**Changed on purpose.** `test_the_lines_step_5_6_reads_are_the_consoles` now pins the recorder handed to
+`RunAll` inside the toggles, before the part is closed, and no `RemodelProbeLedger.Write(` at the end;
+`test_the_fixture_ledger_has_the_shape_render_writes` and its helper `rendered_ledger` carry the
+`requested:` list.
+
+**For the plan.** Step 5.6 splits the probes into three runs partly because "a run that hangs loses its
+whole ledger"; that is no longer so for the probes before the one that hangs. Whether to merge the runs
+is the plan's lane's call, but see R27.4 on the five probes Start needs being in one ledger.
+
+### R27.3 Exception text cut to its type and HRESULT (T334, T335)
+
+The ledger's `raw_result` carried exception messages: the runner's `error` for a body that threw, PROBE-5's
+three calls (`"error: " + message`) and PROBE-13's `file_copy_error` and `fallback_error`. A SOLIDWORKS
+or file-system message can name a path, and a path names the user. Each is now `ProbeText.Failure`'s
+`<Type> 0x<HRESULT>` (`COMException 0x80004005`), the form `probe drawings` already prints; an
+`AggregateException` gives each exception it wraps, in order, joined by `; `, and one that wraps nothing
+gives itself, so T171's rule - the host's own exception, never the wrapper's "One or more errors
+occurred." - holds with the type in place of the words. No other probe field holds exception text
+(searched: every `raw[...]` assignment in `RemodelProbeExecutors.cs`).
+
+**Changed on purpose.** The four runner cases that asserted the host's words
+(`Run_ABodyThatThrows_RecordsUnresolvedAndNeverVerified` and the three aggregate cases, renamed from
+`...Message` to say what they now record) and
+`Probe1_HostThrows_RecordsUnresolvedWithTheHostsOwnExceptionTypeAndNoMessage`; `ParkingReorder.HostMessage`'s
+comment now says the ledger must not carry it. Feature 013's FR-052 ("the host's own exception message
+MUST reach the ledger") is superseded on that word by 171A; 013's documents are not this lane's to edit
+(R27.8).
+
+### R27.4 The reader: `swreview remodel ledger` (T336, T337)
+
+`swreview remodel ledger <file> [--json]` (`reviewer/src/swreview/remodel/ledger.py`, wired beside
+`remodel plan`) parses what `Render` writes and prints, per requested probe, its verdict and reason,
+the exception type it threw, or `not finished`; PROBE-11's type names the RMS table does not know; and
+per seat switch, `ready` or every reason not. It prints the file's name, never its folder, and writes
+nothing.
+
+**One golden fixture pins both sides.** `reviewer/tests/fixtures/remodel/ledger/remodel-32.5.0.yaml` is a
+fictional run of the whole catalog that stopped in PROBE-21, each row carrying its definition's own
+question, method and fallback and made-up readings. The C# test
+`Ledger_Render_WritesTheGoldenLedgerTheReaderIsPinnedTo` renders it byte for byte (line ends aside, which
+a checkout may change); the Python tests parse it. Using the catalog's own text also proves the path
+rule passes every probe's question and fallback - PROBE-11's has "CommentsFolder / SelectionSetFolder".
+The parser is `yaml.safe_load` and a strict, closed pydantic model of the renderer's fields, so an
+unknown field, a missing one, a quoted flag or an unknown verdict is refused.
+
+**What it refuses**, before judging, in one line naming the field and never the value:
+
+- **a path**, on every key and value, before the schema is checked, so no later message can repeat
+  one: a drive with either separator at a token boundary (a drive and its backslash anywhere), a UNC
+  share's two backslashes, or a `/` at a token boundary before a non-space - the anchors of the
+  committable-path scanner (`tests/support/local_paths.py`), which a product module cannot import. A test
+  holds the two to the same answer on every sample: `n/a`, `1/2`, `a / b`, a relative
+  `reviewer/src/...` and a URL are not paths;
+- **another version.** The brief named the frozen interop version, `32.5.0.48`. The code's reality
+  differs: the ledger records `ISldWorks.RevisionNumber`, which answers major, service pack and minor -
+  `32.5.0`, as `SwSession.ReadVersion` says and the recorded packages carry - so a ledger with only
+  `32.5.0.48` would refuse every real one. Both spellings of the frozen release are read
+  (`SW_VERSIONS`), and a test pins `FROZEN_INTEROP_VERSION` to the interop manifest's
+  `assembly_version`. A row of another version than its ledger's is refused too;
+- **a shape `probe remodel` does not write**: not YAML, not a mapping, a probe requested twice, two rows
+  for one probe, or a row nobody requested.
+
+**Start** (`RemodelStart.SeatValidated`) is ready only when PROBE-1, 2, 3, 4 and 12 each have a row,
+`verified`, with a `reason` and no `error`, and IDENTITY is calibrated. The reason-and-no-error rule is
+decision 148A's, which the test plan states for PROBE-12's reopen ("its verdict with a reason and no
+`"error":`"); every probe body files a reason, so it is applied to all five. IDENTITY comes from
+`remodel/tolerances.py` (170A: PROBE-8's numbers are the calibration input; T138 sets `calibrated`).
+An `error` that is not `<Type> 0x<HRESULT>` - an earlier build's message - is shown as `(its message is
+not shown)`.
+
+**PROBE-11's unknown names** are the census values (`type[...]` keys) the table neither classifies
+(a class or `ambiguous`) nor names as its folder type, a tolerated type or a derived part's base, once
+each in order; `(unreadable)` is PROBE-11's own `unresolved`, not a name.
+
+**Recorded, not decided** (R27.8): the reader judges one file at a time, and step 5.6's three runs put
+Start's five probes in three ledgers (PROBE-2, 4 and 12; PROBE-3; PROBE-1), so no ledger of today's plan
+can be judged ready. Either the plan puts the five in one run (now safe for the earlier rows, R27.2,
+PROBE-1 last), or the reader learns to judge several ledgers together. And `RemodelStart`'s summary
+allows "the owner's recorded decision" for a blocking probe that is not verified, which no ledger
+carries: such a decision's commit edits the pin with it.
+
+### R27.5 The switch pins (T338)
+
+`reviewer/tests/unit/test_seat_switch_evidence.py` runs in CI, with no build: each switch is read from its
+source by a pattern that must match once, as `test_standards_profile.py` reads the C#.
+
+| Switch | Source | May be true only with |
+|---|---|---|
+| `RemodelStart.SeatValidated` | `extractor/SwReview.Extractor/Rms/RemodelStart.cs` | a ledger under `benchmarks/native/capabilities/` (any depth) that the reader judges ready, IDENTITY calibrated included |
+| `DrawingOpenScope.SeatValidated` | `extractor/SwReview.Extractor/Sw/DrawingOpenScope.cs` | `benchmarks/native/capabilities/drawing-open.md` |
+| `DRAWING_BINDING_VALIDATED` | `reviewer/src/swreview/drawings/binding.py` | `benchmarks/native/capabilities/drawing-binding.md` |
+
+**The drawing switches' evidence has no machine-readable form.** Feature 011's `probe drawings` writes
+`drawings-probe-<time>.txt`, a report of lines; a report with a D6 or D8 section carries design names and
+values and stays in the handoff folder, and only its ids, counts and answers go into 011 research R4
+(011 `contracts/probes.md` sections 1 and 3). So the pins ask for a named file and nothing about its
+content. The expected form, recorded for T077 and T066 and in the folder's README:
+
+- `drawing-open.md`: probe D14's lines with every drawing replaced by `<drawing>`, as the probe prints
+  them, ending with its own reading, `every answer as required` (011 `contracts/probes.md` section 4);
+- `drawing-binding.md`: per known callout of D6 and D8, its id, whether its attached face's persistent
+  reference equals the face phase's, and whether its name's shape matches the part's - ids, booleans and
+  shapes only. `binding.py`'s docstring cites D4, D5, D6 and D8 where 011 `contracts/probes.md` section
+  3, the normative text, names D6 and D8; the file's name is neutral, and which probes it must hold
+  stays T066's.
+
+Every committed ledger is also held to 171A: the reader reads it, the committable-path scanner finds
+no checkout, home or temporary folder in it, and every exception field - the keys read from the C#
+that `ProbeText.Failure` fills, and `error` - holds a type and an HRESULT.
+
+**Mutations**, each made in the worktree, the pins run, and the file restored from git (sha256 equal):
+
+| # | Mutation | Result |
+|---|---|---|
+| M1 | `RemodelStart.SeatValidated => true` | red: the Start pin and the ships-off check |
+| M2 | `DrawingOpenScope.SeatValidated => true` | red: the drawing-open pin and the ships-off check |
+| M3 | `DRAWING_BINDING_VALIDATED: bool = True` | red: the binding pin and the ships-off check |
+| M4 | M1 with the golden ledger committed under `capabilities/` | red: IDENTITY not calibrated |
+| M5 | M4 with `IDENTITY.calibrated=True` | green: the pin admits exactly the evidence it names |
+| M6 | a committed ledger whose PROBE-20 `error` is a message | red: `PROBE-20.error` |
+| M7 | a committed ledger with a drive path in PROBE-3's `tree_before` | red: the reader refuses it (171A) |
+
+### R27.6 The fakes that assume a seat answer (T339)
+
+Each assumption a fake makes about a seat's answer carries one comment beside the member that makes it,
+`seat-assumption: PROBE-<n> <verdict>[|<verdict>] - <what>`, listing the verdicts under which the fake
+still models the seat. A ledger's `unresolved`, or no row, settles nothing; a definite verdict the tag
+does not list refutes it.
+
+| Fake | Probe | Holds under | Assumes |
+|---|---|---|---|
+| `ParkingReorder` (`RemodelProbeHostFakes.cs`) | PROBE-1 | verified, refuted | an illegal reorder's box holds the call until answered |
+| `FakeRemodelDocument.ReorderFeature` (`RemodelFakes.cs`) | PROBE-1 | verified | a reorder never holds the thread: stage 1 runs with `CommandInProgress` set |
+| the same | PROBE-3 | verified | a reorder moves and answers true; a refused one is a bare false, the tree unchanged |
+| `FakeRemodelDocument.InsertFeatureTreeFolder` | PROBE-4 | verified | a folder wraps the selected run; the bridge selects only contiguous members |
+| `Script.equation_wrote_nothing` (`remodel_bridge.py`) | PROBE-6 | verified, refuted | both modelled: an add lands, or adds nothing |
+| `FakeRemodelBridge._wrap` (`remodel_bridge.py`) | PROBE-4 | verified | the host refuses a non-contiguous run of members |
+
+`reviewer/tests/unit/test_seat_assumptions.py` pins each tag above its member and finds none elsewhere in
+the fakes or the support modules; checks every committed ledger refutes none; and, on fictional ledgers,
+goes red for PROBE-4 refuted (both PROBE-4 tags), PROBE-1 refuted (the stage-1 fake's, not
+`ParkingReorder`'s) and PROBE-3 refuted, and stays green for `unresolved` and for all verified.
+Mutations: M8, a committed ledger with PROBE-4 refuted, red; M9, the `InsertFeatureTreeFolder` tag
+removed, red.
+
+### R27.7 Test-first evidence and gates
+
+Failing commits, each on its assertions: T330 (`1a4b0e7`) 2 failures and the plan test; T332 (`782cb1d`)
+5 failures and two plan tests, over seams with no behaviour; T334 (`b7ccd65`) 8 failures; T336
+(`ece9ff0`) 67 failures over a stub reader, the plan tests green. T338 and T339 pin the present state and
+were proven by M1 to M9 instead.
+
+Gates on the final tree (`583f0cb`, before this record):
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero warnings, zero
+  errors.
+- **C# tests.** 10,229 extractor and 4,276 add-in tests passed, none failed or skipped.
+- **Python.** Required-tokenizer non-live suites (`SWREVIEW_TOKENIZER_DIR=C:\t\144a-tok`,
+  `--basetemp` outside the checkout; counted from the progress lines): Python 3.12 18,361 passed and 6
+  skipped; Python 3.11 (`uv run --isolated --python 3.11 --all-extras`) 18,362 passed and 5 skipped;
+  none failed.
+- **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no
+  broken link (`COUNT 0`); every changed file is `i/lf`.
+- **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file: no write path, no
+  allowlist entry and no guard changed.
+
+No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.
+
+### R27.8 Left for others, and what Start waits on
+
+- **The test plan** (another lane's): step 5.6 item 6's "A run writes its answers file and its log only
+  when it ends, so after Ctrl+C neither exists" is no longer true (R27.1, R27.2), and
+  `test_the_lines_step_5_6_reads_are_the_consoles` should pin its replacement; the one-liner
+  `Show-RemodelLedger` gives way to `swreview remodel ledger`; and the three runs keep Start's five
+  probes in three ledgers (R27.4).
+- **One ledger or several** for Start (R27.4): the plan's layout, or a reader that judges several
+  files - not decided here.
+- **Feature 001's CLI contract** (`specs/001-agentic-design-review/contracts/cli.md`) has no row for
+  `swreview remodel ledger`; 001's documents are not this lane's.
+- **Feature 013's FR-052** still says the host's exception *message* reaches the ledger (R27.3).
+- **Start (T172)** now also waits on a ledger committed under `benchmarks/native/capabilities/` that the
+  reader judges ready, beside R25.9's list.
