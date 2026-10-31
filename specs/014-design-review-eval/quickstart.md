@@ -265,7 +265,8 @@ uv run swreview benchmark pilot ../benchmarks/pilots/pane-openai/pilot-off-{1,2,
 Expected: the cost gate printed: the size (repetitions, packages, held-out defects, and the growth
 units to add, each a core case and its fully clean twin, 24A, `cases.md` 6.5), the deciding rules and `alpha`, whether
 the cleared guard decides, both powers, both 5% rates with their Monte Carlo upper bounds, the code
-guard's stress case, the estimated cost, and the study's projected wall clock at `--jobs <N>` (owner
+guard's stress case, the estimated cost with the basis its package runs were priced on (until probe
+L1, cached input priced as uncached, so the estimate is high; owner decision 166A), and the study's projected wall clock at `--jobs <N>` (owner
 decision 36A: per run and for the study, from the pilot's off-arm times and the on arm's ratio from
 P0, beside the mean tokens per minute of one review); the never-detected held-out defects each listed
 with the findings on their parts or documents. The file holds `"approval": {"approved": false,

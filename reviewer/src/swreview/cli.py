@@ -3310,6 +3310,17 @@ def benchmark_pilot(
     def shown(value: object) -> str:
         return "unknown" if value is None else str(value)
 
+    # The pricing notes of the package runs the mean cost averages (`pilot.measure`: completed
+    # and priced), in the scorecard's words: until probe L1, OpenAI's prices cached input as
+    # uncached (owner decision 166A).
+    basis = dict.fromkeys(
+        note
+        for record in records
+        for score in record.study_run.scorecard.per_package
+        if score.run_status.kind == "completed" and score.cost.amount is not None
+        for note in score.cost.basis
+    )
+
     lines = [
         f"wrote {out} (unapproved)",
         f"result: {result.state}",
@@ -3330,6 +3341,7 @@ def benchmark_pilot(
         f"stress case (shown, never bounded): {shown(result.stress_case)}",
         f"estimated study cost: {shown(result.estimated_study_cost)} "
         "(off-arm package-run mean for both arms)",
+        *(f"estimated study cost basis: {note}" for note in basis),
         f"mean package-run cost: {shown(cost_time.mean_cost)}; "
         f"cost unknown: {cost_time.unknown_cost_count} package runs left out",
         f"mean package-run wall clock: {shown(cost_time.mean_wall_clock_s)} s",
