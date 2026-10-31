@@ -13,9 +13,10 @@ problem and is reported as a skip, so a throttled account never turns into a red
 
 Skipped without `OPENAI_API_KEY`, through `tests/conftest.py` (the same convention the
 `integration` marker uses), so a checkout with no key runs the suite unchanged. The model
-is `SWREVIEW_LIVE_MODEL` when set: strict-mode acceptance is a property of the endpoint,
+is `SWREVIEW_LIVE_MODEL` when set, else `gpt-5.6-sol` (`agent/settings.PAID_TEST_MODEL`, owner
+decision 174A): strict-mode acceptance is a property of the endpoint,
 not of one model, and a seat without access to the default should still be able to prove
-its schemas. The literal here is a test fixture, not a product default - `agent/settings.py`
+its schemas. It is a paid test run's model, not a product default - `agent/settings.py`
 owns the per-provider default model (FR-026).
 """
 
@@ -28,11 +29,12 @@ import pytest
 
 from swreview.agent.providers.openai_provider import tool_param
 from swreview.agent.providers.schema import tool_spec
+from swreview.agent.settings import PAID_TEST_MODEL
 from swreview.tools.registry import REGISTRATIONS, bridge_tools
 
 pytestmark = pytest.mark.live
 
-MODEL = os.environ.get("SWREVIEW_LIVE_MODEL", "gpt-5.6")
+MODEL = os.environ.get("SWREVIEW_LIVE_MODEL") or PAID_TEST_MODEL
 MIN_OUTPUT_TOKENS = 16
 """This test wants no output at all; the API requires the field to be at least 16."""
 

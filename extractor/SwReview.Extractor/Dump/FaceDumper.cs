@@ -262,12 +262,18 @@ public sealed class FaceDumper : IFaceSource
     private void SweepEveryFace(DumpScope scope, List<FaceGeometry> faces)
     {
         SwGate gate = _session.Gate;
+        var documentNodes = new DocumentNodePass(scope);
 
         foreach (ScopedComponent component in scope.Components)
         {
-            if (component.Node.Suppression != SuppressionState.Resolved
-                || !(component.Node.Handle is IComponent2 handle))
+            if (component.Node.Suppression != SuppressionState.Resolved)
             {
+                continue;
+            }
+
+            if (!(component.Node.Handle is IComponent2 handle))
+            {
+                documentNodes.Skip(component);
                 continue;
             }
 
@@ -286,6 +292,7 @@ public sealed class FaceDumper : IFaceSource
                 continue;
             }
 
+            documentNodes.Reached(component);
             foreach (object bodyItem in bodies)
             {
                 if (!(bodyItem is IBody2 body)
@@ -317,5 +324,7 @@ public sealed class FaceDumper : IFaceSource
                 }
             }
         }
+
+        documentNodes.Record("face", "its faces were not read", assemblyNotRead: null);
     }
 }

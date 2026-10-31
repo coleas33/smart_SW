@@ -509,7 +509,7 @@ def test_the_typed_package_time_limit_is_recorded_as_package_time_limit_s(
 
 
 @pytest.mark.parametrize("study", [PANE_STUDY, PRIVATE_PANE_STUDY])
-@pytest.mark.parametrize("scenario", ["missing", "priced", "lever", "synthetic"])
+@pytest.mark.parametrize("scenario", ["missing", "default", "priced", "lever", "synthetic"])
 def test_a_pane_study_refuses_a_model_the_price_table_cannot_price(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -519,7 +519,9 @@ def test_a_pane_study_refuses_a_model_the_price_table_cannot_price(
 ) -> None:
     """T201, RF-79: known cost before a pane study; lever and synthetic controls pass.
 
-    Owner decision 94A: OpenAI and the scripted provider cover this row; no Gemini case.
+    Owner decision 94A: OpenAI and the scripted provider cover this row; no Gemini case. The
+    `default` case, `gpt-5.6`, has no price row by design (102A), so its refusal never asks for
+    one (174A; 014 T269).
     """
     from tests.unit.test_benchmark_run_pane_study import EXAMPLE, OFF_ARM, checkout, point_at
     from tests.unit.test_cli import RecordingProvider
@@ -556,7 +558,7 @@ def test_a_pane_study_refuses_a_model_the_price_table_cannot_price(
     })
     monkeypatch.setattr(prices, "load_prices", lambda: table)
     provider = "fake" if scenario == "synthetic" else "openai"
-    model = "fictional-priced" if scenario == "priced" else "fictional-unpriced"
+    model = {"priced": "fictional-priced", "default": "gpt-5.6"}.get(scenario, "fictional-unpriced")
     actual_study = "tool_tiers" if scenario == "lever" else study
     out = tmp_path / "runs" / scenario
 
@@ -571,7 +573,19 @@ def test_a_pane_study_refuses_a_model_the_price_table_cannot_price(
         assert result.exit_code == 1, result.stdout + result.stderr
         assert one_line(result) == (
             "error: ValueError: no price for openai fictional-unpriced in benchmark/prices.yaml: "
-            "a pane study's cost must be known (SC-008); add the entry with its source and date"
+            "a pane study's cost must be known (SC-008); name a priced model, as a paid test run "
+            "names --model gpt-5.6-sol (owner decision 174A), or add the entry with its source "
+            "and date"
+        )
+        assert reviews == []
+        assert not out.exists()
+    elif scenario == "default":
+        assert result.exit_code == 1, result.stdout + result.stderr
+        assert one_line(result) == (
+            "error: ValueError: no price for openai gpt-5.6 in benchmark/prices.yaml: "
+            "a pane study's cost must be known (SC-008); name a priced model, as a paid test run "
+            "names --model gpt-5.6-sol (owner decision 174A); gpt-5.6 is priced by the variant "
+            "that answers (owner decision 102A)"
         )
         assert reviews == []
         assert not out.exists()

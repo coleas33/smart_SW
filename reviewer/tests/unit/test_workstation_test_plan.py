@@ -1830,7 +1830,14 @@ def test_the_start_switch_waits_on_the_blocking_probes_then_a_real_plan(plan: st
     assert handover.index("first step 21's blocking probes") < handover.index(
         "then step 5.3's Plan on one real part's copy"
     )
-    assert "- [ ] T180 " in tasks and "**Blocks setting T172's switch**" in tasks
+    # Owner decision 168A (2026-10-31; 004 research R26.5): T180 is closed on its brief; 170A
+    # (R26.7) has T138 and T187 block the switch.
+    assert "- [x] T180 " in tasks
+    assert "*Closed 2026-10-31 (owner decision 168A; research R26.5):*" in tasks
+    blocks = "**Blocks setting T172's switch**"
+    assert blocks in tasks
+    for task_id in ("T138", "T187"):
+        assert blocks in line_starting(tasks.splitlines(), f"- [ ] {task_id} "), task_id
 
 
 def test_the_owners_parts_give_004_t003_its_packages_and_no_name(plan: str) -> None:

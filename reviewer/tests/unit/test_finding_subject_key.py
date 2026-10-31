@@ -216,6 +216,21 @@ def test_the_key_is_hashable_so_findings_compare_as_multisets() -> None:
     assert list(counts.values()) == [2]
 
 
+def test_hole_instances_among_the_inputs_tell_two_joints_apart() -> None:
+    """A joint finding's inputs are hole instances as the joint map numbers them
+    (`checks/joints.py`); two joints on one pair of components differ by nothing else (008 T132)."""
+    first = finding(check="hole.nominal_alignment", inputs=["hol:0004#1", "hol:0010#1"])
+    second = finding(check="hole.nominal_alignment", inputs=["hol:0004#2", "hol:0010#2"])
+
+    assert finding_subject_key(first) != finding_subject_key(second)
+    assert finding_subject_key(first)[3] == ("hol:0004#1", "hol:0010#1")
+
+
+@pytest.mark.parametrize("text", ["hol:0001#0", "hol:0001#", "hol:0001#a", "hol:0001#1#2"])
+def test_entity_id_refuses_a_malformed_hole_instance(text: str) -> None:
+    assert not ENTITY_ID.match(text)
+
+
 @pytest.mark.parametrize("text", ["cmp:0001", "feat:12345", "hole:0007", "int:0113"])
 def test_entity_id_matches_the_ir_shape(text: str) -> None:
     assert ENTITY_ID.match(text)

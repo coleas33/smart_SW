@@ -13,10 +13,12 @@ folder_type: FtrFolder
 end_tag_suffix: "___EndTag___"
 # Class sets are disjoint: every type name has at most one class. A rule that needs a union
 # names the classes (rules.md "Class vocabulary").
+# RevCut and Helix are the 2024 SP5 names of CutRevolve and HelixCurve, read on the committed
+# replay fixtures (sw_version 32.5.0); both spellings are kept (owner decision 166A).
 classes:
   sketch: [ProfileFeature, 3DProfileFeature]
   solid: [Extrusion, Revolution, Sweep, Loft, Boss, Thicken, BaseFlange, Boundary, ImportedFeature]
-  cut: [Cut, CutRevolve, SweepCut, LoftCut]
+  cut: [Cut, CutRevolve, RevCut, SweepCut, LoftCut]
   hole: [HoleWzd, SimpleHole, Hole]
   fillet: [Fillet]
   chamfer: [Chamfer]
@@ -24,7 +26,7 @@ classes:
   draft: [Draft]
   pattern: [LPattern, CirPattern, MirrorPattern, MirrorSolid, CurvePattern, TablePattern, FillPattern, DerivedLPattern]
   reference: [RefPlane, RefAxis, CoordSys, RefPoint, OriginProfileFeature]
-  construction: [SurfaceExtrude, SurfaceRevolve, SurfaceSweep, SurfaceLoft, SurfaceKnit, SurfaceTrim, SurfaceExtend, SurfacePlanar, SurfaceOffset, SurfaceRuled, SurfaceRadiate, SurfaceFill, CompositeCurve, "Reference Curve", ProjectionCurve, HelixCurve, SplitLine, SurfaceCut]
+  construction: [SurfaceExtrude, SurfaceRevolve, SurfaceSweep, SurfaceLoft, SurfaceKnit, SurfaceTrim, SurfaceExtend, SurfacePlanar, SurfaceOffset, SurfaceRuled, SurfaceRadiate, SurfaceFill, CompositeCurve, "Reference Curve", ProjectionCurve, HelixCurve, Helix, SplitLine, SurfaceCut]
 # Material of unknown kind. The source keeps ICE in both its cut and hole sets because its
 # own recipe builds holes as cuts; on a real part an ICE boss would then read as a hole. Here
 # ICE counts as material for the group-content rule and is unresolved for holes_last.

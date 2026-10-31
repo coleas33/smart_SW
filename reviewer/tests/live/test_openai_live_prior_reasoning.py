@@ -15,7 +15,8 @@ fallback leaves (test-plan step 2.7, 013 T153). The adapter raises its own `Open
 named by the `openai` exception it came from, so that is what is read.
 
 Skipped without `OPENAI_API_KEY`, like `test_openai_live_schemas.py`; the model is
-`SWREVIEW_LIVE_MODEL` when set (a reasoning model: with none, there is nothing to leave out). A
+`SWREVIEW_LIVE_MODEL` when set, else `gpt-5.6-sol` (`agent/settings.PAID_TEST_MODEL`, owner decision
+174A), a reasoning model: with none, there is nothing to leave out. A
 `401`, `429` or `5xx` is an environment problem and is reported as a skip. It costs a few thousand
 tokens.
 """
@@ -29,12 +30,13 @@ import openai
 import pytest
 
 from swreview.agent.providers.openai_provider import OpenAIProvider, OpenAIProviderError
+from swreview.agent.settings import PAID_TEST_MODEL
 from tests.support.toolsets import toolset
 from tests.unit.test_openai_provider import FakeTool, Sink
 
 pytestmark = pytest.mark.live
 
-MODEL = os.environ.get("SWREVIEW_LIVE_MODEL", "gpt-5.6")
+MODEL = os.environ.get("SWREVIEW_LIVE_MODEL") or PAID_TEST_MODEL
 CEILING = 2_000
 ENVIRONMENT = frozenset(
     {

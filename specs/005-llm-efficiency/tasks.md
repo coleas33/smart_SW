@@ -282,6 +282,17 @@ Ordered so each lever is measured against a baseline the next one has not alread
 
 ---
 
+## Amendment 2026-10-31 (owner decision 166A): the pilot's estimate says how its costs were priced
+
+Until probe L1 (T025) records that cached input is contained in input, an OpenAI cost prices cached input at the uncached rate and says so in its basis (`benchmark/prices.py`, `price_rounds`), so the study cost `benchmark pilot` estimates from the pilot's mean package-run cost (feature 014's cost gate) is deliberately high. The cost gate printed the estimate without that note.
+
+- [x] T111 [P] Test first. In `reviewer/tests/unit/test_benchmark_pilot.py`: `test_the_estimate_is_printed_with_the_basis_its_averaged_costs_were_priced_on` - pilot runs whose completed, priced package runs carry the basis "cached input priced as uncached: containment unverified (probe L1)" and whose one behavioural stop carries another; the line after `estimated study cost: ...` is `estimated study cost basis: ` and that note, in the scorecard's own words, and no line names the stopped run's note, which the estimate does not average. Acceptance observed before T112: 1 failure on its assertion (the next line is the mean package-run cost)
+- [x] T112 Implement T111 in `benchmark pilot` (`reviewer/src/swreview/cli.py`): after the estimate, one `estimated study cost basis: <note>` line per distinct note the pilot's completed, priced package runs carry, first seen first - the package runs `pilot.measure` averages - read from each scorecard's `cost.basis`, so the words are `prices.price_rounds`' own and no second source of them exists; nothing is printed when they carry none, and the measurement file does not change. Feature 014's quickstart P2 names the line. Acceptance: T111 green; `test_benchmark_pilot.py` green
+- [x] T113 [P] Test first, the review of T112 (2026-10-31). In `reviewer/tests/unit/test_benchmark_pilot.py`, `test_the_estimate_is_printed_with_the_basis_its_averaged_costs_were_priced_on` is changed deliberately, its assertions kept: parametrized over the twin's first run left out of the average, the behavioural stop it had or a completed run whose cost is unknown (whose note no test guarded), and asking `pilot.cost_basis(records)` for the same one note the cost gate prints. T112 rebuilt `pilot.measure`'s averaged set in `cli.py` with its own filter, so the two could drift. Acceptance observed before T114: 2 failures, `pilot.cost_basis` missing
+- [x] T114 Implement T113 in `reviewer/src/swreview/benchmark/pilot.py`: `_averaged` yields the package scores `measure`'s cost and time means read (the main runs `verdict.study_stats` counts), and `cost_basis` the distinct basis notes of those whose cost is known; `measure` and `benchmark pilot` (`cli.py`) both read them, so one predicate says what the estimate averages. The measurement file and the printed lines are unchanged. Acceptance: T113 green; `test_benchmark_pilot.py` green
+
+---
+
 ## Dependencies
 
 - **T001 to T036 (Phase 1) block everything.** No lever is measurable before the measurement layer lands and is believed. T017 and T018 in particular are the one contract edit and one golden refresh paid once for all ten flags.
@@ -297,6 +308,8 @@ Ordered so each lever is measured against a baseline the next one has not alread
 - **T057 (the tool-name histogram) ships with lever 2, not after it.** The token count is arithmetic; which tool the model picks is the thing that needs watching.
 - **Levers 5 and 7 are never in the same arm** until each has been gated alone: T078 runs with `coverage_stop` off, T084 runs with `prerun_checks` off, and the ledger must show it.
 - **T073 (lever 6) is measured against the lever-5-off baseline**, and therefore before T078 changes what a baseline means.
+- **T111 before T112** (owner decision 166A, 2026-10-31): the cost gate's basis line; it waits on no lever and no probe, and T025 changes only what the line says.
+- **T113 before T114** (review of T112, 2026-10-31): one definition of the package runs the estimate averages.
 
 ## Parallel execution guidance
 

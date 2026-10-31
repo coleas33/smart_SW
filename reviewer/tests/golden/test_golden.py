@@ -104,12 +104,18 @@ def test_a_case_callable_must_name_an_attribute() -> None:
         resolve_callable("swreview.ir.summary")
 
 
-@pytest.mark.parametrize("fixture_dir", FIXTURE_DIRS, ids=lambda path: path.name)
-def test_golden_case(fixture_dir: Path, data_regression: DataRegressionFixture) -> None:
+def golden_result(fixture_dir: Path) -> Any:
+    """What a case's callable returns over its package, in the JSON form the baseline holds: the
+    one runner, so another module that grades a case grades it as this one does."""
     case = json.loads((fixture_dir / "case.json").read_text(encoding="utf-8"))
     function = resolve_callable(case["callable"])
 
     loaded = load_package(fixture_dir)
     result = function(loaded.package, **case.get("kwargs", {}))
 
-    data_regression.check({"result": to_jsonable_python(result)}, basename=fixture_dir.name)
+    return to_jsonable_python(result)
+
+
+@pytest.mark.parametrize("fixture_dir", FIXTURE_DIRS, ids=lambda path: path.name)
+def test_golden_case(fixture_dir: Path, data_regression: DataRegressionFixture) -> None:
+    data_regression.check({"result": golden_result(fixture_dir)}, basename=fixture_dir.name)

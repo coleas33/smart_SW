@@ -136,7 +136,7 @@ read or write; no token is added. No command, secret, guard key or allowlist ent
 *Amended on the third review (`research.md` R25.12):* the open asks again after its last native call and
 before its session is published, since a native call such as `OpenDoc7` or the rebuild can pump the
 queue the close was posted to; a folder recorded meanwhile fails the open through its own unwind - the
-copy it opened closed by its path and deleted (no COM-identity comparison at that close; research R25.13), the settings put back, `remodel.open`'s
+copy it opened closed and deleted once the document open at the copy's path is the one it opened, or none is (owner decision 165A; research R25.13, R26.1, R26.10), the settings put back, `remodel.open`'s
 failure told - and answers `target_mismatch`. The backend reads that token as `RunFolderFailed`, which is
 not marked retryable, though another Plan works.
 
@@ -313,10 +313,14 @@ Sequence, in order, with the call that performs each step:
     with `preexisting_rebuild_errors`, **delete the copy and close the document**: the part was
     already broken and nothing after this point could be attributed to the run. This is the one
     refusal in the feature that happens after a copy exists, which is why it is the one refusal
-    that has to clean up after itself.
+    that has to clean up after itself. *Amended 2026-10-31 (owner decision 165A's second review round;
+    `research.md` R26.11):* when the unwind below leaves the copy, the open answers `target_mismatch`
+    instead, because the backend answers `preexisting_rebuild_errors` as a copy deleted and the host
+    then deletes `copy/` (`backend-remodel.md`).
 12. Re-read the same scope signals, this time **on the copy**, and compare them field for field
     with the probe's. A difference is `scope_changed`: the document being changed is not the one
-    the verdict was reached on, and the run stops with the copy deleted. This costs one pass over
+    the verdict was reached on, and the run stops with the copy deleted, unless the unwind below
+    leaves it (`research.md` R26.1). This costs one pass over
     the tree and closes the only gap the two-step ordering opens. *Amended 2026-09-26 (a design
     choice, `tasks.md` T174; landed 2026-09-27):* the folder row is compared position by position
     by each folder's name (ordinal) and member count, not by its members' persist-ref strings,
@@ -333,6 +337,21 @@ copy deleted whatever the close did, and all four settings restored - each step 
 the others did, and none of their failures replaces the error the open answers. The ending is then
 told to `BridgeServices.RemodelSessionEnded` with the reason `remodel.open`, `copy_closed` true when
 no document was opened, and `verified` and `tag_removed` false.
+
+*Amended 2026-10-31 (owner decision 165A; `research.md` R25.13, R26.1):* when a document handle came back, the unwind
+first asks `VerifyTarget`'s check 3's two reads - the handle's COM identity and that of the document SOLIDWORKS has open
+at the copy's path. The same identity, or nothing open there, is closed and deleted as above. Another document there - the
+copy closed and opened again underneath the open while a native call pumped - or reads that throw: nothing is closed and
+the copy's file is not deleted, `copy_closed` is false, and a failure that names no path says why; in place of
+`unwind.DeleteCopy`'s markers the run's `remodel.log` gets one fixed marker, `skipped unwind.DeleteCopy: ...`
+(`run-artifacts.md`). The settings are put back and the ending told either way. *Amended on its review round
+(`research.md` R26.10):* a close that is not confirmed - it threw, or the copy is still open - is followed by the same two
+reads before the delete, since `CloseDoc` or its confirmation may have pumped an action that opened the copy again: the
+open's own document, or none, is deleted as above; another document, or reads that throw, keep the file and write the
+same marker. The failure sentences reach neither the Remodel tab, which hears only that the copy may still be open, nor
+a log; the marker is the record of a copy left. *Amended on its second review round (`research.md` R26.11):* an open
+stopped with `preexisting_rebuild_errors` whose unwind left the copy answers `target_mismatch` (step 11), in a sentence
+that names the rebuild errors and the copy left and no path; any other failure is answered as before.
 
 *Amended 2026-09-28 (U27; default taken 2026-09-28, the owner may revise; `tasks.md` T185,
 research R16.1):* each step above that calls SOLIDWORKS, and the file work between them, is marked
@@ -830,15 +849,15 @@ stays unknown and is never guessed into the nearest class.
 | `not_a_part` | Source is not an existing `.SLDPRT` | `RemodelPreflightError` | Refused before the copy |
 | `source_not_open` | `remodel.probe_scope` was asked about a source SOLIDWORKS does not have open | `RemodelPreflightError` | Refused before the copy; the source is never opened to answer |
 | `scope_not_probed` | `remodel.open` was called with a `probe_id` this session did not mint, or one minted for a different source path | `RemodelContractError` | Refused before the copy; this is a bug in the caller, not a condition |
-| `scope_changed` | The copy's scope signals differ from the probe's | `RemodelTargetError` | Run aborts; the copy is deleted |
+| `scope_changed` | The copy's scope signals differ from the probe's | `RemodelTargetError` | Run aborts; the copy is deleted, unless the unwind leaves it (R26.1) |
 | `source_dirty` | The open source has unsaved changes | `RemodelPreflightError` | Refused before the copy |
 | `external_refs` | `ListExternalFileReferencesCount2() != 0` | `RemodelPreflightError` | Refused before the copy |
 | `copy_exists` | The destination already exists | `RemodelPreflightError` | Refused; the run never overwrites |
 | `copy_failed` | Both the copy and the stream fallback failed | `RemodelPreflightError` | Refused |
-| `open_failed` | `OpenDoc7` returned no document or the wrong path | `RemodelTargetError` | Run aborts; the copy is deleted |
-| `tag_failed` | The session tag did not write or did not read back | `RemodelTargetError` | Run aborts; the copy is deleted |
-| `preexisting_rebuild_errors` | The part was already broken at baseline | `RemodelPreflightError` | Refused **after** the copy exists, because the reading needs a rollback and a rebuild; the handler deletes the copy and closes the document before it answers |
-| `target_mismatch` | One of `VerifyTarget`'s four checks failed; *amended 2026-10-29 (R25.11):* or a `remodel.open` of a run folder the host's cleanup ended, refused before any read or write | `RemodelTargetError` | Run aborts with the change log intact |
+| `open_failed` | `OpenDoc7` returned no document or the wrong path | `RemodelTargetError` | Run aborts; the copy is deleted, unless the unwind leaves it (R26.1) |
+| `tag_failed` | The session tag did not write or did not read back | `RemodelTargetError` | Run aborts; the copy is deleted, unless the unwind leaves it (R26.1) |
+| `preexisting_rebuild_errors` | The part was already broken at baseline | `RemodelPreflightError` | Refused **after** the copy exists, because the reading needs a rollback and a rebuild; the handler deletes the copy and closes the document before it answers; *amended 2026-10-31 (R26.11):* when its unwind leaves the copy, the open answers `target_mismatch` instead |
+| `target_mismatch` | One of `VerifyTarget`'s four checks failed; *amended 2026-10-29 (R25.11):* or a `remodel.open` of a run folder the host's cleanup ended, refused before any read or write; *amended 2026-10-31 (R26.11):* or a `remodel.open` stopped for rebuild errors whose unwind left the copy | `RemodelTargetError` | Run aborts with the change log intact |
 | `session_mismatch` | A command after `remodel.open` names another run than the one whose session the bridge holds ("The commands"; owner decision 159A, protocol 1.5) | `RemodelTargetError` | Refused before any read or write, the session it reached left as it was; the run that sent it aborts with its change log intact |
 | `guard_refused` | The member is not on the stage-1 allowlist | `RemodelGuardError` | Run aborts; this is a bug, not a condition |
 | `persist_ref_unresolved` | `GetObjectByPersistReference3` returned an error code | `RemodelAddressError` | The change fails and the run stops |
