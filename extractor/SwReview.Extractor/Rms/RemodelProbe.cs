@@ -815,7 +815,10 @@ public static class RemodelProbeRunner
     /// Runs one probe. <paramref name="executors"/> defaults to
     /// <see cref="RemodelProbeExecutors.ByProbeId"/>; a caller passes its own map only to test
     /// this method's own rules (a body that throws, a body that answers) without depending on
-    /// which bodies this build ships.
+    /// which bodies this build ships. <paramref name="threw"/>, when given, is handed the probe's
+    /// id and the exception its body threw (004 T343): the row keeps only its type (owner
+    /// decision 171A), so <c>probe remodel</c> hands the whole exception to its log, which is never
+    /// committed, and a seat failure can still be read there.
     /// </summary>
     public static RemodelProbeRecord Run(
         string probeId,
@@ -849,6 +852,7 @@ public static class RemodelProbeRunner
             }
             catch (Exception error)
             {
+                threw?.Invoke(definition.Id, error);
                 reading = new RemodelProbeReading(
                     RemodelProbeVerdict.Unresolved,
                     new Dictionary<string, string>(StringComparer.Ordinal) { [ErrorKey] = HostFailure(error) });
@@ -892,6 +896,7 @@ public static class RemodelProbeRunner
     /// given, is called with every row so far as each probe finishes (004 T333, decision 166A):
     /// <c>probe remodel</c> hands it <see cref="RemodelProbeLedger.Recorder"/>, so a probe that
     /// hangs, or a run that dies later, keeps every earlier probe's row on disk.
+    /// <paramref name="threw"/> is <see cref="Run"/>'s, for every probe.
     /// </summary>
     public static IReadOnlyList<RemodelProbeRecord> RunAll(
         IReadOnlyList<string> probeIds,
@@ -908,7 +913,7 @@ public static class RemodelProbeRunner
         var records = new List<RemodelProbeRecord>(probeIds.Count);
         foreach (string id in probeIds)
         {
-            records.Add(Run(id, context, executors));
+            records.Add(Run(id, context, executors, threw: threw));
             finished?.Invoke(records.ToArray());
         }
 
@@ -1176,6 +1181,14 @@ public static class RemodelProbeLedger
     /// ledger rewritten whole with every row so far and the probes <paramref name="requested"/>.
     /// A probe that hangs, or a run that dies in a later probe, the part's close or the settings'
     /// restore, keeps every earlier row.
+    ///
+    /// Making it starts the ledger (004 T343): this run's requested list and no rows, written at
+    /// once, so an earlier run's ledger in the same folder never stands for this one - not even
+    /// when the first probe hangs. That write throws if it cannot be made, and <c>probe remodel</c>
+    /// makes the recorder before it builds anything. A rewrite after a probe never throws: one
+    /// the file system refuses (a reader holding the ledger, a full disk) is logged as one line
+    /// naming the file and the exception's type, the run goes on, and the next rewrite carries
+    /// every row.
     /// </summary>
     public static Action<IReadOnlyList<RemodelProbeRecord>> Recorder(
         string outputDirectory, string swVersion, IReadOnlyList<string> requested, Action<string> log)
@@ -1190,13 +1203,24 @@ public static class RemodelProbeLedger
             throw new ArgumentNullException(nameof(log));
         }
 
+        Write(outputDirectory, swVersion, Array.Empty<RemodelProbeRecord>(), requested: requested);
+        string name = Path.GetFileName(FilePath(outputDirectory, swVersion));
+
         return finished =>
         {
             RemodelProbeRecord last = finished[finished.Count - 1];
             log($"finished {last.ProbeId}: {last.Verdict.CliName()} "
                 + $"({finished.Count.ToString(CultureInfo.InvariantCulture)} of "
                 + $"{requested.Count.ToString(CultureInfo.InvariantCulture)})");
-            Write(outputDirectory, swVersion, finished, requested: requested);
+            try
+            {
+                Write(outputDirectory, swVersion, finished, requested: requested);
+            }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+            {
+                log($"could not rewrite {name} after {last.ProbeId} ({ProbeText.Failure(error)}): it lacks "
+                    + "the rows since its last rewrite until a later one succeeds");
+            }
         };
     }
 

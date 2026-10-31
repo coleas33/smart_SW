@@ -1469,6 +1469,14 @@ public static class Program
 
                 IReadOnlyList<RemodelProbeRecord>? records = null;
                 string ledgerPath = RemodelProbeLedger.FilePath(settings.OutputDirectory, swVersion);
+
+                // The ledger is started here, before anything is built - this run's requested
+                // list and no rows, so an earlier run's never stands for it - and rewritten as
+                // each probe finishes (004 T333 and T343, decision 166A), so a probe that hangs,
+                // or a throw from the close or the settings' restore below, keeps every earlier
+                // probe's row.
+                Action<IReadOnlyList<RemodelProbeRecord>> recorder = RemodelProbeLedger.Recorder(
+                    settings.OutputDirectory, swVersion, settings.ProbeIds, log.Write);
                 RemodelSystemToggles.Within(host, gate, () =>
                 {
                     // If BuildPart itself throws partway through the recipe, SOLIDWORKS may be
@@ -1482,14 +1490,14 @@ public static class Program
                     {
                         var context = new RemodelProbeContext(part, gate, swVersion, host, settings.OutputDirectory);
 
-                        // The ledger is rewritten as each probe finishes (004 T333, decision
-                        // 166A), so a probe that hangs, or a throw from the close or the
-                        // settings' restore below, keeps every earlier probe's row.
+                        // A thrown probe's ledger row keeps only the exception's type (decision
+                        // 171A); its message goes to this log, which is never committed (004 T343).
                         records = RemodelProbeRunner.RunAll(
                             settings.ProbeIds,
                             context,
-                            finished: RemodelProbeLedger.Recorder(
-                                settings.OutputDirectory, swVersion, settings.ProbeIds, log.Write));
+                            finished: recorder,
+                            threw: (probe, error) => log.WriteError(
+                                $"{probe} threw; its message is kept in this log, never the ledger:", error));
                     }
                     finally
                     {
