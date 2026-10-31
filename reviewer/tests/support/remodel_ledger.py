@@ -5,7 +5,8 @@ from `tests/unit/test_workstation_test_plan.py` (004 T336) so the plan's `Show-R
 and `swreview remodel ledger`'s tests build theirs one way. The plan test pins the prefixes it
 relies on against the C# source, and `GOLDEN_LEDGER` - which the C# test
 `RemodelProbeTests.Ledger_Render_WritesTheGoldenLedgerTheReaderIsPinnedTo` renders byte for byte -
-pins the whole shape for the reader.
+pins the whole shape for the reader. `committed_ledgers` is what the CI pins read from
+`CAPABILITIES` (004 T338 and T339).
 """
 
 from __future__ import annotations
@@ -13,12 +14,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-__all__ = ["GOLDEN_LEDGER", "rendered_ledger"]
+__all__ = ["CAPABILITIES", "GOLDEN_LEDGER", "committed_ledgers", "rendered_ledger"]
 
 GOLDEN_LEDGER = (
     Path(__file__).resolve().parents[1] / "fixtures" / "remodel" / "ledger" / "remodel-32.5.0.yaml"
 )
 """A fictional run of the whole probe catalog that stopped in its last probe, PROBE-21."""
+
+CAPABILITIES = Path(__file__).resolve().parents[3] / "benchmarks" / "native" / "capabilities"
+"""Where seat evidence is committed (decision 171A; its README)."""
+
+
+def committed_ledgers(root: Path = CAPABILITIES) -> list[Path]:
+    """Every probe ledger under `root`, at any depth: each `probe remodel` run's folder may be
+    kept whole, so two runs' ledgers can share a name."""
+    return sorted(root.rglob("remodel-*.yaml")) if root.is_dir() else []
 
 
 def rendered_ledger(

@@ -20,6 +20,7 @@ public enum ReorderAttempt
     Parks,
 }
 
+// seat-assumption: PROBE-1 verified|refuted - an illegal reorder's "Cannot reorder" box holds the call until it is answered
 /// <summary>
 /// PROBE-1's <c>ReorderFeature</c>, scripted by the <c>CommandInProgress</c> flag each attempt sees,
 /// with a block the test controls rather than a clock (013 contracts/readings.md section 4, 004 T171).

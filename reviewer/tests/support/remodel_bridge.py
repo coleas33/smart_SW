@@ -158,6 +158,7 @@ class Script:
     write is judged by the re-read, never by the answer" drivable from this end.
     """
 
+    # seat-assumption: PROBE-6 verified|refuted - both modelled: an add lands, or adds nothing
     equation_wrote_nothing: frozenset[int] = frozenset()
     """The ordinals at which `remodel.equation` answers `ok` and writes nothing.
 
@@ -626,6 +627,7 @@ class FakeRemodelBridge:
             )
         return index
 
+    # seat-assumption: PROBE-4 verified - the host refuses a non-contiguous run of members
     def _wrap(self, name: str, members: tuple[str, ...]) -> str:
         """Select a contiguous run, wrap it, name it, and record the folder location.
 

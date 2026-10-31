@@ -35,10 +35,9 @@ import pytest
 from swreview.remodel.ledger import Ledger, load_ledger, start_readiness
 from swreview.remodel.tolerances import IDENTITY, Tolerances
 from tests.support import local_paths
-from tests.support.remodel_ledger import GOLDEN_LEDGER
+from tests.support.remodel_ledger import CAPABILITIES, GOLDEN_LEDGER, committed_ledgers
 from tests.support.seat_tasks import REPO
 
-CAPABILITIES = REPO / "benchmarks" / "native" / "capabilities"
 START_SOURCE = REPO / "extractor" / "SwReview.Extractor" / "Rms" / "RemodelStart.cs"
 DRAWING_OPEN_SOURCE = REPO / "extractor" / "SwReview.Extractor" / "Sw" / "DrawingOpenScope.cs"
 BINDING_SOURCE = REPO / "reviewer" / "src" / "swreview" / "drawings" / "binding.py"
@@ -62,12 +61,6 @@ def switch_in(text: str, pattern: re.Pattern[str]) -> bool:
     """The one switch `pattern` finds in `text`; anything but exactly one is a failure."""
     [value] = pattern.findall(text)
     return value in ("true", "True")
-
-
-def committed_ledgers(root: Path = CAPABILITIES) -> list[Path]:
-    """Every probe ledger under `root`, at any depth: each `probe remodel` run's folder may be
-    kept whole, so two runs' ledgers can share a name."""
-    return sorted(root.rglob("remodel-*.yaml")) if root.is_dir() else []
 
 
 def ready_for_start(root: Path = CAPABILITIES, identity: Tolerances = IDENTITY) -> list[Path]:
