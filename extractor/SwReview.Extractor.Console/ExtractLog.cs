@@ -9,13 +9,17 @@ namespace SwReview.Extractor.Console;
 /// <c>extract.log</c>, written next to the output directory (contracts/cli.md). The run is
 /// unattended often enough that "it exited 1" is not a useful answer on its own; the log
 /// carries the timestamps, the document, and the full exception.
+///
+/// Each line is on disk as soon as it is logged (004 T331, owner decision 166A), the way
+/// <c>ExtractionProgress</c> writes its markers: a run that hangs, is stopped with Ctrl+C or
+/// crashes keeps every line it wrote before that.
 /// </summary>
 public sealed class ExtractLog : IDisposable
 {
     public const string FileName = "extract.log";
 
-    private readonly StringBuilder _lines = new StringBuilder();
     private readonly string? _path;
+    private StreamWriter? _file;
 
     /// <summary>Opens a log in <paramref name="directory"/>; a null directory logs to the console only.</summary>
     public ExtractLog(string? directory)
@@ -39,10 +43,24 @@ public sealed class ExtractLog : IDisposable
         {
             Directory.CreateDirectory(directory!);
             _path = System.IO.Path.Combine(directory!, fileName);
+            try
+            {
+                _file = new StreamWriter(
+                    new FileStream(_path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite),
+                    Encoding.UTF8) { AutoFlush = true };
+            }
+            catch (IOException ex)
+            {
+                Unwritable(ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Unwritable(ex);
+            }
         }
     }
 
-    /// <summary>Where the log will be written, or null when only the console gets it.</summary>
+    /// <summary>Where the log is written, or null when only the console gets it.</summary>
     public string? FilePath => _path;
 
     /// <summary>One timestamped line, to the log and to stderr.</summary>
@@ -51,7 +69,7 @@ public sealed class ExtractLog : IDisposable
         string line = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss.fff K", CultureInfo.InvariantCulture)
             + "  " + message;
 
-        _lines.AppendLine(line);
+        ToFile(line);
         System.Console.Error.WriteLine(line);
     }
 
@@ -59,29 +77,56 @@ public sealed class ExtractLog : IDisposable
     public void WriteError(string message, Exception error)
     {
         Write(message);
-        _lines.AppendLine(error.ToString());
+        ToFile(error.ToString());
         System.Console.Error.WriteLine(error.Message);
     }
 
-    /// <summary>Flushes to disk. Never throws: a failed log must not fail the dump.</summary>
+    /// <summary>Closes the file. Never throws: a failed log must not fail the dump.</summary>
     public void Dispose()
     {
-        if (_path == null)
+        try
+        {
+            _file?.Dispose();
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        _file = null;
+    }
+
+    /// <summary>One line to the file, flushed. Never throws: after a failure the console alone gets the rest.</summary>
+    private void ToFile(string text)
+    {
+        if (_file == null)
         {
             return;
         }
 
         try
         {
-            File.AppendAllText(_path, _lines.ToString(), Encoding.UTF8);
+            _file.WriteLine(text);
         }
         catch (IOException ex)
         {
-            System.Console.Error.WriteLine($"Could not write {_path}: {ex.Message}");
+            Unwritable(ex);
         }
         catch (UnauthorizedAccessException ex)
         {
-            System.Console.Error.WriteLine($"Could not write {_path}: {ex.Message}");
+            Unwritable(ex);
         }
+        catch (ObjectDisposedException ex)
+        {
+            Unwritable(ex);
+        }
+    }
+
+    private void Unwritable(Exception ex)
+    {
+        System.Console.Error.WriteLine($"Could not write {_path}: {ex.Message}");
+        Dispose();
     }
 }

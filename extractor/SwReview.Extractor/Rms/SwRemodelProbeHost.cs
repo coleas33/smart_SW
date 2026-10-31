@@ -17,7 +17,8 @@ namespace SwReview.Extractor.Rms;
 /// <c>InsertFeatureChamfer</c>, <c>InsertFeatureShell</c> and
 /// <c>InsertFeatureTreeFolder2</c> behave as their signatures promise on SOLIDWORKS 2024 SP5
 /// is UNVERIFIED (research.md R10) - that is exactly what PROBE-3, 4, 5, 9, 10, 11 and 20
-/// measure once their bodies land (tasks.md T033 to T038). This class is a best-effort,
+/// measure (their bodies are in <c>RemodelProbeExecutors.cs</c>; their seat runs, tasks.md
+/// T033 to T038, have not been made yet). This class is a best-effort,
 /// well-documented first construction for those probes to run against, not a claim that the
 /// geometry it builds is correct; every dimension is a round, arbitrary number chosen only so
 /// the recipe rebuilds cleanly.

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using SwReview.Extractor.Rms;
@@ -77,15 +78,20 @@ public class RemodelProbeExecutorsTests
     }
 
     [Fact]
-    public void Probe1_HostThrows_RecordsUnresolvedWithTheHostsOwnMessage()
+    public void Probe1_HostThrows_RecordsUnresolvedWithTheHostsOwnExceptionTypeAndNoMessage()
     {
+        // Changed on purpose (owner decision 171A, 004 T334): the host's own exception reaches
+        // the ledger as its type and HRESULT, never its words.
         var host = new FakeRemodelProbeHost();
         using var reorder = new ParkingReorder(host, _ => ReorderAttempt.Throws);
 
         RemodelProbeRecord record = RunProbe1(host, reorder);
 
         Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict);
-        Assert.Equal(ParkingReorder.HostMessage, record.RawResult[RemodelProbeRunner.ErrorKey]);
+        Assert.Equal(
+            $"InvalidOperationException 0x{new InvalidOperationException().HResult:X8}",
+            record.RawResult[RemodelProbeRunner.ErrorKey]);
+        Assert.DoesNotContain(ParkingReorder.HostMessage, record.RawResult[RemodelProbeRunner.ErrorKey], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -323,6 +329,30 @@ public class RemodelProbeExecutorsTests
         Assert.Contains("error", record.RawResult["move_to_folder"]);
         Assert.DoesNotContain("error", record.RawResult["reorder_to_folder"]);
         Assert.DoesNotContain("error", record.RawResult["make_sub_feature"]);
+    }
+
+    [Fact]
+    public void Probe5_EachCallThatThrowsWithAPathInItsMessage_RecordsItsTypeAndHresultOnly()
+    {
+        // Owner decision 171A (004 T334): the call's own words may name a path; its type does not.
+        // All three calls throw, so each of the three catches is held to it (004 T342, review
+        // finding F6: with one call throwing, the other two could go back to the message unseen).
+        var host = new FakeRemodelProbeHost
+        {
+            ReorderFeatureImpl = (_, _, _, _) =>
+                throw new COMException(@"C:\Users\FICT-engineer\Designs\FICT-bracket.SLDPRT is open", unchecked((int)0x80004005)),
+            MoveToFolderImpl = (_, _, _, _) =>
+                throw new COMException(@"C:\Users\FICT-engineer\Designs\FICT-bracket.SLDPRT is locked", unchecked((int)0x80004005)),
+            MakeSubFeatureImpl = (_, _, _) =>
+                throw new UnauthorizedAccessException(@"C:\Users\FICT-engineer\Designs\FICT-bracket.SLDPRT is read-only"),
+        };
+
+        RemodelProbeRecord record = Run("PROBE-5", Context(host));
+
+        Assert.Equal("error: COMException 0x80004005", record.RawResult["reorder_to_folder"]);
+        Assert.Equal("error: COMException 0x80004005", record.RawResult["move_to_folder"]);
+        Assert.Equal("error: UnauthorizedAccessException 0x80070005", record.RawResult["make_sub_feature"]);
+        Assert.DoesNotContain(record.RawResult.Values, value => value.Contains("FICT-"));
     }
 
     // ---- PROBE-6: Add3 ---------------------------------------------------------------------
@@ -690,6 +720,33 @@ public class RemodelProbeExecutorsTests
             var context = new RemodelProbeContext(part, new SwGate(), "32.5.0.48", new FakeRemodelProbeHost(), dir);
 
             Assert.Equal(RemodelProbeVerdict.Unresolved, Run("PROBE-13", context).Verdict);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Probe13_ACopyThatFails_RecordsEachErrorsTypeAndHresultAndNoPath()
+    {
+        // Owner decision 171A (004 T334): a missing source makes both the copy and the stream
+        // fallback throw FileNotFoundException, whose message names the path.
+        string dir = Path.Combine(Path.GetTempPath(), "swreview-probe-executor-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string source = Path.Combine(dir, "FICT-missing.SLDPRT");
+
+        try
+        {
+            var part = new RemodelProbePart(new object(), source, Array.Empty<object>());
+            var context = new RemodelProbeContext(part, new SwGate(), "32.5.0.48", new FakeRemodelProbeHost(), dir);
+
+            RemodelProbeRecord record = Run("PROBE-13", context);
+
+            string notFound = $"FileNotFoundException 0x{new FileNotFoundException().HResult:X8}";
+            Assert.Equal(notFound, record.RawResult["file_copy_error"]);
+            Assert.Equal(notFound, record.RawResult["fallback_error"]);
+            Assert.DoesNotContain(record.RawResult.Values, value => value.Contains("FICT-"));
         }
         finally
         {

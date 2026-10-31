@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using SwReview.Extractor.Probes;
 using SwReview.Extractor.Sw;
 
 namespace SwReview.Extractor.Rms;
@@ -807,20 +808,24 @@ public static class RemodelProbeRunner
     /// <summary>The <c>raw_result</c> key <see cref="NotImplementedNote"/> is filed under.</summary>
     public const string NoteKey = "note";
 
-    /// <summary>The <c>raw_result</c> key a thrown probe body's message is filed under.</summary>
+    /// <summary>The <c>raw_result</c> key a thrown probe body's exception type is filed under.</summary>
     public const string ErrorKey = "error";
 
     /// <summary>
     /// Runs one probe. <paramref name="executors"/> defaults to
     /// <see cref="RemodelProbeExecutors.ByProbeId"/>; a caller passes its own map only to test
     /// this method's own rules (a body that throws, a body that answers) without depending on
-    /// which bodies this build ships.
+    /// which bodies this build ships. <paramref name="threw"/>, when given, is handed the probe's
+    /// id and the exception its body threw (004 T343): the row keeps only its type (owner
+    /// decision 171A), so <c>probe remodel</c> hands the whole exception to its log, which is never
+    /// committed, and a seat failure can still be read there.
     /// </summary>
     public static RemodelProbeRecord Run(
         string probeId,
         RemodelProbeContext context,
         IReadOnlyDictionary<string, RemodelProbeExecutor>? executors = null,
-        Func<long>? elapsedMsFor = null)
+        Func<long>? elapsedMsFor = null,
+        Action<string, Exception>? threw = null)
     {
         if (context == null)
         {
@@ -847,9 +852,10 @@ public static class RemodelProbeRunner
             }
             catch (Exception error)
             {
+                threw?.Invoke(definition.Id, error);
                 reading = new RemodelProbeReading(
                     RemodelProbeVerdict.Unresolved,
-                    new Dictionary<string, string>(StringComparer.Ordinal) { [ErrorKey] = HostMessage(error) });
+                    new Dictionary<string, string>(StringComparer.Ordinal) { [ErrorKey] = HostFailure(error) });
             }
         }
 
@@ -870,34 +876,48 @@ public static class RemodelProbeRunner
     }
 
     /// <summary>
-    /// What the ledger records for a body that threw: the host's own words (013 T137, 004 T171).
-    /// A call made through a task arrives as an <see cref="AggregateException"/> whose own message
-    /// ("One or more errors occurred.") says nothing, so the messages of what it wraps are recorded,
-    /// in order; one that wraps nothing keeps its own message, the only words there are.
+    /// What the ledger records for a body that threw: the host's own exception (013 T137, 004
+    /// T171) as its type and HRESULT, never its message (owner decision 171A, 004 T335), since a
+    /// SOLIDWORKS or file-system message may name a path holding the user's name. A call made
+    /// through a task arrives as an <see cref="AggregateException"/>, which says nothing of what
+    /// failed, so each exception it wraps is recorded, in order; one that wraps nothing is
+    /// recorded as itself.
     /// </summary>
-    private static string HostMessage(Exception error)
+    private static string HostFailure(Exception error)
     {
-        if (!(error is AggregateException aggregate))
-        {
-            return error.Message;
-        }
-
-        IReadOnlyCollection<Exception> inner = aggregate.Flatten().InnerExceptions;
-        return inner.Count == 0 ? error.Message : string.Join("; ", inner.Select(exception => exception.Message));
+        IReadOnlyCollection<Exception> inner = error is AggregateException aggregate
+            ? aggregate.Flatten().InnerExceptions
+            : (IReadOnlyCollection<Exception>)Array.Empty<Exception>();
+        return inner.Count == 0 ? ProbeText.Failure(error) : string.Join("; ", inner.Select(ProbeText.Failure));
     }
 
-    /// <summary>Runs every id in <paramref name="probeIds"/>, in order.</summary>
+    /// <summary>
+    /// Runs every id in <paramref name="probeIds"/>, in order. <paramref name="finished"/>, when
+    /// given, is called with every row so far as each probe finishes (004 T333, decision 166A):
+    /// <c>probe remodel</c> hands it <see cref="RemodelProbeLedger.Recorder"/>, so a probe that
+    /// hangs, or a run that dies later, keeps every earlier probe's row on disk.
+    /// <paramref name="threw"/> is <see cref="Run"/>'s, for every probe.
+    /// </summary>
     public static IReadOnlyList<RemodelProbeRecord> RunAll(
         IReadOnlyList<string> probeIds,
         RemodelProbeContext context,
-        IReadOnlyDictionary<string, RemodelProbeExecutor>? executors = null)
+        IReadOnlyDictionary<string, RemodelProbeExecutor>? executors = null,
+        Action<IReadOnlyList<RemodelProbeRecord>>? finished = null,
+        Action<string, Exception>? threw = null)
     {
         if (probeIds == null)
         {
             throw new ArgumentNullException(nameof(probeIds));
         }
 
-        return probeIds.Select(id => Run(id, context, executors)).ToList();
+        var records = new List<RemodelProbeRecord>(probeIds.Count);
+        foreach (string id in probeIds)
+        {
+            records.Add(Run(id, context, executors, threw: threw));
+            finished?.Invoke(records.ToArray());
+        }
+
+        return records;
     }
 }
 
@@ -1039,7 +1059,9 @@ public static class RemodelProbe
 /// Writes the capabilities ledger, <c>capabilities/remodel-&lt;sw-version&gt;.yaml</c>
 /// (tasks.md T032), with one row per probe in the shape T031 names:
 /// <c>{probe_id, question, method, raw_result, verdict, sw_version}</c>, plus
-/// <c>blocking</c>, <c>fallback</c>, <c>duration_ms</c> and <c>interop_members</c>.
+/// <c>blocking</c>, <c>fallback</c>, <c>duration_ms</c> and <c>interop_members</c>; and,
+/// before the rows, the probes the run was asked for (<c>requested</c>, 004 T333), so a ledger
+/// a run left behind when it stopped says which probes never finished.
 ///
 /// Hand-written rather than pulled from a library, the same call CommandLine.cs makes for the
 /// option parser: the shape is fixed and small, and every string scalar is double-quoted with
@@ -1073,9 +1095,17 @@ public static class RemodelProbeLedger
             FileNamePrefix + SanitizeForFileName(swVersion) + FileNameExtension);
     }
 
-    /// <summary>The YAML text for <paramref name="records"/>. Pure: no filesystem access.</summary>
+    /// <summary>
+    /// The YAML text for <paramref name="records"/>. Pure: no filesystem access. The one
+    /// renderer: <see cref="Write"/>, and so the run's rewrite after each probe, uses it, and
+    /// <c>swreview remodel ledger</c> reads what it writes (one golden fixture pins both sides).
+    /// <paramref name="requested"/> defaults to the rows' own probes.
+    /// </summary>
     public static string Render(
-        string swVersion, IReadOnlyList<RemodelProbeRecord> records, DateTimeOffset generatedAt)
+        string swVersion,
+        IReadOnlyList<RemodelProbeRecord> records,
+        DateTimeOffset generatedAt,
+        IReadOnlyList<string>? requested = null)
     {
         if (records == null)
         {
@@ -1087,6 +1117,7 @@ public static class RemodelProbeLedger
         text.Append("generated_at: ")
             .Append(Quote(generatedAt.ToString("o", CultureInfo.InvariantCulture)))
             .Append('\n');
+        AppendStringList(text, "requested", requested ?? records.Select(record => record.ProbeId).ToList(), "  - ");
 
         if (records.Count == 0)
         {
@@ -1114,20 +1145,87 @@ public static class RemodelProbeLedger
         return text.ToString();
     }
 
-    /// <summary>Renders and writes the ledger, creating <c>capabilities/</c> if needed. Returns the path written.</summary>
+    /// <summary>
+    /// Renders and writes the ledger, creating <c>capabilities/</c> if needed, and returns the
+    /// path written. The file is replaced whole (004 T333): the text goes to a temporary file
+    /// beside it, which then replaces it, so a run stopped mid-write leaves the previous ledger,
+    /// never half of the next one.
+    /// </summary>
     public static string Write(
         string outputDirectory,
         string swVersion,
         IReadOnlyList<RemodelProbeRecord> records,
-        DateTimeOffset? generatedAt = null)
+        DateTimeOffset? generatedAt = null,
+        IReadOnlyList<string>? requested = null)
     {
         string path = FilePath(outputDirectory, swVersion);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, Render(swVersion, records, generatedAt ?? DateTimeOffset.UtcNow), Encoding.UTF8);
+        string temporary = path + ".tmp";
+        File.WriteAllText(
+            temporary, Render(swVersion, records, generatedAt ?? DateTimeOffset.UtcNow, requested), Encoding.UTF8);
+        if (File.Exists(path))
+        {
+            File.Replace(temporary, path, destinationBackupFileName: null);
+        }
+        else
+        {
+            File.Move(temporary, path);
+        }
+
         return path;
     }
 
-    private static void AppendStringList(StringBuilder text, string key, IReadOnlyList<string> items)
+    /// <summary>
+    /// What <c>probe remodel</c> hands <see cref="RemodelProbeRunner.RunAll"/> (004 T333, owner
+    /// decision 166A): as each probe finishes, one line for it to <paramref name="log"/>, then the
+    /// ledger rewritten whole with every row so far and the probes <paramref name="requested"/>.
+    /// A probe that hangs, or a run that dies in a later probe, the part's close or the settings'
+    /// restore, keeps every earlier row.
+    ///
+    /// Making it starts the ledger (004 T343): this run's requested list and no rows, written at
+    /// once, so an earlier run's ledger in the same folder never stands for this one - not even
+    /// when the first probe hangs. That write throws if it cannot be made, and <c>probe remodel</c>
+    /// makes the recorder before it builds anything. A rewrite after a probe never throws: one
+    /// the file system refuses (a reader holding the ledger, a full disk) is logged as one line
+    /// naming the file and the exception's type, the run goes on, and the next rewrite carries
+    /// every row.
+    /// </summary>
+    public static Action<IReadOnlyList<RemodelProbeRecord>> Recorder(
+        string outputDirectory, string swVersion, IReadOnlyList<string> requested, Action<string> log)
+    {
+        if (requested == null)
+        {
+            throw new ArgumentNullException(nameof(requested));
+        }
+
+        if (log == null)
+        {
+            throw new ArgumentNullException(nameof(log));
+        }
+
+        Write(outputDirectory, swVersion, Array.Empty<RemodelProbeRecord>(), requested: requested);
+        string name = Path.GetFileName(FilePath(outputDirectory, swVersion));
+
+        return finished =>
+        {
+            RemodelProbeRecord last = finished[finished.Count - 1];
+            log($"finished {last.ProbeId}: {last.Verdict.CliName()} "
+                + $"({finished.Count.ToString(CultureInfo.InvariantCulture)} of "
+                + $"{requested.Count.ToString(CultureInfo.InvariantCulture)})");
+            try
+            {
+                Write(outputDirectory, swVersion, finished, requested: requested);
+            }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+            {
+                log($"could not rewrite {name} after {last.ProbeId} ({ProbeText.Failure(error)}): it lacks "
+                    + "the rows since its last rewrite until a later one succeeds");
+            }
+        };
+    }
+
+    private static void AppendStringList(
+        StringBuilder text, string key, IReadOnlyList<string> items, string itemPrefix = "      - ")
     {
         if (items.Count == 0)
         {
@@ -1138,7 +1236,7 @@ public static class RemodelProbeLedger
         text.Append(key).Append(":\n");
         foreach (string item in items)
         {
-            text.Append("      - ").Append(Quote(item)).Append('\n');
+            text.Append(itemPrefix).Append(Quote(item)).Append('\n');
         }
     }
 

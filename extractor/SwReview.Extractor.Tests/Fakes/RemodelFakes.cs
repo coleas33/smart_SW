@@ -826,6 +826,8 @@ public sealed class FakeRemodelDocument : IRemodelDocument
         Selected.Clear();
     }
 
+    // seat-assumption: PROBE-1 verified - a reorder never holds the thread: stage 1 runs with CommandInProgress set, which suppresses the box
+    // seat-assumption: PROBE-3 verified - a reorder moves the feature and answers true; a refused one answers a bare false, the tree unchanged
     public bool ReorderFeature(string featureName, string targetName, int location)
     {
         Members.Add(nameof(ReorderFeature));
@@ -849,6 +851,7 @@ public sealed class FakeRemodelDocument : IRemodelDocument
         return true;
     }
 
+    // seat-assumption: PROBE-4 verified - a folder wraps the selected run as one; the bridge selects only contiguous members, which 2024 requires
     public object? InsertFeatureTreeFolder(int type)
     {
         Members.Add(nameof(InsertFeatureTreeFolder));
