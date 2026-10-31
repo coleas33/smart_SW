@@ -1842,7 +1842,7 @@ Record: each pass or fail. Save no configuration change.
 Record: each pass or fail; for 007 T060 the four minutes, the net saved and A's run folder stamp
 (`<stamp>-A`). From here on SOLIDWORKS may be closed and reopened.
 
-### 4.6 Drawing questions, three answers in one send, and a confirmed candidate left closed [011 T067; 009 T084; 011 T077; 011 T101]
+### 4.6 Drawing questions, three answers in one send, and a confirmed candidate left closed [011 T067; 009 T084; 011 T077]
 
 Open assembly K with K-1's same-name drawing **closed**, and open two drawings of K-2 and two of
 K-3 (all four showing their part in a view). Note the Window menu. Make K active and press Review.
@@ -1851,8 +1851,8 @@ K-3 (all four showing their part in a view). Note the Window menu. Make K active
 same-name drawing question. The summary's drawings line gives the instruction in its place,
 `Open <K-1's drawing> in SOLIDWORKS, then press Review again with <K> active`, and only the
 governing questions are asked. Record that line in the 011 T067 row; write
-`blocked: switch off (013 T142)` in 011 T067's same-name half and in the rows of 011 T077's pane
-half and 011 T101 part 1, which need the same-name question answered; judge the governing
+`blocked: switch off (013 T142)` in 011 T067's same-name half and in the row of 011 T077's pane
+half, which need the same-name question answered; judge the governing
 questions, the brief and 009 T084 as written (009 T084 still needs three questions). With the
 switch on, at a later sitting, the review asks one same-name question per drawing file, as below.
 
@@ -1872,7 +1872,7 @@ switch on, at a later sitting, the review asks one same-name question per drawin
   between the first and last answer 0`, and `turns ended after the last answer 1`; record `first
   round input after the answers` beside the sentence you recorded. With fewer than three questions,
   write `blocked: <n> questions` in the 009 T084 row: T084 then waits for a review that asks three.
-- 011 T077's pane half and 011 T101 part 1, pass, while the switch is off: the Not reached fold's
+- 011 T077's pane half, pass, while the switch is off: the Not reached fold's
   unresolved bucket has the line
   `drawing.confirmed_open - the bridge returned status 'error': the read-only open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14) [BridgeRefusedError]`
   (it passes when the line contains
@@ -1886,7 +1886,6 @@ switch on, at a later sitting, the review asks one same-name question per drawin
   prints, as its **last** line, the newest `drawing.read` line: it has `command=drawing.read
   status=error`, `gated=GetOpenDocumentByName` and nothing more in the `gated=` list, and no
   `target=`.
-- 011 T101 part 3, pass: the fold holds as many `drawing.context` lines as before the answers.
 - 011 T067, the brief: find K-2's and K-1's document ids with `Show-Documents $run`, then for each:
 
   ```powershell
@@ -1920,8 +1919,9 @@ Pass: `open_only`. Items 2 and 3 then run with no question: open J's drawing you
 active with the Window menu, press **Clear review**, then Review (a new review). Pass, when it
 finishes: the drawings line reads `Drawing read: <J's drawing>` with no instruction, in the same
 place; J's drawing is still open; and as many `drawing.context` lines as item 1 counted. Items 4
-and 5 run on that review as written. 011 T101's `drawing.confirmed_open` and `Show-DrawingReadLog`
-passes need the question answered: `blocked: switch off (013 T142)`.
+and 5 run on that review as written. The `drawing.confirmed_open` and `Show-DrawingReadLog` passes
+of items 2 and 3 need the question answered: since 2026-10-31 they are 011 T095's, at the sitting
+after the switch, and 011 T101 is item 5's screenshot.
 
 1. Close J's drawing. Open part J only and make it active; press Review. When
    `Waiting for your answers.` appears, record the summary's drawings line: pass, it reads
@@ -2465,7 +2465,14 @@ and the settings showed. `$H\runs-t303a` travels inside the handover folder.
 in a commit of its own) only once a sitting has proved, in this order: first step 5.6's blocking
 probes - PROBE-1, 2, 3, 4 and 12 (004 T033 to T035 and 004 T037) - each `verified`; then this step's
 Plan on one real part's copy - part J - with that part's hash, size and time unchanged. 004 T180,
-what a plan holds while Start is on, is decided on the development machine before it too. The
+what a plan holds while Start is on, is decided on the development machine before it too. So, since
+2026-10-31, are: the close in process, 004 T303a (S1, the item above), whose other half, 004
+T303b, a plan holding its session for Start, comes first at the sitting after the switch, before
+any stage-1 run (decision 169A); two narrow defects found on review and fixed now under decision
+165A, an end told during a Plan that then succeeds (004 research R22.14) and the barrier unwind's
+close by path (R25.13); and IDENTITY calibrated, since Start refuses every change while it is not
+(decision 170A): 004 T187 records PROBE-8's readings at step 5.6's first run, and 004 T138 freezes
+the profile from them on the development machine. The
 stage-1 runs (004 T135 to T141) are for the sitting after that.
 
 ### 5.4 Withdrawn: the live Gemini test
@@ -2774,7 +2781,7 @@ is what none of its steps runs. For the development machine, once the folder com
 | 010, 011 | setting either switch; 010 T104's and T106's counts | the development machine, as sections 3.10, 3.1 and 4.2 say |
 | 006 | PROBE-1 to PROBE-3 into research R4; `TRANSPARENCY_POLARITY`'s flip | the development machine, from step 3.1's two Standards probe reports |
 | 013 | 013 T142's second half; the census's counts | the sitting after the development machine sets `DrawingOpenScope.SeatValidated`: the host answers `opens_closed` and a review offers the read-only open once per drawing file; and the development machine reruns the part-role census over step 5.1's N folders, counts only |
-| 004 | setting `RemodelStart.SeatValidated` (004 T172's switch); 004 T180; 004 T182's wait | the development machine, in a commit of its own for the switch, and only once a sitting has proved step 5.3's "What the Start switch waits on": step 5.6's blocking probes (004 T033 to T035 and 004 T037) each `verified`, then step 5.3's Plan on part J's copy with J's hash, size and time unchanged; 004 T180, what a plan holds while Start is on, is decided first; 004 T182 sets the add-in's wait on the copy's open from step 5.3's time |
+| 004 | setting `RemodelStart.SeatValidated` (004 T172's switch); 004 T180; 004 T182's wait | the development machine, in a commit of its own for the switch, and only once a sitting has proved step 5.3's "What the Start switch waits on": step 5.6's blocking probes (004 T033 to T035 and 004 T037) each `verified`, then step 5.3's Plan on part J's copy with J's hash, size and time unchanged; 004 T180, what a plan holds while Start is on, is decided first; and the rest that paragraph names: 004 T303a (S1), R22.14 and R25.13 (decision 165A), and IDENTITY calibrated, 004 T187's readings and 004 T138's freeze (decision 170A), with 004 T303b first at the sitting after the switch; 004 T182 sets the add-in's wait on the copy's open from step 5.3's time |
 | 004 | 004 T003's dry run itself; the re-modeler probes' verdicts into the record | the development machine: `swreview remodel plan` over each `package.json` of step 5.1's P folders, counts only, each part by its letter and never its file name, into T003's table (`specs/004-resilient-remodeler/phase0-decision.md` section 4), where they replace 004 T148's provisional counts (its section 4.1, taken from other parts the development machine already held); the verdicts and raw readings of step 5.6's three answers files, as quickstart Scenario 4 says |
 | 010 | 010 T123, 010 T124 | the fine-pitch amendment seat checks (2026-10-08), added after this plan; for the next sitting plan |
 
@@ -2782,7 +2789,7 @@ Open seat or key tasks of earlier features, not asked this time:
 
 | Package | Task | Why not now |
 |---|---|---|
-| 001 | 001 T061, 001 T076 | the bracket-assembly benchmark on the workstation; T076 also adds pane buttons that are not built |
+| 001 | 001 T061, 001 T076 | the bracket-assembly benchmark on the workstation (001 T061), whose quickstart scenarios T076 also runs; T076's buttons are built, the Extract tab's **Interference** and **Capture selection**, and S1's optional block settles the volume unit it reads (decision 172A) |
 | 001 | 001 T103 | every quickstart scenario of feature 001 end to end: a sweep of its own |
 | 002 | 002 T044, 002 T051 | quickstart scenarios on the bracket fixture, which is not prepared (001 T061) |
 | 002 | 002 T063 | the Ask tab's terminal (Codex): the Ask tab is hidden in this build |
@@ -2799,4 +2806,6 @@ Open seat or key tasks of earlier features, not asked this time:
 | 006 | 006 T106, 006 T108 | the tab end to end and its timing on a 40-component assembly: not asked |
 | 006 | 006 T109, 006 T110 | read-only proved on a standards dump, and agreement with the macro on copies: not asked |
 | 007 | 007 T061 to T063 | the procedural gate's study runs: need the lever study set-up |
+| 004 | 004 T188's native configuration-watch timing | 004 T188 is ticked, but `docs/development-handoff-2026-10-23.md` asks a licensed sitting to check that the configuration watch stays out of the copy's open and a failed open's unwind, and that switching configuration still follows the active document (009 T081): the development machine reads it from S1's `addin.log` and step 5.3's `remodel.log`, and if they cannot show it, it gets a step of its own at S2 |
+| 004, 011 | the focused retest of 2026-10-13 | `docs/history/testing-feedback-2026-10-13.md`: its Remodel half (one copy and its lock, a finished Plan, the source unchanged, Discard closing only its own copy, Start refused, the settings back while the Plan waits, and the read-only option's refusal) is step 5.3, in S1; its Review half asks the engineer to resolve an assembly's components by hand before the review, which decision 14A's rule forbids at the seat, so it waits on the owner |
 | 016 | 016 T010, 016 T015 | feature 016's native selection, rebinding, unsaved state and source freshness on the seat: not yet placed in a sitting |

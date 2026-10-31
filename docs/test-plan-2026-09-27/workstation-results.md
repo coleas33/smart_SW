@@ -104,8 +104,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 4.6 | 011 T067: the two questions, at most four, the brief | | | |
 | 4.6 | 009 T084: three or more answers in one send | | | |
 | 4.6 | 011 T077: the pane half, switch off | | | |
-| 4.6 | 011 T101: parts 1 and 3, a candidate left closed | | | |
-| 4.7 | 011 T101: parts 2, 3 and 4, a candidate opened first | | | |
+| 4.7 | 011 T101: the 300 by 600 screenshot with the drawings line (item 5) | | | |
 | 4.7 | 013 T142: the host answers `open_only`; the instruction line, no drawing question | | | |
 | 4.8 | 013 T143: A-plate's drawing closed, the instruction once and no drawing question (SC-005) | | | |
 | 4.8 | 013 T143: no modelling or hygiene row on A-pin, one bought-parts line (SC-001) | | | |

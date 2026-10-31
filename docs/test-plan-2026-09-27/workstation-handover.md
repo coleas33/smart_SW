@@ -116,7 +116,10 @@ before the development machine sets the Start switch (`RemodelStart.SeatValidate
 of its own), in this order: first step 21's blocking probes - PROBE-1, 2, 3, 4 and 12 (004 T033
 to T035 and 004 T037) - each `verified`; then step 5.3's Plan on one real part's copy, part J, with
 that part's hash unchanged. 004 T180, what a plan holds while Start is on, is decided on the
-development machine before the switch too. *Added 2026-10-19 (decision 144A):* the pane seat calls
+development machine before the switch too. *Since 2026-10-31* the list is longer: 004 T303a (S1),
+R22.14 and R25.13 (decision 165A), and IDENTITY calibrated (004 T187's readings, 004 T138's freeze;
+decision 170A), with 004 T303b first after the switch (decision 169A); the test plan's step 5.3
+has it whole. *Added 2026-10-19 (decision 144A):* the pane seat calls
 SOLIDWORKS through a gate of its own in this build, so step 5.3's item B, on the box before its
 Discard, also runs 011 T171: Open copy, then Start, and the run's `remodel.log` must hold exactly
 four `seat=` lines - a begin line and an outcome line for the plan's activation of the copy, and
@@ -325,13 +328,10 @@ row per step and task id. The development machine moves each answer into the res
    unchanged, no save flag, released after the close, the counts). Then a pane review with the
    candidate, confirmed: the pane shows the host's refusal ("the read-only open of a confirmed
    drawing is not yet validated on a seat") and nothing opens - which is right while the switch
-   is off. Record: the report file and the pane's sentence. In the same pane reviews, 011 T101:
-   the lanes' live checks of User Story 5's part B (the test plan's part J; its B is the big
-   assembly) with the switch off - the `drawing.read` line of the
-   tool-service log, the `drawing.confirmed_open` coverage for a candidate left closed and for one
-   the engineer opened before confirming, the summary's drawings line before and after, one
-   `drawing.context` line per document, and the pane at 300 by 600 (the test plan's steps 4.6
-   and 4.7).
+   is off. Record: the report file and the pane's sentence. In the same pane reviews, 011 T101,
+   rewritten 2026-10-31: the pane at 300 by 600 with the drawings line on it (the test plan's step
+   4.7); its live checks with the question answered are 011 T095's, at the sitting after the
+   switch.
 9. **011 T067: the questions.** A pane review of the design with a candidate drawing and a
    doubly-drawn part: the two questions appear (at most four drawing questions), answering them
    records the answers, and the part's brief lists them with all five sections. The brief's size,

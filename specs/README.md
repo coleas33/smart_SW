@@ -39,7 +39,11 @@ Some `tasks.md` files mark tasks that cannot run on a development machine:
 | `[paid]` | Needs an OpenAI or Gemini key on the paid machine and spends money (feature 014). | [014 tasks.md](014-design-review-eval/tasks.md), "Format" |
 | `[O]` | Waits on an answer only the owner can give (feature 011). | [011 tasks.md](011-drawing-context/tasks.md), "Format" |
 
-Features 001 to 004 and 016 do not use `[W]`; their workstation tasks say so in their text.
+Features 003 and 004 also mark a workstation task as one whose text, after its tags, begins
+`Workstation`, and 004 T303 carries both marks. The workstation tasks of 001, 002 and 016 said so
+only in their text until 2026-10-31, when they were tagged `[W]` (decision 166A).
+`reviewer/tests/support/seat_tasks.py` reads both marks in every feature, and the workstation
+test plan's pins hold every open task so marked to a place in the plan.
 
 ## Features and their status
 
@@ -79,5 +83,6 @@ from the drafting status.
   architecture decision records.
 - The [architecture overview](../docs/architecture.md) and the [glossary](../docs/glossary.md)
   explain the parts and the terms these specs use.
-- The workstation tasks are gathered into one sitting in
+- The workstation tasks are gathered into one test plan, run in short sittings (S1 first,
+  decision 167A), in
   [`docs/test-plan-2026-09-27/`](../docs/test-plan-2026-09-27/workstation-test-plan.md).
