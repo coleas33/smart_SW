@@ -1000,6 +1000,68 @@ entry considered):
 | 63B, a goal of its own, "Thread pitch", in the Fasteners group | one more line on every Review summary, "not applicable" or "not reached" on most designs, and `test_review_words.py`'s goal table and every summary pin that counts goals move; the owner chose that no existing review reads differently (63A) |
 | 63C, the rows feed the Fasteners goal line (the prefix `thread.`, D25 as first written) | a coarse pass lifts the line to "checked", and with none a skipped row turns "not applicable (out of scope)" into "not reached", so the line moves on designs with threads and on designs without; the owner chose 63A |
 
+### R2.27 A node whose handle is its document records a gap where its holes are not read (amendment 2026-10-31, owner decision 166A)
+
+**The defect** (166A, defect 1 of four found offline). `HoleDumper.Dump` skipped, with no gap,
+every scope node whose handle is not an `IComponent2`, while the suppressed and no-model branches
+beside it each record one; `FastenerDumper.ReadFastener` returned null the same way, and
+`FaceDumper.SweepEveryFace` (`--faces all`) skipped silently too. Two nodes carry their
+`IModelDoc2` as their handle, because the document IS the node (`ComponentDocuments`): the part
+root of a part reviewed on its own (`ComponentTreeDumper.PartRootNode`) and every model a
+drawing's views reference (`ComponentTreeDumper.ReferencedModelNode`, a part or an assembly). So
+a part review, and every model of a drawing review, got no hole, no cosmetic thread and no
+fastener identity, and nothing said so: `check_threads` wrote `no tapped hole, cosmetic thread or
+fastener in the package states a thread` (open item 2 of R2.26). Read from the code; T124 at the
+seat confirms it.
+
+**Decided** (166A): the skip records a gap now, and the read waits. Reading the part root's
+holes through the document's own feature tree is T130, after PROBE-15 (003 T088) records what
+`GetRootComponent3(false)` returns for a part at the seat, since that answer decides whether the
+part root is the node to read at all.
+
+- **The gap.** One `not_extracted` gap per node and per read, its `entity_id` null and its
+  reason naming the node by its key, in the words of the gaps beside it:
+  `'{key}' is reviewed as a document of its own, not as a component of an assembly, so ` and
+  then `its holes and threads were not read.` (`hole`), `whether it is a fastener was not read.`
+  (`fastener`) or `its faces were not read.` (`face`, under `--faces all` only). One sentence is
+  true of all three shapes - a part root, and a part or an assembly a drawing references - so the
+  dumpers do not tell them apart; the key does (a part root's is its design name, a referenced
+  model's its path).
+- **Null id, as the siblings.** The suppressed and no-model gaps name no id and put the key in
+  the reason; this one does the same, so the reviewer's not-read row (D20) lists it with them.
+- **One place.** `ComponentDocuments`, which already documents the two handle shapes, records it
+  for a node whose handle is an `IModelDoc2` and for nothing else, and the three dumpers call it
+  where they skip; no interop member is called for it, and the members each dumper calls, and
+  their order, do not change.
+- **The drawing forest root records nothing.** It carries no handle at all
+  (`ComponentTreeDumper.DrawingRootNode`) and a drawing has no holes, faces or fastener identity
+  of its own, so a gap there would say something false.
+- **A fastener gap on every document node.** Whether the node is a fastener is decided by
+  `IsFastenerCandidate` from its description too, which needs the document's properties - an
+  interop read this change does not add - so the gap cannot be limited to candidates; it says
+  that whether the node is a fastener was not read.
+- **`MeshExporter.Export` is left as it is.** It does not skip silently: a node that is not an
+  `IComponent2` already records a `body` gap there. Its words, `'{key}' is not resolved, so no
+  mesh was written for it.`, are inexact for a resolved document node; recorded here, not
+  changed, because 166A's defect is the silence.
+- **The reviewer needs no change.** `thread_pitch._unread_gaps` already lists every `hole` and
+  `fastener` gap that names no row, a null id among them, in the not-read row, and the
+  nothing-at-all row is written only when there is none (D20); T129 pins it with these words.
+
+**Alternatives rejected**:
+
+| Option | Why not |
+|---|---|
+| Read the part root's holes now, through `ComponentDocuments.Of` and the document's `FirstFeature` | 166A: PROBE-15 has not answered, and if `GetRootComponent3` returns a component for a part the part root is never built; T130 |
+| Two sentences, one for a part root and one for a drawing reference | the dumpers would branch on `ParentKey` or the root path to say what the key already says, and one sentence is true of both |
+| The fastener gap only for a node whose name or Toolbox flag makes it a candidate | a vendor screw identified by its description alone would stay silent, the defect itself |
+| The component's `cmp:NNNN` as the gap's `entity_id` | the sibling gaps name none; the not-read row would then scope a component the others do not |
+| A gap on the drawing forest root too | a drawing has none of the three to read; the gap would be false |
+
+**Results.** T127, run before T128 on the development machine: `Failed: 9, Passed: 5, Total: 14`
+(`DocumentNodeGapTests`) - each of the three dumpers on each of the three document nodes records
+no gap; the five pins of what does not change pass.
+
 ## R3. Verified facts the plan relies on
 
 **Packages** (analyst fact 1, re-checked). The big assembly: 26 documents (23 parts, 3 assemblies), 89
