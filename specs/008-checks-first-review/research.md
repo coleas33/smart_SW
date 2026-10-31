@@ -271,6 +271,21 @@ settles:
 
 The component ids and locations are sorted, which separates nothing.
 
+*Re-reviewed 2026-10-31 (T134 to T137): an independent re-review of the lane's fix round, T132
+and T133 among it, found no critical, high or medium issue; its low findings here are settled.*
+The regrade's fallback match requires the restated finding's entity ids to be a subset of the
+earlier one's (T134, T135; the third bullet above). T136 pins the fallback's uniqueness rule, a
+resumed turn on another hole pair of the same components and the annotation citation, each
+proved by a mutant of `runner.py` restored byte for byte. Two records:
+
+- the decision carry (72A) now carries a joint decision by hole-instance number
+  (`hol:NNNN#n`), which assumes a hole's face-id order is stable across re-extraction; no
+  fixture holds `#n` inputs;
+- the fix round's earlier "3.12" local gates ran on the worktree's 3.11 venv, uv's default in a
+  new worktree. The re-review's isolated 3.12.3 run was green (18298 passed, 5 skipped), and this
+  round's gates ran on a real 3.12 venv: 18305 passed and 5 skipped on Python 3.12.3, and the
+  same on 3.11.16 (`uv run --isolated --python 3.11`).
+
 *Amended 2026-09-25 (owner decision 25A; T128): each drawing location keeps its persistent
 reference.* The key's locations are `(document_id, sheet, view, annotation, page, persist_ref)`,
 `persist_ref` `None` where a location has none; everything else above stands. Without the
