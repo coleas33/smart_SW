@@ -1,0 +1,11 @@
+[2026-10-30T16:02:11.1000000+00:00] AssemblyRedirect installed.
+[2026-10-30T16:02:13.2000000+00:00] Attached to SOLIDWORKS.
+[2026-10-30T16:02:14.3000000+00:00] Task Pane created.
+[2026-10-30T16:02:14.9000000+00:00] Review host started.
+[2026-10-30T17:40:02.0000000+00:00] The SwReview tool service could not be scheduled. System.InvalidOperationException: a fictional failure of an earlier session
+   at Fict.Stack.Frame()
+[2026-10-31T09:15:02.1234567+00:00] AssemblyRedirect installed.
+[2026-10-31T09:15:02.5000000+00:00] AssemblyRedirect served 'System.Memory, Version=4.0.1.1' from D:\fict-seat\addin\System.Memory.dll.
+[2026-10-31T09:15:04.0000000+00:00] Attached to SOLIDWORKS.
+[2026-10-31T09:15:05.0000000+00:00] Task Pane created.
+[2026-10-31T09:15:05.5000000+00:00] Review host started.
