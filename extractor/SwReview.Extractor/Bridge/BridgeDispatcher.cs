@@ -1348,7 +1348,8 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
             if (leaveTheCopy)
             {
-                // The ending's failures reach the pane's words but no log, so the copy left is written down here.
+                // The pane hears only that the copy may still be open, and the ending's failure sentences reach no pane or
+                // log (research R26.10), so this marker is the one record of the copy left.
                 RemodelStageMarkers.Skipped(
                     stage,
                     UnwindDeleteStep,
@@ -2666,7 +2667,9 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// by <see cref="CloseCopyUnsaved"/> - owner decision 165A (research R25.13): unless SOLIDWORKS
     /// has another document open at the copy's path, or cannot say which (<see cref="AnotherDocumentAtTheCopy"/>);
     /// then nothing is closed, the copy is not counted closed, and <paramref name="leaveTheCopy"/>
-    /// tells the unwind not to delete the file either. A copy made with no handle back - <c>OpenDoc7</c> answered
+    /// tells the unwind not to delete the file either. A close that is not confirmed is asked the same way again before
+    /// the delete (the review round, research R26.10): <c>CloseDoc</c> or its confirmation may have pumped an action that
+    /// opened the copy again. A copy made with no handle back - <c>OpenDoc7</c> answered
     /// null, it or the document's wrapper threw, or the gate refused it - may still have been opened,
     /// so the seat is asked first, by the same clean-up read under <c>GetOpenDocumentByName</c>:
     /// nothing open is closed; a document open there is closed the same way and confirmed; a read that
@@ -2690,7 +2693,14 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         if (document != null)
         {
             leaveTheCopy = AnotherDocumentAtTheCopy(document, copy, failures);
-            return !leaveTheCopy && CloseCopyUnsaved(gate, seat, copy, failures);
+            if (leaveTheCopy || CloseCopyUnsaved(gate, seat, copy, failures))
+            {
+                return !leaveTheCopy;
+            }
+
+            // R26.10: a close not confirmed may have pumped an action that opened the copy again, so ask before the delete.
+            leaveTheCopy = AnotherDocumentAtTheCopy(document, copy, failures);
+            return false;
         }
 
         if (!CleanUpCall(
@@ -2712,7 +2722,8 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// document SOLIDWORKS has open at the copy's path is not <paramref name="opened"/> - the copy closed and opened again
     /// underneath the open by a re-entrant action while one of its native calls pumped - or because which document is open
     /// there cannot be read. Asked by <c>VerifyTarget</c>'s check 3's two reads, ungated as there. Nothing open at the path,
-    /// or the same COM identity, is false: the routine's close goes ahead. Otherwise true, with a sentence in
+    /// or the same COM identity, is false: the routine's close goes ahead, or, asked again after a close not confirmed
+    /// (R26.10), the delete. Otherwise true, with a sentence in
     /// <paramref name="failures"/> that names no path.
     /// </summary>
     private static bool AnotherDocumentAtTheCopy(IRemodelDocument opened, string copy, List<string> failures)
@@ -2732,7 +2743,8 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             return true;
         }
 
-        if (open == IntPtr.Zero || (held != IntPtr.Zero && held == open))
+        // A handle whose identity reads zero never equals a non-zero one open there, so it is left too.
+        if (open == IntPtr.Zero || held == open)
         {
             return false;
         }
