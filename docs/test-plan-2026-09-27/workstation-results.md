@@ -24,8 +24,8 @@ Since 2026-09-28 the next sitting runs the retest of U25 to U27 first (the plan'
 the retest"): steps 4.9 and 5.3, right after step 1, and their rows are filled in then.
 
 Since 2026-10-31 the next sitting is S1 (the plan's section "S1: Start readiness", decision 167A):
-fill in only the rows of S1's steps - 1.3 to 1.7, 3.9, 5.3, 5.6 and step 6's - and leave every
-other row blank.
+fill in only the rows of S1's steps - 1.3 to 1.7, 3.1's `real files fingerprinted`, 3.9, 5.3, 5.6
+and step 6's - and leave every other row blank.
 
 | | |
 |---|---|
@@ -52,7 +52,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 1.3 | update, build and gates | | | |
 | 1.3 | 004 T140: `InstalledAssemblyMatchesManifest` passed, not skipped | | | |
 | 1.6 | health checks 1, 2, 3, 6 and 7 | | | |
-| 1.6 | `swreview seat health` (decision 166A; 004 T353) | | | |
+| 1.6 | 004 T353: `swreview seat health`, every line it printed under step 1's heading, each FAIL with what was done about it (decision 166A) | | | |
 | 1.7 | 004 T164: FeatureWorks present and enabled, for the record; in S1 the product Help > About names | | | |
 | 2.2 | 006 T100: the pane reads the placed profile | | | |
 | 2.3 | 008 T101: the profile is version 3 | | | |

@@ -38,16 +38,17 @@ the sitting's runs) and 009 T085 (restore them offline).
 *Added 2026-10-31.* The next sitting is not the whole list below: it is S1, about three hours
 with no key and no paid call, and its order is the test plan's section "S1: Start readiness",
 which wins where this list differs. In that order: the update and the health checks, with
-`swreview seat health` (004 T353) and 004 T140's manifest test (the test plan's steps 1.1 to 1.6); the product
-Help > About names (004 T164, step 1.7); step 21's first run, moved early because it asks for no
-reorder (004 T036 to T039, and 004 T187's PROBE-8 readings); the fingerprint, then step 8's two
-D14 runs on part J (011 T077, 013 T142) and PROBE-15 on J (003 T088; the test plan's step 3.9);
+`swreview seat health` (004 T353) and 004 T140's manifest test (the test plan's steps 1.1 to 1.6),
+the fingerprint taken there before SOLIDWORKS starts, since part J is the health checks' part;
+the product Help > About names (004 T164, step 1.7); step 21's first run, moved early because it
+asks for no reorder (004 T036 to T039, and 004 T187's PROBE-8 readings); step 8's two D14 runs
+on part J (011 T077, 013 T142) and PROBE-15 on J (003 T088; the test plan's step 3.9);
 the retest's box and part J's Plan with the open's seconds (004 T185, 004 T186, 011 T171, 004
 T182; step 5.3); the close in process, idle and then with a dialog open (004 T303a; step 5.3),
 which ends only the backend the add-in started, by its number; optionally, two made-up
 assemblies built at the seat and never committed (006 T102's transparency, 001 T076's volume
-unit; decision 172A); step 21's second and third runs, the third holding the five probes Start
-waits on; and the test plan's handoff steps 6.0,
+unit; decision 172A); Window > Close All, since part J is still open, then step 21's second and
+third runs, the third holding the five probes Start waits on; and the test plan's handoff steps 6.0,
 6.1, 6.3 and 6.5. The later sittings, S2 to S5, are each 3.5 hours or less and on one theme (the
 test plan's section "Sittings").
 
@@ -230,7 +231,8 @@ cd "$R\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd $R
 ```
 
 Pass: `pull exit code: 0`, the script ends at its health step with no step failed, runbook
-section 6's seven checks hold, and `swreview seat health` ends `exit code: 0` (a build without it:
+section 6's seven checks hold, and `swreview seat health` ends `exit code: 0`, every line it
+printed recorded as the test plan's step 1.6 says (a build without it:
 `seat health: not in this build`). The script fetches first even with `-NoPull`, and says
 `-NoPull: building what is checked out`; the test plan's step 1.3 says what each other line means.
 Record the commit before and after and the versions of section 2 at the top of the findings

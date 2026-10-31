@@ -203,6 +203,10 @@ Start SOLIDWORKS with a **part or assembly** active, not a drawing (a drawing is
 the tool service, out loud, since the fix of 2026-09-18; before it, a drawing active at load
 silently disabled every bridge-backed feature).
 
+From `<repo>\reviewer`, `uv run swreview seat health` (decision 166A), run while that SOLIDWORKS is
+the only one running, prints `PASS` or `FAIL` with a reason for what a file can prove of these
+checks and `MANUAL` for the rest; read each `FAIL` against section 7.
+
 1. **The add-in loaded.** Tools > Add-ins shows SwReview ticked. The tail of
    `%LOCALAPPDATA%\SwReview\logs\addin.log` for this start shows, in order:
    `AssemblyRedirect installed.`, `Attached to SOLIDWORKS.`, `Task Pane created.`,

@@ -58,14 +58,14 @@ step itself says:
 
 | Order | Steps | Tasks | Estimate |
 |---|---|---|---|
-| 1 | 1.1 to 1.6: the update, its gates with 004 T140's check at 1.3, and the health checks with `swreview seat health` | 004 T140, 004 T353 | 55 min |
+| 1 | 1.1 to 1.6: the update, its gates with 004 T140's check at 1.3, 3.1's `Save-Fingerprint 'before'`, then the health checks on part J with `swreview seat health` | 004 T140, 004 T353 | 55 min |
 | 2 | 1.7, Help > About's product name only | 004 T164 | 5 min |
 | 3 | 5.6's item 1, then its first run (moved early: it asks for no reorder), its item 4 and its item 7 | 004 T036 to T039, 004 T187 | 10 min |
-| 4 | 3.1's `Save-Fingerprint 'before'`, then 3.9: D14 twice on part J, then PROBE-15 on it | 011 T077, 013 T142, 003 T088 | 25 min |
+| 4 | 3.9: D14 twice on part J, then PROBE-15 on it | 011 T077, 013 T142, 003 T088 | 25 min |
 | 5 | 5.3: items A and B on the box, then items 1 to 6 on part J, with the open's seconds | 004 T185, 004 T186, 011 T171, 004 T182 | 30 min |
 | 6 | 5.3's close in process, idle, then with a dialog open | 004 T303a | 25 min |
 | 7 | optional: two made-up assemblies (below) | 006 T102, 001 T076 | 25 min |
-| 8 | 5.6's second and third runs, then its items 4 to 7 | 004 T033 to T035, 004 T037, 004 T038 | 15 min |
+| 8 | 5.6's item 1's Window > Close All, Don't Save (part J is still open, and perhaps row 7's assemblies, and a run refuses to start while any document is), then its second and third runs, then its items 4 to 7 | 004 T033 to T035, 004 T037, 004 T038 | 15 min |
 | 9 | 6.0, 6.1, 6.3 and 6.5: the handoff | none | 25 min |
 
 - **Before the sitting:** section 0.1's items 1 and 3 (the build on GitHub, the vocabulary file),
@@ -77,8 +77,9 @@ step itself says:
   "Cannot reorder" box can hold it (step 5.6, item 2): do its item 1 (no document open, the three
   options noted) before it and its item 7 (the options as noted) after it. The second and third
   runs stay last before the handoff, as step 5.6 says.
-- **The fingerprint.** `Save-Fingerprint 'before'` runs before step 3.9 first opens part J;
-  step 6.0 compares, as always.
+- **The fingerprint.** Step 1.6's part is part J, the only document S1 has, so
+  `Save-Fingerprint 'before'` (step 3.1's line) runs at step 1.6, before SOLIDWORKS starts, and
+  so before anything opens part J; step 6.0 compares, as always.
 - **Cut rule.** If SOLIDWORKS closes during step 5.3 (its item C), skip the close in process and
   the optional block, and go straight to 5.6's second and third runs.
 - **The optional block** starts only by 2 h 25 on the sitting's clock, counted from step 1.1, so
@@ -172,7 +173,9 @@ SOLIDWORKS closes during step 5.3, follow its item C before anything else, and g
    either. The one write of the sitting from your files is step 3.5's Pack and Go copy into a
    scratch folder under `%TEMP%`, which step 6.0 deletes; step 5.6's probe builds, saves and
    deletes throwaway parts of its own inside `$H\probes`, never a file of yours; step 5.3's item B
-   saves one new throwaway box of the sitting's own into `$H\scratch`. **Check nothing
+   saves one new throwaway box of the sitting's own into `$H\scratch`; and S1's optional block
+   saves the new parts and the two made-up assemblies of its recipes into `$H\scratch` too
+   (decision 172A). **Check nothing
    out of the vault** during the sitting: a file
    you have not checked out is read-only on disk, so a wrong Save cannot reach it. Steps 3.1, 3.5
    and 6.0 fingerprint your files and show whether anything changed.
@@ -779,6 +782,10 @@ step fails". Close the administrator window afterwards and carry on in the ordin
 
 ### 1.6 The health checks
 
+*In S1* (decision 167A) the part is part J, the only document S1 has. Before starting SOLIDWORKS,
+run step 3.1's `Save-Fingerprint 'before'`, so that the fingerprint is taken before anything opens
+J; its pass and its row are step 3.1's.
+
 Start SOLIDWORKS and open a **part** (not an assembly, not a drawing). Write SOLIDWORKS's version
 and service pack from Help > About at the top of the findings document. Then:
 
@@ -802,15 +809,27 @@ Every line of that log starts with its time in square brackets; read what follow
 7. `git status --porcelain` still prints nothing.
 
 Then the seat's own health check (decision 166A, 2026-10-31; 004 T353), with SOLIDWORKS still open
-on the part:
+on the part. Run it while the SOLIDWORKS started at the top of this step is still running and is
+the only SOLIDWORKS running: the command ties `addin.log` to that one start, so its three log
+checks fail when none is running or more than one is (004 research R28.7). If it says more than
+one is running, close the others and run it again.
 
 ```powershell
 cd "$R\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd $R
 ```
 
-Pass: `exit code: 0`. Any other: copy what it printed into the notes of its 1.6 row, after
-checking it holds no path. A build older than 2026-10-31 has no such command: write
-`seat health: not in this build`.
+It prints one `PASS` or `FAIL` line for each check a file can prove, with its reason; then one
+`MANUAL` line for each check only the pane shows, naming the check above by its item number; and
+last a line beginning `health:`. It prints no path of this machine, no branch and no document's
+name, so every line may be copied. Pass: `exit code: 0`. Record, under the findings document's
+heading "1. Update and health", every line from the first `PASS` or `FAIL` line to the `health:`
+line, as printed (004 T353 asks for every line). After each `FAIL` line write what was done about
+it, from runbook section 7, and whether the command passed when run again; a fix that belongs to
+a step this sitting does not run (placing the profile is step 2.2) is written `not in this
+sitting: step <n>`. After each `MANUAL` line write the result of its check, read by eye: checks
+1, 2, 3 and 6 above, or `later` for items 4 and 5, which steps 2.4 and 3.4 read. In its own 1.6
+row: `pass` or `fail`, and in Observed the `health:` line. A build older than 2026-10-31 has no
+such command: write `seat health: not in this build`.
 
 Record: pass or fail for checks 1, 2, 3, 6 and 7 in the 1.6 row; on a fail, the log lines (each
 after its `[time]`). A fail of check 1 or 2: "When a step fails" says what to try once and what
