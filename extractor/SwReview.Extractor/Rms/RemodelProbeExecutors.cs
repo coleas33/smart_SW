@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using SolidWorks.Interop.swconst;
+using SwReview.Extractor.Probes;
 
 namespace SwReview.Extractor.Rms;
 
@@ -526,6 +527,9 @@ public static partial class RemodelProbeExecutors
     }
 
     // ---- PROBE-5: the three folder optimisations, each recorded independently ----------
+    //
+    // A call that throws is recorded as its exception's type and HRESULT, never its message
+    // (owner decision 171A, 004 T335), as PROBE-13's errors and the runner's are.
 
     private static RemodelProbeReading Probe5(RemodelProbeContext context)
     {
@@ -547,7 +551,7 @@ public static partial class RemodelProbeExecutors
         }
         catch (Exception error)
         {
-            raw["reorder_to_folder"] = "error: " + error.Message;
+            raw["reorder_to_folder"] = "error: " + ProbeText.Failure(error);
         }
 
         attempts++;
@@ -559,7 +563,7 @@ public static partial class RemodelProbeExecutors
         }
         catch (Exception error)
         {
-            raw["move_to_folder"] = "error: " + error.Message;
+            raw["move_to_folder"] = "error: " + ProbeText.Failure(error);
         }
 
         attempts++;
@@ -571,7 +575,7 @@ public static partial class RemodelProbeExecutors
         }
         catch (Exception error)
         {
-            raw["make_sub_feature"] = "error: " + error.Message;
+            raw["make_sub_feature"] = "error: " + ProbeText.Failure(error);
         }
 
         RemodelProbeVerdict verdict = successes == attempts ? RemodelProbeVerdict.Verified : RemodelProbeVerdict.Unresolved;
@@ -1048,7 +1052,7 @@ public static partial class RemodelProbeExecutors
                 // surfaces as either depending on exactly how it is locked, and a real
                 // SOLIDWORKS lock is not something this build can predict.
                 copySucceeded = false;
-                raw["file_copy_error"] = copyError.Message;
+                raw["file_copy_error"] = ProbeText.Failure(copyError);
                 fallbackAttempted = true;
 
                 try
@@ -1063,7 +1067,7 @@ public static partial class RemodelProbeExecutors
                 }
                 catch (Exception fallbackError)
                 {
-                    raw["fallback_error"] = fallbackError.Message;
+                    raw["fallback_error"] = ProbeText.Failure(fallbackError);
                 }
             }
         }

@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using SwReview.Extractor.Probes;
 using SwReview.Extractor.Sw;
 
 namespace SwReview.Extractor.Rms;
@@ -807,7 +808,7 @@ public static class RemodelProbeRunner
     /// <summary>The <c>raw_result</c> key <see cref="NotImplementedNote"/> is filed under.</summary>
     public const string NoteKey = "note";
 
-    /// <summary>The <c>raw_result</c> key a thrown probe body's message is filed under.</summary>
+    /// <summary>The <c>raw_result</c> key a thrown probe body's exception type is filed under.</summary>
     public const string ErrorKey = "error";
 
     /// <summary>
@@ -849,7 +850,7 @@ public static class RemodelProbeRunner
             {
                 reading = new RemodelProbeReading(
                     RemodelProbeVerdict.Unresolved,
-                    new Dictionary<string, string>(StringComparer.Ordinal) { [ErrorKey] = HostMessage(error) });
+                    new Dictionary<string, string>(StringComparer.Ordinal) { [ErrorKey] = HostFailure(error) });
             }
         }
 
@@ -870,20 +871,19 @@ public static class RemodelProbeRunner
     }
 
     /// <summary>
-    /// What the ledger records for a body that threw: the host's own words (013 T137, 004 T171).
-    /// A call made through a task arrives as an <see cref="AggregateException"/> whose own message
-    /// ("One or more errors occurred.") says nothing, so the messages of what it wraps are recorded,
-    /// in order; one that wraps nothing keeps its own message, the only words there are.
+    /// What the ledger records for a body that threw: the host's own exception (013 T137, 004
+    /// T171) as its type and HRESULT, never its message (owner decision 171A, 004 T335), since a
+    /// SOLIDWORKS or file-system message may name a path holding the user's name. A call made
+    /// through a task arrives as an <see cref="AggregateException"/>, which says nothing of what
+    /// failed, so each exception it wraps is recorded, in order; one that wraps nothing is
+    /// recorded as itself.
     /// </summary>
-    private static string HostMessage(Exception error)
+    private static string HostFailure(Exception error)
     {
-        if (!(error is AggregateException aggregate))
-        {
-            return error.Message;
-        }
-
-        IReadOnlyCollection<Exception> inner = aggregate.Flatten().InnerExceptions;
-        return inner.Count == 0 ? error.Message : string.Join("; ", inner.Select(exception => exception.Message));
+        IReadOnlyCollection<Exception> inner = error is AggregateException aggregate
+            ? aggregate.Flatten().InnerExceptions
+            : (IReadOnlyCollection<Exception>)Array.Empty<Exception>();
+        return inner.Count == 0 ? ProbeText.Failure(error) : string.Join("; ", inner.Select(ProbeText.Failure));
     }
 
     /// <summary>
