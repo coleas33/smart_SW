@@ -5402,16 +5402,23 @@ No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopp
 
 ### R25.9 What Start (T172) waits on now
 
+*Updated 2026-10-31 (owner decisions 165A, 168A, 169A and 170A; R26.8):* R22.14 and R25.13 are fixed, T180 is closed,
+T303 is split, and T138 and T187 join the list.
+
 - T303a (T303 split by owner decision 169A; R26.6): the in-process close's timing on the SOLIDWORKS
   thread at the pilot workstation, in sitting S1, with R22.3's native order of an abandoned close and
   R25.3's order of a close the old backend handed over before it stopped. T303b, a plan holding its
   session for Start, needs Start on: it runs first in the sitting after the switch is set and is not on
   this list.
-- An end told during a `Plan` that then succeeds (R22.14).
-- T180 and its owner decision.
+- *Done (165A; R26.2):* an end told during a `Plan` that then succeeds (R22.14).
+- *Done (168A; R26.5):* T180 and its owner decision.
 - PROBE-1, PROBE-2, PROBE-3, PROBE-4 and PROBE-12.
 - A real Plan whose source hash stays unchanged.
-- The barrier unwind's close by path (R25.13).
+- *Done (165A; R26.1):* the barrier unwind's close by path (R25.13).
+- T138 and T187 (owner decision 170A; R26.7): `require_stage_1` refuses every change while
+  `IDENTITY.calibrated` is false (`reviewer/src/swreview/remodel/tolerances.py:149`, asked at `runner.py:887`
+  and `apply.py:1732`), so Start waits on T138's calibration of `IDENTITY` from PROBE-8 and on T187's
+  overrides and accuracy.
 
 R24.10's first item - the old backend alive but not answering - is settled in code by 163A and leaves
 the list, apart from its seat order (T303, now T303a).
@@ -5819,3 +5826,18 @@ closed and reopened at its path mid-open, a close not answered in time and run l
 while it finished. Earlier references to T303 in R22 to R25 are left as written; each names a check now in T303a,
 apart from the plan waiting for Start, which is T303b's. R25.9's list, `contracts/backend-remodel.md` and T172 now name
 the two.
+
+### R26.7 The IDENTITY profile and Start (170A)
+
+Decision 170A: the `IDENTITY` tolerance profile is calibrated from PROBE-8 as written (FR-036), with the stage-1 run
+(T135) as a repeat check. Start cannot apply a change while it is not: `require_stage_1`
+(`reviewer/src/swreview/remodel/tolerances.py:149`) refuses a profile whose `calibrated` is false; the run orchestrator
+asks it before any provider, bridge call or change (`runner.py:887`), and the geometry verification asks it again
+(`apply.py:1732`, in `verify`). `IDENTITY.calibrated` is false until T138 freezes it against PROBE-8's attained error,
+and T187 must settle overrides and accuracy before a calibrated profile is published. So T138 and T187 join R25.9's
+list; each task says so.
+
+### R26.8 What Start (T172) waits on now
+
+R25.9's list is updated in place (2026-10-31) and stays the one list: R25.13 and R22.14 done (R26.1, R26.2), T180 done
+(R26.5), T303a in place of T303 (R26.6), T138 and T187 added (R26.7). T172 is amended to say so.
