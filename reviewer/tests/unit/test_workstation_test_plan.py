@@ -2915,7 +2915,13 @@ def test_not_in_this_sitting_says_what_s1_runs_of_the_tasks_it_holds(plan: str) 
 def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
     """Decision 173A closes a replaced or deferred task by ticking it with a dated note, so the
     README no longer counts an unticked `SUPERSEDED (127A)` task as superseded, and the rows of
-    the four features whose tasks 004 T361 closed are recounted (004 T370, on review)."""
+    the four features whose tasks 004 T361 closed are recounted (004 T370, on review).
+
+    *Changed 2026-10-31 on review (004 T388; research R29.11, RR8):* main's merges added tasks to
+    001, 005 and 008 after that count, and 004's row still listed T180, which decision 168A
+    closed: the rows of 001, 002, 004, 005 and 008 are recounted from this tree's task lists. The
+    counts stay literals, checked by hand at each recount: a pin that computed them would turn
+    every lane that adds a task red."""
     readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
     flat = re.sub(r"\s+", " ", readme)
     rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
@@ -2923,23 +2929,28 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
     assert "is counted as superseded, not open" not in flat
     assert "decision 173A" in flat
     for number, counts, closed in (
-        ("001", "102 / 3 / 0", "T098"),
+        ("001", "107 / 3 / 0", "T098"),
         ("002", "298 / 4 / 0", "T055a"),
-        ("005", "86 / 27 / 0", "T073"),
-        ("008", "124 / 5 / 0", "T106"),
+        ("005", "90 / 27 / 0", "T073"),
+        ("008", "132 / 5 / 0", "T106"),
     ):
         assert f"| {counts} |" in rows[number], number
         assert "Closed on 2026-10-31 (decision 173A)" in rows[number], number
         assert closed in rows[number].split("Closed on 2026-10-31")[1], number
+    assert "| 388 / 22 / 0 |" in rows["004"]
+    assert "T180" not in rows["004"]
+    for task in ("T182", "T187", "T303a", "T303b", "T353"):
+        assert re.search(rf"\b{task}\b", rows["004"]), task
+    assert "the rows of 001, 002, 004, 005 and 008 were recounted on 2026-10-31" in flat
 
 
 def test_swreview_remodel_ledger_prints_what_step_5_6_reads(tmp_path: Path) -> None:
     """`Show-RemodelLedger` hands each answers file to `swreview remodel ledger` (decision 166A),
-    and step 5.6 reads from it each probe's id, verdict and reason. That reader is another lane's,
-    merged before this plan's: until it is in the checkout this skips; once it is, an answers
-    file in `RemodelProbeLedger.Render`'s shape is read through it (004 T370, on review)."""
-    if "ledger" not in get_command(app).commands["remodel"].commands:
-        pytest.skip("`swreview remodel ledger`, decision 166A's reader, is not in this checkout")
+    and step 5.6 reads from it each probe's id, verdict and reason: an answers file in
+    `RemodelProbeLedger.Render`'s shape is read through it (004 T370, on review).
+
+    *Changed 2026-10-31 on review (004 T388; research R29.11, RR9):* the reader is on main since
+    PR #53, so the skip that waited for it is gone: a checkout without the command fails here."""
     ledger = tmp_path / "remodel-32.5.0.48.yaml"
     ledger.write_text(
         rendered_ledger(
@@ -3016,3 +3027,86 @@ def test_t303a_records_its_stuck_case_as_its_task_allows(plan: str, results: str
     assert record in part and f"`{stuck_fake}`" in part
     assert "Record in 004 T303a's three rows" in part
     assert len(rows) == 3 and "the stuck case" in rows[-1]
+
+
+def test_step_1_6_records_every_line_seat_health_prints(
+    plan: str, results: str, tmp_path: Path
+) -> None:
+    """004 T353 asks for every line `swreview seat health` prints recorded, each FAIL with what
+    was done about it, read against runbook section 7, and the MANUAL lines checked by eye; and
+    the command ties `addin.log` to the one SOLIDWORKS running, so it runs while the one step 1.6
+    started is the only one (004 research R28.7). Step 1.6 recorded only its exit code. The kinds
+    of line the plan names are the ones the command prints, and it prints no path of the machine,
+    so every line may be copied; runbook section 6, which the command serves, names it (004 T388,
+    review finding RR7)."""
+    part = re.sub(r"\s+", " ", step(plan, "1.6"))
+    rows = [line for line in results.splitlines() if line.startswith("| 1.6 | 004 T353")]
+    runbook = re.sub(r"\s+", " ", RUNBOOK.read_text(encoding="utf-8"))
+    checks = runbook[runbook.index("## 6. Health checks") : runbook.index("## 7. Failure modes")]
+    result = CliRunner().invoke(
+        app,
+        [
+            "seat", "health",
+            "--logs", str(tmp_path / "logs"),
+            "--repo", str(tmp_path / "repo"),
+            "--profile", str(tmp_path / "standards.yaml"),
+        ],
+    )
+    lines = result.output.splitlines()
+
+    assert result.exit_code == 1, result.output
+    assert {line.split(" ", 1)[0] for line in lines} <= {"PASS", "FAIL", "MANUAL", "health:"}
+    assert lines[-1].startswith("health: ") and str(tmp_path) not in result.output
+    for kind in ("`PASS`", "`FAIL`", "`MANUAL`", "`health:`"):
+        assert kind in part, kind
+    assert "every line from the first `PASS` or `FAIL` line to the `health:` line" in part
+    assert "what was done about it, from runbook section 7" in part
+    assert "by eye" in part
+    assert "the only SOLIDWORKS running" in part and "R28.7" in part
+    assert "Any other: copy what it printed" not in part
+    assert len(rows) == 1 and "every line" in rows[0] and "what was done about it" in rows[0]
+    assert "`uv run swreview seat health`" in checks and "section 7" in checks
+
+
+def test_s1_closes_its_documents_before_the_last_runs_and_fingerprints_before_j_opens(
+    plan: str,
+) -> None:
+    """Three gaps in S1's order (004 T388, review finding RR10). (a) Row 8 ran step 5.6's second
+    and third runs straight after rows 4 to 7, with part J still open (step 5.3 keeps it open) and
+    perhaps the optional block's assemblies, so the second run was refused: the row now does 5.6's
+    item 1's Window > Close All first. (b) Step 1.6 opens a part, in S1 part J, the only document
+    S1 has, while `Save-Fingerprint 'before'` ran at row 4, said to be before J was first opened:
+    it now runs at step 1.6, before SOLIDWORKS starts. (c) Rule 1's list of the sitting's only
+    saves names the optional block's saves into `$H\\scratch` (decision 172A)."""
+    rows = s1_rows(plan)
+    [last_runs] = [cell for _, cell, _, _ in rows if "second and third runs" in cell]
+    flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+    health = step(plan, "1.6")
+    rules = section(plan, "The rules for the whole sitting")
+    rule_1 = re.sub(
+        r"\s+", " ", rules[rules.index("1. **Save nothing") : rules.index("2. **Edit no file")]
+    )
+
+    assert "5.6's item 1" in last_runs and "Window > Close All, Don't Save" in last_runs
+    assert "Save-Fingerprint 'before'" in rows[0][1] and "part J" in rows[0][1]
+    assert [cell for _, cell, _, _ in rows[1:] if "Save-Fingerprint" in cell] == []
+    assert "before step 3.9 first opens part J" not in flat
+    assert "runs at step 1.6, before SOLIDWORKS starts" in flat
+    assert "*In S1*" in health and "part J" in health
+    assert health.index("`Save-Fingerprint 'before'`") < health.index("Start SOLIDWORKS and open")
+    assert "S1's optional block" in rule_1 and "`$H\\scratch`" in rule_1
+
+
+def test_002_t063_is_codex_only_since_t055a_is_closed() -> None:
+    """002 T063 still waited on T055a for Gemini and asked for the refusal probe for both CLIs,
+    while T055a is closed (decisions 94A and 173A) and the plan's row reads T063 as the terminal's
+    Codex run: it carries a dated note that it is Codex only (004 T388, review finding RR11)."""
+    lines = (REPO / "specs" / "002-task-pane-assistant" / "tasks.md").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    t055a = line_starting(lines, "- [x] T055a ")
+    t063 = line_starting(lines, "- [ ] T063 ")
+
+    assert "*Closed 2026-10-31 (owner decision 173A)" in t055a
+    assert "*Amended 2026-10-31 (owner decisions 94A and 173A):" in t063
+    assert "Codex only" in t063.split("*Amended 2026-10-31")[1]
