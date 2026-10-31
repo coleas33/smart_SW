@@ -6147,12 +6147,13 @@ other cases of the file green.
 | M29 | a committed `drawing-binding.md` with a D8 dimension line | red: the design-name pin |
 | M30 | a committed `drawing-open.md` naming its drawing's file | red: the design-name pin |
 
-**Gates** on the final tree (GATES_COMMIT, with this record):
+**Gates** on the final tree (`1e30df3`, with this record; its counts filled in after):
 
 - **C#.** Not run: no file under `extractor/` changed in this round.
 - **Python.** Required-tokenizer non-live suites (`SWREVIEW_TOKENIZER_DIR=C:\t\144a-tok`,
-  `--basetemp` outside the checkout; counted from the progress lines): Python 3.12 PY312_COUNTS; Python
-  3.11 (`uv run --isolated --python 3.11 --all-extras`) PY311_COUNTS; none failed.
+  `--basetemp` outside the checkout; counted from the progress lines): Python 3.12 18,393 passed and 6
+  skipped; Python 3.11 (`uv run --isolated --python 3.11 --all-extras`) 18,394 passed and 5 skipped;
+  none failed. Fifteen more than R27.9.8's, the fifteen T348 added.
 - **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no
   broken link (`COUNT 0`); every changed file is `i/lf`.
 - **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file.
