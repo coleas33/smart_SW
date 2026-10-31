@@ -1324,7 +1324,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 SourceAttestation = attestation,
             };
         }
-        catch (Exception)
+        catch (Exception error)
         {
             // 004 T177 (default taken 2026-09-27, the owner may revise; research R14.3): the
             // unwind follows the end-of-session routine's rules. The close is the same allowlisted
@@ -1338,7 +1338,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             // asks SOLIDWORKS first, since OpenDoc7 may have opened the copy anyway. Owner decision
             // 165A (004 research R25.13): with one, another document open at the copy's path - the
             // copy closed and reopened by a re-entrant action while a native call pumped - is neither
-            // closed nor has its file deleted.
+            // closed nor has its file deleted, and rebuild errors are then answered as below.
             var failures = new List<string>();
             bool leaveTheCopy = false;
             bool copyClosed = RemodelStageMarkers.Around(
@@ -1376,6 +1376,20 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 copyClosed,
                 toggles.Outstanding,
                 failures));
+
+            // 165A's second review round (004 research R26.11): preexisting_rebuild_errors says the copy is deleted - the
+            // backend answers it copy_present: false and the host deletes copy/ - so a copy left is answered as every other
+            // open whose unwind left it.
+            if (leaveTheCopy
+                && error is RemodelCommandError refusal
+                && refusal.ErrorCode == RemodelErrorCodes.PreexistingRebuildErrors)
+            {
+                throw new RemodelCommandError(
+                    RemodelErrorCodes.TargetMismatch,
+                    "the part already has rebuild errors at baseline, so the run stops; the document SOLIDWORKS has open at "
+                    + "the copy's path is not the one this open opened, or could not be read, so it was neither closed nor "
+                    + "deleted.");
+            }
 
             throw;
         }
