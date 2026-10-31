@@ -29,7 +29,8 @@ throwaway part it builds itself, once:
    and an HRESULT.
 
 Copy the ledger alone, never the run's `remodel-probe.log`, whose first line names the `--out`
-folder. Keep each run in a folder of its own, named for the sitting and the run
+folder and which keeps each thrown probe's exception message, path and all (research R27.9). Keep
+each run in a folder of its own, named for the sitting and the run
 (`<yyyy-mm-dd>-<run>/remodel-<version>.yaml`), since every run of one version writes the same file
 name. Start's five probes (PROBE-1, 2, 3, 4 and 12) must be in one ledger: the reader judges one
 file at a time (research R27.4).

@@ -5711,7 +5711,8 @@ answer. Now:
   for, before `probes:`, so a ledger a run left behind says which probes never finished. Its items are
   indented two spaces, `  - "PROBE-1"`, which none of `Show-RemodelLedger`'s four patterns reads;
 - `probe remodel` hands the recorder to `RunAll` inside the toggles and writes no ledger of its own at
-  the end; the end's `Wrote <path>` line names the same file.
+  the end; the end's `Wrote <path>` line names the same file. (Since R27.9.2 the recorder is made
+  before the toggles, and starts the ledger as it is made.)
 
 What a hang still costs: the row of the probe that hangs, and the settings' restore, as before. The
 regression test reads the file while the third probe's host call is running - what a hang or a kill
@@ -5777,7 +5778,8 @@ unknown field, a missing one, a quoted flag or an unknown verdict is refused.
   (`SW_VERSIONS`), and a test pins `FROZEN_INTEROP_VERSION` to the interop manifest's
   `assembly_version`. A row of another version than its ledger's is refused too;
 - **a shape `probe remodel` does not write**: not YAML, not a mapping, a probe requested twice, two rows
-  for one probe, or a row nobody requested.
+  for one probe, or a row nobody requested; and, since R27.9, an anchor or alias, a key that is not a
+  plain string or appears twice in one mapping, and a file that cannot be read (named by its name).
 
 **Start** (`RemodelStart.SeatValidated`) is ready only when PROBE-1, 2, 3, 4 and 12 each have a row,
 `verified`, with a `reason` and no `error`, and IDENTITY is calibrated. The reason-and-no-error rule is
@@ -5891,7 +5893,10 @@ No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopp
   when it ends, so after Ctrl+C neither exists" is no longer true (R27.1, R27.2), and
   `test_the_lines_step_5_6_reads_are_the_consoles` should pin its replacement; the one-liner
   `Show-RemodelLedger` gives way to `swreview remodel ledger`; and the three runs keep Start's five
-  probes in three ledgers (R27.4).
+  probes in three ledgers (R27.4). Decision 148A's PROBE-12 check, "write `error` and whether it names
+  `OpenDoc7`", can no longer be answered from the ledger, whose `error` is a type and an HRESULT: the
+  answer is in `remodel-probe.log`'s `PROBE-12 threw; ...` line and the message after it (R27.9.3),
+  which, like the rest of the log, is read on the workstation and never copied.
 - **One ledger or several** for Start (R27.4): the plan's layout, or a reader that judges several
   files - not decided here.
 - **Feature 001's CLI contract** (`specs/001-agentic-design-review/contracts/cli.md`) has no row for
@@ -5899,3 +5904,159 @@ No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopp
 - **Feature 013's FR-052** still says the host's exception *message* reaches the ledger (R27.3).
 - **Start (T172)** now also waits on a ledger committed under `benchmarks/native/capabilities/` that the
   reader judges ready, beside R25.9's list.
+
+### R27.9 The lane's first review round (T342 to T347; 2026-10-31)
+
+Two reviewers read the lane at `a28958c`: an Opus review (nine findings) and a Codex review (five). Both
+numbered from F1, so here `O-F<n>` is the first's and `C-F<n>` the second's. Each was checked against
+the code; every defect was reproduced by a failing test before its fix, and none was rejected. Owner
+decisions 166A and 171A govern all of it; 148A and 159A's review-round policy are applied where named.
+
+#### R27.9.1 A rewrite that fails no longer stops the run (O-F1, C-F1; T342, T343)
+
+Confirmed. `Write` ends in `File.Replace`, which needs delete access to the ledger, so a reader holding
+it without sharing its delete - `Get-Content`, Python's `open()` and so `swreview remodel ledger`
+itself, a sync client - made it throw; so did a full disk or a denied folder. The throw left the
+recorder, `RunAll` and the toggles, and every probe after it never ran: a normal user path, at the cost
+of seat time. The rewrite after each probe now catches `IOException` and
+`UnauthorizedAccessException`, logs one line, `could not rewrite remodel-<version>.yaml after
+PROBE-<n> (<Type> 0x<HRESULT>): it lacks the rows since its last rewrite until a later one succeeds`,
+and the run goes on; the next rewrite carries every row. The test holds the ledger (`FileShare.ReadWrite`,
+no delete: the replace fails) or the temporary file (`FileShare.None`: the write fails) across PROBE-6's
+rewrite and releases it in PROBE-3: every probe runs, one failure line names the file and no folder, the
+last rewrite has every row and nothing is left beside it.
+
+**Recorded, not fixed** (159A): if the *last* probe's rewrite fails, the ledger lacks that probe's row
+until the probe is run again. The reader then shows it `not finished`, never ready on it, the log names
+the failure, and the end's `Wrote <path>` line is still printed after that line. A holder at exactly that
+moment is narrower than the case fixed, and the ledger errs only towards "not ready".
+
+#### R27.9.2 The ledger started before anything is built (O-F2, C-F2; T342, T343)
+
+Confirmed. Nothing was written until the first probe ended, and the file's name depends only on the
+version, so a run that hung in PROBE-1 (its own question), rerun into the same `--out`, left the earlier
+run's ledger - every row finished - standing for it; with IDENTITY calibrated the reader could judge it
+ready. `RemodelProbeLedger.Recorder` now writes this run's ledger when it is made - its `requested:`
+list and `probes: []` - and throws if it cannot. `probe remodel` makes the recorder after the
+open-document refusal and the part's save-path check, before the toggles and `BuildPart`, so a ledger
+that cannot be started fails the run (`probe remodel failed.`) with nothing built and no option
+changed, and an earlier run's rows never survive a rerun's start. Codex's other suggestion, refusing a
+folder that already holds a ledger, was not taken: a rerun into the same folder is legitimate, and its
+start now replaces the earlier ledger. Changed on purpose: `test_the_lines_step_5_6_reads_are_the_consoles`
+pins the recorder made before the toggles, no longer inside `RunAll`'s call.
+
+#### R27.9.3 The exception's message kept for the log alone (O-F3; T342, T343)
+
+Confirmed. With the message cut from the ledger (R27.3), decision 148A's step for PROBE-12 - "write
+`error` and whether it names `OpenDoc7`" - had nowhere to be answered. `RemodelProbeRunner.Run` now
+hands a thrown body's exception to an optional `threw(probeId, exception)`, which `RunAll` passes on,
+and `probe remodel` points it at `log.WriteError`, with the line `PROBE-<n> threw; its message is kept in
+this log, never the ledger:` - the shape of every other failure the console reports: the line and the
+message on the console, the whole exception in `remodel-probe.log`. The ledger still keeps the type and
+HRESULT only. The plan's sentence is the plan lane's to point at the log (R27.8). PROBE-5's and
+PROBE-13's own per-call catches, which no plan step reads, still log nothing.
+
+#### R27.9.4 The reader refuses what `yaml.safe_load` would settle silently (C-F3, O-F7, C-F4, O-F5; T344, T345)
+
+- **A key twice (C-F3).** Confirmed: `safe_load` keeps the last of a key repeated in one mapping, so a
+  blocking row reading `verdict: refuted` then `verdict: verified` was judged verified, by the command and
+  by the CI pin that uses it; a merge key (`<<: {verdict: refuted}`) did the same. The reader now loads
+  with `_RenderedYaml`, a `SafeLoader` whose `construct_mapping` refuses a key that is not a plain
+  string - a merge key among them - or that appears twice in one mapping, at every depth, before anything
+  is judged.
+- **Anchors and aliases (O-F7).** Confirmed: `safe_load` follows aliases, and the path walk visited each
+  again, so a few lines of them took exponential time before the shape was checked. `_RenderedYaml`'s
+  `compose_node` refuses any anchor or alias as it is composed; `Render` writes neither.
+- **A file that cannot be read (C-F4).** Confirmed: a missing ledger under a fictional user's design
+  folder printed the folder, user and design names, because the `OSError`'s message repeats the path.
+  `load_ledger` now refuses with `could not read <file name>: <strerror>`.
+- **The version's value (O-F5).** Confirmed: the version refusal repeated `sw_version`. It now says the
+  version is another, and lists the two it reads. `test_a_ledger_for_another_solidworks_version_is_refused`
+  is changed on purpose to ask that the refusal repeat no version.
+
+Each refusal still names no value from the file.
+
+#### R27.9.5 The switch pins read code, never comments (C-F5; T344, T345)
+
+Confirmed by reproduction (M17): the C# pattern matched inside a comment, so a getter turning Start on,
+beside the old line commented out, read as off and kept both the pin and its mutation test green. The
+readers now fail closed on any form they do not read:
+
+- `csharp_switch` strips `//` and `/* */` comments, then requires exactly one declaration of
+  `SeatValidated` (an expression body, a getter or a field's value) and that it be
+  `public static bool SeatValidated => true|false;`;
+- `python_switch` reads `binding.py`'s syntax tree: `DRAWING_BINDING_VALIDATED` bound once in the whole
+  module, at its top level, to the literal `True` or `False`.
+
+The new test turns the sources into six forms - a getter beside the old line commented out (in a line
+or a block comment), a field, a second declaration under `#if`, the binding bound again, a value that is
+not a literal - and each fails its reader. A limit, recorded: the readers read text and are not a
+compiler, so a `//` or `/*` inside a string literal is taken as a comment; that can only hide a
+declaration, which fails the reader closed. `test_each_switch_ships_off_and_its_reader_sees_it_flipped`
+is changed on purpose to name a reader per language.
+
+#### R27.9.6 Coverage the reviewers' mutations found missing (O-F6, O-F4; T342, T344)
+
+Each pins behaviour that was already right, so it is green from the start and proven by a mutation
+(R27.9.8):
+
+- (a) a `MALFORMED` reading that is not a string, `"FICT-key": 5`, whose key the refusal must not
+  repeat - `_named` printing a reading's key went unnoticed;
+- (b) a temporary file left by a run killed between write and replace is taken over by the next write;
+  with the held-file test of R27.9.1, writing the ledger in place now turns three tests red. That the
+  replace is atomic is not itself observable from a test;
+- (c) PROBE-5 with all three calls throwing, so each catch is held to type and HRESULT;
+- O-F4: `test_nothing_committed_under_capabilities_names_a_local_folder` scans every file under
+  `benchmarks/native/capabilities/` - the drawing records, the README, a stray copy - not only
+  `remodel-*.yaml`.
+
+#### R27.9.7 Repetition (O-F9; T346)
+
+`CALIBRATED` is defined once, in `tests/support/remodel_ledger.py`; the exception-text pattern once, as
+`swreview.remodel.ledger.FAILURE` (was `_FAILURE`), which the switch pins import; `CAPABILITIES` is built
+from `seat_tasks.REPO`. The plan test's `write =log[` spacing went with T342's edit there.
+
+#### R27.9.8 For the owner (O-F8), test-first evidence, mutations and gates
+
+**For the owner, not decided here.** O-F8 asks for two decisions this lane recorded but cannot take: that
+the reader read both `32.5.0.48` and `32.5.0` (`SW_VERSIONS`, R27.4: `ISldWorks.RevisionNumber` answers
+the second), and whether Start's five probes go in one run - with R27.9.1 and R27.9.2, a run with PROBE-1
+last keeps every earlier row when PROBE-1 hangs - or the reader learns to judge several ledgers.
+
+**Failing commits.** T342 (`45ed283`): 5 failures on their assertions and the plan test red. T344
+(`8ca0ded`): 20 failures, 18 on their assertions and 2 on the stub reader's `ValueError` (it read two
+switches, or none). T346 changes no behaviour.
+
+**Mutations**, each made in the worktree, the tests run, and the file restored (sha256 equal; M18's file
+removed):
+
+| # | Mutation | Result |
+|---|---|---|
+| M10 | the rewrite's IO failure not caught | red: the held-file test, both cases |
+| M11 | the recorder starts no ledger | red: the earlier run's ledger, and the ledger that cannot be started |
+| M12 | `threw` never called | red: the thrown exception handed to `threw` |
+| M13 | the ledger written in place, no temporary file | red: the leftover temporary file, and the held-file test, both cases |
+| M14 | PROBE-5's `reorder_to_folder` keeps the message | red: PROBE-5's three calls |
+| M15 | PROBE-5's `make_sub_feature` keeps the message | red: PROBE-5's three calls |
+| M16 | a validation error names a reading's key | red: `MALFORMED`'s `a-reading-not-a-string` |
+| M17 | Start turned on by a getter beside the old line commented out (C-F5's own) | red: the Start pin, and the ships-off check |
+| M18 | a `drawing-open.md` naming a fictional user's folder | red: the folder scan |
+| M19 | no check for a key twice | red: the verdict, the version and the reading twice (the merge key is still refused, as not a plain string) |
+| M20 | no check for an anchor or alias | red: all three aliased cases |
+| M21 | an unreadable file's `OSError` not turned into a refusal | red: both unreadable cases |
+
+**Gates** on the final tree (`25f17c1` with this record's README and help-text lines):
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero warnings, zero
+  errors.
+- **C# tests.** 10,235 extractor tests (10,229 before the round, and six more) and 4,276 add-in tests
+  passed, none failed or skipped.
+- **Python.** Required-tokenizer non-live suites (`SWREVIEW_TOKENIZER_DIR=C:\t\144a-tok`,
+  `--basetemp` outside the checkout; counted from the progress lines): Python 3.12 18,378 passed and 6
+  skipped; Python 3.11 (`uv run --isolated --python 3.11 --all-extras`) 18,379 passed and 5 skipped;
+  none failed. Seventeen more than R27.7's, the seventeen T344 added.
+- **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no
+  broken link (`COUNT 0`); every changed file is `i/lf`.
+- **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file.
+
+No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.

@@ -1776,9 +1776,10 @@ def remodel_ledger_command(
     reason it does not. Start needs PROBE-1, 2, 3, 4 and 12 verified, each with a reason and
     no error, and the IDENTITY tolerance profile calibrated (004 research R27.4).
 
-    Exit 1, with one line and no value from the file, for a ledger it will not judge: not in
-    the shape probe remodel writes, for another SOLIDWORKS version than the frozen interop's,
-    or naming a path anywhere (decision 171A). It writes nothing and prints the file's name,
+    Exit 1, with one line and no value from the file, for a ledger it will not judge: one it
+    cannot read, not in the shape probe remodel writes (YAML anchors, aliases and a key twice
+    in one mapping included), for another SOLIDWORKS version than the frozen interop's, or
+    naming a path anywhere (decision 171A). It writes nothing and prints the file's name,
     never its folder.
     """
     with _errors_as_exit_1():
