@@ -947,6 +947,9 @@ merge, never hand-merged.
    and a part root's handle is its `IModelDoc2` (`extractor/SwReview.Extractor/Dump/ComponentTreeDumper.cs:315`),
    so a part review may carry no tapped hole and no cosmetic thread at all. Read from the code only;
    the seat confirms it, and until then a part review's thread check covers only what it was given.
+   *Amended 2026-10-31 (owner decision 166A, R2.27):* the skip now records a `hole` and a
+   `fastener` gap naming the node (T128), so the check lists them in its not-read row; the seat
+   (T124) confirms the gap, and reading the holes is T130, after PROBE-15 (003 T088).
 
 **Known limits, recorded rather than fixed** (2026-10-08, in the documents' review):
 
@@ -958,7 +961,9 @@ merge, never hand-merged.
   unreadable, and `1/16` is a size in no table. The owner may add the tokens; it is one edit of the
   one list beside `parse_thread`, with its vectors.
 - **A part reviewed on its own** may give no hole row and no gap (open item 2 above, T124), so the
-  "nothing at all" row cannot yet tell such a part from one with no thread.
+  "nothing at all" row cannot yet tell such a part from one with no thread. *Amended 2026-10-31:*
+  the gap is fixed by T128 (166A, R2.27), so such a part reaches the not-read row; its holes stay
+  unread until T130.
 - **A tolerance class written after a space** joins the pitch: `parse_thread` removes all
   whitespace before reading (`reviewer/src/swreview/checks/fastener.py:164`), which is how it
   reads `M8 x 1.25`, so `M8x1.25 6H` reads pitch 1.256 and is flagged non-standard, and
@@ -1062,6 +1067,10 @@ part root is the node to read at all.
 (`DocumentNodeGapTests`) - each of the three dumpers on each of the three document nodes records
 no gap; the five pins of what does not change pass. After T128: `Passed: 14, Total: 14`, and
 the whole C# suite green (extractor 10230 passed, add-in 4276 passed, the build zero warnings).
+T129: the reviewer's test of the two gaps, for a part root and for a model a drawing references,
+passed at once, with no reviewer change: `thread_pitch._unread_gaps` already lists a null-id
+`hole` or `fastener` gap, so `check_threads` writes the not-read row and never the nothing-at-all
+row; no fixture or golden was regenerated.
 
 ## R3. Verified facts the plan relies on
 

@@ -36,7 +36,7 @@ from swreview.checks.thread_pitch import (
 )
 from swreview.ir.models import DumpPhase, EvidencePackage, Quantity
 from swreview.report.session import CoverageItem, CoverageScope
-from tests.support.mechanical import Face, Instance, PackageBuilder
+from tests.support.mechanical import FICTIONAL_ROOT, Face, Instance, PackageBuilder
 
 REVIEWER = Path(__file__).resolve().parents[1].parent
 PROFILE_A = REVIEWER / "tests" / "fixtures" / "standards" / "profile-a.yaml"
@@ -1464,6 +1464,45 @@ def test_with_no_source_anything_unread_is_said_instead_of_nothing(
     checks = run(nothing_package(**changes))
 
     assert reasons(checks.skipped) == [row]
+
+
+DOCUMENT_NODE = "is reviewed as a document of its own, not as a component of an assembly"
+"""What the extractor writes, word for word, for a node whose handle is its document - a part
+root, or a model a drawing references - whose holes and fastener identity it did not read
+(`ComponentDocuments.RecordDocumentNode`, feature 010 T128, owner decision 166A)."""
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["PLATE_FICT", f"{FICTIONAL_ROOT}Vault\\PLATE_FICT.SLDPRT"],
+    ids=["part reviewed on its own", "model a drawing references"],
+)
+def test_a_document_node_the_extractor_did_not_read_is_the_not_read_row_never_nothing(
+    key: str,
+) -> None:
+    """T129 (166A): a part reviewed on its own, keyed by its design name, and a model a drawing
+    references, keyed by its path, give no hole, cosmetic thread or fastener row, only the two
+    gaps the hole and fastener phases write for them. The not-read row lists both, so the
+    review says their threads were not checked rather than that the package states none."""
+    hole = f"'{key}' {DOCUMENT_NODE}, so its holes and threads were not read."
+    fastener = f"'{key}' {DOCUMENT_NODE}, so whether it is a fastener was not read."
+
+    checks = run(nothing_package(gaps=[gap("hole", None, hole), gap("fastener", None, fastener)]))
+
+    assert checks.skipped == (
+        CoverageItem(
+            check=ROW,
+            scope=CoverageScope(),
+            reason=(
+                "2 extractor gaps left holes, cosmetic threads or fasteners unread, so their "
+                f"pitch was not checked: {hole}; {fastener}"
+            ),
+            error=None,
+        ),
+    )
+    assert NOTHING not in reasons(checks.skipped)
+    assert (checks.findings, checks.checked, checks.unresolved) == ((), (), ())
+    assert (checks.threads, checks.coarse) == (0, 0)
 
 
 def test_a_model_check_package_says_the_hole_and_fastener_phases_did_not_run() -> None:
