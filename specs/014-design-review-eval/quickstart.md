@@ -195,11 +195,11 @@ plain one (RF-84). The private slice's go outside the repository.
 
 ```bash
 uv run swreview benchmark run --set ../benchmarks/sets/pane-smoke.json \
-    --out ../benchmarks/pilots/pane-openai/smoke-off --provider openai --model <model> \
+    --out ../benchmarks/pilots/pane-openai/smoke-off --provider openai --model gpt-5.6-sol \
     --effort <effort> --study pane_defaults --arm off --rep 1 --no-explain-findings \
     --standards-profile ../config/standards.example.yaml --jobs <N>
 uv run swreview benchmark run --set ../benchmarks/sets/pane-smoke.json \
-    --out ../benchmarks/pilots/pane-openai/smoke-on --provider openai --model <model> \
+    --out ../benchmarks/pilots/pane-openai/smoke-on --provider openai --model gpt-5.6-sol \
     --effort <effort> --study pane_defaults --arm on --pane-defaults --rep 1 --no-explain-findings \
     --standards-profile ../config/standards.example.yaml --jobs <N>
 # exit 1 names infrastructure failures: run `uv run swreview benchmark resume <that folder>`
@@ -213,7 +213,11 @@ uv run pytest -q -m live -rs tests/live/test_benchmark_live_attempt.py
 Two packages, `kalo-1` (a held-out core case) and `kalo-fit-1` (the anchor with a case file, so the
 answer driver runs), one repetition per arm: about four real reviews, with the model, effort,
 explanation setting and profile the pilot and the study will use, and `<N>` the concurrency planned
-for them (1 unless chosen; P3). Then read every row of both scorecards and of the report:
+for them (1 unless chosen; P3). The model is named, `gpt-5.6-sol`, as every paid test run names it
+(owner decision 174A): the review's default, `gpt-5.6`, has no price row (102A) and its served
+variants are not its aliases, so a pane study requesting it refuses at its price row, naming
+`--model gpt-5.6-sol`. The live test runs `gpt-5.6-sol` unless `SWREVIEW_LIVE_MODEL` names another.
+Then read every row of both scorecards and of the report:
 
 - the served model, within the requested model's aliases (`served_models`);
 - non-zero usage, input and output tokens;
@@ -235,7 +239,7 @@ reads their review times (`--smoke`), and P3 packs and commits them with the pil
 ```bash
 for n in 1 2 3; do
   uv run swreview benchmark run --set ../benchmarks/sets/committed.json \
-      --out ../benchmarks/pilots/pane-openai/pilot-off-$n --provider openai --model <model> \
+      --out ../benchmarks/pilots/pane-openai/pilot-off-$n --provider openai --model gpt-5.6-sol \
       --effort <effort> --study pane_defaults --arm off --rep $n --no-explain-findings \
       --standards-profile ../config/standards.example.yaml --jobs <N>
   # exit 1 names infrastructure failures: run `uv run swreview benchmark resume <that folder>`

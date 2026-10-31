@@ -449,6 +449,7 @@ From T186, issue 20, answered 20A.
 - **Question** (tasks.md T186; `benchmark-run.md` 13): the review's default model `gpt-5.6` (`agent/settings.py`) is not on OpenAI's pricing page, read 2026-10-15 at <https://developers.openai.com/api/docs/pricing>; only its variants `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna` are.
 - **Options**: A: keep `gpt-5.6` and price the variant each response reports serving. B: make `gpt-5.6-sol` the default. C: make `gpt-5.6-terra` the default.
 - **Chosen**: A. The table enters the three variants and no entry for `gpt-5.6` itself; `price_entry` matches the served id each round reports (RUN-08), so whichever variant answers is priced and none is guessed. `test_every_default_non_scripted_model_has_an_entry` checks the OpenAI default through the three variants. The first live or paid run's served model shows which variant answers.
+- *Amended 2026-10-31 (owner decision 174A, recorded under 110A where 33C deferred it)*: the variants are not aliases of `gpt-5.6`, so paid test runs name `gpt-5.6-sol` explicitly; the default and this pricing rule stand.
 
 ### 103A. A short-context price and where it stops (2026-10-15)
 
@@ -476,6 +477,7 @@ From the adversarial review of all of slice 6 before its merge (issue 34, answer
 `, `	` or `
 `, and the scanner gained the same boundary (stricter, never looser).
 - **Deferred by the owner (33C)**: whether `gpt-5.6`'s served `-sol`, `-terra` or `-luna` count as its aliases, until before T244, the first paid run; until then such a run fails as `wrong_model`.
+- **Settled 2026-10-31 (owner decision 174A)**: they do not. `benchmark/served.py` is unchanged: an alias is the exact id or its dated snapshot, so `gpt-5.6-sol`, `-terra` and `-luna` are not aliases of `gpt-5.6`, and the review's default stays `gpt-5.6`, priced by the variant that answers (102A). Paid test runs name `gpt-5.6-sol` explicitly instead: `--model gpt-5.6-sol` in quickstart P0 and P1 and in T244, T245 and T260; T171's live test runs `agent/settings.PAID_TEST_MODEL`, `gpt-5.6-sol`, unless `SWREVIEW_LIVE_MODEL` names another (before, it ran the default and would have failed as `wrong_model` or on its cost); and a pane study's refusal of a model with no price row names the fix for OpenAI, `--model gpt-5.6-sol`, before adding an entry (`provenance.md` 3.2). Tests, offline: `test_a_paid_test_run_names_a_priced_variant_never_an_alias_of_the_default` and `test_the_live_attempt_runs_the_paid_test_model_unless_one_is_named` (`test_prices.py`), and `test_a_pane_study_refuses_a_model_the_price_table_cannot_price` (`test_benchmark_run_options.py`), changed deliberately for the refusal's new words (tasks.md T267, T268). No live test was run.
 
 ### 111A. The simulator made fast before it lands (2026-10-16)
 

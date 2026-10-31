@@ -16,7 +16,8 @@ scorecard's `run_status`, `cost`, `served_models` and `price_table` (`scoring.md
 
 OpenAI only (owner decision 94A, 2026-10-15): skipped when `OPENAI_API_KEY` is not set, and never
 falls back to Gemini, whatever Gemini key the environment holds. The model is `SWREVIEW_LIVE_MODEL`
-when set, else the provider's default (`agent/settings.py`, `DEFAULT_MODELS`).
+when set, else `gpt-5.6-sol` (`agent/settings.py`, `PAID_TEST_MODEL`; owner decision 174A): the
+default `gpt-5.6` has no price row (102A) and its served variants are not its aliases.
 
 **Never run by accident.** `pytestmark = pytest.mark.live`, so the gate's `-m "not live"` deselects
 it, and `tests/conftest.py` skips every live test when no provider key is set at all. It spends
@@ -50,7 +51,7 @@ from typer.testing import CliRunner
 
 from swreview import cli
 from swreview.agent.providers import ProviderName
-from swreview.agent.settings import DEFAULT_MODELS
+from swreview.agent.settings import PAID_TEST_MODEL
 from swreview.benchmark import sets
 from swreview.benchmark.answers import ANSWER_LOG_FILE_NAME
 from swreview.benchmark.report_page import INDEX_FILE, PROMPTS_FILE, TRANSCRIPTS_DIR
@@ -64,7 +65,7 @@ PROVIDER = ProviderName.OPENAI
 
 KEY_NAME = "OPENAI_API_KEY"
 
-MODEL = os.environ.get("SWREVIEW_LIVE_MODEL") or DEFAULT_MODELS[PROVIDER]
+MODEL = os.environ.get("SWREVIEW_LIVE_MODEL") or PAID_TEST_MODEL
 
 PACKAGE_ID = "kalo-fit-1"
 """The anchor with a case file, so the answer driver runs (`benchmarks/sets/pane-smoke.json`)."""
