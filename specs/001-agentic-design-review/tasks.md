@@ -137,7 +137,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T058 [US2] Implement `extractor/SwReview.Extractor/Dump/PackageWriter.cs` orchestrating the dumpers, `GapCollector`, id allocation (`cmp:NNNN`), and `package.json` plus `meshes/` output
 - [X] T059 [US2] Implement `extractor/SwReview.Extractor.Console/Program.cs` commands `dump` and `resolve` per contracts/cli.md (attach to running SOLIDWORKS via `GetObject`, else create; `extract.log`)
 - [X] T060 [US2] Implement `extractor/SwReview.AddIn/` (COM registration, Task Pane with **Dump IR** button calling `PackageWriter` on the active document, progress and error dialog)
-- [ ] T061 [US2] On the workstation, prepare `benchmarks/native/bracket-assy/` (assembly with tapped holes, Toolbox screws, a suppressed component, a pattern) and `benchmarks/native/bracket-assy/answer-key.json`; run quickstart Scenario 2 including the reopen and `resolve` round trip; record results in `benchmarks/native/bracket-assy/notes.md`
+- [ ] T061 [W] [US2] On the workstation, prepare `benchmarks/native/bracket-assy/` (assembly with tapped holes, Toolbox screws, a suppressed component, a pattern) and `benchmarks/native/bracket-assy/answer-key.json`; run quickstart Scenario 2 including the reopen and `resolve` round trip; record results in `benchmarks/native/bracket-assy/notes.md`
 
 **Checkpoint**: Native packages load in the reviewer (`swreview validate`) and US1 reviews run against them.
 
@@ -168,7 +168,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T073 [US3] Implement `reviewer/src/swreview/bridge/client.py` and the tools `bridge_capture`, `bridge_measure`, `bridge_interference` in `reviewer/src/swreview/tools/bridge.py`, registered only with `--bridge`; `request_capture` uses the bridge when present
 - [X] T074 [US3] Add CLI commands `exceptions accept` and `exceptions list` to `reviewer/src/swreview/cli.py`
 - [X] T075 [US3] Create golden fixture `reviewer/tests/golden/fixtures/bracket-assy-interference/` (three seeded interferences, one six-instance pattern, one accepted exception, one truncated pair) with expected grouped findings and coverage
-- [ ] T076 [US3] Add Task Pane buttons **Interference** and **Capture selection** to `extractor/SwReview.AddIn/`; run quickstart Scenario 3 on the workstation and record results in `benchmarks/native/bracket-assy/notes.md`
+- [ ] T076 [W] [US3] Add Task Pane buttons **Interference** and **Capture selection** to `extractor/SwReview.AddIn/`; run quickstart Scenario 3 on the workstation and record results in `benchmarks/native/bracket-assy/notes.md`
 
 **Checkpoint**: Interference findings are grouped, excepted, and re-flagged on change; the bridge serves captures.
 
@@ -250,7 +250,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T100 [P] Write the root `README.md`: purpose, layout, how to build the extractor and run the reviewer, link to `specs/001-agentic-design-review/quickstart.md`
 - [X] T101 [P] Add `NOTICE.md` attributing MIT-derived patterns (`solidworks-skills` connection manager and circuit breaker ideas) and stating that SwpilotCLI is referenced only
 - [X] T102 [P] Add a CI workflow `.github/workflows/reviewer.yml` running `uv run pytest` on Windows and Ubuntu (integration tests skipped) and `ruff check`
-- [ ] T103 Run every quickstart scenario end to end; fix discrepancies between quickstart, contracts, and behavior
+- [ ] T103 [W] Run every quickstart scenario end to end; fix discrepancies between quickstart, contracts, and behavior
 - [X] T104 DRY and constitution review across `reviewer/src/swreview/checks/` and `tools/`: one finding builder, one unit module, no duplicated id resolution; update `research.md` with any decision changes
 - [X] T105 Regenerate `contracts/ir.schema.json` from the models (`python -m swreview.ir.schema --write`) and confirm `test_schema_sync` and the C# serializer test still pass *(Done as verification: `test_schema_sync` proves the generated schema is semantically equal to the hand-authored contract and the cover-blind-tap package validates against both; the contract file is kept hand-authored for readability.)*
 

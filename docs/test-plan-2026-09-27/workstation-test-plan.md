@@ -2643,20 +2643,21 @@ Open seat or key tasks of earlier features, not asked this time:
 
 | Package | Task | Why not now |
 |---|---|---|
-| 001 | 001 T044, 001 T098, 001 T099 | the benchmark packages and the pilot benchmark set: benchmark work, not a test of this build |
 | 001 | 001 T061, 001 T076 | the bracket-assembly benchmark on the workstation; T076 also adds pane buttons that are not built |
 | 001 | 001 T103 | every quickstart scenario of feature 001 end to end: a sweep of its own |
 | 002 | 002 T044, 002 T051 | quickstart scenarios on the bracket fixture, which is not prepared (001 T061) |
-| 002 | 002 T055a, 002 T063 | the Ask tab's terminal (Codex, Gemini CLI): the Ask tab is hidden in this build |
+| 002 | 002 T063 | the Ask tab's terminal (Codex): the Ask tab is hidden in this build |
 | 002 | 002 T067 | every quickstart scenario of feature 002 end to end: a sweep of its own |
 | 003 | 003 T062, 003 T088, 003 T089 | the RMS fixture parts and their probes; step 5.1 touches Model check on J and the owner's parts only |
 | 004 | 004 T135 to T141 | the re-modeler's stage-1 runs: Start is switched off in this build (004 T172) until the development machine sets it, as the table above says; the production seat adapter, its wiring and its teardown (004 T152 to T160 and 004 T167, decision 17A) are in this build, and step 5.3 plans on a copy through them |
-| 005 | 005 T025 to T030 | the live usage probes: their test files are not written yet |
+| 004 | 004 T303 | split by decision 169A: its first half, 004 T303a (the close in process, with no plan waiting for Start), at the next sitting; its second half, 004 T303b (a plan holding its session for Start), first at the sitting after the development machine switches Start on (the row of 004 T172's switch above) |
+| 005 | 005 T025 to T027 | the live usage probes: their test files are not written yet |
 | 005 | 005 T034, 005 T036 | building `rms-part` and the benchmark baseline: benchmark work |
 | 005 | 005 T085a | the workstation A/B harness: not built |
-| 005 | 005 T050, 005 T058, 005 T063, 005 T068, 005 T073, 005 T078, 005 T084 | lever A/B runs: need the harness of 005 T085a |
+| 005 | 005 T050, 005 T058, 005 T063, 005 T084 | lever A/B runs: need the harness of 005 T085a |
 | 005 | 005 T086, 005 T092, 005 T093, 005 T095, 005 T100, 005 T101, 005 T103, 005 T108 | lever 9 to 11 probes and A/B runs: need the harness, or wait on their levers |
 | 006 | 006 T104 | PROBE-8 and PROBE-9 on a weldment and a sheet-metal part, graded end to end: not asked (step 3.2 only probes L) |
 | 006 | 006 T106, 006 T108 | the tab end to end and its timing on a 40-component assembly: not asked |
 | 006 | 006 T109, 006 T110 | read-only proved on a standards dump, and agreement with the macro on copies: not asked |
 | 007 | 007 T061 to T063 | the procedural gate's study runs: need the lever study set-up |
+| 016 | 016 T010, 016 T015 | feature 016's native selection, rebinding, unsaved state and source freshness on the seat: not yet placed in a sitting |

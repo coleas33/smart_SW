@@ -9,14 +9,14 @@
 - [x] T007 Bounded read-only LLM tools and privacy/default-surface regressions.
 - [x] T008 End-to-end fixtures, independent review and nonlive regression gate.
 - [x] T009 Document offline delivery and the pending native selection gate.
-- [ ] T010 Native SOLIDWORKS selection/rebinding and unsaved-state verification
+- [ ] T010 [W] Native SOLIDWORKS selection/rebinding and unsaved-state verification
       (future workstation gate; excluded from the offline delivery).
 - [x] T011 Bounded guarded selection observation and scoped saved-target matching.
 - [x] T012 Authenticated private context routes and exact session attachment.
 - [x] T013 Prepare evidence, enter/inspect/confirm and review-with-context pane flow.
 - [x] T014 Fake native/backend/WebView regressions, Release compile and full offline gate
       ([final receipt](offline-gate-native-entry.md)).
-- [ ] T015 Native selection calibration and source-freshness attestation on the workstation
+- [ ] T015 [W] Native selection calibration and source-freshness attestation on the workstation
       (remains pending; no cross-extraction approval carry-forward in this slice).
 - [x] T016 Merge `main` (015's send gate) on top of 016 and regenerate the waiting pane
       fixtures with 016's labels, 016 landing second (owner decision 99A; 015 T117 note).

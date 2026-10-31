@@ -517,3 +517,12 @@ teardown, 004 T167, are in this build, and the development machine sets
 `RemodelStart.SeatValidated` (004 T172) in a commit of its own only once step 21's blocking
 probes are `verified`, the test plan's step 5.3 has planned on part J's copy with J's hash
 unchanged, and 004 T180 is decided; a later sitting runs them.
+
+*Added 2026-10-31 (owner decision 166A; 004 T362):* every feature's open seat tasks are held to
+this list and to the test plan, not only those of the features above. Those this list does not
+run are in the test plan's "Not in this sitting", each with its reason: 001 T061, T076 and T103;
+002 T044, T051, T063 and T067; 003 T062, T088 and T089; 004 T135 to T141, and T303, which decision
+169A splits into 004 T303a (the close in process with no plan waiting for Start, at the next
+sitting) and 004 T303b (a plan holding its session for Start, after Start is switched on); 005
+T034, T085a, T086, T092, T093, T095, T100, T101, T103 and T108; 006 T104, T106, T108, T109 and
+T110; 007 T061 to T063; and 016 T010 and T015.
