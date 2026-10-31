@@ -1072,6 +1072,86 @@ passed at once, with no reviewer change: `thread_pitch._unread_gaps` already lis
 `hole` or `fastener` gap, so `check_threads` writes the not-read row and never the nothing-at-all
 row; no fixture or golden was regenerated.
 
+### R2.28 Review round 1 of R2.27: the sentence says how the node is reviewed, and a document read through an instance records nothing (amendment 2026-10-31, owner decision 166A)
+
+The review of T127 to T130 raised eight findings (F1 to F8). Each was checked against the code;
+five are fixed by T131 to T133, one becomes an open task, and two are recorded.
+
+- **F1, fixed (T131, T132).** R2.27's one sentence is false of two of its three shapes. An
+  assembly a drawing references is walked below its node as `IComponent2` components
+  (`ComponentTreeDumper.WalkReferencedAssembly`), and `HoleDumper` reads each of them, so the
+  only holes lost are those of the assembly's own features, which an assembly root's read
+  (`Component.FirstFeature` on the root component) would have found; and every model a drawing
+  references is not "reviewed as a document of its own" - the drawing is. Decided:
+  `RecordDocumentNode` picks the words from the node, with no interop. A part root, the one node
+  with no `ParentKey`, keeps `'{key}' is reviewed as a document of its own, not as a component of
+  an assembly, so ...`; a model a drawing references reads `'{key}' is referenced by a drawing,
+  not reviewed as a component of an assembly, so ...`; and an assembly a drawing references
+  records one `hole` gap ending `so the holes and threads of its own assembly features were not
+  read.` and nothing in the fastener, face and mesh reads. Its parts' fastener identity, faces and
+  bodies come through its components, and an assembly holds no body of its own; an assembly whose
+  own name makes it a fastener (a kit) is not identified, while the screw part in it is - recorded
+  as the cost. The words for an assembly come from the caller, so each read says, at its call,
+  what an assembly loses there; `HoleDumper` is the one that names any.
+- **F2, fixed (T131, T132).** A drawing with an assembly sheet and a part-detail sheet has the
+  plate twice in the scope: as a model the drawing references (keyed on its path) and as a
+  component of the referenced assembly (keyed on `Name2`, `IComponent2`). The four reads take the
+  plate through the component, so a gap naming its path listed a document whose threads were
+  checked. Decided: no gap when a resolved `IComponent2` node of the same document id
+  (`DocumentIds.For`, which ignores case and separator) and the same referenced configuration is
+  in the scope. A suppressed or lightweight component is not read, and another configuration may
+  have other holes, so the gap stays for either. A resolved component with no loaded model names
+  itself in its own `hole` gap, and in no face or body gap (F5, T135); the drawing holds the
+  document loaded, so its component should answer `GetModelDoc2`, and the seat (T134) confirms it.
+  The check is a pass over `DumpScope.Components`, once per document node.
+- **F3, fixed in the tasks.** PROBE-15 settles only the part root: a model a drawing references
+  becomes a node before, and whatever, `GetRootComponent3` answers
+  (`ComponentTreeDumper.AddReferencedSubtree`). T130 keeps the part root after 003 T088, and T134
+  is the drawing-referenced read with no PROBE-15 dependency; each names hole, thread and fastener
+  rows in its acceptance and says the face and body gaps stay.
+- **F4, fixed (T131, T132).** `MeshExporter.Export` wrote `'{key}' is not resolved, so no mesh
+  was written for it.` for a resolved document node. It now calls `RecordDocumentNode` with `no
+  mesh was written for it` for a resolved node whose handle is its document, so a part root and a
+  part a drawing references say how they are reviewed, an assembly a drawing references records
+  nothing, and a node read through an instance records nothing (F2). A suppressed or unresolved
+  component, and the drawing forest root, keep the old gap. `checks/mass.py` counts every `body`
+  gap toward its coverage row, so that count drops by one for each referenced assembly and each
+  model read through an instance - nodes whose bodies were meshed through their components.
+- **F5, recorded, T135.** The `--faces all` sweep skips a suppressed component, one with no
+  loaded model and a null `GetBodies2` with no gap, and `MeshExporter.ExportComponent` the last
+  two; and the mesh export's gap on the drawing forest root is false of a document with no
+  bodies. None is the `is IComponent2` skip 166A names, no reviewer code reads face gaps by kind,
+  and the change is the face sweep's and the mesh export's own; T135 holds it for the owner.
+- **F6, fixed (T132).** The `ComponentDocuments` class summary names `RecordDocumentNode` and its
+  four callers.
+- **F7, taken (T133).** T129's test adds a pin on the words, not new behaviour (the null-id
+  `hole` and `fastener` cases beside it already cover the not-read row); its docstring now says
+  the drawing cases vary only the key and the words. The words are copied by hand from the C#,
+  which no shared constant can span.
+- **F8, recorded.** `carry_over._gap_digest` hashes every gap's `reason`, so a package dumped by
+  this build has a new gap set, and findings carried from a package dumped before it do not carry
+  on the first re-review after the upgrade. That is the conservative direction and expected, not
+  a regression; `benchmark/reuse.py`'s `_aborted_dump_refusals` is not affected, because these
+  gaps are `not_extracted`, not `tool_error`.
+
+**Alternatives rejected**:
+
+| Option | Why not |
+|---|---|
+| Keep one sentence and record the limit | an assembly-drawing review would list the assembly as unread beside checked rows for its own parts' threads, a contradiction on a common path |
+| No gap at all for an assembly a drawing references | its own assembly features (an assembly-level Hole Wizard hole) are really unread; the silence is 166A's defect |
+| A fastener gap for an assembly a drawing references | every assembly-drawing review would list it, for an identity its parts already carry |
+| Skip the gap for any other node of the same path | a suppressed component, or one in another configuration, did not read what the drawing shows |
+| Choose the words by the tree's root kind | `ParentKey` and `DocumentKind` are on the node already, and say it for the node itself |
+
+**Results.** T131, run before T132 on the development machine: `Failed: 10, Passed: 9, Total:
+19` (`DocumentNodeGapTests`) - a part a drawing references still reads "is reviewed as a document
+of its own" in the hole, fastener and face reads; the mesh export says "is not resolved" of both
+part document nodes; an assembly a drawing references records the part sentence and a fastener,
+face and body gap; the plate read through an instance is named as unread; and the configuration
+and suppressed cases read the old words. The nine that pass are the part root's three gaps and
+the six pins of what does not change.
+
 ## R3. Verified facts the plan relies on
 
 **Packages** (analyst fact 1, re-checked). The big assembly: 26 documents (23 parts, 3 assemblies), 89
