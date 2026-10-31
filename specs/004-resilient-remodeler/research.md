@@ -6013,3 +6013,44 @@ way, so only the words are wrong; it is outside this lane's files and is for the
 - **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file.
 
 No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.
+
+### R26.12 Re-review of the second round (T385 to T387; 2026-10-31)
+
+An Opus re-review of `bd5b082..7db4d5b` found no critical, high or medium issue, and four low or note findings. No new
+owner decision; no guard key, allowlist entry, bridge command, secret or write path. Each finding was checked by reading
+the code first.
+
+| Finding | How it was settled |
+|---|---|
+| **RR1 (low): nothing pins T329g's narrowness.** | Holds; a guard added (T385). With T329g's code condition taken out (mutation MB, below) every open whose unwind left the copy answers `target_mismatch`, and all 735 bridge cases still passed; a `scope_changed` refusal would then reach the tab as `RunFolderFailed` in `BackendFailedMessage` instead of 149A's `ScopeRefused` words. `AnotherRefusalWhoseUnwindLeftTheCopyKeepsItsOwnCode` reaches two other refusals with the copy left - `scope_changed` (the copy reopened at its path inside the rebuild, its signals differing from the probe's) and `tag_failed` (reopened inside `OpenDoc7`, its tag not read back) - and asks for its own code, nothing closed, the file kept, the copy not counted closed and the `skipped unwind.DeleteCopy` marker. `open_failed` has no row: the fakes run no action inside the rollback or the feature walk, the only native calls between the rollback write's check 3 and the rolled-back refusal, and the condition the rows pin is one comparison, the same for every code. |
+| **RR2 (low): T329g's words say more than the code does.** | Holds; words corrected (T386). The dispatcher's comment, T329f's case summary, T329g and R26.11 said a rebuild-error open whose unwind left the copy is answered "as every other open whose unwind left it". Only the barrier's refusal is `target_mismatch`; a check-3 failure answers an error with no code (R26.10, F4), and `scope_changed`, `open_failed` and `tag_failed` keep their own codes. They now say `target_mismatch`, the code the barrier's own refusal uses; the ticked T329g keeps its text and carries a dated correction, and R26.11 a note. `bridge-remodel.md`'s step 12 and its `scope_changed`, `open_failed` and `tag_failed` rows said the copy is deleted unconditionally; since R26.1 the unwind can leave it, and they now say so. |
+| **RR3 (low): a rebuild-error open whose own copy stays open and held still says the copy is deleted.** | Holds as described; **recorded, not fixed**, under 159A's policy, as an owner item. Pre-existing since T177. `CloseDoc` returns but the open's own document stays open and holds its file: R26.10's second look finds the open's own document, so the delete is tried as T177 has it, `DeleteCopy` keeps the file on the `IOException`, the unwind did not leave the copy, and the open answers `preexisting_rebuild_errors`. The backend answers `copy_present: false`; the host's `DeleteCopyFolder` finds no session to close, and its `Directory.Delete(copy/, recursive: true)` throws an `IOException` that escapes the Plan and replaces the refusal: the tab reads `HostError` in `UnexpectedFailureMessage`, the log has the exception. Only the run's own copy is involved; nothing else is closed or deleted; only the answer is wrong. Two ways to fix it, for the owner: (a) make T329g's condition also hold when the copy's file is still on disk after the unwind (`File.Exists(copy)`), so the host keeps it - the fixed sentence, which says another document is open there, would then need a second wording; or (b) have the host catch the `IOException` in its three `PreexistingRebuildErrors` branches and say the copy could not be deleted. Not added to R25.9's list: that list holds Start's prerequisites and one owner call on what an unwind closes or deletes (CX1), and no item where only the answer is wrong; R26.11's count words, the comparable one, are recorded there alone. |
+| **RR4 (note): the words a rebuild-error open with the copy left reaches the tab in.** | Recorded. Since T329g such an open reaches the tab as `BackendFailedMessage` (`RunFolderFailed`, `retryable: false`), not `PreexistingRebuildErrors`' "Fix the part first" (`retryable: true`); the rebuild errors are named only in the bridge's sentence, in the log, which "Press View log to see why" points to. It is the cost of answering with a code rather than a flag carried through three layers (R26.11). |
+
+**Recorded, not fixed.**
+
+- RR3, above, for the owner.
+
+**Tests first.** T385 (`0bee271`) is a guard, green on arrival: no behaviour changed this round, so there is no
+deliberately red commit. T386 (`d1fa8c3`) changes words only.
+
+**Mutation.** MB, T329g's code condition taken out (`&& refusal.ErrorCode == RemodelErrorCodes.PreexistingRebuildErrors`
+removed by an exact replacement matching once), built and run against `RemodelTeardownTests`, `RemodelOpenHandlerTests`,
+`RemodelIdleSettingsTests`, `BridgeDispatcherTests`, `GuardTests` and `RemodelFinishHandlerTests` (737 cases): 2 failed,
+both rows of `AnotherRefusalWhoseUnwindLeftTheCopyKeepsItsOwnCode`, each on the code (`target_mismatch` answered for
+`scope_changed` and for `tag_failed`); restored from the bytes read before, sha256 equal, and all 737 passed again.
+
+**Gates on the final tree.**
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero warnings, zero errors.
+- **C# tests.** 10,227 extractor and 4,281 add-in tests passed, none failed or skipped: R26.11's counts and T385's two
+  rows.
+- **Python.** The suites were not re-run: no Python file changed this round. The six unit files that read this
+  feature's documents (`test_workstation_test_plan.py`, `test_tools_remodel_plan.py`, `test_support_remodel.py`,
+  `test_remodel_apply_log.py`, `test_remodel_client.py`, `test_chat_remodel_routes.py`) were run on Python 3.12 against
+  the changed `tasks.md`, `research.md` and `bridge-remodel.md`: 707 passed.
+- **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no broken link
+  (`COUNT 0`); every changed file is `i/lf`.
+- **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file.
+
+No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.
