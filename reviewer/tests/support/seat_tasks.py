@@ -11,8 +11,9 @@ T141 to T144, and a fifth, 013 T153, with its follow-ups the same day. Feature 0
 lists and one reader of a document's ids serve both tests.
 
 Task ids repeat across packages (`008 T101` and `011 T101` are different tasks), so the plan is
-read with the package in front of each id (`qualified_tasks`); the handover's older, unqualified
-reading (`named_tasks`) is kept as it was.
+read with the package in front of each id (`qualified_tasks`). *Changed 2026-10-31 on review (004
+T373):* so is the handover; its older, unqualified reading (`named_tasks`) let 001 T103 leave it
+with its pin green, since `008 T102 and T103` names a T103 too, and is gone.
 
 *Widened 2026-10-31 (owner decision 166A; 004 T360):* every feature package is read, since 004
 T303 (`[W]`) drifted out of the plan while 004 was not among the seven. A seat task is an open
@@ -29,7 +30,6 @@ from pathlib import Path
 __all__ = [
     "PACKAGES",
     "REPO",
-    "named_tasks",
     "open_seat_tasks",
     "qualified_tasks",
     "seat_tasks_in",
@@ -55,8 +55,6 @@ PACKAGES = (
 )
 OPEN_TASK = re.compile(r"^- \[ \] (T\d{3}[a-z]?)((?: \[[^\]\n]*\])*) ?(.*)$", re.MULTILINE)
 """An open task: its id, its leading tags (` [P] [W] [L9]`) and the text after them."""
-TASK_ID = re.compile(r"\bT(\d{3}[a-z]?)\b")
-TASK_RANGE = re.compile(r"\bT(\d{3}) to T(\d{3})\b")
 QUALIFIED_ID = re.compile(r"\b(\d{3}) T(\d{3}[a-z]?)\b")
 QUALIFIED_RANGE = re.compile(r"\b(\d{3}) T(\d{3}) to T(\d{3})\b")
 
@@ -74,14 +72,6 @@ def seat_tasks_in(text: str) -> list[str]:
 def open_seat_tasks(package: str) -> list[str]:
     """The ids of `package`'s open seat tasks, in the order its `tasks.md` lists them."""
     return seat_tasks_in((REPO / "specs" / package / "tasks.md").read_text(encoding="utf-8"))
-
-
-def named_tasks(text: str) -> set[str]:
-    """Every task id the text names, a range `T103 to T106` counting each id in it."""
-    named = {f"T{number}" for number in TASK_ID.findall(text)}
-    for first, last in TASK_RANGE.findall(text):
-        named |= {f"T{number:03d}" for number in range(int(first), int(last) + 1)}
-    return named
 
 
 def qualified_tasks(text: str) -> set[tuple[str, str]]:
