@@ -1079,8 +1079,8 @@ public sealed class RemodelTeardownTests : IDisposable
     /// rebuild, which document is open there cannot be read, or the copy opened again while the unwind closed it. The open
     /// answered <c>preexisting_rebuild_errors</c> all the same, the one refusal that says the copy is deleted: the backend
     /// answers it <c>copy_present: false</c> and the host deletes <c>copy/</c> on it, so the file the unwind kept was
-    /// deleted one layer up. The open must answer <c>target_mismatch</c> instead, as every other open whose unwind left the
-    /// copy does, in a sentence that names the rebuild errors and the copy left, and no path or run.
+    /// deleted one layer up. The open must answer <c>target_mismatch</c> instead, the code the barrier's own refusal uses
+    /// (research R26.12), in a sentence that names the rebuild errors and the copy left, and no path or run.
     /// </summary>
     [Theory]
     [InlineData("reopened at the same path")]

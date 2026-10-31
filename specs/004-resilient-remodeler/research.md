@@ -5962,8 +5962,8 @@ real rebuild errors and an identity read that throws are enough, and it undoes w
 not recorded under 159A's policy.
 
 **The fix (T329g).** One place in the bridge: when the unwind left the copy and the open's failure is
-`preexisting_rebuild_errors`, the open answers `target_mismatch`, as every other open whose unwind left the copy does (the
-barrier's, R26.1), in one fixed sentence that names no path or run: "the part already has rebuild errors at baseline, so
+`preexisting_rebuild_errors`, the open answers `target_mismatch`, the code the barrier's own refusal uses (R26.1), in
+one fixed sentence that names no path or run: "the part already has rebuild errors at baseline, so
 the run stops; the document SOLIDWORKS has open at the copy's path is not the one this open opened, or could not be
 read, so it was neither closed nor deleted." The backend makes `target_mismatch` a `RunFolderFailed` refusal
 (`BRIDGE_REFUSALS` has no row for it, the same path as the unlisted token in
@@ -5975,7 +5975,9 @@ flag would change three layers and two contracts. T177's rule that none of the u
 error still holds; the code is changed here because its promise would be false. The engineer loses the count, which the
 reply did not carry in practice (below). A rebuild-error open whose unwind closed and deleted the copy is unchanged.
 `bridge-remodel.md` (step 11, the unwind's paragraph and the two code rows) and `backend-remodel.md` (`POST
-/remodel/open`) are amended.
+/remodel/open`) are amended. *Worded again on re-review (R26.12, RR2):* this said "as every other open whose unwind left
+the copy does"; only the barrier's refusal is `target_mismatch`, a check-3 failure answers an error with no code, and
+`scope_changed`, `open_failed` and `tag_failed` keep their own codes when the unwind leaves the copy.
 
 **Tests first.** T329f (`ecdd71b`) is the deliberately red commit: all three rows of
 `ARebuildErrorRefusalWhoseUnwindLeftTheCopyDoesNotSayTheCopyIsDeleted` failed on the refusal's code

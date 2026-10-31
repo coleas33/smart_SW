@@ -319,7 +319,8 @@ Sequence, in order, with the call that performs each step:
     then deletes `copy/` (`backend-remodel.md`).
 12. Re-read the same scope signals, this time **on the copy**, and compare them field for field
     with the probe's. A difference is `scope_changed`: the document being changed is not the one
-    the verdict was reached on, and the run stops with the copy deleted. This costs one pass over
+    the verdict was reached on, and the run stops with the copy deleted, unless the unwind below
+    leaves it (`research.md` R26.1). This costs one pass over
     the tree and closes the only gap the two-step ordering opens. *Amended 2026-09-26 (a design
     choice, `tasks.md` T174; landed 2026-09-27):* the folder row is compared position by position
     by each folder's name (ordinal) and member count, not by its members' persist-ref strings,
@@ -848,13 +849,13 @@ stays unknown and is never guessed into the nearest class.
 | `not_a_part` | Source is not an existing `.SLDPRT` | `RemodelPreflightError` | Refused before the copy |
 | `source_not_open` | `remodel.probe_scope` was asked about a source SOLIDWORKS does not have open | `RemodelPreflightError` | Refused before the copy; the source is never opened to answer |
 | `scope_not_probed` | `remodel.open` was called with a `probe_id` this session did not mint, or one minted for a different source path | `RemodelContractError` | Refused before the copy; this is a bug in the caller, not a condition |
-| `scope_changed` | The copy's scope signals differ from the probe's | `RemodelTargetError` | Run aborts; the copy is deleted |
+| `scope_changed` | The copy's scope signals differ from the probe's | `RemodelTargetError` | Run aborts; the copy is deleted, unless the unwind leaves it (R26.1) |
 | `source_dirty` | The open source has unsaved changes | `RemodelPreflightError` | Refused before the copy |
 | `external_refs` | `ListExternalFileReferencesCount2() != 0` | `RemodelPreflightError` | Refused before the copy |
 | `copy_exists` | The destination already exists | `RemodelPreflightError` | Refused; the run never overwrites |
 | `copy_failed` | Both the copy and the stream fallback failed | `RemodelPreflightError` | Refused |
-| `open_failed` | `OpenDoc7` returned no document or the wrong path | `RemodelTargetError` | Run aborts; the copy is deleted |
-| `tag_failed` | The session tag did not write or did not read back | `RemodelTargetError` | Run aborts; the copy is deleted |
+| `open_failed` | `OpenDoc7` returned no document or the wrong path | `RemodelTargetError` | Run aborts; the copy is deleted, unless the unwind leaves it (R26.1) |
+| `tag_failed` | The session tag did not write or did not read back | `RemodelTargetError` | Run aborts; the copy is deleted, unless the unwind leaves it (R26.1) |
 | `preexisting_rebuild_errors` | The part was already broken at baseline | `RemodelPreflightError` | Refused **after** the copy exists, because the reading needs a rollback and a rebuild; the handler deletes the copy and closes the document before it answers; *amended 2026-10-31 (R26.11):* when its unwind leaves the copy, the open answers `target_mismatch` instead |
 | `target_mismatch` | One of `VerifyTarget`'s four checks failed; *amended 2026-10-29 (R25.11):* or a `remodel.open` of a run folder the host's cleanup ended, refused before any read or write; *amended 2026-10-31 (R26.11):* or a `remodel.open` stopped for rebuild errors whose unwind left the copy | `RemodelTargetError` | Run aborts with the change log intact |
 | `session_mismatch` | A command after `remodel.open` names another run than the one whose session the bridge holds ("The commands"; owner decision 159A, protocol 1.5) | `RemodelTargetError` | Refused before any read or write, the session it reached left as it was; the run that sent it aborts with its change log intact |

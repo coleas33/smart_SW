@@ -1377,9 +1377,9 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 toggles.Outstanding,
                 failures));
 
-            // 165A's second review round (004 research R26.11): preexisting_rebuild_errors says the copy is deleted - the
-            // backend answers it copy_present: false and the host deletes copy/ - so a copy left is answered as every other
-            // open whose unwind left it.
+            // 165A's second review round (004 research R26.11, R26.12): preexisting_rebuild_errors says the copy is deleted -
+            // the backend answers it copy_present: false and the host deletes copy/ - so a copy left is answered
+            // target_mismatch, the code the barrier's own refusal uses; every other failure keeps its own.
             if (leaveTheCopy
                 && error is RemodelCommandError refusal
                 && refusal.ErrorCode == RemodelErrorCodes.PreexistingRebuildErrors)
