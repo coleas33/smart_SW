@@ -61,7 +61,8 @@ way before it closes anything in process, since the server below the launcher ma
 command this backend handed to the tool service before it stopped, other than that close - a
 `remodel.open` of a plan the add-in gave up on - can still run after the close in process; *amended on
 its re-review (R25.11):* the bridge then refuses it `target_mismatch` before it touches SOLIDWORKS
-(`bridge-remodel.md`), and T303 checks that barrier at the pilot workstation. Every call the add-in makes
+(`bridge-remodel.md`), and T303a checks that barrier at the pilot workstation (T303, split by owner decision
+169A; `research.md` R26.6). Every call the add-in makes
 to this backend is aborted when the add-in unloads.
 
 ## Routes

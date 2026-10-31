@@ -5402,9 +5402,11 @@ No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopp
 
 ### R25.9 What Start (T172) waits on now
 
-- T303: the in-process close's timing on the SOLIDWORKS thread at the pilot workstation, with R22.3's
-  native order of an abandoned close and R25.3's order of a close the old backend handed over before
-  it stopped.
+- T303a (T303 split by owner decision 169A; R26.6): the in-process close's timing on the SOLIDWORKS
+  thread at the pilot workstation, in sitting S1, with R22.3's native order of an abandoned close and
+  R25.3's order of a close the old backend handed over before it stopped. T303b, a plan holding its
+  session for Start, needs Start on: it runs first in the sitting after the switch is set and is not on
+  this list.
 - An end told during a `Plan` that then succeeds (R22.14).
 - T180 and its owner decision.
 - PROBE-1, PROBE-2, PROBE-3, PROBE-4 and PROBE-12.
@@ -5412,7 +5414,7 @@ No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopp
 - The barrier unwind's close by path (R25.13).
 
 R24.10's first item - the old backend alive but not answering - is settled in code by 163A and leaves
-the list, apart from its seat order (T303).
+the list, apart from its seat order (T303, now T303a).
 
 ### R25.10 Review round (T310 to T312; 2026-10-29)
 
@@ -5797,3 +5799,23 @@ preparation", and `review-2026-10-14.md`) and is on `main`; the tests below pass
 
 **Every finding maps, so T180 is ticked** (2026-10-31, 168A). What no fake can show is native and is already on R25.9's
 list: PROBE-1 for `CommandInProgress` around the change commands, and T303b for a plan holding its session at the seat.
+
+### R26.6 T303 split (169A)
+
+T303 is split by decision 169A into two seat tasks, both `[W]`, pilot workstation only:
+
+- **T303a**, in sitting S1 (decision 167A): everything that does not need a plan waiting for Start, with Start off - the
+  in-process close's timing after the old backend is ended by its PID or stuck, the line it writes, the copy closed and
+  the settings back, SOLIDWORKS responsive with the application thread idle and with a dialog open, within the 30-second
+  bound, R22.3's abandoned-close order, and the barrier in both orders and mid-open as far as a sitting can produce them.
+  Start waits on it.
+- **T303b**, first in the sitting after Start is switched on: the same close for a plan holding its session for Start.
+  It cannot run before the switch (with Start off a plan closes its session at the plan, T176), so it is not on the
+  list of what the switch waits on; it is the first thing done once the switch is set.
+
+Cases a sitting cannot produce by hand stay covered by the fakes (169A), named in each task: an old `remodel.open`
+queued around the close in process in either order, a close pumped inside an open's `OpenDoc7` or rebuild, a copy
+closed and reopened at its path mid-open, a close not answered in time and run later, and a plan whose session ended
+while it finished. Earlier references to T303 in R22 to R25 are left as written; each names a check now in T303a,
+apart from the plan waiting for Start, which is T303b's. R25.9's list, `contracts/backend-remodel.md` and T172 now name
+the two.
