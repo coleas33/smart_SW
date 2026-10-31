@@ -1033,6 +1033,35 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// The second review round of owner decision 165A (004 T329f, a guard; research R26.11, Codex's F1): the host's half. An
+    /// open whose unwind left the copy - rebuild errors at baseline among them - is answered <c>target_mismatch</c>, which the
+    /// backend answers as a <c>RunFolderFailed</c> refusal and not as <c>copy_present: false</c>. The host deletes
+    /// <c>copy/</c> on <c>PreexistingRebuildErrors</c> only, so the copy the bridge left on disk is kept.
+    /// </summary>
+    [Fact]
+    public void AnOpenRefusedWithTheCopyLeftOnDiskKeepsTheCopy()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.DuringCopy = () =>
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(world.ExpectedCopyPath)!);
+                File.WriteAllText(world.ExpectedCopyPath, "the copy the bridge's unwind left");
+            };
+            world.Pipeline.CopyFailure = TheBackends(
+                "RunFolderFailed",
+                "the part already has rebuild errors at baseline, so the run stops; the document SOLIDWORKS has open at "
+                + "the copy's path is not the one this open opened, or could not be read, so it was neither closed nor deleted.");
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal("RunFolderFailed", world.ErrorClass("p1"));
+            Assert.True(File.Exists(world.ExpectedCopyPath), "the host deleted the copy the bridge's unwind left");
+        }
+    }
+
     [Fact]
     public void ASecondPlanWhileARunIsInFlightIsRefusedAsRunInProgress()
     {

@@ -1073,6 +1073,70 @@ public sealed class RemodelTeardownTests : IDisposable
         Assert.DoesNotContain("before unwind.DeleteCopy", markers);
     }
 
+    /// <summary>
+    /// The second review round of owner decision 165A, test first (004 T329f; research R26.11, Codex's F1): the open stops for
+    /// rebuild errors at baseline and its unwind leaves the copy - the copy closed and opened again at its path inside the
+    /// rebuild, which document is open there cannot be read, or the copy opened again while the unwind closed it. The open
+    /// answered <c>preexisting_rebuild_errors</c> all the same, the one refusal that says the copy is deleted: the backend
+    /// answers it <c>copy_present: false</c> and the host deletes <c>copy/</c> on it, so the file the unwind kept was
+    /// deleted one layer up. The open must answer <c>target_mismatch</c> instead, as every other open whose unwind left the
+    /// copy does, in a sentence that names the rebuild errors and the copy left, and no path or run.
+    /// </summary>
+    [Theory]
+    [InlineData("reopened at the same path")]
+    [InlineData("the document open there cannot be read")]
+    [InlineData("opened again while the unwind closed it")]
+    public void ARebuildErrorRefusalWhoseUnwindLeftTheCopyDoesNotSayTheCopyIsDeleted(string what)
+    {
+        var markers = new List<string>();
+        _harness.Services.RemodelStage = (_, marker) => markers.Add(marker);
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+        _harness.Copy.WhatsWrongCount = 2;
+        _harness.Copy.DuringCall = member =>
+        {
+            if (member != nameof(FakeRemodelDocument.ForceRebuild))
+            {
+                return;
+            }
+
+            if (what == "reopened at the same path")
+            {
+                _harness.Copy.ReopenedAs = new IntPtr(0x4002);
+            }
+            else if (what == "the document open there cannot be read")
+            {
+                _harness.Copy.OpenIdentityFailure = new InvalidOperationException("FICT the application did not answer");
+            }
+        };
+        int reopened = 0;
+        _harness.Seat.DuringCleanUpCall = member =>
+        {
+            if (what == "opened again while the unwind closed it"
+                && member == nameof(FakeRemodelSeat.CloseDocument)
+                && reopened++ == 0)
+            {
+                _harness.Seat.OpenDocuments.Add(_harness.CopyPath);
+                _harness.Copy.ReopenedAs = new IntPtr(0x4002);
+            }
+        };
+
+        BridgeResponse opened = _harness.Dispatch(RemodelCommands.Open, OpenParams(_harness.CopyPath, probeId));
+
+        Assert.Equal(RemodelErrorCodes.TargetMismatch, RemodelHarness.Refusal(opened));
+        Assert.Contains("rebuild error", opened.Error, StringComparison.Ordinal);
+        Assert.Contains("neither closed nor deleted", opened.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(Path.GetFileName(_harness.CopyPath), opened.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(RemodelHarness.RunId, opened.Error, StringComparison.Ordinal);
+        Assert.Equal(what == "opened again while the unwind closed it" ? 1 : 0, _harness.Seat.Closed.Count);
+        Assert.Contains(_harness.CopyPath, _harness.Seat.OpenDocuments);
+        Assert.True(File.Exists(_harness.CopyPath), "the unwind deleted the file under a document it did not open");
+        Assert.False(Assert.Single(_told).CopyClosed);
+        string left = Assert.Single(markers, marker => marker.StartsWith("skipped ", StringComparison.Ordinal));
+        Assert.StartsWith("skipped unwind.DeleteCopy: ", left, StringComparison.Ordinal);
+    }
+
     /// <summary><c>remodel.open</c>'s params for the harness's run, with the copy given.</summary>
     private string OpenParams(string copy, string probeId) =>
         "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath)
