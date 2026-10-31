@@ -10,7 +10,8 @@ the checkout is clean on `main`. The pane's own checks stay manual, and the outp
 Every log here is fictional (`tests/fixtures/seat/health/`, one folder per case); each checkout is
 a throwaway git repository made in the test's temp folder, so no case reads this machine's
 `%LOCALAPPDATA%\\SwReview` or this checkout's own state. The clock is set: five minutes after the
-fixtures' latest start, as the runbook has the command run.
+fixtures' latest start, as the runbook has the command run; and one SOLIDWORKS is running, begun
+just before that start, unless a case says otherwise.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -39,18 +41,33 @@ FICTIONAL_NAME = "Jane Fict"
 CHECKS = ["add-in load", "tool service", "backend", "profile", "uv", "extractor", "checkout"]
 LOG_CHECKS = {"add-in load", "tool service", "backend"}
 
+LATEST_START = datetime(2026, 10, 31, 9, 15, 2, 123456, tzinfo=UTC)
+"""The all-good log's latest `AssemblyRedirect installed.` (its last digit of 100 ns dropped)."""
 LATEST_LOAD = datetime(2026, 10, 31, 9, 15, 4, tzinfo=UTC)
 """The all-good log's latest `Attached to SOLIDWORKS.`, two seconds after its latest start."""
+SOLIDWORKS_BEGAN = datetime(2026, 10, 31, 9, 14, 50, tzinfo=UTC)
+"""When the one SOLIDWORKS running began, twelve seconds before the add-in's start line."""
 
 
 def at(monkeypatch: pytest.MonkeyPatch, when: datetime) -> None:
     monkeypatch.setattr(seat_health, "now", lambda: when)
 
 
+def running(monkeypatch: pytest.MonkeyPatch, starts: list[datetime] | None) -> None:
+    """The SOLIDWORKS processes running, by when each began; None when that cannot be read."""
+    monkeypatch.setattr(seat_health, "solidworks_starts", lambda: starts)
+
+
 @pytest.fixture(autouse=True)
 def clock(monkeypatch: pytest.MonkeyPatch) -> None:
     """Five minutes after the latest load; a case that wants another time sets its own."""
     at(monkeypatch, LATEST_LOAD + timedelta(minutes=5))
+
+
+@pytest.fixture(autouse=True)
+def one_solidworks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One SOLIDWORKS, begun just before the latest start; a case that wants another says so."""
+    running(monkeypatch, [SOLIDWORKS_BEGAN])
 
 
 @pytest.fixture(autouse=True)
@@ -325,6 +342,108 @@ def test_the_latest_load_may_be_at_most_two_hours_old(
     )
 
 
+def test_a_restart_that_wrote_nothing_after_a_good_load_fails_the_three_log_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review round 2, F1: a good load at 09:15, then SOLIDWORKS closed and started again at
+    09:20 with the add-in not loading (docs/addin-load-fix.md), which writes no line. The log's
+    latest load is five minutes old, but it is the closed process's, not this one's."""
+    restarted = datetime(2026, 10, 31, 9, 20, tzinfo=UTC)
+    running(monkeypatch, [restarted])
+    at(monkeypatch, restarted + timedelta(minutes=5))
+
+    result = health("all-good", checkout(tmp_path), "--json")
+
+    assert result.exit_code == 1
+    assert failing(result) == LOG_CHECKS
+    for check in LOG_CHECKS:
+        assert "2026-10-31T09:20:00" in reason(result, check)
+    assert "Tools > Add-ins" in reason(result, "add-in load")
+
+
+@pytest.mark.parametrize(
+    ("began", "status"),
+    [
+        (LATEST_START, "PASS"),
+        (LATEST_START + timedelta(microseconds=1), "FAIL"),
+    ],
+    ids=["at the start line", "just after it"],
+)
+def test_the_latest_start_line_must_be_no_older_than_the_solidworks_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, began: datetime, status: str
+) -> None:
+    """The type initializer writes the start line inside the process, so this process's own start
+    line is never older than the process."""
+    running(monkeypatch, [began])
+
+    result = health("all-good", checkout(tmp_path), "--json")
+
+    assert {check: statuses(result)[check] for check in LOG_CHECKS} == dict.fromkeys(
+        LOG_CHECKS, status
+    )
+
+
+def test_the_restart_time_is_given_in_the_logs_own_offset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`AddInLog` stamps local time with its offset; the process time is read in UTC. The reason
+    gives it as the log does, so the engineer can set the two side by side."""
+    logs = tmp_path / "logs"
+    shutil.copytree(LOGS / "all-good", logs)
+    text = (logs / "addin.log").read_text(encoding="utf-8")
+    (logs / "addin.log").write_text(text.replace("+00:00]", "+01:00]"), encoding="utf-8")
+    running(monkeypatch, [datetime(2026, 10, 31, 9, 20, tzinfo=UTC)])
+    at(monkeypatch, datetime(2026, 10, 31, 9, 25, tzinfo=UTC))
+
+    result = health("", checkout(tmp_path), "--json", logs=logs)
+
+    assert failing(result) == LOG_CHECKS
+    assert "2026-10-31T10:20:00+01:00" in reason(result, "add-in load")
+
+
+@pytest.mark.parametrize(
+    ("starts", "said"),
+    [
+        ([], "not running"),
+        ([SOLIDWORKS_BEGAN, SOLIDWORKS_BEGAN + timedelta(seconds=30)], "2 SOLIDWORKS"),
+        (None, "cannot be read"),
+    ],
+    ids=["none running", "two running", "unreadable"],
+)
+def test_the_three_log_checks_fail_closed_unless_one_solidworks_start_can_be_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, starts: list[datetime] | None, said: str
+) -> None:
+    """With no SOLIDWORKS, or two writing to one log, or a start time that cannot be read, nothing
+    ties the log's latest start to the start just made: the three checks fail and say why."""
+    running(monkeypatch, starts)
+
+    result = health("all-good", checkout(tmp_path), "--json")
+
+    assert result.exit_code == 1
+    assert failing(result) == LOG_CHECKS
+    for check in LOG_CHECKS:
+        assert said in reason(result, check)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="reads Windows' process list")
+def test_the_process_reader_finds_this_python_and_nothing_for_a_made_up_image() -> None:
+    """The reader behind `solidworks_starts`, against this machine's processes: this test's own
+    interpreter has begun, and an image no process has is absent. It opens each process for the
+    limited query alone, and starts nothing."""
+    ours = seat_health.process_starts(Path(sys.executable).name)
+    later = datetime.now(UTC) + timedelta(seconds=1)
+
+    assert ours, "this test's own interpreter is running"
+    assert all(datetime(2020, 1, 1, tzinfo=UTC) < began < later for began in ours)
+    assert seat_health.process_starts("fict-no-such-image.exe") == []
+
+
+def test_the_process_reader_answers_none_off_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    assert seat_health.process_starts("SLDWORKS.exe") is None
+
+
 def test_a_reload_that_attached_again_passes_on_its_own_lines(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -443,6 +562,70 @@ def test_a_newest_backend_log_that_never_became_healthy_fails(tmp_path: Path) ->
 
     assert failing(result) == {"backend"}
     assert "backend-20261031-092000.log" in reason(result, "backend")
+
+
+def backend_with(tmp_path: Path, *lines: str) -> Path:
+    """A copy of the all-good logs with `lines` appended to the newest backend log."""
+    logs = tmp_path / "logs"
+    shutil.copytree(LOGS / "all-good", logs)
+    with (logs / "backend-20261031-091506.log").open("a", encoding="utf-8") as log:
+        log.write("".join(f"{line}\n" for line in lines))
+    return logs
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "backend stopped",
+        "asked the backend to shut down (Ctrl+Break)",
+        "asking the backend to shut down failed: a fictional failure",
+        "a process of the backend had not exited 5 seconds after it was ended",
+    ],
+)
+def test_a_backend_that_stopped_after_it_was_healthy_fails(tmp_path: Path, line: str) -> None:
+    """Review round 2, F2: `BackendProcess.Stop` writes these on its way down, after the healthy
+    line, into the same log. A backend that stopped, or is stopping, is not healthy."""
+    logs = backend_with(tmp_path, f"[2026-10-31T09:18:00.0000000+00:00] {line}")
+
+    result = health("", checkout(tmp_path), "--json", logs=logs)
+
+    assert result.exit_code == 1
+    assert failing(result) == {"backend"}
+    assert "stopped" in reason(result, "backend")
+    assert "2026-10-31T09:18:00" in reason(result, "backend")
+
+
+def test_a_second_start_in_the_same_log_needs_its_own_healthy_line(tmp_path: Path) -> None:
+    """`OpenLog` appends: a restart within the same second as the last writes into the same
+    file, and only a healthy line after its own `starting` line speaks for it."""
+    restarted = (
+        "[2026-10-31T09:18:00.0000000+00:00] backend stopped",
+        "[2026-10-31T09:18:00.5000000+00:00] starting uv run swreview chat serve",
+    )
+    healthy = (
+        "[2026-10-31T09:18:04.0000000+00:00] backend healthy on http://127.0.0.1:52013 (pid 9)"
+    )
+    repo = checkout(tmp_path)
+
+    starting = health("", repo, "--json", logs=backend_with(tmp_path, *restarted))
+    shutil.rmtree(tmp_path / "logs")
+    again = health("", repo, "--json", logs=backend_with(tmp_path, *restarted, healthy))
+
+    assert failing(starting) == {"backend"}
+    assert "does not say the backend is healthy" in reason(starting, "backend")
+    assert failing(again) == set(), again.stdout
+
+
+def test_a_server_line_after_the_healthy_line_does_not_unsay_it(tmp_path: Path) -> None:
+    """The server's own output reaches the same log; only the lines `BackendProcess` writes on a
+    start or a stop change what it says."""
+    logs = backend_with(
+        tmp_path, "[2026-10-31T09:16:00.0000000+00:00] INFO: a fictional request line"
+    )
+
+    result = health("", checkout(tmp_path), "--json", logs=logs)
+
+    assert failing(result) == set(), result.stdout
 
 
 def test_a_backend_log_is_ordered_by_its_own_clock_whatever_its_offset(tmp_path: Path) -> None:
@@ -569,11 +752,38 @@ def test_an_unbuilt_extractor_fails(tmp_path: Path) -> None:
     assert failing(result) == {"extractor"}
 
 
-def test_a_branch_other_than_main_fails_the_checkout_check(tmp_path: Path) -> None:
-    result = health("all-good", checkout(tmp_path, branch="workstation/2026-10-31"), "--json")
+def test_untracked_files_git_is_configured_to_hide_still_fail_the_checkout(
+    tmp_path: Path,
+) -> None:
+    """Review round 2, F3: `status.showUntrackedFiles=no` drops untracked files from a plain
+    `git status --porcelain`; a handover file left in the checkout must still fail it."""
+    repo = checkout(tmp_path, dirty=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "status.showUntrackedFiles", "no"], check=True
+    )
+
+    result = health("all-good", repo, "--json")
 
     assert failing(result) == {"checkout"}
-    assert "workstation/2026-10-31" in reason(result, "checkout")
+    assert "1 changed or untracked" in reason(result, "checkout")
+
+
+def test_a_branch_other_than_main_fails_the_checkout_check_without_naming_it(
+    tmp_path: Path,
+) -> None:
+    """Review round 2, F5: a branch name is the workstation's, not something the engineer typed,
+    and can name a customer or a design; neither output gives it. (T350's case asserted the name
+    was printed; that was the leak.)"""
+    repo = checkout(tmp_path, branch="fict-customer/made-up-bracket")
+    result = health("all-good", repo, "--json")
+    text = health("all-good", repo)
+
+    assert failing(result) == {"checkout"}
+    assert "not on main" in reason(result, "checkout")
+    assert text.exit_code == 1
+    for printed in (result.stdout, text.stdout):
+        assert "fict-customer" not in printed
+        assert "made-up-bracket" not in printed
 
 
 def test_a_folder_that_is_not_a_checkout_fails_the_two_checks_that_need_one(
