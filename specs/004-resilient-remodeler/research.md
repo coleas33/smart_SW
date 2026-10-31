@@ -5827,7 +5827,9 @@ content. The expected form, recorded for T077 and T066 and in the folder's READM
 
 Every committed ledger is also held to 171A: the reader reads it, the committable-path scanner finds
 no checkout, home or temporary folder in it, and every exception field - the keys read from the C#
-that `ProbeText.Failure` fills, and `error` - holds a type and an HRESULT.
+that `ProbeText.Failure` fills, and `error` - holds a type and an HRESULT. *Since R27.10*, every
+feature name in it passes the name scan too, and every file under the folder is scanned for a
+design's name in the forms the probes print one.
 
 **Mutations**, each made in the worktree, the pins run, and the file restored from git (sha256 equal):
 
@@ -6055,6 +6057,102 @@ removed):
   `--basetemp` outside the checkout; counted from the progress lines): Python 3.12 18,378 passed and 6
   skipped; Python 3.11 (`uv run --isolated --python 3.11 --all-extras`) 18,379 passed and 5 skipped;
   none failed. Seventeen more than R27.7's, the seventeen T344 added.
+- **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no
+  broken link (`COUNT 0`); every changed file is `i/lf`.
+- **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file.
+
+No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.
+
+### R27.10 The lane's second review round (T348, T349, T380; 2026-10-31)
+
+One reviewer re-read the lane at `7e4b781` and filed one finding, F1 (medium). It was checked against
+the code, confirmed, and fixed test first. Owner decisions 166A and 171A govern it; 159A's review-round
+policy is applied where named.
+
+#### R27.10.1 The name scan decision 171A asks for (F1; T348, T349)
+
+Confirmed. 171A lets a ledger be committed once its exception text is cut to its type "and a path and
+name scan passes"; R27 restated that, and R27.5's pin built only the path half: the reader's path
+refusal, the committable-path scanner and the scrub. Nothing checked a name. Yet the ledger records the
+name of every feature of the throwaway part, and `SwRemodelProbeHost.BuildPart` builds that part on the
+workstation's default part template (`swDefaultTemplatePart`), whose features `GetFeatureNames` walks
+from `FirstFeature`. PROBE-3's `tree_before` and `tree_after_illegal`, PROBE-10's `tree_after_rename`
+and `marker_name_after`, and PROBE-11's census keys `type[<name>]` carry them, and PROBE-10's reason
+quotes a marker's name when it names neither folder (`RemodelProbe10Logic.Decide`). A company
+template's renamed planes, logo sketch or folders would have reached a public commit. The reviewer's
+case was reproduced as a test: the golden ledger with `FICT-Corp Datum A` in each of those readings
+passed every check.
+
+The fix is the CI pin the reviewer recommended, in `test_seat_switch_evidence.py`:
+
+- `unlisted_names(ledger)` reads each of those readings and lets a name be one of three things: a name
+  the probe gives what it builds, read from the C# (`RemodelProbePartRecipe.Default()`'s steps and
+  PROBE-10's rename, `Probe10RenamedFolder`); one of SOLIDWORKS's own English default part-template
+  names (`TEMPLATE_NAMES`, 23 of them: the folders a walk lists, from `Favorites` to `Equations` and
+  `Material <not specified>`, the default lights, the three planes and the origin); or a placeholder,
+  `<template feature N>`. Each may be followed by the end-tag marker (`rms_types.yaml`'s
+  `end_tag_suffix`), as a folder's marker is. A walked tree is matched whole against the names joined by
+  commas, so a default name with a comma in it (`Lights, Cameras and Scene`) stays one name and a piece
+  of one is none. It reports `PROBE-<n>.<key>`, a census key by its place among its row's readings
+  (`PROBE-11.type[#3]`), never the name.
+- The walked trees' keys are read from the C# (every `string.Join(",", ...)` reading), and the other
+  three forms are asserted present in `RemodelProbeExecutors.cs`, so a probe body that changes one
+  turns the pin red rather than going unscanned.
+- `test_every_committed_ledger_is_read_scanned_clean_and_scrubbed` runs it beside the path scan
+  (changed on purpose: tightened).
+- The README's checklist gains a fourth step: every other name is replaced, everywhere in the file, by
+  `<template feature 1>`, `<template feature 2>` and so on, one number per name, so PROBE-11's keys
+  stay distinct (the reader refuses a key twice, R27.9.4).
+
+**Why a list of defaults, and its limit.** The default names are the product's, never a company's, so
+listing them keeps PROBE-11's census of the template's own folders - the `CommentsFolder`,
+`SelectionSetFolder` and `InkMarkupFolder` its question asks about - readable without scrubbing. The
+list is the development machine's knowledge of SOLIDWORKS 2024's English template, not confirmed on the
+seat (no licence here), and it fails closed: a default it lacks, a localized name or a sketch the walk
+lists turns the pin red, and is replaced by a placeholder or, once seen on the seat, added to the list in
+a commit of its own. The reviewer's alternatives were not taken: building the part from a template the
+repository ships changes the C# and `BuildPart`'s behaviour on the seat (it selects `Front Plane` by
+name), and recording only a count of the template's features loses the census.
+
+**The drawing records** (F1's last point). `drawing-open.md` and `drawing-binding.md` are written by
+hand from a report, so no scan can prove that free text names nothing. `design_names` scans every file
+under `benchmarks/native/capabilities/` for the two forms in which the drawing probes print a design's
+name: a SOLIDWORKS document's file name (`<stem>.SLDDRW`, `.SLDPRT` or `.SLDASM`; a space before the
+extension, or `<drawing>`, names none) and D6's and D8's dimension line, `name "...", view "..."` (011
+`contracts/probes.md` section 1). The README says so, and that any other name is its writer's to leave
+out. **Recorded, not fixed** (159A): a design name typed into a record in another form; the README's
+rule is the only guard for it, as no pattern can tell a design's name from a word.
+
+R27.5's M5, the golden ledger committed with IDENTITY calibrated, would now be red on the name scan: the
+golden's census key `FICT-Feature1` is neither built nor a default. M22 commits it with that key
+replaced by a placeholder, and it is green.
+
+#### R27.10.2 Test-first evidence, mutations and gates
+
+**Failing commit.** T348 (`c45b05b`): 10 failures, each on its assertion, over stub helpers; the 22
+other cases of the file green.
+
+**Mutations**, each made in the worktree, `test_seat_switch_evidence.py` run, and the tree restored
+(sha256 equal; each added file removed):
+
+| # | Mutation | Result |
+|---|---|---|
+| M22 | the golden ledger committed under `capabilities/`, its census key `FICT-Feature1` replaced by a placeholder | green: a ledger naming only the recipe, the defaults and placeholders passes |
+| M23 | M22 with `FICT-Corp Datum A` in PROBE-3's `tree_before` | red: the committed-ledger pin |
+| M24 | PROBE-11's census keys not scanned | red: the golden case |
+| M25 | a name matched only from its start, not whole | red: the golden case and four tree cases (more after a listed name, a piece of one, an unnumbered placeholder, an unlisted folder's marker) |
+| M26 | no end-tag marker after a listed name | red: the golden case and the tree with `Folder1___EndTag___` |
+| M27 | PROBE-10's reason not scanned | red: the golden case |
+| M28 | a tree split at every comma | red: the empty tree and `Lights, Cameras and Scene` |
+| M29 | a committed `drawing-binding.md` with a D8 dimension line | red: the design-name pin |
+| M30 | a committed `drawing-open.md` naming its drawing's file | red: the design-name pin |
+
+**Gates** on the final tree (GATES_COMMIT, with this record):
+
+- **C#.** Not run: no file under `extractor/` changed in this round.
+- **Python.** Required-tokenizer non-live suites (`SWREVIEW_TOKENIZER_DIR=C:\t\144a-tok`,
+  `--basetemp` outside the checkout; counted from the progress lines): Python 3.12 PY312_COUNTS; Python
+  3.11 (`uv run --isolated --python 3.11 --all-extras`) PY311_COUNTS; none failed.
 - **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no
   broken link (`COUNT 0`); every changed file is `i/lf`.
 - **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file.
