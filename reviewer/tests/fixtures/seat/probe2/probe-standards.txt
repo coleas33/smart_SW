@@ -11,7 +11,7 @@ probe-1 exploded_state:
     (none)
 probe-2 appearance_overrides:
   cmp:0001 PROBE2-POLARITY HasMaterialPropertyValues=False GetMaterialPropertyValues2(1, null)=null
-  cmp:0002 PROBE2-BLOCK-1 HasMaterialPropertyValues=True GetMaterialPropertyValues2(1, null)=9 slots [0]=0 [1]=0.501961 [2]=1 [3]=1 [4]=1 [5]=0.5 [6]=0.3125 [7]=0.5 [8]=0
+  cmp:0002 PROBE2-BLOCK-1 HasMaterialPropertyValues=True GetMaterialPropertyValues2(1, null)=9 slots [0]=0 [1]=0.501961 [2]=1 [3]=1 [4]=1 [5]=0.5 [6]=0.3125 [7]=0.75 [8]=0
   cmp:0003 PROBE2-BLOCK-2 HasMaterialPropertyValues=True GetMaterialPropertyValues2(1, null)=9 slots [0]=0 [1]=0.501961 [2]=1 [3]=1 [4]=1 [5]=0.5 [6]=0.3125 [7]=0 [8]=0
   cmp:0004 PROBE2-BLOCK-3 HasMaterialPropertyValues=False GetMaterialPropertyValues2(1, null)=9 slots [0]=0.792157 [1]=0.819608 [2]=0.933333 [3]=1 [4]=1 [5]=1 [6]=0.3125 [7]=0 [8]=0
 probe-3 component_visibility:

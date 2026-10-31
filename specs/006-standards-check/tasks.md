@@ -229,6 +229,11 @@ Every task here needs the pilot workstation and a SOLIDWORKS 2024 SP5 seat. **No
 - [x] T112 Implement T111 (owner decision 172A; research R11). `reviewer/src/swreview/seat/transparency.py` and `swreview seat transparency <probe output> [--transparent] [--opaque] [--plain] [--json]`; generate the precomputed goldens in `reviewer/tests/golden/test_transparency_polarity/<polarity>/`. Acceptance: every T111 case green
 - [x] T113 Record R11 (the decider's rule and why each inconclusive is one, the flip after the sitting step by step with every hand-written assertion it changes, the recipe) and write `benchmarks/native/probe2-polarity/RECIPE.md`; run both Python suites, ruff, the link check and the LF check. Acceptance recorded in R11
 
+*Added 2026-10-31 (owner decision 172A; research R11.1):* the lane's review round 1 found that the decider refuted slot 7 when the two overrides differed nowhere, or only in colour - an operator slip, which would have sent the owner to change the extractor.
+
+- [ ] T114 [P] Test first (owner decision 172A; research R11.1). In `reviewer/tests/unit/test_cli_seat_transparency.py`: overrides that differ at no slot are inconclusive naming the recipe's step 4 and the component row, not a refutation; slot 7 equal with the colour differing, alone or beside another slot, is inconclusive naming steps 3 and 4, not a refutation; reads of no slots, slots that skip one and a count that disagrees with the slots listed are failed reads; the sample run's transparent block reads 0.75, the recipe's new amount
+- [ ] T115 Implement T114 (owner decision 172A; research R11.1) in `reviewer/src/swreview/seat/transparency.py`; amend R11's rule table and `benchmarks/native/probe2-polarity/RECIPE.md` (75 %, and the refuted row); share the precomputed goldens' runner with `test_golden.py` (`golden_result`) and one `INCONCLUSIVE` across the seat deciders. Acceptance: every T111 and T114 case green, and the 26 precomputed goldens unchanged
+
 ---
 
 ## Dependencies & Execution Order

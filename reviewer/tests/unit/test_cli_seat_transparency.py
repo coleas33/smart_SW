@@ -9,11 +9,14 @@ each, and this decider reads only those lines:
 
 - the two overrides must differ in slot 7 and nowhere else; the opaque one's slot 7 then names
   the polarity, `0` for `zero_is_opaque` and `1` for `one_is_opaque`;
-- no difference at slot 7 (equal, or no slot 7 at all) **refutes slot 7**: the dump reads that
-  slot (`ComponentTreeDumper.ReadTransparency`), so no flip of the constant could settle it;
-- anything else - a control that did not hold, a component missing, a read that failed, a
+- slot 7 equal while the colour is equal and another slot differs, or no slot 7 at all,
+  **refutes slot 7**: the dump reads that slot (`ComponentTreeDumper.ReadTransparency`), so no
+  flip of the constant could settle it;
+- anything else - nothing differing (the transparency set on the part, not the component row), a
+  colour that differs, a control that did not hold, a component missing, a read that failed, a
   difference beyond slot 7, an opaque reading that is neither 0 nor 1 - is inconclusive, never a
-  guess (research R2.8).
+  guess (research R2.8), and never a refutation that would send the owner to the extractor for
+  what an operator slip explains.
 
 Every probe line here is fictional: one complete run in `tests/fixtures/seat/probe2/`, and its
 PROBE-2 section rewritten per case.
@@ -143,7 +146,7 @@ def test_the_text_answer_leads_with_the_verdict_and_gives_each_reading(tmp_path:
     assert result.exit_code == 0, result.output
     lines = result.stdout.splitlines()
     assert lines[0] == f"verdict: {ZERO_IS_OPAQUE}"
-    assert any(line.startswith("transparent PROBE2-BLOCK-1") and "0.5" in line for line in lines)
+    assert any(line.startswith("transparent PROBE2-BLOCK-1") and "0.75" in line for line in lines)
     assert any(line.startswith("opaque PROBE2-BLOCK-2") for line in lines)
     assert any(line.startswith("plain PROBE2-BLOCK-3") for line in lines)
     assert "D:\\fict-seat" not in result.stdout
@@ -167,10 +170,38 @@ def test_slot_7_equal_with_another_slot_differing_refutes_slot_7_and_names_the_s
     assert body["next"] is None
 
 
-def test_no_slot_differing_refutes_slot_7(tmp_path: Path) -> None:
+def test_no_slot_differing_is_an_operator_slip_not_a_refutation(tmp_path: Path) -> None:
+    """Transparency set on the part, a body or a face makes all three blocks look see-through
+    and leaves the two component overrides identical: the recipe's step 4 was missed, and the
+    answer is to set it on the component row and probe again, not an extractor change."""
     body = report(probe_file(tmp_path, seat(transparent=slots(0), opaque=slots(0))))
 
-    assert body["slot_7_refuted"] is True
+    assert body["verdict"] == "inconclusive"
+    assert body["slot_7_refuted"] is False
+    assert "step 4" in body["reason"]
+    assert "component row" in body["reason"]
+    assert body["next"] is None
+
+
+@pytest.mark.parametrize(
+    "transparent",
+    [
+        slots(0, colour=(1, 0, 0, 1, 1, 0.5, 0.3125)),
+        slots(0, eighth=0.5, colour=(1, 0, 0, 1, 1, 0.5, 0.3125)),
+    ],
+    ids=["only the colour", "the colour and slot 8"],
+)
+def test_a_colour_that_differs_with_slot_7_equal_is_not_a_refutation(
+    tmp_path: Path, transparent: list[float]
+) -> None:
+    """Two colours mean the recipe's control did not hold, so nothing else the overrides show
+    can refute slot 7: same colour, and probe again."""
+    body = report(probe_file(tmp_path, seat(transparent=transparent, opaque=slots(0))))
+
+    assert body["verdict"] == "inconclusive"
+    assert body["slot_7_refuted"] is False
+    assert "colour" in body["reason"]
+    assert "steps 3 and 4" in body["reason"]
 
 
 def test_fewer_than_eight_slots_refutes_slot_7(tmp_path: Path) -> None:
@@ -219,6 +250,21 @@ def test_fewer_than_eight_slots_refutes_slot_7(tmp_path: Path) -> None:
             "PROBE2-BLOCK-1",
         ),
         ("the slot read answered null", seat(transparent="null"), "PROBE2-BLOCK-1"),
+        (
+            "the slot reads answered no slots",
+            seat(transparent="0 slots", opaque="0 slots"),
+            "PROBE2-BLOCK-1",
+        ),
+        (
+            "the slots skip one",
+            seat(transparent="9 slots [0]=0 [1]=0.5 [2]=1 [3]=1 [4]=1 [5]=0.5 [6]=0.3 [8]=0"),
+            "PROBE2-BLOCK-1",
+        ),
+        (
+            "the count disagrees with the slots listed",
+            seat(transparent="9 slots [0]=0 [1]=0.5 [2]=1 [3]=1 [4]=1 [5]=0.5 [6]=0.3 [7]=0.75"),
+            "PROBE2-BLOCK-1",
+        ),
         ("the opaque block is missing", [*seat()[:2], seat()[3]], "PROBE2-BLOCK-2"),
         ("a block is listed twice", [*seat(), seat()[1]], "PROBE2-BLOCK-1"),
         (
