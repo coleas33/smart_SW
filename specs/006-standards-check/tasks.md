@@ -234,6 +234,11 @@ Every task here needs the pilot workstation and a SOLIDWORKS 2024 SP5 seat. **No
 - [x] T114 [P] Test first (owner decision 172A; research R11.1). In `reviewer/tests/unit/test_cli_seat_transparency.py`: overrides that differ at no slot are inconclusive naming the recipe's step 4 and the component row, not a refutation; slot 7 equal with the colour differing, alone or beside another slot, is inconclusive naming steps 3 and 4, not a refutation; reads of no slots, slots that skip one and a count that disagrees with the slots listed are failed reads; the sample run's transparent block reads 0.75, the recipe's new amount
 - [x] T115 Implement T114 (owner decision 172A; research R11.1) in `reviewer/src/swreview/seat/transparency.py`; amend R11's rule table and `benchmarks/native/probe2-polarity/RECIPE.md` (75 %, and the refuted row); share the precomputed goldens' runner with `test_golden.py` (`golden_result`) and one `INCONCLUSIVE` across the seat deciders. Acceptance: every T111 and T114 case green, and the 26 precomputed goldens unchanged
 
+*Added 2026-10-31 (owner decision 172A; research R11.2):* the lane's review round 2 found that a slot 7 reading no transparency can hold (`NaN`, an infinity, below 0 or above 1) settled the polarity, and that a value no slot can hold could refute slot 7.
+
+- [ ] T116 [P] Test first (owner decision 172A; research R11.2). In `reviewer/tests/unit/test_cli_seat_transparency.py`: the transparent or the opaque block reading `NaN`, `Infinity`, `-Infinity`, -1 or 2 at slot 7 is inconclusive, not refuted, naming that block; and neither a slot that is no number beside an equal slot 7 nor an equal slot 7 outside 0 to 1 refutes slot 7
+- [ ] T117 Implement T116 (owner decision 172A; research R11.2) in `reviewer/src/swreview/seat/transparency.py`; amend R11's rule table and record R11.2. Acceptance: every T111, T114 and T116 case green, and the 26 precomputed goldens unchanged
+
 ---
 
 ## Dependencies & Execution Order

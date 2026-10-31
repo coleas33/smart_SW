@@ -287,6 +287,50 @@ def test_inconclusive_names_what_did_not_hold(
     assert named in body["reason"], (case, body["reason"])
 
 
+def printed(seven: str, *, eighth: str = "0") -> str:
+    """The recipe's colour with slots 7 and 8 as given, printed as the probe prints a value
+    (`G6`, invariant culture: `NaN`, `Infinity` and `-Infinity` included)."""
+    values = [f"{value:g}" for value in COLOUR] + [seven, eighth]
+    return f"{len(values)} slots " + " ".join(f"[{i}]={v}" for i, v in enumerate(values))
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "-1", "2"])
+@pytest.mark.parametrize(
+    ("role", "name"), [("transparent", "PROBE2-BLOCK-1"), ("opaque", "PROBE2-BLOCK-2")]
+)
+def test_a_slot_7_reading_that_is_no_transparency_settles_nothing(
+    tmp_path: Path, role: str, name: str, value: str
+) -> None:
+    """Review round 2, F4: a transparency is a fraction from 0 to 1. A transparent block reading
+    `NaN` or 2 beside an opaque 0 differs at slot 7 alone, but proves no polarity."""
+    body = report(probe_file(tmp_path, seat(**{role: printed(value)})))
+
+    assert body["verdict"] == "inconclusive"
+    assert body["slot_7_refuted"] is False
+    assert name in body["reason"], body["reason"]
+    assert body["next"] is None
+
+
+@pytest.mark.parametrize(
+    ("transparent", "opaque"),
+    [
+        (printed("0", eighth="NaN"), printed("0")),
+        (printed("2", eighth="0.5"), printed("2")),
+    ],
+    ids=["a slot that is no number beside an equal slot 7", "an equal slot 7 outside 0 to 1"],
+)
+def test_an_invalid_reading_never_refutes_slot_7(
+    tmp_path: Path, transparent: str, opaque: str
+) -> None:
+    """A refutation sends the owner to change the extractor; a value no slot can hold says the
+    read went wrong, not that slot 7 is not the transparency."""
+    body = report(probe_file(tmp_path, seat(transparent=transparent, opaque=opaque)))
+
+    assert body["verdict"] == "inconclusive"
+    assert body["slot_7_refuted"] is False
+    assert "PROBE2-BLOCK-1" in body["reason"], body["reason"]
+
+
 def test_a_file_with_no_probe_2_section_is_inconclusive(tmp_path: Path) -> None:
     body = report(probe_file(tmp_path, text="probe: standards\nprobe-1 exploded_state:\n"))
 
