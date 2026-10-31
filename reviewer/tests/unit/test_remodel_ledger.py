@@ -430,7 +430,7 @@ def test_a_ledger_that_cannot_be_read_is_refused_naming_its_file_and_no_folder(
     assert result.exit_code == 1
     assert result.stdout == ""
     [line] = result.stderr.splitlines()
-    assert line.startswith("error: could not read remodel-32.5.0.yaml"), line
+    assert line.startswith("error: LedgerRefused: could not read remodel-32.5.0.yaml: "), line
     assert "FICT" not in line and tmp_path.name not in line
     with pytest.raises(LedgerRefused, match="could not read remodel-32.5.0.yaml"):
         load_ledger(ledger)

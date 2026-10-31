@@ -17,7 +17,9 @@ renderer and this parser together - and answers four things:
 It refuses, before judging anything, a ledger for another SOLIDWORKS version than the frozen
 interop's, and a ledger any of whose strings looks like a path (decision 171A: a ledger from the
 probe's own throwaway part may be committed, once nothing in it names a place on someone's
-machine). A refusal names the field, never the value.
+machine); and YAML that `Render` never writes but `yaml.safe_load` would settle silently - a key
+twice in one mapping, an anchor or an alias (T345). A refusal names the field, never the value, and
+a file that cannot be read is named by its name, never its folder.
 
 It judges and switches nothing: Start is set true in a commit of its own, which a CI pin
 (`tests/unit/test_seat_switch_evidence.py`) holds to a committed ledger this module judges ready.
@@ -90,6 +92,8 @@ anywhere), a UNC share's two backslashes, and a `/` at a token boundary before a
 `n/a`, `1/2`, `a / b`, a relative `reviewer/src` and a URL's `//` are not paths. A test holds the
 two to the same answer on every sample."""
 
+_STRING_TAG = "tag:yaml.org,2002:str"
+
 _FIELDS = frozenset(
     {"sw_version", "generated_at", "requested", "probes", "probe_id", "question", "method",
      "blocking", "fallback", "verdict", "duration_ms", "interop_members", "raw_result"}
@@ -102,6 +106,27 @@ Verdict = Literal["verified", "refuted", "unresolved"]
 
 class LedgerRefused(ValueError):
     """A ledger this reader will not judge. The message names the field, never its value."""
+
+
+class _RenderedYaml(yaml.SafeLoader):
+    """`yaml.safe_load`'s loader, refusing what `Render` never writes and `safe_load` settles
+    silently (004 T345): an anchor or alias, which `_strings` would follow again each time, so a few
+    lines of them took exponential time; and a key that is not a plain string (a merge key `<<`
+    among them) or is written twice in one mapping, of which `safe_load` keeps the last, so a row
+    saying `verdict: refuted` and then `verdict: verified` was judged verified."""
+
+    def compose_node(self, parent: Any, index: Any) -> Any:
+        if self.peek_event().anchor is not None:
+            raise LedgerRefused(_shape_refusal("it uses a YAML anchor or alias"))
+        return super().compose_node(parent, index)
+
+    def construct_mapping(self, node: Any, deep: bool = False) -> Any:
+        keys = [key for key, _ in node.value]
+        if any(key.tag != _STRING_TAG for key in keys):
+            raise LedgerRefused(_shape_refusal("a key is not a plain string"))
+        if len({key.value for key in keys}) != len(keys):
+            raise LedgerRefused(_shape_refusal("a key appears twice in one mapping"))
+        return super().construct_mapping(node, deep)
 
 
 class _Shape(BaseModel):
@@ -158,16 +183,25 @@ def path_kind(text: str) -> str | None:
 
 
 def load_ledger(path: Path | str) -> Ledger:
-    """The ledger at `path`. The renderer writes a byte-order mark, which is not the text's."""
-    return parse_ledger(Path(path).read_text(encoding="utf-8-sig"))
+    """The ledger at `path`. The renderer writes a byte-order mark, which is not the text's. A
+    file that cannot be read is refused by its name and the system's reason, never its folder,
+    which may name the user and which the `OSError`'s own message repeats (004 T345)."""
+    file = Path(path)
+    try:
+        text = file.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        reason = exc.strerror or type(exc).__name__
+        raise LedgerRefused(f"could not read {file.name}: {reason}") from None
+    return parse_ledger(text)
 
 
 def parse_ledger(text: str) -> Ledger:
-    """The ledger `text` holds, or `LedgerRefused`: not the renderer's shape, a path anywhere in
-    it (checked first, on every key and value, so no later message can repeat one), or another
+    """The ledger `text` holds, or `LedgerRefused`: YAML the renderer never writes (an anchor,
+    an alias, a key twice in a mapping), not the renderer's shape, a path anywhere in it (checked
+    on every key and value before the shape, so no later message can repeat one), or another
     version than the frozen interop's."""
     try:
-        document = yaml.safe_load(text)
+        document = yaml.load(text, Loader=_RenderedYaml)
     except yaml.YAMLError as exc:
         mark = getattr(exc, "problem_mark", None)
         where = f" at line {mark.line + 1}" if mark is not None else ""
@@ -193,7 +227,7 @@ def parse_ledger(text: str) -> Ledger:
 
     if ledger.sw_version not in SW_VERSIONS:
         raise LedgerRefused(
-            f"this ledger is for SOLIDWORKS {ledger.sw_version!r}; only the frozen interop's "
+            "this ledger's sw_version is another SOLIDWORKS version; only the frozen interop's "
             f"version is judged ({' or '.join(SW_VERSIONS)})"
         )
     for row in ledger.probes:

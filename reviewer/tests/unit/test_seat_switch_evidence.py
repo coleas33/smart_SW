@@ -16,8 +16,10 @@ Feature 011's probes print a report of lines, not a machine-readable record, and
 holds design names and stays out of the repository (011 `contracts/probes.md` sections 1 and 3); so
 each drawing switch may be true only if its named evidence file is committed here, in the form 004
 research R27.5 records. Each constant is read from its source, as `test_standards_profile.py` reads
-the C#, so the pins run in CI with no build. While every switch is off they pass; flipping any one
-of them turns its pin red (R27.5 records each mutation).
+the C#, so the pins run in CI with no build: the C# with its comments stripped, the Python from its
+syntax tree, each from exactly one declaration in the one form shipped, so a switch turned on in any
+other form fails its reader rather than being read past (004 T345). While every switch is off they
+pass; flipping any one of them turns its pin red (R27.5 and R27.9 record each mutation).
 
 A committed ledger is also held to decision 171A: the reader reads it (no path, the frozen
 version), the committable-path scanner finds nothing in it, and every exception text in it is a type
@@ -26,6 +28,7 @@ and an HRESULT.
 
 from __future__ import annotations
 
+import ast
 import re
 import shutil
 from collections.abc import Callable
@@ -50,9 +53,12 @@ DRAWING_BINDING_EVIDENCE = CAPABILITIES / "drawing-binding.md"
 """Probes D6 and D8's record, the evidence `DRAWING_BINDING_VALIDATED` needs (R27.5)."""
 
 CSHARP_SWITCH = re.compile(r"public static bool SeatValidated => (true|false);")
-PYTHON_SWITCH = re.compile(r"^DRAWING_BINDING_VALIDATED: bool = (True|False)$", re.MULTILINE)
+CSHARP_DECLARATION = re.compile(r"\bSeatValidated\s*(?:=>|\{|=(?!=))")
+"""Any declaration of `SeatValidated`: an expression body, a getter or a field's value."""
+CSHARP_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
 CSHARP_OFF = "public static bool SeatValidated => false;"
-PYTHON_OFF = "DRAWING_BINDING_VALIDATED: bool = False"
+PYTHON_NAME = "DRAWING_BINDING_VALIDATED"
+PYTHON_OFF = f"{PYTHON_NAME}: bool = False"
 
 FAILURE = re.compile(r"\w+ 0x[0-9A-F]{8}(?:; \w+ 0x[0-9A-F]{8})*")
 """`ProbeText.Failure`'s form, the only exception text a committable ledger carries (171A)."""
@@ -60,20 +66,42 @@ FAILURE = re.compile(r"\w+ 0x[0-9A-F]{8}(?:; \w+ 0x[0-9A-F]{8})*")
 CALIBRATED = IDENTITY.model_copy(update={"calibrated": True, "calibration_ref": "fictional"})
 
 
-def switch_in(text: str, pattern: re.Pattern[str]) -> bool:
-    """The one switch `pattern` finds in `text`; anything but exactly one is a failure."""
-    [value] = pattern.findall(text)
-    return value in ("true", "True")
-
-
 def csharp_switch(text: str) -> bool:
-    """`SeatValidated` as a C# source declares it. A stub until T345."""
-    return switch_in(text, CSHARP_SWITCH)
+    """`SeatValidated` as a C# source declares it, read from its code, never its comments: exactly
+    one declaration, and that one `public static bool SeatValidated => true|false;`. A getter, a
+    field or a second declaration under `#if` fails this reader rather than being read past (004
+    T345: a getter turning the switch on beside the old line commented out read as off)."""
+    code = CSHARP_COMMENT.sub("", text)
+    found = CSHARP_SWITCH.findall(code)
+    assert len(CSHARP_DECLARATION.findall(code)) == len(found) == 1, (
+        "SeatValidated is read only from one `public static bool SeatValidated => true|false;` "
+        "outside comments"
+    )
+    return found[0] == "true"
 
 
 def python_switch(text: str) -> bool:
-    """`DRAWING_BINDING_VALIDATED` as `binding.py` binds it. A stub until T345."""
-    return switch_in(text, PYTHON_SWITCH)
+    """`DRAWING_BINDING_VALIDATED` as `binding.py` binds it, read from its syntax tree, so never
+    from a comment or a docstring: bound once in the whole module, at its top level, to the
+    literal `True` or `False`. Bound again, or to anything else, fails this reader (004 T345)."""
+    tree = ast.parse(text)
+    stores = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id == PYTHON_NAME and isinstance(node.ctx, ast.Store)
+    ]
+    values = [
+        statement.value.value
+        for statement in tree.body
+        if isinstance(statement, ast.AnnAssign)
+        and isinstance(statement.target, ast.Name)
+        and statement.target.id == PYTHON_NAME
+        and isinstance(statement.value, ast.Constant)
+        and isinstance(statement.value.value, bool)
+    ]
+    assert len(stores) == len(values) == 1, (
+        f"{PYTHON_NAME} is read only from one module-level `{PYTHON_NAME}: bool = True|False`"
+    )
+    return values[0]
 
 
 def ready_for_start(root: Path = CAPABILITIES, identity: Tolerances = IDENTITY) -> list[Path]:
