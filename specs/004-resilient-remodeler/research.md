@@ -5845,10 +5845,14 @@ design's name in the forms the probes print one.
 
 ### R27.6 The fakes that assume a seat answer (T339)
 
-Each assumption a fake makes about a seat's answer carries one comment beside the member that makes it,
+Each assumption tagged here carries one comment beside the member that makes it,
 `seat-assumption: PROBE-<n> <verdict>[|<verdict>] - <what>`, listing the verdicts under which the fake
 still models the seat. A ledger's `unresolved`, or no row, settles nothing; a definite verdict the tag
-does not list refutes it.
+does not list refutes it. *Corrected by R27.11.4*: this said every assumption a fake makes about a
+seat's answer is tagged. Only the six below are; the C# `FakeEquationManager`'s `Add3Adds` and
+`SetEquationWrites` (PROBE-6 and PROBE-7, each answer modelled through a flag) and `FakeFeature`'s
+`Description` kept across a reorder or a folder wrap (PROBE-20) carry no tag, and no audit has shown
+that these are the only untagged ones.
 
 | Fake | Probe | Holds under | Assumes |
 |---|---|---|---|
@@ -5993,8 +5997,11 @@ readers now fail closed on any form they do not read:
 The new test turns the sources into six forms - a getter beside the old line commented out (in a line
 or a block comment), a field, a second declaration under `#if`, the binding bound again, a value that is
 not a literal - and each fails its reader. A limit, recorded: the readers read text and are not a
-compiler, so a `//` or `/*` inside a string literal is taken as a comment; that can only hide a
-declaration, which fails the reader closed. `test_each_switch_ships_off_and_its_reader_sees_it_flipped`
+compiler. *Corrected by R27.11.2*: this went on to say that a `//` or `/*` inside a string literal,
+taken as a comment, could only hide a declaration and so fail the reader closed. That was wrong: a
+compiled declaration hidden that way, beside one the compiler skips (under `#if`, or inside a
+string), read as off while the build had it true. R27.11.2 lexes the C# literals, refuses `#if`, and
+states the limit that remains. `test_each_switch_ships_off_and_its_reader_sees_it_flipped`
 is changed on purpose to name a reader per language.
 
 #### R27.9.6 Coverage the reviewers' mutations found missing (O-F6, O-F4; T342, T344)
@@ -6065,8 +6072,9 @@ No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopp
 
 ### R27.10 The lane's second review round (T348, T349, T380; 2026-10-31)
 
-One reviewer re-read the lane at `7e4b781` and filed one finding, F1 (medium). It was checked against
-the code, confirmed, and fixed test first. Owner decisions 166A and 171A govern it; 159A's review-round
+One reviewer re-read the lane at `7e4b781` and filed one medium finding, F1, here; its four low
+findings and four notes, F2 to F9, are settled in R27.11. F1 was checked against the code, confirmed,
+and fixed test first. Owner decisions 166A and 171A govern it; 159A's review-round
 policy is applied where named.
 
 #### R27.10.1 The name scan decision 171A asks for (F1; T348, T349)
@@ -6154,6 +6162,142 @@ other cases of the file green.
   `--basetemp` outside the checkout; counted from the progress lines): Python 3.12 18,393 passed and 6
   skipped; Python 3.11 (`uv run --isolated --python 3.11 --all-extras`) 18,394 passed and 5 skipped;
   none failed. Fifteen more than R27.9.8's, the fifteen T348 added.
+- **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no
+  broken link (`COUNT 0`); every changed file is `i/lf`.
+- **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file.
+
+No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.
+
+### R27.11 The lane's third review round (T381 to T384; 2026-10-31)
+
+R27.10's reviewer also filed four low findings, F2 to F5, and four notes, F6 to F9 (the reviewer's
+numbering). Each was checked against the code. F5 and F2 were reproduced by failing tests and fixed;
+for F2 the C# switch reader was hardened, not only R27.9.5 corrected. F3 and F4 add the tests the
+reviewer's mutations found missing, and the notes are recorded. Owner decisions 148A, 166A and 171A
+govern it; 159A's review-round policy is applied where named.
+
+#### R27.11.1 A blank reason holds Start back (F5; T381, T382)
+
+Confirmed. `start_readiness` asked only that a `reason` key exist, so a ledger whose five Start rows
+said `reason: ""` was judged ready, by `swreview remodel ledger` and by the CI pin that uses it,
+against 148A's "a verdict with a reason and no error". A blank or whitespace-only reason now counts as
+none, and the reason given is `PROBE-<n> gives no reason (decision 148A: ...)`, naming the probe and no
+value. The C# bodies always write a non-empty reason (the reviewer's reading), so only a hand-edited
+or damaged ledger reaches this. `test_start_names_each_probe_that_holds_it_back` gains
+`blank-reason-148A` and `whitespace-reason-148A`.
+
+#### R27.11.2 The C# switch reader lexes literals (F2, F3; T381, T382)
+
+Confirmed, and R27.9.5's limit was wrong (corrected there). The reader stripped comments by a pattern
+that did not know literals, so the reviewer's two forms read as off while the build had Start on:
+(a) `"//"` in a string hiding the compiled `=> true` after it on its line, with a `=> false` under
+`#if FICT_NEVER`; (b) `"/*"` and `"*/ ... => false;"` in two strings around the compiled `=> true`.
+
+Taken: hardening, since it stays one pattern. `csharp_code` lexes the source in one left-to-right
+pass, as the compiler does: a directive line is read whole (a `#region` name is not code), a `//` or
+`/* */` comment is dropped, and a regular, verbatim, character or interpolated literal is blanked to
+`""`. What the pass cannot lex fails the reader closed: a raw string, an interpolated string with a
+hole holding a quote, an apostrophe, a slash, a brace, an `@`, a `$` or a line break, and any other
+`$` or `@` that starts no literal it reads (a verbatim interpolated string among them). So does
+any `#if`, `#elif`, `#else` or `#endif`: the compiler does not lex a skipped section, so a `/*` there
+opens nothing where a reader of text sees a comment. Neither shipped source has one. The
+one-declaration count stays.
+
+Tests: four forms fail the reader closed - form (a); comment marks in skipped `#if` sections around
+the `true`; raw strings holding comment marks; interpolation holes holding strings - and five read as
+on, so the Start pin goes red - form (b); a `#region` name holding `/*`; a character literal holding
+a quote; a verbatim string ending in a backslash; strings holding escaped quotes. F3's case, a getter
+returning `true` with the shipped line moved into a nested class, fails only on the declaration count:
+without it, it read as off (M31, the reviewer's P8). These ten forms, and the two below, were compiled
+in a scratch net48 project with `LangVersion` latest, as `extractor/Directory.Build.props` sets it,
+and each reports `SeatValidated == True`; nothing of it was committed.
+
+**The limit that remains, recorded, not fixed (159A).** The reader is still not a compiler: it knows a
+declaration only as the name spelled `SeatValidated` followed by `=>`, `{` or `=`. A compiled
+declaration it does not recognise, beside a recognised `false` one in a nested class, still reads as
+off while the build has it true. Two such forms were compiled and read as off: the name spelled with
+a Unicode escape (`\u0053eatValidated => true`), and a field with no initialiser set by a
+deconstruction in a static constructor (`(SeatValidated, _) = (true, 0)`); an `out` argument would do
+the same. The reader also reads one file, so it cannot see a declaration in another file, of a
+partial class or of a base class of `DrawingOpenScope`. Counting every use of the name rather than its
+declarations would close the in-file forms, but `DrawingOpenScope.cs` names the switch again in its
+constructor chain (`: this(host, observer, SeatValidated)`). Each form takes a deliberate edit of
+several odd-looking parts, and R13.3 has Start set true only in a commit of its own that cites the
+ledger: the pin is a tripwire against an unreviewed flip, not a proof.
+
+#### R27.11.3 The access-denied branch of the rewrite's catch (F4; T383)
+
+Confirmed: both held-file cases of R27.9.1's test throw a sharing violation (`IOException`), so
+narrowing the catch to `IOException` left every test green. A read-only temporary file, as a killed
+run can leave, makes the write throw `UnauthorizedAccessException` (`0x80070005`) on .NET Framework.
+`RunAll_WithTheRecorder_AFileHeldAcrossARewrite_...` gains that third case: the file is made read-only
+during PROBE-6 and writable in PROBE-3; the run finishes, exactly one `could not rewrite ...
+(UnauthorizedAccessException 0x80070005)` line is logged, and the last rewrite has every row with
+nothing beside it. Changed on purpose: the expected exception type is given per case and each case's
+hold is released through one action; the two earlier cases assert what they did. The code was already
+right, so the case was green from the start and is proven by M44.
+
+#### R27.11.4 Notes (F6 to F9)
+
+- **F6, an exception thrown by `threw` would end the run.** Recorded, not fixed (159A).
+  `RemodelProbeRunner.Run` calls `threw` inside its catch unguarded, and the console's callback,
+  `ExtractLog.WriteError`, throws only if the exception's `ToString` or `Message` does or the console
+  write fails - which ends the run from every other log line too, the recorder's `finished` line
+  among them. A catch around this one callback would swallow what it threw and guard nothing the other
+  lines lack, so the assumption is recorded instead: the log's callbacks do not throw.
+- **F7, the pins read only the constants.** Recorded (159A). `RemodelHost`, `SwBridgeDispatcher` and
+  `DrawingOpenScope` also take their switch as a constructor argument; every production call passes
+  the constant today, and `DrawingOpenProbe` passes `true` by design. A production call passing a
+  literal `true` would open its gate with all three pins green; R27.5's pins hold the constants to
+  evidence, not their callers.
+- **F8, R27.6 claimed every seat assumption tagged.** Corrected there: only its six tags exist, and
+  `FakeEquationManager`'s PROBE-6 and PROBE-7 flags and `FakeFeature`'s description across a reorder
+  or a wrap (PROBE-20) carry none. None of these probes is among Start's five, so no false "ready"
+  follows; tagging them, and adding them to `TAGGED`, is left open.
+- **F9, a repeated `--probe` id.** Recorded (159A). `SplitProbeIds` keeps duplicates, so `--probe
+  PROBE-1,PROBE-2,PROBE-1` runs PROBE-1 twice and the reader refuses the ledger (`a probe is requested
+  twice`). It errs safe - no false "ready" - at the cost of seat time; the parser predates the lane.
+
+#### R27.11.5 Test-first evidence, mutations and gates
+
+**Failing commit.** T381 (`6a1b05a`): 11 failures, each on its assertion - four forms read as off
+rather than refused, three read as off rather than on, two refused rather than read as on, and the two
+blank reasons judged ready; the 110 other cases of the two files green. T383 adds a case to code that
+was already right.
+
+**Mutations**, each made in the worktree, the focused tests run (`test_seat_switch_evidence.py` and
+`test_remodel_ledger.py`; `RemodelProbeTests` for M44), and the file restored (sha256 equal):
+
+| # | Mutation | Result |
+|---|---|---|
+| M31 | the declaration count removed (the reviewer's P8) | red: the getter with the shipped line in a nested class, and only it; over the reader before T382 too, where it was the one case it turned red |
+| M32 | a `reason` key is enough (F5 undone) | red: both blank reasons |
+| M33 | a whitespace-only reason is a reason | red: the whitespace reason |
+| M34 | literals kept, not blanked | red: the character literal, the verbatim string, the strings holding comment marks and the escaped quotes |
+| M35 | directive lines not read whole | red: the `#region` name |
+| M36 | no `#if` refusal | red: the comment marks in skipped sections |
+| M37 | raw strings not refused | red: the raw strings |
+| M38 | a `$` or `@` that starts no literal read not refused | red: the interpolation holes |
+| M39 | interpolated strings not lexed | red: `DrawingOpenScope.cs` fails its reader - its ships-off check and its pin |
+| M40 | verbatim strings not lexed | red: the verbatim string |
+| M41 | character literals not lexed | red: the character literal |
+| M42 | escapes in a regular string not read | red: the escaped quotes |
+| M43 | an interpolation hole may hold anything but a brace | red: the interpolation holes |
+| M44 | the rewrite's catch narrowed to `IOException` (the reviewer's C2) | red: the read-only temporary file, and only it |
+
+**Gates** on the final tree (this record's commit, its counts filled in after the run):
+
+- **C# build.** `dotnet build extractor/SwReview.sln -c Release --no-incremental`: zero warnings, zero
+  errors.
+- **C# tests.** 10,236 extractor tests (R27.9.8's 10,235 and T383's case) and 4,276 add-in tests
+  passed, none failed or skipped.
+- **Python.** Required-tokenizer non-live suites (`SWREVIEW_TOKENIZER_DIR=C:\t\144a-tok`,
+  `--basetemp` outside the checkout; counted from the progress lines): Python 3.12 18,406 passed and 5
+  skipped; Python 3.11 (`uv run --isolated --python 3.11 --all-extras`) 18,406 passed and 5 skipped;
+  none failed. Twelve more than R27.10.2's, the twelve cases T381 added. On 3.12 the five skips, named
+  by a run with `-rs`, are the machine's: two answer-key cases with no native package, a key-only
+  benchmark case and two that need symlinks. R27.10.2 counted six skipped on 3.12 without naming
+  them, so the one fewer here is not explained; the total, passed and skipped, is twelve more.
 - **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no
   broken link (`COUNT 0`); every changed file is `i/lf`.
 - **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file.

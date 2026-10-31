@@ -79,8 +79,9 @@ CSHARP_TOKEN = re.compile(
 )
 """What the C# lexer reads before any code, in one left-to-right pass: a directive line (read
 whole: a `#region` name is not code), a comment, and a string or character literal - regular,
-verbatim, or interpolated with holes that hold no literal, comment, brace or line break. A raw
-string, and a `$` or `@` that starts no literal read here, are what this pass cannot lex."""
+verbatim, or interpolated with holes that hold no quote, apostrophe, slash, brace, `@`, `$` or line
+break. A raw string, and a `$` or `@` that starts no literal read here, are what this pass cannot
+lex."""
 CSHARP_CONDITIONAL = re.compile(r"^[ \t]*#[ \t]*(?:if|elif|else|endif)\b", re.MULTILINE)
 UNLEXED = "\0"
 CSHARP_OFF = "public static bool SeatValidated => false;"
