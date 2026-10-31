@@ -15,6 +15,7 @@ Every package and record here is fictional and made in the test's temp folder.
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -172,6 +173,45 @@ def test_a_file_that_is_neither_a_package_nor_a_record_is_an_error(tmp_path: Pat
 
     assert result.exit_code == 1
     assert result.stdout == ""
+    assert "neither a package nor an interference record" in result.stderr
+
+
+def test_an_error_names_the_path_as_it_was_given_and_no_more(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A folder with no `package.json`, passed relative: the message names `made-up-folder`,
+    never the folders above it, which hold the user's name."""
+    (tmp_path / "made-up-folder").mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    result = invoke("seat", "volume-unit", "made-up-folder", "--expected-mm3", "1000")
+
+    assert result.exit_code == 1
+    assert "made-up-folder" in result.stderr
+    assert "package.json" in result.stderr
+    assert str(tmp_path) not in result.output
+
+
+@pytest.mark.parametrize("kind", ["record", "package"])
+def test_nothing_under_the_answer_keys_is_read(tmp_path: Path, kind: str) -> None:
+    """`reject_answer_key_path`, the guard every reviewer read goes through, holds for a single
+    record as for a package: refused before it is opened, in one sentence, with no traceback."""
+    withheld = tmp_path / "benchmarks" / "answer_keys"
+    if kind == "record":
+        withheld.mkdir(parents=True)
+        target = withheld / "interference.json"
+        target.write_text(row(1e-6).model_dump_json(), encoding="utf-8")
+    else:
+        shutil.copytree(package_dir(tmp_path, row(1e-6)), withheld / "package")
+        target = withheld / "package"
+
+    result = judge(target)
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert result.stdout == ""
+    assert "answer_keys" in result.stderr
+    assert "neither a package" not in result.stderr
 
 
 @pytest.mark.parametrize("expected", ["0", "-1000"])
