@@ -14,7 +14,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-from swreview.ir.loader import load_package
+from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, reject_answer_key_path
 from swreview.ir.models import Interference
 from swreview.seat import INCONCLUSIVE
 
@@ -36,9 +36,17 @@ class Judgement:
 
 
 def interferences(path: Path) -> list[Interference]:
-    """The rows of a package (its folder or its `package.json`), or one record on its own."""
-    if path.is_dir() or path.name == "package.json":
-        return list(load_package(path if path.is_dir() else path.parent).package.interferences)
+    """The rows of a package (its folder or its `package.json`), or one record on its own.
+
+    Refuses anything under the answer keys first (`AnswerKeyAccessError`), as every reviewer read
+    does; raises `ValueError` or `OSError` for anything else it cannot read, in words that name
+    no path."""
+    reject_answer_key_path(path, "answer keys are withheld from the reviewer")
+    if path.is_dir() or path.name == PACKAGE_FILE_NAME:
+        folder = path if path.is_dir() else path.parent
+        if not (folder / PACKAGE_FILE_NAME).is_file():
+            raise ValueError(f"there is no {PACKAGE_FILE_NAME} in it")
+        return list(load_package(folder).package.interferences)
     return [Interference.model_validate_json(path.read_bytes())]
 
 

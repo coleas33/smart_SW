@@ -178,8 +178,8 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 
 *Added 2026-10-31 (owner decision 172A; research R15.1):* the lane's review round 1 found that the judge read a single interference record without the answer-key guard every other reviewer read goes through, and printed paths the engineer had not typed.
 
-- [ ] T109 [P] [US3] Test first (owner decision 172A; research R15.1). In `reviewer/tests/unit/test_cli_seat_volume_unit.py`: a record or a package under `benchmarks/answer_keys/` is refused in one sentence on stderr, exit 1, with no traceback; an error names the path as it was given (a relative folder with no `package.json`) and none of the folders above it; a file that is neither a package nor a record says so on stderr
-- [ ] T110 [US3] Implement T109 (owner decision 172A; research R15.1) in `reviewer/src/swreview/seat/volume_unit.py` and the `seat volume-unit` command, and record R15.1. Acceptance: every T106 and T109 case green
+- [X] T109 [P] [US3] Test first (owner decision 172A; research R15.1). In `reviewer/tests/unit/test_cli_seat_volume_unit.py`: a record or a package under `benchmarks/answer_keys/` is refused in one sentence on stderr, exit 1, with no traceback; an error names the path as it was given (a relative folder with no `package.json`) and none of the folders above it; a file that is neither a package nor a record says so on stderr
+- [X] T110 [US3] Implement T109 (owner decision 172A; research R15.1) in `reviewer/src/swreview/seat/volume_unit.py` and the `seat volume-unit` command, and record R15.1. Acceptance: every T106 and T109 case green
 
 **Checkpoint**: Interference findings are grouped, excepted, and re-flagged on change; the bridge serves captures.
 

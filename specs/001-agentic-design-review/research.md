@@ -271,7 +271,8 @@ SOLIDWORKS' own Interference Detection reads 1000 mm^3, dumps the assembly, runs
 - no match is inconclusive, with the number; when it is the overlap in cubic inches, the reason
   says the assembly was built from an inch template;
 - it reads a package folder, its `package.json`, or one interference record, through the IR
-  models; anything else is an error. Exit 0 on `m3` or `mm3`, 1 otherwise; `--json`.
+  models, and nothing under the answer keys (R15.1); anything else is an error. Exit 0 on `m3`
+  or `mm3`, 1 otherwise; `--json`.
 
 **Rationale**: the label is the assumption under test, so only the raw number is compared. The
 tolerance absorbs floating error and display rounding, not a sloppy model: the recipe types the
@@ -293,6 +294,28 @@ answer to).
 **Tests** (T106): `reviewer/tests/unit/test_cli_seat_volume_unit.py`, 21 cases over fictional
 packages and records made in the test's temp folder, all red before T107 (no command) and green
 after it. Gates: recorded in 004 research R28.5, which ran them once for the whole lane.
+
+### R15.1 Review round 1: the answer-key guard and what an error prints (T109, T110; 2026-10-31)
+
+The lane's review (004 research R28.6 lists every finding) found, and the code confirmed, that a
+single interference record was read with `Interference.model_validate_json` and no
+`reject_answer_key_path`, the guard every other reviewer read goes through (`swreview.ir.loader`);
+that a package folder under `benchmarks/answer_keys/` raised `AnswerKeyAccessError`, a
+`RuntimeError` the command did not catch, so a traceback named the resolved path; and that the
+error for a folder with no `package.json` quoted the loader's message, which names the resolved
+absolute path even when the engineer typed a relative one.
+
+`volume_unit.interferences` now refuses anything under the answer keys or the case files before
+it opens it, and says "there is no package.json in it" itself. The command answers each in one
+sentence on stderr, exit 1, naming the path as it was given: "lies under benchmarks/answer_keys
+or benchmarks/case_files, which are withheld from the reviewer", or "is neither a package nor an
+interference record" with the reason - an `OSError` by its `strerror`, never its `str()`, and
+anything else by its first line (a validation error's names the model, not the file).
+
+**Tests** (T109): 24 cases, 3 red before T110 (the record and the package under the answer keys,
+the relative folder) and all green after it; the stderr sentence for a file that is neither was
+already printed and is now asserted, since a judge that stopped catching `ValueError` also exits
+1 with an empty stdout.
 
 ## Open questions carried into the plan as risks
 

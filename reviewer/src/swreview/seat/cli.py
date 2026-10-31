@@ -14,6 +14,7 @@ from typing import Annotated, Any
 import typer
 
 from swreview.checks.standards.profile import DEFAULT_PATH
+from swreview.ir.loader import AnswerKeyAccessError
 from swreview.seat import INCONCLUSIVE, health, transparency, volume_unit
 
 app = typer.Typer(
@@ -140,9 +141,23 @@ def volume_unit_command(
         raise typer.BadParameter("must be a volume above zero", param_hint="'--expected-mm3'")
     try:
         rows = volume_unit.interferences(package)
+    except AnswerKeyAccessError as error:
+        typer.echo(
+            f"error: {package} lies under benchmarks/answer_keys or benchmarks/case_files, which "
+            "are withheld from the reviewer",
+            err=True,
+        )
+        raise typer.Exit(1) from error
     except (OSError, ValueError) as error:
-        first = str(error).splitlines()[0] if str(error) else type(error).__name__
-        typer.echo(f"error: neither a package nor an interference record: {first}", err=True)
+        # `str()` of an OSError names the resolved path; the path is given as it was typed.
+        why = (
+            error.strerror
+            if isinstance(error, OSError)
+            else next(iter(str(error).splitlines()), "")
+        ) or type(error).__name__
+        typer.echo(
+            f"error: {package} is neither a package nor an interference record: {why}", err=True
+        )
         raise typer.Exit(1) from error
     judgement = volume_unit.judge(rows, expected_mm3)
     if json_output:
