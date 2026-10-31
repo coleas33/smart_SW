@@ -52,13 +52,15 @@ public sealed class MeshExporter : IMeshSource
         }
 
         var bodies = new List<BodyRef>();
+        var documentNodes = new DocumentNodePass(scope);
         Directory.CreateDirectory(meshDirectory);
 
         foreach (ScopedComponent component in scope.Components)
         {
-            Export(component, scope, meshDirectory, bodies);
+            Export(component, scope, meshDirectory, bodies, documentNodes);
         }
 
+        RecordDocumentNodes(documentNodes);
         return bodies;
     }
 
@@ -86,17 +88,34 @@ public sealed class MeshExporter : IMeshSource
         }
 
         var bodies = new List<BodyRef>();
+
+        // Each component is fetched by a call of its own, which answers for itself, so every
+        // resolved instance in the scope counts as reaching its document (T133, T137).
+        var documentNodes = new DocumentNodePass(scope, scope.Components);
         Directory.CreateDirectory(meshDirectory);
-        Export(component, scope, meshDirectory, bodies);
+        Export(component, scope, meshDirectory, bodies, documentNodes);
+        RecordDocumentNodes(documentNodes);
         return bodies;
     }
+
+    private static void RecordDocumentNodes(DocumentNodePass documentNodes) =>
+        documentNodes.Record("body", "no mesh was written for it", assemblyNotRead: null);
 
     private void Export(
         ScopedComponent component,
         DumpScope scope,
         string meshDirectory,
-        List<BodyRef> bodies)
+        List<BodyRef> bodies,
+        DocumentNodePass documentNodes)
     {
+        if (component.Node.Suppression == SuppressionState.Resolved && component.Node.Handle is IModelDoc2)
+        {
+            // A part root or a model a drawing references is resolved; its gap, after the pass,
+            // says how it is reviewed (T132, T137).
+            documentNodes.Skip(component);
+            return;
+        }
+
         if (component.Node.Suppression != SuppressionState.Resolved
             || !(component.Node.Handle is IComponent2 handle))
         {
@@ -109,7 +128,7 @@ public sealed class MeshExporter : IMeshSource
             return;
         }
 
-        ExportComponent(handle, component, scope, meshDirectory, bodies);
+        ExportComponent(handle, component, scope, meshDirectory, bodies, documentNodes);
     }
 
     private void ExportComponent(
@@ -117,7 +136,8 @@ public sealed class MeshExporter : IMeshSource
         ScopedComponent component,
         DumpScope scope,
         string meshDirectory,
-        List<BodyRef> bodies)
+        List<BodyRef> bodies,
+        DocumentNodePass documentNodes)
     {
         SwGate gate = _session.Gate;
 
@@ -135,6 +155,7 @@ public sealed class MeshExporter : IMeshSource
             return;
         }
 
+        documentNodes.Reached(component);
         foreach (object item in bodyArray)
         {
             if (!(item is IBody2 body))
