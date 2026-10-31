@@ -15,7 +15,8 @@ only its PROBE-2 lines:
 - anything else is inconclusive and says what did not hold, because a guess either way silently
   mislabels every override (research R2.8). Overrides that differ nowhere, or in colour, are
   inconclusive rather than a refutation: a missed recipe step explains them, and a refutation
-  sends the owner to change the extractor.
+  sends the owner to change the extractor. So is a slot that is no finite number, or a slot 7
+  outside 0 to 1, which no transparency is: the read went wrong (R11.2).
 """
 
 from __future__ import annotations
@@ -99,7 +100,8 @@ def _section(text: str) -> list[str] | str:
 
 def _slots(printed: str) -> list[float] | None:
     """`9 slots [0]=0 ... [8]=0` as numbers in slot order; None for `null`, a failure, a gap, a
-    count that disagrees with the slots listed, or no slots at all."""
+    count that disagrees with the slots listed, no slots at all, or a slot that is no finite
+    number (the probe prints `NaN` and `Infinity` as such)."""
     match = _SLOTS.fullmatch(printed.strip())
     if not match:
         return None
@@ -109,7 +111,7 @@ def _slots(printed: str) -> list[float] | None:
             number = float(value)
         except ValueError:
             return None
-        if int(index) != position:
+        if int(index) != position or not math.isfinite(number):
             return None
         values.append(number)
     return values if values and len(values) == int(match["count"]) else None
@@ -175,6 +177,13 @@ def decide(text: str, names: dict[str, str]) -> Decision:
             f"{REFUTED}",
             refuted=True,
         )
+    for reading, read in ((transparent, clear), (opaque, solid)):
+        if not 0 <= read[SLOT] <= 1:
+            return inconclusive(
+                f"{reading.name} reads {read[SLOT]:g} at slot 7, outside 0 to 1, which no "
+                "transparency is, so the read went wrong: probe again, and if it reads so again, "
+                "tell the owner"
+            )
     differ = [
         slot
         for slot, (left, right) in enumerate(zip(clear, solid, strict=True))

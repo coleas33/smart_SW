@@ -67,7 +67,7 @@ uv run swreview seat transparency "<your folder>\probe-standards.txt"
 |-----------|---------------|------------|
 | `verdict: zero_is_opaque` or `verdict: one_is_opaque` | The seat showed the polarity. | Copy the `verdict`, `reason` and three reading lines into the sitting's findings document; the owner makes the flip `next:` names (006 research R11). |
 | `verdict: inconclusive`, reason starting `slot 7 refuted` | The two overrides are the same colour and read the same at slot 7 but differ at another slot, or have no slot 7: slot 7 does not carry the transparency on this build, so the dump reads the wrong slot. | Record it as it stands and stop: the fix is an extractor change, not the flip. |
-| `verdict: inconclusive`, any other reason | A step above did not hold (the reason names it: overrides that differ nowhere, which is step 4 missed; a colour that differs; an override on the plain block; a block missing). | Fix that step, save, and run the two commands again. |
+| `verdict: inconclusive`, any other reason | A step above did not hold (the reason names it: overrides that differ nowhere, which is step 4 missed; a colour that differs; an override on the plain block; a block missing; a slot 7 reading outside 0 to 1, which is a bad read). | Fix that step, save, and run the two commands again. |
 
 Afterwards close the assembly; nothing here was changed by the probe. Delete the files or keep
 them in your own folder, but never copy them into the checkout.

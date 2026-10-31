@@ -648,6 +648,7 @@ engineer saves `swreview-extract probe standards` to a file and runs
 | They read the same at slot 7 and differ in colour, with or without another slot | inconclusive | The control did not hold, so nothing else they show can refute slot 7: same colour, probe again (R11.1). |
 | They differ at slot 7 and elsewhere too | inconclusive | The colours differ, so slot 7 is not shown to be the only carrier: same colour, probe again. |
 | The opaque one reads neither 0 nor 1 at slot 7 | inconclusive | Neither polarity names it opaque. |
+| Either reads a slot 7 outside 0 to 1, or any slot that is no finite number (`NaN`, `Infinity`) | inconclusive, never refuted | No transparency is outside 0 to 1: the read went wrong, which shows no polarity and refutes no slot. Probe again (R11.2). |
 | A block missing or listed twice, a failed, `null` or empty read, slots that skip one or disagree with their count, differing slot counts, no PROBE-2 section or two | inconclusive | Nothing to read, or two runs in one file. |
 | `PROBE2-BLOCK-3` reports an override, or `-1` or `-2` reports none | inconclusive | The control did not hold: `HasMaterialPropertyValues` would then not tell an override apart, which the check relies on. |
 
@@ -734,3 +735,25 @@ the two deciders share one `INCONCLUSIVE` (`swreview.seat`).
 overrides, a colour that differs alone and beside slot 8, two reads of no slots) and all green
 after it; T111's "no slot differing refutes slot 7" is replaced by the first, deliberately. The
 26 precomputed goldens are unchanged.
+
+### R11.2 Review round 2: a reading no transparency can hold (T116, T117; 2026-10-31)
+
+The lane's second review (004 research R28.7 lists every finding) found that a transparent block
+reading `NaN`, `Infinity`, -1 or 2 at slot 7 beside an opaque 0 decided `zero_is_opaque`.
+Verified against the code: `float()` takes `NaN` and `Infinity` (the probe prints a double with
+`G6` in the invariant culture, so it writes them so), and any such value differs from 0, so the two
+overrides "differed at slot 7 alone". The same held for a refutation: an equal slot 7 of 2 beside
+another slot differing, or a `NaN` at slot 8 beside an equal slot 7, refuted slot 7 - `NaN` is
+not close even to itself.
+
+A transparency is a fraction from 0 to 1, so a reading outside it says the read went wrong, not
+which polarity the seat has, nor that slot 7 is the wrong slot. Now a slot that is no finite
+number is a failed read, as a gap or a `null` already was, and a slot 7 outside 0 to 1 on either
+override is inconclusive naming that block and its value: probe again, and if it reads so again,
+tell the owner. Neither refutes slot 7. The rule table above has the row, and the recipe's results
+table names the bad read among the other reasons. The plain block's slots are still not read.
+
+**Tests** (T116): 12 cases in `test_cli_seat_transparency.py`, 42 in all, 12 red before T117 (the
+five transparent readings decided `zero_is_opaque`, the two refutations refuted, the five opaque
+readings inconclusive already but without naming the block) and all green after it. The 26
+precomputed goldens are unchanged.

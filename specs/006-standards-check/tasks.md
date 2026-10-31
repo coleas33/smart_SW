@@ -236,8 +236,8 @@ Every task here needs the pilot workstation and a SOLIDWORKS 2024 SP5 seat. **No
 
 *Added 2026-10-31 (owner decision 172A; research R11.2):* the lane's review round 2 found that a slot 7 reading no transparency can hold (`NaN`, an infinity, below 0 or above 1) settled the polarity, and that a value no slot can hold could refute slot 7.
 
-- [ ] T116 [P] Test first (owner decision 172A; research R11.2). In `reviewer/tests/unit/test_cli_seat_transparency.py`: the transparent or the opaque block reading `NaN`, `Infinity`, `-Infinity`, -1 or 2 at slot 7 is inconclusive, not refuted, naming that block; and neither a slot that is no number beside an equal slot 7 nor an equal slot 7 outside 0 to 1 refutes slot 7
-- [ ] T117 Implement T116 (owner decision 172A; research R11.2) in `reviewer/src/swreview/seat/transparency.py`; amend R11's rule table and record R11.2. Acceptance: every T111, T114 and T116 case green, and the 26 precomputed goldens unchanged
+- [x] T116 [P] Test first (owner decision 172A; research R11.2). In `reviewer/tests/unit/test_cli_seat_transparency.py`: the transparent or the opaque block reading `NaN`, `Infinity`, `-Infinity`, -1 or 2 at slot 7 is inconclusive, not refuted, naming that block; and neither a slot that is no number beside an equal slot 7 nor an equal slot 7 outside 0 to 1 refutes slot 7
+- [x] T117 Implement T116 (owner decision 172A; research R11.2) in `reviewer/src/swreview/seat/transparency.py`; amend R11's rule table and record R11.2. Acceptance: every T111, T114 and T116 case green, and the 26 precomputed goldens unchanged
 
 ---
 
