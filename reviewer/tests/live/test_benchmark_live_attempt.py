@@ -17,7 +17,8 @@ scorecard's `run_status`, `cost`, `served_models` and `price_table` (`scoring.md
 OpenAI only (owner decision 94A, 2026-10-15): skipped when `OPENAI_API_KEY` is not set, and never
 falls back to Gemini, whatever Gemini key the environment holds. The model is `SWREVIEW_LIVE_MODEL`
 when set, else `gpt-5.6-sol` (`agent/settings.py`, `PAID_TEST_MODEL`; owner decision 174A): the
-default `gpt-5.6` has no price row (102A) and its served variants are not its aliases.
+default `gpt-5.6` has no price row (102A) and its served variants are not its aliases. A model with
+no price row fails before anything is sent (014 T270).
 
 **Never run by accident.** `pytestmark = pytest.mark.live`, so the gate's `-m "not live"` deselects
 it, and `tests/conftest.py` skips every live test when no provider key is set at all. It spends
@@ -161,6 +162,15 @@ def test_one_real_benchmark_attempt_records_every_field_of_its_row(
 ) -> None:
     # The slice's own modules, imported here so every gate collects this module cleanly.
     from swreview.benchmark import prices, served
+
+    # No --study, so `benchmark run` has no price guard: a model the table cannot price would
+    # spend a review and then fail on its cost (174A).
+    if prices.price_entry(prices.load_prices(), PROVIDER, MODEL) is None:
+        pytest.fail(
+            f"no price for {PROVIDER.value} {MODEL} in benchmark/prices.yaml, so the attempt's "
+            "cost could not be known; nothing was spent. Name a priced model, as "
+            f"{PAID_TEST_MODEL} is (owner decision 174A)"
+        )
 
     root = sets.REPO_ROOT
     run = tmp_path / "run"

@@ -2839,18 +2839,25 @@ def benchmark_run(
             # Row 6's price entry: the scripted provider's cost is synthetic.
             if study in (PANE_STUDY, PRIVATE_PANE_STUDY) and provider != ProviderName.FAKE:
                 if prices.price_entry(prices.load_prices(), provider, settings.model) is None:
-                    from swreview.agent.settings import PAID_TEST_MODEL
+                    from swreview.agent.settings import DEFAULT_MODELS, PAID_TEST_MODEL
 
-                    fix = (
+                    add = "add the entry with its source and date"
+                    paid = (
                         f"name a priced model, as a paid test run names --model {PAID_TEST_MODEL} "
-                        "(owner decision 174A), or add"
-                        if provider == ProviderName.OPENAI
-                        else "add"
+                        "(owner decision 174A)"
                     )
+                    if provider != ProviderName.OPENAI:
+                        fix = add
+                    elif settings.model == DEFAULT_MODELS[provider]:
+                        fix = (
+                            f"{paid}; {settings.model} is priced by the variant that answers "
+                            "(owner decision 102A)"
+                        )
+                    else:
+                        fix = f"{paid}, or {add}"
                     raise ValueError(
                         f"no price for {provider.value} {settings.model} in benchmark/prices.yaml: "
-                        f"a pane study's cost must be known (SC-008); {fix} the entry with its "
-                        "source and date"
+                        f"a pane study's cost must be known (SC-008); {fix}"
                     )
             # Row 7, P-3.
             if declares_a_study:
