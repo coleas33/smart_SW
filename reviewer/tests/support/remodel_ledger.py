@@ -6,7 +6,8 @@ and `swreview remodel ledger`'s tests build theirs one way. The plan test pins t
 relies on against the C# source, and `GOLDEN_LEDGER` - which the C# test
 `RemodelProbeTests.Ledger_Render_WritesTheGoldenLedgerTheReaderIsPinnedTo` renders byte for byte -
 pins the whole shape for the reader. `committed_ledgers` is what the CI pins read from
-`CAPABILITIES` (004 T338 and T339).
+`CAPABILITIES` (004 T338 and T339), and `CALIBRATED` is IDENTITY as T138 would leave it, for the
+cases that test everything else Start needs (004 T346).
 """
 
 from __future__ import annotations
@@ -14,15 +15,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-__all__ = ["CAPABILITIES", "GOLDEN_LEDGER", "committed_ledgers", "rendered_ledger"]
+from swreview.remodel.tolerances import IDENTITY
+from tests.support.seat_tasks import REPO
+
+__all__ = ["CALIBRATED", "CAPABILITIES", "GOLDEN_LEDGER", "committed_ledgers", "rendered_ledger"]
 
 GOLDEN_LEDGER = (
     Path(__file__).resolve().parents[1] / "fixtures" / "remodel" / "ledger" / "remodel-32.5.0.yaml"
 )
 """A fictional run of the whole probe catalog that stopped in its last probe, PROBE-21."""
 
-CAPABILITIES = Path(__file__).resolve().parents[3] / "benchmarks" / "native" / "capabilities"
+CAPABILITIES = REPO / "benchmarks" / "native" / "capabilities"
 """Where seat evidence is committed (decision 171A; its README)."""
+
+CALIBRATED = IDENTITY.model_copy(update={"calibrated": True, "calibration_ref": "fictional"})
+"""IDENTITY as T138 would leave it."""
 
 
 def committed_ledgers(root: Path = CAPABILITIES) -> list[Path]:

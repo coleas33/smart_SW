@@ -40,6 +40,7 @@ from swreview.checks.rms_types import RmsTypeTable, load_table
 from swreview.remodel.tolerances import IDENTITY, Tolerances
 
 __all__ = [
+    "FAILURE",
     "FROZEN_INTEROP_VERSION",
     "START_PROBES",
     "START_SWITCH",
@@ -77,7 +78,7 @@ REASON_KEY = "reason"
 _TYPE_KEY = re.compile(r"type\[.*\]")
 _UNREADABLE_TYPE = "(unreadable)"
 
-_FAILURE = re.compile(r"\w+ 0x[0-9A-F]{8}(?:; \w+ 0x[0-9A-F]{8})*")
+FAILURE = re.compile(r"\w+ 0x[0-9A-F]{8}(?:; \w+ 0x[0-9A-F]{8})*")
 """`ProbeText.Failure`'s `<Type> 0x<HRESULT>`, one per exception, the only exception text a
 ledger written since 004 T335 carries. Anything else in `error` is an earlier build's message."""
 
@@ -347,7 +348,7 @@ def summary_lines(payload: dict[str, Any]) -> list[str]:
 
 
 def _shown_error(error: str) -> str:
-    return error if _FAILURE.fullmatch(error) else "(its message is not shown)"
+    return error if FAILURE.fullmatch(error) else "(its message is not shown)"
 
 
 def _shape_refusal(why: str) -> str:

@@ -36,13 +36,9 @@ from swreview.remodel.ledger import (
     start_readiness,
     unknown_types,
 )
-from swreview.remodel.tolerances import IDENTITY
 from tests.support import local_paths
-from tests.support.remodel_ledger import GOLDEN_LEDGER, rendered_ledger
+from tests.support.remodel_ledger import CALIBRATED, GOLDEN_LEDGER, rendered_ledger
 from tests.support.seat_tasks import REPO
-
-CALIBRATED = IDENTITY.model_copy(update={"calibrated": True, "calibration_ref": "fictional"})
-"""IDENTITY as T138 would leave it, for the cases that test everything else Start needs."""
 
 IDENTITY_NOT_CALIBRATED = (
     "the IDENTITY tolerance profile is not calibrated: T138 freezes it against PROBE-8's "

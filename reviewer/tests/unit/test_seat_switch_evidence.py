@@ -36,10 +36,15 @@ from pathlib import Path
 
 import pytest
 
-from swreview.remodel.ledger import Ledger, load_ledger, start_readiness
+from swreview.remodel.ledger import FAILURE, Ledger, load_ledger, start_readiness
 from swreview.remodel.tolerances import IDENTITY, Tolerances
 from tests.support import local_paths
-from tests.support.remodel_ledger import CAPABILITIES, GOLDEN_LEDGER, committed_ledgers
+from tests.support.remodel_ledger import (
+    CALIBRATED,
+    CAPABILITIES,
+    GOLDEN_LEDGER,
+    committed_ledgers,
+)
 from tests.support.seat_tasks import REPO
 
 START_SOURCE = REPO / "extractor" / "SwReview.Extractor" / "Rms" / "RemodelStart.cs"
@@ -59,11 +64,6 @@ CSHARP_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
 CSHARP_OFF = "public static bool SeatValidated => false;"
 PYTHON_NAME = "DRAWING_BINDING_VALIDATED"
 PYTHON_OFF = f"{PYTHON_NAME}: bool = False"
-
-FAILURE = re.compile(r"\w+ 0x[0-9A-F]{8}(?:; \w+ 0x[0-9A-F]{8})*")
-"""`ProbeText.Failure`'s form, the only exception text a committable ledger carries (171A)."""
-
-CALIBRATED = IDENTITY.model_copy(update={"calibrated": True, "calibration_ref": "fictional"})
 
 
 def csharp_switch(text: str) -> bool:
