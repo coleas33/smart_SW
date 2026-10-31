@@ -251,7 +251,7 @@ def start_readiness(ledger: Ledger, identity: Tolerances = IDENTITY) -> SwitchRe
             reasons.append(f"{probe} threw {_shown_error(row.raw_result[ERROR_KEY])}")
         elif row.verdict != "verified":
             reasons.append(f"{probe} is {row.verdict}")
-        elif REASON_KEY not in row.raw_result:
+        elif not row.raw_result.get(REASON_KEY, "").strip():
             reasons.append(
                 f"{probe} gives no reason (decision 148A: a verdict with a reason and no error)"
             )

@@ -16,10 +16,11 @@ Feature 011's probes print a report of lines, not a machine-readable record, and
 holds design names and stays out of the repository (011 `contracts/probes.md` sections 1 and 3); so
 each drawing switch may be true only if its named evidence file is committed here, in the form 004
 research R27.5 records. Each constant is read from its source, as `test_standards_profile.py` reads
-the C#, so the pins run in CI with no build: the C# with its comments stripped, the Python from its
-syntax tree, each from exactly one declaration in the one form shipped, so a switch turned on in any
-other form fails its reader rather than being read past (004 T345). While every switch is off they
-pass; flipping any one of them turns its pin red (R27.5 and R27.9 record each mutation).
+the C#, so the pins run in CI with no build: the C# lexed for its comments and literals, the Python
+from its syntax tree, each from exactly one declaration in the one form shipped, so a switch turned
+on in any other form fails its reader rather than being read past (004 T345, T382). While every
+switch is off they pass; flipping any one of them turns its pin red (R27.5, R27.9 and R27.11
+record each mutation).
 
 A committed ledger is also held to decision 171A: the reader reads it (no path, the frozen
 version), the committable-path scanner finds nothing in it, every feature name in it is one the
@@ -65,22 +66,53 @@ DRAWING_BINDING_EVIDENCE = CAPABILITIES / "drawing-binding.md"
 CSHARP_SWITCH = re.compile(r"public static bool SeatValidated => (true|false);")
 CSHARP_DECLARATION = re.compile(r"\bSeatValidated\s*(?:=>|\{|=(?!=))")
 """Any declaration of `SeatValidated`: an expression body, a getter or a field's value."""
-CSHARP_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
+CSHARP_TOKEN = re.compile(
+    "|".join((
+        r"(?P<directive>^[ \t]*#[^\n]*)",
+        r"(?P<comment>//[^\n]*|/\*.*?\*/)",
+        r'(?P<raw>\$*""")',
+        r'(?P<literal>\$"(?:[^"\\\n{]|\\[^\n]|\{\{|\{[^{}"\'/@$\n]*\})*"'
+        r'|@"(?:[^"]|"")*"|"(?:[^"\\\n]|\\[^\n])*"|\'(?:[^\'\\\n]|\\[^\n])+\')',
+        r"(?P<prefix>[$@])",
+    )),
+    re.DOTALL | re.MULTILINE,
+)
+"""What the C# lexer reads before any code, in one left-to-right pass: a directive line (read
+whole: a `#region` name is not code), a comment, and a string or character literal - regular,
+verbatim, or interpolated with holes that hold no literal, comment, brace or line break. A raw
+string, and a `$` or `@` that starts no literal read here, are what this pass cannot lex."""
+CSHARP_CONDITIONAL = re.compile(r"^[ \t]*#[ \t]*(?:if|elif|else|endif)\b", re.MULTILINE)
+UNLEXED = "\0"
 CSHARP_OFF = "public static bool SeatValidated => false;"
 PYTHON_NAME = "DRAWING_BINDING_VALIDATED"
 PYTHON_OFF = f"{PYTHON_NAME}: bool = False"
 
 
+def csharp_code(text: str) -> str:
+    """`text` with each comment dropped and each literal blanked to `""`, as `CSHARP_TOKEN` lexes
+    them, so a `//` inside a string is no comment and a quote inside a comment opens no string;
+    directive lines kept whole, and what the pass cannot lex marked `UNLEXED`."""
+    kept = {"comment": " ", "literal": '""', "raw": UNLEXED, "prefix": UNLEXED}
+    return CSHARP_TOKEN.sub(lambda token: kept.get(token.lastgroup or "", token.group()), text)
+
+
 def csharp_switch(text: str) -> bool:
-    """`SeatValidated` as a C# source declares it, read from its code, never its comments: exactly
-    one declaration, and that one `public static bool SeatValidated => true|false;`. A getter, a
-    field or a second declaration under `#if` fails this reader rather than being read past (004
-    T345: a getter turning the switch on beside the old line commented out read as off)."""
-    code = CSHARP_COMMENT.sub("", text)
+    """`SeatValidated` as a C# source declares it, read from its code, never its comments or
+    literals: exactly one declaration, and that one `public static bool SeatValidated =>
+    true|false;`. A getter, a field, a second declaration, any `#if` (a skipped section is not
+    lexed by the compiler, so no reader of text can tell what it hides) or a literal this reader
+    cannot lex fails it rather than being read past (004 T345: a getter turning the switch on
+    beside the old line commented out read as off; T382: a `//` or `/*` inside a literal or a
+    skipped section hid the compiled declaration)."""
+    code = csharp_code(text)
     found = CSHARP_SWITCH.findall(code)
-    assert len(CSHARP_DECLARATION.findall(code)) == len(found) == 1, (
+    assert (
+        UNLEXED not in code
+        and not CSHARP_CONDITIONAL.search(code)
+        and len(CSHARP_DECLARATION.findall(code)) == len(found) == 1
+    ), (
         "SeatValidated is read only from one `public static bool SeatValidated => true|false;` "
-        "outside comments"
+        "outside comments and literals, in a file with no #if and no literal its reader cannot lex"
     )
     return found[0] == "true"
 
