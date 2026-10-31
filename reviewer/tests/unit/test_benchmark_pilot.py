@@ -742,6 +742,40 @@ def test_other_estimators_share_verdict_counts_and_keep_individual_rates(tmp_pat
     assert sample.code_detections[0, 0].tolist() == [2, 2]
 
 
+def test_the_estimate_is_printed_with_the_basis_its_averaged_costs_were_priced_on(
+    tmp_path, monkeypatch,
+):
+    """Until probe L1 (005 T025) an OpenAI cost prices cached input as uncached; the cost gate
+    prints that basis beside the estimate in the scorecard's own words, for the completed and
+    priced package runs the estimate averages (owner decision 166A)."""
+    uncached = "cached input priced as uncached: containment unverified (probe L1)"
+    packages = (PanePackage("core"), PanePackage("twin", model_held_out=(), matched=()))
+    folders, smoke = keyed_folders(tmp_path, monkeypatch, packages=packages)
+    adjusted = []
+    for rep, record in enumerate(compare.run_records(folders)):
+        core = replace(packages[0], score_overrides={
+            "cost": {"amount": 2, "missing": [], "basis": [uncached], "synthetic": False},
+        })
+        twin = replace(packages[1], status="behavioural" if rep == 0 else "completed",
+                       score_overrides={"cost": {
+                           "amount": 3, "missing": [], "synthetic": False,
+                           "basis": ["cache-write tokens counted, not priced"] if rep == 0 else [],
+                       }})
+        adjusted.append(replace(
+            record, study_run=pane_run(record.study_run.run, "off", [core, twin]),
+        ))
+    small_search(monkeypatch)
+    result = invoke_records(monkeypatch, adjusted, compare.run_records(smoke),
+                            tmp_path / "measurement.json")
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    [estimate] = [i for i, line in enumerate(lines) if line.startswith("estimated study cost: ")]
+    assert lines[estimate + 1] == f"estimated study cost basis: {uncached}"
+    assert [line for line in lines if line.startswith("estimated study cost basis: ")] == [
+        lines[estimate + 1]
+    ]
+
+
 @pytest.mark.parametrize("approved", [False, True])
 def test_existing_output_is_refused_without_loading_or_changing_anything(
     tmp_path, monkeypatch, approved,
