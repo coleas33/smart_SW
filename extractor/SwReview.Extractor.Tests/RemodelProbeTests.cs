@@ -696,31 +696,49 @@ public class RemodelProbeTests
         root);
 
     [Theory]
-    [InlineData("the ledger")]
-    [InlineData("the temporary file")]
-    public void RunAll_WithTheRecorder_AFileHeldAcrossARewrite_EveryProbeStillRunsAndTheLastRewriteHasEveryRow(string held)
+    [InlineData("the ledger", "IOException 0x")]
+    [InlineData("the temporary file", "IOException 0x")]
+    [InlineData("a read-only temporary file", "UnauthorizedAccessException 0x80070005")]
+    public void RunAll_WithTheRecorder_AFileHeldAcrossARewrite_EveryProbeStillRunsAndTheLastRewriteHasEveryRow(
+        string held, string failure)
     {
         // A reader that holds the ledger without sharing its delete (Get-Content, Python's open(),
-        // a sync client) fails File.Replace; one that holds the temporary file fails the write.
-        // Either is a rewrite that fails: it is logged, and the run goes on (review finding F1).
+        // a sync client) fails File.Replace; one that holds the temporary file fails the write;
+        // a read-only temporary file, left by a killed run, refuses the write as access denied.
+        // Each is a rewrite that fails: it is logged, and the run goes on (review finding F1; the
+        // third round's F4: the access-denied branch of the catch). *Changed on purpose by 004
+        // T383*: the third case, and the expected exception's type given per case.
         InRunFolder(root =>
         {
             string[] requested = { "PROBE-4", "PROBE-6", "PROBE-3", "PROBE-21" };
             string ledger = RemodelProbeLedger.FilePath(root, "32.5.0.48");
+            string temporary = ledger + ".tmp";
             var logged = new List<string>();
-            FileStream? hold = null;
+            Action? release = null;
             var host = new FakeRemodelProbeHost
             {
                 GetEquationManagerImpl = _ =>
                 {
-                    hold = held == "the ledger"
-                        ? new FileStream(ledger, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)
-                        : new FileStream(ledger + ".tmp", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                    if (held == "a read-only temporary file")
+                    {
+                        File.WriteAllText(temporary, "a killed run's rewrite");
+                        File.SetAttributes(temporary, FileAttributes.ReadOnly);
+                        release = () => File.SetAttributes(temporary, FileAttributes.Normal);
+                    }
+                    else
+                    {
+                        FileStream hold = held == "the ledger"
+                            ? new FileStream(ledger, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)
+                            : new FileStream(temporary, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                        release = hold.Dispose;
+                    }
+
                     return new FakeEquationManager();
                 },
                 ReorderFeatureImpl = (part, move, target, location) =>
                 {
-                    hold?.Dispose();
+                    release?.Invoke();
+                    release = null;
                     return true;
                 },
             };
@@ -735,14 +753,14 @@ public class RemodelProbeTests
                 Assert.Equal(requested, records!.Select(record => record.ProbeId));
                 Assert.Equal(requested, RowIds(File.ReadAllText(ledger)));
                 string[] failures = logged.Where(line => line.StartsWith("could not rewrite ", StringComparison.Ordinal)).ToArray();
-                string failure = Assert.Single(failures);
-                Assert.StartsWith("could not rewrite remodel-32.5.0.48.yaml after PROBE-6 (IOException 0x", failure, StringComparison.Ordinal);
-                Assert.DoesNotContain(root, failure, StringComparison.OrdinalIgnoreCase);
+                string line = Assert.Single(failures);
+                Assert.StartsWith($"could not rewrite remodel-32.5.0.48.yaml after PROBE-6 ({failure}", line, StringComparison.Ordinal);
+                Assert.DoesNotContain(root, line, StringComparison.OrdinalIgnoreCase);
                 Assert.Equal(new[] { Path.GetFileName(ledger) }, Directory.GetFiles(Path.GetDirectoryName(ledger)!).Select(Path.GetFileName));
             }
             finally
             {
-                hold?.Dispose();
+                release?.Invoke();
             }
         });
     }
