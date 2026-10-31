@@ -890,7 +890,8 @@ public static class RemodelProbeRunner
     public static IReadOnlyList<RemodelProbeRecord> RunAll(
         IReadOnlyList<string> probeIds,
         RemodelProbeContext context,
-        IReadOnlyDictionary<string, RemodelProbeExecutor>? executors = null)
+        IReadOnlyDictionary<string, RemodelProbeExecutor>? executors = null,
+        Action<IReadOnlyList<RemodelProbeRecord>>? finished = null)
     {
         if (probeIds == null)
         {
@@ -1075,7 +1076,10 @@ public static class RemodelProbeLedger
 
     /// <summary>The YAML text for <paramref name="records"/>. Pure: no filesystem access.</summary>
     public static string Render(
-        string swVersion, IReadOnlyList<RemodelProbeRecord> records, DateTimeOffset generatedAt)
+        string swVersion,
+        IReadOnlyList<RemodelProbeRecord> records,
+        DateTimeOffset generatedAt,
+        IReadOnlyList<string>? requested = null)
     {
         if (records == null)
         {
@@ -1119,13 +1123,18 @@ public static class RemodelProbeLedger
         string outputDirectory,
         string swVersion,
         IReadOnlyList<RemodelProbeRecord> records,
-        DateTimeOffset? generatedAt = null)
+        DateTimeOffset? generatedAt = null,
+        IReadOnlyList<string>? requested = null)
     {
         string path = FilePath(outputDirectory, swVersion);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, Render(swVersion, records, generatedAt ?? DateTimeOffset.UtcNow), Encoding.UTF8);
         return path;
     }
+
+    /// <summary>The seam <see cref="RemodelProbeRunner.RunAll"/> calls as each probe finishes (004 T333).</summary>
+    public static Action<IReadOnlyList<RemodelProbeRecord>> Recorder(
+        string outputDirectory, string swVersion, IReadOnlyList<string> requested, Action<string> log) => _ => { };
 
     private static void AppendStringList(StringBuilder text, string key, IReadOnlyList<string> items)
     {

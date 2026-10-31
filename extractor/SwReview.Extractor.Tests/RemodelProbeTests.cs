@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using SwReview.Extractor.Rms;
 using SwReview.Extractor.Sw;
 using SwReview.Extractor.Tests.Fakes;
@@ -516,6 +517,126 @@ public class RemodelProbeTests
             Assert.Equal(Path.Combine(root, "capabilities", "remodel-32.5.0.48.yaml"), path);
             Assert.True(File.Exists(path));
             Assert.Contains("probe_id: \"PROBE-1\"", File.ReadAllText(path));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    // ---- the ledger rewritten as each probe finishes (004 T332, decision 166A) -----------
+
+    private static readonly DateTimeOffset Fixed = new DateTimeOffset(2026, 10, 31, 12, 0, 0, TimeSpan.Zero);
+
+    private static IReadOnlyList<string> RowIds(string yaml) =>
+        Regex.Matches(yaml, "^  - probe_id: \"([^\"]+)\"\r?$", RegexOptions.Multiline)
+            .Cast<Match>().Select(match => match.Groups[1].Value).ToList();
+
+    private static IReadOnlyList<string> RequestedIds(string yaml)
+    {
+        Match block = Regex.Match(yaml, "^requested:\r?\n((?:  - \"[^\"]+\"\r?\n)*)", RegexOptions.Multiline);
+        Assert.True(block.Success, "no requested: list in\n" + yaml);
+        return Regex.Matches(block.Groups[1].Value, "\"([^\"]+)\"")
+            .Cast<Match>().Select(match => match.Groups[1].Value).ToList();
+    }
+
+    [Fact]
+    public void Ledger_Render_ListsTheRequestedProbesBeforeTheRows()
+    {
+        string yaml = RemodelProbeLedger.Render(
+            "32.5.0.48", new[] { SampleRecord("PROBE-1") }, Fixed, requested: new[] { "PROBE-1", "PROBE-3" });
+
+        Assert.Contains(
+            "generated_at: \"2026-10-31T12:00:00.0000000+00:00\"\nrequested:\n  - \"PROBE-1\"\n  - \"PROBE-3\"\nprobes:\n",
+            yaml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Ledger_Render_WithNoRequestedListGiven_RequestsTheRowsOwnProbes()
+    {
+        string yaml = RemodelProbeLedger.Render(
+            "32.5.0.48", new[] { SampleRecord("PROBE-1"), SampleRecord("PROBE-4") }, Fixed);
+
+        Assert.Equal(new[] { "PROBE-1", "PROBE-4" }, RequestedIds(yaml));
+    }
+
+    [Fact]
+    public void Ledger_Render_NothingRequestedAndNothingRun_WritesTwoEmptyLists()
+    {
+        string yaml = RemodelProbeLedger.Render("32.5.0.48", Array.Empty<RemodelProbeRecord>(), Fixed);
+
+        Assert.Contains("requested: []\nprobes: []\n", yaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RunAll_WithTheRecorder_AFakeHostThatThrowsInProbe3_HasLeftTwoRowsAndTheRequestedList()
+    {
+        // What a run that hangs or is killed inside the third probe leaves on disk: the file as it
+        // stands while that probe's host call runs. The host then throws, and the run goes on.
+        string root = Path.Combine(Path.GetTempPath(), "swreview-probe-tests", Guid.NewGuid().ToString("N"));
+        string[] requested = { "PROBE-2", "PROBE-6", "PROBE-3", "PROBE-21" };
+        string ledger = RemodelProbeLedger.FilePath(root, "32.5.0.48");
+        var logged = new List<string>();
+        string? whileProbe3Ran = null;
+        int loggedWhileProbe3Ran = -1;
+        var host = new FakeRemodelProbeHost
+        {
+            ReorderFeatureImpl = (part, move, target, location) =>
+            {
+                whileProbe3Ran = File.Exists(ledger) ? File.ReadAllText(ledger) : null;
+                loggedWhileProbe3Ran = logged.Count;
+                throw new InvalidOperationException("the fake host stops here");
+            },
+        };
+        var part = new RemodelProbePart(new object(), Path.Combine(root, "probe-part", "remodel-probe.SLDPRT"), Array.Empty<object>());
+        var context = new RemodelProbeContext(part, new SwGate(), "32.5.0.48", host, root);
+
+        try
+        {
+            IReadOnlyList<RemodelProbeRecord> records = RemodelProbeRunner.RunAll(
+                requested, context, finished: RemodelProbeLedger.Recorder(root, "32.5.0.48", requested, logged.Add));
+
+            Assert.NotNull(whileProbe3Ran);
+            Assert.Equal(new[] { "PROBE-2", "PROBE-6" }, RowIds(whileProbe3Ran!));
+            Assert.Equal(requested, RequestedIds(whileProbe3Ran!));
+            Assert.Equal(2, loggedWhileProbe3Ran);
+
+            string final = File.ReadAllText(ledger);
+            Assert.Equal(requested, RowIds(final));
+            Assert.Equal(requested, RequestedIds(final));
+            Assert.Equal(RemodelProbeVerdict.Unresolved, records[2].Verdict);
+            Assert.Equal(
+                requested.Select((id, index) => $"finished {id}: {records[index].Verdict.CliName()} ({index + 1} of 4)"),
+                logged);
+            Assert.Equal(new[] { Path.GetFileName(ledger) }, Directory.GetFiles(Path.GetDirectoryName(ledger)!).Select(Path.GetFileName));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Ledger_Write_ReplacesTheWholeFileAndLeavesNothingBesideIt()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "swreview-probe-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            RemodelProbeLedger.Write(root, "32.5.0.48", new[] { SampleRecord("PROBE-1"), SampleRecord("PROBE-2") });
+            string path = RemodelProbeLedger.Write(
+                root, "32.5.0.48", new[] { SampleRecord("PROBE-4") }, requested: new[] { "PROBE-4", "PROBE-12" });
+
+            string text = File.ReadAllText(path);
+            Assert.Equal(new[] { "PROBE-4" }, RowIds(text));
+            Assert.Equal(new[] { "PROBE-4", "PROBE-12" }, RequestedIds(text));
+            Assert.Equal(new[] { path }, Directory.GetFiles(Path.GetDirectoryName(path)!));
         }
         finally
         {

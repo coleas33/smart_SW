@@ -1426,11 +1426,11 @@ def test_a_message_box_is_answered_only_after_probe_1s_watchdog_has_timed_both_t
 
 
 def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
-    """The run refuses while a document is open, writes its ledger only when it ends, puts each
-    log line on disk as it is written (004 T330, decision 166A: a run stopped with Ctrl+C keeps
-    its log), and ends with the count line and one BLOCKING line per blocking probe not
-    verified; and it turns off the three options step 5.6 notes before the runs and checks
-    after."""
+    """The run refuses while a document is open, rewrites its ledger as each probe finishes and
+    puts each log line on disk as it is written (004 T330 and T332, decision 166A: a run stopped
+    with Ctrl+C keeps its log and every finished probe's row), and ends with the count line and
+    one BLOCKING line per blocking probe not verified; and it turns off the three options step
+    5.6 notes before the runs and checks after."""
     program = (REPO / "extractor" / "SwReview.Extractor.Console" / "Program.cs").read_text(
         encoding="utf-8"
     )
@@ -1444,8 +1444,14 @@ def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
     probes = re.sub(r"\s+", " ", step(plan, "5.6"))
 
     assert run.index("host.AnyDocumentOpen()") < run.index("host.BuildPart(")
-    assert run.index("RemodelSystemToggles.Within(") < run.index("RemodelProbeLedger.Write(")
-    write = log[log.index("public void Write(") : log.index("public void WriteError(")]
+    assert (
+        run.index("RemodelSystemToggles.Within(")
+        < run.index("RemodelProbeRunner.RunAll(")
+        < run.index("finished: RemodelProbeLedger.Recorder(")
+        < run.index("host.ClosePart(")
+    )
+    assert "RemodelProbeLedger.Write(" not in run
+    write =log[log.index("public void Write(") : log.index("public void WriteError(")]
     assert "File.AppendAllText(" not in log and "AutoFlush = true" in log
     assert "FileShare.ReadWrite" in log and "ToFile(line)" in write
     fragments = [
@@ -1471,9 +1477,10 @@ def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
 
 def rendered_ledger(records: list[tuple[str, bool, str, dict[str, str]]]) -> str:
     """A ledger in `RemodelProbeLedger.Render`'s shape (the test below pins the prefixes it
-    relies on against the C# source): `(probe id, blocking, verdict, raw_result)` per probe."""
+    relies on against the C# source): `(probe id, blocking, verdict, raw_result)` per probe,
+    each of them requested."""
     lines = ['sw_version: "32.5.0.48"', 'generated_at: "2026-10-02T12:00:00.0000000+00:00"',
-             "probes:"]
+             "requested:", *(f'  - "{probe}"' for probe, _, _, _ in records), "probes:"]
     for probe, blocking, verdict, raw in records:
         lines += [
             f'  - probe_id: "{probe}"',
@@ -1497,14 +1504,20 @@ def rendered_ledger(records: list[tuple[str, bool, str, dict[str, str]]]) -> str
 def test_the_fixture_ledger_has_the_shape_render_writes() -> None:
     """`Show-RemodelLedger` matches lines by their indentation and key, so the fixture's
     prefixes are the ones `RemodelProbeLedger.Render` appends, and the two raw_result keys it
-    prints are the runner's error key and the reason key every probe body files."""
+    prints are the runner's error key and the reason key every probe body files. *Changed on
+    purpose by 004 T332 (decision 166A)*: a top-level `requested:` list comes before `probes:`,
+    its items indented two spaces, so no `Show-RemodelLedger` pattern reads one."""
     ledger = (RMS / "RemodelProbe.cs").read_text(encoding="utf-8")
 
     for prefix in ('text.Append("  - probe_id: ")', 'text.Append("    blocking: ")',
                    'text.Append("    verdict: ")',
                    'text.Append("      ").Append(Quote(entry.Key)).Append(": ")',
+                   'AppendStringList(text, "requested", requested ?? ', '"  - "',
                    "Encoding.UTF8"):
         assert prefix in ledger, prefix
+    assert ledger.index('AppendStringList(text, "requested", ') < ledger.index(
+        'text.Append("probes:\\n")'
+    )
     assert 'public const string ErrorKey = "error";' in ledger
     assert [probe for probe, body in probe_bodies().items() if '["reason"]' not in body] == []
 
