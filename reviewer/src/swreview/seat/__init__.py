@@ -5,3 +5,6 @@
 `volume_unit` the unit of a recorded interference volume against a known overlap (001 research
 R15), both from a tiny made-up assembly built by hand at the seat (decision 172A).
 """
+
+INCONCLUSIVE = "inconclusive"
+"""Either decider's answer when the seat did not prove what was asked: never a guess."""

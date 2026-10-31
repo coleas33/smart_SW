@@ -12,29 +12,23 @@ No golden outside `standards-*` may depend on the polarity; the last case here s
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic_core import to_jsonable_python
 from pytest_regressions.data_regression import DataRegressionFixture
 
 from swreview.checks.standards import assembly
-from swreview.ir.loader import load_package
-from tests.golden.test_golden import FIXTURE_DIRS, WRITTEN_AT_1_4_0, resolve_callable
+from tests.golden.test_golden import FIXTURE_DIRS, WRITTEN_AT_1_4_0, golden_result
 
 SETTLED = (assembly.ZERO_IS_OPAQUE, assembly.ONE_IS_OPAQUE)
 STANDARDS_DIRS = [path for path in FIXTURE_DIRS if path.name.startswith(WRITTEN_AT_1_4_0)]
 
 
 def graded(fixture_dir: Path, polarity: str, monkeypatch: pytest.MonkeyPatch) -> Any:
-    """One golden case under `polarity`, exactly as `test_golden.test_golden_case` runs it."""
+    """One golden case under `polarity`, by `test_golden.test_golden_case`'s own runner."""
     monkeypatch.setattr(assembly, "TRANSPARENCY_POLARITY", polarity)
-    case = json.loads((fixture_dir / "case.json").read_text(encoding="utf-8"))
-    function = resolve_callable(case["callable"])
-    result = function(load_package(fixture_dir).package, **case.get("kwargs", {}))
-    return to_jsonable_python(result)
+    return golden_result(fixture_dir)
 
 
 def test_the_standards_goldens_are_the_ones_the_prefix_names() -> None:

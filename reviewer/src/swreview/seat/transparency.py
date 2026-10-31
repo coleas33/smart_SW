@@ -9,10 +9,13 @@ only its PROBE-2 lines:
 
 - the transparent and opaque overrides must differ at slot 7 and nowhere else; the opaque one's
   slot 7 then names the polarity, 0 for `zero_is_opaque` and 1 for `one_is_opaque`;
-- no difference at slot 7 refutes slot 7: the dump reads that slot
-  (`ComponentTreeDumper.ReadTransparency`), so the constant cannot settle it;
+- slot 7 equal while the colour is equal and another slot differs, or no slot 7 at all, refutes
+  slot 7: the dump reads that slot (`ComponentTreeDumper.ReadTransparency`), so the constant
+  cannot settle it;
 - anything else is inconclusive and says what did not hold, because a guess either way silently
-  mislabels every override (research R2.8).
+  mislabels every override (research R2.8). Overrides that differ nowhere, or in colour, are
+  inconclusive rather than a refutation: a missed recipe step explains them, and a refutation
+  sends the owner to change the extractor.
 """
 
 from __future__ import annotations
@@ -24,10 +27,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from swreview.checks.standards.assembly import ONE_IS_OPAQUE, ZERO_IS_OPAQUE
+from swreview.seat import INCONCLUSIVE
 
 SECTION = "probe-2 appearance_overrides:"
 SLOT = 7
-INCONCLUSIVE = "inconclusive"
+COLOUR = (0, 1, 2)
+"""The slots of the colour, red, green and blue; the lighting slots follow them."""
+
 DEFAULT_NAMES = {
     "transparent": "PROBE2-BLOCK-1",
     "opaque": "PROBE2-BLOCK-2",
@@ -92,7 +98,8 @@ def _section(text: str) -> list[str] | str:
 
 
 def _slots(printed: str) -> list[float] | None:
-    """`9 slots [0]=0 ... [8]=0` as numbers in slot order; None for `null`, a failure or a gap."""
+    """`9 slots [0]=0 ... [8]=0` as numbers in slot order; None for `null`, a failure, a gap, a
+    count that disagrees with the slots listed, or no slots at all."""
     match = _SLOTS.fullmatch(printed.strip())
     if not match:
         return None
@@ -105,7 +112,7 @@ def _slots(printed: str) -> list[float] | None:
         if int(index) != position:
             return None
         values.append(number)
-    return values if len(values) == int(match["count"]) else None
+    return values if values and len(values) == int(match["count"]) else None
 
 
 def _read(body: list[str], role: str, name: str) -> Reading | str:
@@ -175,16 +182,28 @@ def decide(text: str, names: dict[str, str]) -> Decision:
     ]
     shared = f"{solid[SLOT]:g}"
     if SLOT not in differ:
-        where = f"differ only at {_listed(differ)}" if differ else "differ at no slot"
+        both = f"the transparent and opaque overrides both read {shared} at slot 7"
+        if not differ:
+            return inconclusive(
+                f"{both} and differ at no slot, so the transparency never reached "
+                f"{transparent.name}: set it on the component row, not the part, a body or a "
+                "face, until the block looks see-through (recipe step 4), and probe again"
+            )
+        if any(slot in COLOUR for slot in differ):
+            return inconclusive(
+                f"{both} and differ at {_listed(differ)}, the colour among them, so the recipe's "
+                "control did not hold: give both the same colour by number, the transparency on "
+                "the component row (recipe steps 3 and 4), and probe again"
+            )
         return inconclusive(
-            f"slot 7 refuted: the transparent and opaque overrides both read {shared} at slot 7 "
-            f"and {where}; {REFUTED}",
+            f"slot 7 refuted: {both}, the same colour, and differ only at {_listed(differ)}; "
+            f"{REFUTED}",
             refuted=True,
         )
     if differ != [SLOT]:
         return inconclusive(
             f"the two overrides differ at {_listed(differ)}, not at slot 7 alone: give both the "
-            "same colour (recipe) and probe again"
+            "same appearance but the transparent amount (recipe steps 3 and 4) and probe again"
         )
     seen = (
         f"the opaque override reads {shared} at slot 7 and the transparent one {clear[SLOT]:g}, "

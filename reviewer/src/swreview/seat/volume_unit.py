@@ -16,9 +16,9 @@ from pathlib import Path
 
 from swreview.ir.loader import load_package
 from swreview.ir.models import Interference
+from swreview.seat import INCONCLUSIVE
 
 TOLERANCE = 0.01
-INCONCLUSIVE = "inconclusive"
 MM3_IN = {"m3": 1e9, "mm3": 1.0}
 """Cubic millimetres in one of each unit the judge can answer."""
 

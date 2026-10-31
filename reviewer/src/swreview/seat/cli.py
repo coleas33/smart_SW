@@ -14,7 +14,7 @@ from typing import Annotated, Any
 import typer
 
 from swreview.checks.standards.profile import DEFAULT_PATH
-from swreview.seat import health, transparency, volume_unit
+from swreview.seat import INCONCLUSIVE, health, transparency, volume_unit
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -112,7 +112,7 @@ def transparency_command(
             typer.echo(line)
         if decision.next:
             typer.echo(f"next: {decision.next}")
-    if decision.verdict == transparency.INCONCLUSIVE:
+    if decision.verdict == INCONCLUSIVE:
         raise typer.Exit(1)
 
 
@@ -152,5 +152,5 @@ def volume_unit_command(
         typer.echo(f"reason: {judgement.reason}")
         if judgement.next:
             typer.echo(f"next: {judgement.next}")
-    if judgement.unit == volume_unit.INCONCLUSIVE:
+    if judgement.unit == INCONCLUSIVE:
         raise typer.Exit(1)

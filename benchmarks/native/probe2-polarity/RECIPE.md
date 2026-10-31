@@ -43,12 +43,16 @@ inserted again its number moves on; then pass the names the probe printed with `
    amount** at 0. OK.
 4. **The transparent override, on `PROBE2-BLOCK<1>`.** The same way, on the component row: the
    same colour, R 0, G 128, B 255, and under **Advanced**, **Illumination**, **Transparent
-   amount** 50 %. OK. The block now looks see-through.
+   amount** 75 %. OK. This block, and only this one, now looks see-through; if all three do, the
+   transparency went on the part: undo it, and set it on the component row.
 5. **The control, `PROBE2-BLOCK<3>`.** Leave it alone: no appearance at any level.
 6. Save the assembly as `PROBE2-POLARITY.SLDASM` in your folder and keep it open and active.
 
 The two overrides must be the same colour, typed in by number: the decider asks that they differ
-at the transparency slot and nowhere else, so a different colour reads as inconclusive.
+at the transparency slot and nowhere else, so a different colour reads as inconclusive. The
+amount is 75 % rather than 50 % so that the transparent block's reading also shows the polarity
+to the eye: 0.75 under `zero_is_opaque`, 0.25 under `one_is_opaque`, if the amount reaches the
+slot as it reads. The decider takes the polarity from the opaque block alone and prints both.
 
 ## Using it
 
@@ -62,8 +66,8 @@ uv run swreview seat transparency "<your folder>\probe-standards.txt"
 | It prints | What it means | What to do |
 |-----------|---------------|------------|
 | `verdict: zero_is_opaque` or `verdict: one_is_opaque` | The seat showed the polarity. | Copy the `verdict`, `reason` and three reading lines into the sitting's findings document; the owner makes the flip `next:` names (006 research R11). |
-| `verdict: inconclusive`, reason starting `slot 7 refuted` | Slot 7 does not carry the transparency on this build, so the dump reads the wrong slot. | Record it as it stands and stop: the fix is an extractor change, not the flip. |
-| `verdict: inconclusive`, any other reason | A step above did not hold (the reason names it: a colour that differs, an override on the plain block, a block missing). | Fix that step, save, and run the two commands again. |
+| `verdict: inconclusive`, reason starting `slot 7 refuted` | The two overrides are the same colour and read the same at slot 7 but differ at another slot, or have no slot 7: slot 7 does not carry the transparency on this build, so the dump reads the wrong slot. | Record it as it stands and stop: the fix is an extractor change, not the flip. |
+| `verdict: inconclusive`, any other reason | A step above did not hold (the reason names it: overrides that differ nowhere, which is step 4 missed; a colour that differs; an override on the plain block; a block missing). | Fix that step, save, and run the two commands again. |
 
 Afterwards close the assembly; nothing here was changed by the probe. Delete the files or keep
 them in your own folder, but never copy them into the checkout.

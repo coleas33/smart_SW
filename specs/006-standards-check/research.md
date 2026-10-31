@@ -630,7 +630,8 @@ sitting, in an optional 25-minute block, never committed; the other is feature 0
 volume (001 research R15).
 
 **The assembly** (`benchmarks/native/probe2-polarity/RECIPE.md`): one 20 mm block inserted three
-times. `PROBE2-BLOCK-1` gets a component-level appearance with Transparent amount 50 %,
+times. `PROBE2-BLOCK-1` gets a component-level appearance with Transparent amount 75 % (50 %
+until R11.1),
 `PROBE2-BLOCK-2` the same colour, typed in by number, at 0 %, and `PROBE2-BLOCK-3` nothing. The
 engineer saves `swreview-extract probe standards` to a file and runs
 `uv run swreview seat transparency "<folder>\probe-standards.txt"`
@@ -642,10 +643,12 @@ engineer saves `swreview-extract probe standards` to a file and runs
 |---|---|---|
 | The two overrides differ at slot 7 and nowhere else, and the opaque one reads 0 there | `zero_is_opaque` | 0 is opaque, the SDK's reading. |
 | The same, and the opaque one reads 1 | `one_is_opaque` | 1 is opaque, the macro's reading. |
-| They read the same at slot 7 (whether or not another slot differs), or answer with no slot 7 | inconclusive, **slot 7 refuted** | The dump reads slot 7 (`ComponentTreeDumper.ReadTransparency`), so no value of the constant can settle it: an extractor change, the owner's. |
+| They read the same at slot 7 and the same colour (slots 0 to 2), and differ at another slot; or they answer with no slot 7 | inconclusive, **slot 7 refuted** | The dump reads slot 7 (`ComponentTreeDumper.ReadTransparency`), so no value of the constant can settle it: an extractor change, the owner's. |
+| They read the same at every slot | inconclusive | The transparency never reached the component: set on the part, a body or a face, it leaves the two component overrides identical. Recipe step 4, probe again (R11.1). |
+| They read the same at slot 7 and differ in colour, with or without another slot | inconclusive | The control did not hold, so nothing else they show can refute slot 7: same colour, probe again (R11.1). |
 | They differ at slot 7 and elsewhere too | inconclusive | The colours differ, so slot 7 is not shown to be the only carrier: same colour, probe again. |
 | The opaque one reads neither 0 nor 1 at slot 7 | inconclusive | Neither polarity names it opaque. |
-| A block missing or listed twice, a failed or `null` read, differing slot counts, no PROBE-2 section or two | inconclusive | Nothing to read, or two runs in one file. |
+| A block missing or listed twice, a failed, `null` or empty read, slots that skip one or disagree with their count, differing slot counts, no PROBE-2 section or two | inconclusive | Nothing to read, or two runs in one file. |
 | `PROBE2-BLOCK-3` reports an override, or `-1` or `-2` reports none | inconclusive | The control did not hold: `HasMaterialPropertyValues` would then not tell an override apart, which the check relies on. |
 
 Every inconclusive names what did not hold; none is a guess (R2.8: either guess silently mislabels
@@ -700,3 +703,34 @@ extractor's slot is the owner's to change.
 probe run (`reviewer/tests/fixtures/seat/probe2/probe-standards.txt`) with its PROBE-2 lines
 rewritten per case, and the 26 precomputed goldens: all 51 red before T112 and green after it.
 Gates: recorded in 004 research R28.5, which ran them once for the whole lane.
+
+### R11.1 Review round 1: a refutation an operator slip explains (T114, T115; 2026-10-31)
+
+The lane's review (004 research R28.6 lists every finding) found that overrides identical at all
+nine slots were reported as **slot 7 refuted**, and so were overrides equal at slot 7 that
+differed only in colour. Verified against the code: the refuted branch took every case with no
+difference at slot 7. The likeliest cause of both is a missed step, not the slot: transparency
+set on the part, a body or a face makes all three blocks look see-through and leaves the two
+component overrides identical. A refutation tells the engineer to stop and the owner to change
+`ComponentTreeDumper.ReadTransparency`, so it now rests on a clean control only: the same colour,
+slot 7 equal, and another slot differing - or no slot 7 at all. Identical overrides name recipe
+step 4 and the component row; a colour that differs names steps 3 and 4, with or without another
+slot beside it, since the control did not hold. A read of no slots is a failed read, not "no
+slot 7". The rule table above is amended to match, and so is the recipe's results table.
+
+The recipe's Transparent amount is now 75 % rather than 50 %: at 50 % the transparent block
+reads 0.5 under either polarity, at 75 % it reads 0.75 under `zero_is_opaque` and 0.25 under
+`one_is_opaque`, so the reading the decider prints shows the polarity to the eye as well. The
+decider does not require it: how the dialog's percentage reaches the slot is not documented, and
+the opaque block's 0 or 1 settles the polarity on its own; requiring the second reading could
+only turn an answer into an inconclusive at a sitting that cannot be repeated cheaply. The sample
+run's transparent reading moved to 0.75 with it.
+
+Also in T115, no behaviour changed: the precomputed goldens are graded by `test_golden.py`'s own
+runner (`golden_result`, extracted from `test_golden_case`), so the two cannot drift apart, and
+the two deciders share one `INCONCLUSIVE` (`swreview.seat`).
+
+**Tests** (T114): 30 cases in `test_cli_seat_transparency.py`, 4 red before T115 (identical
+overrides, a colour that differs alone and beside slot 8, two reads of no slots) and all green
+after it; T111's "no slot differing refutes slot 7" is replaced by the first, deliberately. The
+26 precomputed goldens are unchanged.
