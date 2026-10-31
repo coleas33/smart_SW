@@ -958,9 +958,10 @@ def _restated_targets(earlier: Sequence[Finding], restated: Sequence[Finding]) -
     The one with its verdict key; else - the regrade drops a finding's newly bought sources, as
     a bought tapped hole leaves a thread finding citing only its part's fastener - the one
     earlier finding nothing matched whose key less its entity ids is the restated finding's,
-    when no other restated finding nothing matched shares it (decision 58A; 008 T133). Only the
-    regrade matches so: in a resumed turn (`_reconcile_reruns`) a finding with other entity ids
-    is the model checking something else.
+    when no other restated finding nothing matched shares it, and whose entity ids include the
+    restated finding's: a finding about other holes re-judges nothing earlier (decision 58A;
+    008 T133, T135). Only the regrade matches so: in a resumed turn (`_reconcile_reruns`) a
+    finding with other entity ids is the model checking something else.
     """
     by_key = {_verdict_key(finding): index for index, finding in enumerate(earlier)}
     targets: dict[int, int] = {}
@@ -979,7 +980,11 @@ def _restated_targets(earlier: Sequence[Finding], restated: Sequence[Finding]) -
     for key, positions in loose.items():
         indexes = unmatched.get(key, [])
         if len(positions) == 1 and len(indexes) == 1:
-            targets[positions[0]] = indexes[0]
+            position, index = positions[0], indexes[0]
+            restated_ids = set(finding_subject_key(restated[position])[3])
+            earlier_ids = set(finding_subject_key(earlier[index])[3])
+            if restated_ids <= earlier_ids:
+                targets[position] = index
     return targets
 
 

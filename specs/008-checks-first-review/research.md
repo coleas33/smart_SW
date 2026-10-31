@@ -260,7 +260,9 @@ settles:
   only the fastener is graded. Its key lost the hole's id, so the Accepted finding was withdrawn
   and the restated one added as new, the Accept lost (58A). `_restated_targets` matches a
   restated finding nothing matched onto the one earlier finding nothing matched whose key less
-  its entity ids is its own, when no other unmatched restated finding shares it. A resumed turn
+  its entity ids is its own, when no other unmatched restated finding shares it and its entity
+  ids are a subset of that finding's (T135): the regrade only drops sources, so a restated
+  finding about other holes of the same components re-judges nothing earlier. A resumed turn
   never matches so: there, a finding with other entity ids is the model checking something else
   (`test_a_rerun_that_covers_something_else_is_a_second_finding`).
 
@@ -1742,7 +1744,7 @@ Re-opened on 2026-09-23 at `47f8b73` for this reconciliation (the rest are the d
 | "uncached" or "new" on both surfaces (R2.46) | owner, feature 009 | nothing |
 | Record probe L1 from the 119 recorded rounds and flip `CACHED_SHARE_PUBLISHABLE` | owner | nothing (the pane no longer shows a share) |
 | SC-003's regrouped margin is thin (0.29M to 0.30M modelled, R2.43) | owner, after T087 | SC-003 |
-| Settled 2026-10-31 (owner decision 166A; T130 to T133): `runner._verdict_key` ignored hole ids, so `_reconcile_reruns` could fold two hole-pair findings (existing, R2.8); it is now `finding_subject_key`, hole instances read, a reference counted where it is a location's one locator, and the regrade's restated findings matched less their entity ids when unique | backlog | nothing |
+| Settled 2026-10-31 (owner decision 166A; T130 to T133): `runner._verdict_key` ignored hole ids, so `_reconcile_reruns` could fold two hole-pair findings (existing, R2.8); it is now `finding_subject_key`, hole instances read, a reference counted where it is a location's one locator, and the regrade's restated findings matched less their entity ids when unique and narrowed (T135) | backlog | nothing |
 | Move `request_capture` onto `resolve_entity_ref` (R2.27) | follow-up | nothing |
 | MCP general chat still shows persist references while the bridge tools want ids (R2.38) | follow-up | nothing |
 | `benchmark compare` ignores `model_view`, so a comparison across builds would not be refused | follow-up | nothing |
