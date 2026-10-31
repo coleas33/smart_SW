@@ -620,6 +620,30 @@ def _simulated_rates(row: simulate.SizeResult) -> SimulatedRates:
     return SimulatedRates(**{name: getattr(row, name) for name in SimulatedRates.model_fields})
 
 
+def _averaged(records: Sequence[RunRecord], per_run):
+    """Each package score `measure`'s cost and time means read, with its run: the main runs
+    `verdict.study_stats` counts in that run's own summary, so a behavioural stop is left out."""
+    for record, summary in zip(records, per_run, strict=True):
+        selected = {name for i, name in enumerate(summary.package_ids)
+                    if summary.package_runs[0, 0, 0, i]}
+        for score in record.study_run.scorecard.per_package:
+            if score.package_id in selected:
+                yield record, score
+
+
+def cost_basis(records: Sequence[RunRecord]) -> list[str]:
+    """The distinct basis notes of the priced package runs the estimated study cost averages,
+    first seen first, in `prices.price_rounds`' own words: the cost gate prints them beside the
+    estimate (owner decision 166A; until probe L1, OpenAI's cached input priced as uncached)."""
+    per_run = [verdict.study_stats([record.study_run]) for record in records]
+    return list(dict.fromkeys(
+        note
+        for _, score in _averaged(records, per_run)
+        if score.cost.amount is not None
+        for note in score.cost.basis
+    ))
+
+
 def measure(
     records: Sequence[RunRecord], smoke: Sequence[RunRecord], *, relative_to: Path,
     cap: int = 10, seed: int | None = None, jobs: int = 1,
@@ -653,27 +677,22 @@ def measure(
     ) for i, ref in enumerate(data.clear_ids) if data.clear_held_out[i]]
     costs, times, tokens_per_minute, unknown_cost = [], [], [], []
     package_times = {entry.package_id: [] for entry in records[0].saved_set.packages}
-    for record, summary in zip(records, per_run, strict=True):
-        selected = {name for i, name in enumerate(summary.package_ids)
-                    if summary.package_runs[0, 0, 0, i]}
-        for score in record.study_run.scorecard.per_package:
-            if score.package_id not in selected:
-                continue
-            if score.cost.amount is None:
-                unknown_cost.append(PackageRun(run=_relative_run(record, relative_to),
-                                               package_id=score.package_id))
-            else:
-                costs.append(score.cost.amount)
-            if score.wall_clock_s is not None:
-                times.append(score.wall_clock_s)
-                package_times[score.package_id].append(score.wall_clock_s)
-                if (score.wall_clock_s > 0 and score.usage is not None
-                        and score.usage.input_tokens is not None
-                        and score.usage.output_tokens is not None):
-                    tokens_per_minute.append(
-                        60 * (score.usage.input_tokens + score.usage.output_tokens)
-                        / score.wall_clock_s,
-                    )
+    for record, score in _averaged(records, per_run):
+        if score.cost.amount is None:
+            unknown_cost.append(PackageRun(run=_relative_run(record, relative_to),
+                                           package_id=score.package_id))
+        else:
+            costs.append(score.cost.amount)
+        if score.wall_clock_s is not None:
+            times.append(score.wall_clock_s)
+            package_times[score.package_id].append(score.wall_clock_s)
+            if (score.wall_clock_s > 0 and score.usage is not None
+                    and score.usage.input_tokens is not None
+                    and score.usage.output_tokens is not None):
+                tokens_per_minute.append(
+                    60 * (score.usage.input_tokens + score.usage.output_tokens)
+                    / score.wall_clock_s,
+                )
     layout = study_layout(records, stats=data)
     def rate_draw(rng, shape):
         if fit.distribution == "beta":

@@ -61,7 +61,8 @@ way before it closes anything in process, since the server below the launcher ma
 command this backend handed to the tool service before it stopped, other than that close - a
 `remodel.open` of a plan the add-in gave up on - can still run after the close in process; *amended on
 its re-review (R25.11):* the bridge then refuses it `target_mismatch` before it touches SOLIDWORKS
-(`bridge-remodel.md`), and T303 checks that barrier at the pilot workstation. Every call the add-in makes
+(`bridge-remodel.md`), and T303a checks that barrier at the pilot workstation (T303, split by owner decision
+169A; `research.md` R26.6). Every call the add-in makes
 to this backend is aborted when the add-in unloads.
 
 ## Routes
@@ -106,6 +107,10 @@ it and the count is what the engineer needs to read:
 | ok | `200 {copy_path, rebuild_error_count: 0, copy_present: true}` |
 | `preexisting_rebuild_errors` | `200 {copy_path, rebuild_error_count: <from the refusal's detail, null when it carries none>, copy_present: false}` - the bridge has already deleted the copy and closed the document |
 | any other `error_code` | the error body of the class named in the table below |
+
+*Amended 2026-10-31 (owner decision 165A's second review round; `research.md` R26.11):* the host deletes `copy/` on
+`copy_present: false`, so the bridge answers `preexisting_rebuild_errors` only when its unwind did not leave the copy;
+one stopped for rebuild errors whose unwind left the copy answers `target_mismatch`, an error body that keeps the copy.
 
 *Amended 2026-09-27 (default taken 2026-09-27, the owner may revise; `tasks.md` T175, research
 R14.1):* once the bridge's `remodel.open` has answered ok, the bridge holds a session - the copy

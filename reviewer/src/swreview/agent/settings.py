@@ -80,6 +80,7 @@ __all__ = [
     "MODEL_VIEW_PANE",
     "NO_STUDY",
     "OUTPUT_CEILINGS",
+    "PAID_TEST_MODEL",
     "PANE_STUDY",
     "PRIVATE_PANE_STUDY",
     "WORKSTATION_LEVERS",
@@ -124,6 +125,16 @@ DEFAULT_MODELS: Mapping[ProviderName, str] = {
 
 `fake-scripted` is the id the scripted provider reports and the one `GET /models` returns
 for `fake`: it is not a model, and a session recording it is self-evidently a dry run.
+"""
+
+PAID_TEST_MODEL = "gpt-5.6-sol"
+"""The OpenAI model a paid test run names explicitly (owner decision 174A).
+
+`DEFAULT_MODELS[openai]`, `gpt-5.6`, has no price row: it is priced by the variant that answers
+(feature 014 decision 102A), and `-sol`, `-terra` and `-luna` are not its aliases
+(`benchmark/served.py`), so a pane study that requested it would refuse at its price row and a
+live attempt would end `wrong_model`. T171's live test runs this unless `SWREVIEW_LIVE_MODEL`
+names another, and the pane study's price refusal names it as the fix.
 """
 
 OUTPUT_CEILINGS: Mapping[ProviderName, int] = {

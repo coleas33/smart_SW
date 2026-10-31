@@ -36,7 +36,7 @@ from swreview.checks.thread_pitch import (
 )
 from swreview.ir.models import DumpPhase, EvidencePackage, Quantity
 from swreview.report.session import CoverageItem, CoverageScope
-from tests.support.mechanical import Face, Instance, PackageBuilder
+from tests.support.mechanical import FICTIONAL_ROOT, Face, Instance, PackageBuilder
 
 REVIEWER = Path(__file__).resolve().parents[1].parent
 PROFILE_A = REVIEWER / "tests" / "fixtures" / "standards" / "profile-a.yaml"
@@ -322,8 +322,9 @@ def test_no_finding_names_a_document_id_or_a_percent_sign(examples) -> None:
 
 
 def test_no_two_results_share_a_check_and_component_ids(examples) -> None:
-    """The restate's verdict key is the check, the components, the drawing places and the
-    configuration (`runner._verdict_key`): one finding per check and part gives each its own."""
+    """The restate's verdict key is the check, the components, the drawing places, the entity
+    ids among the inputs and the configuration (`runner._verdict_key`): one finding per check
+    and part gives each its own."""
     keys = [(item.result.check, item.component_ids) for item in examples.findings]
 
     assert len(keys) == len(set(keys))
@@ -1464,6 +1465,81 @@ def test_with_no_source_anything_unread_is_said_instead_of_nothing(
     checks = run(nothing_package(**changes))
 
     assert reasons(checks.skipped) == [row]
+
+
+ON_ITS_OWN = "is reviewed as a document of its own, not as a component of an assembly"
+BY_A_DRAWING = "is referenced by a drawing, not reviewed as a component of an assembly"
+"""What the extractor writes, word for word, for a node whose handle is its document - a part
+root (`ON_ITS_OWN`), or a model a drawing references (`BY_A_DRAWING`) - whose holes and fastener
+identity it did not read (`ComponentDocuments.RecordDocumentNode`, feature 010 T128 and T132,
+owner decision 166A). Copied by hand: no constant spans the C# and the Python."""
+
+PLATE = f"{FICTIONAL_ROOT}Vault\\PLATE_FICT.SLDPRT"
+FRAME = f"{FICTIONAL_ROOT}Vault\\FRAME_FICT.SLDASM"
+
+
+@pytest.mark.parametrize(
+    ("unread", "count"),
+    [
+        (
+            [
+                ("hole", f"'PLATE_FICT' {ON_ITS_OWN}, so its holes and threads were not read."),
+                (
+                    "fastener",
+                    f"'PLATE_FICT' {ON_ITS_OWN}, so whether it is a fastener was not read.",
+                ),
+            ],
+            "2 extractor gaps",
+        ),
+        (
+            [
+                ("hole", f"'{PLATE}' {BY_A_DRAWING}, so its holes and threads were not read."),
+                (
+                    "fastener",
+                    f"'{PLATE}' {BY_A_DRAWING}, so whether it is a fastener was not read.",
+                ),
+            ],
+            "2 extractor gaps",
+        ),
+        (
+            [
+                (
+                    "hole",
+                    f"'{FRAME}' {BY_A_DRAWING}, so the holes and threads of its own assembly "
+                    "features were not read.",
+                ),
+            ],
+            "1 extractor gap",
+        ),
+    ],
+    ids=["part reviewed on its own", "part a drawing references", "assembly a drawing references"],
+)
+def test_a_document_node_the_extractor_did_not_read_is_the_not_read_row_never_nothing(
+    unread: list[tuple[str, str]], count: str
+) -> None:
+    """T129 and T133 (166A): a part reviewed on its own, keyed by its design name, and a part a
+    drawing references, keyed by its path, give no hole, cosmetic thread or fastener row, only
+    the two gaps the hole and fastener phases write for them; an assembly a drawing references
+    gives the one `hole` gap for its own assembly features (its parts are read through its
+    components). The not-read row lists them, so the review says their threads were not checked
+    rather than that the package states none. The drawing cases vary only the key and the words:
+    `check_threads` reads no drawing, so the package is a part's, as for a part on its own."""
+    checks = run(nothing_package(gaps=[gap(kind, None, reason) for kind, reason in unread]))
+
+    assert checks.skipped == (
+        CoverageItem(
+            check=ROW,
+            scope=CoverageScope(),
+            reason=(
+                f"{count} left holes, cosmetic threads or fasteners unread, so their pitch was "
+                "not checked: " + "; ".join(reason for _, reason in unread)
+            ),
+            error=None,
+        ),
+    )
+    assert NOTHING not in reasons(checks.skipped)
+    assert (checks.findings, checks.checked, checks.unresolved) == ((), (), ())
+    assert (checks.threads, checks.coarse) == (0, 0)
 
 
 def test_a_model_check_package_says_the_hole_and_fastener_phases_did_not_run() -> None:

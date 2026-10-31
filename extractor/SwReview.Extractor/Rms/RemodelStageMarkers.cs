@@ -57,6 +57,12 @@ public static class RemodelStageMarkers
         });
     }
 
+    /// <summary>
+    /// Owner decision 165A (004 research R26.1): one marker, <c>skipped {name}: {why}</c>, in place of the before and after
+    /// markers of a step not taken. <paramref name="why"/> is fixed text, so the marker names no path.
+    /// </summary>
+    public static void Skipped(Action<string>? stage, string name, string why) => Mark(stage, "skipped " + name + ": " + why);
+
     private static void Mark(Action<string>? stage, string marker)
     {
         try

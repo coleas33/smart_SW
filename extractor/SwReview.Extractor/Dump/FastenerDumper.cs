@@ -66,12 +66,13 @@ public sealed class FastenerDumper : IFastenerSource
         }
 
         var fasteners = new List<Fastener>();
+        var documentNodes = new DocumentNodePass(scope);
 
         foreach (ScopedComponent component in scope.Components)
         {
             scope.Gaps.TryStep("fastener", null, $"identify fastener '{component.Node.Key}'", () =>
             {
-                Fastener? fastener = ReadFastener(component, scope);
+                Fastener? fastener = ReadFastener(component, scope, documentNodes);
                 if (fastener != null)
                 {
                     fasteners.Add(fastener);
@@ -79,13 +80,15 @@ public sealed class FastenerDumper : IFastenerSource
             });
         }
 
+        documentNodes.Record("fastener", "whether it is a fastener was not read", assemblyNotRead: null);
         return fasteners;
     }
 
-    private Fastener? ReadFastener(ScopedComponent component, DumpScope scope)
+    private Fastener? ReadFastener(ScopedComponent component, DumpScope scope, DocumentNodePass documentNodes)
     {
         if (!(component.Node.Handle is IComponent2 handle))
         {
+            documentNodes.Skip(component);
             return null;
         }
 
@@ -94,6 +97,11 @@ public sealed class FastenerDumper : IFastenerSource
         string fileName = Path.GetFileName(component.Node.DocumentPath);
 
         var model = gate.Call("GetModelDoc2", () => handle.GetModelDoc2()) as IModelDoc2;
+        if (model != null)
+        {
+            documentNodes.Reached(component);
+        }
+
         Dictionary<string, string> properties = model == null
             ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             : PropertyDumper.ReadProperties(model, configuration, gate);

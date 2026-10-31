@@ -618,3 +618,142 @@ change and the value is unambiguous.
   sibling folder; the `family` field in `check.json` is how the backend answers a read by id for
   a folder it was handed. Two mechanisms, two questions; the alternative (one suffix plus a file
   read per sibling on every `init`) is rejected because `init` runs on every tab activation.
+
+---
+
+## R11. The transparency polarity, decided off the probe's lines (decision 172A; T111 to T113; 2026-10-31)
+
+T102 asks the seat which recorded transparency value means transparent, and whether slot 7 of
+`GetMaterialPropertyValues2` is the transparency slot on this build (R2.8, R4's PROBE-2 row).
+Owner decision 172A lets the engineer build a tiny made-up assembly for it by hand at the stage 1
+sitting, in an optional 25-minute block, never committed; the other is feature 001's interference
+volume (001 research R15).
+
+**The assembly** (`benchmarks/native/probe2-polarity/RECIPE.md`): one 20 mm block inserted three
+times. `PROBE2-BLOCK-1` gets a component-level appearance with Transparent amount 75 % (50 %
+until R11.1),
+`PROBE2-BLOCK-2` the same colour, typed in by number, at 0 %, and `PROBE2-BLOCK-3` nothing. The
+engineer saves `swreview-extract probe standards` to a file and runs
+`uv run swreview seat transparency "<folder>\probe-standards.txt"`
+(`reviewer/src/swreview/seat/transparency.py`).
+
+**The rule.** Only the PROBE-2 lines of the three named blocks are read:
+
+| What the lines show | Answer | Why |
+|---|---|---|
+| The two overrides differ at slot 7 and nowhere else, and the opaque one reads 0 there | `zero_is_opaque` | 0 is opaque, the SDK's reading. |
+| The same, and the opaque one reads 1 | `one_is_opaque` | 1 is opaque, the macro's reading. |
+| They read the same at slot 7 and the same colour (slots 0 to 2), and differ at another slot; or they answer with no slot 7 | inconclusive, **slot 7 refuted** | The dump reads slot 7 (`ComponentTreeDumper.ReadTransparency`), so no value of the constant can settle it: an extractor change, the owner's. |
+| They read the same at every slot | inconclusive | The transparency never reached the component: set on the part, a body or a face, it leaves the two component overrides identical. Recipe step 4, probe again (R11.1). |
+| They read the same at slot 7 and differ in colour, with or without another slot | inconclusive | The control did not hold, so nothing else they show can refute slot 7: same colour, probe again (R11.1). |
+| They differ at slot 7 and elsewhere too | inconclusive | The colours differ, so slot 7 is not shown to be the only carrier: same colour, probe again. |
+| The opaque one reads neither 0 nor 1 at slot 7 | inconclusive | Neither polarity names it opaque. |
+| Either reads a slot 7 outside 0 to 1, or any slot that is no finite number (`NaN`, `Infinity`) | inconclusive, never refuted | No transparency is outside 0 to 1: the read went wrong, which shows no polarity and refutes no slot. Probe again (R11.2). |
+| A block missing or listed twice, a failed, `null` or empty read, slots that skip one or disagree with their count, differing slot counts, no PROBE-2 section or two | inconclusive | Nothing to read, or two runs in one file. |
+| `PROBE2-BLOCK-3` reports an override, or `-1` or `-2` reports none | inconclusive | The control did not hold: `HasMaterialPropertyValues` would then not tell an override apart, which the check relies on. |
+
+Every inconclusive names what did not hold; none is a guess (R2.8: either guess silently mislabels
+every override). The file is read as the seat saves it: Windows PowerShell 5.1's `>` writes UTF-16
+with CRLF. Blocks are matched by the last segment of the probe's key, case-insensitively, so
+`--transparent`, `--opaque` and `--plain` take other names. Exit 0 on a polarity, 1 otherwise;
+`--json`. A decided answer prints the one edit and where the precomputed goldens are.
+
+**The goldens, precomputed.** T102 names three goldens to update, but the flip changes eleven:
+every `standards-*` case whose package carries an assembly with components (seeded, compliant,
+compliant-flat, multiplicity, profile-a and profile-b, seeded-second-subject, unknown, and three
+of the five drawing cases). `reviewer/tests/golden/test_transparency_polarity.py` pins all
+thirteen `standards-*` cases under each settled polarity in
+`reviewer/tests/golden/test_transparency_polarity/<polarity>/`, the two that do not change
+included, so the flip copies a folder and needs no list; the same module asserts that no other
+golden depends on the polarity. The two polarities' files differ only in the seeded pair, whose
+finding names the polarity, because no fixture carries an override reading exactly 0 or 1. The
+cost is 26 files, about 0.9 MB, regenerated with the rest by `--force-regen`.
+
+**The flip after the sitting**, when the decider printed a polarity. Measured 2026-10-31 by making
+it in a scratch tree, under each polarity in turn, over the 49 test files that name standards,
+transparency or the polarity and the whole of `tests/golden`: the same sixteen assertions change
+under either, and every copied golden passed. The full suite was not run flipped.
+
+1. `TRANSPARENCY_POLARITY = "<polarity>"` in `reviewer/src/swreview/checks/standards/assembly.py`.
+2. Copy `reviewer/tests/golden/test_transparency_polarity/<polarity>/*.yml` over
+   `reviewer/tests/golden/test_golden/`.
+3. The sixteen hand-written assertions that pin the unsettled state:
+   - `tests/unit/test_standards_assembly_rules.py`, `TestNotTransparent`:
+     `test_the_polarity_ships_unsettled` asserts the settled value;
+     `test_every_component_is_unresolved_while_the_polarity_is_unsettled` and
+     `test_an_assembly_with_no_children_is_unresolved_while_unsettled` keep their claim by setting
+     the constant to `unsettled` themselves, as the settled cases beside them set theirs.
+   - `tests/golden/test_standards_goldens.py`, `TestSeeded` (five): `SEEDED_FINDINGS` gains
+     `standards.assembly.not_transparent: 1`; sixteen findings, not fifteen; the transparency
+     check is one finding rather than one unresolved row; `SEEDED_ERRORS` is 14; the verdict's
+     unresolved ids no longer carry it.
+   - The same file, `TestCompliant` (four): the known gaps lose the transparency check (the
+     multi-level fixture keeps its two difference-h gaps, the flat one has none), and the flat
+     fixture's verdict is `ready`; `TestUnknown` (one): `UNKNOWN_UNRESOLVED` loses it.
+   - `tests/unit/test_chat_standards_routes.py`, `TestRunStandardsCheck` (three): the counts,
+     the findings one per seeded violation (sixteen) and the coverage rows' documents, as the
+     copied seeded golden has them.
+4. R4's PROBE-2 Answer column, and T102 ticked with the decider's three reading lines quoted.
+5. The gates. `test_ir_golden_fixtures_load.py`'s golden-tree check reads `git status`, so it
+   passes only once the copied goldens are committed.
+
+A **slot 7 refuted** answer stops before step 1: the constant stays `unsettled`, and the
+extractor's slot is the owner's to change.
+
+**Tests** (T111): `reviewer/tests/unit/test_cli_seat_transparency.py`, 25 cases over one fictional
+probe run (`reviewer/tests/fixtures/seat/probe2/probe-standards.txt`) with its PROBE-2 lines
+rewritten per case, and the 26 precomputed goldens: all 51 red before T112 and green after it.
+Gates: recorded in 004 research R28.5, which ran them once for the whole lane.
+
+### R11.1 Review round 1: a refutation an operator slip explains (T114, T115; 2026-10-31)
+
+The lane's review (004 research R28.6 lists every finding) found that overrides identical at all
+nine slots were reported as **slot 7 refuted**, and so were overrides equal at slot 7 that
+differed only in colour. Verified against the code: the refuted branch took every case with no
+difference at slot 7. The likeliest cause of both is a missed step, not the slot: transparency
+set on the part, a body or a face makes all three blocks look see-through and leaves the two
+component overrides identical. A refutation tells the engineer to stop and the owner to change
+`ComponentTreeDumper.ReadTransparency`, so it now rests on a clean control only: the same colour,
+slot 7 equal, and another slot differing - or no slot 7 at all. Identical overrides name recipe
+step 4 and the component row; a colour that differs names steps 3 and 4, with or without another
+slot beside it, since the control did not hold. A read of no slots is a failed read, not "no
+slot 7". The rule table above is amended to match, and so is the recipe's results table.
+
+The recipe's Transparent amount is now 75 % rather than 50 %: at 50 % the transparent block
+reads 0.5 under either polarity, at 75 % it reads 0.75 under `zero_is_opaque` and 0.25 under
+`one_is_opaque`, so the reading the decider prints shows the polarity to the eye as well. The
+decider does not require it: how the dialog's percentage reaches the slot is not documented, and
+the opaque block's 0 or 1 settles the polarity on its own; requiring the second reading could
+only turn an answer into an inconclusive at a sitting that cannot be repeated cheaply. The sample
+run's transparent reading moved to 0.75 with it.
+
+Also in T115, no behaviour changed: the precomputed goldens are graded by `test_golden.py`'s own
+runner (`golden_result`, extracted from `test_golden_case`), so the two cannot drift apart, and
+the two deciders share one `INCONCLUSIVE` (`swreview.seat`).
+
+**Tests** (T114): 30 cases in `test_cli_seat_transparency.py`, 4 red before T115 (identical
+overrides, a colour that differs alone and beside slot 8, two reads of no slots) and all green
+after it; T111's "no slot differing refutes slot 7" is replaced by the first, deliberately. The
+26 precomputed goldens are unchanged.
+
+### R11.2 Review round 2: a reading no transparency can hold (T116, T117; 2026-10-31)
+
+The lane's second review (004 research R28.7 lists every finding) found that a transparent block
+reading `NaN`, `Infinity`, -1 or 2 at slot 7 beside an opaque 0 decided `zero_is_opaque`.
+Verified against the code: `float()` takes `NaN` and `Infinity` (the probe prints a double with
+`G6` in the invariant culture, so it writes them so), and any such value differs from 0, so the two
+overrides "differed at slot 7 alone". The same held for a refutation: an equal slot 7 of 2 beside
+another slot differing, or a `NaN` at slot 8 beside an equal slot 7, refuted slot 7 - `NaN` is
+not close even to itself.
+
+A transparency is a fraction from 0 to 1, so a reading outside it says the read went wrong, not
+which polarity the seat has, nor that slot 7 is the wrong slot. Now a slot that is no finite
+number is a failed read, as a gap or a `null` already was, and a slot 7 outside 0 to 1 on either
+override is inconclusive naming that block and its value: probe again, and if it reads so again,
+tell the owner. Neither refutes slot 7. The rule table above has the row, and the recipe's results
+table names the bad read among the other reasons. The plain block's slots are still not read.
+
+**Tests** (T116): 12 cases in `test_cli_seat_transparency.py`, 42 in all, 12 red before T117 (the
+five transparent readings decided `zero_is_opaque`, the two refutations refuted, the five opaque
+readings inconclusive already but without naming the block) and all green after it. The 26
+precomputed goldens are unchanged.

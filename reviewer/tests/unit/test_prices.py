@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import runpy
 from copy import deepcopy
 from dataclasses import FrozenInstanceError, replace
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import pytest
 import respx
@@ -173,6 +174,60 @@ def test_every_default_non_scripted_model_has_an_entry() -> None:
         entry = price_entry(table, ProviderName.OPENAI, model)
         assert entry is not None
         assert entry.model == model
+
+
+def test_a_paid_test_run_names_a_priced_variant_never_an_alias_of_the_default() -> None:
+    """174A: the served variants are not aliases of `gpt-5.6`, so a paid test run names one."""
+    from swreview.agent.settings import DEFAULT_MODELS, PAID_TEST_MODEL
+    from swreview.benchmark.prices import load_prices, price_entry
+    from swreview.benchmark.served import aliases
+
+    assert PAID_TEST_MODEL == "gpt-5.6-sol"
+    entry = price_entry(load_prices(), ProviderName.OPENAI, PAID_TEST_MODEL)
+    assert entry is not None
+    assert entry.model == PAID_TEST_MODEL
+    for variant in OPENAI_DEFAULT_VARIANTS:
+        assert not aliases(ProviderName.OPENAI, DEFAULT_MODELS[ProviderName.OPENAI], variant)
+
+
+@pytest.mark.parametrize(
+    "module",
+    [
+        "test_benchmark_live_attempt.py",
+        "test_openai_live_prior_reasoning.py",
+        "test_openai_live_schemas.py",
+    ],
+)
+def test_the_live_attempt_runs_the_paid_test_model_unless_one_is_named(
+    monkeypatch: pytest.MonkeyPatch, module: str
+) -> None:
+    """174A: every OpenAI live test defaults to `gpt-5.6-sol` (T171's since T268, the other two
+    since 014 T270); `SWREVIEW_LIVE_MODEL` still overrides."""
+    live = Path(__file__).resolve().parents[1] / "live" / module
+    monkeypatch.delenv("SWREVIEW_LIVE_MODEL", raising=False)
+    assert runpy.run_path(str(live))["MODEL"] == "gpt-5.6-sol"
+    monkeypatch.setenv("SWREVIEW_LIVE_MODEL", "fict-model-a")
+    assert runpy.run_path(str(live))["MODEL"] == "fict-model-a"
+
+
+def test_the_live_attempt_refuses_an_unpriced_model_before_it_spends(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """174A: T171's live test, given a model with no price row, fails naming the paid test model
+    before its `benchmark run`, which would spend and then fail on the cost (014 T269). Run
+    offline: the run is a spy that fails the test if it is ever reached."""
+    from tests.live import test_benchmark_live_attempt as live
+
+    def spends(*args: str) -> NoReturn:
+        raise AssertionError(f"the live attempt ran benchmark {args[:2]} for an unpriced model")
+
+    monkeypatch.setattr(live, "MODEL", "fictional-unpriced")
+    monkeypatch.setattr(live, "_invoke", spends)
+
+    with pytest.raises(pytest.fail.Exception, match=r"nothing was spent.*gpt-5\.6-sol.*174A"):
+        live.test_one_real_benchmark_attempt_records_every_field_of_its_row(
+            "fictional-openai-key", tmp_path
+        )
 
 
 @pytest.mark.parametrize("provider", ["openai", "gemini"])

@@ -601,11 +601,26 @@ public sealed class FakeRemodelDocument : IRemodelDocument
         return _identity;
     }
 
+    /// <summary>
+    /// Owner decision 165A (004 research R25.13): the identity of another document SOLIDWORKS has open at this one's path
+    /// - this one closed and the copy opened again underneath - which <see cref="GetOpenDocumentIdentity"/> answers for that
+    /// path when set; <see cref="IntPtr.Zero"/> is nothing open there. Unset, it answers this document's own.
+    /// </summary>
+    public IntPtr? ReopenedAs { get; set; }
+
+    /// <summary>What <see cref="GetOpenDocumentIdentity"/> throws: a SOLIDWORKS that does not answer which document is open there.</summary>
+    public Exception? OpenIdentityFailure { get; set; }
+
     public IntPtr GetOpenDocumentIdentity(string documentPath)
     {
         Members.Add(nameof(GetOpenDocumentIdentity));
+        if (OpenIdentityFailure != null)
+        {
+            throw OpenIdentityFailure;
+        }
+
         return string.Equals(documentPath, PathName, StringComparison.OrdinalIgnoreCase)
-            ? _identity
+            ? ReopenedAs ?? _identity
             : IntPtr.Zero;
     }
 
@@ -1056,6 +1071,13 @@ public sealed class FakeRemodelSeat : IRemodelSeat
     /// </summary>
     public Action<string>? DuringCall { get; set; }
 
+    /// <summary>
+    /// The review round of owner decision 165A (004 research R26.10): run with the member's name as
+    /// <see cref="CloseDocument"/> returns, after its close took effect, and as <see cref="IsDocumentOpen"/> is asked,
+    /// before it answers - a re-entrant action pumped by <c>CloseDoc</c> or by the read that confirms it.
+    /// </summary>
+    public Action<string>? DuringCleanUpCall { get; set; }
+
     public IRemodelDocument? OpenDocument(string documentPath, int options)
     {
         DuringCall?.Invoke(nameof(OpenDocument));
@@ -1087,11 +1109,14 @@ public sealed class FakeRemodelSeat : IRemodelSeat
         {
             OpenDocuments.Remove(documentPath);
         }
+
+        DuringCleanUpCall?.Invoke(nameof(CloseDocument));
     }
 
     public bool IsDocumentOpen(string documentPath)
     {
         OpenReads.Add(documentPath);
+        DuringCleanUpCall?.Invoke(nameof(IsDocumentOpen));
         if (OpenReadFailure != null)
         {
             throw OpenReadFailure;

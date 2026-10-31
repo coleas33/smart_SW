@@ -235,6 +235,57 @@ the `^<prefix>:[0-9]{4,}$` shape (`ir/models.py:367, 487, 865, 911, 933, 973, 10
 `runner.py:531-552`; that existing defect in `_reconcile_reruns` is an R5 item, not fixed here);
 whole-finding equality (rejected: a changed field would read as one lost and one added).
 
+*Settled 2026-10-31 (owner decision 166A; T130, T131; corrected on review, T132, T133): the
+runner keys on this key.* `runner._verdict_key` is `finding_subject_key` with one difference
+(below), so `_reconcile_reruns` and `_reconcile_restated` fold a re-run only onto the earlier
+finding with the same entity ids. Before, a resumed turn that re-ran the first of two
+`hole.coaxiality` pairs on one pair of components, with no tolerance, put its verdict on the second
+pair's finding and lost the second. T131 recorded that the key's other differences from the old
+one separate no re-run from the finding it re-judges, because the suites that fold a re-run passed
+unchanged; the review of T131 found three re-runs no suite covered, which T132 pins and T133
+settles:
+
+- a joint finding's inputs are hole instances as the joint map numbers them (`hol:0014#2`,
+  `checks/joints.py`), which `ENTITY_ID` did not read, so two joints on one pair of components,
+  with no drawing location, shared one key and a resumed turn's re-run of both lost the first's
+  new verdict, as it did under the old key. `ENTITY_ID` now reads a hole instance too: two joints
+  are two keys in the runner, in the replay's comparison and in the decision carry (72A), which
+  named such a decision as matching many and carried none;
+- the model may cite a sheet or an annotation first without and then with its persistent
+  reference; the key held the reference, so the re-run stood beside the finding it re-judges. In
+  the runner's key alone a location's reference counts only where it is the location's one
+  locator: a check cites each subject by its reference alone (25A), which still names it there.
+  So `{sheet S, reference A}` and `{sheet S, reference B}` fold into one key, as before the lane
+  (T136 pins the sheet and the annotation citation);
+- the part-roles regrade drops a finding's newly bought sources: an unclear part whose fastener
+  row and tapped hole share one fine pitch has one finding citing both, and after "All bought"
+  only the fastener is graded. Its key lost the hole's id, so the Accepted finding was withdrawn
+  and the restated one added as new, the Accept lost (58A). `_restated_targets` matches a
+  restated finding nothing matched onto the one earlier finding nothing matched whose key less
+  its entity ids is its own, when no other unmatched restated finding shares it and its entity
+  ids are a subset of that finding's (T135): the regrade only drops sources, so a restated
+  finding about other holes of the same components re-judges nothing earlier. A resumed turn
+  never matches so: there, a finding with other entity ids is the model checking something else
+  (`test_a_rerun_that_covers_something_else_is_a_second_finding`, and
+  `test_a_resumed_turn_on_another_hole_pair_of_the_same_components_is_a_second_finding`, T136).
+
+The component ids and locations are sorted, which separates nothing.
+
+*Re-reviewed 2026-10-31 (T134 to T137): an independent re-review of the lane's fix round, T132
+and T133 among it, found no critical, high or medium issue; its low findings here are settled.*
+The regrade's fallback match requires the restated finding's entity ids to be a subset of the
+earlier one's (T134, T135; the third bullet above). T136 pins the fallback's uniqueness rule, a
+resumed turn on another hole pair of the same components and the annotation citation, each
+proved by a mutant of `runner.py` restored byte for byte. Two records:
+
+- the decision carry (72A) now carries a joint decision by hole-instance number
+  (`hol:NNNN#n`), which assumes a hole's face-id order is stable across re-extraction; no
+  fixture holds `#n` inputs;
+- the fix round's earlier "3.12" local gates ran on the worktree's 3.11 venv, uv's default in a
+  new worktree. The re-review's isolated 3.12.3 run was green (18298 passed, 5 skipped), and this
+  round's gates ran on a real 3.12 venv: 18305 passed and 5 skipped on Python 3.12.3, and the
+  same on 3.11.16 (`uv run --isolated --python 3.11`).
+
 *Amended 2026-09-25 (owner decision 25A; T128): each drawing location keeps its persistent
 reference.* The key's locations are `(document_id, sheet, view, annotation, page, persist_ref)`,
 `persist_ref` `None` where a location has none; everything else above stands. Without the
@@ -1711,7 +1762,7 @@ Re-opened on 2026-09-23 at `47f8b73` for this reconciliation (the rest are the d
 | "uncached" or "new" on both surfaces (R2.46) | owner, feature 009 | nothing |
 | Record probe L1 from the 119 recorded rounds and flip `CACHED_SHARE_PUBLISHABLE` | owner | nothing (the pane no longer shows a share) |
 | SC-003's regrouped margin is thin (0.29M to 0.30M modelled, R2.43) | owner, after T087 | SC-003 |
-| `runner._verdict_key` ignores hole ids, so `_reconcile_reruns` can fold two hole-pair findings (existing, R2.8) | backlog | nothing |
+| Settled 2026-10-31 (owner decision 166A; T130 to T133): `runner._verdict_key` ignored hole ids, so `_reconcile_reruns` could fold two hole-pair findings (existing, R2.8); it is now `finding_subject_key`, hole instances read, a reference counted where it is a location's one locator, and the regrade's restated findings matched less their entity ids when unique and narrowed (T135) | backlog | nothing |
 | Move `request_capture` onto `resolve_entity_ref` (R2.27) | follow-up | nothing |
 | MCP general chat still shows persist references while the bridge tools want ids (R2.38) | follow-up | nothing |
 | `benchmark compare` ignores `model_view`, so a comparison across builds would not be refused | follow-up | nothing |
