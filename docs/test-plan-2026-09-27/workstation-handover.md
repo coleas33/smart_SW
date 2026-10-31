@@ -216,12 +216,19 @@ git pull --ff-only origin main; "pull exit code: $LASTEXITCODE"
 .\extractor\tools\update-workstation.ps1 -NoPull      # add -TokenizerFrom "<file>" or -SolidWorksRoot "<root>" as section 2 says
 git log --oneline -1; Test-Path docs\test-plan-2026-09-27\workstation-results.md   # the commit, then True: the results sheet is there
 git merge-base --is-ancestor 43436d3 HEAD; "holds 43436d3: $($LASTEXITCODE -eq 0)"   # True: the probe names each dimension (T066)
-Get-Content "$env:LOCALAPPDATA\SwReview\logs\addin.log" -Tail 12   # SOLIDWORKS started on a part: runbook section 6's check 1
 Select-String -Path "$env:LOCALAPPDATA\SwReview\standards.yaml" -Pattern '^version:'   # after step 1 below
 ```
 
-Pass: `pull exit code: 0`, the script ends at its health step with no step failed, and runbook
-section 6's seven checks hold. The script fetches first even with `-NoPull`, and says
+Then its step 1.6, with SOLIDWORKS started on a part:
+
+```powershell
+Get-Content "$env:LOCALAPPDATA\SwReview\logs\addin.log" -Tail 12   # runbook section 6's check 1
+cd "$R\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd $R   # decision 166A's check
+```
+
+Pass: `pull exit code: 0`, the script ends at its health step with no step failed, runbook
+section 6's seven checks hold, and `swreview seat health` ends `exit code: 0` (a build without it:
+`seat health: not in this build`). The script fetches first even with `-NoPull`, and says
 `-NoPull: building what is checked out`; the test plan's step 1.3 says what each other line means.
 Record the commit before and after and the versions of section 2 at the top of the findings
 document, which the test plan starts at step 1.4. Every `swreview-extract` command below needs the
