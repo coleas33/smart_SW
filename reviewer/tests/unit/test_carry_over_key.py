@@ -248,7 +248,7 @@ def test_the_rms_rule_version_is_in_the_key(monkeypatch: pytest.MonkeyPatch) -> 
     previous = previous_session(package, [rms_finding(package)])
     assert json.loads(previous.findings[0].carry_over_key)[8] == RULES_VERSION
 
-    monkeypatch.setattr(carry_over, "RULES_VERSION", "2")
+    monkeypatch.setattr(carry_over, "RULES_VERSION", f"{RULES_VERSION}-next")
 
     decision = select_carry_over(package, previous, at=CARRIED_AT)
     assert decision.carried == ()

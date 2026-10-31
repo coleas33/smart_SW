@@ -136,6 +136,12 @@ compares moves and no fixture of feature 008 is regenerated; what moves is the `
 coverage item, which no longer names the two (or the one document only they put in it), in the
 one fixture made by a fresh checks-only run of the big assembly, the add-in's
 `review-waiting-big-assembly.json`, regenerated with `generate_waiting_fixtures.py --write`.
+*Corrected on review (2026-10-31, T095, T096):* the classification can change an `rms.*` verdict
+over an unchanged tree (a group holding a `RevCut` now names it), and the carry-over key sees the
+tree, not the type table; its member 8, the rms `RULES_VERSION`, is where such a change is stamped.
+It moves to "2", so a verdict stamped under "1" is re-run rather than carried (feature 005
+lever 11a, guard 5), and its docstring names a classified type among what moves it. No committed
+fixture holds a carry-over key.
 
 The feature-type census in the extractor (`TypeNameCensus`) answers a different question
 (which type names no dump pass consumed); the RMS unknown-type report (which type names the

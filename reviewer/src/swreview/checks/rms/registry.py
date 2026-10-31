@@ -81,8 +81,9 @@ respect - `fn` is filled in by `bind` after construction, because the evaluator 
 import this one and not the other way round.
 """
 
-RULES_VERSION = "1"
-"""This catalogue's version: the rms family's `Calculation.function_version`.
+RULES_VERSION = "2"
+"""This catalogue's version: the rms family's `Calculation.function_version`. "2" since the type
+table classified the 2024 names `RevCut` and `Helix` (feature 003 T094, T096).
 
 The deterministic checks each carry a module-level `FUNCTION_VERSION` (`checks/fit.py`,
 `checks/fastener.py` and the rest) that rides into every finding's `Calculation` and says
@@ -93,7 +94,8 @@ claim that **this** implementation would conclude the same thing (guard 5,
 `carry_over.carry_over_key`).
 
 **Bump it whenever a rule's verdict over an unchanged tree could change**: a rule added or
-removed, a severity changed, an evaluator's condition edited. Nothing detects an unbumped
+removed, a severity changed, an evaluator's condition edited, a type name classified in
+`checks/rms_types.yaml`. Nothing detects an unbumped
 change, which is the honest cost of there being no calculation to version; the direction of
 the error is a carried verdict, so the bump is part of editing a rule, not an afterthought.
 """
