@@ -1426,10 +1426,11 @@ def test_a_message_box_is_answered_only_after_probe_1s_watchdog_has_timed_both_t
 
 
 def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
-    """The run refuses while a document is open, writes its ledger and its log only when it
-    ends (so a run stopped with Ctrl+C leaves neither, as step 5.6 says), and ends with the
-    count line and one BLOCKING line per blocking probe not verified; and it turns off the three
-    options step 5.6 notes before the runs and checks after."""
+    """The run refuses while a document is open, writes its ledger only when it ends, puts each
+    log line on disk as it is written (004 T330, decision 166A: a run stopped with Ctrl+C keeps
+    its log), and ends with the count line and one BLOCKING line per blocking probe not
+    verified; and it turns off the three options step 5.6 notes before the runs and checks
+    after."""
     program = (REPO / "extractor" / "SwReview.Extractor.Console" / "Program.cs").read_text(
         encoding="utf-8"
     )
@@ -1444,9 +1445,9 @@ def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
 
     assert run.index("host.AnyDocumentOpen()") < run.index("host.BuildPart(")
     assert run.index("RemodelSystemToggles.Within(") < run.index("RemodelProbeLedger.Write(")
-    assert log.count("File.AppendAllText(") == 1
-    assert log.index("public void Dispose()") < log.index("File.AppendAllText(")
-    assert "only when it ends, so after Ctrl+C neither exists" in probes
+    write = log[log.index("public void Write(") : log.index("public void WriteError(")]
+    assert "File.AppendAllText(" not in log and "AutoFlush = true" in log
+    assert "FileShare.ReadWrite" in log and "_file" in write
     fragments = [
         '"probes: {records.Count} run "',
         '"({Count(records, RemodelProbeVerdict.Verified)} verified, "',

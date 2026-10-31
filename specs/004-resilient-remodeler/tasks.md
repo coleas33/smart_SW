@@ -528,6 +528,11 @@ On the decision's final review (2026-10-21; research R19.20 to R19.26): the revi
 - [x] T318 Record R25.12 (the finding, the recheck, every point in the open where native code can pump, the correction, tests, mutations, gates), amend `bridge-remodel.md` and T303's barrier item, and update row 163A. Run the C# gates, the focused classes three times, both Python suites, ruff, the link check and the LF check. Acceptance recorded in R25.12
 - [x] T319 Record R25.13 (Codex's final review: the barrier unwind closes the copy by path, without a COM-identity comparison; recorded as a Start prerequisite, not fixed), correct R25.12's and `bridge-remodel.md`'s "after the identity check", and add it to R25.9. Run the link check and the LF check. Acceptance recorded in R25.13
 
+*Added 2026-10-31 (owner decisions 166A and 171A; research R27):* stage 1 of the seat-validation kit. A probe run that hangs or crashes keeps its log and every finished probe's row; the ledger names no exception text; `swreview remodel ledger` reads a ledger and says what it lets the build switch on; the switch constants are pinned to committed evidence in CI; and the fakes that assume a seat answer name the probe that checks it.
+
+- [x] T330 [P] Test first, C# (owner decision 166A; research R27.1). `ExtractLogTests.cs`: `EachLineIsInTheFileBeforeTheLogIsDisposed` and `AnErrorsLinesAreInTheFileBeforeTheLogIsDisposed` (the file read while the log still holds it, as a hung run's would be), and the guards `ALaterRunAppendsToTheSameFile` and `ALogWhoseFileCannotBeOpenedNeverThrows`. `test_workstation_test_plan.py`'s `test_the_lines_step_5_6_reads_are_the_consoles` is changed on purpose: it pinned the log written once, in `Dispose`, and now pins it written line by line; its assertion of the plan's "only when it ends, so after Ctrl+C neither exists" goes, since the sentence is no longer true and the plan is another lane's (R27.1). Acceptance observed before T331: 2 failures (no file before `Dispose`) and the plan test red; the guards passing
+- [ ] T331 Implement T330: `ExtractLog` opens its file once, append, `FileShare.ReadWrite`, auto-flushed, as `ExtractionProgress` does, and writes each line as it is logged; an IO failure at the open or at a write leaves the console line and never throws. `SuppressTestTests` unchanged. Acceptance: every T330 case green
+
 
 
 
