@@ -896,6 +896,293 @@ public sealed class RemodelTeardownTests : IDisposable
         Assert.Empty(told.SettingsOutstanding);
     }
 
+    /// <summary>
+    /// Owner decision 165A, test first (004 T320; research R25.13, R26.1): the barrier's refusal fails the open through its
+    /// unwind, which closed the copy by its path and deleted it without asking whether the document open there is the one
+    /// the open opened. Here the close in process is pumped inside the open's rebuild and, before the recheck refuses, a
+    /// second re-entrant action closes the copy and opens it again at the same path. The unwind must neither close that
+    /// document nor delete the file under it - nor when which document is open there cannot be read - and still put the
+    /// settings back and tell the failed open, the copy not counted closed and the failure naming no path or run.
+    ///
+    /// The review round (004 T320a; research R26.10, F4): the third row, a guard, reopens the copy inside <c>OpenDoc7</c>
+    /// with no close in process, so <c>VerifyTarget</c>'s check 3 fails the rollback write and that unwind leaves it too.
+    /// </summary>
+    [Theory]
+    [InlineData("reopened at the same path")]
+    [InlineData("the document open there cannot be read")]
+    [InlineData("reopened before the rollback write")]
+    public void AnUnwindLeavesADocumentOpenedAgainAtTheCopysPathMidOpenAndItsFile(string what)
+    {
+        bool[] idleBefore = RemodelSystemToggles.SuppressedToggles.Select(_harness.Seat.GetUserPreferenceToggle).ToArray();
+        bool commandBefore = _harness.Seat.CommandInProgress;
+        var markers = new List<string>();
+        _harness.Services.RemodelStage = (_, marker) => markers.Add(marker);
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+        if (what == "reopened before the rollback write")
+        {
+            _harness.Seat.DuringCall = _ => _harness.Copy.ReopenedAs = new IntPtr(0x4002);
+        }
+
+        _harness.Copy.DuringCall = member =>
+        {
+            if (member != nameof(FakeRemodelDocument.ForceRebuild))
+            {
+                return;
+            }
+
+            Assert.Null(_harness.Dispatcher.EndRemodelSessionOf(_harness.RunDirectory));
+            if (what == "reopened at the same path")
+            {
+                _harness.Copy.ReopenedAs = new IntPtr(0x4002);
+            }
+            else
+            {
+                _harness.Copy.OpenIdentityFailure = new InvalidOperationException("FICT the application did not answer");
+            }
+        };
+
+        BridgeResponse opened = _harness.Dispatch(RemodelCommands.Open, OpenParams(_harness.CopyPath, probeId));
+
+        if (what == "reopened before the rollback write")
+        {
+            // Check 3's own failure is the open's error, as every write's check failure in an open is.
+            Assert.Equal(BridgeStatus.Error, opened.Status);
+            Assert.Contains("check 3 failed", opened.Error, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Equal(RemodelErrorCodes.TargetMismatch, RemodelHarness.Refusal(opened));
+        }
+
+        Assert.Null(_harness.Dispatcher.RemodelRunDirectory);
+        Assert.Null(_harness.Dispatcher.RemodelTargetPath);
+        Assert.Empty(_harness.Seat.Closed);
+        Assert.Contains(_harness.CopyPath, _harness.Seat.OpenDocuments);
+        Assert.True(File.Exists(_harness.CopyPath), "the unwind deleted the file under a document it did not open");
+        Assert.Equal(idleBefore, RemodelSystemToggles.SuppressedToggles.Select(_harness.Seat.GetUserPreferenceToggle).ToArray());
+        Assert.Equal(commandBefore, _harness.Seat.CommandInProgress);
+        RemodelSessionEnd told = Assert.Single(_told);
+        Assert.Equal(RemodelSessionEnd.ReasonOpenFailed, told.Reason);
+        Assert.False(told.CopyClosed);
+        Assert.Empty(told.SettingsOutstanding);
+        string failure = Assert.Single(told.Failures);
+        Assert.StartsWith("close: ", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain(Path.GetFileName(_harness.CopyPath), failure, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(RemodelHarness.RunId, failure, StringComparison.Ordinal);
+
+        // Owner decision 165A, test first (004 T328; research R26.1): the copy left is written down in the run's remodel.log,
+        // in one fixed marker in place of the delete's, naming no path or run.
+        string left = Assert.Single(markers, marker => marker.StartsWith("skipped ", StringComparison.Ordinal));
+        Assert.StartsWith("skipped unwind.DeleteCopy: ", left, StringComparison.Ordinal);
+        Assert.DoesNotContain(Path.GetFileName(_harness.CopyPath), left, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(RemodelHarness.RunId, left, StringComparison.Ordinal);
+        Assert.DoesNotContain("before unwind.DeleteCopy", markers);
+        Assert.True(
+            markers.IndexOf("after unwind.CloseDoc") < markers.IndexOf(left)
+            && markers.IndexOf(left) < markers.IndexOf("before unwind.PutBackSettings"),
+            "the marker is not where the delete's would be");
+    }
+
+    /// <summary>
+    /// Owner decision 165A (004 T321 - a guard; research R26.1): the identity check holds back only a document that is
+    /// not the open's. A copy closed underneath the open and not opened again leaves nothing at its path, so the unwind
+    /// closes and deletes as it always has - the file is the run's own and nothing holds it - and the ending is clean.
+    /// </summary>
+    [Fact]
+    public void AnUnwindStillClosesAndDeletesACopyClosedUnderneathAndNotReopened()
+    {
+        var markers = new List<string>();
+        _harness.Services.RemodelStage = (_, marker) => markers.Add(marker);
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+        _harness.Copy.DuringCall = member =>
+        {
+            if (member == nameof(FakeRemodelDocument.ForceRebuild))
+            {
+                Assert.Null(_harness.Dispatcher.EndRemodelSessionOf(_harness.RunDirectory));
+                _harness.Seat.OpenDocuments.Remove(_harness.CopyPath);
+                _harness.Copy.ReopenedAs = IntPtr.Zero;
+            }
+        };
+
+        BridgeResponse opened = _harness.Dispatch(RemodelCommands.Open, OpenParams(_harness.CopyPath, probeId));
+
+        Assert.Equal(RemodelErrorCodes.TargetMismatch, RemodelHarness.Refusal(opened));
+        Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.Closed));
+        Assert.False(File.Exists(_harness.CopyPath));
+        RemodelSessionEnd told = Assert.Single(_told);
+        Assert.True(told.CopyClosed);
+        Assert.Empty(told.Failures);
+        Assert.Contains("after unwind.DeleteCopy", markers);
+        Assert.DoesNotContain(markers, marker => marker.StartsWith("skipped ", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The review round of owner decision 165A, test first (004 T320a; research R26.10, Codex's CX2): the unwind's close can
+    /// pump too. The barrier refuses as in T316, the identity check finds the open's own document and closes it, and then a
+    /// re-entrant action - pumped inside <c>CloseDoc</c>, or inside the read that confirms it - opens the copy again at the
+    /// same path. The close is not confirmed, and the unwind must ask again which document is open there before it deletes:
+    /// the new document is not closed, its file is kept, the copy is not counted closed, and the marker stands in place of
+    /// the delete's.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(FakeRemodelSeat.CloseDocument))]
+    [InlineData(nameof(FakeRemodelSeat.IsDocumentOpen))]
+    public void AnUnwindDeletesNoCopyOpenedAgainWhileItsCloseRan(string where)
+    {
+        var markers = new List<string>();
+        _harness.Services.RemodelStage = (_, marker) => markers.Add(marker);
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+        _harness.Copy.DuringCall = member =>
+        {
+            if (member == nameof(FakeRemodelDocument.ForceRebuild))
+            {
+                Assert.Null(_harness.Dispatcher.EndRemodelSessionOf(_harness.RunDirectory));
+            }
+        };
+        int reopened = 0;
+        _harness.Seat.DuringCleanUpCall = member =>
+        {
+            if (member == where && reopened++ == 0)
+            {
+                _harness.Seat.OpenDocuments.Add(_harness.CopyPath);
+                _harness.Copy.ReopenedAs = new IntPtr(0x4002);
+            }
+        };
+
+        BridgeResponse opened = _harness.Dispatch(RemodelCommands.Open, OpenParams(_harness.CopyPath, probeId));
+
+        Assert.Equal(RemodelErrorCodes.TargetMismatch, RemodelHarness.Refusal(opened));
+        Assert.Equal(1, reopened);
+        Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.Closed));
+        Assert.Contains(_harness.CopyPath, _harness.Seat.OpenDocuments);
+        Assert.True(File.Exists(_harness.CopyPath), "the unwind deleted the file under a document opened again while it closed");
+        RemodelSessionEnd told = Assert.Single(_told);
+        Assert.False(told.CopyClosed);
+        Assert.Empty(told.SettingsOutstanding);
+        Assert.Equal(2, told.Failures.Count);
+        Assert.Equal("close: CloseDoc returned, but SOLIDWORKS still has the copy open", told.Failures[0]);
+        Assert.StartsWith("close: SOLIDWORKS has another document open at the copy's path", told.Failures[1], StringComparison.Ordinal);
+        string left = Assert.Single(markers, marker => marker.StartsWith("skipped ", StringComparison.Ordinal));
+        Assert.StartsWith("skipped unwind.DeleteCopy: ", left, StringComparison.Ordinal);
+        Assert.DoesNotContain("before unwind.DeleteCopy", markers);
+    }
+
+    /// <summary>
+    /// The second review round of owner decision 165A, test first (004 T329f; research R26.11, Codex's F1): the open stops for
+    /// rebuild errors at baseline and its unwind leaves the copy - the copy closed and opened again at its path inside the
+    /// rebuild, which document is open there cannot be read, or the copy opened again while the unwind closed it. The open
+    /// answered <c>preexisting_rebuild_errors</c> all the same, the one refusal that says the copy is deleted: the backend
+    /// answers it <c>copy_present: false</c> and the host deletes <c>copy/</c> on it, so the file the unwind kept was
+    /// deleted one layer up. The open must answer <c>target_mismatch</c> instead, the code the barrier's own refusal uses
+    /// (research R26.12), in a sentence that names the rebuild errors and the copy left, and no path or run.
+    /// </summary>
+    [Theory]
+    [InlineData("reopened at the same path")]
+    [InlineData("the document open there cannot be read")]
+    [InlineData("opened again while the unwind closed it")]
+    public void ARebuildErrorRefusalWhoseUnwindLeftTheCopyDoesNotSayTheCopyIsDeleted(string what)
+    {
+        var markers = new List<string>();
+        _harness.Services.RemodelStage = (_, marker) => markers.Add(marker);
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+        _harness.Copy.WhatsWrongCount = 2;
+        _harness.Copy.DuringCall = member =>
+        {
+            if (member != nameof(FakeRemodelDocument.ForceRebuild))
+            {
+                return;
+            }
+
+            if (what == "reopened at the same path")
+            {
+                _harness.Copy.ReopenedAs = new IntPtr(0x4002);
+            }
+            else if (what == "the document open there cannot be read")
+            {
+                _harness.Copy.OpenIdentityFailure = new InvalidOperationException("FICT the application did not answer");
+            }
+        };
+        int reopened = 0;
+        _harness.Seat.DuringCleanUpCall = member =>
+        {
+            if (what == "opened again while the unwind closed it"
+                && member == nameof(FakeRemodelSeat.CloseDocument)
+                && reopened++ == 0)
+            {
+                _harness.Seat.OpenDocuments.Add(_harness.CopyPath);
+                _harness.Copy.ReopenedAs = new IntPtr(0x4002);
+            }
+        };
+
+        BridgeResponse opened = _harness.Dispatch(RemodelCommands.Open, OpenParams(_harness.CopyPath, probeId));
+
+        Assert.Equal(RemodelErrorCodes.TargetMismatch, RemodelHarness.Refusal(opened));
+        Assert.Contains("rebuild error", opened.Error, StringComparison.Ordinal);
+        Assert.Contains("neither closed nor deleted", opened.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(Path.GetFileName(_harness.CopyPath), opened.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(RemodelHarness.RunId, opened.Error, StringComparison.Ordinal);
+        Assert.Equal(what == "opened again while the unwind closed it" ? 1 : 0, _harness.Seat.Closed.Count);
+        Assert.Contains(_harness.CopyPath, _harness.Seat.OpenDocuments);
+        Assert.True(File.Exists(_harness.CopyPath), "the unwind deleted the file under a document it did not open");
+        Assert.False(Assert.Single(_told).CopyClosed);
+        string left = Assert.Single(markers, marker => marker.StartsWith("skipped ", StringComparison.Ordinal));
+        Assert.StartsWith("skipped unwind.DeleteCopy: ", left, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A guard for T329g's narrowness (owner decision 165A; 004 T385; research R26.12, the re-review's RR1): only
+    /// <c>preexisting_rebuild_errors</c> is answered <c>target_mismatch</c> when the unwind leaves the copy. An open stopped
+    /// for another reason whose unwind left the copy keeps its own code - <c>scope_changed</c> (the copy reopened at its
+    /// path inside the rebuild, its signals differing from the probe's), which the tab words as 149A has it, and
+    /// <c>tag_failed</c> (the copy reopened inside <c>OpenDoc7</c>, its tag not read back) - with the file kept and the
+    /// <c>skipped unwind.DeleteCopy</c> marker written all the same.
+    /// </summary>
+    [Theory]
+    [InlineData(RemodelErrorCodes.ScopeChanged)]
+    [InlineData(RemodelErrorCodes.TagFailed)]
+    public void AnotherRefusalWhoseUnwindLeftTheCopyKeepsItsOwnCode(string code)
+    {
+        var markers = new List<string>();
+        _harness.Services.RemodelStage = (_, marker) => markers.Add(marker);
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+        if (code == RemodelErrorCodes.ScopeChanged)
+        {
+            _harness.Copy.Signals.SolidBodyCount = 4;
+            _harness.Copy.DuringCall = member =>
+            {
+                if (member == nameof(FakeRemodelDocument.ForceRebuild))
+                {
+                    _harness.Copy.ReopenedAs = new IntPtr(0x4002);
+                }
+            };
+        }
+        else
+        {
+            _harness.Copy.TagWrites = false;
+            _harness.Seat.DuringCall = _ => _harness.Copy.ReopenedAs = new IntPtr(0x4002);
+        }
+
+        BridgeResponse opened = _harness.Dispatch(RemodelCommands.Open, OpenParams(_harness.CopyPath, probeId));
+
+        Assert.Equal(code, RemodelHarness.Refusal(opened));
+        Assert.Empty(_harness.Seat.Closed);
+        Assert.Contains(_harness.CopyPath, _harness.Seat.OpenDocuments);
+        Assert.True(File.Exists(_harness.CopyPath), "the unwind deleted the file under a document it did not open");
+        Assert.False(Assert.Single(_told).CopyClosed);
+        string left = Assert.Single(markers, marker => marker.StartsWith("skipped ", StringComparison.Ordinal));
+        Assert.StartsWith("skipped unwind.DeleteCopy: ", left, StringComparison.Ordinal);
+    }
+
     /// <summary><c>remodel.open</c>'s params for the harness's run, with the copy given.</summary>
     private string OpenParams(string copy, string probeId) =>
         "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath)
