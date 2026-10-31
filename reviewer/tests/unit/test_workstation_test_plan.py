@@ -68,6 +68,7 @@ from tests.support.seat_tasks import (
     REPO,
     open_seat_tasks,
     qualified_tasks,
+    seat_tasks_in,
 )
 
 PLAN = REPO / "docs" / "test-plan-2026-09-27" / "workstation-test-plan.md"
@@ -777,6 +778,40 @@ def test_a_qualified_range_names_each_task_in_it_and_a_bare_id_names_nothing() -
     assert qualified_tasks("[010 T103 to T106; 009 T080] and T077") == {
         ("010", "T103"), ("010", "T104"), ("010", "T105"), ("010", "T106"), ("009", "T080"),
     }
+
+
+def test_a_seat_task_is_tagged_w_or_says_workstation_and_its_id_is_read_whole() -> None:
+    """Decision 166A (004 T360): a seat task is open and tagged `[W]` among its leading tags, as
+    005 tags `[P] [W]`, or says `Workstation` first after them, as 003 and 004 do; a task tagged
+    only `[K]`, or saying so later in its text, is not one. An id ending in a letter is that task,
+    not the one without it: `004 T303a` is not `004 T303`."""
+    tasks = "\n".join([
+        "- [ ] T001 [W] On the seat.",
+        "- [ ] T002 [P] [W] [L9] Probe P3.",
+        "- [ ] T003 [US6] Workstation: probes 14 and 15.",
+        "- [ ] T004 Workstation, read only: the record.",
+        "- [ ] T085a [W] The harness.",
+        "- [x] T005 [W] Done already.",
+        "- [ ] T006 [P] [K] A live probe.",
+        "- [ ] T007 Run it on the workstation later.",
+        "- [ ] T008 [WK] Not the tag.",
+    ])
+
+    assert seat_tasks_in(tasks) == ["T001", "T002", "T003", "T004", "T085a"]
+    assert qualified_tasks("004 T303a and 004 T303b, then 005 T085a; 004 T303") == {
+        ("004", "T303a"), ("004", "T303b"), ("005", "T085a"), ("004", "T303"),
+    }
+    assert qualified_tasks("004 T303ab") == set()
+
+
+def test_every_feature_with_an_open_seat_task_is_one_the_plan_is_held_to() -> None:
+    """Decision 166A: the pins read every feature package, so a seat task cannot drift out of
+    the plan as 004 T303 did while 004 was not among the packages read."""
+    features = sorted(path.parent.name for path in (REPO / "specs").glob("*/tasks.md"))
+
+    assert len(features) >= 15
+    assert [feature for feature in features if feature not in PACKAGES] == []
+    assert [package for package in PACKAGES if package not in features] == []
 
 
 def test_the_plan_says_what_allows_each_switch_and_names_every_probe(plan: str) -> None:
