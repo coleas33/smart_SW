@@ -475,8 +475,10 @@ evidence**."""
 
 def test_every_step_outside_step_4_that_presses_review_answers_the_panel(plan: str) -> None:
     """Step 4's box answers a Before this review panel for the steps under it; a step elsewhere
-    that presses Review says the owner's answer itself, and step 5.5 opens A resolved both
-    times, as step 4.1 does."""
+    that presses Review says the owner's answer itself, and step 5.5 opens A resolved, as step
+    4.1 does. *Changed 2026-10-31 on purpose (decision 175A; 004 T363):* step 5.5 kept 009
+    T082's "after" half only, so it opens A once, on the current build, where it opened it on
+    each of two builds."""
     flat = {
         number: re.sub(r"\s+", " ", step(plan, number)) for number in STEP_HEADING.findall(plan)
     }
@@ -490,7 +492,7 @@ def test_every_step_outside_step_4_that_presses_review_answers_the_panel(plan: s
     for number in outside:
         assert "decision 14A" in flat[number], number
         assert "never resolve or unsuppress a part" in flat[number], number
-    assert flat["5.5"].count("open A resolved and part J") == 2
+    assert flat["5.5"].count("open A resolved and part J") == 1
     assert [
         match.group(0)
         for match in PRESS_REVIEW.finditer(
@@ -613,11 +615,54 @@ def test_no_value_of_a_named_dimension_goes_into_the_findings_document(plan: str
 
 def test_the_plan_never_lets_the_update_script_pull(plan: str) -> None:
     """Every run of the script in the plan builds what is checked out: the pull is step 1.3's own
-    line, before it, so the script that runs is the one that arrived."""
+    line, before it, so the script that runs is the one that arrived. *Changed 2026-10-31 on
+    purpose (decision 175A; 004 T363):* step 5.5's four runs, to the older build and back, left
+    with its "before" half, so three runs remain: step 1.3's two spellings and the way back to the
+    build the seat had."""
     runs = re.findall(r"\.\\extractor\\tools\\update-workstation\.ps1[^`\n]*", plan)
 
-    assert len(runs) >= 6
+    assert len(runs) >= 3
     assert [run for run in runs if " -NoPull" not in run] == []
+
+
+def test_no_document_of_the_sitting_asks_for_a_gemini_key(plan: str, results: str) -> None:
+    """Decision 94A defers Gemini's own behaviour and 004 T361 closed 008 T106, the live Gemini
+    test, under it (decision 173A), so no step runs that test and no document of the sitting asks
+    for a Gemini key or names `GEMINI_API_KEY` (004 T363)."""
+    documents = {
+        "plan": plan,
+        "results": results,
+        "handover": HANDOVER.read_text(encoding="utf-8"),
+        "runbook": RUNBOOK.read_text(encoding="utf-8"),
+    }
+    tasks = (REPO / "specs" / "008-checks-first-review" / "tasks.md").read_text(encoding="utf-8")
+    [t106] = [line for line in tasks.splitlines() if re.match(r"- \[[ x]\] T106 ", line)]
+
+    for name, text in documents.items():
+        for words in ("GEMINI_API_KEY", "test_gemini_live_function_response", "Gemini key"):
+            assert words not in text, (name, words)
+    assert ("008", "T106") not in tagged_tasks(plan)
+    assert ("008", "T106") not in rowed_tasks(results)
+    assert t106.startswith("- [x] T106 ") and "94A" in t106
+
+
+def test_step_5_5_is_009_t082s_after_half_on_the_current_build(plan: str) -> None:
+    """Decision 175A drops 009 T082's "before" half, a one-hour swap to an older build to show a
+    bug already fixed, and keeps its "after" half: on the build of step 1.4, Show in SOLIDWORKS
+    on one of A's findings selects A's own entity (004 T363). Nothing checks out another commit,
+    builds without the gates, or copies the settings aside for a way back."""
+    show = re.sub(r"\s+", " ", step(plan, "5.5"))
+    handover = HANDOVER.read_text(encoding="utf-8")
+    tasks = (REPO / "specs" / "009-engineer-workspace" / "tasks.md").read_text(encoding="utf-8")
+    [t082] = [line for line in tasks.splitlines() if line.startswith("- [ ] T082 ")]
+
+    assert "Show in SOLIDWORKS selects A's own entity" in show
+    for words in ("git checkout", "-SkipTests", "settings.json.before-5.5", "update-workstation"):
+        assert words not in show, words
+    for text in (plan, handover):
+        assert "69fbb4a" not in text
+        assert "settings.json.before-5.5" not in text
+    assert "175A" in t082
 
 
 def test_the_update_script_fetches_before_it_decides_not_to_pull() -> None:
@@ -1341,8 +1386,10 @@ def test_each_decision_18a_item_has_its_one_place(plan: str, results: str) -> No
 
 def test_the_remodel_probes_are_the_last_step_before_the_handoff(plan: str) -> None:
     """A "Cannot reorder" box can hold SOLIDWORKS, and PROBE-1 asks for one, so step 5.6 comes
-    after everything but the handoff - after 5.5's return to the current build - with no
-    document open, and 5.5 no longer calls itself last."""
+    after everything but the handoff, with no document open, and 5.5 no longer calls itself
+    last. *Changed 2026-10-31 on purpose (decision 175A; 004 T363):* step 5.5 no longer builds
+    an older commit, so step 5.6 waits on no return to the current build and is never `blocked
+    by 5.5`."""
     numbers = STEP_HEADING.findall(plan)
     headings = re.findall(r"^### (5\.[56]) (.*)$", plan, re.MULTILINE)
     probes = re.sub(r"\s+", " ", step(plan, "5.6"))
@@ -1350,7 +1397,7 @@ def test_the_remodel_probes_are_the_last_step_before_the_handoff(plan: str) -> N
     assert numbers[numbers.index("6.0") - 1] == "5.6"
     assert dict(headings)["5.6"].startswith("The re-modeler probes, with no document open: last ")
     assert "last" not in dict(headings)["5.5"]
-    assert "blocked by 5.5" in probes
+    assert "blocked by 5.5" not in plan
     assert "Window > Close All, **Don't Save**, so that no document is open" in probes
     assert "--allow-start" not in probes and "--keep-part" not in probes
 
@@ -2001,6 +2048,10 @@ DECISION_144A_IN_STEP_5 = 5
 """Step 5.3's item B for 011 T171 (decision 144A, 2026-10-19): the box's Open copy, then Start,
 and the run's four `seat=` lines, 5 minutes."""
 
+GEMINI_TEST_IN_STEP_5 = 5
+"""Step 5.4's live Gemini test (008 T106), part of step 5.1 to 5.4's first 35 minutes, withdrawn
+when decision 173A closed 008 T106 under decision 94A (004 T363), 5 minutes."""
+
 
 def minutes(estimate: str) -> int:
     """`3 h 55 min`, `3 h` or `50 min` as minutes."""
@@ -2025,7 +2076,9 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     smoke checks at step 4.11, reading step 4.1's review without another paid review. Decision
     144A (011 T171, 2026-10-19, edited deliberately) adds `DECISION_144A_IN_STEP_5` to step 5.1
     to 5.4's row, for the pane seat's gate at step 5.3's item B, which the decision 18A range
-    leaves out too."""
+    leaves out too. *Changed 2026-10-31 on purpose (004 T363):* step 5.1 to 5.4's row loses
+    `GEMINI_TEST_IN_STEP_5` with step 5.4's Gemini test (decisions 94A and 173A), and step 5.5's
+    row falls from an hour to 15 minutes with 009 T082's "before" half (decision 175A)."""
     section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
     rows = re.findall(r"^\| ([^|]+) \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
     [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
@@ -2033,10 +2086,11 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
 
     assert len(rows) == 8
     assert abs(sum(estimates.values()) - (int(hours) * 60 + int(mins or 0))) <= 7
-    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 90
+    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 85
+    assert estimates["5.5"] == 15
     decision_18a_in_step_5 = (
         estimates["5.1 to 5.4"]
-        - 35
+        - (35 - GEMINI_TEST_IN_STEP_5)
         - FEATURE_013_IN_STEP_5
         - RETEST_2026_09_28_IN_STEP_5
         - DECISION_144A_IN_STEP_5
