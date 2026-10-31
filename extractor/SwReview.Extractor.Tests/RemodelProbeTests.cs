@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using SwReview.Extractor.Rms;
 using SwReview.Extractor.Sw;
 using SwReview.Extractor.Tests.Fakes;
@@ -234,64 +236,86 @@ public class RemodelProbeTests
         Assert.Equal(RemodelProbeRunner.NotImplementedNote, record.RawResult[RemodelProbeRunner.NoteKey]);
     }
 
+    // A thrown body's row carries the exception's type and HRESULT, never its message: a
+    // SOLIDWORKS or file-system message may name a path with the user's name in it, and a
+    // ledger from the probe's own throwaway part may be committed (owner decision 171A; 004
+    // T334, research R27.3). Changed on purpose from T171's "the host's own words": the host's
+    // own exception, not the wrapper's, still reaches the ledger - as its type.
+
     [Fact]
     public void Run_ABodyThatThrows_RecordsUnresolvedAndNeverVerified()
     {
-        var executors = new Dictionary<string, RemodelProbeExecutor>
-        {
-            ["PROBE-3"] = _ => throw new InvalidOperationException("ReorderFeature raised a modal"),
-        };
+        var error = new InvalidOperationException("ReorderFeature raised a modal");
+        var executors = new Dictionary<string, RemodelProbeExecutor> { ["PROBE-3"] = _ => throw error };
 
         RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-3", Context(), executors);
 
         Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict);
         Assert.NotEqual(RemodelProbeVerdict.Verified, record.Verdict);
-        Assert.Equal("ReorderFeature raised a modal", record.RawResult[RemodelProbeRunner.ErrorKey]);
+        Assert.Equal($"InvalidOperationException 0x{error.HResult:X8}", record.RawResult[RemodelProbeRunner.ErrorKey]);
     }
 
     [Fact]
-    public void Run_ABodyWhoseCallCameBackWrappedInATask_RecordsTheHostsOwnMessage()
+    public void Run_ABodyWhoseCallCameBackWrappedInATask_RecordsTheHostsOwnExceptionNotTheWrapper()
     {
-        // A call made through a task arrives as an AggregateException whose own message, "One or
-        // more errors occurred.", says nothing; the ledger keeps the host's own words (013 T137,
-        // 004 T171).
+        // A call made through a task arrives as an AggregateException, which says nothing of what
+        // failed; the ledger records the host's own exception (013 T137, 004 T171), as its type.
         var executors = new Dictionary<string, RemodelProbeExecutor>
         {
-            ["PROBE-1"] = _ => throw new AggregateException(new InvalidOperationException("the host's own words")),
+            ["PROBE-1"] = _ => throw new AggregateException(new COMException("the host's own words", unchecked((int)0x80004005))),
         };
 
         RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-1", Context(), executors);
 
         Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict);
-        Assert.Equal("the host's own words", record.RawResult[RemodelProbeRunner.ErrorKey]);
+        Assert.Equal("COMException 0x80004005", record.RawResult[RemodelProbeRunner.ErrorKey]);
     }
 
     [Fact]
-    public void Run_ABodyWhoseWrappedCallsBothThrew_RecordsEveryHostMessageInOrder()
+    public void Run_ABodyWhoseWrappedCallsBothThrew_RecordsEveryHostExceptionInOrder()
     {
         var executors = new Dictionary<string, RemodelProbeExecutor>
         {
             ["PROBE-1"] = _ => throw new AggregateException(
-                new InvalidOperationException("first"),
-                new AggregateException(new InvalidOperationException("second"))),
+                new COMException("first", unchecked((int)0x80004005)),
+                new AggregateException(new COMException("second", unchecked((int)0x8001010A)))),
         };
 
         RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-1", Context(), executors);
 
-        Assert.Equal("first; second", record.RawResult[RemodelProbeRunner.ErrorKey]);
+        Assert.Equal("COMException 0x80004005; COMException 0x8001010A", record.RawResult[RemodelProbeRunner.ErrorKey]);
     }
 
     [Fact]
-    public void Run_AnAggregateWithNoInnerException_KeepsItsOwnMessage()
+    public void Run_AnAggregateWithNoInnerException_RecordsItsOwnType()
     {
-        // Nothing inside to prefer: its own message is the only words there are, never an empty string.
+        // Nothing inside to prefer: its own type is what there is, never an empty string.
         var error = new AggregateException("the wrapper's only words", Array.Empty<Exception>());
         var executors = new Dictionary<string, RemodelProbeExecutor> { ["PROBE-1"] = _ => throw error };
 
         RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-1", Context(), executors);
 
-        Assert.Equal(error.Message, record.RawResult[RemodelProbeRunner.ErrorKey]);
-        Assert.False(string.IsNullOrEmpty(record.RawResult[RemodelProbeRunner.ErrorKey]));
+        Assert.Equal($"AggregateException 0x{error.HResult:X8}", record.RawResult[RemodelProbeRunner.ErrorKey]);
+    }
+
+    [Fact]
+    public void Run_AHostThatThrowsWithAPathInItsMessage_TheLedgerShowsItsTypeAndHresultOnly()
+    {
+        const string fictionalPath = @"C:\Users\FICT-engineer\Designs\FICT-bracket.SLDPRT";
+        var host = new FakeRemodelProbeHost
+        {
+            ReopenPartImpl = _ => throw new COMException($"Could not open '{fictionalPath}'.", unchecked((int)0x80004005)),
+        };
+        var part = new RemodelProbePart(new object(), @"C:\out\probe-part\remodel-probe.SLDPRT", Array.Empty<object>());
+        var context = new RemodelProbeContext(part, new SwGate(), "32.5.0.48", host, @"C:\out");
+
+        RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-12", context);
+        string yaml = RemodelProbeLedger.Render("32.5.0.48", new[] { record }, Fixed);
+
+        Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict);
+        Assert.Equal("COMException 0x80004005", record.RawResult[RemodelProbeRunner.ErrorKey]);
+        Assert.DoesNotContain("FICT-", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Could not open", yaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -524,6 +548,406 @@ public class RemodelProbeTests
                 Directory.Delete(root, recursive: true);
             }
         }
+    }
+
+    // ---- the ledger rewritten as each probe finishes (004 T332, decision 166A) -----------
+
+    private static readonly DateTimeOffset Fixed = new DateTimeOffset(2026, 10, 31, 12, 0, 0, TimeSpan.Zero);
+
+    private static IReadOnlyList<string> RowIds(string yaml) =>
+        Regex.Matches(yaml, "^  - probe_id: \"([^\"]+)\"\r?$", RegexOptions.Multiline)
+            .Cast<Match>().Select(match => match.Groups[1].Value).ToList();
+
+    private static IReadOnlyList<string> RequestedIds(string yaml)
+    {
+        Match block = Regex.Match(yaml, "^requested:\r?\n((?:  - \"[^\"]+\"\r?\n)*)", RegexOptions.Multiline);
+        Assert.True(block.Success, "no requested: list in\n" + yaml);
+        return Regex.Matches(block.Groups[1].Value, "\"([^\"]+)\"")
+            .Cast<Match>().Select(match => match.Groups[1].Value).ToList();
+    }
+
+    [Fact]
+    public void Ledger_Render_ListsTheRequestedProbesBeforeTheRows()
+    {
+        string yaml = RemodelProbeLedger.Render(
+            "32.5.0.48", new[] { SampleRecord("PROBE-1") }, Fixed, requested: new[] { "PROBE-1", "PROBE-3" });
+
+        Assert.Contains(
+            "generated_at: \"2026-10-31T12:00:00.0000000+00:00\"\nrequested:\n  - \"PROBE-1\"\n  - \"PROBE-3\"\nprobes:\n",
+            yaml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Ledger_Render_WithNoRequestedListGiven_RequestsTheRowsOwnProbes()
+    {
+        string yaml = RemodelProbeLedger.Render(
+            "32.5.0.48", new[] { SampleRecord("PROBE-1"), SampleRecord("PROBE-4") }, Fixed);
+
+        Assert.Equal(new[] { "PROBE-1", "PROBE-4" }, RequestedIds(yaml));
+    }
+
+    [Fact]
+    public void Ledger_Render_NothingRequestedAndNothingRun_WritesTwoEmptyLists()
+    {
+        string yaml = RemodelProbeLedger.Render("32.5.0.48", Array.Empty<RemodelProbeRecord>(), Fixed);
+
+        Assert.Contains("requested: []\nprobes: []\n", yaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RunAll_WithTheRecorder_AFakeHostThatThrowsInProbe3_HasLeftTwoRowsAndTheRequestedList()
+    {
+        // What a run that hangs or is killed inside the third probe leaves on disk: the file as it
+        // stands while that probe's host call runs. The host then throws, and the run goes on.
+        string root = Path.Combine(Path.GetTempPath(), "swreview-probe-tests", Guid.NewGuid().ToString("N"));
+        string[] requested = { "PROBE-2", "PROBE-6", "PROBE-3", "PROBE-21" };
+        string ledger = RemodelProbeLedger.FilePath(root, "32.5.0.48");
+        var logged = new List<string>();
+        string? whileProbe3Ran = null;
+        int loggedWhileProbe3Ran = -1;
+        var host = new FakeRemodelProbeHost
+        {
+            ReorderFeatureImpl = (part, move, target, location) =>
+            {
+                whileProbe3Ran = File.Exists(ledger) ? File.ReadAllText(ledger) : null;
+                loggedWhileProbe3Ran = logged.Count;
+                throw new InvalidOperationException("the fake host stops here");
+            },
+        };
+        var part = new RemodelProbePart(new object(), Path.Combine(root, "probe-part", "remodel-probe.SLDPRT"), Array.Empty<object>());
+        var context = new RemodelProbeContext(part, new SwGate(), "32.5.0.48", host, root);
+
+        try
+        {
+            IReadOnlyList<RemodelProbeRecord> records = RemodelProbeRunner.RunAll(
+                requested, context, finished: RemodelProbeLedger.Recorder(root, "32.5.0.48", requested, logged.Add));
+
+            Assert.NotNull(whileProbe3Ran);
+            Assert.Equal(new[] { "PROBE-2", "PROBE-6" }, RowIds(whileProbe3Ran!));
+            Assert.Equal(requested, RequestedIds(whileProbe3Ran!));
+            Assert.Equal(2, loggedWhileProbe3Ran);
+
+            string final = File.ReadAllText(ledger);
+            Assert.Equal(requested, RowIds(final));
+            Assert.Equal(requested, RequestedIds(final));
+            Assert.Equal(RemodelProbeVerdict.Unresolved, records[2].Verdict);
+            Assert.Equal(
+                requested.Select((id, index) => $"finished {id}: {records[index].Verdict.CliName()} ({index + 1} of 4)"),
+                logged);
+            Assert.Equal(new[] { Path.GetFileName(ledger) }, Directory.GetFiles(Path.GetDirectoryName(ledger)!).Select(Path.GetFileName));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Ledger_Write_ReplacesTheWholeFileAndLeavesNothingBesideIt()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "swreview-probe-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            RemodelProbeLedger.Write(root, "32.5.0.48", new[] { SampleRecord("PROBE-1"), SampleRecord("PROBE-2") });
+            string path = RemodelProbeLedger.Write(
+                root, "32.5.0.48", new[] { SampleRecord("PROBE-4") }, requested: new[] { "PROBE-4", "PROBE-12" });
+
+            string text = File.ReadAllText(path);
+            Assert.Equal(new[] { "PROBE-4" }, RowIds(text));
+            Assert.Equal(new[] { "PROBE-4", "PROBE-12" }, RequestedIds(text));
+            Assert.Equal(new[] { path }, Directory.GetFiles(Path.GetDirectoryName(path)!));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    // ---- the review round of the ledger's rewrite (004 T342, decision 166A; research R27.9) ----
+
+    private static void InRunFolder(Action<string> test)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "swreview-probe-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            test(root);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    private static RemodelProbeContext RunContext(string root, FakeRemodelProbeHost host) => new RemodelProbeContext(
+        new RemodelProbePart(new object(), Path.Combine(root, "probe-part", "remodel-probe.SLDPRT"), Array.Empty<object>()),
+        new SwGate(),
+        "32.5.0.48",
+        host,
+        root);
+
+    [Theory]
+    [InlineData("the ledger", "IOException 0x")]
+    [InlineData("the temporary file", "IOException 0x")]
+    [InlineData("a read-only temporary file", "UnauthorizedAccessException 0x80070005")]
+    public void RunAll_WithTheRecorder_AFileHeldAcrossARewrite_EveryProbeStillRunsAndTheLastRewriteHasEveryRow(
+        string held, string failure)
+    {
+        // A reader that holds the ledger without sharing its delete (Get-Content, Python's open(),
+        // a sync client) fails File.Replace; one that holds the temporary file fails the write;
+        // a read-only temporary file, left by a killed run, refuses the write as access denied.
+        // Each is a rewrite that fails: it is logged, and the run goes on (review finding F1; the
+        // third round's F4: the access-denied branch of the catch). *Changed on purpose by 004
+        // T383*: the third case, and the expected exception's type given per case.
+        InRunFolder(root =>
+        {
+            string[] requested = { "PROBE-4", "PROBE-6", "PROBE-3", "PROBE-21" };
+            string ledger = RemodelProbeLedger.FilePath(root, "32.5.0.48");
+            string temporary = ledger + ".tmp";
+            var logged = new List<string>();
+            Action? release = null;
+            var host = new FakeRemodelProbeHost
+            {
+                GetEquationManagerImpl = _ =>
+                {
+                    if (held == "a read-only temporary file")
+                    {
+                        File.WriteAllText(temporary, "a killed run's rewrite");
+                        File.SetAttributes(temporary, FileAttributes.ReadOnly);
+                        release = () => File.SetAttributes(temporary, FileAttributes.Normal);
+                    }
+                    else
+                    {
+                        FileStream hold = held == "the ledger"
+                            ? new FileStream(ledger, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)
+                            : new FileStream(temporary, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                        release = hold.Dispose;
+                    }
+
+                    return new FakeEquationManager();
+                },
+                ReorderFeatureImpl = (part, move, target, location) =>
+                {
+                    release?.Invoke();
+                    release = null;
+                    return true;
+                },
+            };
+            IReadOnlyList<RemodelProbeRecord>? records = null;
+
+            try
+            {
+                Exception? thrown = Record.Exception(() => records = RemodelProbeRunner.RunAll(
+                    requested, RunContext(root, host), finished: RemodelProbeLedger.Recorder(root, "32.5.0.48", requested, logged.Add)));
+
+                Assert.Null(thrown);
+                Assert.Equal(requested, records!.Select(record => record.ProbeId));
+                Assert.Equal(requested, RowIds(File.ReadAllText(ledger)));
+                string[] failures = logged.Where(line => line.StartsWith("could not rewrite ", StringComparison.Ordinal)).ToArray();
+                string line = Assert.Single(failures);
+                Assert.StartsWith($"could not rewrite remodel-32.5.0.48.yaml after PROBE-6 ({failure}", line, StringComparison.Ordinal);
+                Assert.DoesNotContain(root, line, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(new[] { Path.GetFileName(ledger) }, Directory.GetFiles(Path.GetDirectoryName(ledger)!).Select(Path.GetFileName));
+            }
+            finally
+            {
+                release?.Invoke();
+            }
+        });
+    }
+
+    [Fact]
+    public void Recorder_StartsThisRunsLedger_AnEarlierRunsLedgerNeverStandsForIt()
+    {
+        // A run that hangs in its first probe, rerun into the same folder, must not leave the
+        // earlier run's finished rows standing for it (review finding F2): the recorder writes
+        // this run's requested list and no rows before the first probe starts.
+        InRunFolder(root =>
+        {
+            RemodelProbeLedger.Write(root, "32.5.0.48", new[] { SampleRecord("PROBE-1"), SampleRecord("PROBE-2") });
+            string[] requested = { "PROBE-3", "PROBE-6" };
+            string ledger = RemodelProbeLedger.FilePath(root, "32.5.0.48");
+            var logged = new List<string>();
+            string? whileTheFirstRan = null;
+            int loggedWhileTheFirstRan = -1;
+            var host = new FakeRemodelProbeHost
+            {
+                ReorderFeatureImpl = (part, move, target, location) =>
+                {
+                    whileTheFirstRan ??= File.ReadAllText(ledger);
+                    loggedWhileTheFirstRan = loggedWhileTheFirstRan < 0 ? logged.Count : loggedWhileTheFirstRan;
+                    return true;
+                },
+            };
+
+            RemodelProbeRunner.RunAll(
+                requested, RunContext(root, host), finished: RemodelProbeLedger.Recorder(root, "32.5.0.48", requested, logged.Add));
+
+            Assert.NotNull(whileTheFirstRan);
+            Assert.Empty(RowIds(whileTheFirstRan!));
+            Assert.Equal(requested, RequestedIds(whileTheFirstRan!));
+            Assert.Contains("probes: []\n", whileTheFirstRan!, StringComparison.Ordinal);
+            Assert.Equal(0, loggedWhileTheFirstRan);
+        });
+    }
+
+    [Fact]
+    public void Recorder_ALedgerThatCannotBeStarted_ThrowsBeforeAnyProbeRuns()
+    {
+        // Where the ledger cannot even be started, an earlier run's could stand for this one, so
+        // the run is refused before its part is built (review finding F2).
+        InRunFolder(root =>
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, RemodelProbeLedger.DirectoryName), "a file where the folder goes");
+
+            Assert.Throws<IOException>(() => RemodelProbeLedger.Recorder(root, "32.5.0.48", new[] { "PROBE-3" }, _ => { }));
+        });
+    }
+
+    [Fact]
+    public void Ledger_Write_OverALeftoverTemporaryFile_WritesTheLedgerAndLeavesNothingBesideIt()
+    {
+        // A run killed between the temporary file's write and the replace leaves the temporary
+        // file; the next write takes it over (review finding F6).
+        InRunFolder(root =>
+        {
+            string ledger = RemodelProbeLedger.FilePath(root, "32.5.0.48");
+            Directory.CreateDirectory(Path.GetDirectoryName(ledger)!);
+            File.WriteAllText(ledger + ".tmp", "half of an earlier ledger");
+
+            RemodelProbeLedger.Write(root, "32.5.0.48", new[] { SampleRecord("PROBE-4") });
+
+            Assert.Equal(new[] { "PROBE-4" }, RowIds(File.ReadAllText(ledger)));
+            Assert.Equal(new[] { ledger }, Directory.GetFiles(Path.GetDirectoryName(ledger)!));
+        });
+    }
+
+    [Fact]
+    public void RunAll_ABodyThatThrows_HandsItsExceptionToThrewAndOnlyItsTypeToTheLedger()
+    {
+        // 171A keeps the message out of the ledger; the console hands it to remodel-probe.log, which
+        // is never committed, so a seat failure can still be read - 148A's "whether it names
+        // OpenDoc7" among it (review finding F3).
+        const string fictionalPath = @"C:\Users\FICT-engineer\Designs\FICT-bracket.SLDPRT";
+        var error = new COMException($"OpenDoc7 could not open '{fictionalPath}'.", unchecked((int)0x80004005));
+        var host = new FakeRemodelProbeHost { ReopenPartImpl = _ => throw error };
+        var threw = new List<(string Probe, Exception Error)>();
+
+        IReadOnlyList<RemodelProbeRecord> records = RemodelProbeRunner.RunAll(
+            new[] { "PROBE-12", "PROBE-6" }, RunContext(@"C:\out", host), threw: (probe, thrown) => threw.Add((probe, thrown)));
+
+        var only = Assert.Single(threw);
+        Assert.Equal("PROBE-12", only.Probe);
+        Assert.Same(error, only.Error);
+        Assert.Equal("COMException 0x80004005", records[0].RawResult[RemodelProbeRunner.ErrorKey]);
+    }
+
+    // ---- the golden ledger the Python reader is pinned to (004 T336, decision 166A) -------
+
+    /// <summary>
+    /// <c>reviewer/tests/fixtures/remodel/ledger/remodel-32.5.0.yaml</c>: what <see cref="RemodelProbeLedger.Render"/>
+    /// writes for a fictional run of the whole catalog that stopped in its last probe, PROBE-21 -
+    /// every definition's own text, made-up readings. <c>swreview remodel ledger</c>'s tests parse
+    /// the same file, so the renderer and the reader cannot drift apart. "32.5.0" is the spelling
+    /// <c>ISldWorks.RevisionNumber</c> answers (<c>SwSession.ReadVersion</c>).
+    /// </summary>
+    internal static string GoldenLedgerPath() => Path.Combine(
+        RemodelLengthUnitsTests.RepositoryRoot(), "reviewer", "tests", "fixtures", "remodel", "ledger", "remodel-32.5.0.yaml");
+
+    private static RemodelProbeRecord GoldenRow(
+        string id, RemodelProbeVerdict verdict, long durationMs, string[] interopMembers, params (string Key, string Value)[] raw)
+    {
+        RemodelProbeDefinition definition = RemodelProbeCatalog.Get(id);
+        return new RemodelProbeRecord(
+            id,
+            definition.Question,
+            definition.Method,
+            definition.Blocking,
+            definition.Fallback,
+            verdict,
+            raw.ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal),
+            "32.5.0",
+            durationMs,
+            interopMembers);
+    }
+
+    private static IReadOnlyList<RemodelProbeRecord> GoldenRows()
+    {
+        string[] none = Array.Empty<string>();
+        return new[]
+        {
+            GoldenRow("PROBE-1", RemodelProbeVerdict.Verified, 10021, new[] { "ReorderFeature", "set_CommandInProgress" },
+                ("blocked_with_flag_clear", "True"), ("blocked_with_flag_set", "False"),
+                ("returned_with_flag_clear", "n/a (blocked)"), ("returned_with_flag_set", "False"),
+                ("reason", RemodelProbe1Logic.Decide(true, false).Reason)),
+            GoldenRow("PROBE-2", RemodelProbeVerdict.Verified, 41, new[] { "GetCount", "get_Equation", "get_Value" },
+                ("equation_count", "1"), ("equation_text", "\"w\" = 120"), ("equation_value", "120"),
+                ("unit", "document_units_mm"), ("reason", "get_Value returned 120: the equation number is in the document's length unit, matching R3.6.")),
+            GoldenRow("PROBE-3", RemodelProbeVerdict.Verified, 230, new[] { "ReorderFeature", "GetName" },
+                ("legal_returned", "True"), ("legal_order_unchanged", "True"), ("illegal_returned", "False"),
+                ("illegal_order_unchanged", "True"), ("tree_before", "Boss-Extrude1,Cut-Extrude1,Fillet1,Fillet1,Shell1"),
+                ("tree_after_illegal", "Boss-Extrude1,Cut-Extrude1,Fillet1,Fillet1,Shell1"),
+                ("reason", RemodelProbe3Logic.Decide(true, true, false, true).Reason)),
+            GoldenRow("PROBE-4", RemodelProbeVerdict.Verified, 95, new[] { "InsertFeatureTreeFolder2", "Select2" },
+                ("contiguous_folder_built", "True"), ("non_contiguous_folder_built", "False"),
+                ("reason", RemodelProbe4Logic.Decide(true, false).Reason)),
+            GoldenRow("PROBE-5", RemodelProbeVerdict.Unresolved, 310, new[] { "ReorderFeature", "MoveToFolder", "MakeSubFeature" },
+                ("reorder_to_folder", "True"), ("move_to_folder", "error: COMException 0x80004005"), ("make_sub_feature", "False"),
+                ("reason", "1 of 3 calls threw; see the per-call entries above.")),
+            GoldenRow("PROBE-6", RemodelProbeVerdict.Verified, 17, new[] { "Add3", "GetCount" },
+                ("count_before", "1"), ("add3_result", "1"), ("count_after", "2"),
+                ("reason", RemodelProbe6Logic.Decide(1, 1, 2).Reason)),
+            GoldenRow("PROBE-7", RemodelProbeVerdict.Verified, 22, new[] { "Add3", "set_Equation", "get_Equation" },
+                ("before", "\"probe7check\" = 1"), ("after", "\"probe7check\" = 99"),
+                ("reason", "set_Equation's edit is reflected on the next read.")),
+            GoldenRow("PROBE-8", RemodelProbeVerdict.Verified, 4120, new[] { "CreateMassProperty2", "Recalculate" },
+                ("accuracy_level", "default"), ("measurement_scope", "whole_part"), ("box_status", "measured"),
+                ("box_volume_rel_error", "3.000000E-012"), ("box_area_rel_error", "4.000000E-012"),
+                ("cylinder_status", "measured"), ("cylinder_volume_rel_error", "6.000000E-011"),
+                ("reason", "both default whole-part shapes measured cleanly and each override experiment was observed; only the plain readings supply attained calibration errors.")),
+            GoldenRow("PROBE-9", RemodelProbeVerdict.Verified, 160, new[] { "SetSuppression2", "ForceRebuild3" },
+                ("suppress_returned", "True"), ("whats_wrong_count", "2"), ("whats_wrong_element_kind", "feature_names"),
+                ("reason", "GetWhatsWrong's Features array held feature_names on this build.")),
+            GoldenRow("PROBE-10", RemodelProbeVerdict.Verified, 33, new[] { "GetName", "set_Name" },
+                ("marker_before", "False"), ("marker_after", "False"), ("marker_name_after", "(none)"),
+                ("reason", "no ___EndTag___ marker appeared on 2024, before or after the rename.")),
+            GoldenRow("PROBE-11", RemodelProbeVerdict.Verified, 12, new[] { "GetTypeName2" },
+                ("type[Comments]", "CommentsFolder"), ("type[Front Plane]", "RefPlane"), ("type[Origin]", "OriginProfileFeature"),
+                ("type[Boss-Extrude1]", "Extrusion"), ("type[Cut-Extrude1]", "Cut"), ("type[Fillet1]", "Fillet"),
+                ("type[Shell1]", "Shell"), ("type[Folder1]", "FtrFolder"), ("type[FICT-Feature1]", "FictProbeType"),
+                ("reason", "every feature in the tree answered GetTypeName2; compare the census above against "
+                    + "reviewer/src/swreview/checks/rms_types.yaml by hand - that table lives outside this build.")),
+            GoldenRow("PROBE-12", RemodelProbeVerdict.Verified, 1880, new[] { "ICustomPropertyManager.Add3", "ISldWorks.OpenDoc7" },
+                ("add_result", "0"), ("saved", "True"), ("found_after_reopen", "True"),
+                ("value_after_reopen", "verify-me"), ("resolved_value_after_reopen", "verify-me"),
+                ("reason", RemodelProbe12Logic.Decide(true, true, "verify-me", "verify-me").Reason)),
+            GoldenRow("PROBE-13", RemodelProbeVerdict.Refuted, 8, none,
+                ("file_copy_error", "IOException 0x80070020"), ("file_copy_succeeded", "False"), ("fallback_succeeded", "True"),
+                ("reason", RemodelProbe13Logic.Decide(false, true).Reason)),
+            GoldenRow("PROBE-20", RemodelProbeVerdict.Unresolved, 5, none,
+                ("error", "COMException 0x80004005")),
+        };
+    }
+
+    [Fact]
+    public void Ledger_Render_WritesTheGoldenLedgerTheReaderIsPinnedTo()
+    {
+        string rendered = RemodelProbeLedger.Render(
+            "32.5.0", GoldenRows(), Fixed, requested: RemodelProbeCatalog.AllIds);
+
+        // A checkout may turn the file's line endings to CRLF; what is pinned is the text.
+        string golden = File.ReadAllText(GoldenLedgerPath()).Replace("\r\n", "\n");
+        Assert.Equal(golden, rendered);
     }
 
     // ---- log lines -----------------------------------------------------------------

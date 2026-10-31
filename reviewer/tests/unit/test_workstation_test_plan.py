@@ -63,6 +63,7 @@ from swreview.report.session import load_session
 from swreview.report.summary import load_words
 from swreview.tools.checks_interference import groups_of
 from tests.support.console import plain_one_line
+from tests.support.remodel_ledger import rendered_ledger
 from tests.support.seat_tasks import (
     PACKAGES,
     REPO,
@@ -1426,10 +1427,14 @@ def test_a_message_box_is_answered_only_after_probe_1s_watchdog_has_timed_both_t
 
 
 def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
-    """The run refuses while a document is open, writes its ledger and its log only when it
-    ends (so a run stopped with Ctrl+C leaves neither, as step 5.6 says), and ends with the
-    count line and one BLOCKING line per blocking probe not verified; and it turns off the three
-    options step 5.6 notes before the runs and checks after."""
+    """The run refuses while a document is open, starts its ledger before the part is built,
+    rewrites it as each probe finishes and puts each log line on disk as it is written (004 T330,
+    T332 and T342, decision 166A: a run stopped with Ctrl+C keeps its log and every finished
+    probe's row, and an earlier run's ledger never stands for it), logs a thrown probe's exception
+    to the log alone (T342: the ledger keeps its type only, 171A), and ends with the count line
+    and one BLOCKING line per blocking probe not verified; and it turns off the three options step
+    5.6 notes before the runs and checks after. *Changed on purpose by 004 T342 (review findings
+    F2 and F3)*: the recorder is made before the toggles, no longer inside `RunAll`'s call."""
     program = (REPO / "extractor" / "SwReview.Extractor.Console" / "Program.cs").read_text(
         encoding="utf-8"
     )
@@ -1443,10 +1448,20 @@ def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
     probes = re.sub(r"\s+", " ", step(plan, "5.6"))
 
     assert run.index("host.AnyDocumentOpen()") < run.index("host.BuildPart(")
-    assert run.index("RemodelSystemToggles.Within(") < run.index("RemodelProbeLedger.Write(")
-    assert log.count("File.AppendAllText(") == 1
-    assert log.index("public void Dispose()") < log.index("File.AppendAllText(")
-    assert "only when it ends, so after Ctrl+C neither exists" in probes
+    assert (
+        run.index("RemodelProbe.AssertPartSavePath(")
+        < run.index("= RemodelProbeLedger.Recorder(")
+        < run.index("RemodelSystemToggles.Within(")
+        < run.index("host.BuildPart(")
+        < run.index("RemodelProbeRunner.RunAll(")
+        < run.index("finished: recorder,")
+        < run.index("threw: (probe, error) => log.WriteError(")
+        < run.index("host.ClosePart(")
+    )
+    assert "RemodelProbeLedger.Write(" not in run
+    write = log[log.index("public void Write(") : log.index("public void WriteError(")]
+    assert "File.AppendAllText(" not in log and "AutoFlush = true" in log
+    assert "FileShare.ReadWrite" in log and "ToFile(line)" in write
     fragments = [
         '"probes: {records.Count} run "',
         '"({Count(records, RemodelProbeVerdict.Verified)} verified, "',
@@ -1468,42 +1483,23 @@ def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
     assert "the three boxes are as item 1 noted" in probes
 
 
-def rendered_ledger(records: list[tuple[str, bool, str, dict[str, str]]]) -> str:
-    """A ledger in `RemodelProbeLedger.Render`'s shape (the test below pins the prefixes it
-    relies on against the C# source): `(probe id, blocking, verdict, raw_result)` per probe."""
-    lines = ['sw_version: "32.5.0.48"', 'generated_at: "2026-10-02T12:00:00.0000000+00:00"',
-             "probes:"]
-    for probe, blocking, verdict, raw in records:
-        lines += [
-            f'  - probe_id: "{probe}"',
-            '    question: "a question"',
-            '    method: "a method"',
-            f"    blocking: {'true' if blocking else 'false'}",
-            '    fallback: "a fallback"',
-            f"    verdict: {verdict}",
-            '    sw_version: "32.5.0.48"',
-            "    duration_ms: 12",
-            "    interop_members: []",
-        ]
-        if raw:
-            lines.append("    raw_result:")
-            lines += [f'      "{key}": "{value}"' for key, value in raw.items()]
-        else:
-            lines.append("    raw_result: {}")
-    return "\n".join(lines) + "\n"
-
-
 def test_the_fixture_ledger_has_the_shape_render_writes() -> None:
     """`Show-RemodelLedger` matches lines by their indentation and key, so the fixture's
     prefixes are the ones `RemodelProbeLedger.Render` appends, and the two raw_result keys it
-    prints are the runner's error key and the reason key every probe body files."""
+    prints are the runner's error key and the reason key every probe body files. *Changed on
+    purpose by 004 T332 (decision 166A)*: a top-level `requested:` list comes before `probes:`,
+    its items indented two spaces, so no `Show-RemodelLedger` pattern reads one."""
     ledger = (RMS / "RemodelProbe.cs").read_text(encoding="utf-8")
 
     for prefix in ('text.Append("  - probe_id: ")', 'text.Append("    blocking: ")',
                    'text.Append("    verdict: ")',
                    'text.Append("      ").Append(Quote(entry.Key)).Append(": ")',
+                   'AppendStringList(text, "requested", requested ?? ', '"  - "',
                    "Encoding.UTF8"):
         assert prefix in ledger, prefix
+    assert ledger.index('AppendStringList(text, "requested", ') < ledger.index(
+        'text.Append("probes:\\n")'
+    )
     assert 'public const string ErrorKey = "error";' in ledger
     assert [probe for probe, body in probe_bodies().items() if '["reason"]' not in body] == []
 

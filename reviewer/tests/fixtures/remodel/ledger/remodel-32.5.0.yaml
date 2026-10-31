@@ -1,0 +1,253 @@
+sw_version: "32.5.0"
+generated_at: "2026-10-31T12:00:00.0000000+00:00"
+requested:
+  - "PROBE-1"
+  - "PROBE-2"
+  - "PROBE-3"
+  - "PROBE-4"
+  - "PROBE-5"
+  - "PROBE-6"
+  - "PROBE-7"
+  - "PROBE-8"
+  - "PROBE-9"
+  - "PROBE-10"
+  - "PROBE-11"
+  - "PROBE-12"
+  - "PROBE-13"
+  - "PROBE-20"
+  - "PROBE-21"
+probes:
+  - probe_id: "PROBE-1"
+    question: "Does ISldWorks.CommandInProgress = true suppress the \"Cannot reorder\" message box?"
+    method: "Deliberately request an illegal reorder with the flag set and with it clear, watched from a watchdog thread; record whether the call returns or the STA thread blocks."
+    blocking: true
+    fallback: "A refuted PROBE-1 means stage 1 cannot run unattended: an illegal reorder hangs the add-in's STA thread, and Phases 5 and 8 stop until the owner decides."
+    verdict: verified
+    sw_version: "32.5.0"
+    duration_ms: 10021
+    interop_members:
+      - "ReorderFeature"
+      - "set_CommandInProgress"
+    raw_result:
+      "blocked_with_flag_clear": "True"
+      "blocked_with_flag_set": "False"
+      "returned_with_flag_clear": "n/a (blocked)"
+      "returned_with_flag_set": "False"
+      "reason": "the illegal reorder blocked with CommandInProgress clear and returned once it was set: the flag suppresses the message box."
+  - probe_id: "PROBE-2"
+    question: "Equation units: does \"w\" = 120 in a millimetre part produce 120 mm, and what unit does IEquationMgr.get_Value(i) return?"
+    method: "Read get_Equation(i) and get_Value(i) for the recipe's global; record IDimension.SystemValue (always metres) beside it. v1 reads no other IDimension member."
+    blocking: true
+    fallback: "A wrong answer silently builds a 120-metre part that rebuilds cleanly and passes every non-geometric check; the units sequence in the plan is inverted and globals do not ship until it is right."
+    verdict: verified
+    sw_version: "32.5.0"
+    duration_ms: 41
+    interop_members:
+      - "GetCount"
+      - "get_Equation"
+      - "get_Value"
+    raw_result:
+      "equation_count": "1"
+      "equation_text": "\"w\" = 120"
+      "equation_value": "120"
+      "unit": "document_units_mm"
+      "reason": "get_Value returned 120: the equation number is in the document's length unit, matching R3.6."
+  - probe_id: "PROBE-3"
+    question: "Does IModelDocExtension.ReorderFeature(f, anchor, swMoveAfter=3) move a feature on 2024, and return false rather than corrupting the tree when asked to move past a dependency?"
+    method: "Attempt a legal reorder and an illegal one past a dependency; record the return value and the tree order after each."
+    blocking: true
+    fallback: "A refuted PROBE-3 fails the whole reorganize-in-place premise; Phase 0's numbers decide what replaces it."
+    verdict: verified
+    sw_version: "32.5.0"
+    duration_ms: 230
+    interop_members:
+      - "ReorderFeature"
+      - "GetName"
+    raw_result:
+      "legal_returned": "True"
+      "legal_order_unchanged": "True"
+      "illegal_returned": "False"
+      "illegal_order_unchanged": "True"
+      "tree_before": "Boss-Extrude1,Cut-Extrude1,Fillet1,Fillet1,Shell1"
+      "tree_after_illegal": "Boss-Extrude1,Cut-Extrude1,Fillet1,Fillet1,Shell1"
+      "reason": "the benign reorder returned true and left the tree unchanged; the illegal one returned false and left the tree unchanged too."
+  - probe_id: "PROBE-4"
+    question: "Do feature folders require contiguous members on 2024?"
+    method: "Call IFeatureManager.InsertFeatureTreeFolder2(swFeatureTreeFolder_Containing=2) against the recipe's contiguous box-and-cut selection, then against a non-contiguous one; record what each did."
+    blocking: true
+    fallback: "A contiguity answer wrong in either direction re-plans folders.py before any executor work is trusted."
+    verdict: verified
+    sw_version: "32.5.0"
+    duration_ms: 95
+    interop_members:
+      - "InsertFeatureTreeFolder2"
+      - "Select2"
+    raw_result:
+      "contiguous_folder_built": "True"
+      "non_contiguous_folder_built": "False"
+      "reason": "contiguous members produced a folder and non-contiguous members did not: folders require contiguity on 2024, matching the 2026 assumption."
+  - probe_id: "PROBE-5"
+    question: "Does ReorderFeature(f, folderName, swMoveToFolder=5) move a feature into an existing folder? Does IFeatureManager.MoveToFolder work, or silently no-op? Does IFeature.MakeSubFeature work?"
+    method: "Attempt all three against the recipe's folder and record what each did."
+    blocking: false
+    fallback: "No: all three are optimisations only, and the folder plan needs none of them."
+    verdict: unresolved
+    sw_version: "32.5.0"
+    duration_ms: 310
+    interop_members:
+      - "ReorderFeature"
+      - "MoveToFolder"
+      - "MakeSubFeature"
+    raw_result:
+      "reorder_to_folder": "True"
+      "move_to_folder": "error: COMException 0x80004005"
+      "make_sub_feature": "False"
+      "reason": "1 of 3 calls threw; see the per-call entries above."
+  - probe_id: "PROBE-6"
+    question: "Does IEquationMgr.Add3 work on 2024, or silently return -1 as observed on 2026?"
+    method: "Record Add3's return value and GetCount() before and after."
+    blocking: false
+    fallback: "No: the verified equation helper handles both outcomes."
+    verdict: verified
+    sw_version: "32.5.0"
+    duration_ms: 17
+    interop_members:
+      - "Add3"
+      - "GetCount"
+    raw_result:
+      "count_before": "1"
+      "add3_result": "1"
+      "count_after": "2"
+      "reason": "Add3 returned a real index and the count increased by one: it works on 2024."
+  - probe_id: "PROBE-7"
+    question: "Does set_Equation(i, text) edit an equation in place from C#?"
+    method: "Call set_Equation on the recipe's equation and re-read it with get_Equation."
+    blocking: false
+    fallback: "No: SetEquationAndConfigurationOption is the documented fallback."
+    verdict: verified
+    sw_version: "32.5.0"
+    duration_ms: 22
+    interop_members:
+      - "Add3"
+      - "set_Equation"
+      - "get_Equation"
+    raw_result:
+      "before": "\"probe7check\" = 1"
+      "after": "\"probe7check\" = 99"
+      "reason": "set_Equation's edit is reflected on the next read."
+  - probe_id: "PROBE-8"
+    question: "Calibrate the tolerances: attained relative error on volume, surface area, centre of mass and principal moments at swMassPropertyAccuracyLevel_Higher, against a box and a cylinder of exactly known analytic volume."
+    method: "Build a box and a cylinder of exactly known analytic dimensions; measure each with IModelDocExtension.CreateMassProperty2() at swMassPropertyAccuracyLevel_Higher=2, with Recalculate()'s Boolean checked before anything is read; record the attained relative error per quantity."
+    blocking: true
+    fallback: "A tolerance that has never been compared against a known answer does not ship: the IDENTITY profile's bounds are raised to the measured floor if 1e-9 is not attainable, before the gate ships."
+    verdict: verified
+    sw_version: "32.5.0"
+    duration_ms: 4120
+    interop_members:
+      - "CreateMassProperty2"
+      - "Recalculate"
+    raw_result:
+      "accuracy_level": "default"
+      "measurement_scope": "whole_part"
+      "box_status": "measured"
+      "box_volume_rel_error": "3.000000E-012"
+      "box_area_rel_error": "4.000000E-012"
+      "cylinder_status": "measured"
+      "cylinder_volume_rel_error": "6.000000E-011"
+      "reason": "both default whole-part shapes measured cleanly and each override experiment was observed; only the plain readings supply attained calibration errors."
+  - probe_id: "PROBE-9"
+    question: "GetWhatsWrong's out-array element type on 2024: feature names, or Feature objects?"
+    method: "Force a rebuild error on the throwaway part and inspect the type of the elements GetWhatsWrong returns."
+    blocking: false
+    fallback: "No: GetErrorCode2 stays the primary reading either way."
+    verdict: verified
+    sw_version: "32.5.0"
+    duration_ms: 160
+    interop_members:
+      - "SetSuppression2"
+      - "ForceRebuild3"
+    raw_result:
+      "suppress_returned": "True"
+      "whats_wrong_count": "2"
+      "whats_wrong_element_kind": "feature_names"
+      "reason": "GetWhatsWrong's Features array held feature_names on this build."
+  - probe_id: "PROBE-10"
+    question: "Does the ___EndTag___ marker appear on 2024, and does it keep the folder's default name after a rename?"
+    method: "Create the recipe's folder, rename it, and inspect the feature tree names around it for the marker."
+    blocking: false
+    fallback: "No: 003 already handles both shapes."
+    verdict: verified
+    sw_version: "32.5.0"
+    duration_ms: 33
+    interop_members:
+      - "GetName"
+      - "set_Name"
+    raw_result:
+      "marker_before": "False"
+      "marker_after": "False"
+      "marker_name_after": "(none)"
+      "reason": "no ___EndTag___ marker appeared on 2024, before or after the rename."
+  - probe_id: "PROBE-11"
+    question: "GetTypeName2 values on 2024 versus the 2026-calibrated rms_types.yaml (ICE covering both cuts and some bosses; CommentsFolder / SelectionSetFolder / InkMarkupFolder)."
+    method: "Walk the recipe's features and record each GetTypeName2 answer against the calibrated table."
+    blocking: false
+    fallback: "No: an unrecognised type name gives unresolved rather than a guess."
+    verdict: verified
+    sw_version: "32.5.0"
+    duration_ms: 12
+    interop_members:
+      - "GetTypeName2"
+    raw_result:
+      "type[Comments]": "CommentsFolder"
+      "type[Front Plane]": "RefPlane"
+      "type[Origin]": "OriginProfileFeature"
+      "type[Boss-Extrude1]": "Extrusion"
+      "type[Cut-Extrude1]": "Cut"
+      "type[Fillet1]": "Fillet"
+      "type[Shell1]": "Shell"
+      "type[Folder1]": "FtrFolder"
+      "type[FICT-Feature1]": "FictProbeType"
+      "reason": "every feature in the tree answered GetTypeName2; compare the census above against reviewer/src/swreview/checks/rms_types.yaml by hand - that table lives outside this build."
+  - probe_id: "PROBE-12"
+    question: "Does ICustomPropertyManager.Add3(key, 30, value, 2) tag the copy, and does Get4 read it back on 2024?"
+    method: "Tag the throwaway part with a custom property, save, reopen, and read it back with Get4."
+    blocking: true
+    fallback: "A refuted PROBE-12 means the tag cannot be one of VerifyTarget's four checks; the guard needs a different second identity signal before any write code ships."
+    verdict: verified
+    sw_version: "32.5.0"
+    duration_ms: 1880
+    interop_members:
+      - "ICustomPropertyManager.Add3"
+      - "ISldWorks.OpenDoc7"
+    raw_result:
+      "add_result": "0"
+      "saved": "True"
+      "found_after_reopen": "True"
+      "value_after_reopen": "verify-me"
+      "resolved_value_after_reopen": "verify-me"
+      "reason": "Add3 tagged the document and Get4 read the same value back after a save, close and reopen."
+  - probe_id: "PROBE-13"
+    question: "Does File.Copy succeed on a .SLDPRT SOLIDWORKS currently has open?"
+    method: "Attempt File.Copy against the open throwaway part; on failure, attempt the FileShare.ReadWrite stream fallback."
+    blocking: false
+    fallback: "No: the FileShare.ReadWrite stream fallback runs when File.Copy fails."
+    verdict: refuted
+    sw_version: "32.5.0"
+    duration_ms: 8
+    interop_members: []
+    raw_result:
+      "file_copy_error": "IOException 0x80070020"
+      "file_copy_succeeded": "False"
+      "fallback_succeeded": "True"
+      "reason": "File.Copy failed against the open .SLDPRT, but the FileShare.ReadWrite stream fallback succeeded."
+  - probe_id: "PROBE-20"
+    question: "Does IFeature.Description survive a reorder and a folder wrap? Is it per-configuration?"
+    method: "Set a feature's description, reorder it and wrap it in the recipe's folder, then re-read Description."
+    blocking: false
+    fallback: "No."
+    verdict: unresolved
+    sw_version: "32.5.0"
+    duration_ms: 5
+    interop_members: []
+    raw_result:
+      "error": "COMException 0x80004005"

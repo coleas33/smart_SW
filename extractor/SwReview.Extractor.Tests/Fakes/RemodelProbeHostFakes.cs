@@ -20,6 +20,7 @@ public enum ReorderAttempt
     Parks,
 }
 
+// seat-assumption: PROBE-1 verified|refuted - an illegal reorder's "Cannot reorder" box holds the call until it is answered
 /// <summary>
 /// PROBE-1's <c>ReorderFeature</c>, scripted by the <c>CommandInProgress</c> flag each attempt sees,
 /// with a block the test controls rather than a clock (013 contracts/readings.md section 4, 004 T171).
@@ -31,7 +32,10 @@ public enum ReorderAttempt
 /// </summary>
 public sealed class ParkingReorder : IDisposable
 {
-    /// <summary>The message an attempt that throws carries: the host's own words, which the ledger must keep.</summary>
+    /// <summary>
+    /// The message an attempt that throws carries: the host's own words, which the ledger must not
+    /// carry - it records the exception's type and HRESULT (owner decision 171A, 004 T334).
+    /// </summary>
     public const string HostMessage = "the host's own words: the reorder failed";
 
     private readonly FakeRemodelProbeHost _host;
