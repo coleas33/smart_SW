@@ -5668,3 +5668,86 @@ unwind and compare identities before the close, skipping the close and delete on
 R25.9's list of what Start waits on.
 
 No code changed; no gate is affected beyond the link and line-ending checks.
+
+## R28 `swreview seat health`: the seat's health checks, proved from files (decision 166A; T350 to T353; 2026-10-31)
+
+### R28.1 What was decided, and why
+
+Owner decision 166A: the stage 1 kit includes a `swreview seat health` check. The runbook's
+section 6 (`docs/workstation-runbook.md`) lists seven checks after every start, and an engineer
+reading `addin.log` by eye at the seat is the slowest and least reliable way to make the ones a
+file can prove. One command makes them all, says PASS or FAIL with a one-line reason for each,
+and leaves to the eye only what the pane shows.
+
+The same lane added the two seat deciders of decision 172A under the same sub-app: 006's
+transparency polarity (006 research R11) and 001's interference volume unit (001 research R15).
+
+### R28.2 What it proves, and from what
+
+`uv run swreview seat health` from `<repo>\reviewer` (`reviewer/src/swreview/seat/health.py`):
+
+| Check | Runbook | PASS when | Read from |
+|---|---|---|---|
+| `add-in load` | 6, item 1 | after the latest start (the last `AssemblyRedirect installed.`, which the type initializer writes on every load), `Attached to SOLIDWORKS.`, `Task Pane created.` and `Review host started.` appear, in that order | `addin.log` (`AddInLog`, `SwReviewAddIn.ConnectToSW`; docs/addin-load-fix.md) |
+| `tool service` | 6, item 1 | no line after that start begins `The SwReview tool service`, and none names a `.SLDDRW`, its stack-trace lines included | `addin.log` (`ToolServiceGate`) |
+| `backend` | 6, item 2 | the newest `backend-<stamp>.log` begun since that start, ordered by its own first line's time with its offset, has a `backend healthy on` line | the logs folder (`BackendClient.LogPath`, `BackendProcess.WaitForHealth`) |
+| `profile` | 5; 6, item 4 | the profile loads, at version 3 or later, and is not the repository's `config/standards.example.yaml` byte for byte | the profile (`load_profile`) |
+| `uv` | 2; 7 | `uv` is on this session's PATH | PATH |
+| `extractor` | 1 | `extractor\SwReview.Extractor.Console\bin\x64\Release\net48\swreview-extract.exe` exists | the checkout |
+| `checkout` | 6, item 7 | HEAD is on `main` and `git status --porcelain` prints nothing | `git` |
+
+Then six `MANUAL` lines, one per item only the pane or SOLIDWORKS shows: the ticked add-in, the
+`Backend ready` badge, Model check, Standards, a Review that ends on screen, and five tabs with no
+Ask tab. Exit 1 on any FAIL; `--json` prints the same as `checks`, `failed` and `manual`.
+
+**Defaults** (runbook section 1): `--logs` is `%LOCALAPPDATA%\SwReview\logs` and `--profile` is
+`%LOCALAPPDATA%\SwReview\standards.yaml`, both read from the environment at run time; `--repo` is
+the checkout the command runs from, as `update-workstation.ps1` builds its own. When the settings
+file's `standards_profile_path` names another profile, the engineer passes it with `--profile`:
+the command never opens the settings file, because it holds the key.
+
+### R28.3 What it never does
+
+- It writes nothing, reads no key and opens no settings file.
+- It starts nothing but two read-only `git` commands, `status --porcelain` and
+  `symbolic-ref --short -q HEAD`.
+- It prints no path. A log line is named by its time, never its text, which can name a document;
+  a log by its file name; a dirty tree by its count of paths; a profile that does not validate by
+  that fact alone, since the loader's reason can quote a value. Tested over every case's output,
+  text and JSON.
+
+**Judgement calls within the brief**, each the conservative reading, for the owner to overrule:
+a profile below version 3 fails (the runbook's version check expects 3 or 4); the example profile
+copied into place fails (runbook section 5's "what a wrong file looks like", provable only when
+unedited); a `.SLDDRW` named on any line after the start fails, not only on a tool-service line,
+as the brief says; and the `uv` check reads the PATH of the shell the command runs in, so the
+engineer runs it from a fresh, non-elevated PowerShell, as the runbook's own `uv` check says.
+
+### R28.4 The command names, for the test plan's lane
+
+The test plan (`docs/test-plan-2026-09-27/`) is another lane's; it places these steps. Each runs
+from `<repo>\reviewer`:
+
+| Step | Command | Recipe or source |
+|---|---|---|
+| After starting SOLIDWORKS (004 T353) | `uv run swreview seat health` (`--logs`, `--repo`, `--profile`, `--json`) | this section |
+| PROBE-2 (006 T102), in 172A's optional block | `swreview-extract probe standards > "<folder>\probe-standards.txt"`, then `uv run swreview seat transparency "<folder>\probe-standards.txt"` (`--transparent`, `--opaque`, `--plain`, `--json`) | `benchmarks/native/probe2-polarity/RECIPE.md`; 006 research R11 |
+| Interference volume unit (001 T069, T076), in the same block | `swreview-extract dump --out "<folder>\package"`, `swreview-extract interference --pairs all --out "<folder>\package"`, then `uv run swreview seat volume-unit "<folder>\package" --expected-mm3 1000` (`--json`) | `benchmarks/native/interference-volume/RECIPE.md`; 001 research R15 |
+
+Every one exits 0 when the seat proved what was asked and 1 when it did not. The made-up
+assemblies are built outside the checkout and never committed.
+
+### R28.5 Test-first evidence and gates
+
+| Task | Red | Green |
+|---|---|---|
+| 004 T350/T351 | 32 cases, all failing on exit 2 (no `seat` command) | 32 |
+| 006 T111/T112 | 51 (25 unit, no command; 26 precomputed goldens, missing) | 51 |
+| 001 T106/T107 | 21, all failing (no `volume-unit` command) | 21 |
+
+Guards that passed on an empty output were tightened before their red commit: the path-leak
+cases now require every check in the output, and the usage-error cases a word of the message (the
+option's name; for 006's missing file, "does not exist", read through `plain_words` in its green
+commit, as Rich wraps the sentence across its error box).
+
+Gates for the whole lane, on the final tree: recorded below.
