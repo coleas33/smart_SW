@@ -864,13 +864,22 @@ def test_a_seat_task_is_tagged_w_or_says_workstation_and_its_id_is_read_whole() 
 
 
 def test_every_feature_with_an_open_seat_task_is_one_the_plan_is_held_to() -> None:
-    """Decision 166A: the pins read every feature package, so a seat task cannot drift out of
-    the plan as 004 T303 did while 004 was not among the packages read."""
-    features = sorted(path.parent.name for path in (REPO / "specs").glob("*/tasks.md"))
+    """Decision 166A: the pins read every feature package with an open seat task, so a seat task
+    cannot drift out of the plan as 004 T303 did while 004 was not among the packages read.
+    *Corrected 2026-10-31 on review (004 T370):* a feature whose last seat task is ticked, as 014
+    and 015 will be after S3, leaves `PACKAGES`, whose every package must still have one (`assert
+    tasks, package` in the plan's and the handover's pins), so only the features that have one
+    are held here. 002 T044, quickstart Scenario 1 in the pane on the native bracket assembly,
+    needs the seat though its provider is the fake, so it is read as one too."""
+    tasks = sorted((REPO / "specs").glob("*/tasks.md"))
+    features = [path.parent.name for path in tasks]
+    seated = [path.parent.name for path in tasks if seat_tasks_in(path.read_text(encoding="utf-8"))]
 
     assert len(features) >= 15
-    assert [feature for feature in features if feature not in PACKAGES] == []
+    assert [feature for feature in seated if feature not in PACKAGES] == []
     assert [package for package in PACKAGES if package not in features] == []
+    assert "002-task-pane-assistant" in seated
+    assert "T044" in open_seat_tasks("002-task-pane-assistant")
 
 
 def test_the_plan_says_what_allows_each_switch_and_names_every_probe(plan: str) -> None:
@@ -2358,6 +2367,9 @@ def test_s1s_steps_hold_what_s1_asks_of_them(plan: str) -> None:
         '"$H\\probes\\probe-rms-J.txt" -Encoding utf8; "exit code: $LASTEXITCODE"'
     ) in step(plan, "3.9")
     assert {("003", "T088"), ("011", "T077")} <= qualified_tasks(step(plan, "3.9"))
+    rms = re.sub(r"\s+", " ", step(plan, "3.9"))
+    assert "the `root_component:` line whole" not in rms
+    assert "write only `a component name`, never the name" in rms
     assert "`InstalledAssemblyMatchesManifest`" in t140 and "passed, not skipped" in t140
     assert "*Amended 2026-10-31" in t164 and "the product Help > About names" in t164
 
@@ -2385,6 +2397,8 @@ def test_t303a_ends_only_the_backend_the_add_in_started_and_only_by_its_pid(plan
         "tag_removed=true copy_closed=true"
     ) in flat
     assert "decision 169A" in flat and "the fakes" in flat
+    assert "Of the barrier, which decision 169A puts here," in flat
+    assert "which items 2 to 4 check" in flat
     assert ("004", "T303a") in qualified_tasks(part)
     assert ("004", "T303a") in tagged_tasks(plan)
 
@@ -2396,16 +2410,27 @@ def test_t303a_reads_the_newest_backend_logs_pid_and_ends_that_process_once_the_
     """T303a's first two blocks, pasted as they stand, over a stand-in `LOCALAPPDATA` and run
     root: the number is the newest backend log's, and the process is ended only once a remodel
     folder made after the wait began holds `open_record.written` - here a sleeping Python this
-    test started, the backend's stand-in (004 T365)."""
+    test started, the backend's stand-in (004 T365). *Strengthened 2026-10-31 on review (004
+    T370):* the older log takes the later name, so only the sort by write time finds the newer;
+    an older remodel folder already holds `open_record.written`, so only the folder's creation
+    time keeps the block waiting; and the copy's open begins a second before it is written, the
+    backend still running then, so a block that ended it at `copy_open.begin` - inside the open,
+    the barrier's case the plan leaves to the fakes - fails here."""
     [number, wait, *_] = POWERSHELL_BLOCK.findall(t303a(plan))
     logs = tmp_path / "local" / "SwReview" / "logs"
     logs.mkdir(parents=True)
     runs = tmp_path / "runs"
     runs.mkdir()
+    earlier = runs / "20261031-080000-J-remodel"
+    earlier.mkdir()
+    (earlier / "remodel-open.jsonl").write_text(
+        '{"at": "2026-10-31T08:00:09+00:00", "phase": "open_record.written"}\n', encoding="utf-8"
+    )
     marker = tmp_path / "waiting"
+    alive_inside_the_open: list[bool] = []
     sleeper = subprocess.Popen([sys._base_executable, "-c", "import time; time.sleep(90)"])
     try:
-        older = logs / "backend-20261031-090000.log"
+        older = logs / "backend-20261031-110000.log"
         older.write_text(
             "[2026-10-31T09:00:01+00:00] backend healthy on http://127.0.0.1:50001 (pid 4)\n",
             encoding="utf-8",
@@ -2425,13 +2450,19 @@ def test_t303a_reads_the_newest_backend_logs_pid_and_ends_that_process_once_the_
             time.sleep(1)
             run = runs / "20261031-100500-J-remodel"
             run.mkdir()
-            (run / "remodel-open.jsonl").write_text(
-                '{"at": "2026-10-31T10:05:01+00:00", "phase": "copy_open.begin"}\n'
-                '{"at": "2026-10-31T10:05:09+00:00", "phase": "open_record.written"}\n',
+            record = run / "remodel-open.jsonl"
+            record.write_text(
+                '{"at": "2026-10-31T10:05:01+00:00", "phase": "copy_open.begin"}\n',
                 encoding="utf-8",
             )
+            time.sleep(1)
+            alive_inside_the_open.append(sleeper.poll() is None)
+            with record.open("a", encoding="utf-8") as appended:
+                appended.write(
+                    '{"at": "2026-10-31T10:05:09+00:00", "phase": "open_record.written"}\n'
+                )
 
-        writer = threading.Thread(target=open_a_copy)
+        writer = threading.Thread(target=open_a_copy, daemon=True)
         writer.start()
         local, root, waiting, handover = (
             str(path).replace("'", "''")
@@ -2448,10 +2479,105 @@ def test_t303a_reads_the_newest_backend_logs_pid_and_ends_that_process_once_the_
             f"backend pid {sleeper.pid} | running: True",
             f"ended the backend, pid {sleeper.pid}",
         ]
+        assert alive_inside_the_open == [True]
         assert sleeper.wait(timeout=30) is not None
     finally:
         if sleeper.poll() is None:
             sleeper.kill()
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_t303a_times_the_close_from_save_and_reads_it_before_the_new_backends_start(
+    plan: str, tmp_path: Path
+) -> None:
+    """004 T303 asks for the close's line before the new backend's start, within 30 seconds of
+    Save, and the Windows clock shows minutes only: Save's time is taken from a line pasted just
+    before it, and T303a's reading block, pasted as it stands over a stand-in `LOCALAPPDATA`,
+    prints the seconds from Save to the close and whether the newest backend log began after it -
+    `False` when that backend began first (004 T370, on review)."""
+    blocks = POWERSHELL_BLOCK.findall(t303a(plan))
+    [save] = [block for block in blocks if "$save = " in block]
+    [read] = [block for block in blocks if "$started" in block]
+    logs = tmp_path / "local" / "SwReview" / "logs"
+    logs.mkdir(parents=True)
+    run = tmp_path / "runs" / "20261031-100500-J-remodel"
+    run.mkdir(parents=True)
+    close = (
+        "[2026-10-31T10:06:12.5000000+00:00] remodel close in process thread=posted "
+        "reason=remodel.close verified=true tag_removed=true copy_closed=true "
+        "gated=ISldWorks.CloseDoc"
+    )
+    (logs / "tool-service-20261031-090000.log").write_text(
+        "[2026-10-31T09:30:00.0000000+00:00] remodel close in process thread=posted run=x "
+        "nothing closed: this bridge holds no session of that run\n" + close + "\n",
+        encoding="utf-8",
+    )
+    (run / "remodel.log").write_text(close + "\n", encoding="utf-8")
+    older = logs / "backend-20261031-100000.log"
+    older.write_text(
+        "[2026-10-31T10:00:00.0000000+00:00] starting uv run swreview serve\n"
+        "[2026-10-31T10:06:10.0000000+00:00] backend stopped\n",
+        encoding="utf-8",
+    )
+    os.utime(older, (1_000_000_000, 1_000_000_000))
+    newest = logs / "backend-20261031-100613.log"
+    local, folder = (str(path).replace("'", "''") for path in (tmp_path / "local", run))
+    setup = (
+        f"$env:LOCALAPPDATA = '{local}'\n$open = Get-Item -LiteralPath '{folder}'\n"
+        "$save = [DateTimeOffset]'2026-10-31T10:06:00+00:00'\n"
+    )
+
+    def reading(started: str) -> list[str]:
+        newest.write_text(f"[{started}] starting uv run swreview serve\n", encoding="utf-8")
+        return run_powershell(f"{setup}{read}\n", tmp_path)
+
+    assert "$save = [DateTimeOffset]::Now" in save and "'HH:mm:ss.fff'" in save
+    assert reading("2026-10-31T10:06:13.1000000+00:00") == [
+        close, close, "close 12.5 s after Save | before the new backend's start: True",
+    ]
+    assert reading("2026-10-31T10:06:05.0000000+00:00")[-1] == (
+        "close 12.5 s after Save | before the new backend's start: False"
+    )
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_t303a_leaves_the_folder_for_runs_outside_the_handover_folder(
+    plan: str, tmp_path: Path
+) -> None:
+    """T303a moves the folder for runs into the handover folder and back. Item 2 can end nothing,
+    after which item 3 never moved it, so item 4 moves it to the other of the two; whatever
+    happened, step 5.3 ends with it at `$runs`; and step 6.0's line, pasted as it stands over a
+    stand-in `APPDATA`, says whether the saved folder for runs is outside the handover folder, so
+    the seat is not left writing its runs into it (004 T370, on review)."""
+    part = re.sub(r"\s+", " ", t303a(plan))
+    [line] = [
+        line for block in POWERSHELL_BLOCK.findall(step(plan, "6.0"))
+        for line in block.splitlines() if "folder for runs outside the handover folder" in line
+    ]
+    appdata = tmp_path / "roaming"
+    (appdata / "SwReview").mkdir(parents=True)
+    settings = appdata / "SwReview" / "settings.json"
+    handover = tmp_path / "handover" / "2026-10-31"
+    roaming, quoted = (str(path).replace("'", "''") for path in (appdata, handover))
+
+    def check(run_root: Path | None) -> list[str]:
+        if run_root is None:
+            settings.unlink(missing_ok=True)
+        else:
+            settings.write_text(json.dumps({"run_root": str(run_root)}), encoding="utf-8")
+        return run_powershell(f"$env:APPDATA = '{roaming}'\n$H = '{quoted}'\n{line}\n", tmp_path)
+
+    assert "set the folder for runs to the other of the two" in part
+    assert "**Before leaving step 5.3, whatever happened above**" in part
+    assert check(handover / "runs-t303a") == ["folder for runs outside the handover folder: False"]
+    assert check(Path(str(handover).upper())) == [
+        "folder for runs outside the handover folder: False"
+    ]
+    assert check(tmp_path / "handover" / "2026-10-31-other") == [
+        "folder for runs outside the handover folder: True"
+    ]
+    assert check(tmp_path / "runs") == ["folder for runs outside the handover folder: True"]
+    assert check(None) == ["folder for runs outside the handover folder: True"]
 
 
 @pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
@@ -2567,6 +2693,11 @@ def test_the_seat_work_found_after_the_plan_has_a_place(plan: str) -> None:
     assert "`docs/development-handoff-2026-10-23.md`" in flat
     assert "`docs/history/testing-feedback-2026-10-13.md`" in flat
     assert ("004", "T187") in tagged_tasks(plan)
+    # On review (004 T370): neither the watch nor its start writes a log line, so S1's logs
+    # cannot show the timing.
+    [watch] = [line for line in aside.splitlines() if "004 T188" in line]
+    assert "S1 cannot show it" in watch and "at S2" in watch
+    assert "reads it from S1's" not in watch
 
 
 def test_011_t101_is_its_screenshot_and_its_live_checks_are_011_t095s(
@@ -2583,3 +2714,121 @@ def test_011_t101_is_its_screenshot_and_its_live_checks_are_011_t095s(
     assert_named_only_at({("011", "T101"): {"4.7"}}, plan, results)
     assert "*Rewritten 2026-10-31" in t101 and "300 by 600" in t101
     assert "011 T101's parts 2 and 3" in t095
+
+
+STEP_RANGE = re.compile(r"\b(\d)\.(\d{1,2}) to \1\.(\d{1,2})\b")
+"""A range of one step's parts: `2.5 to 2.7`."""
+WHOLE_STEP = re.compile(r"\bsteps? (\d)\b(?!\.\d)")
+"""A whole step: `step 4`, `step 6's handoff`."""
+
+
+def steps_named(text: str, steps: set[str]) -> set[str]:
+    """Which of the plan's `steps` the text names: `5.5`, a range `2.5 to 2.7`, or a whole step,
+    `step 4`."""
+    named = set(STEP_NUMBER.findall(text))
+    for major, first, last in STEP_RANGE.findall(text):
+        named |= {f"{major}.{minor}" for minor in range(int(first), int(last) + 1)}
+    for major in WHOLE_STEP.findall(text):
+        named |= {number for number in steps if number.startswith(f"{major}.")}
+    return named & steps
+
+
+def test_every_step_has_a_sitting_or_is_named_as_not_yet_placed(plan: str) -> None:
+    """Every step of steps 1 to 6 is S1's, or the Sittings section names it: in a later
+    sitting's row, as opening or closing every sitting, as not yet placed, or as withdrawn. Step
+    5.5, a paid review, is S3's (decision 167A; 004 T370, on review)."""
+    steps = {number for number in STEP_HEADING.findall(plan) if not number.startswith("0.")}
+    sittings = section(plan, "Sittings")
+    s1 = set().union(*(steps_named(cell, steps) for _, cell, _, _ in s1_rows(plan)))
+    [s3] = [line for line in sittings.splitlines() if line.startswith("| S3 |")]
+
+    assert steps_named("steps 2.5 to 2.7, 3.4, step 4 and 5.5", steps) >= {
+        "2.5", "2.6", "2.7", "3.4", "4.1", "4.11", "5.5",
+    }
+    assert len(steps) >= 40
+    assert sorted(steps - s1 - steps_named(sittings, steps)) == []
+    assert "5.5" in steps_named(s3, steps)
+    assert "not yet placed" in re.sub(r"\s+", " ", sittings)
+
+
+def test_s1_with_its_optional_block_still_ends_within_3_h_30(plan: str) -> None:
+    """Every sitting is 3 h 30 min or less (decision 167A), S1 with its optional block too: the
+    block starts only when its 25 minutes and every row after it still end by then. S1's rows
+    before it end at 2 h 30 on their estimates, so it runs only when S1 is ahead (004 T370, on
+    review)."""
+    flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+    rows = s1_rows(plan)
+    [optional] = [index for index, (_, cell, _, _) in enumerate(rows) if "optional" in cell]
+    [(hours, mins)] = re.findall(
+        r"\*\*The optional block\*\* starts only by (\d) h (\d+) on the sitting's clock", flat
+    )
+
+    assert "each 3 hours 30 minutes or less, S1 first" in re.sub(
+        r"\s+", " ", section(plan, "Sittings")
+    )
+    assert int(hours) * 60 + int(mins) + sum(m for *_, m in rows[optional:]) == 210
+    assert sum(m for *_, m in rows[:optional]) == 150
+    assert "at least five minutes ahead" in flat
+
+
+def test_not_in_this_sitting_says_what_s1_runs_of_the_tasks_it_holds(plan: str) -> None:
+    """003 T088's PROBE-15 runs at step 3.9 and 004 T140's manifest half at step 1.3, both in S1,
+    so the rows that hold those tasks say so; and the section no longer says no step runs what it
+    holds, since S2 and S5 name some of it (004 T370, on review)."""
+    aside = plan[plan.index("## Not in this sitting") :]
+    lines = aside.splitlines()
+    [rms] = [line for line in lines if line.startswith("| 003 | 003 T062, 003 T088, 003 T089 |")]
+    [stage] = [line for line in lines if line.startswith("| 004 | 004 T135 to T141 |")]
+    head = re.sub(r"\s+", " ", aside[: aside.index("| Package |")])
+
+    assert "step 3.9" in rms and "S1" in rms
+    assert "step 1.3" in stage and "004 T140" in stage
+    assert "what none of its steps runs" not in head
+    assert "S2 and S5" in head
+
+
+def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
+    """Decision 173A closes a replaced or deferred task by ticking it with a dated note, so the
+    README no longer counts an unticked `SUPERSEDED (127A)` task as superseded, and the rows of
+    the four features whose tasks 004 T361 closed are recounted (004 T370, on review)."""
+    readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
+    flat = re.sub(r"\s+", " ", readme)
+    rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
+
+    assert "is counted as superseded, not open" not in flat
+    assert "decision 173A" in flat
+    for number, counts, closed in (
+        ("001", "102 / 3 / 0", "T098"),
+        ("002", "298 / 4 / 0", "T055a"),
+        ("005", "86 / 27 / 0", "T073"),
+        ("008", "124 / 5 / 0", "T106"),
+    ):
+        assert f"| {counts} |" in rows[number], number
+        assert "Closed on 2026-10-31 (decision 173A)" in rows[number], number
+        assert closed in rows[number].split("Closed on 2026-10-31")[1], number
+
+
+def test_swreview_remodel_ledger_prints_what_step_5_6_reads(tmp_path: Path) -> None:
+    """`Show-RemodelLedger` hands each answers file to `swreview remodel ledger` (decision 166A),
+    and step 5.6 reads from it each probe's id, verdict and reason. That reader is another lane's,
+    merged before this plan's: until it is in the checkout this skips; once it is, an answers
+    file in `RemodelProbeLedger.Render`'s shape is read through it (004 T370, on review)."""
+    if "ledger" not in get_command(app).commands["remodel"].commands:
+        pytest.skip("`swreview remodel ledger`, decision 166A's reader, is not in this checkout")
+    ledger = tmp_path / "remodel-32.5.0.48.yaml"
+    ledger.write_text(
+        rendered_ledger(
+            [
+                ("PROBE-2", True, "verified", {"reason": "get_Value returned 120."}),
+                ("PROBE-13", False, "unresolved", {"error": "InvalidCastException"}),
+            ]
+        ),
+        encoding="utf-8-sig",
+    )
+
+    result = CliRunner().invoke(app, ["remodel", "ledger", str(ledger)])
+    output = plain_one_line(result.output)
+
+    assert result.exit_code == 0, output
+    for words in ("PROBE-2", "verified", "get_Value returned 120.", "PROBE-13", "unresolved"):
+        assert words in output, words
