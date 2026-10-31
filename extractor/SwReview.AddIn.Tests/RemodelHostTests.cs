@@ -6656,7 +6656,9 @@ public sealed class RemodelHostTests
             Action endIt = () =>
             {
                 // The session ends at the bridge with no close of the host's - a teardown - and the bridge tells its end.
-                Assert.NotNull(world.Pipeline.EndSessionInProcess(first));
+                Assert.True(world.Pipeline.SessionOpen);
+                world.Pipeline.EndSessionInProcess(first);
+                Assert.False(world.Pipeline.SessionOpen);
                 world.Host.SessionEnded(new RemodelSessionEnd(
                     RemodelSessionEnd.ReasonToolServiceStopped, first, copy,
                     verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
