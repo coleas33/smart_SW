@@ -952,6 +952,37 @@ public sealed class RemodelTeardownTests : IDisposable
         Assert.DoesNotContain(RemodelHarness.RunId, failure, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Owner decision 165A (004 T321 - a guard; research R26.1): the identity check holds back only a document that is
+    /// not the open's. A copy closed underneath the open and not opened again leaves nothing at its path, so the unwind
+    /// closes and deletes as it always has - the file is the run's own and nothing holds it - and the ending is clean.
+    /// </summary>
+    [Fact]
+    public void AnUnwindStillClosesAndDeletesACopyClosedUnderneathAndNotReopened()
+    {
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+        _harness.Copy.DuringCall = member =>
+        {
+            if (member == nameof(FakeRemodelDocument.ForceRebuild))
+            {
+                Assert.Null(_harness.Dispatcher.EndRemodelSessionOf(_harness.RunDirectory));
+                _harness.Seat.OpenDocuments.Remove(_harness.CopyPath);
+                _harness.Copy.ReopenedAs = IntPtr.Zero;
+            }
+        };
+
+        BridgeResponse opened = _harness.Dispatch(RemodelCommands.Open, OpenParams(_harness.CopyPath, probeId));
+
+        Assert.Equal(RemodelErrorCodes.TargetMismatch, RemodelHarness.Refusal(opened));
+        Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.Closed));
+        Assert.False(File.Exists(_harness.CopyPath));
+        RemodelSessionEnd told = Assert.Single(_told);
+        Assert.True(told.CopyClosed);
+        Assert.Empty(told.Failures);
+    }
+
     /// <summary><c>remodel.open</c>'s params for the harness's run, with the copy given.</summary>
     private string OpenParams(string copy, string probeId) =>
         "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath)

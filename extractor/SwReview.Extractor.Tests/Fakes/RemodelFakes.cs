@@ -604,7 +604,7 @@ public sealed class FakeRemodelDocument : IRemodelDocument
     /// <summary>
     /// Owner decision 165A (004 research R25.13): the identity of another document SOLIDWORKS has open at this one's path
     /// - this one closed and the copy opened again underneath - which <see cref="GetOpenDocumentIdentity"/> answers for that
-    /// path when set. Unset, it answers this document's own.
+    /// path when set; <see cref="IntPtr.Zero"/> is nothing open there. Unset, it answers this document's own.
     /// </summary>
     public IntPtr? ReopenedAs { get; set; }
 

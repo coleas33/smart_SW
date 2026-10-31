@@ -1335,14 +1335,18 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             // it (CleanUpCall). The close, the delete and the put-back are each attempted
             // whatever the others did, and none of their failures replaces the reason the open
             // stopped, which is what is thrown below. 004 T183: with no handle back the close
-            // asks SOLIDWORKS first, since OpenDoc7 may have opened the copy anyway.
+            // asks SOLIDWORKS first, since OpenDoc7 may have opened the copy anyway. Owner decision
+            // 165A (004 research R25.13): with one, another document open at the copy's path - the
+            // copy closed and reopened by a re-entrant action while a native call pumped - is neither
+            // closed nor has its file deleted.
             var failures = new List<string>();
+            bool leaveTheCopy = false;
             bool copyClosed = RemodelStageMarkers.Around(
                 stage,
                 UnwindCloseStep,
-                () => CloseAfterAFailedOpen(_remodelGate, seat, copy, copyCreated, document != null, failures));
+                () => CloseAfterAFailedOpen(_remodelGate, seat, copy, copyCreated, document, failures, out leaveTheCopy));
 
-            if (copyCreated)
+            if (copyCreated && !leaveTheCopy)
             {
                 RemodelStageMarkers.Around(stage, UnwindDeleteStep, () => DeleteCopy(copy));
             }
@@ -2650,23 +2654,34 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// The close a failed open's unwind makes, judged by what SOLIDWORKS answered however far the
     /// open got (004 T183; default taken 2026-09-27, the owner may revise; research R15.4). A copy
     /// never made was never opened: closed, and nothing is asked. A handle that came back is closed
-    /// by <see cref="CloseCopyUnsaved"/>. A copy made with no handle back - <c>OpenDoc7</c> answered
+    /// by <see cref="CloseCopyUnsaved"/> - owner decision 165A (research R25.13): unless SOLIDWORKS
+    /// has another document open at the copy's path, or cannot say which (<see cref="AnotherDocumentAtTheCopy"/>);
+    /// then nothing is closed, the copy is not counted closed, and <paramref name="leaveTheCopy"/>
+    /// tells the unwind not to delete the file either. A copy made with no handle back - <c>OpenDoc7</c> answered
     /// null, it or the document's wrapper threw, or the gate refused it - may still have been opened,
     /// so the seat is asked first, by the same clean-up read under <c>GetOpenDocumentByName</c>:
     /// nothing open is closed; a document open there is closed the same way and confirmed; a read that
     /// cannot answer is not closed, with a sentence in <paramref name="failures"/>.
     /// </summary>
     private static bool CloseAfterAFailedOpen(
-        SwGate gate, IRemodelSeat seat, string copy, bool copyCreated, bool handle, List<string> failures)
+        SwGate gate,
+        IRemodelSeat seat,
+        string copy,
+        bool copyCreated,
+        IRemodelDocument? document,
+        List<string> failures,
+        out bool leaveTheCopy)
     {
+        leaveTheCopy = false;
         if (!copyCreated)
         {
             return true;
         }
 
-        if (handle)
+        if (document != null)
         {
-            return CloseCopyUnsaved(gate, seat, copy, failures);
+            leaveTheCopy = AnotherDocumentAtTheCopy(document, copy, failures);
+            return !leaveTheCopy && CloseCopyUnsaved(gate, seat, copy, failures);
         }
 
         if (!CleanUpCall(
@@ -2681,6 +2696,42 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         }
 
         return !opened || CloseCopyUnsaved(gate, seat, copy, failures);
+    }
+
+    /// <summary>
+    /// Owner decision 165A (004 research R25.13): whether a failed open's unwind must leave the copy alone because the
+    /// document SOLIDWORKS has open at the copy's path is not <paramref name="opened"/> - the copy closed and opened again
+    /// underneath the open by a re-entrant action while one of its native calls pumped - or because which document is open
+    /// there cannot be read. Asked by <c>VerifyTarget</c>'s check 3's two reads, ungated as there. Nothing open at the path,
+    /// or the same COM identity, is false: the routine's close goes ahead. Otherwise true, with a sentence in
+    /// <paramref name="failures"/> that names no path.
+    /// </summary>
+    private static bool AnotherDocumentAtTheCopy(IRemodelDocument opened, string copy, List<string> failures)
+    {
+        IntPtr held;
+        IntPtr open;
+        try
+        {
+            held = opened.GetDocumentIdentity();
+            open = opened.GetOpenDocumentIdentity(copy);
+        }
+        catch (Exception error)
+        {
+            failures.Add(
+                "close: which document SOLIDWORKS has open at the copy's path could not be read, so it was not closed and "
+                + "the copy's file was not deleted: " + error.GetType().Name + ": " + error.Message);
+            return true;
+        }
+
+        if (open == IntPtr.Zero || (held != IntPtr.Zero && held == open))
+        {
+            return false;
+        }
+
+        failures.Add(
+            "close: SOLIDWORKS has another document open at the copy's path than the one this open opened, so it was not "
+            + "closed and the copy's file was not deleted");
+        return true;
     }
 
     /// <summary>
