@@ -115,6 +115,7 @@ public sealed class HoleDumper : IHoleSource
         }
 
         var result = new HoleDumpResult();
+        var documentNodes = new DocumentNodePass(scope);
 
         foreach (ScopedComponent component in scope.Components)
         {
@@ -132,9 +133,7 @@ public sealed class HoleDumper : IHoleSource
 
             if (!(component.Node.Handle is IComponent2 handle))
             {
-                ComponentDocuments.RecordDocumentNode(
-                    scope, component, "hole", "its holes and threads were not read",
-                    assemblyNotRead: "the holes and threads of its own assembly features were not read");
+                documentNodes.Skip(component);
                 continue;
             }
 
@@ -150,9 +149,13 @@ public sealed class HoleDumper : IHoleSource
                 continue;
             }
 
+            documentNodes.Reached(component);
             ReadFeatures(handle, model, component, scope, result);
         }
 
+        documentNodes.Record(
+            "hole", "its holes and threads were not read",
+            assemblyNotRead: "the holes and threads of its own assembly features were not read");
         return result;
     }
 

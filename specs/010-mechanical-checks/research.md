@@ -1107,7 +1107,9 @@ tasks and in T133, F5 becomes the open task T135, and F8 is recorded.
   have other holes, so the gap stays for either. A resolved component with no loaded model names
   itself in its own `hole` gap, and in no face or body gap (F5, T135); the drawing holds the
   document loaded, so its component should answer `GetModelDoc2`, and the seat (T134) confirms it.
-  The check is a pass over `DumpScope.Components`, once per document node.
+  The check is a pass over `DumpScope.Components`, once per document node. *Amended in round 2
+  (R2.29, T137):* a resolved component in the scope was not enough, since its read may never have
+  reached the document; the check is now over the components each read reached.
 - **F3, fixed in the tasks.** PROBE-15 settles only the part root: a model a drawing references
   becomes a node before, and whatever, `GetRootComponent3` answers
   (`ComponentTreeDumper.AddReferencedSubtree`). T130 keeps the part root after 003 T088, and T134
@@ -1180,15 +1182,18 @@ was rejected: F1 is fixed by T136 and T137, and F2 is recorded, with the open ta
   model and asserted exactly that. Decided: each read collects, over its pass, the document nodes it
   skips and the instances whose document it reached, and records the nodes' gaps after the pass,
   leaving a node's out only when the read reached that document through a resolved instance of the
-  same document id and referenced configuration. "Reached" is the point past which a read takes the
-  document's contents and names what it fails to take: the loaded model for the hole read (its
-  feature walk) and the fastener read (its properties), the bodies for the face sweep and the mesh
-  export (each face and each body has its own step). So an instance whose `GetBodies2` answers null,
-  a skip T135 holds with no gap, leaves the plate its face and body gaps too. Over the pass, because
+  same document id and referenced configuration. "Reached" is where a read has the document's
+  contents in hand: the loaded model for the hole read (which walks its features) and the fastener
+  read (which reads its properties), the bodies for the face sweep and the mesh export (which go on
+  body by body). So an instance whose `GetBodies2` answers null, a skip T135 holds with no gap,
+  leaves the plate its face and body gaps too; past that point what a read can still miss in
+  silence is one body's faces (a `GetFaces` that answers nothing, T135's kind). Over the pass, because
   a drawing lists its sheets in any order: a part-detail sheet's node can come before the instance
   on the assembly sheet. No interop member is added, removed or reordered; a document node's gap
   moves to the end of its read's gaps, an order no reader relies on (the not-read row sorts its
-  gaps, R2.26 D20).
+  gaps, R2.26 D20). A read whose phase fails before its pass ends records no document-node gap,
+  and the phase's own `tool_error` gap with a null id (`PackageWriter.RunPhase`) stands for every
+  node it had not finished, as it does for the components.
 - **Over the bridge, unchanged.** `MeshExporter.DumpComponent` (lever 10a's `tessellate`) fetches
   one component per call, and each call answers for itself: `tools/bridge.py` `_fetch_component`
   writes `the bridge fetched no body for it`, with any gap, for an empty answer. So there a document
@@ -1226,7 +1231,9 @@ was rejected: F1 is fixed by T136 and T137, and F2 is recorded, with the open ta
 (`DocumentNodeGapTests`) - the plate whose instance answers no model has no hole, fastener, face
 or body gap of its own, and the plate whose instance answers no bodies no face or body gap, in both
 sheet orders. The 23 that pass include the instance that reads its model and its bodies, in both
-orders, and the two bridge pins: T132 already gave those answers, and T137 must keep them.
+orders, and the two bridge pins: T132 already gave those answers, and T137 must keep them. After
+T137: `Passed: 27, Total: 27`, and the whole C# suite green (extractor 10243 passed, add-in 4276
+passed, the build zero warnings with `--no-incremental`).
 
 ## R3. Verified facts the plan relies on
 
