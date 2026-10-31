@@ -1068,6 +1068,13 @@ public sealed class FakeRemodelSeat : IRemodelSeat
     /// </summary>
     public Action<string>? DuringCall { get; set; }
 
+    /// <summary>
+    /// The review round of owner decision 165A (004 research R26.10): run with the member's name as
+    /// <see cref="CloseDocument"/> returns, after its close took effect, and as <see cref="IsDocumentOpen"/> is asked,
+    /// before it answers - a re-entrant action pumped by <c>CloseDoc</c> or by the read that confirms it.
+    /// </summary>
+    public Action<string>? DuringCleanUpCall { get; set; }
+
     public IRemodelDocument? OpenDocument(string documentPath, int options)
     {
         DuringCall?.Invoke(nameof(OpenDocument));
@@ -1099,11 +1106,14 @@ public sealed class FakeRemodelSeat : IRemodelSeat
         {
             OpenDocuments.Remove(documentPath);
         }
+
+        DuringCleanUpCall?.Invoke(nameof(CloseDocument));
     }
 
     public bool IsDocumentOpen(string documentPath)
     {
         OpenReads.Add(documentPath);
+        DuringCleanUpCall?.Invoke(nameof(IsDocumentOpen));
         if (OpenReadFailure != null)
         {
             throw OpenReadFailure;
