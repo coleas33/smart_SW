@@ -174,7 +174,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 
 - [x] T106 [P] [US3] Test first (owner decision 172A; research R15). In `reviewer/tests/unit/test_cli_seat_volume_unit.py`, over fictional packages and records made in the test's temp folder: the 1000 mm3 overlap recorded as 1e-6 is `m3` and as 1000 is `mm3` (exit 0, naming the extractor change), within 1 per cent and not beyond; another known volume judged against its own; the overlap in cubic inches, a number matching neither, no computed volume (none, null, failed, truncated) and two computed volumes are inconclusive (exit 1); `package.json` reads as its folder and a single interference record on its own; a file that is neither is an error; the known volume is required and must be positive
 - [x] T107 [US3] Implement T106 (owner decision 172A; research R15). `reviewer/src/swreview/seat/volume_unit.py` and `swreview seat volume-unit <package or record> --expected-mm3 <n> [--json]`. Acceptance: every T106 case green
-- [ ] T108 Record R15 (the judge's rule and tolerance, what each answer asks of the extractor, the recipe) and write `benchmarks/native/interference-volume/RECIPE.md`; run both Python suites, ruff, the link check and the LF check. Acceptance recorded in R15
+- [x] T108 Record R15 (the judge's rule and tolerance, what each answer asks of the extractor, the recipe) and write `benchmarks/native/interference-volume/RECIPE.md`; run both Python suites, ruff, the link check and the LF check. Acceptance recorded in R15
 
 **Checkpoint**: Interference findings are grouped, excepted, and re-flagged on change; the bridge serves captures.
 

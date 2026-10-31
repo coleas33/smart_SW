@@ -5750,4 +5750,15 @@ cases now require every check in the output, and the usage-error cases a word of
 option's name; for 006's missing file, "does not exist", read through `plain_words` in its green
 commit, as Rich wraps the sentence across its error box).
 
-Gates for the whole lane, on the final tree: recorded below.
+Gates for the whole lane, run once on `fc0db91` (every code and test change of 004 T350 to T352,
+006 T111 to T113 and 001 T106 to T108), from `reviewer/`:
+
+| Gate | Result |
+|---|---|
+| `SWREVIEW_REQUIRE_TOKENIZER=1 uv run pytest -q -m "not live"`, Python 3.12 | 18417 passed, 5 skipped, 0 failed (counted from the progress lines; exit 0) |
+| The same under `uv run --isolated --python 3.11 --all-extras` | 18417 passed, 5 skipped, 0 failed (exit 0) |
+| `uv run ruff check src tests` | all checks passed |
+| The link check | `COUNT 0` |
+| Every file the lane changed, `git ls-files --eol` | `i/lf` |
+
+The C# gate was not run: no file under `extractor/` changed.
