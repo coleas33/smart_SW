@@ -6632,6 +6632,71 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// Owner decision 165A, test first (004 T322; research R22.14, R26.2): the bridge tells the end of a plan's session while
+    /// the plan is still finishing - inside the open, or inside the plan step - and the plan then succeeds. The end found no
+    /// tracked run, so the run recorded after it was taken to hold its session: with Start on, the host read a session left
+    /// under the run root and a restart that moved it sent the run a close; with Start off, the close at the plan was sent for
+    /// a session already over. Now the run is recorded as ended: no session held, no close sent, none after the restart. With
+    /// Start on the plan is lost, as any plan whose session ended is; with Start off it ends as a plan closed at the plan.
+    /// </summary>
+    [Theory]
+    [InlineData("copy", true)]
+    [InlineData("copy", false)]
+    [InlineData("plan", true)]
+    [InlineData("plan", false)]
+    public void APlansSessionEndedWhileThePlanFinishesIsTrackedAsEnded(string where, bool startOn)
+    {
+        using (var world = new RemodelWorld { StartValidated = startOn })
+        using (var restart = new RunRootRestart(world))
+        {
+            string oldRoot = world.RunRoot;
+            string first = world.ExpectedRunDirectory;
+            string copy = world.ExpectedCopyPath;
+            bool told = false;
+            Action endIt = () =>
+            {
+                // The session ends at the bridge with no close of the host's - a teardown - and the bridge tells its end.
+                Assert.NotNull(world.Pipeline.EndSessionInProcess(first));
+                world.Host.SessionEnded(new RemodelSessionEnd(
+                    RemodelSessionEnd.ReasonToolServiceStopped, first, copy,
+                    verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                    settingsOutstanding: new string[0], failures: new string[0]));
+                told = true;
+            };
+            world.Pipeline.HoldsTheBridgeSession = true;
+            if (where == "copy")
+            {
+                world.Pipeline.DuringCopy = endIt;
+            }
+            else
+            {
+                world.Pipeline.DuringPlan = endIt;
+            }
+
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reply("remodel.planned", "p1");
+            world.Pipeline.DuringCopy = null;
+            world.Pipeline.DuringPlan = null;
+
+            Assert.True(told, "the end was never told");
+            Assert.False(world.Pipeline.SessionOpen);
+            Assert.True(world.Host.LatestRun!.SessionEnded);
+            Assert.False(world.Host.HoldsASessionLeftUnder(oldRoot));
+            Assert.Empty(world.Pipeline.Closed);
+            Assert.Equal(startOn ? 1 : 0, world.AllPosted("remodel.plan_lost").Length);
+
+            restart.Save("save", restart.NewRoot);
+
+            restart.Reply("settings.saved", "save");
+            Assert.Equal(restart.NewRoot, restart.Review.RunRoot);
+            Assert.Equal(new[] { "start" }, restart.Backend.Steps);
+            Assert.Empty(world.Pipeline.Closed);
+            Assert.Empty(world.InProcessCloses);
+            Assert.Equal(startOn ? 1 : 0, world.AllPosted("remodel.plan_lost").Length);
+        }
+    }
+
+    /// <summary>
     /// Owner decision 159A, test first (004 T277; research R22): each session a run can leave on the bridge - a failed plan's,
     /// a plan waiting for Start (Start on, or Start off with its close at the plan not answered) and a finished run's - is
     /// closed through the backend in force, before a save's restart moves the run root, and the restart is then made at once.
@@ -11320,6 +11385,15 @@ public sealed class RemodelHostTests
                     retryable: true);
             }
 
+            if (CopyFailure == null)
+            {
+                // The bridge closed the document itself on `preexisting_rebuild_errors`. Changed deliberately 2026-10-31
+                // (owner decision 165A, 004 research R26.2): an open that answers opens the session before DuringCopy, as the
+                // bridge's open answers before the backend's steps after it, where an end of that session can be told.
+                SessionOpen = HoldsTheBridgeSession && CopyPresent;
+                SessionRun = SessionOpen ? request.RunDirectory : null;
+            }
+
             DuringCopy?.Invoke();
             if (CopyFailure != null)
             {
@@ -11327,10 +11401,6 @@ public sealed class RemodelHostTests
                 SessionRun = SessionOpen ? request.RunDirectory : null;
                 throw CopyFailure;
             }
-
-            // The bridge closed the document itself on `preexisting_rebuild_errors`.
-            SessionOpen = HoldsTheBridgeSession && CopyPresent;
-            SessionRun = SessionOpen ? request.RunDirectory : null;
 
             string folder = Path.Combine(request.RunDirectory, "copy");
             CopyPath = Path.Combine(
