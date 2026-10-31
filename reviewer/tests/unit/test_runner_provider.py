@@ -39,6 +39,7 @@ from swreview.agent.providers import (
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.checks import part_roles
 from swreview.checks.provenance import PROVENANCE_CHECK
+from swreview.checks.thread_pitch import CHECK_FINE_PITCH
 from swreview.findings import Finding, build_finding
 from swreview.ir.loader import save_package
 from swreview.report.names import component_names
@@ -1172,6 +1173,61 @@ def test_a_rerun_citing_another_reference_alone_is_a_second_finding(
         ("F-001", "unresolved"),
         ("F-002", "suspected"),
     ]
+
+
+def on_the_pair(finding_id: str, *inputs: str, check: str = "hole.coaxiality") -> Finding:
+    """A finding on `cmp:0001` and `cmp:0002` that only its entity ids tell from its siblings."""
+    package = build_package()
+    return build_finding(
+        finding_id=finding_id,
+        check=check,
+        title="Holes on the pair",
+        status="unresolved",
+        severity="medium",
+        package=package,
+        configuration=package.design.active_configuration,
+        observed="the hole axes are not shown to meet",
+        requirement="the member axes meet within the joint's clearance",
+        recommended_action="look again",
+        component_ids=["cmp:0001", "cmp:0002"],
+        inputs=list(inputs),
+        coverage_limits=["the position tolerance is not on the drawing"],
+        numeric=False,
+    )
+
+
+def test_a_restated_finding_on_other_holes_re_judges_no_earlier_finding() -> None:
+    """The regrade only drops a finding's newly bought sources, so a restated finding about
+    other holes of the same components takes neither the earlier finding's id nor its
+    disposition (008 T134)."""
+    earlier = [on_the_pair("F-001", "hol:0004", "hol:0010")]
+    restated = [on_the_pair("F-009", "hol:0017", "hol:0027")]
+
+    assert runner._restated_targets(earlier, restated) == {}
+
+
+def test_a_restated_finding_that_lost_a_bought_source_re_judges_the_earlier_one() -> None:
+    """The regrade left the fastener and dropped the newly bought tapped hole: the restated
+    finding's entity ids are a subset of the earlier one's (58A; 008 T133, T134)."""
+    earlier = [on_the_pair("F-001", "fst:0001", "hol:0004", check=CHECK_FINE_PITCH)]
+    restated = [on_the_pair("F-009", "fst:0001", check=CHECK_FINE_PITCH)]
+
+    assert runner._restated_targets(earlier, restated) == {0: 0}
+
+
+def test_a_restated_finding_with_the_same_entity_ids_re_judges_its_own_earlier_one() -> None:
+    """Equal entity ids match through the verdict key, so two siblings that share the key less
+    their entity ids each find their own (166A; 008 T134)."""
+    earlier = [
+        on_the_pair("F-001", "hol:0004", "hol:0010"),
+        on_the_pair("F-002", "hol:0017", "hol:0027"),
+    ]
+    restated = [
+        on_the_pair("F-009", "hol:0017", "hol:0027"),
+        on_the_pair("F-010", "hol:0004", "hol:0010"),
+    ]
+
+    assert runner._restated_targets(earlier, restated) == {0: 1, 1: 0}
 
 
 # --- resume rule (d): max_steps is a per-turn budget --------------------------------------------
