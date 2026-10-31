@@ -105,7 +105,7 @@ from swreview.drawings.evidence import DrawingIndex, file_key
 from swreview.engineering_context.brief import build_summary, compact_json
 from swreview.engineering_context.models import ContextArtifact, canonical_bytes, context_digest
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
-from swreview.findings import Finding, SubjectKey, finding_subject_key
+from swreview.findings import Finding, SubjectKey, finding_subject_key, subject_locations
 from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import (
@@ -916,11 +916,71 @@ def _verdict_key(finding: Finding) -> SubjectKey:
     The finding's subject key (`finding_subject_key`, feature 008 research R2.8): a check, the
     component instances it judged, the drawing places it read, the entity ids among its
     inputs, and the configuration it judged them in. Two drawing findings on different sheets,
-    the same check on different components, or two `hole.coaxiality` findings on one pair of
-    components that differ only by their holes have different keys and all stand (owner
-    decision 166A).
+    the same check on different components, or two `hole.coaxiality` findings (or two joints)
+    on one pair of components that differ only by their holes have different keys and all
+    stand (owner decision 166A).
+
+    One difference: a drawing location's persistent reference counts only where it is the
+    location's one locator. A check cites each subject by its reference alone (decision 25A),
+    so there the reference names the place; the model may cite a sheet or an annotation first
+    without and then with a reference, which is one place (008 T133).
     """
-    return finding_subject_key(finding)
+    check, components, locations, inputs, configuration = finding_subject_key(finding)
+    return (
+        check,
+        components,
+        subject_locations(
+            (
+                document_id,
+                sheet,
+                view,
+                annotation,
+                page,
+                persist_ref if sheet is None and annotation is None and page is None else None,
+            )
+            for document_id, sheet, view, annotation, page, persist_ref in locations
+        ),
+        inputs,
+        configuration,
+    )
+
+
+def _key_without_entities(finding: Finding) -> SubjectKey:
+    """`_verdict_key` with the entity ids among the inputs left out: `_restated_targets`'s
+    second match."""
+    check, components, locations, _, configuration = _verdict_key(finding)
+    return (check, components, locations, (), configuration)
+
+
+def _restated_targets(earlier: Sequence[Finding], restated: Sequence[Finding]) -> dict[int, int]:
+    """The earlier finding each restated finding re-judges, as `{restated position: index}`.
+
+    The one with its verdict key; else - the regrade drops a finding's newly bought sources, as
+    a bought tapped hole leaves a thread finding citing only its part's fastener - the one
+    earlier finding nothing matched whose key less its entity ids is the restated finding's,
+    when no other restated finding nothing matched shares it (decision 58A; 008 T133). Only the
+    regrade matches so: in a resumed turn (`_reconcile_reruns`) a finding with other entity ids
+    is the model checking something else.
+    """
+    by_key = {_verdict_key(finding): index for index, finding in enumerate(earlier)}
+    targets: dict[int, int] = {}
+    loose: dict[SubjectKey, list[int]] = {}
+    for position, finding in enumerate(restated):
+        index = by_key.get(_verdict_key(finding))
+        if index is None:
+            loose.setdefault(_key_without_entities(finding), []).append(position)
+        else:
+            targets[position] = index
+    matched = set(targets.values())
+    unmatched: dict[SubjectKey, list[int]] = {}
+    for index, finding in enumerate(earlier):
+        if index not in matched:
+            unmatched.setdefault(_key_without_entities(finding), []).append(index)
+    for key, positions in loose.items():
+        indexes = unmatched.get(key, [])
+        if len(positions) == 1 and len(indexes) == 1:
+            targets[positions[0]] = indexes[0]
+    return targets
 
 
 def _reconcile_reruns(session: ReviewSession, before: int) -> list[Finding]:
@@ -1705,9 +1765,10 @@ class ReviewRun:
         """Fold the restated calls' findings onto what they re-judge; withdraw the rest.
 
         `mark` is how many findings the session held before the first restated call. Each
-        finding a restated call added takes the id of the earlier finding with the same
-        verdict key, its place and its disposition (`_verdict_key` ignores coverage limits, so a
-        "may be bought" note drops in place), and is announced again under that id: an Accept,
+        finding a restated call added takes the id of the earlier finding it re-judges
+        (`_restated_targets`: the same verdict key, or the same key less the entity ids a bought
+        source took away), its place and its disposition (`_verdict_key` ignores coverage limits,
+        so a "may be bought" note drops in place), and is announced again under that id: an Accept,
         Reject or Defer the engineer recorded before the answer stands (the owner's decision
         58A, 2026-10-08, feature 010 research R2.26). An earlier finding of a restated check -
         one that cites one of its earlier steps, and was not carried from another run, whose
@@ -1717,13 +1778,14 @@ class ReviewRun:
         """
         session = self.session
         earlier = list(session.findings[:mark])
-        by_key = {_verdict_key(finding): index for index, finding in enumerate(earlier)}
+        restated = list(session.findings[mark:])
+        targets = _restated_targets(earlier, restated)
         merged = list(earlier)
         taken: set[str] = set()
         added: list[Finding] = []
         folded: list[Finding] = []
-        for finding in session.findings[mark:]:
-            index = by_key.get(_verdict_key(finding))
+        for position, finding in enumerate(restated):
+            index = targets.get(position)
             if index is None:
                 added.append(finding)
                 continue
