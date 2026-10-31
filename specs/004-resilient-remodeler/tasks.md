@@ -528,6 +528,10 @@ On the decision's final review (2026-10-21; research R19.20 to R19.26): the revi
 - [x] T318 Record R25.12 (the finding, the recheck, every point in the open where native code can pump, the correction, tests, mutations, gates), amend `bridge-remodel.md` and T303's barrier item, and update row 163A. Run the C# gates, the focused classes three times, both Python suites, ruff, the link check and the LF check. Acceptance recorded in R25.12
 - [x] T319 Record R25.13 (Codex's final review: the barrier unwind closes the copy by path, without a COM-identity comparison; recorded as a Start prerequisite, not fixed), correct R25.12's and `bridge-remodel.md`'s "after the identity check", and add it to R25.9. Run the link check and the LF check. Acceptance recorded in R25.13
 
+*Added 2026-10-31 (owner decisions 165A, 168A, 169A and 170A, fourteenth round; research R26):* Start's two narrow prerequisites are fixed test first - a failed open's unwind compares the opened document's COM identity before it closes and deletes the copy (R25.13), and a Plan whose session ended while it was finishing is tracked as ended (R22.14) - T180 is closed on a one-page brief, T303 is split, and T138 and T187 join what Start waits on.
+
+- [x] T320 [P] Test first (owner decision 165A; research R25.13, R26.1). In `RemodelTeardownTests.cs`: `AnUnwindLeavesADocumentOpenedAgainAtTheCopysPathMidOpenAndItsFile` (the close in process pumped inside the open's rebuild, then the copy closed and opened again at its own path - and, the second row, which document is open there cannot be read - before the recheck refuses: `target_mismatch`, nothing closed, the file kept, the settings put back, the failed open told with the copy not counted closed and one failure naming no path or run). The fake copy gains `ReopenedAs` and `OpenIdentityFailure`, unset in every older case. Acceptance observed before T321: 2 failures on their assertions
+
 
 
 
