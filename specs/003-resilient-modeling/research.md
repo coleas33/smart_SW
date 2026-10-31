@@ -123,6 +123,20 @@ which lose only these rows as subjects, are narrowed - matched to the replayed f
 locations that name only rows the table does not count are taken out, and listed - never lost
 and new (008 `contracts/replay.md` section 5, research R2.58).
 
+*Amended 2026-10-31 (owner, decision 166A): the 2024 SP5 names of a revolved cut and a helix.*
+The committed replay fixtures, dumped on 2024 SP5 (`sw_version` 32.5.0), report `RevCut` (3
+features) and `Helix` (4) where the table, calibrated on 2026 SP1.1, has `CutRevolve` and
+`HelixCurve`, so they classified `unknown`. `RevCut` joins `cut` and `Helix` `construction`, the
+2026 names kept beside them (tasks.md T093, T094). Every other unknown name on the fixtures stays
+unclassified, since classifying it is the owner's call: `BaseBody`, `CombineBodies`,
+`ConfigTableFolder`, `CutListFolder`, `FlatPattern`, `FoldUpDownSketchFolder`,
+`MateReferenceGroupFolder`, `PosGroupFolder`, `SMBaseFlange`, `SheetMetal` and `Split`, the set
+`test_rms_type_table.py` holds the fixtures to, which may only shrink. No finding the replay
+compares moves and no fixture of feature 008 is regenerated; what moves is the `rms.types.unknown`
+coverage item, which no longer names the two (or the one document only they put in it), in the
+one fixture made by a fresh checks-only run of the big assembly, the add-in's
+`review-waiting-big-assembly.json`, regenerated with `generate_waiting_fixtures.py --write`.
+
 The feature-type census in the extractor (`TypeNameCensus`) answers a different question
 (which type names no dump pass consumed); the RMS unknown-type report (which type names the
 rule tables do not classify) is computed in Python from `features[]` and recorded as one
