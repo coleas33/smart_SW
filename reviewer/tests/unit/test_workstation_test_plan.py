@@ -2433,11 +2433,12 @@ def test_t303a_reads_the_newest_backend_logs_pid_and_ends_that_process_once_the_
 
         writer = threading.Thread(target=open_a_copy)
         writer.start()
-        local, root, waiting = (
-            str(path).replace("'", "''") for path in (tmp_path / "local", runs, marker)
+        local, root, waiting, handover = (
+            str(path).replace("'", "''")
+            for path in (tmp_path / "local", runs, marker, tmp_path / "handover")
         )
         lines = run_powershell(
-            f"$env:LOCALAPPDATA = '{local}'\n$runs = '{root}'\n{number}\n"
+            f"$env:LOCALAPPDATA = '{local}'\n$runs = '{root}'\n$H = '{handover}'\n{number}\n"
             f"New-Item -ItemType File '{waiting}' | Out-Null\n{wait}\n",
             tmp_path,
         )

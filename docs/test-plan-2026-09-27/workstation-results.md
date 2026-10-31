@@ -23,6 +23,10 @@ lettered like the rest (section 0.2); A-pin is written by its letter in the boug
 Since 2026-09-28 the next sitting runs the retest of U25 to U27 first (the plan's section "First:
 the retest"): steps 4.9 and 5.3, right after step 1, and their rows are filled in then.
 
+Since 2026-10-31 the next sitting is S1 (the plan's section "S1: Start readiness", decision 167A):
+fill in only the rows of S1's steps - 1.3 to 1.7, 3.9, 5.3, 5.6 and step 6's - and leave every
+other row blank.
+
 | | |
 |---|---|
 | Days of the sitting | |
@@ -46,8 +50,10 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | Step | Task | Result | Observed | Notes |
 |---|---|---|---|---|
 | 1.3 | update, build and gates | | | |
+| 1.3 | 004 T140: `InstalledAssemblyMatchesManifest` passed, not skipped | | | |
 | 1.6 | health checks 1, 2, 3, 6 and 7 | | | |
-| 1.7 | 004 T164: FeatureWorks present and enabled, for the record | | | |
+| 1.6 | `swreview seat health` (decision 166A) | | | |
+| 1.7 | 004 T164: FeatureWorks present and enabled, for the record; in S1 the product Help > About names | | | |
 | 2.2 | 006 T100: the pane reads the placed profile | | | |
 | 2.3 | 008 T101: the profile is version 3 | | | |
 | 2.4 | 006 T100: the backend validates the profile (health check 4) | | | |
@@ -80,6 +86,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 3.8 | 011 T066: every named callout tied to its hole, unit and decimals | | | |
 | 3.9 | 011 T077: D14 with J's drawing closed, then open | | | |
 | 3.9 | 013 T142: both D14 reports against section 3.10's five conditions | | | |
+| 3.9 | 003 T088: PROBE-15 on part J, its `root_component:` line and its feature count | | | |
 | 4.1 | 008 T103: the small assembly's input tokens | | | |
 | 4.1 | 009 T079: the small assembly's summary, the engineer's words | | | |
 | 4.1 | 007 T059: Findings by type against `report.md`'s | | | |
@@ -128,6 +135,8 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 5.3 | 004 T185: if SOLIDWORKS closed: item C's six answers, and what was kept | | | |
 | 5.3 | 011 T171: the box's Open copy, then Start; exactly four `seat=` lines in `remodel.log`, the activation's and the open's, none with `refused=` or `error=`; and the plan's `remodel.open` line, `status=ok`, `gated=` naming `ISldWorks.OpenDoc7`, no `refused=` (item B; decision 148A) | | | |
 | 5.3 | 004 T186: J checked in: planned with the read-only option not ticked, or refused naming it with the option ticked; `IsReadOnly` unchanged | | | |
+| 5.3 | 004 T303a (004 T303's first half, decision 169A): the close in process with SOLIDWORKS idle | | | |
+| 5.3 | 004 T303a: the close in process with a dialog open | | | |
 | 5.5 | 009 T082: Show in SOLIDWORKS selects A's own entity, on the current build | | | |
 | 5.6 | 004 T033: PROBE-1, the "Cannot reorder" box with the flag clear and set | | | |
 | 5.6 | 004 T034: PROBE-3 and PROBE-4, the reorder and folder contiguity | | | |
@@ -136,6 +145,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 5.6 | 004 T037: PROBE-12 and PROBE-13, the tag and the copy of an open part | | | |
 | 5.6 | 004 T038: PROBE-5, PROBE-9, PROBE-10, PROBE-11 and PROBE-20 | | | |
 | 5.6 | 004 T039: PROBE-8, the tolerance calibration | | | |
+| 5.6 | 004 T187: PROBE-8's readings with and without the overrides, in the first run's answers file | | | |
 | 5.6 | 011 T171: the first run's `interop members:` line naming `ISldWorks.OpenDoc7`, and PROBE-12's lines with a reason, no `error` (decision 148A) | | | |
 | 5.6 | SOLIDWORKS's three options as they were before the probes | | | |
 | 6.0 | real files unchanged at the end | | | |
@@ -179,9 +189,11 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 
 ### 5. The other tabs, and Show in SOLIDWORKS
 
-### 5.3 Remodel: the retest of U26 and U27, the box, and J
+### 5.3 Remodel: the retest of U26 and U27, the box, J, and the close in process
 
 ### 5.6 The re-modeler probes
+
+### S1: the optional block
 
 ### 6. Handoff
 

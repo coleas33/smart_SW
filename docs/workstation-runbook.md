@@ -29,7 +29,8 @@ sitting of 2026-09-26 stopped after the test plan's step 2.3, so the next sittin
 section 4 says and then starts at step 2.4; the handover and the plan now also hold feature 013's
 five seat tasks (013 T141 to T144 and T153) and the owner's census extraction. This build also
 gives the Remodel tab its seat: the plan's step 5.3 plans on a copy, with Start switched off
-until a sitting has proved what that step's last paragraph names.
+until a sitting has proved what that step's last paragraph names. *2026-10-31:* the next sitting
+is S1, the plan's section "S1: Start readiness" (decision 167A).
 
 ## 1. Where everything is
 

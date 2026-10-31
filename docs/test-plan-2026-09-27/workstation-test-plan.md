@@ -21,7 +21,79 @@ version of the same sitting, with the reasons for its order, is
 `docs/test-plan-2026-09-27/workstation-handover.md`; **where this plan and the handover differ, follow this
 plan.** Where this plan and a task text disagree, the task wins; write the difference down as a
 finding. Since 2026-09-27 the plan also holds feature 013's five seat tasks and a census
-extraction the owner asked for (the next section).
+extraction the owner asked for (the section after S1).
+
+## Sittings
+
+*Added 2026-10-31 (owner decision 167A).* This plan is no longer run as one sitting of two days.
+Its steps are run in short sittings, each on one theme and each 3 hours 30 minutes or less, S1
+first; a later sitting's own table, a selection of the steps below as S1's is, is written here
+when it is planned, from what S1 brought back. A step keeps its number, its commands and its pass
+and fail in whichever sitting runs it.
+
+| Sitting | Theme | Length | What it holds |
+|---|---|---|---|
+| S1 | Start readiness | 3 h 10 min, and an optional 25 min | the next section: Remodel Start's evidence, with no key and no paid call |
+| S2 | Start on | 3 h 30 min at most | the first sitting after the development machine switches Start on: 004 T303b first (decision 169A), then the stage-1 runs, 004 T135 to T141 |
+| S3 | paid review | 3 h 30 min at most | the key and the paid reviews (steps 2.5 to 2.7, 3.4 and step 4), in as many sittings of this length as they need |
+| S4 | drawings | 3 h 30 min at most | the drawing probes and reviews (steps 3.2 to 3.8), then 011 T095 once both drawing switches are set |
+| S5 | fixtures | 3 h 30 min at most | the made-up and benchmark parts (001 T061, 003 T062, 003 T089, 005 T034, 010 T123, 010 T124) |
+
+## S1: Start readiness
+
+The next sitting (decision 167A): about **3 hours 10 minutes** at the seat, plus an optional 25
+minutes, with **no key and no paid call**. It brings the development machine what step 5.3's
+"What the Start switch waits on" asks of a seat - the re-modeler probes, a Plan on part J's copy
+with J unchanged, and the close in process (004 T303a, decision 169A) - with the read-only open's
+two D14 reports and PROBE-15 beside them. Of the documents of section 0.2 only J is needed:
+`notes\paths.txt` holds part J and its drawing. S1 runs these steps, in this order, each as the
+step itself says:
+
+| Order | Steps | Tasks | Estimate |
+|---|---|---|---|
+| 1 | 1.1 to 1.6: the update, its gates with 004 T140's check at 1.3, and the health checks with `swreview seat health` | 004 T140 | 55 min |
+| 2 | 1.7, Help > About's product name only | 004 T164 | 5 min |
+| 3 | 5.6's item 1, then its first run (moved early: it asks for no reorder), its item 4 and its item 7 | 004 T033 to T039, 004 T187 | 10 min |
+| 4 | 3.1's `Save-Fingerprint 'before'`, then 3.9: D14 twice on part J, then PROBE-15 on it | 011 T077, 013 T142, 003 T088 | 25 min |
+| 5 | 5.3: items A and B on the box, then items 1 to 6 on part J, with the open's seconds | 004 T185, 004 T186, 011 T171, 004 T182 | 30 min |
+| 6 | 5.3's close in process, idle, then with a dialog open | 004 T303a | 25 min |
+| 7 | optional: two made-up assemblies (below) | 006 T102, 001 T076 | 25 min |
+| 8 | 5.6's second and third runs, then its items 4 to 7 | 004 T033, 004 T034, 004 T038 | 15 min |
+| 9 | 6.0, 6.1, 6.3 and 6.5: the handoff | none | 25 min |
+
+- **Before the sitting:** section 0.1's items 1 and 3 (the build on GitHub, the vocabulary file),
+  and part J chosen as section 0.2 says, its own and its drawing's paths in `notes\paths.txt`.
+  No key, no standards profile and no other people are needed.
+- **The findings document** starts at step 1.4, as always. Fill in only the rows of S1's steps;
+  every other row stays blank.
+- **Order.** Step 5.6's first run comes early because it asks SOLIDWORKS for no reorder, so no
+  "Cannot reorder" box can hold it (step 5.6, item 2): do its item 1 (no document open, the three
+  options noted) before it and its item 7 (the options as noted) after it. The second and third
+  runs stay last before the handoff, as step 5.6 says.
+- **The fingerprint.** `Save-Fingerprint 'before'` runs before step 3.9 first opens part J;
+  step 6.0 compares, as always.
+- **Cut rule.** If SOLIDWORKS closes during step 5.3 (its item C), skip the close in process and
+  the optional block, and go straight to 5.6's second and third runs.
+- **The optional block** starts only before 2 h 30 on the sitting's clock, counted from step 1.1:
+  at 2 h 30, with neither it nor 5.6's second run begun, cut it and start the second run.
+
+### The optional block: two made-up assemblies (decision 172A)
+
+Two tiny assemblies the engineer builds at the seat by hand, from the two recipes that come with
+`swreview seat transparency` and `swreview seat volume-unit` under `benchmarks/native/`: one
+settles which recorded value means transparent (006 T102), the other the unit of the interference
+volume (001 T076). Each is made from new parts and saved only into `$H\scratch`, never into the
+vault, and never committed. Follow each recipe to its end, which runs its command, and write what
+the command prints under the findings document's heading for S1's optional block. A build without
+the recipes or the commands: write `optional block: not in this build`. Nothing of yours is
+opened or changed.
+
+### After S1, on the development machine
+
+Overnight, each as its own pull request, and each only if S1's results allow it: 004 T138's
+IDENTITY profile frozen from the first run's PROBE-8 answers (decision 170A); Remodel's Start
+switch, `RemodelStart.SeatValidated`, once everything step 5.3's "What the Start switch waits on"
+names holds; and `DrawingOpenScope.SeatValidated`, from step 3.9's two D14 reports (section 3.10).
 
 ## The next sitting: where 2026-09-26 stopped, and what feature 013 adds
 
@@ -161,8 +233,9 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 ## How long it takes
 
-About **13 hours 25 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
-steps 4 to 6. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
+About **13 hours 55 minutes at the seat** for the whole plan, run once. Since 2026-10-31 it is
+run in the sittings of the section "Sittings", each 3 hours 30 minutes or less (decision 167A),
+S1 first, so this figure is the plan's sum, not a sitting's. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
 inside steps 3.1, 4.1, 4.5, 5.1 and 5.2; feature 004's three items (decision 18A) about 40
 minutes more: the FeatureWorks record at step 1.7 (5 minutes), the owner's parts at step 5.1 (10
 minutes) and the re-modeler probes at step 5.6 (25 minutes), the last step of day 2 before the
@@ -174,9 +247,9 @@ to C and the read-only option (20 minutes); feature 015's unticked review and Se
 about 35 minutes more (decision 4A): two SOLIDWORKS restarts, the waiting review sent, and the big
 assembly's unticked review and timings; feature 014's smoke checks at step 4.11 take 10 minutes
 more, reading step 4.1's review without another paid review; and decision 144A's check of the
-re-modeler's pane seat at step 5.3's item B (011 T171) about 5 minutes more. The next sitting, which
-runs the retest first and then starts at step 2.4 after its update, needs about 12 hours 55 minutes. Keep
-SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
+re-modeler's pane seat at step 5.3's item B (011 T171) about 5 minutes more; and S1's close in
+process at step 5.3 (004 T303a, decision 169A) 25 minutes more, and PROBE-15 at step 3.9 (003
+T088) 10. Keep SOLIDWORKS open from step 4.1 to step 4.5, in one sitting:
 the review chips of steps 4.4 and 4.5 live only as long as the SOLIDWORKS session. Before the
 sitting, allow **half a day** to find and note documents C to N, Q and S, and the components of
 A and B step 3.1 asks about (section 0.2), while the owner names the parts P; a new machine
@@ -186,9 +259,9 @@ A and B step 3.1 asks about (section 0.2), while the owner names the parts P; a 
 |---|---|---|
 | 1 | Update, gates, health checks (registration only on a new machine), the FeatureWorks record | 55 min |
 | 2 | Profile and key, the profile's version 4, and lever 14's live test | 40 min |
-| 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
+| 3 | Dumps and the Standards probe of A and B, probes D1 to D14, PROBE-15 and one pane review, with the fingerprints | 4 h 5 min |
 | 4 | The pane reviews, with the findings by type, the timing of A's review, A again with the version 4 profile, a drawing active, and A unticked then sent, with B's timings and A's smoke checks | 5 h |
-| 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel (the retest's box, with the pane seat's gate, and crash capture first) | 1 h 25 min |
+| 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel (the retest's box, with the pane seat's gate, and crash capture first), and the close in process | 1 h 50 min |
 | 5.5 | Show in SOLIDWORKS on the current build: A reviewed, J Model checked, one Show | 15 min |
 | 5.6 | The re-modeler probes: three runs with no document open, and the three options checked | 25 min |
 | 6 | Handoff | 45 min |
@@ -440,7 +513,9 @@ function Show-RemodelLedger {
     param([string] $folder)
     $ledgers = @(Get-ChildItem -LiteralPath "$($folder.TrimEnd('\'))\capabilities" -Filter 'remodel-*.yaml' -ErrorAction SilentlyContinue)
     if ($ledgers.Count -eq 0) { 'no answers file in this folder: the run did not finish'; return }
-    Select-String -LiteralPath $ledgers.FullName -Pattern '^  - probe_id: |^    blocking: |^    verdict: |^      "(reason|error)": ' | ForEach-Object { $_.Line.Trim() }
+    Push-Location "$R\reviewer"
+    try { foreach ($ledger in $ledgers) { uv run swreview remodel ledger $ledger.FullName } }
+    finally { Pop-Location }
 }
 
 Set-Location $R
@@ -484,10 +559,10 @@ What the commands do, so you know what you are running (each only reads):
   every document the dumps list, in `notes\fingerprint-<name>.csv`; `Compare-Fingerprint '<name>'`
   compares that record with the one named `before`. Both only read; hashing B's documents can
   take a few minutes.
-- `Show-RemodelLedger "<probe run folder>"` prints, from the answers file a re-modeler probe run
-  wrote (step 5.6), four lines per probe: its id, whether it is `blocking`, its `verdict`
-  (`verified`, `refuted` or `unresolved`) and its `"reason"` (or the `"error"` it threw); or
-  `no answers file in this folder: the run did not finish`.
+- `Show-RemodelLedger "<probe run folder>"` hands the answers file a re-modeler probe run wrote
+  (step 5.6) to `swreview remodel ledger` (decision 166A, 2026-10-31), which prints each probe's
+  id, whether it is blocking, its verdict (`verified`, `refuted` or `unresolved`) and its reason,
+  or the error it threw; or it prints `no answers file in this folder: the run did not finish`.
 
 If a `Show-` command prints a red Python traceback, copy its last line into the Notes of the step's
 row, write `facts not read` there, and go on (at step 4.11, stop as that step says): the run folder
@@ -548,7 +623,7 @@ any line from the first: **stop**, copy the lines into `$H\notes\update.txt`, an
 do not stash, delete or move anything. Any branch other than `main`: stop and call the owner; do
 not merge on the seat. Less than 10 GB: free space first, or call the owner.
 
-### 1.3 Update, build and gate
+### 1.3 Update, build and gate [004 T140]
 
 ```powershell
 git fetch origin; git log --oneline HEAD..origin/main
@@ -601,6 +676,18 @@ and the line `-NoPull: building what is checked out`; then each `== <step>` head
   `$H\notes\update.txt`, write `blocked by 1.3: network` under them (step 1.4 puts it in 1.3's
   row), and call the owner. A download refused at `tokenizer fetch` is not a fail: run the third
   line again with `-TokenizerFrom` and the owner's file.
+
+**004 T140: the installed interop against the frozen manifest.** The gate above ran this test
+among the others without naming it; run it alone, so that its own line can be read. It reads only
+the metadata of the SOLIDWORKS interop installed here, and starts nothing:
+
+```powershell
+dotnet test extractor\SwReview.Extractor.Tests\SwReview.Extractor.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~InstalledAssemblyMatchesManifest" --logger "console;verbosity=normal"
+```
+
+Pass: a line beginning `Passed` that names `InstalledAssemblyMatchesManifest`, and `Passed: 1`.
+A line beginning `Skipped` in its place means the build found no interop to compare: a fail. Copy
+the two lines into `notes\update.txt`; step 1.4 puts them in 004 T140's row.
 
 ### 1.4 Which build this is, and the findings document
 
@@ -691,11 +778,26 @@ Every line of that log starts with its time in square brackets; read what follow
 6. The pane has five tabs: Review, Extract, Model check, Remodel, Standards. No Ask tab.
 7. `git status --porcelain` still prints nothing.
 
+Then the seat's own health check (decision 166A, 2026-10-31), with SOLIDWORKS still open on the
+part:
+
+```powershell
+cd "$R\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd $R
+```
+
+Pass: `exit code: 0`. Any other: copy what it printed into the notes of its 1.6 row, after
+checking it holds no path. A build older than 2026-10-31 has no such command: write
+`seat health: not in this build`.
+
 Record: pass or fail for checks 1, 2, 3, 6 and 7 in the 1.6 row; on a fail, the log lines (each
 after its `[time]`). A fail of check 1 or 2: "When a step fails" says what to try once and what
 can still go on.
 
 ### 1.7 FeatureWorks, for the record [004 T164]
+
+*In S1 only the product name is asked* (004 T164, amended 2026-10-31): the sitting of 2026-09-26
+recorded the registry line and the dialog below, so S1 reads Help > About alone, as the last
+paragraph but one says, and records the product in 004 T164's row.
 
 Two minutes, and read only. FeatureWorks is the SOLIDWORKS add-in that recognises features in an
 imported solid (a STEP file has no feature tree). Feature 004's work on imports is parked, and
@@ -1324,7 +1426,7 @@ T066 is D8's `value`: the extraction's own reading of the dimension (`GetSystemV
 nominal the product's drawing binding uses. **Change nothing**: the switch this decides is set on
 the development machine (section 3.10).
 
-### 3.9 The read-only open, probed [011 T077; 013 T142]
+### 3.9 The read-only open, probed [011 T077; 013 T142; 003 T088]
 
 1. Close J's drawing if it is open. Open part J and click its window, so J is the active
    document. Click into PowerShell, paste the line, press Enter, and then **touch nothing** until
@@ -1398,6 +1500,22 @@ gives an instruction line in place of a drawing question: step 4.7 records that 
 switch is set, the sitting after this one confirms that the host answers `opens_closed` and that a
 review offers the read-only open once per drawing file ("Not in this sitting"). Record in the 013
 T142 row of this step: whether both reports allow the switch, by section 3.10's five conditions.
+
+**003 T088's PROBE-15, on part J** (S1, 2026-10-31; feature 004 waits on it too). With part J
+still open and active, and its drawing closed again, paste the lines and touch nothing until the
+prompt comes back. The probe reads J and prints; it writes nothing to J:
+
+```powershell
+swreview-extract probe rms --doc "<full path of part J>" | Out-File -FilePath "$H\probes\probe-rms-J.txt" -Encoding utf8; "exit code: $LASTEXITCODE"
+Select-String -Path "$H\probes\probe-rms-J.txt" -Pattern '^(root_component|features|equations|whats_wrong_count): ' | ForEach-Object { $_.Line }
+```
+
+Pass: `exit code: 0`, and the second line prints a `root_component: ` line and a `features: <n>`
+line: what `GetRootComponent3(false)` answers for a part's configuration, and how many features a
+part read on its own has. Record in 003 T088's row the `root_component:` line whole and the
+`features:` count only, never what follows it in brackets, which names a configuration (rule 5).
+The file, which also holds J's path and its feature names, stays in `$H\probes`. 003 T088's other
+probes (14, 16, 17 and 21) are not asked here.
 
 ### 3.10 The two switches: what allows them, and how
 
@@ -2116,7 +2234,7 @@ not found on S-2, as you know them to be. Record: A-plate's drawing's printed li
 and for S-1 and S-2 the export-control check's bucket; never the statement's text or anything
 else of a title block.
 
-### 5.3 Remodel [004 T185; 004 T186; 011 T171]
+### 5.3 Remodel [004 T185; 004 T186; 011 T171; 004 T303a]
 
 This build gives the Remodel tab its seat (feature 004's seat adapter, 004 T152 to T160, and its
 teardown, 004 T167): **Remodel a copy plans on a copy** the tab makes in its own run folder, never
@@ -2249,7 +2367,15 @@ Get-SeatHash $f; Get-Item -LiteralPath $f | Select-Object Length, LastWriteTime,
    ```
 
    Pass: `copies in it: 1`, and SOLIDWORKS's Window menu lists part J and no document whose name
-   ends in `-RMS`: the copy was made in the run folder and let go.
+   ends in `-RMS`: the copy was made in the run folder and let go. Then how long the open took,
+   from the run's own record (004 T182 sets the add-in's wait on the copy's open from it):
+
+   ```powershell
+   $phases = @(Get-Content -LiteralPath (Join-Path $run.FullName 'remodel-open.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
+   "open: $([math]::Round(([DateTimeOffset]$phases[-1].at - [DateTimeOffset]$phases[0].at).TotalSeconds, 1)) s, from $($phases[0].phase) to $($phases[-1].phase)"
+   ```
+
+   Pass: a line `open: <seconds> s, from copy_open.begin to open_record.written`.
 4. Open the three settings again, before Start, and press **Cancel**. Pass: each is as you noted
    it.
 5. Press **Start**. Pass: it says
@@ -2260,13 +2386,80 @@ Get-SeatHash $f; Get-Item -LiteralPath $f | Select-Object Length, LastWriteTime,
    PowerShell, run the second line of the first block again. Pass: the hash, size and time are
    unchanged, and so is `IsReadOnly`.
 
-Record: pass or fail; the refusal if Remodel a copy was refused; how long the plan took, in seconds
-(004 T182 sets the add-in's wait on the copy's open from it); and any line saying not everything
+Record: pass or fail; the refusal if Remodel a copy was refused; how long the plan took, in seconds,
+and the open's seconds from item 3 (004 T182 sets the add-in's wait on the copy's open from them);
+and any line saying not everything
 could be put back. For the retest: item A done or `no administrator rights`; item B's last phase,
 last two `stage=` lines and count; J's `IsReadOnly` and the read-only option as noted; and, if
 SOLIDWORKS closed, item C's six answers. For 011 T171: whether Open copy opened the copy, and item
 B's four `seat=` lines as pass or fail, a failing line written whole. No part name, run folder name
 or path goes in the findings document.
+
+**004 T303a: the close in process (decision 169A; S1).** When the backend that made a plan has
+exited and the folder for runs is then changed, the add-in closes what that plan left on the
+bridge in process, on SOLIDWORKS's own thread, within 30 seconds (decision 161A). This checks it
+twice: once with that thread idle, once with a dialog open. Part J stays open and active, its
+three settings and the read-only option as item 1 noted. It ends one process only: the review
+backend the add-in started, by the number (PID) the backend's own log gives, and only while that
+number is still a backend's; never a process by its name. Two cases cannot be made by hand here
+and are not asked: an open the old backend handed over before it stopped (the barrier) stays the
+fakes', and a plan waiting for Start is 004 T303b's, after Start is switched on (decision 169A).
+
+1. The backend's number, from the newest backend log, whose line reads
+   `backend healthy on <address> (pid <n>)`:
+
+   ```powershell
+   $backend = [int]((Get-ChildItem "$env:LOCALAPPDATA\SwReview\logs\backend-*.log" | Sort-Object LastWriteTime | Select-Object -Last 1 | Select-String -Pattern '\(pid (\d+)\)$' | Select-Object -Last 1).Matches[0].Groups[1].Value)
+   "backend pid $backend | running: $([bool](Get-Process -Id $backend -ErrorAction SilentlyContinue))"
+   ```
+
+   Pass: a number and `running: True`.
+2. A failed plan's leftover: paste this block, then within a minute press **Remodel a copy** on
+   part J. The block waits until the plan's copy is open, then ends the backend:
+
+   ```powershell
+   $start = Get-Date; $open = $null
+   while (-not $open -and ((Get-Date) - $start).TotalMinutes -lt 5) { Start-Sleep -Milliseconds 100; $open = Get-ChildItem $runs, "$H\runs-t303a" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*-remodel' -and $_.CreationTime -gt $start -and (Select-String -LiteralPath (Join-Path $_.FullName 'remodel-open.jsonl') -SimpleMatch 'open_record.written' -Quiet -ErrorAction SilentlyContinue) } | Select-Object -First 1 }
+   $p = Get-Process -Id $backend -ErrorAction SilentlyContinue
+   if ($open -and $p -and $p.ProcessName -in 'uv', 'swreview', 'python') { Stop-Process -Id $backend; "ended the backend, pid $backend" } else { 'nothing was ended: no copy opened within 5 minutes, or that number is no longer a backend' }
+   ```
+
+   Pass: `ended the backend, pid <n>`, and the Remodel tab then says the plan stopped; write its
+   line down as far as it names no path. `nothing was ended`: write the line and skip to item 4.
+3. The close in process, idle. Make the folder for this pass and print its path:
+
+   ```powershell
+   (New-Item -ItemType Directory -Force "$H\runs-t303a").FullName
+   ```
+
+   In the Review tab's **Settings**, set the folder for runs to that path, note the clock time,
+   press **Save**, and touch nothing in SOLIDWORKS for 40 seconds. Then:
+
+   ```powershell
+   Select-String -Path "$env:LOCALAPPDATA\SwReview\logs\tool-service-*.log" -SimpleMatch 'remodel close in process' | Select-Object -Last 1 | ForEach-Object { $_.Line }
+   Select-String -LiteralPath (Join-Path $open.FullName 'remodel.log') -SimpleMatch 'remodel close in process' | ForEach-Object { $_.Line }
+   ```
+
+   Pass: each prints one line that reads, after its time,
+   `remodel close in process thread=posted reason=remodel.close verified=true tag_removed=true copy_closed=true`,
+   timed within 30 seconds of Save; SOLIDWORKS answered as soon as you touched it; the Window menu
+   lists no document whose name ends in `-RMS`; the three settings and the read-only option are
+   as item 1 noted (open them and press **Cancel**); and the Review tab's badge reads
+   `Backend ready` again. A line ending `nothing closed: this bridge holds no session of that run`
+   means no leftover was there: write it down as far as `run=`, never the folder's name after it,
+   and write `blocked`.
+4. The same with a dialog open. Paste item 1's block again (the backend restarted, so its number
+   is new), then item 2's, and press **Remodel a copy** on part J again. When it has ended the
+   backend, in **Settings** set the folder for runs back to the one `$runs` names (type `$runs`
+   in PowerShell to see it), note the clock time, press **Save**, and at once open Tools > Options
+   in SOLIDWORKS; keep it open 40 seconds, then press **Cancel**. Read the two lines as in item 3:
+   the second now comes from this pass's run folder. Pass: as item 3; and write down whether the
+   line's time falls while Options was open or after you closed it. A line timed before you could
+   open Options: write `dialog too late`, a case that stays the fakes' (decision 169A).
+
+Record in 004 T303a's two rows: each pass's two lines as far as their `gated=` list (rule 5), the
+seconds from Save to the line, whether SOLIDWORKS answered throughout, and what the Window menu
+and the settings showed. `$H\runs-t303a` travels inside the handover folder.
 
 **What the Start switch waits on.** The development machine sets it (`RemodelStart.SeatValidated`,
 in a commit of its own) only once a sitting has proved, in this order: first step 5.6's blocking
@@ -2297,7 +2490,7 @@ Pass: Show in SOLIDWORKS selects A's own entity, not something in J. Record what
 something in A, something in J, nothing, or an error. If the review of A stops, or shows no
 finding, write `blocked` in the 009 T082 row with the reason.
 
-### 5.6 The re-modeler probes, with no document open: last [004 T033 to T039; 011 T171]
+### 5.6 The re-modeler probes, with no document open: last [004 T033 to T039; 011 T171; 004 T187]
 
 Feature 004's Phase 2 probes (the owner's decision 18A). `swreview-extract probe remodel` builds a
 throwaway part of its own inside the folder it is given, changes it on purpose to see what this
@@ -2306,6 +2499,10 @@ yours, and it refuses to start while any document is open. Each run writes its a
 verdict per probe, to `capabilities\remodel-<SOLIDWORKS version>.yaml` in its folder: the answers
 file. This is the last step before the handoff because a "Cannot reorder" message box can hold
 SOLIDWORKS until someone answers it, and PROBE-1 asks for one on purpose.
+
+*In S1 the first run comes early* (decision 167A): it asks SOLIDWORKS for no reorder, so no box
+can hold it. S1 does item 1, the first run with its item 4, and item 7 early in the sitting; the
+second and third runs, with items 4 and 7 again, stay last before the handoff.
 
 1. **Before.** In SOLIDWORKS, Window > Close All, **Don't Save**, so that no document is open, and leave SOLIDWORKS running:
    the probe attaches to it and never starts one. Then open Tools > Options > System Options,
@@ -2367,15 +2564,14 @@ SOLIDWORKS until someone answers it, and PROBE-1 asks for one on purpose.
      `verified`, saying what that answer stops. The line after them is the answers file's path.
      That line, the `Wrote` line and the run's first line (the command with its folder) hold the
      handover folder's path: never copy them.
-   - `Show-RemodelLedger`'s lines, four per probe: `- probe_id: "PROBE-<n>"`, `blocking: true`
-     or `false`, `verdict: verified`, `refuted` or `unresolved`, and its `"reason":` sentence. An
-     `"error":` line in place of the reason means the probe threw, and its verdict is
-     `unresolved`.
+   - what `Show-RemodelLedger` prints through `swreview remodel ledger`: for each probe its id,
+     whether it is blocking, its verdict (`verified`, `refuted` or `unresolved`) and its reason.
+     An error in place of the reason means the probe threw, and its verdict is `unresolved`.
    - *Added 2026-10-20 (decision 148A, 011 T171):* after the first run, PROBE-12 reopens the part
      it saved by the open's qualified key. Pass: the run's `interop members:` line names
-     `ISldWorks.OpenDoc7` and not `OpenDoc7` on its own, and PROBE-12's lines carry a `"reason":`,
-     not an `"error":`. An `"error":` line for PROBE-12 is a fail: write `error` and whether it
-     names `OpenDoc7`, never the error's text, which may hold a path.
+     `ISldWorks.OpenDoc7` and not `OpenDoc7` on its own, and PROBE-12 has a reason, not an error.
+     An error for PROBE-12 is a fail: write `error` and whether it names `OpenDoc7`, never the
+     error's text, which may hold a path.
 5. **What each probe asks.** Research R10 and quickstart Scenario 4 of
    `specs/004-resilient-remodeler` hold the whole question and what a bad answer costs.
 
@@ -2396,6 +2592,12 @@ SOLIDWORKS until someone answers it, and PROBE-1 asks for one on purpose.
    | PROBE-13 | 004 T037 | first | can a part be copied while SOLIDWORKS holds it open? | a plain copy worked |
    | PROBE-20 | 004 T038 | second | does a feature's description survive a move into a folder? | it read back unchanged |
    | PROBE-21 | 004 T036 | first | the equation count of a part with none | 0 |
+
+   *004 T187 (decision 170A):* PROBE-8 in this build measures its box and cylinder at the default
+   accuracy, and again with a mass, centre-of-mass and moment override each, and keeps every
+   reading in the first run's answers file; those readings are 004 T187's record, and 004 T138
+   freezes the IDENTITY profile from them on the development machine. Its row passes when
+   PROBE-8's verdict is `verified`, as 004 T039's does.
 
    A probe's result: `pass` when its verdict is `verified`, `fail` when `refuted`, `blocked` when
    `unresolved` (Notes: the first words of its reason, or `error`, never the error's text, which
@@ -2560,7 +2762,8 @@ owner rebuilds. Record which of these you did.
 
 ## Not in this sitting
 
-For the development machine, once the folder comes back:
+*Since 2026-10-31 (decision 167A)* "this sitting" here is the whole plan, S1 to S5: what follows
+is what none of its steps runs. For the development machine, once the folder comes back:
 
 | Package | Task | Why not now |
 |---|---|---|
@@ -2586,7 +2789,7 @@ Open seat or key tasks of earlier features, not asked this time:
 | 002 | 002 T067 | every quickstart scenario of feature 002 end to end: a sweep of its own |
 | 003 | 003 T062, 003 T088, 003 T089 | the RMS fixture parts and their probes; step 5.1 touches Model check on J and the owner's parts only |
 | 004 | 004 T135 to T141 | the re-modeler's stage-1 runs: Start is switched off in this build (004 T172) until the development machine sets it, as the table above says; the production seat adapter, its wiring and its teardown (004 T152 to T160 and 004 T167, decision 17A) are in this build, and step 5.3 plans on a copy through them |
-| 004 | 004 T303 | split by decision 169A: its first half, 004 T303a (the close in process, with no plan waiting for Start), at the next sitting; its second half, 004 T303b (a plan holding its session for Start), first at the sitting after the development machine switches Start on (the row of 004 T172's switch above) |
+| 004 | 004 T303 | split by decision 169A: its first half, 004 T303a (the close in process, with no plan waiting for Start), is S1's, at step 5.3; its second half, 004 T303b (a plan holding its session for Start), first at the sitting after the development machine switches Start on (the row of 004 T172's switch above) |
 | 005 | 005 T025 to T027 | the live usage probes: their test files are not written yet |
 | 005 | 005 T034, 005 T036 | building `rms-part` and the benchmark baseline: benchmark work |
 | 005 | 005 T085a | the workstation A/B harness: not built |

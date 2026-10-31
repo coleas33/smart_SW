@@ -33,6 +33,23 @@ each in a commit of its own. What can only be seen with a switch on is 011 T095,
 after that. Two tasks are the development machine's once the folders come back: 008 T105 (replay
 the sitting's runs) and 009 T085 (restore them offline).
 
+## The next sitting is S1 (decision 167A)
+
+*Added 2026-10-31.* The next sitting is not the whole list below: it is S1, about three hours
+with no key and no paid call, and its order is the test plan's section "S1: Start readiness",
+which wins where this list differs. In that order: the update and the health checks, with
+`swreview seat health` and 004 T140's manifest test (the test plan's steps 1.1 to 1.6); the product
+Help > About names (004 T164, step 1.7); step 21's first run, moved early because it asks for no
+reorder (004 T033 to T039, and 004 T187's PROBE-8 readings); the fingerprint, then step 8's two
+D14 runs on part J (011 T077, 013 T142) and PROBE-15 on J (003 T088; the test plan's step 3.9);
+the retest's box and part J's Plan with the open's seconds (004 T185, 004 T186, 011 T171, 004
+T182; step 5.3); the close in process, idle and then with a dialog open (004 T303a; step 5.3),
+which ends only the backend the add-in started, by its number; optionally, two made-up
+assemblies built at the seat and never committed (006 T102's transparency, 001 T076's volume
+unit; decision 172A); step 21's second and third runs; and the test plan's handoff steps 6.0,
+6.1, 6.3 and 6.5. The later sittings, S2 to S5, are each 3.5 hours or less and on one theme (the
+test plan's section "Sittings").
+
 ## Where the 2026-09-26 sitting stopped, and what the next sitting adds
 
 *Added 2026-09-27.* The sitting of 2026-09-26 ran the build of that day and stopped early in this
