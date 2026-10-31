@@ -40,13 +40,14 @@ with no key and no paid call, and its order is the test plan's section "S1: Star
 which wins where this list differs. In that order: the update and the health checks, with
 `swreview seat health` (004 T353) and 004 T140's manifest test (the test plan's steps 1.1 to 1.6); the product
 Help > About names (004 T164, step 1.7); step 21's first run, moved early because it asks for no
-reorder (004 T033 to T039, and 004 T187's PROBE-8 readings); the fingerprint, then step 8's two
+reorder (004 T036 to T039, and 004 T187's PROBE-8 readings); the fingerprint, then step 8's two
 D14 runs on part J (011 T077, 013 T142) and PROBE-15 on J (003 T088; the test plan's step 3.9);
 the retest's box and part J's Plan with the open's seconds (004 T185, 004 T186, 011 T171, 004
 T182; step 5.3); the close in process, idle and then with a dialog open (004 T303a; step 5.3),
 which ends only the backend the add-in started, by its number; optionally, two made-up
 assemblies built at the seat and never committed (006 T102's transparency, 001 T076's volume
-unit; decision 172A); step 21's second and third runs; and the test plan's handoff steps 6.0,
+unit; decision 172A); step 21's second and third runs, the third holding the five probes Start
+waits on; and the test plan's handoff steps 6.0,
 6.1, 6.3 and 6.5. The later sittings, S2 to S5, are each 3.5 hours or less and on one theme (the
 test plan's section "Sittings").
 
@@ -114,21 +115,23 @@ copy; and part J's hash, size and time are unchanged. The step also records how 
 which sets the add-in's wait on the copy's open (004 T182). What the next sitting must prove
 before the development machine sets the Start switch (`RemodelStart.SeatValidated`, in a commit
 of its own), in this order: first step 21's blocking probes - PROBE-1, 2, 3, 4 and 12 (004 T033
-to T035 and 004 T037) - each `verified`; then step 5.3's Plan on one real part's copy, part J, with
-that part's hash unchanged. 004 T180, what a plan holds while Start is on, is decided on the
-development machine before the switch too. *Since 2026-10-31* the list is longer: 004 T303a (S1),
-R22.14 and R25.13 (decision 165A), and IDENTITY calibrated (004 T187's readings, 004 T138's freeze;
-decision 170A), with 004 T303b first after the switch (decision 169A); the test plan's step 5.3
-has it whole. *Added 2026-10-19 (decision 144A):* the pane seat calls
+to T035 and 004 T037) - each `verified`, all five in step 21's third run, whose answers file is
+committed under `benchmarks/native/capabilities/` and judged ready by `swreview remodel ledger`
+(004 research R27.8); then step 5.3's Plan on one real part's copy, part J, with that part's hash
+unchanged. 004 T180 is done (decision 168A). *Since 2026-10-31* the list is longer: 004 T303a (S1),
+IDENTITY calibrated (004 T187's readings, 004 T138's freeze; decision 170A) and the owner's call on
+the no-handle unwind (R26.10), with 004 T303b first after the switch (decision 169A); R22.14 and
+R25.13 are done (decision 165A); the test plan's step 5.3 has it whole. *Added 2026-10-19 (decision 144A):* the pane seat calls
 SOLIDWORKS through a gate of its own in this build, so step 5.3's item B, on the box before its
 Discard, also runs 011 T171: Open copy, then Start, and the run's `remodel.log` must hold exactly
 four `seat=` lines - a begin line and an outcome line for the plan's activation of the copy, and
 the same for the open - none with `refused=` or `error=`. *Added 2026-10-20 (decision 148A):* the
 seat's guard is a closed allowlist and `OpenDoc7` is called by its qualified key at every caller, so
 T171 also reads the plan's `remodel.open` line in the same `remodel.log` (`status=ok`, its `gated=`
-naming `ISldWorks.OpenDoc7`, no `refused=`), and at step 21's first run PROBE-12's reopen (the run's
-`interop members:` line naming `ISldWorks.OpenDoc7`, PROBE-12's lines with a reason and no
-`error`).
+naming `ISldWorks.OpenDoc7`, no `refused=`), and at step 21's third run PROBE-12's reopen (the run's
+`interop members:` line naming `ISldWorks.OpenDoc7`, PROBE-12 with a reason and no `error`; on an
+error, whether the console's line after
+`PROBE-12 threw; its message is kept in this log, never the ledger:` contains `OpenDoc7`).
 
 Two more the owner asked for on 2026-09-27, with step 20:
 
@@ -432,23 +435,30 @@ row per step and task id. The development machine moves each answer into the res
 21. **004 T033 to T039: the re-modeler probes,** last before the handoff, SOLIDWORKS running with
     no document open (the probe refuses otherwise), on the current build. Three runs, each into
     its own folder, since a second run into the same folder overwrites the first one's answers
-    file; first the probes that never reorder, then the three reorders no watchdog times, then
-    PROBE-1 alone, which provokes a "Cannot reorder" box with the flag clear on purpose:
+    file; first the other probes that never reorder, then PROBE-5's and PROBE-20's reorders, which
+    no watchdog times, then the five probes Start waits on together, so that one answers file can
+    be judged for it (004 research R27.4): PROBE-2, 4 and 12, then PROBE-3, then PROBE-1 last,
+    which provokes a "Cannot reorder" box with the flag clear on purpose:
     ```powershell
-    swreview-extract probe remodel --probe PROBE-2,PROBE-4,PROBE-6,PROBE-7,PROBE-8,PROBE-9,PROBE-10,PROBE-11,PROBE-12,PROBE-13,PROBE-21 --out "$H\probes\remodel-no-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    swreview-extract probe remodel --probe PROBE-6,PROBE-7,PROBE-8,PROBE-9,PROBE-10,PROBE-11,PROBE-13,PROBE-21 --out "$H\probes\remodel-no-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
     Show-RemodelLedger "$H\probes\remodel-no-reorder"
-    swreview-extract probe remodel --probe PROBE-3,PROBE-5,PROBE-20 --out "$H\probes\remodel-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    swreview-extract probe remodel --probe PROBE-5,PROBE-20 --out "$H\probes\remodel-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
     Show-RemodelLedger "$H\probes\remodel-reorder"
-    swreview-extract probe remodel --probe PROBE-1 --out "$H\probes\remodel-probe-1" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
-    Show-RemodelLedger "$H\probes\remodel-probe-1"
+    swreview-extract probe remodel --probe PROBE-2,PROBE-4,PROBE-12,PROBE-3,PROBE-1 --out "$H\probes\remodel-start" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    Show-RemodelLedger "$H\probes\remodel-start"
     ```
     After each, `Show-RemodelLedger` on its folder prints each probe's id, blocking flag, verdict
-    (`verified`, `refuted` or `unresolved`) and reason. A message box is answered only after 30
+    (`verified`, `refuted` or `unresolved`) and reason, and last the line
+    `RemodelStart.SeatValidated: not ready - ` with its reasons, which in S1 reads `not ready`
+    after every run by design (only the third holds Start's five, and IDENTITY is calibrated only
+    after S1, by 004 T138): it is recorded, not judged. A message box is answered only after 30
     seconds (PROBE-1 times each of its two tries for 5 seconds), with OK; a run that hangs is recovered as the test
-    plan's "If SOLIDWORKS stops answering" says and is not run again. Each run turns three
+    plan's "If SOLIDWORKS stops answering" says and is not run again, and its answers file keeps
+    every probe that finished. Each run turns three
     SOLIDWORKS options off and puts them back when it ends; the plan notes them before the runs
     and checks them after (its step 5.6). Pass per probe: `verified`; `refuted` is a fail that is
-    the answer the probe exists for, `unresolved` or a run that did not finish is blocked. Record:
+    the answer the probe exists for; `unresolved`, or `not finished` in a run that hung or failed,
+    is blocked. Record:
     per run its exit code and `probes:` line, each `BLOCKING` line up to its colon, every box,
     the verdicts; the answers files `capabilities\remodel-<version>.yaml` and the logs stay in
     their folders under `<handover folder>\probes` and travel with it.
@@ -512,8 +522,10 @@ refuted blocking probe goes to the owner. The stage-1 runs, 004 T135 to T141, wa
 switch: the production seat adapter and its wiring, 004 T152 to T160 (decision 17A), and its
 teardown, 004 T167, are in this build, and the development machine sets
 `RemodelStart.SeatValidated` (004 T172) in a commit of its own only once step 21's blocking
-probes are `verified`, the test plan's step 5.3 has planned on part J's copy with J's hash
-unchanged, and 004 T180 is decided; a later sitting runs them.
+probes are `verified` in its third answers file, committed and judged ready, the test plan's step
+5.3 has planned on part J's copy with J's hash unchanged, and the rest the test plan's step 5.3
+names under "What the Start switch waits on" holds (004 T303a, IDENTITY calibrated, the owner's
+call on the no-handle unwind); a later sitting runs them.
 
 *Added 2026-10-31 (owner decision 166A; 004 T362):* every feature's open seat tasks are held to
 this list and to the test plan, not only those of the features above. Those this list does not

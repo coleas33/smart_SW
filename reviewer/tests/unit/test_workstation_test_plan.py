@@ -3013,6 +3013,6 @@ def test_t303a_records_its_stuck_case_as_its_task_allows(plan: str, results: str
     ) in task
     assert stuck_fake in task
     assert "// grandchildren `uv run` leaves between us and the server." in backend
-    assert record in part and "`ARunRootChangeWhoseOldRunsCloseIsNotAnswered" in part
+    assert record in part and f"`{stuck_fake}`" in part
     assert "Record in 004 T303a's three rows" in part
     assert len(rows) == 3 and "the stuck case" in rows[-1]

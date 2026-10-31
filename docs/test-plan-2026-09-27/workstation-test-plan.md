@@ -60,12 +60,12 @@ step itself says:
 |---|---|---|---|
 | 1 | 1.1 to 1.6: the update, its gates with 004 T140's check at 1.3, and the health checks with `swreview seat health` | 004 T140, 004 T353 | 55 min |
 | 2 | 1.7, Help > About's product name only | 004 T164 | 5 min |
-| 3 | 5.6's item 1, then its first run (moved early: it asks for no reorder), its item 4 and its item 7 | 004 T033 to T039, 004 T187 | 10 min |
+| 3 | 5.6's item 1, then its first run (moved early: it asks for no reorder), its item 4 and its item 7 | 004 T036 to T039, 004 T187 | 10 min |
 | 4 | 3.1's `Save-Fingerprint 'before'`, then 3.9: D14 twice on part J, then PROBE-15 on it | 011 T077, 013 T142, 003 T088 | 25 min |
 | 5 | 5.3: items A and B on the box, then items 1 to 6 on part J, with the open's seconds | 004 T185, 004 T186, 011 T171, 004 T182 | 30 min |
 | 6 | 5.3's close in process, idle, then with a dialog open | 004 T303a | 25 min |
 | 7 | optional: two made-up assemblies (below) | 006 T102, 001 T076 | 25 min |
-| 8 | 5.6's second and third runs, then its items 4 to 7 | 004 T033, 004 T034, 004 T038 | 15 min |
+| 8 | 5.6's second and third runs, then its items 4 to 7 | 004 T033 to T035, 004 T037, 004 T038 | 15 min |
 | 9 | 6.0, 6.1, 6.3 and 6.5: the handoff | none | 25 min |
 
 - **Before the sitting:** section 0.1's items 1 and 3 (the build on GitHub, the vocabulary file),
@@ -102,20 +102,27 @@ opened or changed.
 Overnight, each as its own pull request, and each only if S1's results allow it: 004 T138's
 IDENTITY profile frozen from the first run's PROBE-8 answers (decision 170A); Remodel's Start
 switch, `RemodelStart.SeatValidated`, once everything step 5.3's "What the Start switch waits on"
-names holds; and `DrawingOpenScope.SeatValidated`, from step 3.9's two D14 reports (section 3.10).
+names holds - among it step 5.6's third answers file committed under
+`benchmarks/native/capabilities/` and judged ready by `swreview remodel ledger` once T138 is in
+(004 research R27.8), and the owner's call on the no-handle unwind (R26.10); and
+`DrawingOpenScope.SeatValidated`, from step 3.9's two D14 reports (section 3.10).
 
 ## The next sitting: where 2026-09-26 stopped, and what feature 013 adds
+
+*Superseded 2026-10-31 by S1 (decision 167A):* S1 is the next sitting, and it runs only its
+table's steps: step 2.4 is not among them, and step 4.9 is S3's. What follows records where
+2026-09-26 stopped and what feature 013 adds, for the sittings that run those steps.
 
 The sitting of 2026-09-26 ran the build of that day (features 008 to 011) and reached five steps,
 each `pass` in its findings document (`pane-findings-2026-09-26.md`, in that sitting's handover
 folder): **1.3** the update, build and gates; **1.6** health checks 1, 2, 3, 6 and 7; **1.7** the
 FeatureWorks record (004 T164); **2.2** the profile placed (006 T100's entry); and **2.3** the
-profile at version 3 (008 T101's first half). Those rows keep that sitting's results. **The next
-sitting starts at step 2.4**, in the handover's order, with a handover folder of its own date. It
-still pastes the setup block and updates first - steps 1.2 to 1.4's commands, then step 1.6's
-checks - because it must run the build that carries feature 013; it writes that update in its
-update notes and the findings document's header, and a result in the 1.3 and 1.6 rows only if the
-update or a check fails.
+profile at version 3 (008 T101's first half). Those rows keep that sitting's results. **The
+sitting after it was to start at step 2.4**, in the handover's order, with a handover folder of
+its own date. It still pastes the setup block and updates first - steps 1.2 to 1.4's commands,
+then step 1.6's checks - because it must run the build that carries feature 013; it writes that
+update in its update notes and the findings document's header, and a result in the 1.3 and 1.6
+rows only if the update or a check fails.
 
 What feature 013 (`specs/013-engineer-first-review/tasks.md`) adds, each in its place:
 
@@ -134,6 +141,10 @@ each says what to record instead.
 
 ## First: the retest of 2026-09-28's findings U25 to U27
 
+*Superseded 2026-10-31 by S1 (decision 167A):* S1 runs only its table's steps. Of this retest,
+step 5.3's items are S1's row 5; step 4.9 is S3's, since it presses Review, a paid call. What
+follows records the retest as 2026-09-28 asked for it.
+
 *Added 2026-09-28.* The sitting of 2026-09-28 ran the build of that day and its handover packet
 reported three findings: **U25**, the Review tab invited a Review of an active drawing, which the
 add-in then refused; **U26**, Remodel a copy refused a checked-in (read-only) part; and **U27**,
@@ -142,8 +153,8 @@ U26, changes the measurement U27 stopped in, and marks every SOLIDWORKS call of 
 the run folder before the call starts, so that a second close says where it happened
 (`docs/history/testing-feedback-2026-09-28.md`, which lists what the development machine changed).
 
-**The next sitting runs this retest first**, right after step 1's update and health checks, and
-before step 2.4, in this order:
+**The sitting after 2026-09-28 was to run this retest first**, right after step 1's update and
+health checks, and before step 2.4, in this order:
 
 1. step 4.9: a drawing active, with and without a review (U25; 011 T110);
 2. step 5.3's retest items A to C: crash capture, then Remodel a copy on a throwaway box, and what to
@@ -2020,7 +2031,8 @@ tokens, the answers' turn's calls, lever 14's state, and Q's counts.
 
 ### 4.9 A drawing active, with and without a review [011 T110]
 
-*Added 2026-09-28: U25's retest, run first (section "First: the retest").* After a review, the
+*Added 2026-09-28: U25's retest, run first (section "First: the retest"); since 2026-10-31 not in
+S1 (decision 167A): it presses Review, a paid call, so it is S3's.* After a review, the
 engineer made the reviewed model's drawing the active document, and the pane invited a Review of the
 drawing, which the add-in refused. In this build the host decides that a document is a drawing,
 the pane's line names the model the drawing's views show, and Review stays greyed out while a
@@ -2489,29 +2501,43 @@ fakes' (decision 169A). A plan waiting for Start is 004 T303b's, after Start is 
    Write down whether the line's time falls while Options was open or after you closed it. A
    line timed before you could open Options: write `dialog too late`, a case that stays the
    fakes' (decision 169A).
+5. The stuck case. 004 T303a also asks for this close with the backend stuck, its process
+   suspended by its number, or, if the seat cannot suspend a process, for that to be recorded and
+   the stuck case left to the fakes it names. This plan gives no way to suspend it: Windows has no
+   command that suspends a process, and when the add-in starts the backend through `uv`, the
+   number item 1 reads is uv's, whose server runs under it in the backend's job, so suspending
+   that number would leave the server answering. Write
+   `stuck case: the seat cannot suspend a process; left to the fakes (169A)` in its row: T303a's
+   fakes for a stuck backend hold it,
+   `RemodelHostTests.ARunRootChangeWhoseOldRunsCloseIsNotAnsweredStopsTheOldBackendThenClosesItInProcess`
+   among them. Suspend or end no process to make the case.
 
 **Before leaving step 5.3, whatever happened above** - each pass made, `nothing was ended`,
 SOLIDWORKS closed, or time ran out - open the Review tab's **Settings** (start SOLIDWORKS first if
 it closed): the folder for runs must be the one `$runs` names. If it is not, set it so and press
 **Save**. Step 6.0 checks it again.
 
-Record in 004 T303a's two rows: each pass's two lines as far as their `gated=` list (rule 5), its
-last line, whether SOLIDWORKS answered throughout, and what the Window menu and the settings
-showed. `$H\runs-t303a` travels inside the handover folder.
+Record in 004 T303a's three rows: each pass's two lines as far as their `gated=` list (rule 5),
+its last line, whether SOLIDWORKS answered throughout, and what the Window menu and the settings
+showed; and item 5's line. `$H\runs-t303a` travels inside the handover folder.
 
 **What the Start switch waits on.** The development machine sets it (`RemodelStart.SeatValidated`,
 in a commit of its own) only once a sitting has proved, in this order: first step 5.6's blocking
-probes - PROBE-1, 2, 3, 4 and 12 (004 T033 to T035 and 004 T037) - each `verified`; then this step's
-Plan on one real part's copy - part J - with that part's hash, size and time unchanged. 004 T180,
-what a plan holds while Start is on, is decided on the development machine before it too. So, since
-2026-10-31, are: the close in process, 004 T303a (S1, the item above), whose other half, 004
-T303b, a plan holding its session for Start, comes first at the sitting after the switch, before
-any stage-1 run (decision 169A); two narrow defects found on review and fixed now under decision
-165A, an end told during a Plan that then succeeds (004 research R22.14) and the barrier unwind's
-close by path (R25.13); and IDENTITY calibrated, since Start refuses every change while it is not
-(decision 170A): 004 T187 records PROBE-8's readings at step 5.6's first run, and 004 T138 freezes
-the profile from them on the development machine. The
-stage-1 runs (004 T135 to T141) are for the sitting after that.
+probes - PROBE-1, 2, 3, 4 and 12 (004 T033 to T035 and 004 T037) - each `verified`, all five in
+step 5.6's third run, whose answers file is committed under `benchmarks/native/capabilities/` and
+judged ready by `swreview remodel ledger`, the file the switch's pin reads (004 research R27.8;
+decision 171A); then this step's Plan on one real part's copy - part J - with that part's hash,
+size and time unchanged. Also before it, as 004 research R25.9 lists them: the close in process,
+004 T303a (S1, the item above), whose other half, 004 T303b, a plan holding its session for
+Start, comes first at the sitting after the switch, before any stage-1 run (decision 169A);
+IDENTITY calibrated, since Start refuses every change while it is not (decision 170A): 004 T187
+records PROBE-8's readings at step 5.6's first run, and 004 T138 freezes the profile from them on
+the development machine; and the owner's call on the no-handle unwind (Codex's CX1, R26.10): with
+no document handle back from a failed open, its unwind closes what is open at the copy's path and
+deletes the copy, recorded and not fixed. Done already: 004 T180, what a plan holds while Start is
+on (decision 168A; R26.5), and two narrow defects found on review, fixed under decision 165A: an
+end told during a Plan that then succeeds (R22.14) and the barrier unwind's close by path
+(R25.13). The stage-1 runs (004 T135 to T141) are for the sitting after that.
 
 ### 5.4 Withdrawn: the live Gemini test
 
@@ -2560,30 +2586,35 @@ second and third runs, with items 4 and 7 again, stay last before the handoff.
    would overwrite the first one's answers). Paste one block, wait for the prompt, read what the
    run printed (item 4), then paste the next.
 
-   The first run holds every probe that never asks SOLIDWORKS to reorder a feature, so no
-   message box can hold it, and its answers are written even if a later run hangs:
+   The first run holds every probe that never asks SOLIDWORKS to reorder a feature, but the
+   three of them Start waits on, which the third run holds; so no message box can hold it, and
+   its answers are written even if a later run hangs:
 
    ```powershell
-   swreview-extract probe remodel --probe PROBE-2,PROBE-4,PROBE-6,PROBE-7,PROBE-8,PROBE-9,PROBE-10,PROBE-11,PROBE-12,PROBE-13,PROBE-21 --out "$H\probes\remodel-no-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+   swreview-extract probe remodel --probe PROBE-6,PROBE-7,PROBE-8,PROBE-9,PROBE-10,PROBE-11,PROBE-13,PROBE-21 --out "$H\probes\remodel-no-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
    Show-RemodelLedger "$H\probes\remodel-no-reorder"
    ```
 
-   The second asks for three reorders that no watchdog times, PROBE-3's past a dependency
-   among them. While the flag the probe sets works, no box appears; if one does, that is PROBE-1's
-   answer seen early:
+   The second asks for the reorders of PROBE-5 and PROBE-20, which no watchdog times. While the
+   flag the probe sets works, no box appears; if one does, that is PROBE-1's answer seen early:
 
    ```powershell
-   swreview-extract probe remodel --probe PROBE-3,PROBE-5,PROBE-20 --out "$H\probes\remodel-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+   swreview-extract probe remodel --probe PROBE-5,PROBE-20 --out "$H\probes\remodel-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
    Show-RemodelLedger "$H\probes\remodel-reorder"
    ```
 
-   The third is PROBE-1 alone: an illegal reorder with SOLIDWORKS's CommandInProgress flag set
-   first, which should raise no box, then the same reorder with the flag clear, which should
-   raise a "Cannot reorder" box. Expect at least one box:
+   The third holds the five probes the Start switch waits on, so that one answers file holds all
+   five: Start is judged from one file (004 research R27.4). PROBE-2, PROBE-4 and PROBE-12 come
+   first, since they never reorder; then PROBE-3, whose reorders no watchdog times, one of them
+   past a dependency; then PROBE-1, last because it asks for a box: an illegal reorder with
+   SOLIDWORKS's CommandInProgress flag set first, which should raise no box, then the same
+   reorder with the flag clear, which should raise a "Cannot reorder" box. Expect at least one
+   box. The answers file is rewritten as each probe finishes, so a hang in PROBE-1 keeps the four
+   before it:
 
    ```powershell
-   swreview-extract probe remodel --probe PROBE-1 --out "$H\probes\remodel-probe-1" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
-   Show-RemodelLedger "$H\probes\remodel-probe-1"
+   swreview-extract probe remodel --probe PROBE-2,PROBE-4,PROBE-12,PROBE-3,PROBE-1 --out "$H\probes\remodel-start" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+   Show-RemodelLedger "$H\probes\remodel-start"
    ```
 
 3. **While a run runs, touch nothing but a SOLIDWORKS message box** (rule 6's one exception). If
@@ -2612,20 +2643,30 @@ second and third runs, with items 4 and 7 again, stay last before the handoff.
    - what `Show-RemodelLedger` prints through `swreview remodel ledger`: for each probe its id,
      whether it is blocking, its verdict (`verified`, `refuted` or `unresolved`) and its reason.
      An error in place of the reason means the probe threw, and its verdict is `unresolved`.
-   - *Added 2026-10-20 (decision 148A, 011 T171):* after the first run, PROBE-12 reopens the part
+   - the last line `Show-RemodelLedger` prints, `RemodelStart.SeatValidated: not ready - ` and its
+     reasons, reads `not ready` after every run of S1, by design: only the third run holds Start's
+     five probes, and Start also needs the IDENTITY profile calibrated, which 004 T138 does on the
+     development machine after S1 (decision 170A). So that line is recorded, not judged, and is no
+     fail of the sitting: after the third run, write its reasons other than IDENTITY's (they name
+     probes, verdicts and exception types only), or `only IDENTITY` when that is its one reason;
+     after the first two, nothing of it.
+   - *Added 2026-10-20 (decision 148A, 011 T171):* after the third run, PROBE-12 reopens the part
      it saved by the open's qualified key. Pass: the run's `interop members:` line names
      `ISldWorks.OpenDoc7` and not `OpenDoc7` on its own, and PROBE-12 has a reason, not an error.
-     An error for PROBE-12 is a fail: write `error` and whether it names `OpenDoc7`, never the
-     error's text, which may hold a path.
+     An error for PROBE-12 is a fail. `Show-RemodelLedger` then shows only the error's type and
+     code, so read the run's console: the line
+     `PROBE-12 threw; its message is kept in this log, never the ledger:` and the error's message
+     on the line after it. Write `error` and whether the line after it contains `OpenDoc7`, never
+     that line's text, which may hold a path.
 5. **What each probe asks.** Research R10 and quickstart Scenario 4 of
    `specs/004-resilient-remodeler` hold the whole question and what a bad answer costs.
 
    | Probe | Task | Run | What it asks | `verified` means |
    |---|---|---|---|---|
    | PROBE-1 | 004 T033 | third | does setting CommandInProgress stop the "Cannot reorder" box? | the illegal reorder returned with the flag set and blocked with it clear |
-   | PROBE-2 | 004 T035 | first | is `"w" = 120` in a millimetre part 120 mm, and in which unit does the equation manager answer? | it answered 120, the part's own unit, not 0.12 metres |
-   | PROBE-3 | 004 T034 | second | does a reorder move a feature, and refuse past a dependency without harm? | the harmless reorder answered true, the illegal one false, and the tree did not change |
-   | PROBE-4 | 004 T034 | first | must a folder's members be contiguous? | contiguous members made a folder and non-contiguous ones did not |
+   | PROBE-2 | 004 T035 | third | is `"w" = 120` in a millimetre part 120 mm, and in which unit does the equation manager answer? | it answered 120, the part's own unit, not 0.12 metres |
+   | PROBE-3 | 004 T034 | third | does a reorder move a feature, and refuse past a dependency without harm? | the harmless reorder answered true, the illegal one false, and the tree did not change |
+   | PROBE-4 | 004 T034 | third | must a folder's members be contiguous? | contiguous members made a folder and non-contiguous ones did not |
    | PROBE-5 | 004 T038 | second | the three ways into an existing folder | all three calls answered |
    | PROBE-6 | 004 T036 | first | does `Add3` add an equation? | it answered an index and the count rose by one |
    | PROBE-7 | 004 T036 | first | does `set_Equation` edit an equation in place? | the edit reads back |
@@ -2633,7 +2674,7 @@ second and third runs, with items 4 and 7 again, stay last before the handoff.
    | PROBE-9 | 004 T038 | first | what `GetWhatsWrong` lists | feature names or feature objects |
    | PROBE-10 | 004 T038 | first | the `___EndTag___` marker after a folder rename | no marker, or one that kept the folder's first name |
    | PROBE-11 | 004 T038 | first | every feature's type name | every one read |
-   | PROBE-12 | 004 T037 | first | does a tag survive a save, a close and a reopen? | it read back unchanged |
+   | PROBE-12 | 004 T037 | third | does a tag survive a save, a close and a reopen? | it read back unchanged |
    | PROBE-13 | 004 T037 | first | can a part be copied while SOLIDWORKS holds it open? | a plain copy worked |
    | PROBE-20 | 004 T038 | second | does a feature's description survive a move into a folder? | it read back unchanged |
    | PROBE-21 | 004 T036 | first | the equation count of a part with none | 0 |
@@ -2646,7 +2687,7 @@ second and third runs, with items 4 and 7 again, stay last before the handoff.
 
    A probe's result: `pass` when its verdict is `verified`, `fail` when `refuted`, `blocked` when
    `unresolved` (Notes: the first words of its reason, or `error`, never the error's text, which
-   may hold a path) or when its run did not finish (Notes:
+   may hold a path) or when it did not finish: `not finished`, or no answers file (Notes:
    `blocked by 5.6: run <n> exit code <n>` or `blocked: hung in run <n>`). A `fail` here is the
    answer the probe exists to get, not a fault of the sitting: the development machine still
    ticks the task, and what a refuted
@@ -2655,25 +2696,27 @@ second and third runs, with items 4 and 7 again, stay last before the handoff.
    `blocked`; Observed lists each probe with its verdict (`PROBE-3 verified, PROBE-4 refuted`).
 6. **If a run hangs** (nothing printed for 10 minutes and no box waiting, or SOLIDWORKS says Not
    Responding): "If SOLIDWORKS stops answering", items 2 to 5, except that the run is **not run
-   again**: the hang is itself the record, PROBE-1's question answered the hard way. A run writes
-   its answers file and its log only when it ends, so after Ctrl+C neither exists: record the
-   run, the time, how long it had run, the title and first sentence of every box, whether
-   SOLIDWORKS had to be ended in Task Manager and whether a crash report appeared, and write
-   `blocked: hung in run <n>` for that run's probes. Before the next run: start SOLIDWORKS again
-   if it was ended (close Document Recovery without opening anything), then Window > Close All,
-   Don't Save, since the throwaway part may still be open.
+   again**: the hang is itself the record, PROBE-1's question answered the hard way. A run starts
+   its answers file before it builds anything, rewrites it as each probe finishes and writes its
+   log line by line, so after Ctrl+C both hold every probe that finished: paste that run's
+   `Show-RemodelLedger` line again, record each probe it gives a verdict as item 5 says, and write
+   `blocked: hung in run <n>` only for the probes it prints `not finished`. Record also the run,
+   the time, how long it had run, the title and first sentence of every box, whether SOLIDWORKS
+   had to be ended in Task Manager and whether a crash report appeared. Before the next run:
+   start SOLIDWORKS again if it was ended (close Document Recovery without opening anything), then
+   Window > Close All, Don't Save, since the throwaway part may still be open.
 7. **At the end**, with every run done: Tools > Options > System Options, General page, once
    more. Pass: the three boxes are as item 1 noted. A box that differs: tick or clear it back as
    noted and press **OK**, which puts back what the seat had and is the one change this step
    makes to SOLIDWORKS; write down which box, and after which run, under 5.6's heading.
 
 Where the answers go: nothing to copy. Each run's folder under `$H\probes` (`remodel-no-reorder`,
-`remodel-reorder`, `remodel-probe-1`) holds its answers file, its log `remodel-probe.log` and,
+`remodel-reorder`, `remodel-start`) holds its answers file, its log `remodel-probe.log` and,
 after a hang, the throwaway part in `probe-part`; step 6.3 lists them, and the handover folder
 travels whole (step 6.5). The development machine reads the verdicts and the raw readings from
 them. In the findings document, under 5.6's heading: per run its folder's name, its `exit code`
-and its `probes:` line; each `BLOCKING` line as far as its colon; every box you answered; and
-the rows of 5.6.
+and its `probes:` line; each `BLOCKING` line as far as its colon; the third run's
+`RemodelStart.SeatValidated` reasons as item 4 says; every box you answered; and the rows of 5.6.
 
 ## Step 6. The handoff
 
@@ -2825,7 +2868,7 @@ that sitting is planned. For the development machine, once the folder comes back
 | 010, 011 | setting either switch; 010 T104's and T106's counts | the development machine, as sections 3.10, 3.1 and 4.2 say |
 | 006 | PROBE-1 to PROBE-3 into research R4; `TRANSPARENCY_POLARITY`'s flip | the development machine, from step 3.1's two Standards probe reports |
 | 013 | 013 T142's second half; the census's counts | the sitting after the development machine sets `DrawingOpenScope.SeatValidated`: the host answers `opens_closed` and a review offers the read-only open once per drawing file; and the development machine reruns the part-role census over step 5.1's N folders, counts only |
-| 004 | setting `RemodelStart.SeatValidated` (004 T172's switch); 004 T180; 004 T182's wait | the development machine, in a commit of its own for the switch, and only once a sitting has proved step 5.3's "What the Start switch waits on": step 5.6's blocking probes (004 T033 to T035 and 004 T037) each `verified`, then step 5.3's Plan on part J's copy with J's hash, size and time unchanged; 004 T180, what a plan holds while Start is on, is decided first; and the rest that paragraph names: 004 T303a (S1), R22.14 and R25.13 (decision 165A), and IDENTITY calibrated, 004 T187's readings and 004 T138's freeze (decision 170A), with 004 T303b first at the sitting after the switch; 004 T182 sets the add-in's wait on the copy's open from step 5.3's time |
+| 004 | setting `RemodelStart.SeatValidated` (004 T172's switch); 004 T182's wait | the development machine, in a commit of its own for the switch, and only once a sitting has proved step 5.3's "What the Start switch waits on": step 5.6's blocking probes (004 T033 to T035 and 004 T037) each `verified` in the third run's answers file, committed under `benchmarks/native/capabilities/` and judged ready by `swreview remodel ledger` (004 research R27.8), then step 5.3's Plan on part J's copy with J's hash, size and time unchanged; and the rest that paragraph names: 004 T303a (S1), IDENTITY calibrated, 004 T187's readings and 004 T138's freeze (decision 170A), and the owner's call on the no-handle unwind (R26.10), with 004 T303b first at the sitting after the switch; 004 T180 is done (decision 168A), as are R22.14 and R25.13 (decision 165A); 004 T182 sets the add-in's wait on the copy's open from step 5.3's time |
 | 004 | 004 T003's dry run itself; the re-modeler probes' verdicts into the record | the development machine: `swreview remodel plan` over each `package.json` of step 5.1's P folders, counts only, each part by its letter and never its file name, into T003's table (`specs/004-resilient-remodeler/phase0-decision.md` section 4), where they replace 004 T148's provisional counts (its section 4.1, taken from other parts the development machine already held); the verdicts and raw readings of step 5.6's three answers files, as quickstart Scenario 4 says |
 | 010 | 010 T123, 010 T124 | the fine-pitch amendment seat checks (2026-10-08), added after this plan; for the next sitting plan |
 

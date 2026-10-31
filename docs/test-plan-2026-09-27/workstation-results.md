@@ -136,6 +136,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 5.3 | 004 T186: J checked in: planned with the read-only option not ticked, or refused naming it with the option ticked; `IsReadOnly` unchanged | | | |
 | 5.3 | 004 T303a (004 T303's first half, decision 169A): the close in process with SOLIDWORKS idle | | | |
 | 5.3 | 004 T303a: the close in process with a dialog open | | | |
+| 5.3 | 004 T303a: the stuck case, `stuck case: the seat cannot suspend a process; left to the fakes (169A)` (item 5) | | | |
 | 5.5 | 009 T082: Show in SOLIDWORKS selects A's own entity, on the current build | | | |
 | 5.6 | 004 T033: PROBE-1, the "Cannot reorder" box with the flag clear and set | | | |
 | 5.6 | 004 T034: PROBE-3 and PROBE-4, the reorder and folder contiguity | | | |
@@ -145,7 +146,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 5.6 | 004 T038: PROBE-5, PROBE-9, PROBE-10, PROBE-11 and PROBE-20 | | | |
 | 5.6 | 004 T039: PROBE-8, the tolerance calibration | | | |
 | 5.6 | 004 T187: PROBE-8's readings with and without the overrides, in the first run's answers file | | | |
-| 5.6 | 011 T171: the first run's `interop members:` line naming `ISldWorks.OpenDoc7`, and PROBE-12's lines with a reason, no `error` (decision 148A) | | | |
+| 5.6 | 011 T171: the third run's `interop members:` line naming `ISldWorks.OpenDoc7`, and PROBE-12 with a reason, no `error`; on an error, whether the console's line after `PROBE-12 threw; ...` contains `OpenDoc7` (decision 148A) | | | |
 | 5.6 | SOLIDWORKS's three options as they were before the probes | | | |
 | 6.0 | real files unchanged at the end | | | |
 | 6.1 | no key in a file (first audit) | | | |
