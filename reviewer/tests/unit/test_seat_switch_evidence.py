@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -50,6 +51,8 @@ DRAWING_BINDING_EVIDENCE = CAPABILITIES / "drawing-binding.md"
 
 CSHARP_SWITCH = re.compile(r"public static bool SeatValidated => (true|false);")
 PYTHON_SWITCH = re.compile(r"^DRAWING_BINDING_VALIDATED: bool = (True|False)$", re.MULTILINE)
+CSHARP_OFF = "public static bool SeatValidated => false;"
+PYTHON_OFF = "DRAWING_BINDING_VALIDATED: bool = False"
 
 FAILURE = re.compile(r"\w+ 0x[0-9A-F]{8}(?:; \w+ 0x[0-9A-F]{8})*")
 """`ProbeText.Failure`'s form, the only exception text a committable ledger carries (171A)."""
@@ -61,6 +64,16 @@ def switch_in(text: str, pattern: re.Pattern[str]) -> bool:
     """The one switch `pattern` finds in `text`; anything but exactly one is a failure."""
     [value] = pattern.findall(text)
     return value in ("true", "True")
+
+
+def csharp_switch(text: str) -> bool:
+    """`SeatValidated` as a C# source declares it. A stub until T345."""
+    return switch_in(text, CSHARP_SWITCH)
+
+
+def python_switch(text: str) -> bool:
+    """`DRAWING_BINDING_VALIDATED` as `binding.py` binds it. A stub until T345."""
+    return switch_in(text, PYTHON_SWITCH)
 
 
 def ready_for_start(root: Path = CAPABILITIES, identity: Tolerances = IDENTITY) -> list[Path]:
@@ -101,7 +114,7 @@ def unscrubbed(ledger: Ledger) -> list[str]:
 
 
 def test_start_is_on_only_with_a_committed_ledger_judged_ready_and_identity_calibrated() -> None:
-    start = switch_in(START_SOURCE.read_text(encoding="utf-8"), CSHARP_SWITCH)
+    start = csharp_switch(START_SOURCE.read_text(encoding="utf-8"))
 
     assert not start or (IDENTITY.calibrated and ready_for_start()), (
         "RemodelStart.SeatValidated is true, but no ledger committed under "
@@ -111,7 +124,7 @@ def test_start_is_on_only_with_a_committed_ledger_judged_ready_and_identity_cali
 
 
 def test_the_drawing_open_is_on_only_with_probe_d14s_committed_record() -> None:
-    opens = switch_in(DRAWING_OPEN_SOURCE.read_text(encoding="utf-8"), CSHARP_SWITCH)
+    opens = csharp_switch(DRAWING_OPEN_SOURCE.read_text(encoding="utf-8"))
 
     assert not opens or DRAWING_OPEN_EVIDENCE.is_file(), (
         f"DrawingOpenScope.SeatValidated is true without {DRAWING_OPEN_EVIDENCE.name} "
@@ -120,7 +133,7 @@ def test_the_drawing_open_is_on_only_with_probe_d14s_committed_record() -> None:
 
 
 def test_the_drawing_binding_is_on_only_with_probes_d6_and_d8s_committed_record() -> None:
-    binds = switch_in(BINDING_SOURCE.read_text(encoding="utf-8"), PYTHON_SWITCH)
+    binds = python_switch(BINDING_SOURCE.read_text(encoding="utf-8"))
 
     assert not binds or DRAWING_BINDING_EVIDENCE.is_file(), (
         f"DRAWING_BINDING_VALIDATED is true without {DRAWING_BINDING_EVIDENCE.name} "
@@ -129,26 +142,69 @@ def test_the_drawing_binding_is_on_only_with_probes_d6_and_d8s_committed_record(
 
 
 @pytest.mark.parametrize(
-    ("source", "pattern", "off", "on"),
+    ("source", "read", "off", "on"),
     [
-        (START_SOURCE, CSHARP_SWITCH, "=> false;", "=> true;"),
-        (DRAWING_OPEN_SOURCE, CSHARP_SWITCH, "=> false;", "=> true;"),
-        (BINDING_SOURCE, PYTHON_SWITCH, "bool = False", "bool = True"),
+        (START_SOURCE, csharp_switch, CSHARP_OFF, CSHARP_OFF.replace("false", "true")),
+        (DRAWING_OPEN_SOURCE, csharp_switch, CSHARP_OFF, CSHARP_OFF.replace("false", "true")),
+        (BINDING_SOURCE, python_switch, PYTHON_OFF, PYTHON_OFF.replace("False", "True")),
     ],
     ids=["start", "drawing-open", "drawing-binding"],
 )
 def test_each_switch_ships_off_and_its_reader_sees_it_flipped(
-    source: Path, pattern: re.Pattern[str], off: str, on: str
+    source: Path, read: Callable[[str], bool], off: str, on: str
 ) -> None:
     """The reader finds each switch exactly once, off, and reads a flipped copy as on - so a flip
-    reaches the pin above rather than slipping past a pattern that no longer matches."""
+    reaches the pin above rather than slipping past a pattern that no longer matches.
+    *Changed on purpose by 004 T344*: each switch's reader is named by its language rather than
+    by a pattern."""
     text = source.read_text(encoding="utf-8")
-    line = pattern.search(text)
-    assert line is not None
+    assert text.count(off) == 1
 
-    flipped = text[: line.start()] + line.group().replace(off, on) + text[line.end() :]
+    assert (read(text), read(text.replace(off, on))) == (False, True)
 
-    assert (switch_in(text, pattern), switch_in(flipped, pattern)) == (False, True)
+
+CSHARP_ON = CSHARP_OFF.replace("false", "true")
+
+UNREAD = {
+    "start-a-block-getter-beside-the-old-line-commented": (
+        START_SOURCE,
+        f"// {CSHARP_OFF}\n    public static bool SeatValidated {{ get {{ return true; }} }}",
+    ),
+    "start-a-second-declaration": (
+        START_SOURCE, f"#if FICT\n    {CSHARP_ON}\n#else\n    {CSHARP_OFF}\n#endif"
+    ),
+    "drawing-open-a-getter-beside-the-old-line-in-a-block-comment": (
+        DRAWING_OPEN_SOURCE,
+        f"/* {CSHARP_OFF} */\n    public static bool SeatValidated {{ get => true; }}",
+    ),
+    "drawing-open-a-field-beside-the-old-line-commented": (
+        DRAWING_OPEN_SOURCE,
+        f"// {CSHARP_OFF}\n    public static readonly bool SeatValidated = true;",
+    ),
+    "binding-bound-again-below": (
+        BINDING_SOURCE, f"{PYTHON_OFF}\nDRAWING_BINDING_VALIDATED = True"
+    ),
+    "binding-not-a-literal": (
+        BINDING_SOURCE, PYTHON_OFF.replace("= False", "= not False")
+    ),
+}
+"""Each switch's declaration replaced by a form its reader does not read (review finding F5 of the
+second reviewer: a commented old line kept the pin green while a new getter turned the switch
+on). Each must fail the reader, never read as off."""
+
+
+@pytest.mark.parametrize("case", sorted(UNREAD))
+def test_a_switch_in_a_form_its_reader_does_not_read_fails_closed(case: str) -> None:
+    source, replacement = UNREAD[case]
+    binding = source == BINDING_SOURCE
+    read, off = (python_switch, PYTHON_OFF) if binding else (csharp_switch, CSHARP_OFF)
+    text = source.read_text(encoding="utf-8")
+
+    mutated = text.replace(off, replacement)
+
+    assert mutated != text
+    with pytest.raises(AssertionError, match="read only"):
+        read(mutated)
 
 
 def test_the_readme_names_both_drawing_evidence_files() -> None:
@@ -167,6 +223,12 @@ def test_every_committed_ledger_is_read_scanned_clean_and_scrubbed() -> None:
 
         assert local_paths.scan_file(path) == [], path.name
         assert unscrubbed(ledger) == [], path.name
+
+
+def test_nothing_committed_under_capabilities_names_a_local_folder() -> None:
+    """Every file there, not only the ledgers: the drawing records, the README and a stray copy
+    (004 T344, review finding F4: `scan_committable` does not reach `benchmarks/native`)."""
+    assert local_paths.scan_folder(CAPABILITIES) == []
 
 
 def test_the_start_pin_judges_a_committed_folder_by_the_reader(tmp_path: Path) -> None:

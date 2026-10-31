@@ -231,10 +231,14 @@ def test_start_is_ready_with_the_five_verified_and_identity_calibrated() -> None
 
 @pytest.mark.parametrize("version", ["2024 SP5", "32.4.0", "32.5.1", "32.5.0.49", "33.0.0", ""])
 def test_a_ledger_for_another_solidworks_version_is_refused(version: str) -> None:
+    """*Changed on purpose by 004 T344 (review finding F5)*: the refusal repeats no value from
+    the file, as every other refusal does, so it does not name the version either."""
     text = rendered_ledger(start_rows(), sw_version=version)
 
-    with pytest.raises(LedgerRefused, match="only the frozen interop's version"):
+    with pytest.raises(LedgerRefused, match="only the frozen interop's version") as refused:
         parse_ledger(text)
+
+    assert not version or version not in str(refused.value)
 
 
 def test_a_row_from_another_version_than_its_ledgers_is_refused() -> None:
@@ -338,6 +342,9 @@ MALFORMED = {
     "not-a-probe-id": rendered_ledger(start_rows()).replace(
         '"PROBE-2"', '"maybe-later"'
     ),
+    "a-reading-not-a-string": rendered_ledger(start_rows()).replace(
+        '"reason": "PROBE-3 answered."', '"FICT-key": 5', 1
+    ),
 }
 
 
@@ -348,6 +355,85 @@ def test_a_ledger_not_in_renders_shape_is_refused_without_repeating_its_values(k
 
     assert "maybe-later" not in str(refused.value)
     assert '"yes"' not in str(refused.value)
+    assert "FICT" not in str(refused.value)
+
+
+# --- what `yaml.safe_load` would settle silently (004 T344, review findings F3 and F7) ---------
+
+TWICE = {
+    "a-verdict": rendered_ledger(start_rows(PROBE_3=("refuted", {"reason": "it moved"}))).replace(
+        "    verdict: refuted\n", "    verdict: refuted\n    verdict: verified\n", 1
+    ),
+    "the-version": rendered_ledger(start_rows()).replace(
+        'sw_version: "32.5.0.48"\n', 'sw_version: "32.5.0.48"\nsw_version: "32.5.0.48"\n', 1
+    ),
+    "a-reading": rendered_ledger(start_rows()).replace(
+        '"reason": "PROBE-3 answered."',
+        '"reason": "PROBE-3 answered."\n      "reason": "PROBE-3 answered."',
+    ),
+    "a-verdict-merged": rendered_ledger(start_rows()).replace(
+        "    verdict: verified\n", "    <<: {verdict: refuted}\n    verdict: verified\n", 1
+    ),
+}
+"""A key twice in one mapping, which `yaml.safe_load` settles by keeping the last, so a row could
+say `refuted` and then `verified` and be judged by the second; and a merge key doing the same."""
+
+
+@pytest.mark.parametrize("kind", sorted(TWICE))
+def test_a_key_twice_in_one_mapping_is_refused(kind: str) -> None:
+    with pytest.raises(LedgerRefused, match="RemodelProbeLedger.Render") as refused:
+        parse_ledger(TWICE[kind])
+
+    for value in ("answered", "moved", "refuted", "32.5.0.48"):
+        assert value not in str(refused.value), value
+
+
+def alias_bomb(depth: int) -> str:
+    """A list whose strings double at each level through aliases: a few lines that a walk of the
+    loaded document would visit 2 ** depth times."""
+    lines = ['laughs0: &l0 ["x", "x"]']
+    lines += [f"laughs{n}: &l{n} [*l{n - 1}, *l{n - 1}]" for n in range(1, depth)]
+    return "\n".join(lines) + "\n"
+
+
+ALIASED = {
+    "an-anchor-and-its-alias": rendered_ledger(start_rows())
+    .replace('question: "a question"', 'question: &q "a question"', 1)
+    .replace('question: "a question"', "question: *q", 1),
+    "an-anchor-alone": rendered_ledger(start_rows()).replace(
+        'method: "a method"', 'method: &m "a method"', 1
+    ),
+    "an-alias-bomb": rendered_ledger(start_rows()) + alias_bomb(16),
+}
+"""What `Render` never writes: an anchor or an alias. The path walk follows each alias again, so a
+few lines of them would take exponential time before the shape is checked."""
+
+
+@pytest.mark.parametrize("kind", sorted(ALIASED))
+def test_an_anchor_or_alias_is_refused_before_anything_is_walked(kind: str) -> None:
+    with pytest.raises(LedgerRefused, match="Render writes: it uses a YAML anchor or alias"):
+        parse_ledger(ALIASED[kind])
+
+
+@pytest.mark.parametrize("kind", ["missing", "a-folder"])
+def test_a_ledger_that_cannot_be_read_is_refused_naming_its_file_and_no_folder(
+    tmp_path: Path, kind: str
+) -> None:
+    """The reader prints the file's name, never its folder, which may name the user (review
+    finding F4 of the second reviewer: the operating system's message repeats the whole path)."""
+    ledger = tmp_path / "FICT-engineer" / "FICT-design" / "remodel-32.5.0.yaml"
+    if kind == "a-folder":
+        ledger.mkdir(parents=True)
+
+    result = CliRunner().invoke(app, ["remodel", "ledger", str(ledger)])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    [line] = result.stderr.splitlines()
+    assert line.startswith("error: could not read remodel-32.5.0.yaml"), line
+    assert "FICT" not in line and tmp_path.name not in line
+    with pytest.raises(LedgerRefused, match="could not read remodel-32.5.0.yaml"):
+        load_ledger(ledger)
 
 
 def test_the_command_refuses_in_one_line_and_exits_1(tmp_path: Path) -> None:
