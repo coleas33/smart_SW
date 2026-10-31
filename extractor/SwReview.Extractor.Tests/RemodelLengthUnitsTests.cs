@@ -161,7 +161,7 @@ public class RemodelLengthUnitsTests
     }
 
     /// <summary>The repository root: the folder above the test assembly that holds <c>reviewer/</c> and <c>extractor/</c>.</summary>
-    private static string RepositoryRoot()
+    internal static string RepositoryRoot()
     {
         DirectoryInfo? directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory != null

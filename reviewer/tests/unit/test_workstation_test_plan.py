@@ -63,6 +63,7 @@ from swreview.report.session import load_session
 from swreview.report.summary import load_words
 from swreview.tools.checks_interference import groups_of
 from tests.support.console import plain_one_line
+from tests.support.remodel_ledger import rendered_ledger
 from tests.support.seat_tasks import (
     PACKAGES,
     REPO,
@@ -1473,32 +1474,6 @@ def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
                    "**Warn before saving documents with update errors**"):
         assert option in probes, option
     assert "the three boxes are as item 1 noted" in probes
-
-
-def rendered_ledger(records: list[tuple[str, bool, str, dict[str, str]]]) -> str:
-    """A ledger in `RemodelProbeLedger.Render`'s shape (the test below pins the prefixes it
-    relies on against the C# source): `(probe id, blocking, verdict, raw_result)` per probe,
-    each of them requested."""
-    lines = ['sw_version: "32.5.0.48"', 'generated_at: "2026-10-02T12:00:00.0000000+00:00"',
-             "requested:", *(f'  - "{probe}"' for probe, _, _, _ in records), "probes:"]
-    for probe, blocking, verdict, raw in records:
-        lines += [
-            f'  - probe_id: "{probe}"',
-            '    question: "a question"',
-            '    method: "a method"',
-            f"    blocking: {'true' if blocking else 'false'}",
-            '    fallback: "a fallback"',
-            f"    verdict: {verdict}",
-            '    sw_version: "32.5.0.48"',
-            "    duration_ms: 12",
-            "    interop_members: []",
-        ]
-        if raw:
-            lines.append("    raw_result:")
-            lines += [f'      "{key}": "{value}"' for key, value in raw.items()]
-        else:
-            lines.append("    raw_result: {}")
-    return "\n".join(lines) + "\n"
 
 
 def test_the_fixture_ledger_has_the_shape_render_writes() -> None:

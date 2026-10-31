@@ -670,6 +670,104 @@ public class RemodelProbeTests
         }
     }
 
+    // ---- the golden ledger the Python reader is pinned to (004 T336, decision 166A) -------
+
+    /// <summary>
+    /// <c>reviewer/tests/fixtures/remodel/ledger/remodel-32.5.0.yaml</c>: what <see cref="RemodelProbeLedger.Render"/>
+    /// writes for a fictional run of the whole catalog that stopped in its last probe, PROBE-21 -
+    /// every definition's own text, made-up readings. <c>swreview remodel ledger</c>'s tests parse
+    /// the same file, so the renderer and the reader cannot drift apart. "32.5.0" is the spelling
+    /// <c>ISldWorks.RevisionNumber</c> answers (<c>SwSession.ReadVersion</c>).
+    /// </summary>
+    internal static string GoldenLedgerPath() => Path.Combine(
+        RemodelLengthUnitsTests.RepositoryRoot(), "reviewer", "tests", "fixtures", "remodel", "ledger", "remodel-32.5.0.yaml");
+
+    private static RemodelProbeRecord GoldenRow(
+        string id, RemodelProbeVerdict verdict, long durationMs, string[] interopMembers, params (string Key, string Value)[] raw)
+    {
+        RemodelProbeDefinition definition = RemodelProbeCatalog.Get(id);
+        return new RemodelProbeRecord(
+            id,
+            definition.Question,
+            definition.Method,
+            definition.Blocking,
+            definition.Fallback,
+            verdict,
+            raw.ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal),
+            "32.5.0",
+            durationMs,
+            interopMembers);
+    }
+
+    private static IReadOnlyList<RemodelProbeRecord> GoldenRows()
+    {
+        string[] none = Array.Empty<string>();
+        return new[]
+        {
+            GoldenRow("PROBE-1", RemodelProbeVerdict.Verified, 10021, new[] { "ReorderFeature", "set_CommandInProgress" },
+                ("blocked_with_flag_clear", "True"), ("blocked_with_flag_set", "False"),
+                ("returned_with_flag_clear", "n/a (blocked)"), ("returned_with_flag_set", "False"),
+                ("reason", RemodelProbe1Logic.Decide(true, false).Reason)),
+            GoldenRow("PROBE-2", RemodelProbeVerdict.Verified, 41, new[] { "GetCount", "get_Equation", "get_Value" },
+                ("equation_count", "1"), ("equation_text", "\"w\" = 120"), ("equation_value", "120"),
+                ("unit", "document_units_mm"), ("reason", "get_Value returned 120: the equation number is in the document's length unit, matching R3.6.")),
+            GoldenRow("PROBE-3", RemodelProbeVerdict.Verified, 230, new[] { "ReorderFeature", "GetName" },
+                ("legal_returned", "True"), ("legal_order_unchanged", "True"), ("illegal_returned", "False"),
+                ("illegal_order_unchanged", "True"), ("tree_before", "Boss-Extrude1,Cut-Extrude1,Fillet1,Fillet1,Shell1"),
+                ("tree_after_illegal", "Boss-Extrude1,Cut-Extrude1,Fillet1,Fillet1,Shell1"),
+                ("reason", RemodelProbe3Logic.Decide(true, true, false, true).Reason)),
+            GoldenRow("PROBE-4", RemodelProbeVerdict.Verified, 95, new[] { "InsertFeatureTreeFolder2", "Select2" },
+                ("contiguous_folder_built", "True"), ("non_contiguous_folder_built", "False"),
+                ("reason", RemodelProbe4Logic.Decide(true, false).Reason)),
+            GoldenRow("PROBE-5", RemodelProbeVerdict.Unresolved, 310, new[] { "ReorderFeature", "MoveToFolder", "MakeSubFeature" },
+                ("reorder_to_folder", "True"), ("move_to_folder", "error: COMException 0x80004005"), ("make_sub_feature", "False"),
+                ("reason", "1 of 3 calls threw; see the per-call entries above.")),
+            GoldenRow("PROBE-6", RemodelProbeVerdict.Verified, 17, new[] { "Add3", "GetCount" },
+                ("count_before", "1"), ("add3_result", "1"), ("count_after", "2"),
+                ("reason", RemodelProbe6Logic.Decide(1, 1, 2).Reason)),
+            GoldenRow("PROBE-7", RemodelProbeVerdict.Verified, 22, new[] { "Add3", "set_Equation", "get_Equation" },
+                ("before", "\"probe7check\" = 1"), ("after", "\"probe7check\" = 99"),
+                ("reason", "set_Equation's edit is reflected on the next read.")),
+            GoldenRow("PROBE-8", RemodelProbeVerdict.Verified, 4120, new[] { "CreateMassProperty2", "Recalculate" },
+                ("accuracy_level", "default"), ("measurement_scope", "whole_part"), ("box_status", "measured"),
+                ("box_volume_rel_error", "3.000000E-012"), ("box_area_rel_error", "4.000000E-012"),
+                ("cylinder_status", "measured"), ("cylinder_volume_rel_error", "6.000000E-011"),
+                ("reason", "both default whole-part shapes measured cleanly and each override experiment was observed; only the plain readings supply attained calibration errors.")),
+            GoldenRow("PROBE-9", RemodelProbeVerdict.Verified, 160, new[] { "SetSuppression2", "ForceRebuild3" },
+                ("suppress_returned", "True"), ("whats_wrong_count", "2"), ("whats_wrong_element_kind", "feature_names"),
+                ("reason", "GetWhatsWrong's Features array held feature_names on this build.")),
+            GoldenRow("PROBE-10", RemodelProbeVerdict.Verified, 33, new[] { "GetName", "set_Name" },
+                ("marker_before", "False"), ("marker_after", "False"), ("marker_name_after", "(none)"),
+                ("reason", "no ___EndTag___ marker appeared on 2024, before or after the rename.")),
+            GoldenRow("PROBE-11", RemodelProbeVerdict.Verified, 12, new[] { "GetTypeName2" },
+                ("type[Comments]", "CommentsFolder"), ("type[Front Plane]", "RefPlane"), ("type[Origin]", "OriginProfileFeature"),
+                ("type[Boss-Extrude1]", "Extrusion"), ("type[Cut-Extrude1]", "Cut"), ("type[Fillet1]", "Fillet"),
+                ("type[Shell1]", "Shell"), ("type[Folder1]", "FtrFolder"), ("type[FICT-Feature1]", "FictProbeType"),
+                ("reason", "every feature in the tree answered GetTypeName2; compare the census above against "
+                    + "reviewer/src/swreview/checks/rms_types.yaml by hand - that table lives outside this build.")),
+            GoldenRow("PROBE-12", RemodelProbeVerdict.Verified, 1880, new[] { "ICustomPropertyManager.Add3", "ISldWorks.OpenDoc7" },
+                ("add_result", "0"), ("saved", "True"), ("found_after_reopen", "True"),
+                ("value_after_reopen", "verify-me"), ("resolved_value_after_reopen", "verify-me"),
+                ("reason", RemodelProbe12Logic.Decide(true, true, "verify-me", "verify-me").Reason)),
+            GoldenRow("PROBE-13", RemodelProbeVerdict.Refuted, 8, none,
+                ("file_copy_error", "IOException 0x80070020"), ("file_copy_succeeded", "False"), ("fallback_succeeded", "True"),
+                ("reason", RemodelProbe13Logic.Decide(false, true).Reason)),
+            GoldenRow("PROBE-20", RemodelProbeVerdict.Unresolved, 5, none,
+                ("error", "COMException 0x80004005")),
+        };
+    }
+
+    [Fact]
+    public void Ledger_Render_WritesTheGoldenLedgerTheReaderIsPinnedTo()
+    {
+        string rendered = RemodelProbeLedger.Render(
+            "32.5.0", GoldenRows(), Fixed, requested: RemodelProbeCatalog.AllIds);
+
+        // A checkout may turn the file's line endings to CRLF; what is pinned is the text.
+        string golden = File.ReadAllText(GoldenLedgerPath()).Replace("\r\n", "\n");
+        Assert.Equal(golden, rendered);
+    }
+
     // ---- log lines -----------------------------------------------------------------
 
     [Fact]
