@@ -43,16 +43,21 @@ what it promises is held in its text:
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from typer.main import get_command
 from typer.testing import CliRunner
 
+from swreview.chat.remodel import OPEN_DIAGNOSTICS_FILE, _open_phase
 from swreview.cli import app
 from swreview.ir.loader import load_package
 from swreview.report.attention import load_policy, rank
@@ -327,6 +332,15 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("baseline_geometry.begin", "reviewer/src/swreview/chat/remodel.py"),
     ("stage=", "extractor/SwReview.AddIn/ToolService/ToolServiceHost.cs"),
     ("get_Density", "extractor/SwReview.Extractor/Rms/RemodelGeometry.cs"),
+    # S1 (decisions 167A and 169A; 004 T365): the backend's number, the close in process, 004
+    # T140's test and PROBE-15's line.
+    ("backend healthy on ", "extractor/SwReview.AddIn/Review/BackendProcess.cs"),
+    ("remodel close in process thread=", "extractor/SwReview.AddIn/ToolService/ToolServiceHost.cs"),
+    ("nothing closed: this bridge holds no session of that run",
+     "extractor/SwReview.AddIn/ToolService/ToolServiceHost.cs"),
+    ("InstalledAssemblyMatchesManifest",
+     "extractor/SwReview.Extractor.Tests/RemodelInteropManifestTests.cs"),
+    ("root_component: ", "extractor/SwReview.Extractor.Console/Program.cs"),
 )
 """Every product sentence the plan quotes, with the file that says it."""
 
@@ -1591,47 +1605,44 @@ def test_the_fixture_ledger_has_the_shape_render_writes() -> None:
 
 
 @pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
-def test_show_remodel_ledger_prints_each_probes_verdict_and_reason(
+def test_show_remodel_ledger_hands_each_answers_file_to_swreview_remodel_ledger(
     plan: str, tmp_path: Path
 ) -> None:
+    """*Changed 2026-10-31 on purpose (decision 166A; 004 T365):* `Show-RemodelLedger` no longer
+    reads the answers file line by line itself; it hands each file to `swreview remodel ledger`,
+    the reader another lane builds, from `$R\reviewer` as every `uv run` of the plan runs, and
+    still says when a run wrote none. That command is not this test's: `uv` is stood in for by a
+    function that prints what it was asked, so nothing of that lane's runs here."""
     run = tmp_path / "remodel-no-reorder"
     (run / "capabilities").mkdir(parents=True)
-    (run / "capabilities" / "remodel-32.5.0.48.yaml").write_text(
+    ledger = run / "capabilities" / "remodel-32.5.0.48.yaml"
+    ledger.write_text(
         rendered_ledger(
             [
-                ("PROBE-2", True, "verified", {
-                    "equation_count": "1",
-                    "equation_text": '\\"w\\" = 120',
-                    "reason": "get_Value returned 120.",
-                }),
+                ("PROBE-2", True, "verified", {"reason": "get_Value returned 120."}),
                 ("PROBE-13", False, "unresolved", {"error": "the call threw"}),
-                ("PROBE-21", False, "refuted", {}),
             ]
         ),
         encoding="utf-8-sig",
     )
     empty = tmp_path / "remodel-probe-1"
     empty.mkdir()
+    reviewer = tmp_path / "checkout" / "reviewer"
+    reviewer.mkdir(parents=True)
     function = plan_function(plan, "Show-RemodelLedger")
-    quoted, quoted_empty = (str(folder).replace("'", "''") for folder in (run, empty))
+    quoted, quoted_empty, checkout = (
+        str(folder).replace("'", "''") for folder in (run, empty, reviewer.parent)
+    )
+    stub = "function uv { \"uv $($args -join ' ') | from $((Get-Location).Path)\" }"
 
     lines = run_powershell(
-        f"{function}\nShow-RemodelLedger '{quoted}'\nShow-RemodelLedger '{quoted_empty}\\'\n",
+        f"$R = '{checkout}'\n{stub}\n{function}\nShow-RemodelLedger '{quoted}'\n"
+        f"Show-RemodelLedger '{quoted_empty}\\'\n",
         tmp_path,
     )
 
     assert lines == [
-        '- probe_id: "PROBE-2"',
-        "blocking: true",
-        "verdict: verified",
-        '"reason": "get_Value returned 120."',
-        '- probe_id: "PROBE-13"',
-        "blocking: false",
-        "verdict: unresolved",
-        '"error": "the call threw"',
-        '- probe_id: "PROBE-21"',
-        "blocking: false",
-        "verdict: refuted",
+        f"uv run swreview remodel ledger {ledger} | from {reviewer}",
         "no answers file in this folder: the run did not finish",
     ]
     assert plan.index("function Show-RemodelLedger ") < plan.index("Set-Location $R")
@@ -2048,6 +2059,10 @@ DECISION_144A_IN_STEP_5 = 5
 """Step 5.3's item B for 011 T171 (decision 144A, 2026-10-19): the box's Open copy, then Start,
 and the run's four `seat=` lines, 5 minutes."""
 
+DECISION_169A_IN_STEP_5 = 25
+"""Step 5.3's close in process, 004 T303a, idle and with a dialog open (decision 169A, 2026-10-31;
+004 T365), 25 minutes."""
+
 GEMINI_TEST_IN_STEP_5 = 5
 """Step 5.4's live Gemini test (008 T106), part of step 5.1 to 5.4's first 35 minutes, withdrawn
 when decision 173A closed 008 T106 under decision 94A (004 T363), 5 minutes."""
@@ -2078,7 +2093,9 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     to 5.4's row, for the pane seat's gate at step 5.3's item B, which the decision 18A range
     leaves out too. *Changed 2026-10-31 on purpose (004 T363):* step 5.1 to 5.4's row loses
     `GEMINI_TEST_IN_STEP_5` with step 5.4's Gemini test (decisions 94A and 173A), and step 5.5's
-    row falls from an hour to 15 minutes with 009 T082's "before" half (decision 175A)."""
+    row falls from an hour to 15 minutes with 009 T082's "before" half (decision 175A). *Changed
+    2026-10-31 on purpose (004 T365):* step 5.1 to 5.4's row gains `DECISION_169A_IN_STEP_5` for
+    004 T303a in step 5.3, and step 3's row 10 minutes for PROBE-15 at step 3.9 (003 T088)."""
     section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
     rows = re.findall(r"^\| ([^|]+) \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
     [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
@@ -2086,7 +2103,7 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
 
     assert len(rows) == 8
     assert abs(sum(estimates.values()) - (int(hours) * 60 + int(mins or 0))) <= 7
-    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 85
+    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 110
     assert estimates["5.5"] == 15
     decision_18a_in_step_5 = (
         estimates["5.1 to 5.4"]
@@ -2094,6 +2111,7 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
         - FEATURE_013_IN_STEP_5
         - RETEST_2026_09_28_IN_STEP_5
         - DECISION_144A_IN_STEP_5
+        - DECISION_169A_IN_STEP_5
     )
     assert 30 <= estimates["5.6"] + (estimates["1"] - 50) + decision_18a_in_step_5 <= 45
     assert (estimates["2"], estimates["4"]) == (40, 300)
@@ -2189,3 +2207,291 @@ def test_every_command_written_in_the_text_parses(tmp_path: Path) -> None:
     assert len(spans) >= 70
 
     assert powershell_parse_errors(spans, tmp_path) == ""
+
+
+SITTING_ROW = re.compile(r"^\| (S\d) \| ([^|]+) \| ([^|]+) \| [^|]+ \|$", re.MULTILINE)
+"""A row of the plan's Sittings table: the sitting, its theme and its length."""
+S1_ROW = re.compile(r"^\| (\d+) \| ([^|]+) \| ([^|]*) \| ([^|]+) \|$", re.MULTILINE)
+"""A row of S1's table: its order, the steps it runs, their task ids and its estimate."""
+STEP_NUMBER = re.compile(r"\b(\d\.\d{1,2})\b")
+PAID_STEPS = frozenset({"2.5", "2.7", "3.4", "5.5"})
+"""The steps outside step 4 that use the key: it is saved (2.5), lever 14's live test reads it
+(2.7), and a pane review sends to the model (3.4, 5.5); every step of step 4 is a review too."""
+S1_TASKS = frozenset({
+    ("004", "T140"), ("004", "T164"), ("004", "T187"), ("011", "T077"), ("013", "T142"),
+    ("003", "T088"), ("004", "T185"), ("004", "T186"), ("011", "T171"), ("004", "T182"),
+    ("004", "T303a"), ("006", "T102"), ("001", "T076"),
+})
+"""What S1 answers, as decisions 167A, 169A and 172A put it, besides the probes of step 5.6."""
+
+
+def section(plan: str, heading: str) -> str:
+    """The plan's section `## <heading>`, to the next heading of its level."""
+    start = plan.index(f"## {heading}\n")
+    end = plan.find("\n## ", start + 1)
+    return plan[start : end if end >= 0 else len(plan)]
+
+
+def s1_rows(plan: str) -> list[tuple[int, str, str, int]]:
+    """`(order, steps, tasks, minutes)` of each row of S1's table."""
+    return [
+        (int(order), steps.strip(), tasks, minutes(estimate))
+        for order, steps, tasks, estimate in S1_ROW.findall(section(plan, "S1: Start readiness"))
+    ]
+
+
+def t303a(plan: str) -> str:
+    """Step 5.3's part for 004 T303a, the close in process (decision 169A)."""
+    remodel = step(plan, "5.3")
+    end = remodel.index("**What the Start switch waits on.**")
+    return remodel[remodel.index("**004 T303a") : end]
+
+
+def test_the_plan_is_run_in_short_themed_sittings_s1_first(plan: str) -> None:
+    """Decision 167A: the next sitting is S1, about three hours, and later sittings are short and
+    themed, each 3.5 hours or less, in place of the two-day plan (004 T365)."""
+    sittings = section(plan, "Sittings")
+    rows = SITTING_ROW.findall(sittings)
+    lengths = {sitting: length.strip() for sitting, _, length in rows}
+
+    assert [(sitting, theme.strip()) for sitting, theme, _ in rows] == [
+        ("S1", "Start readiness"), ("S2", "Start on"), ("S3", "paid review"),
+        ("S4", "drawings"), ("S5", "fixtures"),
+    ]
+    assert lengths["S1"] == "3 h 10 min, and an optional 25 min"
+    assert [lengths[sitting] for sitting in ("S2", "S3", "S4", "S5")] == ["3 h 30 min at most"] * 4
+    assert "decision 167A" in re.sub(r"\s+", " ", sittings)
+    assert ("004", "T303b") in qualified_tasks(sittings)
+    assert (
+        plan.index("## Sittings\n")
+        < plan.index("## S1: Start readiness\n")
+        < plan.index("## The next sitting: where 2026-09-26 stopped")
+    )
+
+
+def test_s1_is_a_selection_of_the_plans_steps_whose_minutes_are_its_headline(plan: str) -> None:
+    """S1 runs steps the plan already has, none that uses the key, and its estimates add up to its
+    headline, 3 h 10 min, the optional block's 25 minutes apart; together they answer what
+    decisions 167A, 169A and 172A put in it (004 T365)."""
+    flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+    rows = s1_rows(plan)
+    [(hours, mins, optional)] = re.findall(
+        r"about \*\*(\d+) hours (\d+) minutes\*\* at the seat, plus an optional (\d+) minutes", flat
+    )
+    steps = set(STEP_HEADING.findall(plan))
+    named = [set(STEP_NUMBER.findall(cell)) for _, cell, _, _ in rows]
+    used = set().union(*named)
+    tasks = set().union(*(qualified_tasks(cell) for _, _, cell, _ in rows))
+
+    assert [order for order, *_ in rows] == list(range(1, len(rows) + 1))
+    assert sum(m for _, cell, _, m in rows if "optional" not in cell) == 190
+    assert int(hours) * 60 + int(mins) == 190
+    assert [m for _, cell, _, m in rows if "optional" in cell] == [int(optional)] == [25]
+    assert [cell for (_, cell, _, _), numbers in zip(rows, named, strict=True)
+            if not numbers and "optional" not in cell] == []
+    assert used <= steps, sorted(used - steps)
+    assert sorted(n for n in used if n.startswith("4.") or n in PAID_STEPS) == []
+    assert "no key and no paid call" in flat
+    assert S1_TASKS | set(PROBE_RUNS) <= tasks
+
+
+def test_s1_runs_the_probes_that_never_reorder_early_and_the_reorders_last(plan: str) -> None:
+    """Step 5.6's first run asks SOLIDWORKS for no reorder, so no "Cannot reorder" box can hold
+    it, and it comes early; its second and third runs stay last before the handoff. If SOLIDWORKS
+    closes during step 5.3, the close in process is skipped; the optional block is the first thing
+    cut; and after S1 the development machine's three switches each go in a pull request of their
+    own (decision 167A; 004 T365)."""
+    cells = [cell for _, cell, _, _ in s1_rows(plan)]
+    flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+
+    def at(words: str) -> int:
+        [index] = [index for index, cell in enumerate(cells) if words in cell]
+        return index
+
+    assert (
+        at("first run")
+        < at("3.9")
+        < at("5.3: items")
+        < at("close in process")
+        < at("optional")
+        < at("second and third runs")
+        == len(cells) - 2
+    )
+    assert set(STEP_NUMBER.findall(cells[-1])) == {"6.0", "6.1", "6.3", "6.5"}
+    assert "If SOLIDWORKS closes during step 5.3" in flat
+    assert "go straight to 5.6's second and third runs" in flat
+    assert "2 h 30" in flat
+    assert ("004", "T138") in qualified_tasks(flat)
+    for words in ("`RemodelStart.SeatValidated`", "`DrawingOpenScope.SeatValidated`",
+                  "each as its own pull request"):
+        assert words in flat, words
+    assert "In S1 the first run comes early" in re.sub(r"\s+", " ", step(plan, "5.6"))
+
+
+def test_s1s_steps_hold_what_s1_asks_of_them(plan: str) -> None:
+    """Step 1.3 names 004 T140's one test, which the C# gate runs unnamed; step 1.6 runs
+    `swreview seat health` (decision 166A, another lane's command, only pasted here); step 1.7
+    keeps the product name 004 T164 still needs; step 3.9 runs PROBE-15 on part J (003 T088); and
+    004's tasks say what is left of T140 and T164 (004 T365)."""
+    tasks = (FEATURE_004 / "tasks.md").read_text(encoding="utf-8")
+    [t140] = [line for line in tasks.splitlines() if line.startswith("- [ ] T140 ")]
+    [t164] = [line for line in tasks.splitlines() if line.startswith("- [ ] T164 ")]
+    manifest_tests = (
+        REPO / "extractor" / "SwReview.Extractor.Tests" / "RemodelInteropManifestTests.cs"
+    )
+
+    assert (
+        'dotnet test extractor\\SwReview.Extractor.Tests\\SwReview.Extractor.Tests.csproj '
+        '-c Release --no-build --filter "FullyQualifiedName~InstalledAssemblyMatchesManifest" '
+        '--logger "console;verbosity=normal"'
+    ) in step(plan, "1.3")
+    assert "public void InstalledAssemblyMatchesManifest()" in manifest_tests.read_text(
+        encoding="utf-8"
+    )
+    assert ("004", "T140") in qualified_tasks(step(plan, "1.3"))
+    assert 'cd "$R\\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd $R' in (
+        step(plan, "1.6")
+    )
+    assert "In S1 only the product" in re.sub(r"\s+", " ", step(plan, "1.7"))
+    assert (
+        'swreview-extract probe rms --doc "<full path of part J>" | Out-File -FilePath '
+        '"$H\\probes\\probe-rms-J.txt" -Encoding utf8; "exit code: $LASTEXITCODE"'
+    ) in step(plan, "3.9")
+    assert {("003", "T088"), ("011", "T077")} <= qualified_tasks(step(plan, "3.9"))
+    assert "`InstalledAssemblyMatchesManifest`" in t140 and "passed, not skipped" in t140
+    assert "*Amended 2026-10-31" in t164 and "the product Help > About names" in t164
+
+
+def test_t303a_ends_only_the_backend_the_add_in_started_and_only_by_its_pid(plan: str) -> None:
+    """004 T303a ends the review backend the add-in started, by the number its own log gives
+    (`BackendProcess`), and only once that number is still a backend's process; no document of
+    the sitting ends a process by its name. The close it reads for is the tool service's own line,
+    and what cannot be made by hand stays the fakes' (decision 169A; 004 T365)."""
+    part = t303a(plan)
+    flat = re.sub(r"\s+", " ", part)
+    backend = (REPO / "extractor" / "SwReview.AddIn" / "Review" / "BackendProcess.cs").read_text(
+        encoding="utf-8"
+    )
+
+    for path in (PLAN, HANDOVER, RUNBOOK):
+        text = path.read_text(encoding="utf-8")
+        assert re.findall(r"Stop-Process(?! -Id \$backend\b)", text) == [], path.name
+        assert "taskkill" not in text.lower(), path.name
+    assert "Stop-Process -Id $backend" in part
+    assert "$p.ProcessName -in 'uv', 'swreview', 'python'" in part
+    assert '$"backend healthy on {Origin} (pid {ProcessId})"' in backend
+    assert (
+        "remodel close in process thread=posted reason=remodel.close verified=true "
+        "tag_removed=true copy_closed=true"
+    ) in flat
+    assert "decision 169A" in flat and "the fakes" in flat
+    assert ("004", "T303a") in qualified_tasks(part)
+    assert ("004", "T303a") in tagged_tasks(plan)
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_t303a_reads_the_newest_backend_logs_pid_and_ends_that_process_once_the_copy_is_open(
+    plan: str, tmp_path: Path
+) -> None:
+    """T303a's first two blocks, pasted as they stand, over a stand-in `LOCALAPPDATA` and run
+    root: the number is the newest backend log's, and the process is ended only once a remodel
+    folder made after the wait began holds `open_record.written` - here a sleeping Python this
+    test started, the backend's stand-in (004 T365)."""
+    [number, wait, *_] = POWERSHELL_BLOCK.findall(t303a(plan))
+    logs = tmp_path / "local" / "SwReview" / "logs"
+    logs.mkdir(parents=True)
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    marker = tmp_path / "waiting"
+    sleeper = subprocess.Popen([sys._base_executable, "-c", "import time; time.sleep(90)"])
+    try:
+        older = logs / "backend-20261031-090000.log"
+        older.write_text(
+            "[2026-10-31T09:00:01+00:00] backend healthy on http://127.0.0.1:50001 (pid 4)\n",
+            encoding="utf-8",
+        )
+        os.utime(older, (1_000_000_000, 1_000_000_000))
+        (logs / "backend-20261031-100000.log").write_text(
+            "[2026-10-31T10:00:00+00:00] starting\n"
+            f"[2026-10-31T10:00:01+00:00] backend healthy on http://127.0.0.1:50002 "
+            f"(pid {sleeper.pid})\n",
+            encoding="utf-8",
+        )
+
+        def open_a_copy() -> None:
+            deadline = time.monotonic() + 120
+            while not marker.exists() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            time.sleep(1)
+            run = runs / "20261031-100500-J-remodel"
+            run.mkdir()
+            (run / "remodel-open.jsonl").write_text(
+                '{"at": "2026-10-31T10:05:01+00:00", "phase": "copy_open.begin"}\n'
+                '{"at": "2026-10-31T10:05:09+00:00", "phase": "open_record.written"}\n',
+                encoding="utf-8",
+            )
+
+        writer = threading.Thread(target=open_a_copy)
+        writer.start()
+        local, root, waiting = (
+            str(path).replace("'", "''") for path in (tmp_path / "local", runs, marker)
+        )
+        lines = run_powershell(
+            f"$env:LOCALAPPDATA = '{local}'\n$runs = '{root}'\n{number}\n"
+            f"New-Item -ItemType File '{waiting}' | Out-Null\n{wait}\n",
+            tmp_path,
+        )
+        writer.join(timeout=150)
+
+        assert lines == [
+            f"backend pid {sleeper.pid} | running: True",
+            f"ended the backend, pid {sleeper.pid}",
+        ]
+        assert sleeper.wait(timeout=30) is not None
+    finally:
+        if sleeper.poll() is None:
+            sleeper.kill()
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_the_opens_seconds_are_read_from_the_runs_remodel_open_record(
+    plan: str, tmp_path: Path
+) -> None:
+    """004 T182 sets the open route's wait from the time the open takes on a real part, so step
+    5.3 reads it from the run's own `remodel-open.jsonl`, in the shape the backend writes it, from
+    the first phase to the last (004 T365)."""
+    [block] = [
+        found for found in POWERSHELL_BLOCK.findall(step(plan, "5.3")) if "$phases" in found
+    ]
+    run = tmp_path / "20261031-101112-J-remodel"
+    run.mkdir()
+    _open_phase(run, "copy_open.begin")
+    [written] = (run / OPEN_DIAGNOSTICS_FILE).read_text(encoding="utf-8").splitlines()
+    assert set(json.loads(written)) == {"at", "phase"}
+    began = datetime(2026, 10, 31, 10, 11, 12, 345678, tzinfo=UTC)
+    phases = ((0, "copy_open.begin"), (4.5, "baseline_geometry.begin"),
+              (12.34, "open_record.written"))
+    (run / OPEN_DIAGNOSTICS_FILE).write_text(
+        "".join(
+            json.dumps({"at": (began + timedelta(seconds=at)).isoformat(), "phase": phase}) + "\n"
+            for at, phase in phases
+        ),
+        encoding="utf-8",
+    )
+    quoted = str(run).replace("'", "''")
+
+    lines = run_powershell(f"$run = Get-Item -LiteralPath '{quoted}'\n{block}\n", tmp_path)
+
+    assert lines == ["open: 12.3 s, from copy_open.begin to open_record.written"]
+
+
+def test_the_handover_says_the_next_sitting_is_s1(plan: str) -> None:
+    """The handover gives the assistant S1's order and points at the plan's table, which wins
+    (decision 167A; 004 T365)."""
+    handover = HANDOVER.read_text(encoding="utf-8")
+    s1 = handover[handover.index("## The next sitting is S1") :]
+    s1 = s1[: s1.index("\n## ")]
+
+    assert "the test plan's section \"S1: Start readiness\"" in re.sub(r"\s+", " ", s1)
+    assert S1_TASKS <= qualified_tasks(s1) | qualified_tasks(section(plan, "S1: Start readiness"))
+    assert ("004", "T303a") in qualified_tasks(s1)
