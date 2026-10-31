@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +41,7 @@ from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, Script
 from swreview.checks import part_roles
 from swreview.checks.provenance import PROVENANCE_CHECK
 from swreview.checks.thread_pitch import CHECK_FINE_PITCH
-from swreview.findings import Finding, build_finding
+from swreview.findings import Disposition, Finding, build_finding
 from swreview.ir.loader import save_package
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession
@@ -1107,29 +1108,35 @@ def test_a_rerun_of_two_joints_on_the_same_components_keeps_each_its_verdict(
     ]
 
 
+@pytest.mark.parametrize(
+    "place", [{"sheet": "Sheet1"}, {"annotation": "D3"}], ids=["sheet", "annotation"]
+)
 def test_a_rerun_citing_the_same_place_with_its_reference_yields_one_verdict(
-    review: Callable[..., runner.ReviewRun],
+    review: Callable[..., runner.ReviewRun], place: dict[str, str]
 ) -> None:
-    """The model's citation of a sheet first without and then with the persistent reference is
-    one place: the re-run folds onto the finding it re-judges (008 T132)."""
-    cited = ScriptedToolCall(
-        name="record_drawing_finding",
-        arguments={
-            **DRAWING_FINDING_ARGUMENTS,
-            "source_refs": [
-                {"document_id": "doc:2", "sheet": "Sheet1", "persist_ref": persist_ref("Sheet1")}
-            ],
-            "status": "suspected",
-        },
-    )
+    """The model's citation of a sheet or an annotation first without and then with the
+    persistent reference is one place: the re-run folds onto the finding it re-judges (008
+    T132, T136)."""
+    [locator] = place.values()
+
+    def cited(status: str, **reference: str) -> ScriptedToolCall:
+        return ScriptedToolCall(
+            name="record_drawing_finding",
+            arguments={
+                **DRAWING_FINDING_ARGUMENTS,
+                "source_refs": [{"document_id": "doc:2", **place, **reference}],
+                "status": status,
+            },
+        )
+
     run = review(
         [
             turn(
                 "blocked",
-                drawing_finding("unresolved"),
+                cited("unresolved"),
                 call("request_evidence", **EVIDENCE_ARGUMENTS),
             ),
-            turn("resolved", cited),
+            turn("resolved", cited("suspected", persist_ref=persist_ref(locator))),
         ]
     )
 
@@ -1228,6 +1235,56 @@ def test_a_restated_finding_with_the_same_entity_ids_re_judges_its_own_earlier_o
     ]
 
     assert runner._restated_targets(earlier, restated) == {0: 1, 1: 0}
+
+
+def test_two_earlier_findings_a_restated_one_could_narrow_leave_it_unmatched() -> None:
+    """Two unmatched earlier findings share the key less their entity ids, each with its own
+    disposition, and the restated finding narrows either: which it re-judges is unknown, so it
+    takes neither id nor disposition (58A; 008 T136)."""
+    when = datetime(2026, 10, 31, tzinfo=UTC)
+    earlier = [
+        on_the_pair("F-001", "fst:0001", "hol:0004", check=CHECK_FINE_PITCH).model_copy(
+            update={"disposition": Disposition(decision="accepted", note="meant", by="a", at=when)}
+        ),
+        on_the_pair("F-002", "fst:0001", "hol:0010", check=CHECK_FINE_PITCH).model_copy(
+            update={"disposition": Disposition(decision="rejected", note="a slip", by="a", at=when)}
+        ),
+    ]
+    restated = [on_the_pair("F-009", "fst:0001", check=CHECK_FINE_PITCH)]
+
+    assert runner._restated_targets(earlier, restated) == {}
+
+
+def test_two_restated_findings_that_could_narrow_one_earlier_finding_take_nothing() -> None:
+    """The mirror: two unmatched restated findings each narrow the one earlier finding, so
+    neither takes it (008 T136)."""
+    earlier = [on_the_pair("F-001", "fst:0001", "hol:0004", check=CHECK_FINE_PITCH)]
+    restated = [
+        on_the_pair("F-009", "fst:0001", check=CHECK_FINE_PITCH),
+        on_the_pair("F-010", "hol:0004", check=CHECK_FINE_PITCH),
+    ]
+
+    assert runner._restated_targets(earlier, restated) == {}
+
+
+def test_a_resumed_turn_on_another_hole_pair_of_the_same_components_is_a_second_finding(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """In a resumed turn a finding on other holes of the same two components is the model
+    checking something else: it never takes the earlier pair's id (166A; 008 T136)."""
+    run = review([turn("nothing yet")])
+    session = run.session
+    session.findings[:] = [
+        on_the_pair("F-001", "hol:0004", "hol:0010"),
+        on_the_pair("F-002", "hol:0017", "hol:0027"),
+    ]
+
+    runner._reconcile_reruns(session, 1)
+
+    assert [(finding.id, finding.inputs) for finding in session.findings] == [
+        ("F-001", ["hol:0004", "hol:0010"]),
+        ("F-002", ["hol:0017", "hol:0027"]),
+    ]
 
 
 # --- resume rule (d): max_steps is a per-turn budget --------------------------------------------

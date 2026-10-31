@@ -254,7 +254,9 @@ settles:
 - the model may cite a sheet or an annotation first without and then with its persistent
   reference; the key held the reference, so the re-run stood beside the finding it re-judges. In
   the runner's key alone a location's reference counts only where it is the location's one
-  locator: a check cites each subject by its reference alone (25A), which still names it there;
+  locator: a check cites each subject by its reference alone (25A), which still names it there.
+  So `{sheet S, reference A}` and `{sheet S, reference B}` fold into one key, as before the lane
+  (T136 pins the sheet and the annotation citation);
 - the part-roles regrade drops a finding's newly bought sources: an unclear part whose fastener
   row and tapped hole share one fine pitch has one finding citing both, and after "All bought"
   only the fastener is graded. Its key lost the hole's id, so the Accepted finding was withdrawn
@@ -264,7 +266,8 @@ settles:
   ids are a subset of that finding's (T135): the regrade only drops sources, so a restated
   finding about other holes of the same components re-judges nothing earlier. A resumed turn
   never matches so: there, a finding with other entity ids is the model checking something else
-  (`test_a_rerun_that_covers_something_else_is_a_second_finding`).
+  (`test_a_rerun_that_covers_something_else_is_a_second_finding`, and
+  `test_a_resumed_turn_on_another_hole_pair_of_the_same_components_is_a_second_finding`, T136).
 
 The component ids and locations are sorted, which separates nothing.
 
