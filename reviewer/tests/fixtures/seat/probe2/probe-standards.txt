@@ -1,0 +1,32 @@
+probe: standards - the ten workstation probes of research.md R4
+document: "D:\fict-seat\PROBE2-POLARITY.SLDASM"
+kind: assembly
+configuration: "Default"
+components: 4, traversal gaps: 0
+probe-1 exploded_state:
+  open document: IModelDoc2.IsExploded()=False IModelDocExtension.IsExploded(out name)=False view=null
+  configurations (read without activating any):
+    "Default" explode_steps=0
+  sub-assembly documents:
+    (none)
+probe-2 appearance_overrides:
+  cmp:0001 PROBE2-POLARITY HasMaterialPropertyValues=False GetMaterialPropertyValues2(1, null)=null
+  cmp:0002 PROBE2-BLOCK-1 HasMaterialPropertyValues=True GetMaterialPropertyValues2(1, null)=9 slots [0]=0 [1]=0.501961 [2]=1 [3]=1 [4]=1 [5]=0.5 [6]=0.3125 [7]=0.5 [8]=0
+  cmp:0003 PROBE2-BLOCK-2 HasMaterialPropertyValues=True GetMaterialPropertyValues2(1, null)=9 slots [0]=0 [1]=0.501961 [2]=1 [3]=1 [4]=1 [5]=0.5 [6]=0.3125 [7]=0 [8]=0
+  cmp:0004 PROBE2-BLOCK-3 HasMaterialPropertyValues=False GetMaterialPropertyValues2(1, null)=9 slots [0]=0.792157 [1]=0.819608 [2]=0.933333 [3]=1 [4]=1 [5]=1 [6]=0.3125 [7]=0 [8]=0
+probe-3 component_visibility:
+  cmp:0001 PROBE2-POLARITY Visible=1 GetVisibility(1, null)=1 suppression=resolved
+  cmp:0002 PROBE2-BLOCK-1 Visible=1 GetVisibility(1, null)=1 suppression=resolved
+  cmp:0003 PROBE2-BLOCK-2 Visible=1 GetVisibility(1, null)=1 suppression=resolved
+  cmp:0004 PROBE2-BLOCK-3 Visible=1 GetVisibility(1, null)=1 suppression=resolved
+probe-4 revision_tables: not a drawing
+probe-5 notes: not a drawing
+probe-6 views_annotations_dimensions: not a drawing
+probe-7 non_active_sheets: not a drawing
+probe-8 cut_list_walk:
+  (an assembly has no cut list)
+probe-9 sketch_text_segments:
+  (an assembly has no sketches of its own here)
+probe-10 persistent_references:
+  sheet: (none on this document)
+gate log: a fictional summary of the members this run touched, none of them mutating
