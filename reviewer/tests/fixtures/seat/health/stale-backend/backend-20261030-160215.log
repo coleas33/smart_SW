@@ -1,0 +1,2 @@
+[2026-10-30T16:02:15.0000000+00:00] starting uv run swreview chat serve
+[2026-10-30T16:02:19.0000000+00:00] backend healthy on http://127.0.0.1:50111 (pid 1111)

@@ -170,6 +170,17 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T075 [US3] Create golden fixture `reviewer/tests/golden/fixtures/bracket-assy-interference/` (three seeded interferences, one six-instance pattern, one accepted exception, one truncated pair) with expected grouped findings and coverage
 - [ ] T076 [US3] Add Task Pane buttons **Interference** and **Capture selection** to `extractor/SwReview.AddIn/`; run quickstart Scenario 3 on the workstation and record results in `benchmarks/native/bracket-assy/notes.md`
 
+*Added 2026-10-31 (owner decision 172A; research R15):* T069's one-time check of the `Volume` unit against a known box overlap is still open (`InterferenceRunner.VolumeUnitVerified` is false). The engineer may build two made-up cubes by hand at the seat, never committed, and a judge reads the unit off the package. These three need no seat; the seat run itself is the recipe's, at the stage 1 sitting.
+
+- [X] T106 [P] [US3] Test first (owner decision 172A; research R15). In `reviewer/tests/unit/test_cli_seat_volume_unit.py`, over fictional packages and records made in the test's temp folder: the 1000 mm3 overlap recorded as 1e-6 is `m3` and as 1000 is `mm3` (exit 0, naming the extractor change), within 1 per cent and not beyond; another known volume judged against its own; the overlap in cubic inches, a number matching neither, no computed volume (none, null, failed, truncated) and two computed volumes are inconclusive (exit 1); `package.json` reads as its folder and a single interference record on its own; a file that is neither is an error; the known volume is required and must be positive
+- [X] T107 [US3] Implement T106 (owner decision 172A; research R15). `reviewer/src/swreview/seat/volume_unit.py` and `swreview seat volume-unit <package or record> --expected-mm3 <n> [--json]`. Acceptance: every T106 case green
+- [X] T108 Record R15 (the judge's rule and tolerance, what each answer asks of the extractor, the recipe) and write `benchmarks/native/interference-volume/RECIPE.md`; run both Python suites, ruff, the link check and the LF check. Acceptance recorded in R15
+
+*Added 2026-10-31 (owner decision 172A; research R15.1):* the lane's review round 1 found that the judge read a single interference record without the answer-key guard every other reviewer read goes through, and printed paths the engineer had not typed.
+
+- [X] T109 [P] [US3] Test first (owner decision 172A; research R15.1). In `reviewer/tests/unit/test_cli_seat_volume_unit.py`: a record or a package under `benchmarks/answer_keys/` is refused in one sentence on stderr, exit 1, with no traceback; an error names the path as it was given (a relative folder with no `package.json`) and none of the folders above it; a file that is neither a package nor a record says so on stderr
+- [X] T110 [US3] Implement T109 (owner decision 172A; research R15.1) in `reviewer/src/swreview/seat/volume_unit.py` and the `seat volume-unit` command, and record R15.1. Acceptance: every T106 and T109 case green
+
 **Checkpoint**: Interference findings are grouped, excepted, and re-flagged on change; the bridge serves captures.
 
 ---
