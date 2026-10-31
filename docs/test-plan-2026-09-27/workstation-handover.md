@@ -292,9 +292,9 @@ row per step and task id. The development machine moves each answer into the res
    `swreview-extract probe drawings --out "<handover folder>\probes" --doc "<drawing>" --probe D1,D11`,
    then press Standards check, then
    `swreview-extract probe standards --doc "<drawing>"` into a file in the same folder (the test
-   plan's step 3.2); then 006 T103, T105 and T107 as their task texts say (T107's not-loaded model
-   is the test plan's step 3.5, on a drawing opened in Detailing mode). Pass: the probe report's
-   answers and its gate log (no writer, activation, open or close member). Record: the
+   plan's step 3.2); then 006 T103, 006 T105 and 006 T107 as their task texts say (T107's
+   not-loaded model is the test plan's step 3.5, on a drawing opened in Detailing mode). Pass: the
+   probe report's answers and its gate log (no writer, activation, open or close member). Record: the
    `drawings-probe-<time>.txt` files stay in the `--out` folder; the answers go to 011 research
    R4 and 006 research R4.
 4. **011 T063: discovery.** With the assembly and the three drawings open:
@@ -356,7 +356,7 @@ row per step and task id. The development machine moves each answer into the res
     dimension or an ISO 286 Hole Wizard fit on a joint; a report saying "no tolerance source is
     read for this package" means T068 is blocked at this sitting, not passed. The binding itself is
     T095.
-11. **008 T102, 010 T107 and 009 T079, T080: the big assembly, paid.** A pane review with the
+11. **008 T102, 010 T107, 009 T079 and 009 T080: the big assembly, paid.** A pane review with the
     defaults. Pass for T102: the report's input tokens, uncached plus cached, at most **995,853**
     (1.5 times the replay's "Requested, pane defaults" figure for `big-assembly`, 663,902, in
     `docs/llm-efficiency-options.md`); every detected interference group judged, as a finding or
@@ -395,9 +395,9 @@ row per step and task id. The development machine moves each answer into the res
     holding the review could save over them; its `session.json` carrying the baseline is the
     evidence.
 
-14. **009 T081, T083, T084.** Configuration switch (T081), chips and restore (T083), three open
-    questions answered in one send (T084), each as its task text says; T084's resumed turn's
-    first round input goes beside the pane's resume sentence.
+14. **009 T081, 009 T083, 009 T084.** Configuration switch (T081), chips and restore (T083),
+    three open questions answered in one send (T084), each as its task text says; T084's resumed
+    turn's first round input goes beside the pane's resume sentence.
 15. **008 T106: closed.** *Closed 2026-10-31* by decision 173A, under decision 94A (OpenAI only),
     with the test plan's step 5.4: nothing to run.
 16. **Evidence.** Zip the whole run folders of steps 1, 3 to 14, 20, 22 and 23 (their `tool-results\`
@@ -499,7 +499,7 @@ research R5. If T066 and T077 passed, the development machine sets each switch i
 own, editing the one pin test the task names, and 011 T095 goes into the next handover, with 013
 T142's second half (the host answers `opens_closed`, and the review offers the read-only open once
 per drawing file). Feature 010's fine-pitch amendment (2026-10-08) added two seat tasks after this
-list was written, 010 T123 and T124 (what Hole Wizard writes for fine tapped holes and a cosmetic
+list was written, 010 T123 and 010 T124 (what Hole Wizard writes for fine tapped holes and a cosmetic
 thread callout, and whether a part opened on its own gives hole rows); this sitting does not ask
 them, and they go into the next sitting plan. Feature 013's census reruns over the N folders' packages, counts only; 013 T141
 to T144's results are ticked from the findings document, and the version 4 profile, like the
@@ -517,9 +517,10 @@ unchanged, and 004 T180 is decided; a later sitting runs them.
 
 *Added 2026-10-31 (owner decision 166A; 004 T362):* every feature's open seat tasks are held to
 this list and to the test plan, not only those of the features above. Those this list does not
-run are in the test plan's "Not in this sitting", each with its reason: 001 T061, T076 and T103;
-002 T044, T051, T063 and T067; 003 T062, T088 and T089; 004 T135 to T141, and T303, which decision
-169A splits into 004 T303a (the close in process with no plan waiting for Start, at the next
-sitting) and 004 T303b (a plan holding its session for Start, after Start is switched on); 005
-T034, T085a, T086, T092, T093, T095, T100, T101, T103 and T108; 006 T104, T106, T108, T109 and
-T110; 007 T061 to T063; and 016 T010 and T015.
+run are in the test plan's "Not in this sitting", each with its reason: 001 T061, 001 T076 and
+001 T103; 002 T044, 002 T051, 002 T063 and 002 T067; 003 T062, 003 T088 and 003 T089;
+004 T135 to T141, and 004 T303, which decision 169A splits into 004 T303a (the close in process
+with no plan waiting for Start, at the next sitting) and 004 T303b (a plan holding its session for
+Start, after Start is switched on); 005 T034, 005 T085a, 005 T086, 005 T092, 005 T093, 005 T095,
+005 T100, 005 T101, 005 T103 and 005 T108; 006 T104, 006 T106, 006 T108, 006 T109 and 006 T110;
+007 T061 to T063; and 016 T010 and 016 T015.
