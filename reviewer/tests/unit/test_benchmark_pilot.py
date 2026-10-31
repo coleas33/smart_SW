@@ -742,12 +742,15 @@ def test_other_estimators_share_verdict_counts_and_keep_individual_rates(tmp_pat
     assert sample.code_detections[0, 0].tolist() == [2, 2]
 
 
+@pytest.mark.parametrize("left_out", ["stopped", "unpriced"])
 def test_the_estimate_is_printed_with_the_basis_its_averaged_costs_were_priced_on(
-    tmp_path, monkeypatch,
+    tmp_path, monkeypatch, left_out,
 ):
     """Until probe L1 (005 T025) an OpenAI cost prices cached input as uncached; the cost gate
     prints that basis beside the estimate in the scorecard's own words, for the completed and
-    priced package runs the estimate averages (owner decision 166A)."""
+    priced package runs the estimate averages (owner decision 166A). The twin's first run, a
+    behavioural stop or a completed run whose cost is unknown, is not averaged, so its note is
+    not printed; `pilot.cost_basis` is the one place that says which runs are (005 T113)."""
     uncached = "cached input priced as uncached: containment unverified (probe L1)"
     packages = (PanePackage("core"), PanePackage("twin", model_held_out=(), matched=()))
     folders, smoke = keyed_folders(tmp_path, monkeypatch, packages=packages)
@@ -756,14 +759,19 @@ def test_the_estimate_is_printed_with_the_basis_its_averaged_costs_were_priced_o
         core = replace(packages[0], score_overrides={
             "cost": {"amount": 2, "missing": [], "basis": [uncached], "synthetic": False},
         })
-        twin = replace(packages[1], status="behavioural" if rep == 0 else "completed",
+        stopped = rep == 0 and left_out == "stopped"
+        unpriced = rep == 0 and left_out == "unpriced"
+        twin = replace(packages[1], status="behavioural" if stopped else "completed",
                        score_overrides={"cost": {
-                           "amount": 3, "missing": [], "synthetic": False,
+                           "amount": None if unpriced else 3,
+                           "missing": ["fictional-unpriced"] if unpriced else [],
+                           "synthetic": False,
                            "basis": ["cache-write tokens counted, not priced"] if rep == 0 else [],
                        }})
         adjusted.append(replace(
             record, study_run=pane_run(record.study_run.run, "off", [core, twin]),
         ))
+    assert pilot.cost_basis(adjusted) == [uncached]
     small_search(monkeypatch)
     result = invoke_records(monkeypatch, adjusted, compare.run_records(smoke),
                             tmp_path / "measurement.json")
