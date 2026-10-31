@@ -2496,3 +2496,90 @@ def test_the_handover_says_the_next_sitting_is_s1(plan: str) -> None:
     assert "the test plan's section \"S1: Start readiness\"" in re.sub(r"\s+", " ", s1)
     assert S1_TASKS <= qualified_tasks(s1) | qualified_tasks(section(plan, "S1: Start readiness"))
     assert ("004", "T303a") in qualified_tasks(s1)
+
+
+START_WAITS_ON = frozenset({
+    ("004", "T303a"), ("004", "T303b"), ("004", "T138"), ("004", "T187"), ("004", "T180"),
+})
+"""What Start waits on besides the blocking probes and a real Plan: the close in process's two
+halves (decision 169A), IDENTITY's calibration (decision 170A: Start refuses every change while it
+is uncalibrated) and T180's decision; with R22.14 and R25.13, fixed now under decision 165A."""
+
+
+def test_what_the_start_switch_waits_on_is_what_004_research_lists(plan: str) -> None:
+    """004 research R25.9 lists what Start (T172) waits on: T303, R22.14, T180, the blocking probes,
+    a real Plan and R25.13; decision 169A splits T303 and decision 170A adds T138 and T187. Step
+    5.3's paragraph and the development machine's row say all of it (004 T367)."""
+    waits = re.sub(r"\s+", " ", step(plan, "5.3"))
+    waits = waits[waits.index("**What the Start switch waits on.**") :]
+    [row] = [
+        line for line in plan[plan.index("## Not in this sitting") :].splitlines()
+        if "`RemodelStart.SeatValidated`" in line
+    ]
+    research = (FEATURE_004 / "research.md").read_text(encoding="utf-8")
+    listed = research[research.index("### R25.9 ") : research.index("### R25.10 ")]
+
+    for reference in ("R22.14", "R25.13"):
+        assert reference in listed, reference
+    for text in (waits, row):
+        missing = START_WAITS_ON - qualified_tasks(text)
+        assert missing == set(), sorted(missing)
+        assert "R22.14" in text and "R25.13" in text
+        assert "decision 170A" in text
+
+
+def test_the_plan_says_001_t076s_buttons_are_built(plan: str) -> None:
+    """001 T076's Interference and Capture selection buttons are on the Extract tab
+    (`TaskPaneControl`), so no row says they are not built; S1's optional block settles the
+    volume unit T076 reads (decision 172A; 004 T367)."""
+    pane = (REPO / "extractor" / "SwReview.AddIn" / "TaskPaneControl.cs").read_text(
+        encoding="utf-8"
+    )
+    [row] = [line for line in plan.splitlines() if line.startswith("| 001 | 001 T061, 001 T076 |")]
+
+    assert 'Text = "Interference",' in pane and 'Text = "Capture selection",' in pane
+    assert "not built" not in row
+    assert "**Interference**" in row and "**Capture selection**" in row
+    assert "decision 172A" in row
+
+
+def test_the_specs_readme_says_which_features_mark_seat_tasks_and_how() -> None:
+    """`specs/README.md` said features 001 to 004 and 016 use no `[W]`; 004 T303 carried it, and
+    since decision 166A the workstation tasks of 001, 002 and 016 are tagged too, while 003 and 004
+    also say `Workstation` first. The pins read both (004 T367)."""
+    readme = re.sub(r"\s+", " ", (REPO / "specs" / "README.md").read_text(encoding="utf-8"))
+
+    assert "Features 001 to 004 and 016 do not use `[W]`" not in readme
+    assert "begins `Workstation`" in readme
+    assert "`reviewer/tests/support/seat_tasks.py`" in readme
+    assert "decision 166A" in readme
+
+
+def test_the_seat_work_found_after_the_plan_has_a_place(plan: str) -> None:
+    """Work for the seat found after the plan was written has a place in it: 004 T188's native
+    configuration-watch timing (`docs/development-handoff-2026-10-23.md`), 004 T187 (step 5.6)
+    and the focused retest of 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`), whose
+    Review half waits on the owner (004 T367)."""
+    aside = plan[plan.index("## Not in this sitting") :]
+    flat = re.sub(r"\s+", " ", aside)
+
+    assert ("004", "T188") in qualified_tasks(aside)
+    assert "`docs/development-handoff-2026-10-23.md`" in flat
+    assert "`docs/history/testing-feedback-2026-10-13.md`" in flat
+    assert ("004", "T187") in tagged_tasks(plan)
+
+
+def test_011_t101_is_its_screenshot_and_its_live_checks_are_011_t095s(
+    plan: str, results: str
+) -> None:
+    """011 T101 could not pass as written: since 013 T142 no same-name question is asked while the
+    read-only open's switch is off, and with it on, its part 1's refusal cannot happen. Its part 1
+    is dropped, its parts 2 and 3 are 011 T095's, at the sitting after the switch, and its part 4,
+    the screenshot, stays at step 4.7 (004 T368)."""
+    tasks = (REPO / "specs" / "011-drawing-context" / "tasks.md").read_text(encoding="utf-8")
+    [t101] = [line for line in tasks.splitlines() if line.startswith("- [ ] T101 ")]
+    [t095] = [line for line in tasks.splitlines() if line.startswith("- [ ] T095 ")]
+
+    assert_named_only_at({("011", "T101"): {"4.7"}}, plan, results)
+    assert "*Rewritten 2026-10-31" in t101 and "300 by 600" in t101
+    assert "011 T101's parts 2 and 3" in t095
