@@ -5688,13 +5688,20 @@ transparency polarity (006 research R11) and 001's interference volume unit (001
 
 | Check | Runbook | PASS when | Read from |
 |---|---|---|---|
-| `add-in load` | 6, item 1 | after the latest start (the last `AssemblyRedirect installed.`, which the type initializer writes on every load), `Attached to SOLIDWORKS.`, `Task Pane created.` and `Review host started.` appear, in that order | `addin.log` (`AddInLog`, `SwReviewAddIn.ConnectToSW`; docs/addin-load-fix.md) |
-| `tool service` | 6, item 1 | no line after that start begins `The SwReview tool service`, and none names a `.SLDDRW`, its stack-trace lines included | `addin.log` (`ToolServiceGate`) |
-| `backend` | 6, item 2 | the newest `backend-<stamp>.log` begun since that start, ordered by its own first line's time with its offset, has a `backend healthy on` line | the logs folder (`BackendClient.LogPath`, `BackendProcess.WaitForHealth`) |
-| `profile` | 5; 6, item 4 | the profile loads, at version 3 or later, and is not the repository's `config/standards.example.yaml` byte for byte | the profile (`load_profile`) |
-| `uv` | 2; 7 | `uv` is on this session's PATH | PATH |
+| `add-in load` | 6, item 1 | after the latest start (the last `AssemblyRedirect installed.`, which the type initializer writes once per SOLIDWORKS process), the latest load (the last `Attached to SOLIDWORKS.`, which `ConnectToSW` writes each time the add-in is ticked) is followed by `Task Pane created.` and `Review host started.`, in that order, with neither before the first load; a load that wrote `The SwReview add-in could not attach to SOLIDWORKS.` instead fails | `addin.log` (`AddInLog`, `SwReviewAddIn.ConnectToSW`; docs/addin-load-fix.md) |
+| `tool service` | 6, item 1 | no line after the latest load begins `The SwReview tool service`, and none names a `.SLDDRW`, its stack-trace lines included | `addin.log` (`ToolServiceGate`) |
+| `backend` | 6, item 2 | the newest `backend-<stamp>.log` begun since the latest load, ordered by its own first line's time with its offset, has a `backend healthy on` line | the logs folder (`BackendClient.LogPath`, `BackendProcess.WaitForHealth`) |
+| `profile` | 5; 6, item 4 | the profile loads, at version 3 or later, and does not load to the same profile as the repository's `config/standards.example.yaml`, whatever its line endings or comments | the profile (`load_profile`) |
+| `uv` | 2; 7 | `uv` is on this shell's PATH (the `backend` row proves SOLIDWORKS found it) | PATH |
 | `extractor` | 1 | `extractor\SwReview.Extractor.Console\bin\x64\Release\net48\swreview-extract.exe` exists | the checkout |
-| `checkout` | 6, item 7 | HEAD is on `main` and `git status --porcelain` prints nothing | `git` |
+| `checkout` | 6, item 7 | HEAD is on `main` and `git --no-optional-locks status --porcelain` prints nothing | `git` |
+
+The three `addin.log` rows also fail, all three with the same reason naming its age, when the
+latest load (or, with none after it, the latest start) is more than two hours old: a start that
+loaded nothing - a reverted check box, a broken registration (docs/addin-load-fix.md) - writes no
+line, and must not pass on the session before it (R28.6). A line of either log is one the add-in
+wrote only when it begins with a time and its offset (`{0:O}`); any other line, a bracket
+included, continues the line before it.
 
 Then six `MANUAL` lines, one per item only the pane or SOLIDWORKS shows: the ticked add-in, the
 `Backend ready` badge, Model check, Standards, a Review that ends on screen, and five tabs with no
@@ -5710,18 +5717,23 @@ the command never opens the settings file, because it holds the key.
 
 - It writes nothing, reads no key and opens no settings file.
 - It starts nothing but two read-only `git` commands, `status --porcelain` and
-  `symbolic-ref --short -q HEAD`.
-- It prints no path. A log line is named by its time, never its text, which can name a document;
-  a log by its file name; a dirty tree by its count of paths; a profile that does not validate by
-  that fact alone, since the loader's reason can quote a value. Tested over every case's output,
-  text and JSON.
+  `symbolic-ref --short -q HEAD`, each with `--no-optional-locks`, so `status` does not rewrite
+  a stale index under `index.lock` (R28.6).
+- It prints no path. A log line is named by its parsed time, never its text, which can name a
+  document; a log by its file name, a log that cannot be read by its file name and the system's
+  words for why; a dirty tree by its count of paths; a profile that does not validate by that fact
+  alone, since the loader's reason can quote a value. Tested over every case's output, text and
+  JSON.
 
 **Judgement calls within the brief**, each the conservative reading, for the owner to overrule:
 a profile below version 3 fails (the runbook's version check expects 3 or 4); the example profile
-copied into place fails (runbook section 5's "what a wrong file looks like", provable only when
-unedited); a `.SLDDRW` named on any line after the start fails, not only on a tool-service line,
-as the brief says; and the `uv` check reads the PATH of the shell the command runs in, so the
-engineer runs it from a fresh, non-elevated PowerShell, as the runbook's own `uv` check says.
+copied into place fails (runbook section 5's "what a wrong file looks like", provable while its
+content is the example's, whatever its line endings or comments); a `.SLDDRW` named on any line
+after the latest load fails, not only on a tool-service line, as the brief says; the `uv` check
+reads the PATH of the shell the command runs in, so the engineer runs it from a fresh,
+non-elevated PowerShell, as the runbook's own `uv` check says; and a latest load more than two
+hours old fails the three log checks, so the command is run right after a start, as section 6
+has it.
 
 ### R28.4 The command names, for the test plan's lane
 
@@ -5760,5 +5772,61 @@ Gates for the whole lane, run once on `fc0db91` (every code and test change of 0
 | `uv run ruff check src tests` | all checks passed |
 | The link check | `COUNT 0` |
 | Every file the lane changed, `git ls-files --eol` | `i/lf` |
+
+The C# gate was not run: no file under `extractor/` changed.
+
+### R28.6 Review round 1 (T354 to T356; 006 T114, T115; 001 T109, T110; 2026-10-31)
+
+An Opus review of the lane raised eleven findings. Each was checked against the code before
+anything changed; none was rejected. The fixes are test first, one red commit and one green
+commit per feature.
+
+| Id | Finding | Verified | Done |
+|---|---|---|---|
+| H1 | A start that wrote no line passed the three log checks on the session before it | Yes: the latest start was never aged. A reverted check box or a broken registration loads nothing, so the type initializer never runs, and the session before was the latest the log held. | Fixed (T354, T355). The latest load is aged against the clock, and one more than two hours old fails all three, naming its age: "if SOLIDWORKS has been started since, the add-in did not load (Tools > Add-ins); if not, start it and run this again". Two hours, as the reviewer proposed: section 6 is run right after a start, and a session left open longer is no longer one this command can speak for. |
+| M1 | A line beginning with a bracket became an entry: its text printed as a time (a path, a name), a drawing in it missed | Yes, both reproduced. `Report` writes whole exception texts. | Fixed. An entry begins only at a time with its offset; any other line continues the one before, brackets included; reasons give the parsed time. A time with no offset is no line the add-in wrote (`AddInLog` always writes `{0:O}`), which also removes the comparison of a naive and an aware time. |
+| M2 | Overrides identical at every slot, or differing only in colour, were reported as slot 7 refuted | Yes | Fixed in 006 (research R11.1): refuted only on an equal colour with slot 7 equal and another slot differing, or no slot 7; identical overrides name recipe step 4, a differing colour steps 3 and 4. |
+| L1 | Guards that survived mutation | Yes for the three named | Fixed: the invalid profile's input now makes the loader quote a value, and neither it nor the temp folder may appear; the privacy case covers a plain tool-service failure (fixture `tool-service-after-start`); the volume judge's "neither a package nor an interference record" is asserted on stderr; slot gaps, a count that disagrees and no slots are failed reads; the newest backend log is pinned to its own clock; a time with no offset is pinned. Not added, as harmless: a failed `git status` ignored (the `symbolic-ref` check fails the same folder), the PROBE-2 section never ending (no PROBE-3 line matches the PROBE-2 line shape), and the failed-read reason (both reasons are inconclusive, exit 1, naming the block). |
+| L2 | `git status` can rewrite `.git/index` | Yes: the red case's index bytes changed after a plain `status` over stale stat data | Fixed: `git --no-optional-locks`, for both commands. |
+| L3 | Tracebacks naming paths; the single record read without the answer-key guard | Yes, both | Fixed: a log that cannot be read fails by its file name and `strerror`; the volume judge refuses the answer keys first, catches `AnswerKeyAccessError`, and names paths as typed (001 research R15.1). |
+| L4 | R28.2 said the start line is written on every load; a failed reload after a good load passed | Yes: the type initializer runs once per process; `ConnectToSW` runs on each tick | Fixed: R28.2 corrected, and the three log checks read from the latest load (`Attached to SOLIDWORKS.`, or `The SwReview add-in could not attach to SOLIDWORKS.`), so a reload passes or fails on its own lines and needs a backend log begun since it. |
+| L5 | The `uv` reason claimed SOLIDWORKS inherits this shell's PATH | Yes: from the Start menu it inherits Explorer's | Fixed: "uv is on this shell's PATH; the backend check proves SOLIDWORKS found it". |
+| L6 | Repetition | Yes | Fixed in part: `profile.DEFAULT_PATH` in the reason and the help; `golden_result` extracted in `tests/golden/test_golden.py` and used by the precomputed goldens; one `INCONCLUSIVE` in `swreview.seat`. Not changed: `_swreview_local`'s `LOCALAPPDATA` fallback beside `tokens.tokenizer_dir`'s, which belongs to the tokenizer contract (`contracts/tokenizer.md` section 2, with an override variable and a non-Windows branch) - sharing one expression would tie the seat's folders to that contract; and the three commands' JSON-or-text tail, whose text forms differ, so a helper would take as many arguments as the lines it saves. |
+| L7 | Every backend log read in full | Yes | Fixed: the first line of each, then the newest in full. |
+| N1 | Smaller points | Yes, all five | (1) 001's new ticks are `[X]`. (2) The example is recognised by its loaded content (`model_dump`, since a loaded profile's private identity holds its path and digest). (3) The recipe's amount is 75 %; the decider prints the transparent reading and does not require it (006 R11.1 says why). (4) No slots is a failed read. (5) `docs/workstation-runbook.md` section 6 and the CLI contract do not name `swreview seat` yet: both belong to other lanes, which take the names from R28.4, unchanged by this round. |
+
+**What changed for the test plan's lane**: the command names in R28.4 are unchanged. The seat
+health step now says to run the command right after the start (within two hours of the latest
+load), and the PROBE-2 recipe's transparent amount is 75 %.
+
+**Test-first evidence**:
+
+| Task | Red | Green |
+|---|---|---|
+| 004 T354/T355 | 14 of 50 failing, each on its own assertion | 50 |
+| 006 T114/T115 | 4 of 30 | 30, and the 26 precomputed goldens unchanged |
+| 001 T109/T110 | 3 of 24 | 24 |
+
+One assertion of T350 changed deliberately (the backend reason says "since the latest load", the
+anchor it now reads from), and T111's "no slot differing refutes slot 7" was replaced, the
+refutation being the defect. The T355 tick commit had garbled one line of `tasks.md` (T057's
+non-ASCII characters, through a Windows PowerShell 5.1 read in the ANSI code page); the next
+commit restored it byte for byte.
+
+Mutations, each applied alone to the source, the focused file run, and the source restored byte
+for byte (sha256 checked): the invalid profile's reason made `str(error)`, the line's text added
+to the tool-service reason, `ValueError` no longer caught by the volume judge, the latest load
+never aged, `--no-optional-locks` dropped, identical overrides refuted again, and the single
+record read without `reject_answer_key_path`. All seven are killed.
+
+Gates, run once on `5064ab4`, the round's last code commit, from `reviewer/`:
+
+| Gate | Result |
+|---|---|
+| `SWREVIEW_REQUIRE_TOKENIZER=1 uv run pytest -q -m "not live"`, Python 3.12 | 18443 passed, 5 skipped, 0 failed (counted from the progress lines; exit 0) |
+| The same under `uv run --isolated --python 3.11 --all-extras` | 18443 passed, 5 skipped, 0 failed (exit 0) |
+| `uv run ruff check src tests` | all checks passed |
+| The link check | `COUNT 0` |
+| Every file the round changed, `git ls-files --eol` | `i/lf` |
 
 The C# gate was not run: no file under `extractor/` changed.
