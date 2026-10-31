@@ -911,6 +911,8 @@ public sealed class RemodelTeardownTests : IDisposable
     {
         bool[] idleBefore = RemodelSystemToggles.SuppressedToggles.Select(_harness.Seat.GetUserPreferenceToggle).ToArray();
         bool commandBefore = _harness.Seat.CommandInProgress;
+        var markers = new List<string>();
+        _harness.Services.RemodelStage = (_, marker) => markers.Add(marker);
         _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
         string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
             RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
@@ -950,6 +952,18 @@ public sealed class RemodelTeardownTests : IDisposable
         Assert.StartsWith("close: ", failure, StringComparison.Ordinal);
         Assert.DoesNotContain(Path.GetFileName(_harness.CopyPath), failure, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(RemodelHarness.RunId, failure, StringComparison.Ordinal);
+
+        // Owner decision 165A, test first (004 T328; research R26.1): the copy left is written down in the run's remodel.log,
+        // in one fixed marker in place of the delete's, naming no path or run.
+        string left = Assert.Single(markers, marker => marker.StartsWith("skipped ", StringComparison.Ordinal));
+        Assert.StartsWith("skipped unwind.DeleteCopy: ", left, StringComparison.Ordinal);
+        Assert.DoesNotContain(Path.GetFileName(_harness.CopyPath), left, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(RemodelHarness.RunId, left, StringComparison.Ordinal);
+        Assert.DoesNotContain("before unwind.DeleteCopy", markers);
+        Assert.True(
+            markers.IndexOf("after unwind.CloseDoc") < markers.IndexOf(left)
+            && markers.IndexOf(left) < markers.IndexOf("before unwind.PutBackSettings"),
+            "the marker is not where the delete's would be");
     }
 
     /// <summary>
@@ -960,6 +974,8 @@ public sealed class RemodelTeardownTests : IDisposable
     [Fact]
     public void AnUnwindStillClosesAndDeletesACopyClosedUnderneathAndNotReopened()
     {
+        var markers = new List<string>();
+        _harness.Services.RemodelStage = (_, marker) => markers.Add(marker);
         _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
         string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
             RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
@@ -981,6 +997,8 @@ public sealed class RemodelTeardownTests : IDisposable
         RemodelSessionEnd told = Assert.Single(_told);
         Assert.True(told.CopyClosed);
         Assert.Empty(told.Failures);
+        Assert.Contains("after unwind.DeleteCopy", markers);
+        Assert.DoesNotContain(markers, marker => marker.StartsWith("skipped ", StringComparison.Ordinal));
     }
 
     /// <summary><c>remodel.open</c>'s params for the harness's run, with the copy given.</summary>
