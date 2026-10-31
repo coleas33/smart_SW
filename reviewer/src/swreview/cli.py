@@ -173,6 +173,7 @@ from swreview.ingest.package_builder import build_package
 from swreview.ir.loader import AnswerKeyAccessError, load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
 from swreview.ir.summary import summarize
+from swreview.remodel import ledger as remodel_ledger
 from swreview.remodel.plan import part_document_ids, plan_reorganize
 from swreview.remodel.summary import plan_lines, plan_summary_row
 from swreview.report.attention import coverage_line, rank, start_here_lines
@@ -1754,6 +1755,35 @@ def remodel_plan_command(
     _emit(payload, lines, json_output)
     if any(row["state"] == "failed" for row in rows):
         raise typer.Exit(1)
+
+
+# --- remodel ledger --------------------------------------------------------------
+
+
+@remodel_app.command("ledger")
+def remodel_ledger_command(
+    ledger: Annotated[
+        Path,
+        typer.Argument(help="A capabilities/remodel-<version>.yaml that probe remodel wrote."),
+    ],
+    json_output: JsonFlag = False,
+) -> None:
+    """Read a probe remodel ledger: each probe's verdict, and what it lets the build switch on.
+
+    One line per probe the run was asked for - its verdict and reason, the exception type it
+    threw, or that the run stopped before it finished - then PROBE-11's type names the RMS
+    table does not know, then per seat switch whether this ledger makes it ready and every
+    reason it does not. Start needs PROBE-1, 2, 3, 4 and 12 verified, each with a reason and
+    no error, and the IDENTITY tolerance profile calibrated (004 research R27.4).
+
+    Exit 1, with one line and no value from the file, for a ledger it will not judge: not in
+    the shape probe remodel writes, for another SOLIDWORKS version than the frozen interop's,
+    or naming a path anywhere (decision 171A). It writes nothing and prints the file's name,
+    never its folder.
+    """
+    with _errors_as_exit_1():
+        payload = remodel_ledger.summary(remodel_ledger.load_ledger(ledger), Path(ledger).name)
+    _emit(payload, remodel_ledger.summary_lines(payload), json_output)
 
 
 # --- exceptions accept | list | accept-rms ---------------------------------------

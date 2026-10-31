@@ -189,7 +189,9 @@ def test_the_golden_ledger_holds_start_back_only_for_the_uncalibrated_profile() 
             "PROBE-12 threw COMException 0x80004005",
         ),
         (
-            start_rows(PROBE_12=("verified", {"reason": "read back", "error": "IOException 0x80131620"})),
+            start_rows(
+                PROBE_12=("verified", {"reason": "read back", "error": "IOException 0x80131620"})
+            ),
             None,
             "PROBE-12 threw IOException 0x80131620",
         ),
@@ -236,7 +238,9 @@ def test_a_ledger_for_another_solidworks_version_is_refused(version: str) -> Non
 
 
 def test_a_row_from_another_version_than_its_ledgers_is_refused() -> None:
-    text = rendered_ledger(start_rows()).replace('    sw_version: "32.5.0.48"', '    sw_version: "32.5.0"', 1)
+    text = rendered_ledger(start_rows()).replace(
+        '    sw_version: "32.5.0.48"', '    sw_version: "32.5.0"', 1
+    )
 
     with pytest.raises(LedgerRefused, match="PROBE-1's row"):
         parse_ledger(text)
@@ -301,8 +305,9 @@ def test_a_string_that_names_no_path_is_read(text: str) -> None:
 
 @pytest.mark.parametrize("text", [*PATHS.values(), *NOT_PATHS])
 def test_the_path_rule_agrees_with_the_committable_scanner(tmp_path: Path, text: str) -> None:
-    """The reader's rule (a product module cannot import the test-side scanner) flags exactly what
-    `tests/support/local_paths.py`, the committable-path scanner, flags outside its fictional roots."""
+    """The reader's rule (a product module cannot import the test-side scanner) flags exactly
+    what `tests/support/local_paths.py`, the committable-path scanner, flags outside its
+    fictional roots."""
     sample = tmp_path / "sample.txt"
     sample.write_text(text, encoding="utf-8")
 
