@@ -1466,36 +1466,72 @@ def test_with_no_source_anything_unread_is_said_instead_of_nothing(
     assert reasons(checks.skipped) == [row]
 
 
-DOCUMENT_NODE = "is reviewed as a document of its own, not as a component of an assembly"
+ON_ITS_OWN = "is reviewed as a document of its own, not as a component of an assembly"
+BY_A_DRAWING = "is referenced by a drawing, not reviewed as a component of an assembly"
 """What the extractor writes, word for word, for a node whose handle is its document - a part
-root, or a model a drawing references - whose holes and fastener identity it did not read
-(`ComponentDocuments.RecordDocumentNode`, feature 010 T128, owner decision 166A)."""
+root (`ON_ITS_OWN`), or a model a drawing references (`BY_A_DRAWING`) - whose holes and fastener
+identity it did not read (`ComponentDocuments.RecordDocumentNode`, feature 010 T128 and T132,
+owner decision 166A). Copied by hand: no constant spans the C# and the Python."""
+
+PLATE = f"{FICTIONAL_ROOT}Vault\\PLATE_FICT.SLDPRT"
+FRAME = f"{FICTIONAL_ROOT}Vault\\FRAME_FICT.SLDASM"
 
 
 @pytest.mark.parametrize(
-    "key",
-    ["PLATE_FICT", f"{FICTIONAL_ROOT}Vault\\PLATE_FICT.SLDPRT"],
-    ids=["part reviewed on its own", "model a drawing references"],
+    ("unread", "count"),
+    [
+        (
+            [
+                ("hole", f"'PLATE_FICT' {ON_ITS_OWN}, so its holes and threads were not read."),
+                (
+                    "fastener",
+                    f"'PLATE_FICT' {ON_ITS_OWN}, so whether it is a fastener was not read.",
+                ),
+            ],
+            "2 extractor gaps",
+        ),
+        (
+            [
+                ("hole", f"'{PLATE}' {BY_A_DRAWING}, so its holes and threads were not read."),
+                (
+                    "fastener",
+                    f"'{PLATE}' {BY_A_DRAWING}, so whether it is a fastener was not read.",
+                ),
+            ],
+            "2 extractor gaps",
+        ),
+        (
+            [
+                (
+                    "hole",
+                    f"'{FRAME}' {BY_A_DRAWING}, so the holes and threads of its own assembly "
+                    "features were not read.",
+                ),
+            ],
+            "1 extractor gap",
+        ),
+    ],
+    ids=["part reviewed on its own", "part a drawing references", "assembly a drawing references"],
 )
 def test_a_document_node_the_extractor_did_not_read_is_the_not_read_row_never_nothing(
-    key: str,
+    unread: list[tuple[str, str]], count: str
 ) -> None:
-    """T129 (166A): a part reviewed on its own, keyed by its design name, and a model a drawing
-    references, keyed by its path, give no hole, cosmetic thread or fastener row, only the two
-    gaps the hole and fastener phases write for them. The not-read row lists both, so the
-    review says their threads were not checked rather than that the package states none."""
-    hole = f"'{key}' {DOCUMENT_NODE}, so its holes and threads were not read."
-    fastener = f"'{key}' {DOCUMENT_NODE}, so whether it is a fastener was not read."
-
-    checks = run(nothing_package(gaps=[gap("hole", None, hole), gap("fastener", None, fastener)]))
+    """T129 and T133 (166A): a part reviewed on its own, keyed by its design name, and a part a
+    drawing references, keyed by its path, give no hole, cosmetic thread or fastener row, only
+    the two gaps the hole and fastener phases write for them; an assembly a drawing references
+    gives the one `hole` gap for its own assembly features (its parts are read through its
+    components). The not-read row lists them, so the review says their threads were not checked
+    rather than that the package states none. The drawing cases vary only the key and the words:
+    `check_threads` reads no drawing, so the package is a part's, as for a part on its own."""
+    checks = run(nothing_package(gaps=[gap(kind, None, reason) for kind, reason in unread]))
 
     assert checks.skipped == (
         CoverageItem(
             check=ROW,
             scope=CoverageScope(),
             reason=(
-                "2 extractor gaps left holes, cosmetic threads or fasteners unread, so their "
-                f"pitch was not checked: {hole}; {fastener}"
+                f"{count} left holes, cosmetic threads or fasteners unread, so their pitch was "
+                "not checked: " + "; ".join(reason for _, reason in unread)
             ),
             error=None,
         ),

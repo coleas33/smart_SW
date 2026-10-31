@@ -1031,7 +1031,9 @@ part root is the node to read at all.
   (`fastener`) or `its faces were not read.` (`face`, under `--faces all` only). One sentence is
   true of all three shapes - a part root, and a part or an assembly a drawing references - so the
   dumpers do not tell them apart; the key does (a part root's is its design name, a referenced
-  model's its path).
+  model's its path). *Amended in review (R2.28, T132):* it is not - a model a drawing references
+  is "referenced by a drawing", and an assembly a drawing references loses only its own assembly
+  features - so the helper picks the words from the node.
 - **Null id, as the siblings.** The suppressed and no-model gaps name no id and put the key in
   the reason; this one does the same, so the reviewer's not-read row (D20) lists it with them.
 - **One place.** `ComponentDocuments`, which already documents the two handle shapes, records it
@@ -1048,7 +1050,8 @@ part root is the node to read at all.
 - **`MeshExporter.Export` is left as it is.** It does not skip silently: a node that is not an
   `IComponent2` already records a `body` gap there. Its words, `'{key}' is not resolved, so no
   mesh was written for it.`, are inexact for a resolved document node; recorded here, not
-  changed, because 166A's defect is the silence.
+  changed, because 166A's defect is the silence. *Amended in review (R2.28, F4):* changed by
+  T132, through the same helper.
 - **The reviewer needs no change.** `thread_pitch._unread_gaps` already lists every `hole` and
   `fastener` gap that names no row, a null id among them, in the not-read row, and the
   nothing-at-all row is written only when there is none (D20); T129 pins it with these words.
@@ -1058,7 +1061,7 @@ part root is the node to read at all.
 | Option | Why not |
 |---|---|
 | Read the part root's holes now, through `ComponentDocuments.Of` and the document's `FirstFeature` | 166A: PROBE-15 has not answered, and if `GetRootComponent3` returns a component for a part the part root is never built; T130 |
-| Two sentences, one for a part root and one for a drawing reference | the dumpers would branch on `ParentKey` or the root path to say what the key already says, and one sentence is true of both |
+| Two sentences, one for a part root and one for a drawing reference | the dumpers would branch on `ParentKey` or the root path to say what the key already says, and one sentence is true of both. *Taken in review (R2.28):* the one sentence was false of a model a drawing references, and the helper, not the dumpers, branches |
 | The fastener gap only for a node whose name or Toolbox flag makes it a candidate | a vendor screw identified by its description alone would stay silent, the defect itself |
 | The component's `cmp:NNNN` as the gap's `entity_id` | the sibling gaps name none; the not-read row would then scope a component the others do not |
 | A gap on the drawing forest root too | a drawing has none of the three to read; the gap would be false |
@@ -1152,7 +1155,9 @@ face and body gap; the plate read through an instance is named as unread; and th
 and suppressed cases read the old words. The nine that pass are the part root's three gaps and
 the six pins of what does not change. After T132: `Passed: 19, Total: 19`, and the whole C#
 suite green (extractor 10235 passed, add-in 4276 passed, the build zero warnings with
-`--no-incremental`).
+`--no-incremental`). T133: T129's test, now three cases (a part root, a part and an assembly a
+drawing references) in T132's words, passed at once with no reviewer change; no fixture or
+golden was regenerated.
 
 ## R3. Verified facts the plan relies on
 
