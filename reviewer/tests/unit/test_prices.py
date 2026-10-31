@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import runpy
 from copy import deepcopy
 from dataclasses import FrozenInstanceError, replace
 from datetime import date
@@ -173,6 +174,31 @@ def test_every_default_non_scripted_model_has_an_entry() -> None:
         entry = price_entry(table, ProviderName.OPENAI, model)
         assert entry is not None
         assert entry.model == model
+
+
+def test_a_paid_test_run_names_a_priced_variant_never_an_alias_of_the_default() -> None:
+    """174A: the served variants are not aliases of `gpt-5.6`, so a paid test run names one."""
+    from swreview.agent.settings import DEFAULT_MODELS, PAID_TEST_MODEL
+    from swreview.benchmark.prices import load_prices, price_entry
+    from swreview.benchmark.served import aliases
+
+    assert PAID_TEST_MODEL == "gpt-5.6-sol"
+    entry = price_entry(load_prices(), ProviderName.OPENAI, PAID_TEST_MODEL)
+    assert entry is not None
+    assert entry.model == PAID_TEST_MODEL
+    for variant in OPENAI_DEFAULT_VARIANTS:
+        assert not aliases(ProviderName.OPENAI, DEFAULT_MODELS[ProviderName.OPENAI], variant)
+
+
+def test_the_live_attempt_runs_the_paid_test_model_unless_one_is_named(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """174A: T171's live test defaults to `gpt-5.6-sol`; `SWREVIEW_LIVE_MODEL` still overrides."""
+    live = Path(__file__).resolve().parents[1] / "live" / "test_benchmark_live_attempt.py"
+    monkeypatch.delenv("SWREVIEW_LIVE_MODEL", raising=False)
+    assert runpy.run_path(str(live))["MODEL"] == "gpt-5.6-sol"
+    monkeypatch.setenv("SWREVIEW_LIVE_MODEL", "fict-model-a")
+    assert runpy.run_path(str(live))["MODEL"] == "fict-model-a"
 
 
 @pytest.mark.parametrize("provider", ["openai", "gemini"])

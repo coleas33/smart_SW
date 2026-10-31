@@ -571,7 +571,9 @@ def test_a_pane_study_refuses_a_model_the_price_table_cannot_price(
         assert result.exit_code == 1, result.stdout + result.stderr
         assert one_line(result) == (
             "error: ValueError: no price for openai fictional-unpriced in benchmark/prices.yaml: "
-            "a pane study's cost must be known (SC-008); add the entry with its source and date"
+            "a pane study's cost must be known (SC-008); name a priced model, as a paid test run "
+            "names --model gpt-5.6-sol (owner decision 174A), or add the entry with its source "
+            "and date"
         )
         assert reviews == []
         assert not out.exists()

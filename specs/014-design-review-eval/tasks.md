@@ -518,6 +518,14 @@ This slice's page renders none of them and shows none of them as 0.
 
 ---
 
+## Amendment 2026-10-31 (owner decision 174A): paid test runs name the priced variant
+
+**Goal**: the review's default model, `gpt-5.6`, has no price row by design (102A), and its served `-sol`, `-terra` and `-luna` are not its aliases (174A, which settles what 110A deferred under 33C): a pane study requesting it refuses at its price row, and a live attempt requesting it ends `wrong_model`. Paid test runs name `gpt-5.6-sol` explicitly, with `--model` or `SWREVIEW_LIVE_MODEL`; the product default and the alias rule (`benchmark/served.py`) are unchanged (research 174A).
+
+- [x] T267 [P] [py] Test first, offline (never a live run). In `reviewer/tests/unit/test_prices.py`: `test_a_paid_test_run_names_a_priced_variant_never_an_alias_of_the_default` (`agent/settings.PAID_TEST_MODEL` is `gpt-5.6-sol`, has its own price entry, and none of the three variants is an alias of `DEFAULT_MODELS[openai]`) and `test_the_live_attempt_runs_the_paid_test_model_unless_one_is_named` (T171's live test, read with `runpy` and never run, defaults to `gpt-5.6-sol`, and `SWREVIEW_LIVE_MODEL` still overrides it). In `reviewer/tests/unit/test_benchmark_run_options.py`, `test_a_pane_study_refuses_a_model_the_price_table_cannot_price` is changed deliberately: the refusal now names the fix, a priced model as a paid test run names it with `--model gpt-5.6-sol`, before adding an entry. Acceptance observed before T268: 4 failures (`PAID_TEST_MODEL` missing; the live default `gpt-5.6`; the refusal's old words, for both pane studies)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies
