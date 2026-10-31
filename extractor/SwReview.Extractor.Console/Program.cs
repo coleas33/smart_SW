@@ -1468,6 +1468,7 @@ public static class Program
                 RemodelProbe.AssertPartSavePath(partPath, settings.OutputDirectory);
 
                 IReadOnlyList<RemodelProbeRecord>? records = null;
+                string ledgerPath = RemodelProbeLedger.FilePath(settings.OutputDirectory, swVersion);
                 RemodelSystemToggles.Within(host, gate, () =>
                 {
                     // If BuildPart itself throws partway through the recipe, SOLIDWORKS may be
@@ -1480,7 +1481,15 @@ public static class Program
                     try
                     {
                         var context = new RemodelProbeContext(part, gate, swVersion, host, settings.OutputDirectory);
-                        records = RemodelProbeRunner.RunAll(settings.ProbeIds, context);
+
+                        // The ledger is rewritten as each probe finishes (004 T333, decision
+                        // 166A), so a probe that hangs, or a throw from the close or the
+                        // settings' restore below, keeps every earlier probe's row.
+                        records = RemodelProbeRunner.RunAll(
+                            settings.ProbeIds,
+                            context,
+                            finished: RemodelProbeLedger.Recorder(
+                                settings.OutputDirectory, swVersion, settings.ProbeIds, log.Write));
                     }
                     finally
                     {
@@ -1491,8 +1500,6 @@ public static class Program
                         }
                     }
                 });
-
-                string ledgerPath = RemodelProbeLedger.Write(settings.OutputDirectory, swVersion, records!);
 
                 foreach (string line in RemodelProbe.LogLines(records!, observer.Members, ledgerPath))
                 {

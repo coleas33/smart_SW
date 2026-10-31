@@ -886,7 +886,12 @@ public static class RemodelProbeRunner
         return inner.Count == 0 ? error.Message : string.Join("; ", inner.Select(exception => exception.Message));
     }
 
-    /// <summary>Runs every id in <paramref name="probeIds"/>, in order.</summary>
+    /// <summary>
+    /// Runs every id in <paramref name="probeIds"/>, in order. <paramref name="finished"/>, when
+    /// given, is called with every row so far as each probe finishes (004 T333, decision 166A):
+    /// <c>probe remodel</c> hands it <see cref="RemodelProbeLedger.Recorder"/>, so a probe that
+    /// hangs, or a run that dies later, keeps every earlier probe's row on disk.
+    /// </summary>
     public static IReadOnlyList<RemodelProbeRecord> RunAll(
         IReadOnlyList<string> probeIds,
         RemodelProbeContext context,
@@ -898,7 +903,14 @@ public static class RemodelProbeRunner
             throw new ArgumentNullException(nameof(probeIds));
         }
 
-        return probeIds.Select(id => Run(id, context, executors)).ToList();
+        var records = new List<RemodelProbeRecord>(probeIds.Count);
+        foreach (string id in probeIds)
+        {
+            records.Add(Run(id, context, executors));
+            finished?.Invoke(records.ToArray());
+        }
+
+        return records;
     }
 }
 
@@ -1040,7 +1052,9 @@ public static class RemodelProbe
 /// Writes the capabilities ledger, <c>capabilities/remodel-&lt;sw-version&gt;.yaml</c>
 /// (tasks.md T032), with one row per probe in the shape T031 names:
 /// <c>{probe_id, question, method, raw_result, verdict, sw_version}</c>, plus
-/// <c>blocking</c>, <c>fallback</c>, <c>duration_ms</c> and <c>interop_members</c>.
+/// <c>blocking</c>, <c>fallback</c>, <c>duration_ms</c> and <c>interop_members</c>; and,
+/// before the rows, the probes the run was asked for (<c>requested</c>, 004 T333), so a ledger
+/// a run left behind when it stopped says which probes never finished.
 ///
 /// Hand-written rather than pulled from a library, the same call CommandLine.cs makes for the
 /// option parser: the shape is fixed and small, and every string scalar is double-quoted with
@@ -1074,7 +1088,12 @@ public static class RemodelProbeLedger
             FileNamePrefix + SanitizeForFileName(swVersion) + FileNameExtension);
     }
 
-    /// <summary>The YAML text for <paramref name="records"/>. Pure: no filesystem access.</summary>
+    /// <summary>
+    /// The YAML text for <paramref name="records"/>. Pure: no filesystem access. The one
+    /// renderer: <see cref="Write"/>, and so the run's rewrite after each probe, uses it, and
+    /// <c>swreview remodel ledger</c> reads what it writes (one golden fixture pins both sides).
+    /// <paramref name="requested"/> defaults to the rows' own probes.
+    /// </summary>
     public static string Render(
         string swVersion,
         IReadOnlyList<RemodelProbeRecord> records,
@@ -1091,6 +1110,7 @@ public static class RemodelProbeLedger
         text.Append("generated_at: ")
             .Append(Quote(generatedAt.ToString("o", CultureInfo.InvariantCulture)))
             .Append('\n');
+        AppendStringList(text, "requested", requested ?? records.Select(record => record.ProbeId).ToList(), "  - ");
 
         if (records.Count == 0)
         {
@@ -1118,7 +1138,12 @@ public static class RemodelProbeLedger
         return text.ToString();
     }
 
-    /// <summary>Renders and writes the ledger, creating <c>capabilities/</c> if needed. Returns the path written.</summary>
+    /// <summary>
+    /// Renders and writes the ledger, creating <c>capabilities/</c> if needed, and returns the
+    /// path written. The file is replaced whole (004 T333): the text goes to a temporary file
+    /// beside it, which then replaces it, so a run stopped mid-write leaves the previous ledger,
+    /// never half of the next one.
+    /// </summary>
     public static string Write(
         string outputDirectory,
         string swVersion,
@@ -1128,15 +1153,53 @@ public static class RemodelProbeLedger
     {
         string path = FilePath(outputDirectory, swVersion);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, Render(swVersion, records, generatedAt ?? DateTimeOffset.UtcNow), Encoding.UTF8);
+        string temporary = path + ".tmp";
+        File.WriteAllText(
+            temporary, Render(swVersion, records, generatedAt ?? DateTimeOffset.UtcNow, requested), Encoding.UTF8);
+        if (File.Exists(path))
+        {
+            File.Replace(temporary, path, destinationBackupFileName: null);
+        }
+        else
+        {
+            File.Move(temporary, path);
+        }
+
         return path;
     }
 
-    /// <summary>The seam <see cref="RemodelProbeRunner.RunAll"/> calls as each probe finishes (004 T333).</summary>
+    /// <summary>
+    /// What <c>probe remodel</c> hands <see cref="RemodelProbeRunner.RunAll"/> (004 T333, owner
+    /// decision 166A): as each probe finishes, one line for it to <paramref name="log"/>, then the
+    /// ledger rewritten whole with every row so far and the probes <paramref name="requested"/>.
+    /// A probe that hangs, or a run that dies in a later probe, the part's close or the settings'
+    /// restore, keeps every earlier row.
+    /// </summary>
     public static Action<IReadOnlyList<RemodelProbeRecord>> Recorder(
-        string outputDirectory, string swVersion, IReadOnlyList<string> requested, Action<string> log) => _ => { };
+        string outputDirectory, string swVersion, IReadOnlyList<string> requested, Action<string> log)
+    {
+        if (requested == null)
+        {
+            throw new ArgumentNullException(nameof(requested));
+        }
 
-    private static void AppendStringList(StringBuilder text, string key, IReadOnlyList<string> items)
+        if (log == null)
+        {
+            throw new ArgumentNullException(nameof(log));
+        }
+
+        return finished =>
+        {
+            RemodelProbeRecord last = finished[finished.Count - 1];
+            log($"finished {last.ProbeId}: {last.Verdict.CliName()} "
+                + $"({finished.Count.ToString(CultureInfo.InvariantCulture)} of "
+                + $"{requested.Count.ToString(CultureInfo.InvariantCulture)})");
+            Write(outputDirectory, swVersion, finished, requested: requested);
+        };
+    }
+
+    private static void AppendStringList(
+        StringBuilder text, string key, IReadOnlyList<string> items, string itemPrefix = "      - ")
     {
         if (items.Count == 0)
         {
@@ -1147,7 +1210,7 @@ public static class RemodelProbeLedger
         text.Append(key).Append(":\n");
         foreach (string item in items)
         {
-            text.Append("      - ").Append(Quote(item)).Append('\n');
+            text.Append(itemPrefix).Append(Quote(item)).Append('\n');
         }
     }
 
