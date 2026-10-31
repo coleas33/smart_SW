@@ -235,6 +235,17 @@ the `^<prefix>:[0-9]{4,}$` shape (`ir/models.py:367, 487, 865, 911, 933, 973, 10
 `runner.py:531-552`; that existing defect in `_reconcile_reruns` is an R5 item, not fixed here);
 whole-finding equality (rejected: a changed field would read as one lost and one added).
 
+*Settled 2026-10-31 (owner decision 166A; T130, T131): the runner keys on this key.*
+`runner._verdict_key` returns `finding_subject_key`, so `_reconcile_reruns` and
+`_reconcile_restated` fold a re-run only onto the earlier finding with the same entity ids. Before,
+a resumed turn that re-ran the first of two `hole.coaxiality` pairs on one pair of components, with
+no tolerance, put its verdict on the second pair's finding and lost the second. The key is stricter
+in two more ways, neither of which separates a re-run from the finding it re-judges: each drawing
+location keeps its persistent reference, which a re-run on the same package names again, and the
+component ids and locations are sorted. The suites that fold a re-run (the resume rules, the
+part-roles regrade, the confirmed drawing read, the pre-run's same-session comparison) pass
+unchanged.
+
 *Amended 2026-09-25 (owner decision 25A; T128): each drawing location keeps its persistent
 reference.* The key's locations are `(document_id, sheet, view, annotation, page, persist_ref)`,
 `persist_ref` `None` where a location has none; everything else above stands. Without the
@@ -1711,7 +1722,7 @@ Re-opened on 2026-09-23 at `47f8b73` for this reconciliation (the rest are the d
 | "uncached" or "new" on both surfaces (R2.46) | owner, feature 009 | nothing |
 | Record probe L1 from the 119 recorded rounds and flip `CACHED_SHARE_PUBLISHABLE` | owner | nothing (the pane no longer shows a share) |
 | SC-003's regrouped margin is thin (0.29M to 0.30M modelled, R2.43) | owner, after T087 | SC-003 |
-| `runner._verdict_key` ignores hole ids, so `_reconcile_reruns` can fold two hole-pair findings (existing, R2.8) | backlog | nothing |
+| Settled 2026-10-31 (owner decision 166A; T130, T131): `runner._verdict_key` ignored hole ids, so `_reconcile_reruns` could fold two hole-pair findings (existing, R2.8); it is now `finding_subject_key` | backlog | nothing |
 | Move `request_capture` onto `resolve_entity_ref` (R2.27) | follow-up | nothing |
 | MCP general chat still shows persist references while the bridge tools want ids (R2.38) | follow-up | nothing |
 | `benchmark compare` ignores `model_view`, so a comparison across builds would not be refused | follow-up | nothing |

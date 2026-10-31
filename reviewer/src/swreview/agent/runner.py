@@ -105,7 +105,7 @@ from swreview.drawings.evidence import DrawingIndex, file_key
 from swreview.engineering_context.brief import build_summary, compact_json
 from swreview.engineering_context.models import ContextArtifact, canonical_bytes, context_digest
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
-from swreview.findings import Finding, finding_subject_key
+from swreview.findings import Finding, SubjectKey, finding_subject_key
 from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import (
@@ -910,28 +910,17 @@ class CoverageStopTools:
 # --- one verdict per check --------------------------------------------------------------
 
 
-def _verdict_key(finding: Finding) -> tuple[Any, ...]:
+def _verdict_key(finding: Finding) -> SubjectKey:
     """What makes two findings two verdicts on the *same* thing rather than two findings.
 
-    A check, the component instances it judged, the drawing places it read, and the
-    configuration it judged them in. Two drawing findings on different sheets, or the same
-    check on different components, have different keys and both stand.
+    The finding's subject key (`finding_subject_key`, feature 008 research R2.8): a check, the
+    component instances it judged, the drawing places it read, the entity ids among its
+    inputs, and the configuration it judged them in. Two drawing findings on different sheets,
+    the same check on different components, or two `hole.coaxiality` findings on one pair of
+    components that differ only by their holes have different keys and all stand (owner
+    decision 166A).
     """
-    return (
-        finding.check,
-        tuple(finding.component_ids),
-        tuple(
-            (
-                location.document_id,
-                location.sheet,
-                location.view,
-                location.annotation,
-                location.page,
-            )
-            for location in finding.drawing_locations
-        ),
-        finding.configuration,
-    )
+    return finding_subject_key(finding)
 
 
 def _reconcile_reruns(session: ReviewSession, before: int) -> list[Finding]:

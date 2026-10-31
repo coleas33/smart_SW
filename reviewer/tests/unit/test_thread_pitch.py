@@ -322,8 +322,9 @@ def test_no_finding_names_a_document_id_or_a_percent_sign(examples) -> None:
 
 
 def test_no_two_results_share_a_check_and_component_ids(examples) -> None:
-    """The restate's verdict key is the check, the components, the drawing places and the
-    configuration (`runner._verdict_key`): one finding per check and part gives each its own."""
+    """The restate's verdict key is the check, the components, the drawing places, the entity
+    ids among the inputs and the configuration (`runner._verdict_key`): one finding per check
+    and part gives each its own."""
     keys = [(item.result.check, item.component_ids) for item in examples.findings]
 
     assert len(keys) == len(set(keys))

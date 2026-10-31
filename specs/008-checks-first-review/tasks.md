@@ -308,6 +308,7 @@ Re-measured on main after the four lanes of 2026-09-23 merged (feature 008 US4 a
 **Goal**: the runner's verdict key tells apart two findings that differ only by their entity ids, so a re-run folds onto the verdict it re-judges and never onto another (research R2.8 and R5; `docs/review-backlog.md`, "Features 008 and 009: open follow-ups").
 
 - [x] T130 [P] Test first. In `reviewer/tests/unit/test_runner_provider.py`: `test_a_rerun_of_one_of_two_hole_pairs_on_the_same_components_keeps_each_its_verdict` - a package with two hole pairs across the same two components, `hol:0001`/`hol:0003` and `hol:0002`/`hol:0004`, each pair checked by `check_hole_alignment` with no tolerance and an evidence request opened; the resumed turn re-runs the first pair; each finding keeps its own pair, `F-001` the first and `F-002` the second. Acceptance observed before T131: 1 failure on its assertion (`F-002` holds the first pair's verdict and the second pair's is gone)
+- [x] T131 Implement T130 in `reviewer/src/swreview/agent/runner.py`: `_verdict_key` returns `finding_subject_key(finding)` (`findings.py`, R2.8), the one key that already holds the entity-id inputs, so `_reconcile_reruns` and `_reconcile_restated` both fold a re-run only onto its own finding. `test_thread_pitch.py`'s docstring that spells the key out names the entity ids too. Record it as settled in R2.8 and R5 and in `docs/review-backlog.md`. Acceptance: T130 green; the resume-rule, part-roles regrade, confirmed-read, pre-run same-session, thread-pitch and carry-over suites green unchanged
 
 ---
 
