@@ -4,14 +4,17 @@
 settle the part a file can prove, each PASS or FAIL with a one-line reason: the add-in's four load
 checkpoints in order for the latest load (`AddInLog`, `SwReviewAddIn.ConnectToSW`), no
 tool-service refusal or `.SLDDRW` line after it (`ToolServiceGate`), a backend log begun since it
-that says the backend is healthy (`BackendProcess.WaitForHealth`), the standards profile with its
-version, `uv` on PATH, `swreview-extract` built, and the checkout clean on `main`. What only the
-pane shows stays manual (`MANUAL`). A latest load more than `FRESH` old fails the three log checks:
-a start that loaded nothing writes nothing, and the session before it must not pass for it.
+that says the backend is healthy and has not stopped since (`BackendProcess`), the standards
+profile with its version, `uv` on PATH, `swreview-extract` built, and the checkout clean on `main`.
+What only the pane shows stays manual (`MANUAL`). A start that loaded nothing writes nothing, and
+the session before it must not pass for it: the three log checks fail unless the log's latest
+start is no older than the one SOLIDWORKS running, and when the latest load is more than `FRESH`
+old.
 
-It reads files and runs two read-only `git` commands, taking no optional lock; it starts nothing
-else, writes nothing, reads no key (the settings file, which holds one, is never opened), and
-prints no path - a reason names a log by its file name and a line by its time, never by its text,
+It reads files and the start time of each running `SLDWORKS.exe` (opened for the limited query
+alone), and runs two read-only `git` commands, taking no optional lock; it starts nothing else,
+writes nothing, reads no key (the settings file, which holds one, is never opened), and prints no
+path or branch - a reason names a log by its file name and a line by its time, never by its text,
 which can name a document.
 """
 
@@ -21,6 +24,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -59,8 +63,18 @@ FRESH = timedelta(hours=2)
 LOG_CHECKS = ("add-in load", "tool service", "backend")
 """The checks `addin.log` settles, in order."""
 
+SOLIDWORKS = "SLDWORKS.exe"
+
 DRAWING = ".slddrw"
+STARTING = "starting "
 HEALTHY = "backend healthy on "
+STOPPING = (
+    "asked the backend to shut down",
+    "asking the backend to shut down failed",
+    "a process of the backend had not exited",
+    "backend stopped",
+)
+"""What `BackendProcess.Stop` writes on its way down, after the healthy line, into the same log."""
 EXTRACTOR = Path("extractor/SwReview.Extractor.Console/bin/x64/Release/net48/swreview-extract.exe")
 EXAMPLE = Path("config/standards.example.yaml")
 LOWEST_CURRENT_VERSION = 3
@@ -100,6 +114,74 @@ def failed(check: str, reason: str) -> Check:
 def now() -> datetime:
     """The clock the latest load is aged by."""
     return datetime.now(UTC)
+
+
+def solidworks_starts() -> list[datetime] | None:
+    """When each running SOLIDWORKS began; None when that cannot be read."""
+    return process_starts(SOLIDWORKS)
+
+
+def process_starts(image: str) -> list[datetime] | None:
+    """When each running process of `image` began (its file name, in any case), from Windows'
+    process list; None off Windows, or when one of them refuses the query or has gone before it
+    is read. Each is opened for `PROCESS_QUERY_LIMITED_INFORMATION` alone."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    class Entry(ctypes.Structure):
+        _fields_ = (
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", ctypes.c_wchar * 260),
+        )
+
+    kernel32 = ctypes.WinDLL("kernel32")
+    kernel32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = (wintypes.HANDLE, ctypes.POINTER(Entry))
+    kernel32.Process32NextW.argtypes = (wintypes.HANDLE, ctypes.POINTER(Entry))
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetProcessTimes.argtypes = (wintypes.HANDLE, *[ctypes.POINTER(wintypes.FILETIME)] * 4)
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+    if snapshot is None or snapshot == ctypes.c_void_p(-1).value:  # INVALID_HANDLE_VALUE
+        return None
+    ids = []
+    try:
+        entry = Entry(dwSize=ctypes.sizeof(Entry))
+        more = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while more:
+            if entry.szExeFile.lower() == image.lower():
+                ids.append(entry.th32ProcessID)
+            more = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(snapshot)
+
+    starts = []
+    for pid in ids:
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return None
+        times = [wintypes.FILETIME() for _ in range(4)]
+        try:
+            if not kernel32.GetProcessTimes(handle, *(ctypes.byref(time) for time in times)):
+                return None
+        finally:
+            kernel32.CloseHandle(handle)
+        ticks = times[0].dwHighDateTime << 32 | times[0].dwLowDateTime  # 100 ns since 1601 UTC
+        starts.append(datetime(1601, 1, 1, tzinfo=UTC) + timedelta(microseconds=ticks // 10))
+    return starts
 
 
 @dataclass(frozen=True)
@@ -198,6 +280,9 @@ def _log_checks(logs: Path) -> list[Check]:
             "began (runbook section 7)"
         )
     start = starts[-1]
+    unproved = _not_this_start(entries[start].time)
+    if unproved is not None:
+        return all_fail(unproved)
     loads = [
         index
         for index in range(start + 1, len(entries))
@@ -218,6 +303,32 @@ def _log_checks(logs: Path) -> list[Check]:
         _tool_service(entries, latest),
         _backend(logs, entries[latest].time),
     ]
+
+
+def _not_this_start(start: datetime) -> str | None:
+    """Why the log's latest start cannot be the one SOLIDWORKS running, or None when it can: the
+    type initializer writes the start line inside the process, so the running one's own is no
+    older than it, and a start that loaded nothing leaves only older ones."""
+    started = solidworks_starts()
+    if started is None:
+        return (
+            "when SOLIDWORKS started cannot be read here, so addin.log cannot be tied to the start "
+            "just made: run this at the seat, as the user SOLIDWORKS runs as"
+        )
+    if not started:
+        return "SOLIDWORKS is not running: this checks the start just made; start it, then run this"
+    if len(started) > 1:
+        return (
+            f"{len(started)} SOLIDWORKS processes are running and write to one addin.log, which "
+            "cannot say whose start is whose: close all but one and run this again"
+        )
+    began = started[0].astimezone(start.tzinfo)
+    if start < began:
+        return (
+            f"SOLIDWORKS started at {_when(began)} and the add-in has written no start line "
+            "since, so it did not load (Tools > Add-ins, runbook section 7)"
+        )
+    return None
 
 
 def _load(entries: list[_Entry], start: int, loads: list[int]) -> Check:
@@ -300,9 +411,18 @@ def _backend(logs: Path, since: datetime) -> Check:
         lines = _entries(newest)
     except OSError as error:
         return failed(check, _unreadable(newest, error))
-    if any(entry.text.startswith(HEALTHY) for entry in lines):
+    # The last line `BackendProcess` writes on a start or a stop says where the backend stands.
+    said = [entry for entry in lines if entry.text.startswith((STARTING, HEALTHY, *STOPPING))]
+    if said and said[-1].text.startswith(HEALTHY):
         return passed(
             check, f"{newest.name}, the newest since the load, says the backend is healthy"
+        )
+    if said and said[-1].text.startswith(STOPPING):
+        return failed(
+            check,
+            f"{newest.name}, the newest since the load, says the backend stopped at "
+            f"{_when(said[-1].time)}: open the Review tab, wait for Backend ready and run this "
+            "again (runbook section 6, item 2)",
         )
     return failed(
         check,
@@ -393,7 +513,8 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
 
 def _checkout(repo: Path) -> Check:
     check = "checkout"
-    status = _git(repo, "status", "--porcelain")
+    # Explicitly: `status.showUntrackedFiles=no` would hide untracked files from a plain status.
+    status = _git(repo, "status", "--porcelain", "--untracked-files=all")
     if status is None:
         return failed(check, "git could not be run: is it installed and on PATH?")
     if status.returncode != 0:
@@ -404,7 +525,8 @@ def _checkout(repo: Path) -> Check:
     if branch is None or branch.returncode != 0:
         problems.append("HEAD is not on a branch, so not on main")
     elif branch.stdout.strip() != "main":
-        problems.append(f"on {branch.stdout.strip()}, not main")
+        # Not by name: a branch can name a customer or a design, and the engineer did not type it.
+        problems.append("HEAD is not on main")
     changed = status.stdout.splitlines()
     if changed:
         problems.append(f"{len(changed)} changed or untracked path(s): run git status there")

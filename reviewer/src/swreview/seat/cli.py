@@ -48,9 +48,10 @@ def health_command(
     """After starting SOLIDWORKS: PASS or FAIL for every health check a file can prove.
 
     Reads `addin.log` and the backend logs, the standards profile and the checkout (runbook
-    section 6); the pane's own checks are listed as MANUAL. Run it right after a start: a latest
-    load more than two hours old fails. Starts nothing but two read-only `git` commands, writes
-    nothing, reads no key and prints no path. Exit 1 on any FAIL.
+    section 6); the pane's own checks are listed as MANUAL. Run it right after a start, with that
+    one SOLIDWORKS still running: a log whose latest start is older than it, or whose latest load
+    is more than two hours old, fails. Reads when SOLIDWORKS started, starts nothing but two
+    read-only `git` commands, writes nothing, reads no key and prints no path. Exit 1 on any FAIL.
     """
     checks = health.run(
         logs or health.default_logs(),
