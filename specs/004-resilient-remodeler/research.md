@@ -5681,7 +5681,7 @@ No code changed; no gate is affected beyond the link and line-ending checks.
 *Fixed 2026-10-31 (owner decision 165A; R26.1):* the unwind now compares the opened document's COM identity with the one
 open at the copy's path before it closes and deletes, as Codex recommended.
 
-## R26 Start's two narrow prerequisites, T180, T303 and the IDENTITY profile (decisions 165A, 168A, 169A and 170A; T320 to T328; 2026-10-31)
+## R26 Start's two narrow prerequisites, T180, T303 and the IDENTITY profile (decisions 165A, 168A, 169A and 170A; T320 to T329; 2026-10-31)
 
 Owner decisions 165A, 168A, 169A and 170A (2026-10-31, fourteenth round; their rows are in
 [`docs/decisions.md`](../../docs/decisions.md)), on branch `startfix-165a` from main `a2d4c47`. 165A fixes the two
@@ -5712,10 +5712,13 @@ as `VerifyTarget` asks them, and before the close:
 
 With no handle back the unwind is unchanged (T183: the seat is asked first). Whatever the identity answers, the four
 settings are put back and the ending is told with the reason `remodel.open`, so a copy left open reaches the pane as
-T167's status ("The copy may still be open") and the tool-service log and the run's `remodel.log` carry the failure by
-the rules every ending follows (`SessionEndLine`). The sentences name no path and no run. The identity reads run inside
-the `unwind.CloseDoc` marker; a delete held back writes no `unwind.DeleteCopy` marker, as a copy never made writes
-none.
+T167's status ("The copy may still be open"). The sentences name no path and no run. The identity reads run inside the
+`unwind.CloseDoc` marker. *Corrected by T328 and T329:* a failed open's ending is told to the Remodel tab, whose words
+it becomes, but its failures are written to no log (`SessionEndLine` writes a teardown's and an in-process close's
+only), so a copy left would have been written down nowhere. The decision asks that it be logged: in place of the
+delete's markers, the run's `remodel.log` gets one fixed marker, `command=remodel.open stage=skipped
+unwind.DeleteCopy: the document open at the copy's path is not the one this open opened, or could not be read, so it
+was neither closed nor deleted` (`RemodelStageMarkers.Skipped`), which names no path, by the markers' existing rule.
 
 Why both the close and the delete are held back: closing a document the open did not open, and deleting a file it may
 hold, are each the defect, and an identity that cannot be shown equal is not the open's, as check 3 reads it. What is
@@ -5761,15 +5764,20 @@ makes the record right whatever ends it.
   a `HostError` before their assertions. Corrected in `d7a3497`, before the fix and checked with the fix taken out: the
   rows ask that the fake session was open and is ended, and all four rows then failed on the run not recorded as ended.
   Nothing was loosened.
-- No existing assertion changed. T316's case says the unwind closed the copy "after the identity check", which is now
-  true.
+- One existing assertion changed on purpose, outside the add-in: `test_workstation_test_plan.py`'s
+  `test_the_start_switch_waits_on_the_blocking_probes_then_a_real_plan` asked that 004's `tasks.md` list T180 open. 168A
+  closes it (R26.5), so the assertion now asks that T180 is ticked and carries its dated 168A note: it still pins T180's
+  state, now the decided one. Its assertions on the workstation plan and the handover, another lane's documents, are
+  unchanged. T320's two rows were strengthened by T328 (the marker in `remodel.log`), and T321's guard with them.
+- T316's case says the unwind closed the copy "after the identity check", which is now true.
 
 ### R26.4 Test-first evidence and mutations
 
 T320 (`4d4c566`) is the deliberately red commit for R26.1: both rows failed on their assertions (the copy closed), and
 T316's two rows passed as guards. T322 (`7d3758c`, corrected in `d7a3497`) is the one for R26.2: all four rows failed on
 their assertions. All green after T321 (`2530d46`) and T323 (`5fde7dc`). Added with T321, a guard:
-`AnUnwindStillClosesAndDeletesACopyClosedUnderneathAndNotReopened`.
+`AnUnwindStillClosesAndDeletesACopyClosedUnderneathAndNotReopened`. T328 (`052dc8d`), the marker in `remodel.log`: T320's
+two rows failed on the marker's assertion and the guard passed; all green after T329.
 
 Each fix taken out once, alone, by an exact replacement matching once, built and run - the dispatcher's against
 `RemodelTeardownTests`, `RemodelOpenHandlerTests`, `RemodelIdleSettingsTests`, `BridgeDispatcherTests`, `GuardTests` and
@@ -5786,6 +5794,7 @@ checked equal.
 | M104 | `BridgeDispatcher.cs`: reads that throw taken as the same document | 1 of 728 | `AnUnwindLeavesADocumentOpenedAgain...` (cannot be read) | sha256 equal |
 | M105 | `RemodelHost.cs`: `Track` not reading the attempt | 4 of 1017 | `APlansSessionEndedWhileThePlanFinishesIsTrackedAsEnded` (all rows) | sha256 equal |
 | M106 | `RemodelHost.cs`: the close at the plan sent for a session already ended | 2 of 1017 | `APlansSessionEndedWhileThePlanFinishes...` (both Start-off rows) | sha256 equal |
+| M107 | `BridgeDispatcher.cs`: the left copy's marker not written (T329) | 2 of 729 | `AnUnwindLeavesADocumentOpenedAgain...` (both rows) | sha256 equal |
 
 Every row failed at least one case. Not mutation-testable here: the order in `SessionEnded` - the attempt marked before
 the run is looked for - matters only when the end and `Track` run on two threads; it is reasoned in R26.2, as R24.8
@@ -5841,3 +5850,22 @@ list; each task says so.
 
 R25.9's list is updated in place (2026-10-31) and stays the one list: R25.13 and R22.14 done (R26.1, R26.2), T180 done
 (R26.5), T303a in place of T303 (R26.6), T138 and T187 added (R26.7). T172 is amended to say so.
+
+### R26.9 Gates
+
+Gates on the final tree (T329's):
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero warnings, zero errors.
+- **C# tests.** 10,219 extractor and 4,280 add-in tests passed, none failed or skipped: 3 and 4 rows more than R25.12's
+  10,216 and 4,276.
+- **Focused runs.** `RemodelHostTests`, `DeferredRestartTests`, `RemodelWiringTests`, `ToolService*`, `ReviewHostTests`,
+  `RemodelTeardownTests`, `RemodelOpenHandlerTests`, `RemodelIdleSettingsTests`, `BridgeDispatcherTests` and
+  `GuardTests` (697 extractor and 1,354 add-in cases) passed three times in a row.
+- **Python.** Required-tokenizer non-live suites (`SWREVIEW_TOKENIZER_DIR=C:\t\144a-tok`, `--basetemp` outside the
+  checkout), counted from the progress lines: Python 3.12 18,275 passed and 6 skipped (the sixth `embreex`, as in
+  R25.8); Python 3.11 (`uv run --isolated --python 3.11 --all-extras`) 18,276 passed and 5 skipped. None failed.
+- **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no broken link
+  (`COUNT 0`); every changed file is `i/lf`.
+- **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file.
+
+No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.

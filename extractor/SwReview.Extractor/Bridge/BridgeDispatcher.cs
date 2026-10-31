@@ -1346,7 +1346,16 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 UnwindCloseStep,
                 () => CloseAfterAFailedOpen(_remodelGate, seat, copy, copyCreated, document, failures, out leaveTheCopy));
 
-            if (copyCreated && !leaveTheCopy)
+            if (leaveTheCopy)
+            {
+                // The ending's failures reach the pane's words but no log, so the copy left is written down here.
+                RemodelStageMarkers.Skipped(
+                    stage,
+                    UnwindDeleteStep,
+                    "the document open at the copy's path is not the one this open opened, or could not be read, so it was "
+                    + "neither closed nor deleted");
+            }
+            else if (copyCreated)
             {
                 RemodelStageMarkers.Around(stage, UnwindDeleteStep, () => DeleteCopy(copy));
             }

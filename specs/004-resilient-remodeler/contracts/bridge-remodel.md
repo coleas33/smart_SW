@@ -338,8 +338,9 @@ no document was opened, and `verified` and `tag_removed` false.
 first asks `VerifyTarget`'s check 3's two reads - the handle's COM identity and that of the document SOLIDWORKS has open
 at the copy's path. The same identity, or nothing open there, is closed and deleted as above. Another document there - the
 copy closed and opened again underneath the open while a native call pumped - or reads that throw: nothing is closed and
-the copy's file is not deleted, `copy_closed` is false, and a failure that names no path says why. The settings are put
-back and the ending told either way.
+the copy's file is not deleted, `copy_closed` is false, and a failure that names no path says why; in place of
+`unwind.DeleteCopy`'s markers the run's `remodel.log` gets one fixed marker, `skipped unwind.DeleteCopy: ...`
+(`run-artifacts.md`). The settings are put back and the ending told either way.
 
 *Amended 2026-09-28 (U27; default taken 2026-09-28, the owner may revise; `tasks.md` T185,
 research R16.1):* each step above that calls SOLIDWORKS, and the file work between them, is marked
