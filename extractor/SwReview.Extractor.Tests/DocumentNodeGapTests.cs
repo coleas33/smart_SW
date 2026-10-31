@@ -37,6 +37,13 @@ namespace SwReview.Extractor.Tests;
 /// The drawing forest root carries no handle at all and has no holes, faces or fastener
 /// identity of its own, so it still records nothing; and a component with no loaded model keeps
 /// the gaps and the calls it had.
+///
+/// T136 (review round 2, finding F1): a model a drawing references is taken as read through an
+/// instance only when the read really reached its document through that instance - its model,
+/// and for the face sweep and the mesh export its bodies - in whichever order the drawing lists
+/// the two; an instance that answers no model, or no bodies, leaves the model's own gaps standing.
+/// Over the bridge each component is fetched on its own and answers for itself, so there the
+/// node is still taken through any resolved instance (T132, T133).
 /// </summary>
 public class DocumentNodeGapTests : IDisposable
 {
@@ -196,26 +203,62 @@ public class DocumentNodeGapTests : IDisposable
         Assert.Empty(_observer.Members);
     }
 
-    // ---- a model a drawing references that is also an instance (T131, finding F2) --------
+    // ---- a model a drawing references that is also an instance (T131 F2; T136, round 2 F1) --
 
-    [Fact]
-    public void APartADrawingReferences_ThatIsAlsoAResolvedInstanceInTheSameConfiguration_IsNotRecordedAsUnread()
+    /// <summary>
+    /// The two orders a drawing can list its sheets in: the assembly sheet first, so the plate's
+    /// instance comes before the plate as a model of its own, or the part-detail sheet first.
+    /// </summary>
+    public static IEnumerable<object[]> SheetOrders() => new[]
+    {
+        new object[] { false },
+        new object[] { true },
+    };
+
+    [Theory]
+    [MemberData(nameof(SheetOrders))]
+    public void APartADrawingReferences_WhoseInstanceReadsItsModel_IsNotRecordedAsUnread(bool partSheetFirst)
     {
         // An assembly sheet and a part-detail sheet of one drawing: the plate is a referenced
-        // model of its own and a component of the referenced frame. Its holes, identity, faces
-        // and bodies are read through the instance (here the instance has no loaded model, so the
-        // hole read names the instance instead), and a gap naming the plate's path would list a
-        // document whose threads were checked. The instance's path differs in case only: the
+        // model of its own and a resolved component of the referenced frame, in the same
+        // configuration. Its holes, identity, faces and bodies are read through the instance, so
+        // a gap naming the plate's path would list a document whose threads were checked, in
+        // whichever order the sheets come. The instance's path differs in case only: the
         // document id is what says two nodes are one document.
         var plate = new InteropRecorder<IModelDoc2>(typeof(ModelDoc2));
         var frame = new InteropRecorder<IModelDoc2>(typeof(ModelDoc2));
+        InteropRecorder<IComponent2> instance = InstanceWithAModel(bodies: true);
+        DumpScope scope = PlateForest(partSheetFirst, frame.Instance, instance.Instance, plate.Instance);
+
+        RunAllFour(scope);
+
+        Assert.Equal(
+            new[] { $"'{AssemblyPath}' {ByADrawing}, so the holes and threads of its own assembly features were not read." },
+            scope.Gaps.Gaps.Where(gap => gap.EntityKind == "hole").Select(gap => gap.Reason));
+        Assert.DoesNotContain(scope.Gaps.Gaps, gap => gap.Reason.Contains($"'{PartPath}'"));
+        Assert.Empty(plate.Calls);
+        Assert.Empty(frame.Calls);
+
+        // What each read asks of the instance, and in what order: the hole, fastener, face and
+        // mesh reads, as before T137.
+        Assert.Equal(
+            new[] { "GetModelDoc2", "FirstFeature", "GetModelDoc2", "GetModelDoc2", "GetBodies2", "GetModelDoc2", "GetBodies2" },
+            instance.Members);
+    }
+
+    [Theory]
+    [MemberData(nameof(SheetOrders))]
+    public void APartADrawingReferences_WhoseInstanceAnswersNoModel_KeepsItsGaps(bool partSheetFirst)
+    {
+        // T136 (round 2, finding F1): the instance is resolved and in the same configuration, but
+        // GetModelDoc2 answers null, so no read reached the plate's document through it. The hole
+        // read names the instance; the fastener, face and mesh reads say nothing of an instance
+        // with no model (T135), so the plate's own gaps are the only trace and are kept - in all
+        // four reads, beside the instance's hole gap.
+        var plate = new InteropRecorder<IModelDoc2>(typeof(ModelDoc2));
+        var frame = new InteropRecorder<IModelDoc2>(typeof(ModelDoc2));
         var instance = new InteropRecorder<IComponent2>();
-        DumpScope scope = Forest(
-            FaceScope.All,
-            Node(DrawingPath, null, DrawingPath, DocumentKind.Drawing, handle: null),
-            Node(AssemblyPath, DrawingPath, AssemblyPath, DocumentKind.Assembly, frame.Instance),
-            Node("FICT-PLATE-1", AssemblyPath, PartPath.ToLowerInvariant(), DocumentKind.Part, instance.Instance),
-            Node(PartPath, DrawingPath, PartPath, DocumentKind.Part, plate.Instance));
+        DumpScope scope = PlateForest(partSheetFirst, frame.Instance, instance.Instance, plate.Instance);
 
         RunAllFour(scope);
 
@@ -223,12 +266,45 @@ public class DocumentNodeGapTests : IDisposable
             new[]
             {
                 $"'{AssemblyPath}' {ByADrawing}, so the holes and threads of its own assembly features were not read.",
+                $"'{PartPath}' {ByADrawing}, so its holes and threads were not read.",
                 "'FICT-PLATE-1' has no loaded model document; its holes were not read.",
             },
-            scope.Gaps.Gaps.Where(gap => gap.EntityKind == "hole").Select(gap => gap.Reason));
-        Assert.DoesNotContain(scope.Gaps.Gaps, gap => gap.Reason.Contains($"'{PartPath}'"));
+            scope.Gaps.Gaps
+                .Where(gap => gap.EntityKind == "hole")
+                .Select(gap => gap.Reason)
+                .OrderBy(reason => reason, StringComparer.Ordinal));
+        Assert.Equal(
+            PlateGaps(
+                "its holes and threads were not read",
+                "whether it is a fastener was not read",
+                "its faces were not read",
+                "no mesh was written for it"),
+            PlateGapsIn(scope));
         Assert.Empty(plate.Calls);
         Assert.Empty(frame.Calls);
+        Assert.Equal(new[] { "GetModelDoc2", "GetModelDoc2", "GetModelDoc2", "GetModelDoc2" }, instance.Members);
+    }
+
+    [Theory]
+    [MemberData(nameof(SheetOrders))]
+    public void APartADrawingReferences_WhoseInstanceAnswersNoBodies_KeepsItsFaceAndBodyGaps(bool partSheetFirst)
+    {
+        // T136: the face sweep and the mesh export reach the plate's document through the
+        // instance's bodies. With GetBodies2 null neither does, and neither says so of the
+        // instance (T135), so the plate keeps its face and body gaps; its holes and its identity
+        // were read through the instance's model, so it keeps no hole or fastener gap.
+        var plate = new InteropRecorder<IModelDoc2>(typeof(ModelDoc2));
+        InteropRecorder<IComponent2> instance = InstanceWithAModel(bodies: false);
+        DumpScope scope = PlateForest(
+            partSheetFirst, new InteropRecorder<IModelDoc2>(typeof(ModelDoc2)).Instance, instance.Instance, plate.Instance);
+
+        RunAllFour(scope);
+
+        Assert.Equal(PlateGaps("its faces were not read", "no mesh was written for it"), PlateGapsIn(scope));
+        Assert.Empty(plate.Calls);
+        Assert.Equal(
+            new[] { "GetModelDoc2", "FirstFeature", "GetModelDoc2", "GetModelDoc2", "GetBodies2", "GetModelDoc2", "GetBodies2" },
+            instance.Members);
     }
 
     [Fact]
@@ -277,6 +353,41 @@ public class DocumentNodeGapTests : IDisposable
             },
             scope.Gaps.Gaps.Where(gap => gap.Reason.Contains($"'{PartPath}'")).Select(gap => gap.Reason));
         Assert.Empty(plate.Calls);
+    }
+
+    // ---- over the bridge (T136 pins T132 and T133) ----------------------------------------
+
+    [Fact]
+    public void MeshExporter_OverTheBridge_APartADrawingReferencesWithAResolvedInstance_AnswersNoBodyAndNoGap()
+    {
+        // Over the bridge each component is fetched by a call of its own, which answers for itself
+        // (tools/bridge.py writes "the bridge fetched no body for it" for an empty answer), so the
+        // plate's node is taken through its resolved instance as T132 left it, whatever that
+        // instance's own fetch answers - here no model.
+        var plate = new InteropRecorder<IModelDoc2>(typeof(ModelDoc2));
+        var instance = new InteropRecorder<IComponent2>();
+        DumpScope scope = Forest(
+            FaceScope.Needed,
+            Node("FICT-PLATE-1", AssemblyPath, PartPath, DocumentKind.Part, instance.Instance),
+            Node(PartPath, DrawingPath, PartPath, DocumentKind.Part, plate.Instance));
+
+        Assert.Empty(Meshes().DumpComponent(scope, scope.Components[1], _meshDirectory));
+        Assert.Empty(scope.Gaps.Gaps);
+        Assert.Empty(plate.Calls);
+        Assert.Empty(instance.Calls);
+    }
+
+    [Theory]
+    [MemberData(nameof(PartNodes))]
+    public void MeshExporter_OverTheBridge_APartDocumentNode_RecordsItsBodyGap(string key, string? parentKey, string how)
+    {
+        var document = new InteropRecorder<IModelDoc2>(typeof(ModelDoc2));
+        DumpScope scope = Scope(Node(key, parentKey, PartPath, DocumentKind.Part, document.Instance));
+
+        Assert.Empty(Meshes().DumpComponent(scope, scope.Components[0], _meshDirectory));
+        AssertOnlyGap(scope, "body", $"'{key}' {how}, so no mesh was written for it.");
+        Assert.Empty(document.Calls);
+        Assert.Empty(_observer.Members);
     }
 
     // ---- what does not change -----------------------------------------------------------
@@ -384,6 +495,41 @@ public class DocumentNodeGapTests : IDisposable
 
         return scope;
     }
+
+    /// <summary>
+    /// A drawing with an assembly sheet of the frame, which holds the plate as the resolved
+    /// component FICT-PLATE-1 (its path in another case), and a part-detail sheet of the plate,
+    /// in the sheet order given.
+    /// </summary>
+    private static DumpScope PlateForest(bool partSheetFirst, object frame, object instance, object plate)
+    {
+        ComponentNode drawing = Node(DrawingPath, null, DrawingPath, DocumentKind.Drawing, handle: null);
+        ComponentNode assembly = Node(AssemblyPath, DrawingPath, AssemblyPath, DocumentKind.Assembly, frame);
+        ComponentNode component = Node("FICT-PLATE-1", AssemblyPath, PartPath.ToLowerInvariant(), DocumentKind.Part, instance);
+        ComponentNode part = Node(PartPath, DrawingPath, PartPath, DocumentKind.Part, plate);
+        return partSheetFirst
+            ? Forest(FaceScope.All, drawing, part, assembly, component)
+            : Forest(FaceScope.All, drawing, assembly, component, part);
+    }
+
+    /// <summary>
+    /// A component whose <c>GetModelDoc2</c> answers a loaded model with no custom property (so
+    /// it is no fastener by its names), and whose <c>GetBodies2</c> answers no body, or null.
+    /// </summary>
+    private static InteropRecorder<IComponent2> InstanceWithAModel(bool bodies)
+    {
+        var extension = new InteropRecorder<IModelDocExtension>();
+        var model = new InteropRecorder<IModelDoc2>(typeof(ModelDoc2)).Answer("get_Extension", extension.Instance);
+        return new InteropRecorder<IComponent2>()
+            .Answer("GetModelDoc2", model.Instance)
+            .Answer("GetBodies2", bodies ? new object[0] : null);
+    }
+
+    private static IEnumerable<string> PlateGaps(params string[] notRead) =>
+        notRead.Select(words => $"'{PartPath}' {ByADrawing}, so {words}.");
+
+    private static IEnumerable<string> PlateGapsIn(DumpScope scope) =>
+        scope.Gaps.Gaps.Where(gap => gap.Reason.Contains($"'{PartPath}'")).Select(gap => gap.Reason);
 
     private void RunAllFour(DumpScope scope)
     {

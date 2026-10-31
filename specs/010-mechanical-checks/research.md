@@ -1164,6 +1164,70 @@ suite green (extractor 10235 passed, add-in 4276 passed, the build zero warnings
 drawing references) in T132's words, passed at once with no reviewer change; no fixture or
 golden was regenerated.
 
+### R2.29 Review round 2 of R2.27: a document is taken as read through an instance only when the read reached it (amendment 2026-10-31, owner decision 166A)
+
+The review of T131 to T135 raised two findings. Each was checked against the code and neither
+was rejected: F1 is fixed by T136 and T137, and F2 is recorded, with the open task T138.
+
+- **F1, fixed (T136, T137).** T132's check (`ComponentDocuments.ReadThroughAnInstance`) left a
+  document node's gap out whenever a resolved `IComponent2` node of the same document id and
+  referenced configuration was in the scope, whatever that node's read got. An instance whose
+  `GetModelDoc2` answers null names itself in the hole read alone (`'{key}' has no loaded model
+  document; its holes were not read.`): the fastener read identifies it by its names, with no gap
+  when they make it no fastener, and the face sweep and the mesh export skip it with no gap (T135).
+  So a part a drawing references whose instance answered no model got neither a row nor a gap from
+  those three reads, and lost the `body` gap it had at `a2d4c47`; T131's instance test answered no
+  model and asserted exactly that. Decided: each read collects, over its pass, the document nodes it
+  skips and the instances whose document it reached, and records the nodes' gaps after the pass,
+  leaving a node's out only when the read reached that document through a resolved instance of the
+  same document id and referenced configuration. "Reached" is the point past which a read takes the
+  document's contents and names what it fails to take: the loaded model for the hole read (its
+  feature walk) and the fastener read (its properties), the bodies for the face sweep and the mesh
+  export (each face and each body has its own step). So an instance whose `GetBodies2` answers null,
+  a skip T135 holds with no gap, leaves the plate its face and body gaps too. Over the pass, because
+  a drawing lists its sheets in any order: a part-detail sheet's node can come before the instance
+  on the assembly sheet. No interop member is added, removed or reordered; a document node's gap
+  moves to the end of its read's gaps, an order no reader relies on (the not-read row sorts its
+  gaps, R2.26 D20).
+- **Over the bridge, unchanged.** `MeshExporter.DumpComponent` (lever 10a's `tessellate`) fetches
+  one component per call, and each call answers for itself: `tools/bridge.py` `_fetch_component`
+  writes `the bridge fetched no body for it`, with any gap, for an empty answer. So there a document
+  node is still taken through any resolved instance in the scope, as T132 and T133 left it; the
+  instance's own fetch says what it got.
+- **F2, recorded (T138).** True, and not 166A's alone. `ReuseKey`'s `extractor_version` is the
+  assembly version, `0.1.0.0` since the extractor's first commit of 2026-09-12
+  (`extractor/Directory.Build.props:28`, `PackageWriter.cs:789`); the key holds no gap, and
+  `BuildReuseProbe` runs the traversal and the manifest alone. So `swreview-extract dump --reuse`
+  copies a package an earlier build wrote of an unchanged design, without T128's gaps, and a reused
+  package's phase rows are not read for the phases row (`contracts/fasteners.md` 8.6): a part
+  reviewed that way still reads "nothing at all". Recorded rather than fixed, under the policy of
+  decision 159A's review rounds: no engineer's file is touched, nothing private leaks, and no
+  normal user path reaches it. The pane dumps in process and never reuses
+  (`Review/SwReviewDump.cs:98`, `SwReviewAddIn.cs:1742`; `RunFolders.FindReusable` has no caller
+  outside its tests); `package_reuse` is off, a workstation lever the harness alone measures
+  (`agent/settings.py:489`, `:687`), and the harness dumps each design cold with the same build
+  before it reuses (005 T093). Every change to what a dump reads since lever 9 landed, feature
+  010's fastener candidates among them, has the same exposure, so the fix is lever 9's: a key a
+  build that changes what a dump reads must change, in both languages, before 005 T094 adopts
+  the lever. T138 holds it.
+
+**Alternatives rejected**:
+
+| Option | Why not |
+|---|---|
+| Have the fastener, face and mesh reads name an instance with no model (the review's suggestion) | it changes what an assembly review records for every such component, the face sweep's and the mesh export's own skips that T135 holds for the owner; the pass fixes a document node's coverage, 166A's defect, and leaves those as they are |
+| Revert T132's check, so a document node always records its gaps | a drawing with an assembly sheet and a part-detail sheet would list as unread a plate whose threads were checked (R2.28 F2), a common path |
+| Ask the instance's `GetModelDoc2` again in the check | an interop call this change does not add |
+| Take the instance as read at its model in the face sweep and the mesh export too | an instance whose `GetBodies2` answers null would hide the plate's face and body gaps, with no gap of its own (T135) |
+| Bump `<Version>` in `Directory.Build.props` (F2) | it is every project's assembly version, the add-in's among them, outside this lane; and it covers this change alone, while the next change to what a dump reads has the same exposure |
+| Refuse a package with no document-node gap (F2) | a refusal by the gaps of one shape, for one change; T138's key covers every change |
+
+**Results.** T136, run before T137 on the development machine: `Failed: 4, Passed: 23, Total: 27`
+(`DocumentNodeGapTests`) - the plate whose instance answers no model has no hole, fastener, face
+or body gap of its own, and the plate whose instance answers no bodies no face or body gap, in both
+sheet orders. The 23 that pass include the instance that reads its model and its bodies, in both
+orders, and the two bridge pins: T132 already gave those answers, and T137 must keep them.
+
 ## R3. Verified facts the plan relies on
 
 **Packages** (analyst fact 1, re-checked). The big assembly: 26 documents (23 parts, 3 assemblies), 89
