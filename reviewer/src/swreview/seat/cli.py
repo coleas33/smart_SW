@@ -13,7 +13,7 @@ from typing import Annotated, Any
 
 import typer
 
-from swreview.seat import health, transparency
+from swreview.seat import health, transparency, volume_unit
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -114,4 +114,44 @@ def transparency_command(
         if decision.next:
             typer.echo(f"next: {decision.next}")
     if decision.verdict == transparency.INCONCLUSIVE:
+        raise typer.Exit(1)
+
+
+@app.command("volume-unit")
+def volume_unit_command(
+    package: Annotated[
+        Path,
+        typer.Argument(
+            exists=True, help="The package folder, its package.json, or one interference record."
+        ),
+    ],
+    expected_mm3: Annotated[
+        float,
+        typer.Option("--expected-mm3", help="The known overlap in mm3; the recipe's is 1000."),
+    ],
+    json_output: Json = False,
+) -> None:
+    """Whether the recorded interference volume is in m3 or mm3, against a known overlap (001 T069).
+
+    Judges the one computed interference of the recipe's two cubes
+    (benchmarks/native/interference-volume/RECIPE.md) within 1 per cent, and names the extractor
+    change it asks for; inconclusive otherwise. Exit 1 when inconclusive.
+    """
+    if not expected_mm3 > 0:
+        raise typer.BadParameter("must be a volume above zero", param_hint="'--expected-mm3'")
+    try:
+        rows = volume_unit.interferences(package)
+    except (OSError, ValueError) as error:
+        first = str(error).splitlines()[0] if str(error) else type(error).__name__
+        typer.echo(f"error: neither a package nor an interference record: {first}", err=True)
+        raise typer.Exit(1) from error
+    judgement = volume_unit.judge(rows, expected_mm3)
+    if json_output:
+        typer.echo(json.dumps(asdict(judgement), indent=2))
+    else:
+        typer.echo(f"unit: {judgement.unit}")
+        typer.echo(f"reason: {judgement.reason}")
+        if judgement.next:
+            typer.echo(f"next: {judgement.next}")
+    if judgement.unit == volume_unit.INCONCLUSIVE:
         raise typer.Exit(1)
