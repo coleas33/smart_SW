@@ -58,7 +58,7 @@ step itself says:
 
 | Order | Steps | Tasks | Estimate |
 |---|---|---|---|
-| 1 | 1.1 to 1.6: the update, its gates with 004 T140's check at 1.3, and the health checks with `swreview seat health` | 004 T140 | 55 min |
+| 1 | 1.1 to 1.6: the update, its gates with 004 T140's check at 1.3, and the health checks with `swreview seat health` | 004 T140, 004 T353 | 55 min |
 | 2 | 1.7, Help > About's product name only | 004 T164 | 5 min |
 | 3 | 5.6's item 1, then its first run (moved early: it asks for no reorder), its item 4 and its item 7 | 004 T033 to T039, 004 T187 | 10 min |
 | 4 | 3.1's `Save-Fingerprint 'before'`, then 3.9: D14 twice on part J, then PROBE-15 on it | 011 T077, 013 T142, 003 T088 | 25 min |
@@ -790,8 +790,8 @@ Every line of that log starts with its time in square brackets; read what follow
 6. The pane has five tabs: Review, Extract, Model check, Remodel, Standards. No Ask tab.
 7. `git status --porcelain` still prints nothing.
 
-Then the seat's own health check (decision 166A, 2026-10-31), with SOLIDWORKS still open on the
-part:
+Then the seat's own health check (decision 166A, 2026-10-31; 004 T353), with SOLIDWORKS still open
+on the part:
 
 ```powershell
 cd "$R\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd $R

@@ -38,7 +38,7 @@ the sitting's runs) and 009 T085 (restore them offline).
 *Added 2026-10-31.* The next sitting is not the whole list below: it is S1, about three hours
 with no key and no paid call, and its order is the test plan's section "S1: Start readiness",
 which wins where this list differs. In that order: the update and the health checks, with
-`swreview seat health` and 004 T140's manifest test (the test plan's steps 1.1 to 1.6); the product
+`swreview seat health` (004 T353) and 004 T140's manifest test (the test plan's steps 1.1 to 1.6); the product
 Help > About names (004 T164, step 1.7); step 21's first run, moved early because it asks for no
 reorder (004 T033 to T039, and 004 T187's PROBE-8 readings); the fingerprint, then step 8's two
 D14 runs on part J (011 T077, 013 T142) and PROBE-15 on J (003 T088; the test plan's step 3.9);
