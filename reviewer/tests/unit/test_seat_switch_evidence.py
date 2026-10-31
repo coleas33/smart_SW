@@ -36,7 +36,8 @@ from pathlib import Path
 
 import pytest
 
-from swreview.remodel.ledger import FAILURE, Ledger, load_ledger, start_readiness
+from swreview.checks.rms_types import load_table
+from swreview.remodel.ledger import FAILURE, Ledger, load_ledger, parse_ledger, start_readiness
 from swreview.remodel.tolerances import IDENTITY, Tolerances
 from tests.support import local_paths
 from tests.support.remodel_ledger import (
@@ -44,6 +45,7 @@ from tests.support.remodel_ledger import (
     CAPABILITIES,
     GOLDEN_LEDGER,
     committed_ledgers,
+    rendered_ledger,
 )
 from tests.support.seat_tasks import REPO
 
@@ -136,6 +138,34 @@ def unscrubbed(ledger: Ledger) -> list[str]:
         and not FAILURE.fullmatch(value.removeprefix("error: "))
         and not (key != "error" and value in ("True", "False"))
     ]
+
+
+END_TAG = load_table().end_tag_suffix
+"""What SOLIDWORKS names the marker after a folder's members in a flat walk, `<folder>___EndTag___`
+(`rms_types.yaml`; PROBE-10's question)."""
+
+PLACEHOLDER = r"<template feature \d+>"
+"""What the person committing a ledger writes for each name the scan does not list, one number per
+name, so PROBE-11's census keys stay distinct (the README's checklist; 004 T348)."""
+
+def recipe_names() -> set[str]:
+    """Stub (004 T348)."""
+    return set()
+
+
+def tree_keys() -> set[str]:
+    """Stub (004 T348)."""
+    return set()
+
+
+def unlisted_names(ledger: Ledger) -> list[str]:
+    """Stub (004 T348)."""
+    return []
+
+
+def design_names(root: Path = CAPABILITIES) -> list[str]:
+    """Stub (004 T348)."""
+    return []
 
 
 # --- the three switches -----------------------------------------------------------------------
@@ -246,10 +276,12 @@ def test_the_readme_names_both_drawing_evidence_files() -> None:
 
 
 def test_every_committed_ledger_is_read_scanned_clean_and_scrubbed() -> None:
+    """*Changed on purpose by 004 T348*: the name scan joins the path scan, as 171A asks."""
     for path in committed_ledgers():
         ledger = load_ledger(path)
 
         assert local_paths.scan_file(path) == [], path.name
+        assert unlisted_names(ledger) == [], path.name
         assert unscrubbed(ledger) == [], path.name
 
 
@@ -257,6 +289,118 @@ def test_nothing_committed_under_capabilities_names_a_local_folder() -> None:
     """Every file there, not only the ledgers: the drawing records, the README and a stray copy
     (004 T344, review finding F4: `scan_committable` does not reach `benchmarks/native`)."""
     assert local_paths.scan_folder(CAPABILITIES) == []
+
+
+def test_nothing_committed_under_capabilities_names_a_design() -> None:
+    """The drawing records too, which the README says hold never a name (004 T348)."""
+    assert design_names() == []
+
+
+# --- the name scan (decision 171A; 004 T348, the second review round's F1) ---------------------
+
+FICT_NAME = "FICT-Corp Datum A"
+"""A company template's own feature, which a public commit must never carry."""
+
+
+def test_the_recipe_names_and_the_walked_trees_are_read_from_the_csharp() -> None:
+    assert recipe_names() == {
+        "Boss-Extrude1", "Cut-Extrude1", "Fillet1", "Shell1", "Folder1", "w",
+        "Probe10RenamedFolder",
+    }
+    assert tree_keys() == {"tree_before", "tree_after_illegal", "tree_after_rename"}
+
+
+def test_the_name_scan_finds_each_reading_naming_a_feature_neither_built_nor_default(
+    tmp_path: Path,
+) -> None:
+    """The golden ledger with a company template's feature in each reading that names one; then
+    with that name replaced by a placeholder. A census key is reported by its place among its
+    row's readings, never by its name; the golden's own `FICT-Feature1` is one."""
+    marker = FICT_NAME + END_TAG
+    named = tmp_path / GOLDEN_LEDGER.name
+    named.write_text(
+        GOLDEN_LEDGER.read_text(encoding="utf-8")
+        .replace('"tree_before": "', f'"tree_before": "Comments,{FICT_NAME},')
+        .replace(
+            '"marker_name_after": "(none)"',
+            f'"marker_name_after": "{marker}"\n      "tree_after_rename": "Origin,{marker}"',
+        )
+        .replace(
+            "no ___EndTag___ marker appeared on 2024, before or after the rename.",
+            f"a marker-like name ('{marker}') was found but names neither the default nor the "
+            "renamed folder.",
+        )
+        .replace('"type[Origin]"', f'"type[{FICT_NAME}]": "RefPlane"\n      "type[Origin]"'),
+        encoding="utf-8",
+    )
+
+    assert unlisted_names(load_ledger(GOLDEN_LEDGER)) == ["PROBE-11.type[#9]"]
+    assert unlisted_names(load_ledger(named)) == [
+        "PROBE-3.tree_before",
+        "PROBE-10.marker_name_after",
+        "PROBE-10.tree_after_rename",
+        "PROBE-10.reason",
+        "PROBE-11.type[#3]",
+        "PROBE-11.type[#10]",
+    ]
+
+    named.write_text(
+        named.read_text(encoding="utf-8").replace(FICT_NAME, "<template feature 1>"),
+        encoding="utf-8",
+    )
+    assert unlisted_names(load_ledger(named)) == ["PROBE-11.type[#10]"]
+
+
+@pytest.mark.parametrize(
+    ("tree", "listed"),
+    [
+        ("Comments,Front Plane,Boss-Extrude1,Fillet1,Fillet1,Folder1___EndTag___", True),
+        ("Lights, Cameras and Scene,Material <not specified>,Origin,Probe10RenamedFolder", True),
+        ("<template feature 1>,<template feature 12>,Shell1", True),
+        ("", True),
+        (f"Front Plane,{FICT_NAME}", False),
+        ("Front Plane FICT", False),
+        ("Lights,Origin", False),
+        ("Front Plane,", False),
+        ("<template feature>,Origin", False),
+        ("FICT-Folder___EndTag___", False),
+    ],
+)
+def test_a_walked_tree_names_only_the_recipe_the_default_template_and_placeholders(
+    tree: str, listed: bool
+) -> None:
+    """Each name whole: a name with a comma in it is one name, a piece of a listed name or a
+    listed name with more after it is none, and a marker is a listed name's."""
+    ledger = parse_ledger(
+        rendered_ledger([("PROBE-3", True, "verified", {"tree_before": tree, "reason": "r"})])
+    )
+
+    assert unlisted_names(ledger) == ([] if listed else ["PROBE-3.tree_before"])
+
+
+def test_the_design_name_scan_finds_a_document_and_a_dimension_line(tmp_path: Path) -> None:
+    (tmp_path / "drawing-open.md").write_text(
+        "D14 outcome: opened and closed <drawing>\n"
+        "D14 open: <drawing>.SLDDRW, type 3\n"
+        "D14 left loaded: FICT-Bracket.SLDDRW\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "drawing-binding.md").write_text(
+        "callout 3: face reference equal true, name shape matches true\n"
+        'D8 dimension 3: sheet 1, name "D1@FICT-Sketch2", view "FICT View1", value 10.0000 mm;\n',
+        encoding="utf-8",
+    )
+    shutil.copy(GOLDEN_LEDGER, tmp_path / GOLDEN_LEDGER.name)
+    shutil.copy(CAPABILITIES / "README.md", tmp_path / "README.md")
+
+    assert design_names(tmp_path) == ["drawing-binding.md:2", "drawing-open.md:3"]
+
+
+def test_the_readme_gives_the_placeholder_the_name_scan_reads() -> None:
+    readme = (CAPABILITIES / "README.md").read_text(encoding="utf-8")
+
+    assert "`<template feature 1>`" in readme
+    assert re.fullmatch(PLACEHOLDER, "<template feature 1>")
 
 
 def test_the_start_pin_judges_a_committed_folder_by_the_reader(tmp_path: Path) -> None:
