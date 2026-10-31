@@ -5795,6 +5795,7 @@ into 011 T095, part 4's screenshot kept at step 4.7.
 | `test_the_handover_gives_only_commands_the_plan_gives` (unchanged) | its floor, `len(lines) >= 15`, held by content | *Recorded on review (R29.8):* withdrawing 008 T106's Gemini block and 009 T082's older build (T364) would have left the handover 11 code lines. T364 split `git status --porcelain; git branch --show-current` into the plan's own two lines and added the `addin.log` tail, which kept it at 16; the floor was not lowered. On review the `addin.log` line moved out of the block for steps 1.2 to 1.4 into one for step 1.6, beside `swreview seat health`, which S1 runs there |
 | `test_every_feature_with_an_open_seat_task_is_one_the_plan_is_held_to` (T360's own) | holds only the features with an open seat task to `PACKAGES`, and reads 002 T044 | *T370, on review:* it held every `specs/*/tasks.md` to `PACKAGES` while two older pins (`assert tasks, package`) require each package to have an open seat task, so ticking 014 T221 or 015 T119 would turn the suite red with no fix keeping both. Checked by mutation: 014 T221 ticked with 014 kept is red, with 014 dropped green; 016 dropped from `PACKAGES` is red |
 | `test_t303a_reads_the_newest_backend_logs_pid_and_ends_that_process_once_the_copy_is_open` | an older remodel folder holding `open_record.written`, the older backend log given the later name, the copy's open begun a second before it is written with the backend checked alive then, and a daemon writer thread | *T370, on review:* each of three mutations - the block's creation-time guard removed, its sort by write time removed, its wait for `copy_open.begin` in place of `open_record.written` - passed before and fails now |
+| `test_the_handover_names_every_open_seat_task_of_features_008_to_011`, renamed `..._with_its_package`; `test_a_range_names_each_task_in_it` removed | reads each task with its package in front of it (`qualified_tasks`), not a bare id (`named_tasks`, removed as unused) | *T373, on the second review (R29.9, cx-1):* a bare id is shared across packages, so 001 T103 left the handover with the pin green. Tightened, not loosened: a handover the new pin passes, the old one passed too, and the qualified reader's own test (`test_a_qualified_range_names_each_task_in_it_and_a_bare_id_names_nothing`) covers ranges and bare ids |
 
 ### R29.7 Gates
 
@@ -5838,3 +5839,20 @@ for that command), and the same on Python 3.11 (`uv run --isolated --python 3.11
 18,304 passed, 6 skipped, 0 failed; `ruff check src tests` clean; the link check `COUNT 0`; every
 changed text file LF in the index. No C# changed, so no C# gate was run. The two plan test files
 alone: 274 passed, 1 skipped.
+
+### R29.9 The second review of the S1 plan work (T373 to T375)
+
+A second review read the lane at `07ff0c7`. Its one finding was checked against the code and the
+handover, and fixed test first (T373 failing, T374 green).
+
+| Finding | Disposition | Evidence and what changed |
+|---|---|---|
+| cx-1 (medium): removing 001 T103 from the handover leaves its coverage pin green, because other features name a T103 | fixed | Reproduced: with "001 T061, T076 and T103" cut to "001 T061 and T076", `test_the_handover_names_every_open_seat_task_of_features_008_to_011` passed, since it read bare ids (`named_tasks`) and "008 T102 and T103" names a T103. Since 166A every package is read, so most ids are shared. The pin now reads each task with its package in front of it (`qualified_tasks`), as the plan's pin does (R29.6). It then failed on 27 ids the handover named only as the second or later id of a list (001 T103; 002 T051, T063, T067; 003 T089; 004 T303; ten of 005; six of 006; 009 T080, T083, T084; 010 T124; 016 T015). Each now has its package in front of it, keeping each package number on the line of its id. Checked by mutation: 001 T103, 016 T015 and 009 T084 each put back to a bare id turn the pin red. The plan's and the results sheet's coverage pins already read qualified ids, and no other test used `named_tasks` |
+
+Gates on `a67701c` with this record: from `reviewer/`, with the tokenizer required, `pytest -q -m
+"not live"` on Python 3.12, 18,303 passed, 6 skipped, 0 failed (exit 0, counted from the progress
+lines, as the run printed no summary line; one fewer than R29.8's, `test_a_range_names_each_task_in_it`
+having gone with `named_tasks`), and the same on Python 3.11 (`uv run --isolated --python 3.11
+--all-extras`), 18,303 passed, 6 skipped, 0 failed; `ruff check src tests` clean; the link check
+`COUNT 0`; every changed text file LF in the index. No C# changed, so no C# gate was run. The two
+plan test files alone: 273 passed, 1 skipped.

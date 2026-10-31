@@ -366,7 +366,7 @@ Seat note (2026-09-25, the owner's decision 18A): T033 to T039 run at step 5.6 o
 - [x] T372 Record R29.8 (each finding of the review, fixed or rejected with its evidence; R29.4 corrected on the barrier; R29.6 on the handover's code-line floor) and run the gates *Done 2026-10-31: R29.8 recorded, gates at its end.*
 - [x] T373 Test first, on the second review of the S1 plan work (research R29.9, finding cx-1; 166A): the handover's pin reads each open seat task with its package in front of it (`001 T103`), as the plan's pin does, so a task named only by a bare id that another package shares (`008 T102 and T103`) is not in the handover; `seat_tasks.named_tasks`, the bare reading, goes with its test *Done 2026-10-31: red before T374 on 001 T103 first, and on 27 such ids in all (R29.9).*
 - [x] T374 Implement T373 in the handover: every open seat task it names gets its package in front of it, in step 3's 006 tasks, steps 11 and 14's 009 tasks, the note on 010 T123 and T124, and the list of tasks the test plan sets aside *Done 2026-10-31: T373 green; 001 T103, 016 T015 and 009 T084 each taken out again turn it red (R29.9).*
-- [ ] T375 Record R29.9 (cx-1, reproduced and fixed; R29.6's row for the handover's pin) and run the gates
+- [x] T375 Record R29.9 (cx-1, reproduced and fixed; R29.6's row for the handover's pin) and run the gates *Done 2026-10-31: R29.9 recorded, gates at its end.*
 
 **Checkpoint**: stage 1 has run on a real part, every blocking probe has a recorded verdict, and the owner has the numbers needed to re-spec stage 2.
 
