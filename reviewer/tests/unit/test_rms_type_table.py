@@ -30,7 +30,9 @@ from swreview.checks.rms_types import (
     RmsTypeTable,
     class_of,
     load_table,
+    unknown_types,
 )
+from swreview.ir.loader import load_package
 from swreview.ir.models import Feature
 from tests.support.packages import persist_ref
 
@@ -184,6 +186,50 @@ def test_classify_spot_checks_one_member_of_each_class(table: RmsTypeTable) -> N
     assert table.classify("MirrorPattern") == "pattern"
     assert table.classify("RefPlane") == "reference"
     assert table.classify("SurfaceKnit") == "construction"
+
+
+def test_the_2024_names_of_a_revolved_cut_and_a_helix_classify_beside_the_2026_ones(
+    table: RmsTypeTable,
+) -> None:
+    """2024 SP5 reports `RevCut` and `Helix` where the 2026 SP1.1 calibration has `CutRevolve`
+    and `HelixCurve` (the committed replay fixtures, `sw_version` 32.5.0); both spellings
+    classify (owner decision 166A)."""
+    assert table.classify("RevCut") == table.classify("CutRevolve") == "cut"
+    assert table.classify("Helix") == table.classify("HelixCurve") == "construction"
+
+
+REPLAY_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "replay"
+
+STILL_UNCLASSIFIED = frozenset(
+    {
+        "BaseBody",
+        "CombineBodies",
+        "ConfigTableFolder",
+        "CutListFolder",
+        "FlatPattern",
+        "FoldUpDownSketchFolder",
+        "MateReferenceGroupFolder",
+        "PosGroupFolder",
+        "SMBaseFlange",
+        "SheetMetal",
+        "Split",
+    }
+)
+"""The content type names on the committed replay fixtures (2024 SP5) the table does not classify.
+
+It may only shrink. Classifying one is the owner's call - the table never guesses a class - and
+the change that classifies it takes it out of here; a name a regenerated fixture brings in fails
+until the owner classifies it or it is listed here deliberately."""
+
+
+def test_the_replay_fixtures_carry_no_unknown_type_but_the_still_unclassified() -> None:
+    names = {
+        row.type_name
+        for package_file in sorted(REPLAY_FIXTURES.glob("*/package.json"))
+        for row in unknown_types(load_package(package_file.parent).package.features)
+    }
+
+    assert names == STILL_UNCLASSIFIED
 
 
 def test_classify_returns_ambiguous_for_ice(table: RmsTypeTable) -> None:
