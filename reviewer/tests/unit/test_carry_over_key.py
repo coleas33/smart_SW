@@ -255,6 +255,23 @@ def test_the_rms_rule_version_is_in_the_key(monkeypatch: pytest.MonkeyPatch) -> 
     assert len(decision.re_run) == 1
 
 
+def test_a_verdict_stamped_before_revcut_and_helix_classified_is_recomputed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Feature 003 T094 classified the 2024 names `RevCut` and `Helix`, which can change an
+    `rms.*` verdict over an unchanged tree, so the rules moved past version 1: a finding
+    stamped under it is re-run, never carried (003 T095)."""
+    package = carry_package()
+    monkeypatch.setattr(carry_over, "RULES_VERSION", "1")
+    previous = previous_session(package, [rms_finding(package)])
+    monkeypatch.undo()
+
+    decision = select_carry_over(package, previous, at=CARRIED_AT)
+
+    assert decision.carried == ()
+    assert len(decision.re_run) == 1
+
+
 def test_a_component_the_package_does_not_hold_raises_rather_than_re_binding() -> None:
     """`exceptions.fingerprint` raises `LookupError` rather than silently binding to
     whatever is left, and the key inherits that rather than catching it."""
