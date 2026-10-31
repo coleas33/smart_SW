@@ -197,13 +197,23 @@ def test_the_golden_ledger_holds_start_back_only_for_the_uncalibrated_profile() 
             "PROBE-12 gives no reason (decision 148A: a verdict with a reason and no error)",
         ),
         (
+            start_rows(PROBE_12=("verified", {"reason": ""})),
+            None,
+            "PROBE-12 gives no reason (decision 148A: a verdict with a reason and no error)",
+        ),
+        (
+            start_rows(PROBE_3=("verified", {"reason": "  "})),
+            None,
+            "PROBE-3 gives no reason (decision 148A: a verdict with a reason and no error)",
+        ),
+        (
             start_rows(PROBE_2=("unresolved", {"error": "Could not open the part."})),
             None,
             "PROBE-2 threw (its message is not shown)",
         ),
     ],
     ids=["not-run", "not-finished", "refuted", "unresolved", "error", "error-beside-verified",
-         "no-reason-148A", "message-withheld"],
+         "no-reason-148A", "blank-reason-148A", "whitespace-reason-148A", "message-withheld"],
 )
 def test_start_names_each_probe_that_holds_it_back(
     rows: list[Row], requested: list[str] | None, reason: str

@@ -294,7 +294,48 @@ def test_each_switch_ships_off_and_its_reader_sees_it_flipped(
 
 CSHARP_ON = CSHARP_OFF.replace("false", "true")
 
+
+def lines(*code: str) -> str:
+    """C# lines in place of the shipped declaration, each indented as it is."""
+    return "\n    ".join(code)
+
+
 UNREAD = {
+    "start-a-getter-and-the-shipped-line-in-a-nested-class": (
+        START_SOURCE,
+        lines(
+            "public static bool SeatValidated { get { return true; } }",
+            f"public static class FictNested {{ {CSHARP_OFF} }}",
+        ),
+    ),
+    "start-a-string-holding-a-line-comment-mark-and-a-declaration-under-if": (
+        START_SOURCE,
+        lines(
+            f'private const string FictNote = "//"; {CSHARP_ON}',
+            "#if FICT_NEVER", CSHARP_OFF, "#endif",
+        ),
+    ),
+    "start-comment-marks-in-skipped-if-sections": (
+        START_SOURCE,
+        lines(
+            "#if FICT_NEVER", "/*", "#endif", CSHARP_ON,
+            "#if FICT_NEVER", "*/", CSHARP_OFF, "#endif",
+        ),
+    ),
+    "start-raw-strings-holding-comment-marks": (
+        START_SOURCE,
+        lines(
+            'private const string FictA = """', '    /*', '    """;', CSHARP_ON,
+            'private const string FictB = """', f"    */ {CSHARP_OFF}", '    """;',
+        ),
+    ),
+    "start-interpolation-holes-holding-strings": (
+        START_SOURCE,
+        lines(
+            f'private const string FictA = $"{{"//"}}"; {CSHARP_ON}',
+            rf'private const string FictB = $"{{"\""}} {CSHARP_OFF} {{"\""}}";',
+        ),
+    ),
     "start-a-block-getter-beside-the-old-line-commented": (
         START_SOURCE,
         f"// {CSHARP_OFF}\n    public static bool SeatValidated {{ get {{ return true; }} }}",
@@ -319,7 +360,9 @@ UNREAD = {
 }
 """Each switch's declaration replaced by a form its reader does not read (review finding F5 of the
 second reviewer: a commented old line kept the pin green while a new getter turned the switch
-on). Each must fail the reader, never read as off."""
+on; and the third round's F2 and F3: a literal or a skipped `#if` section that a reader blind to
+literals takes for a comment, and a getter beside the shipped line moved into a nested class).
+Each must fail the reader, never read as off."""
 
 
 @pytest.mark.parametrize("case", sorted(UNREAD))
@@ -334,6 +377,43 @@ def test_a_switch_in_a_form_its_reader_does_not_read_fails_closed(case: str) -> 
     assert mutated != text
     with pytest.raises(AssertionError, match="read only"):
         read(mutated)
+
+
+READ_ON = {
+    "strings-holding-comment-marks": lines(
+        'private const string FictA = "/*";',
+        CSHARP_ON,
+        f'private const string FictB = "*/ {CSHARP_OFF}";',
+    ),
+    "a-region-name-holding-a-comment-mark": lines(
+        "#region FICT /*", CSHARP_ON, "#endregion", f"// */ {CSHARP_OFF}"
+    ),
+    "a-character-literal-holding-a-quote": lines(
+        f"""private const char FictQ = '"'; {CSHARP_ON} """
+        f'private const string FictB = " {CSHARP_OFF} ";'
+    ),
+    "a-verbatim-string-ending-in-a-backslash": lines(
+        rf'private const string FictA = @"\"; {CSHARP_ON} '
+        f'private const string FictB = " {CSHARP_OFF} ";'
+    ),
+    "strings-holding-escaped-quotes": lines(
+        rf'private const string FictA = "\"//"; {CSHARP_ON}',
+        rf'private const string FictB = "\" {CSHARP_OFF} \"";',
+    ),
+}
+"""Start's declaration turned on beside text that only looks like a comment or a declaration to
+a reader that does not lex literals (the third round's review finding F2): the compiler reads
+each as `true`, so the reader must too, and the Start pin goes red."""
+
+
+@pytest.mark.parametrize("case", sorted(READ_ON))
+def test_a_literal_or_a_directive_that_looks_like_a_comment_hides_no_declaration(case: str) -> None:
+    text = START_SOURCE.read_text(encoding="utf-8")
+
+    mutated = text.replace(CSHARP_OFF, READ_ON[case])
+
+    assert mutated != text
+    assert csharp_switch(mutated) is True
 
 
 def test_the_readme_names_both_drawing_evidence_files() -> None:
