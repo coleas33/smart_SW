@@ -6413,7 +6413,7 @@ from `seat_tasks.REPO`. The plan test's `write =log[` spacing went with T342's e
 
 #### R27.9.8 For the owner (O-F8), test-first evidence, mutations and gates
 
-**For the owner, not decided here.** O-F8 asks for two decisions this lane recorded but cannot take: that
+*Decided 2026-10-31: 178A and 176A (R29.12).* **For the owner, not decided here.** O-F8 asks for two decisions this lane recorded but cannot take: that
 the reader read both `32.5.0.48` and `32.5.0` (`SW_VERSIONS`, R27.4: `ISldWorks.RevisionNumber` answers
 the second), and whether Start's five probes go in one run - with R27.9.1 and R27.9.2, a run with PROBE-1
 last keeps every earlier row when PROBE-1 hangs - or the reader learns to judge several ledgers.
@@ -7204,3 +7204,18 @@ lines, as the run printed no summary line), and the same on Python 3.11 (`uv run
 three new pins. `ruff check src tests` was clean, the link check gave `COUNT 0`, and every changed
 text file is LF in the index. No C# changed, so no C# gate was run. The two plan test files
 alone: 281 passed.
+
+### R29.12 The owner's answers of 2026-10-31 (176A to 178A)
+
+After PRs #49 to #55 merged, the owner answered three of the questions the lanes had left open,
+each with the recommended option:
+
+- **176A (R27.4, R27.9.8, R29.10's RR1).** Start's five blocking probes run in one probe run at
+  S1, PROBE-1 last, as step 5.6's third run already has them; `swreview remodel ledger` keeps
+  judging one answers file.
+- **177A (R29.10's RR6).** T303a's stuck-backend case stays the task's own fallback line at S1;
+  no seat step suspends a process, and the fakes T303a names cover it.
+- **178A (R27.4, R27.9.8).** `SW_VERSIONS` keeps both spellings of the frozen release,
+  `32.5.0.48` and `32.5.0`.
+
+None of the three changes the plan, the reader or a test: each confirms what `main` already does.
