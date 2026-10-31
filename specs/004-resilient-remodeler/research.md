@@ -5690,8 +5690,8 @@ ticks or amendments. No product code, guard, allowlist, command or write path ch
 ### R29.2 The pins (T360, T362)
 
 `seat_tasks.open_seat_tasks` read `^- [ ] Tnnn [W]` in seven packages, so 004 T303 (`[W]`) drifted
-out of the plan unnoticed. Now `PACKAGES` holds every feature package (a new test holds it to
-every `specs/*/tasks.md`), `seat_tasks_in` reads `[W]` anywhere among a task's leading tags (005's
+out of the plan unnoticed. Now `PACKAGES` holds every feature package (a new test holds to it
+every `specs/*/tasks.md` with an open seat task, corrected on review, R29.8), `seat_tasks_in` reads `[W]` anywhere among a task's leading tags (005's
 `[P] [W]`) and a text beginning `Workstation` (003, 004), and `TASK_ID` and `QUALIFIED_ID` read an
 id ending in one letter whole (`005 T085a`, `004 T303a`, `002 T055a`), where before `005 T085a`
 named nothing. Ranges stay numeric. The existing seven packages read exactly the tasks they read
@@ -5701,7 +5701,8 @@ Features 001, 002 and 016 had no machine-readable mark, so "every package has an
 failed for them; their workstation tasks were tagged `[W]`, the tag 005's Format defines, rather
 than reading "workstation" anywhere in a task's text, which would also catch tasks that only
 mention the workstation harness: 001 T061, T076, T103; 002 T051, T063, T067; 016 T010, T015. 002
-T044 runs with the fake provider on a fixture and was left untagged. 004 T033 to T039 and T187,
+T044 runs with the fake provider on a fixture and was left untagged; on review it was tagged too,
+since its quickstart Scenario 1 runs in the pane on the native bracket assembly (R29.8). 004 T033 to T039 and T187,
 plainly seat work, were left untagged because decisions 170A and 171A name them and another lane
 may be editing those lines; the plan names them anyway.
 
@@ -5718,6 +5719,9 @@ Each text was read before it was ticked; nothing else was closed.
 | 005 T028 to T030, T065 to T069; 002 T055a; 008 T106 | Gemini's own behaviour, deferred by decision 94A |
 
 `specs/README.md`'s status counts are a snapshot taken at `9da0057` and were not recounted.
+*On review (R29.8):* the rows of 001, 002, 005 and 008 were recounted and their status lines name
+what was closed; its rule that an unticked `SUPERSEDED (127A)` task counts as superseded now says
+that since 173A such a task is ticked and counts as done.
 
 ### R29.4 S1 (T365, T366)
 
@@ -5727,7 +5731,10 @@ S1 is nine rows of the plan's own steps, 190 minutes plus the optional 25, none 
 - **The optional block's cut rule.** The brief said "cut if run 2 has not started by 2 h 30", but
   in S1's order the close in process ends at 2 h 30 and the block comes before run 2. The plan
   says: the block starts only before 2 h 30 on the sitting's clock; at 2 h 30 with neither it nor
-  run 2 begun, it is cut. The owner may want the other reading.
+  run 2 begun, it is cut. The owner may want the other reading. *Corrected on review (R29.8):*
+  started at 2 h 29, the block and the 40 minutes after it end at 3 h 34, past the 3 h 30 the
+  Sittings section gives every sitting; the block now starts only by 2 h 25, so on S1's own
+  estimates it runs only when S1 is at least five minutes ahead.
 - **T303a.** The backend's number comes from the line `backend healthy on <origin> (pid <n>)`,
   which `BackendProcess.WaitForHealth` writes to the backend's own log, `backend-<stamp>.log`,
   not to `addin.log` as the brief said. A failed plan's leftover is made by ending that process
@@ -5739,7 +5746,12 @@ S1 is nine rows of the plan's own steps, 190 minutes plus the optional 25, none 
   The dialog pass asks for Tools > Options opened at once after Save; since the in-process close
   is posted within about a second of Save when the backend has already exited, it may come too
   late by hand, and the plan then records `dialog too late`, a case left to the fakes as 169A
-  says. The barrier and a plan waiting for Start are not asked (T303b).
+  says. *Corrected on review (R29.8):* this said the barrier was T303b's. Decision 169A puts the
+  barrier in T303a; of its two halves, an open that ran before the close is closed by it, which
+  items 2 to 4 check (the backend ended by hand rather than stuck), and an open that runs only
+  after the close is refused `target_mismatch`, which needs that open held behind the close on
+  SOLIDWORKS's thread and so stays the fakes' under 169A's last sentence. A plan waiting for
+  Start is T303b's.
 - **004 T182's seconds** are read from `remodel-open.jsonl`, first phase to last
   (`copy_open.begin` to `open_record.written`), as `chat/remodel.py`'s `_open_phase` writes them;
   a pin runs the block over a record in that shape.
@@ -5755,7 +5767,10 @@ S1 is nine rows of the plan's own steps, 190 minutes plus the optional 25, none 
   write when a build lacks them.
 - **PROBE-15** (003 T088) runs `probe rms` on part J at step 3.9 and records its
   `root_component:` line and the `features:` count only, the configuration's name after it being
-  rule 5's.
+  rule 5's. *Corrected on review (R29.8):* `ProbeRootComponent` prints the root component's
+  quoted `Name2` when SOLIDWORKS answers one, which for a part may be J's own name, so a quoted
+  name is recorded as `a component name`; `(null)` and `(not IComponent2: <type>)` are recorded
+  as printed.
 
 ### R29.5 The drift (T367, T368)
 
@@ -5776,7 +5791,10 @@ into 011 T095, part 4's screenshot kept at step 4.7.
 | `test_the_plan_never_lets_the_update_script_pull` | at least three runs, not six | 175A removed 5.5's four runs |
 | `test_the_remodel_probes_are_the_last_step_before_the_handoff` | 5.6 never `blocked by 5.5` | 175A: no return to wait on |
 | `test_the_time_estimate_is_the_sum_of_its_steps` | 5.1 to 5.4 85 then 110 minutes, 5.5 15 | the Gemini test's 5 minutes (94A, 173A) out; T303a's 25 in (169A) |
-| `test_show_remodel_ledger_prints_each_probes_verdict_and_reason`, renamed `..._hands_each_answers_file_to_swreview_remodel_ledger` | `uv` stood in; the reader's lines are not read here | 166A: `swreview remodel ledger`, another lane's, reads the ledger; `rendered_ledger` is unchanged for the lane that moves it |
+| `test_show_remodel_ledger_prints_each_probes_verdict_and_reason`, renamed `..._hands_each_answers_file_to_swreview_remodel_ledger` | `uv` stood in; the reader's lines are not read here | 166A: `swreview remodel ledger`, another lane's, reads the ledger; `rendered_ledger` is unchanged for the lane that moves it. *On review (R29.8, T370):* `test_swreview_remodel_ledger_prints_what_step_5_6_reads` reads an answers file through that command once it is in the checkout, and skips until then |
+| `test_the_handover_gives_only_commands_the_plan_gives` (unchanged) | its floor, `len(lines) >= 15`, held by content | *Recorded on review (R29.8):* withdrawing 008 T106's Gemini block and 009 T082's older build (T364) would have left the handover 11 code lines. T364 split `git status --porcelain; git branch --show-current` into the plan's own two lines and added the `addin.log` tail, which kept it at 16; the floor was not lowered. On review the `addin.log` line moved out of the block for steps 1.2 to 1.4 into one for step 1.6, beside `swreview seat health`, which S1 runs there |
+| `test_every_feature_with_an_open_seat_task_is_one_the_plan_is_held_to` (T360's own) | holds only the features with an open seat task to `PACKAGES`, and reads 002 T044 | *T370, on review:* it held every `specs/*/tasks.md` to `PACKAGES` while two older pins (`assert tasks, package`) require each package to have an open seat task, so ticking 014 T221 or 015 T119 would turn the suite red with no fix keeping both. Checked by mutation: 014 T221 ticked with 014 kept is red, with 014 dropped green; 016 dropped from `PACKAGES` is red |
+| `test_t303a_reads_the_newest_backend_logs_pid_and_ends_that_process_once_the_copy_is_open` | an older remodel folder holding `open_record.written`, the older backend log given the later name, the copy's open begun a second before it is written with the backend checked alive then, and a daemon writer thread | *T370, on review:* each of three mutations - the block's creation-time guard removed, its sort by write time removed, its wait for `copy_open.begin` in place of `open_record.written` - passed before and fails now |
 
 ### R29.7 Gates
 
@@ -5787,3 +5805,36 @@ lines, as the run printed no summary line), and the same on Python 3.11 (`uv run
 the link check `COUNT 0`; every changed text file LF in the index. No C# changed, so no C# gate
 was run; the one C# test the plan names, `InstalledAssemblyMatchesManifest`, was run alone on this
 machine (R29.4). The two plan test files alone: 268 passed.
+
+### R29.8 The review of T360 to T369 (T370 to T372)
+
+Two reviews read the lane's work, and each finding was checked against the code and the plan.
+Findings are fixed test first (T370 failing, T371 green) unless the table says otherwise. A1 to
+A13 are the first review's findings, and B1 to B3 the second's.
+
+| Finding | Disposition | Evidence and what changed |
+|---|---|---|
+| A1 (high): T360's pin held every `specs/*/tasks.md` to `PACKAGES`, while `assert tasks, package` requires every package to have an open seat task | fixed | 014 (T221) and 015 (T119) each have one seat task, both of them S3's, so ticking either one had no green fix. The pin now holds only the features that have an open seat task (R29.6) |
+| A2: T303a's item 4 could not produce a close after item 2's `nothing was ended`, and nothing put the folder for runs back | fixed | `ReviewHost.EndTheRemodelSessionsTheRunRootLeaves` returns at once when the run root stays the same. Item 4 now moves the folder to the other of the two folders. Step 5.3 ends with the folder at `$runs` whatever happened, and step 6.0 checks that `settings.json`'s `run_root` is outside the handover folder (a test runs that check) |
+| A3: T303a's pass left out "before the new backend's start", and judged 30 seconds from a clock that shows minutes only | fixed | `$save` is pasted just before Save. The reading block prints the seconds from it to the close's stamp, and compares that stamp with the first line, `starting`, of the newest backend log (`BackendProcess.Start`); both stamps are ISO (a test runs the block). With Options open, a close the add-in stopped waiting for at 30 seconds runs after the new backend has started, so item 4 records that order and does not judge it |
+| A4: 004 T188's row said S1's logs would show the watch | fixed; owner | Neither `ActiveConfigurationWatch` nor `SwReviewAddIn.StartConfigurationWatch` logs anything. The row now says that S1 cannot show it: the development machine adds a log line first, then a step at S2 follows, as the owner decides |
+| A5: PROBE-15's `root_component:` line could carry J's name | fixed | `Program.ProbeRootComponent` prints the quoted `Name2` of whatever `GetRootComponent3(false)` answers. A quoted name is now recorded only as `a component name` |
+| A6: R29.4 gave the barrier to T303b | fixed; owner | Decision 169A puts the barrier in T303a. R29.4 and the plan now say that items 2 to 4 check its "closed by the close" half, with the backend ended by hand rather than stuck. Its refusal half needs an open held behind the close on SOLIDWORKS's thread, so it stays with the fakes. The owner may confirm this reading |
+| A7: three guards of T303a's wait block survived mutation | fixed | The test now fails on each of them (R29.6) |
+| A8: the Sittings table left steps in no sitting | fixed | Step 5.5 is S3's. Every sitting opens with step 1 and closes with step 6, and section 3.10 is read at S1 and at S4. Steps 2.1 to 2.4, 3.1, 5.1 and 5.2 are named as not yet placed, and S2 to S5 are provisional; a pin holds every step to one of these. "Not in this sitting" now says that S2 and S5 name some of its tasks |
+| A9: `specs/README.md` was stale after 173A | fixed | R29.3 |
+| A10: the handover gained lines to stay over a count floor | fixed | R29.6. The `addin.log` line moved to a step 1.6 block |
+| A11: two rows of "Not in this sitting" did not say what S1 runs | fixed | The rows now name 003 T088's PROBE-15 at step 3.9 and 004 T140's manifest half at step 1.3 |
+| A12 (note): `Show-RemodelLedger` depends on another lane's command | fixed in part | A build without the command is written down (`ledger reader: not in this build`). `test_swreview_remodel_ledger_prints_what_step_5_6_reads` reads an answers file through the command once it is in the checkout, and skips on this lane's base. After the merge, the coordinator checks that the test runs and does not skip |
+| A13 (note): the optional block is cut whenever S1 runs on time | recorded; owner | S1's rows before the block add up to 150 minutes, and with B3's fix the block starts only by 2 h 25. On its estimates it runs only when S1 is five minutes ahead. Whether to move it, shorten it or let S1 run to 3 h 35 is the owner's call |
+| B1 (high): `swreview remodel ledger` is not on this branch, so keep the old reader | rejected | The lane's brief fixes both the name and the merge order: the command is another lane's under decision 166A, and the coordinator merges it before this lane, so no seat runs the plan without it. A12's fallback line and test cover a build or a merge that lacks it |
+| B2: 002 T044 was not read as a seat task | fixed | Its quickstart Scenario 1 opens the native bracket assembly in the pane and presses Show in SOLIDWORKS; the fake provider removes only the need for a key. It is now tagged `[W]`, and the pin asserts that the reader finds it |
+| B3: the optional block's cut rule let S1 run to 3 h 34 | fixed | The block now starts only by 2 h 25. A pin holds that start, the block and the rows after it to 210 minutes |
+
+Gates on `f869bb3` with this record: from `reviewer/`, with the tokenizer required, `pytest -q -m
+"not live"` on Python 3.12, 18,304 passed, 6 skipped, 0 failed (exit 0, counted from the progress
+lines, as the run printed no summary line; the sixth skip is the ledger reader's test, which waits
+for that command), and the same on Python 3.11 (`uv run --isolated --python 3.11 --all-extras`),
+18,304 passed, 6 skipped, 0 failed; `ruff check src tests` clean; the link check `COUNT 0`; every
+changed text file LF in the index. No C# changed, so no C# gate was run. The two plan test files
+alone: 274 passed, 1 skipped.
