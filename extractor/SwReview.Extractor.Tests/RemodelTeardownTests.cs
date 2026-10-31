@@ -1137,6 +1137,52 @@ public sealed class RemodelTeardownTests : IDisposable
         Assert.StartsWith("skipped unwind.DeleteCopy: ", left, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A guard for T329g's narrowness (owner decision 165A; 004 T385; research R26.12, the re-review's RR1): only
+    /// <c>preexisting_rebuild_errors</c> is answered <c>target_mismatch</c> when the unwind leaves the copy. An open stopped
+    /// for another reason whose unwind left the copy keeps its own code - <c>scope_changed</c> (the copy reopened at its
+    /// path inside the rebuild, its signals differing from the probe's), which the tab words as 149A has it, and
+    /// <c>tag_failed</c> (the copy reopened inside <c>OpenDoc7</c>, its tag not read back) - with the file kept and the
+    /// <c>skipped unwind.DeleteCopy</c> marker written all the same.
+    /// </summary>
+    [Theory]
+    [InlineData(RemodelErrorCodes.ScopeChanged)]
+    [InlineData(RemodelErrorCodes.TagFailed)]
+    public void AnotherRefusalWhoseUnwindLeftTheCopyKeepsItsOwnCode(string code)
+    {
+        var markers = new List<string>();
+        _harness.Services.RemodelStage = (_, marker) => markers.Add(marker);
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+        string probeId = RemodelHarness.Ok<RemodelProbeScopeResult>(_harness.Dispatch(
+            RemodelCommands.ProbeScope, "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath) + "}")).ProbeId;
+        if (code == RemodelErrorCodes.ScopeChanged)
+        {
+            _harness.Copy.Signals.SolidBodyCount = 4;
+            _harness.Copy.DuringCall = member =>
+            {
+                if (member == nameof(FakeRemodelDocument.ForceRebuild))
+                {
+                    _harness.Copy.ReopenedAs = new IntPtr(0x4002);
+                }
+            };
+        }
+        else
+        {
+            _harness.Copy.TagWrites = false;
+            _harness.Seat.DuringCall = _ => _harness.Copy.ReopenedAs = new IntPtr(0x4002);
+        }
+
+        BridgeResponse opened = _harness.Dispatch(RemodelCommands.Open, OpenParams(_harness.CopyPath, probeId));
+
+        Assert.Equal(code, RemodelHarness.Refusal(opened));
+        Assert.Empty(_harness.Seat.Closed);
+        Assert.Contains(_harness.CopyPath, _harness.Seat.OpenDocuments);
+        Assert.True(File.Exists(_harness.CopyPath), "the unwind deleted the file under a document it did not open");
+        Assert.False(Assert.Single(_told).CopyClosed);
+        string left = Assert.Single(markers, marker => marker.StartsWith("skipped ", StringComparison.Ordinal));
+        Assert.StartsWith("skipped unwind.DeleteCopy: ", left, StringComparison.Ordinal);
+    }
+
     /// <summary><c>remodel.open</c>'s params for the harness's run, with the copy given.</summary>
     private string OpenParams(string copy, string probeId) =>
         "{\"source_path\":" + JsonSerializer.Serialize(_harness.SourcePath)
