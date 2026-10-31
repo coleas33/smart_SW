@@ -7047,6 +7047,8 @@ into 011 T095, part 4's screenshot kept at step 4.7.
 | `test_the_three_runs_cover_the_catalog_once_with_probe_1_alone_and_last`, renamed `..._with_starts_five_last_and_probe_1_last_of_all` | the third run is the reader's `START_PROBES`, those that never reorder first, then PROBE-3, then PROBE-1 last; the first and second runs hold the rest, each probe once | *T377, on the third review (R29.10, RR1):* PROBE-1 alone split Start's five over three answers files, while `swreview remodel ledger` judges one; the pin now reads the five from the reader itself |
 | `START_WAITS_ON` and `test_the_start_switch_waits_on_the_blocking_probes_then_a_real_plan` | 004 T180 is no longer among what Start waits on; the plan, its row and the handover must say it is done, and none that it is still to be decided | *T377 (R29.10, RR3):* decision 168A closed T180 (R25.9, R26.5) |
 | `test_what_the_start_switch_waits_on_is_what_004_research_lists` | also the owner's call on the no-handle unwind (R26.10) and the committed answers file judged ready (R27.8), in the plan's paragraph, its row, "After S1" and the handover | *T377 (R29.10, RR3):* both are on R25.9's list or R27.8's; tightened |
+| `test_the_specs_readme_counts_a_task_173a_closed_as_done` | the literals of 001, 005 and 008 are this tree's counts (107 / 3, 90 / 27, 132 / 5); 004's row reads 388 / 22, names T182, T187, T303a, T303b and T353 and not T180; the paragraph says the five rows were recounted | *T388 (R29.11, RR8):* main's merges added tasks after the count, and 168A closed T180. Still literals, not computed: a computed pin would turn every lane that adds a task red |
+| `test_swreview_remodel_ledger_prints_what_step_5_6_reads` | no skip when `swreview remodel ledger` is absent | *T388 (R29.11, RR9):* the reader is on main since PR #53, so a missing command fails; tightened |
 
 ### R29.7 Gates
 
@@ -7154,3 +7156,51 @@ counts because main's PRs #50 to #53 were merged in, and the ledger reader's tes
 since the reader is in the checkout. `ruff check src tests` was clean, the link check gave `COUNT
 0`, and every changed text file is LF in the index. No C# changed, so no C# gate was run. The two
 plan test files alone: 278 passed.
+
+### R29.11 The third review's low findings (T388, T389)
+
+The third review (R29.10) also raised five low findings and a note, RR7 to RR12. Each was checked
+against the code and the files before anything changed, and none was rejected; two of its
+suggested fixes were not taken, each said why below. Fixed test first: T388 (`864b80c`) failing,
+T389 (`c3bd954`) green.
+
+| Finding | Disposition | Evidence and what changed |
+|---|---|---|
+| RR7: step 1.6 recorded only `swreview seat health`'s exit code, while 004 T353 asks for every line | fixed | Confirmed: step 1.6 read "Pass: `exit code: 0`. Any other: copy what it printed", so a passing run left no line recorded, while T353's acceptance is "every line recorded, each FAIL with what was done about it", read against runbook section 7, the MANUAL lines checked by eye. The command prints one `PASS` or `FAIL` line per check, one `MANUAL` line per item of `health.MANUAL` and a last `health:` line (`seat/cli.py`). No line holds a path of the machine: a log is named by its file name and a line by its time, the checkout's reasons name no branch, and an unreadable profile's reason drops the path (`seat/health.py`, `ProfileError.reason`; `test_no_path_is_printed_from_the_logs_or_the_options`). The only path-like words it can print are the same on every seat: the profile's default as `%LOCALAPPDATA%\SwReview\standards.yaml`, unexpanded, and `extractor\tools\update-workstation.ps1`. Step 1.6 now has every line from the first `PASS` or `FAIL` line to the `health:` line copied under the findings document's step 1 heading, so any line `uv` prints before them is not; after each `FAIL`, what was done about it from runbook section 7, or `not in this sitting: step <n>` for a fix that is another step's (placing the profile is step 2.2); after each `MANUAL` line, its check's result by eye, or `later` for items 4 and 5. It runs while the SOLIDWORKS step 1.6 started is still running and the only one (R28.7). The results row and the handover's section 1 say so, and runbook section 6, which the command was built to serve, names it in one paragraph. The pin runs the command on empty folders and holds the plan to the kinds of line it prints and the command to printing none of the folders it was given |
+| RR8: `specs/README.md`'s rows recounted on 2026-10-31 are stale after main's merges, and 004's row lists T180 | fixed; the computed pin not taken | Confirmed with a script over this tree's `tasks.md` files, counting their `- [x]` and `- [ ]` lines: 001 107 / 3, 005 90 / 27 and 008 132 / 5, 002 unchanged at 298 / 4. 004's row still had `9da0057`'s 178 / 21 and listed T180, closed by 168A, and T188, ticked on 2026-10-24. The rows of 001, 002, 004, 005 and 008 are recounted, 004's to 388 / 22 with T388 and T389 ticked: T003, T004, T033 to T039, T135 to T141, T164, T182, T187, T303a, T303b and T353. The pin's literals follow (R29.6). The review suggested a pin that computes each row from the task lists. Not taken: every lane that adds or ticks a task would turn red until it edits the README, and several lanes run at once. The counts stay literals, dated, and are recounted by hand. Left to the owner, not fixed: the rows the README dates at `9da0057` are stale on this tree too, 003 (93 / 3 against 89 / 3), 006 (108 / 11 against 101 / 11), 010 (127 / 11 against 119 / 7; its text names 7 open tasks, not T130, T134, T135 and T138) and 011 (203 / 12 against 91 / 11; T171 not named), and 014's (246 / 24 against 242 / 24). Recounting them rewrites status texts beyond this finding |
+| RR9: the ledger reader's test skipped when `swreview remodel ledger` was absent | fixed | Confirmed: the reader is on main since PR #53, so the skip could only hide a renamed or removed command. The skip is gone (R29.6). Checked by mutation: with the command registered as `ledger-gone`, the test fails. The review's second suggestion, to assert the `RemodelStart.SeatValidated:` line's `not ready` form, is held already by T377's `test_every_run_reads_start_not_ready_in_s1_and_the_line_is_recorded_not_judged`, which reads that line from the reader |
+| RR10: three gaps in S1's order and in rule 1 | fixed | (a) Confirmed: step 5.3 keeps part J open and active, row 8 ran step 5.6's second run straight after rows 4 to 7, and `probe remodel` refuses while any document is open (step 5.6, item 4). The optional block's recipes close their assemblies at their end, so J alone makes the refusal. Row 8 now does 5.6's item 1's Window > Close All, Don't Save first, and the handover's S1 paragraph says so. (b) Confirmed: J is S1's only document, so step 1.6's part was J, opened before row 4's `Save-Fingerprint 'before'`, while the S1 bullet said the fingerprint came before J was first opened. The fingerprint moves to step 1.6, before SOLIDWORKS starts: row 1, the bullet, an *In S1* paragraph at step 1.6 and the handover's S1 paragraph say so. It is then taken before anything opens J and while nothing holds it open; `Save-Fingerprint` reads only `notes\paths.txt`, which holds J before the sitting, and the dumps, which S1 has none of. The results sheet now names 3.1's `real files fingerprinted` row among S1's, which row 4's fingerprint already needed. (c) Confirmed: rule 1 listed every save of the sitting but the optional block's into `$H\scratch`; it names them now (172A) |
+| RR11: 002 T063 still waited on T055a for Gemini | fixed | Confirmed: T063 read "Gemini deferred until T055a" and "for both CLIs", while T055a is ticked, closed under 173A for 94A, and the plan's row already reads T063 as the terminal's Codex run. T063 carries a dated note: Codex only, with Gemini's run waiting on a new owner decision. `contracts/cli-profiles.md` still says the refusal probe runs for both CLIs; it is the contract for both, and is left as it is |
+| RR12 (note): (a) merge `f356713`'s message keeps git's `# Conflicts:` lines; (b) T376 (`7b0b324`) had no failing commit of its own; (c) the handover's "by its number" is prose no pin holds; (d) 004 T033 to T039 and T187 are still untagged | recorded, not fixed | Each confirmed. (a) The message holds `# Conflicts:` and the file's name; history is not rewritten for it. (b) T376's parent is that merge, on which the widened seat-task pins (T360) were red on 004 T353, as they should be; T376 made them green, and nothing is redone. (c) No pin holds the words; the commands are held, since `test_t303a_ends_only_the_backend_the_add_in_started_and_only_by_its_pid` refuses any `Stop-Process` but `-Id $backend`, and any `taskkill`, in the plan, the handover and the runbook. (d) Left to the owner, because tagging them puts new rows in the sittings. A trial in the worktree, not kept, found every plan and handover pin green with the eight tagged `[W]`, since the plan, the results sheet and the handover name each with its package already. R29.2's reason, another lane editing those lines, no longer holds after the merge |
+
+**Test-first evidence.** At T388 (`864b80c`), the two plan test files gave 277 passed and 4
+failed, each on its assertion about the files: the README pin (001's count first), the seat
+health pin (`` `PASS` `` absent from step 1.6), the S1 order pin (row 8 without 5.6's item 1)
+and the T063 pin. The ledger test, changed on purpose, was green: the reader is in the checkout.
+All 281 were green after T389 (`c3bd954`).
+
+**Mutations.** Each was made alone in the worktree, the pin it names was run, and the file was
+put back byte for byte:
+
+| # | Mutation | Failed |
+|---|---|---|
+| 1 | the results row without "every line" | the seat health pin |
+| 2 | step 1.6 without "the only SOLIDWORKS running" | the seat health pin |
+| 3 | runbook section 6 without the command's name | the seat health pin |
+| 4 | step 1.6 asking for the exit code, not every line | the seat health pin |
+| 5 | row 8 without 5.6's item 1's Close All | the S1 order pin |
+| 6 | the fingerprint back in row 4 | the S1 order pin |
+| 7 | step 1.6's S1 paragraph without `Save-Fingerprint 'before'` | the S1 order pin |
+| 8 | rule 1 without the optional block | the S1 order pin |
+| 9 | 002 T063 without its note | the T063 pin |
+| 10 | 004's row listing T180 again | the README pin |
+| 11 | 005's row back to 86 / 27 | the README pin |
+| 12 | `swreview remodel ledger` registered as `ledger-gone` | the ledger test, which skipped before |
+
+Gates on the tree of this record: from `reviewer/`, with the tokenizer required, `pytest -q -m
+"not live"` on Python 3.12, 18,668 passed, 5 skipped, 0 failed (exit 0, counted from the progress
+lines, as the run printed no summary line), and the same on Python 3.11 (`uv run --isolated
+--python 3.11 --all-extras`), 18,668 passed, 5 skipped, 0 failed (exit 0): R29.10's counts and the
+three new pins. `ruff check src tests` was clean, the link check gave `COUNT 0`, and every changed
+text file is LF in the index. No C# changed, so no C# gate was run. The two plan test files
+alone: 281 passed.

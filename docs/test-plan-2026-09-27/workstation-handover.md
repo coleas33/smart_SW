@@ -48,8 +48,8 @@ T182; step 5.3); the close in process, idle and then with a dialog open (004 T30
 which ends only the backend the add-in started, by its number; optionally, two made-up
 assemblies built at the seat and never committed (006 T102's transparency, 001 T076's volume
 unit; decision 172A); Window > Close All, since part J is still open, then step 21's second and
-third runs, the third holding the five probes Start waits on; and the test plan's handoff steps 6.0,
-6.1, 6.3 and 6.5. The later sittings, S2 to S5, are each 3.5 hours or less and on one theme (the
+third runs, the third holding the five probes Start waits on; and the test plan's handoff steps
+6.0, 6.1, 6.3 and 6.5. The later sittings, S2 to S5, are each 3.5 hours or less and on one theme (the
 test plan's section "Sittings").
 
 ## Where the 2026-09-26 sitting stopped, and what the next sitting adds
