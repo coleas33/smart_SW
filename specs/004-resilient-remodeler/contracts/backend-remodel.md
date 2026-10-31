@@ -108,6 +108,10 @@ it and the count is what the engineer needs to read:
 | `preexisting_rebuild_errors` | `200 {copy_path, rebuild_error_count: <from the refusal's detail, null when it carries none>, copy_present: false}` - the bridge has already deleted the copy and closed the document |
 | any other `error_code` | the error body of the class named in the table below |
 
+*Amended 2026-10-31 (owner decision 165A's second review round; `research.md` R26.11):* the host deletes `copy/` on
+`copy_present: false`, so the bridge answers `preexisting_rebuild_errors` only when its unwind did not leave the copy;
+one stopped for rebuild errors whose unwind left the copy answers `target_mismatch`, an error body that keeps the copy.
+
 *Amended 2026-09-27 (default taken 2026-09-27, the owner may revise; `tasks.md` T175, research
 R14.1):* once the bridge's `remodel.open` has answered ok, the bridge holds a session - the copy
 open and tagged, the four settings changed. When anything after that fails - reading or writing

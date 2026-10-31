@@ -5414,7 +5414,7 @@ T303 is split, and T138 and T187 join the list.
 - *Done (168A; R26.5):* T180 and its owner decision.
 - PROBE-1, PROBE-2, PROBE-3, PROBE-4 and PROBE-12.
 - A real Plan whose source hash stays unchanged.
-- *Done (165A; R26.1):* the barrier unwind's close by path (R25.13).
+- *Done (165A; R26.1, R26.10, R26.11):* the barrier unwind's close by path (R25.13).
 - T138 and T187 (owner decision 170A; R26.7): `require_stage_1` refuses every change while
   `IDENTITY.calibrated` is false (`reviewer/src/swreview/remodel/tolerances.py:149`, asked at `runner.py:887`
   and `apply.py:1732`), so Start waits on T138's calibration of `IDENTITY` from PROBE-8 and on T187's
@@ -5731,7 +5731,9 @@ hold, are each the defect, and an identity that cannot be shown equal is not the
 left is the run's own copy in the run's own folder, kept as evidence as a run folder is (constitution Principle I). The
 fix covers every failure after `OpenDoc7` with a handle back, not only the barrier's: a copy reopened before the
 rollback or the rebuild write fails `VerifyTarget`'s check 3 there, and that unwind now leaves it too (a guard since the
-review round, R26.10: the open then answers check 3's own error, not `target_mismatch`).
+review round, R26.10: the open then answers check 3's own error, not `target_mismatch`). *Amended on the second review
+round (R26.11):* an open stopped for rebuild errors whose unwind leaves the copy answers `target_mismatch`, not
+`preexisting_rebuild_errors`, whose answer has the host delete `copy/`.
 
 ### R26.2 A plan whose session ended while it was finishing is tracked as ended (165A; R22.14; T322, T323)
 
@@ -5937,6 +5939,73 @@ M109 is what keeps T177's rule: a close that threw, or left the open's own docum
   checkout), counted from the progress lines (no summary line was printed; 18,281 collected): Python 3.12 18,275
   passed and 6 skipped; Python 3.11 (`uv run --isolated --python 3.11 --all-extras`) 18,276 passed and 5 skipped. None
   failed.
+- **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no broken link
+  (`COUNT 0`); every changed file is `i/lf`.
+- **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file.
+
+No SOLIDWORKS process, seat task or paid/live test ran, and no process was stopped by name.
+
+### R26.11 Second review round (T329f to T329h; 2026-10-31)
+
+A Codex review of `bd5b082`, with one finding. No new owner decision; no guard key, allowlist entry, bridge command,
+secret or write path. The finding was checked by reading the three layers first.
+
+**F1 (Codex, high): a rebuild-error refusal whose unwind left the copy still has the host delete it.** Holds; fixed
+(T329f, T329g). An open stopped at step 11 for rebuild errors whose unwind leaves the copy - another document open at
+the copy's path, identity reads that throw, or (R26.10) the copy opened again while the unwind closed it - skipped the
+close and the delete and then rethrew `preexisting_rebuild_errors` unchanged. The backend's `_open`
+(`reviewer/src/swreview/chat/remodel.py`) answers that code `200 {copy_present: false}`, and `RemodelHost`'s Plan, on any
+of its three branches for it, calls `DeleteCopyFolder`: its `CloseCopy` finds no session, so nothing is closed, and its
+`Directory.Delete(copy/, recursive)` deletes the file the unwind kept, or, if SOLIDWORKS holds it, throws an
+`IOException` that replaces the refusal. This happens on Plan, with Start off. Re-entrant timing is not needed for it:
+real rebuild errors and an identity read that throws are enough, and it undoes what 165A asked for, so it is fixed and
+not recorded under 159A's policy.
+
+**The fix (T329g).** One place in the bridge: when the unwind left the copy and the open's failure is
+`preexisting_rebuild_errors`, the open answers `target_mismatch`, as every other open whose unwind left the copy does (the
+barrier's, R26.1), in one fixed sentence that names no path or run: "the part already has rebuild errors at baseline, so
+the run stops; the document SOLIDWORKS has open at the copy's path is not the one this open opened, or could not be
+read, so it was neither closed nor deleted." The backend makes `target_mismatch` a `RunFolderFailed` refusal
+(`BRIDGE_REFUSALS` has no row for it, the same path as the unlisted token in
+`test_every_bridge_error_code_becomes_a_named_refusal`), and the host deletes `copy/` on `PreexistingRebuildErrors` only,
+so the copy is kept, and the failed plan's close finds no session. Why a code and not a flag carried through to the
+host, as the finding suggested: both layers above read `preexisting_rebuild_errors` as "the copy is deleted"
+(`backend-remodel.md`, the host's three branches), so keeping that true changes neither of them, where a `copy_left`
+flag would change three layers and two contracts. T177's rule that none of the unwind's own failures replaces the open's
+error still holds; the code is changed here because its promise would be false. The engineer loses the count, which the
+reply did not carry in practice (below). A rebuild-error open whose unwind closed and deleted the copy is unchanged.
+`bridge-remodel.md` (step 11, the unwind's paragraph and the two code rows) and `backend-remodel.md` (`POST
+/remodel/open`) are amended.
+
+**Tests first.** T329f (`ecdd71b`) is the deliberately red commit: all three rows of
+`ARebuildErrorRefusalWhoseUnwindLeftTheCopyDoesNotSayTheCopyIsDeleted` failed on the refusal's code
+(`preexisting_rebuild_errors` answered), and the host guard `AnOpenRefusedWithTheCopyLeftOnDiskKeepsTheCopy` (a
+`RunFolderFailed` refusal from the open keeps the copy on disk) passed. All green after T329g (`9a7e34e`). With the
+backend case named above they cover the three layers; no test crosses all three in one process.
+
+**Mutation.** M110, the replacement made whatever the unwind did (`leaveTheCopy &&` taken out by an exact replacement
+matching once), built and run against `RemodelTeardownTests`, `RemodelOpenHandlerTests`, `RemodelIdleSettingsTests`,
+`BridgeDispatcherTests`, `GuardTests` and `RemodelFinishHandlerTests` (735 cases): 11 failed, among them
+`Open_PreexistingRebuildErrors_DeletesTheCopyAndClosesTheDocument`,
+`Open_WhoseUnwindCloseThrows_StillDeletesTheCopyAndAnswersItsOwnRefusal` and
+`Open_WhoseUnwindCloseLeftTheCopyOpen_TellsAnEndingWithTheCopyNotClosed`; restored from the bytes read before, sha256
+equal. Taking the replacement out altogether is T329f's red state.
+
+**Noticed, not changed.** The bridge's `preexisting_rebuild_errors` carries its count only in its sentence, with no
+`detail` (step 11 passes none, and `RemodelCommandError.Detail` is a map of strings), so the backend's
+`_rebuild_error_count` reads null and the host words every real rebuild-error refusal as "the rebuild-error count could
+not be read on the copy". The backend's own test hands it a detail the bridge never sends. The copy is deleted either
+way, so only the words are wrong; it is outside this lane's files and is for the owner.
+
+**Gates on the final tree.**
+
+- **C# build.** `dotnet build extractor\SwReview.sln -c Release --no-incremental`: zero warnings, zero errors.
+- **C# tests.** 10,225 extractor and 4,281 add-in tests passed, none failed or skipped: R26.10's counts and the round's
+  three bridge rows and one host guard.
+- **Python.** Unchanged by the round, run again on the final tree: the required-tokenizer non-live suites
+  (`SWREVIEW_TOKENIZER_DIR=C:\t\144a-tok`, `--basetemp` outside the checkout), counted from the progress lines (no
+  summary line was printed): Python 3.12 18,275 passed and 6 skipped; Python 3.11 (`uv run --isolated --python 3.11
+  --all-extras`) 18,276 passed and 5 skipped. None failed, and each run exited 0.
 - **Lint, links and line endings.** `uv run ruff check src tests` passed; the link check found no broken link
   (`COUNT 0`); every changed file is `i/lf`.
 - **Guards.** `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file.
