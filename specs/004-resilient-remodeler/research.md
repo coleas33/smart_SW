@@ -7044,6 +7044,9 @@ into 011 T095, part 4's screenshot kept at step 4.7.
 | `test_every_feature_with_an_open_seat_task_is_one_the_plan_is_held_to` (T360's own) | holds only the features with an open seat task to `PACKAGES`, and reads 002 T044 | *T370, on review:* it held every `specs/*/tasks.md` to `PACKAGES` while two older pins (`assert tasks, package`) require each package to have an open seat task, so ticking 014 T221 or 015 T119 would turn the suite red with no fix keeping both. Checked by mutation: 014 T221 ticked with 014 kept is red, with 014 dropped green; 016 dropped from `PACKAGES` is red |
 | `test_t303a_reads_the_newest_backend_logs_pid_and_ends_that_process_once_the_copy_is_open` | an older remodel folder holding `open_record.written`, the older backend log given the later name, the copy's open begun a second before it is written with the backend checked alive then, and a daemon writer thread | *T370, on review:* each of three mutations - the block's creation-time guard removed, its sort by write time removed, its wait for `copy_open.begin` in place of `open_record.written` - passed before and fails now |
 | `test_the_handover_names_every_open_seat_task_of_features_008_to_011`, renamed `..._with_its_package`; `test_a_range_names_each_task_in_it` removed | reads each task with its package in front of it (`qualified_tasks`), not a bare id (`named_tasks`, removed as unused) | *T373, on the second review (R29.9, cx-1):* a bare id is shared across packages, so 001 T103 left the handover with the pin green. Tightened, not loosened: a handover the new pin passes, the old one passed too, and the qualified reader's own test (`test_a_qualified_range_names_each_task_in_it_and_a_bare_id_names_nothing`) covers ranges and bare ids |
+| `test_the_three_runs_cover_the_catalog_once_with_probe_1_alone_and_last`, renamed `..._with_starts_five_last_and_probe_1_last_of_all` | the third run is the reader's `START_PROBES`, those that never reorder first, then PROBE-3, then PROBE-1 last; the first and second runs hold the rest, each probe once | *T377, on the third review (R29.10, RR1):* PROBE-1 alone split Start's five over three answers files, while `swreview remodel ledger` judges one; the pin now reads the five from the reader itself |
+| `START_WAITS_ON` and `test_the_start_switch_waits_on_the_blocking_probes_then_a_real_plan` | 004 T180 is no longer among what Start waits on; the plan, its row and the handover must say it is done, and none that it is still to be decided | *T377 (R29.10, RR3):* decision 168A closed T180 (R25.9, R26.5) |
+| `test_what_the_start_switch_waits_on_is_what_004_research_lists` | also the owner's call on the no-handle unwind (R26.10) and the committed answers file judged ready (R27.8), in the plan's paragraph, its row, "After S1" and the handover | *T377 (R29.10, RR3):* both are on R25.9's list or R27.8's; tightened |
 
 ### R29.7 Gates
 
@@ -7104,3 +7107,50 @@ having gone with `named_tasks`), and the same on Python 3.11 (`uv run --isolated
 --all-extras`), 18,303 passed, 6 skipped, 0 failed; `ruff check src tests` clean; the link check
 `COUNT 0`; every changed text file LF in the index. No C# changed, so no C# gate was run. The two
 plan test files alone: 273 passed, 1 skipped.
+
+### R29.10 The third review of the S1 plan work (T377 to T379)
+
+A third review read the lane at `57cb405`, with PR #53 (the probe evidence and its reader, R27)
+merged in. Each finding was checked against the code, the reader and the plan, and fixed test
+first: T377 (`e383a2d`) failing, T378 (`fee1e94`) green.
+
+| Finding | Disposition | Evidence and what changed |
+|---|---|---|
+| RR1 (high): S1's three probe runs cannot give the one answers file Start's switch is judged from, and step 5.6 does not say how to read the reader's `not ready` line | fixed; owner | Confirmed: `start_readiness` (`remodel/ledger.py`) judges one file, `test_seat_switch_evidence.py` allows Start only with one committed file judged ready, and the plan put PROBE-2, 4 and 12 in run 1, PROBE-3 in run 2 and PROBE-1 in run 3. Of R27.4's two choices the plan's layout is this lane's (R27.2), so the plan takes the first. The third run is now the reader's `START_PROBES`: PROBE-2, 4 and 12, which never reorder, then PROBE-3, then PROBE-1 last, into `remodel-start` (`RunAll` runs the `--probe` list in its order). The first run keeps every other no-reorder probe, PROBE-8 among them (004 T187), and the second keeps PROBE-5 and PROBE-20; each probe still runs once. One cost is recorded: a hang in PROBE-3 now costs PROBE-1's answer at that sitting, where before PROBE-1 ran alone. Start cannot be ready after such a hang either way. Step 5.6's item 4 and the handover's step 21 say that the `RemodelStart.SeatValidated: not ready - ` line reads `not ready` after every S1 run by design: only the third run holds the five, and IDENTITY is calibrated only after S1 (T138). The line is recorded, not judged: the third run's reasons other than IDENTITY's, or `only IDENTITY`. S1's rows 3 and 8 name the tasks that moved. The owner may still choose R27.4's other choice, a reader that judges several files, and the plan would then go back to the old split |
+| RR2 (high): the older "next sitting" sections send the engineer to step 4.9's paid Review and to step 2.4 | fixed | Confirmed: "The next sitting starts at step 2.4" and "The next sitting runs this retest first" stood with no qualifier after S1. Both sections now open with `*Superseded 2026-10-31 by S1 (decision 167A):*`, those two sentences are in the past tense, and step 4.9's header says it is S3's. A pin holds both openings, and that no section but S1's says what the next sitting runs or where it starts |
+| RR3 (medium): Start's list is stale against R25.9 | fixed | Confirmed: T180 is ticked (168A; R26.5), and R25.9 names the owner's call on the no-handle unwind (R26.10, Codex's CX1). The plan's paragraph, its row in "Not in this sitting", "After S1" and the handover's two places now say that T180 is done, and they name the no-handle unwind and R27.8's committed answers file, judged ready. The pins were changed on purpose (R29.6) |
+| RR4 (medium): item 6 says a hung run leaves no answers file and no log | fixed | Confirmed against R27.1, R27.2 and R27.9.2: `ExtractLog` writes each line through, and `RemodelProbeLedger.Recorder` starts the file before the part is built and rewrites it after each probe. Item 6 now keeps each finished probe's verdict, and writes `blocked: hung in run <n>` only for the probes the reader prints `not finished`. Item 5's rule and the handover's step 21 follow it. The pin reads the reader's own `not finished` words |
+| RR5 (medium): decision 148A's PROBE-12 question cannot be answered from the reader | fixed | Confirmed: the reader prints `threw <Type> 0x<HRESULT>` (R27.3), and the message goes only to the console and the log, after the line `PROBE-12 threw; its message is kept in this log, never the ledger:` (`Program.cs`; `ExtractLog.WriteError` writes the line, then `error.Message`). Item 4, the handover and the results row now point at that line, and ask only whether the line after it contains `OpenDoc7`. The pin reads the line's words from `Program.cs` and the order from `ExtractLog.cs`. PROBE-12 is now in the third run, so the check comes after the third run |
+| RR6 (medium): T303a's stuck case and its fallback record are missing | fixed; owner | Confirmed: T303a asks for the close once with the backend stuck, its process suspended by its PID, or for the seat's inability to be recorded. The plan cannot suspend it. Windows has no command for that, and when the add-in starts the backend through `uv`, the number item 1 reads is uv's: its server is a grandchild in the backend's job (`BackendProcess.cs`). Suspending that number would leave the server answering, and a pass recorded then would be false. T303a's new item 5 has the engineer write the task's own fallback, `stuck case: the seat cannot suspend a process; left to the fakes (169A)`, in a third row, and suspend or end nothing. The owner may want a real stuck pass instead, at the cost of a suspend no seat has run: the server's own process, found from its listening port, suspended by a tool the seat allows. Or the owner may amend T303a |
+
+**Test-first evidence.** At T377 (`e383a2d`), seven pins failed on their assertions about the
+plan's text, and on nothing else: the three-runs pin, the `not ready` pin, the hung-run and
+PROBE-12 pin, the two Start pins, the "next sitting" pin and the stuck-case pin. The reader's own
+answer in the `not ready` pin held already: all five verified gives one reason, IDENTITY's. All
+were green after T378 (`fee1e94`). T378 corrected one T377 pin: the stuck-case pin had looked for
+a backtick before the fake's bare name, which the plan never writes. It now asks for the whole
+qualified name in backticks, which is stricter.
+
+**Mutations.** Each was made alone in the worktree, the two plan test files were run, and the
+file was restored from git (`git status` clean after each):
+
+| # | Mutation | Failed |
+|---|---|---|
+| 1 | the third run's list with PROBE-1 first | the three-runs pin, and the handover's two pins on the same runs |
+| 2 | the retest section's superseded line removed | the "next sitting" pin |
+| 3 | "The next sitting runs this retest first" put back | the "next sitting" pin |
+| 4 | the handover's "004 T180 is done" back to "is decided ... before the switch" | the Start pin |
+| 5 | item 6's `not finished` clause back to "for that run's probes" | the hung-run pin |
+| 6 | the handover's "recorded, not judged" changed | the `not ready` pin |
+| 7 | the row's no-handle unwind (R26.10) removed | the R25.9 list pin |
+| 8 | the results sheet's stuck-case row renamed | the stuck-case pin |
+| 9 | item 4's PROBE-12 check back to "whether it names `OpenDoc7`" | the hung-run pin |
+
+Gates on `fee1e94` with this record: from `reviewer/`, with the tokenizer required, `pytest -q -m
+"not live"` on Python 3.12, 18,665 passed, 5 skipped, 0 failed (exit 0, counted from the progress
+lines, as the run printed no summary line), and the same on Python 3.11 (`uv run --isolated
+--python 3.11 --all-extras`), 18,665 passed, 5 skipped, 0 failed. These are more than R29.9's
+counts because main's PRs #50 to #53 were merged in, and the ledger reader's test no longer skips,
+since the reader is in the checkout. `ruff check src tests` was clean, the link check gave `COUNT
+0`, and every changed text file is LF in the index. No C# changed, so no C# gate was run. The two
+plan test files alone: 278 passed.
