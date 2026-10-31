@@ -31,7 +31,10 @@ public enum ReorderAttempt
 /// </summary>
 public sealed class ParkingReorder : IDisposable
 {
-    /// <summary>The message an attempt that throws carries: the host's own words, which the ledger must keep.</summary>
+    /// <summary>
+    /// The message an attempt that throws carries: the host's own words, which the ledger must not
+    /// carry - it records the exception's type and HRESULT (owner decision 171A, 004 T334).
+    /// </summary>
     public const string HostMessage = "the host's own words: the reorder failed";
 
     private readonly FakeRemodelProbeHost _host;

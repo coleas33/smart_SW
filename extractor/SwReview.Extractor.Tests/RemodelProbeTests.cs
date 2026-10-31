@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using SwReview.Extractor.Rms;
 using SwReview.Extractor.Sw;
@@ -235,64 +236,86 @@ public class RemodelProbeTests
         Assert.Equal(RemodelProbeRunner.NotImplementedNote, record.RawResult[RemodelProbeRunner.NoteKey]);
     }
 
+    // A thrown body's row carries the exception's type and HRESULT, never its message: a
+    // SOLIDWORKS or file-system message may name a path with the user's name in it, and a
+    // ledger from the probe's own throwaway part may be committed (owner decision 171A; 004
+    // T334, research R27.3). Changed on purpose from T171's "the host's own words": the host's
+    // own exception, not the wrapper's, still reaches the ledger - as its type.
+
     [Fact]
     public void Run_ABodyThatThrows_RecordsUnresolvedAndNeverVerified()
     {
-        var executors = new Dictionary<string, RemodelProbeExecutor>
-        {
-            ["PROBE-3"] = _ => throw new InvalidOperationException("ReorderFeature raised a modal"),
-        };
+        var error = new InvalidOperationException("ReorderFeature raised a modal");
+        var executors = new Dictionary<string, RemodelProbeExecutor> { ["PROBE-3"] = _ => throw error };
 
         RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-3", Context(), executors);
 
         Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict);
         Assert.NotEqual(RemodelProbeVerdict.Verified, record.Verdict);
-        Assert.Equal("ReorderFeature raised a modal", record.RawResult[RemodelProbeRunner.ErrorKey]);
+        Assert.Equal($"InvalidOperationException 0x{error.HResult:X8}", record.RawResult[RemodelProbeRunner.ErrorKey]);
     }
 
     [Fact]
-    public void Run_ABodyWhoseCallCameBackWrappedInATask_RecordsTheHostsOwnMessage()
+    public void Run_ABodyWhoseCallCameBackWrappedInATask_RecordsTheHostsOwnExceptionNotTheWrapper()
     {
-        // A call made through a task arrives as an AggregateException whose own message, "One or
-        // more errors occurred.", says nothing; the ledger keeps the host's own words (013 T137,
-        // 004 T171).
+        // A call made through a task arrives as an AggregateException, which says nothing of what
+        // failed; the ledger records the host's own exception (013 T137, 004 T171), as its type.
         var executors = new Dictionary<string, RemodelProbeExecutor>
         {
-            ["PROBE-1"] = _ => throw new AggregateException(new InvalidOperationException("the host's own words")),
+            ["PROBE-1"] = _ => throw new AggregateException(new COMException("the host's own words", unchecked((int)0x80004005))),
         };
 
         RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-1", Context(), executors);
 
         Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict);
-        Assert.Equal("the host's own words", record.RawResult[RemodelProbeRunner.ErrorKey]);
+        Assert.Equal("COMException 0x80004005", record.RawResult[RemodelProbeRunner.ErrorKey]);
     }
 
     [Fact]
-    public void Run_ABodyWhoseWrappedCallsBothThrew_RecordsEveryHostMessageInOrder()
+    public void Run_ABodyWhoseWrappedCallsBothThrew_RecordsEveryHostExceptionInOrder()
     {
         var executors = new Dictionary<string, RemodelProbeExecutor>
         {
             ["PROBE-1"] = _ => throw new AggregateException(
-                new InvalidOperationException("first"),
-                new AggregateException(new InvalidOperationException("second"))),
+                new COMException("first", unchecked((int)0x80004005)),
+                new AggregateException(new COMException("second", unchecked((int)0x8001010A)))),
         };
 
         RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-1", Context(), executors);
 
-        Assert.Equal("first; second", record.RawResult[RemodelProbeRunner.ErrorKey]);
+        Assert.Equal("COMException 0x80004005; COMException 0x8001010A", record.RawResult[RemodelProbeRunner.ErrorKey]);
     }
 
     [Fact]
-    public void Run_AnAggregateWithNoInnerException_KeepsItsOwnMessage()
+    public void Run_AnAggregateWithNoInnerException_RecordsItsOwnType()
     {
-        // Nothing inside to prefer: its own message is the only words there are, never an empty string.
+        // Nothing inside to prefer: its own type is what there is, never an empty string.
         var error = new AggregateException("the wrapper's only words", Array.Empty<Exception>());
         var executors = new Dictionary<string, RemodelProbeExecutor> { ["PROBE-1"] = _ => throw error };
 
         RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-1", Context(), executors);
 
-        Assert.Equal(error.Message, record.RawResult[RemodelProbeRunner.ErrorKey]);
-        Assert.False(string.IsNullOrEmpty(record.RawResult[RemodelProbeRunner.ErrorKey]));
+        Assert.Equal($"AggregateException 0x{error.HResult:X8}", record.RawResult[RemodelProbeRunner.ErrorKey]);
+    }
+
+    [Fact]
+    public void Run_AHostThatThrowsWithAPathInItsMessage_TheLedgerShowsItsTypeAndHresultOnly()
+    {
+        const string fictionalPath = @"C:\Users\FICT-engineer\Designs\FICT-bracket.SLDPRT";
+        var host = new FakeRemodelProbeHost
+        {
+            ReopenPartImpl = _ => throw new COMException($"Could not open '{fictionalPath}'.", unchecked((int)0x80004005)),
+        };
+        var part = new RemodelProbePart(new object(), @"C:\out\probe-part\remodel-probe.SLDPRT", Array.Empty<object>());
+        var context = new RemodelProbeContext(part, new SwGate(), "32.5.0.48", host, @"C:\out");
+
+        RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-12", context);
+        string yaml = RemodelProbeLedger.Render("32.5.0.48", new[] { record }, Fixed);
+
+        Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict);
+        Assert.Equal("COMException 0x80004005", record.RawResult[RemodelProbeRunner.ErrorKey]);
+        Assert.DoesNotContain("FICT-", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Could not open", yaml, StringComparison.Ordinal);
     }
 
     [Fact]
