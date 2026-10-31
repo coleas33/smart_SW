@@ -1447,7 +1447,7 @@ def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
     assert run.index("RemodelSystemToggles.Within(") < run.index("RemodelProbeLedger.Write(")
     write = log[log.index("public void Write(") : log.index("public void WriteError(")]
     assert "File.AppendAllText(" not in log and "AutoFlush = true" in log
-    assert "FileShare.ReadWrite" in log and "_file" in write
+    assert "FileShare.ReadWrite" in log and "ToFile(line)" in write
     fragments = [
         '"probes: {records.Count} run "',
         '"({Count(records, RemodelProbeVerdict.Verified)} verified, "',
