@@ -303,6 +303,14 @@ Re-measured on main after the four lanes of 2026-09-23 merged (feature 008 US4 a
 
 ---
 
+## Phase 13: Amendment 2026-10-31 (owner decision 166A): one verdict per hole pair
+
+**Goal**: the runner's verdict key tells apart two findings that differ only by their entity ids, so a re-run folds onto the verdict it re-judges and never onto another (research R2.8 and R5; `docs/review-backlog.md`, "Features 008 and 009: open follow-ups").
+
+- [x] T130 [P] Test first. In `reviewer/tests/unit/test_runner_provider.py`: `test_a_rerun_of_one_of_two_hole_pairs_on_the_same_components_keeps_each_its_verdict` - a package with two hole pairs across the same two components, `hol:0001`/`hol:0003` and `hol:0002`/`hol:0004`, each pair checked by `check_hole_alignment` with no tolerance and an evidence request opened; the resumed turn re-runs the first pair; each finding keeps its own pair, `F-001` the first and `F-002` the second. Acceptance observed before T131: 1 failure on its assertion (`F-002` holds the first pair's verdict and the second pair's is gone)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies
@@ -319,6 +327,7 @@ Re-measured on main after the four lanes of 2026-09-23 merged (feature 008 US4 a
 - **Phase 10 (amendment, decision 3A)**: after Phase 9; T118 after T117; T120 after T119; T121 after T118, T120 and feature 010 T098, T099 and T108 (the change that makes the fixtures drift)
 - **Phase 11 (amendment, seat readiness)**: before the sitting (Phase 8); T122 before T106; T123 before T101
 - **Phase 12 (amendment, decision 23A)**: after Phase 10; T125 after T124; T126 after T125 and lands in feature 003's T090 to T092 commit (decision 20A), the change that makes a recorded RMS finding narrow; T127 (review, 2026-09-25) after T126; T128 (owner decision 25A, 2026-09-25) after T127; T129 (review of decision 25A, 2026-09-25) after T128
+- **Phase 13 (amendment, decision 166A)**: independent of the other phases; T131 after T130
 
 ### Task-level dependencies
 

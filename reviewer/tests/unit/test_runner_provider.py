@@ -39,10 +39,12 @@ from swreview.agent.providers import (
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.checks import part_roles
 from swreview.checks.provenance import PROVENANCE_CHECK
+from swreview.ir.loader import save_package
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession
 from swreview.report.titles import display_title, pane_finding, title_from
 from tests.support.contracts import contract_validator
+from tests.support.packages import build_package, persist_ref
 from tests.support.roles_review import review_brief
 
 MODEL = "fake-1"
@@ -1013,6 +1015,52 @@ def test_a_rerun_that_covers_something_else_is_a_second_finding(
     session = run.answer_evidence("ER-001", "12 mm")
 
     assert [finding.id for finding in session.findings] == ["F-001", "F-002"]
+
+
+def test_a_rerun_of_one_of_two_hole_pairs_on_the_same_components_keeps_each_its_verdict(
+    tmp_path: Path,
+) -> None:
+    """Two `hole.coaxiality` findings on the same two components, with no tolerance, differ
+    only by their holes (008 research R2.8): re-running the first pair folds onto the first
+    and leaves the second pair's verdict where it was (owner decision 166A)."""
+    template = build_package().holes[0]
+    holes = [
+        template.model_copy(
+            update={"id": hole_id, "persist_ref": persist_ref(hole_id), "component_id": owner}
+        )
+        for hole_id, owner in (
+            ("hol:0001", "cmp:0001"),
+            ("hol:0002", "cmp:0001"),
+            ("hol:0003", "cmp:0002"),
+            ("hol:0004", "cmp:0002"),
+        )
+    ]
+    package = tmp_path / "package"
+    save_package(build_package(holes=holes, gaps=[]), package)
+    first = call("check_hole_alignment", hole_id_a="hol:0001", hole_id_b="hol:0003")
+    second = call("check_hole_alignment", hole_id_a="hol:0002", hole_id_b="hol:0004")
+    asked = call(
+        "request_evidence",
+        what="The position tolerance of hol:0001 and hol:0003",
+        why="hole.coaxiality needs it",
+        entity_ids=["hol:0001", "hol:0003"],
+    )
+    run = runner.start_review(
+        package,
+        tmp_path / "out",
+        provider=FakeProvider(
+            script=[turn("blocked", first, second, asked), turn("re-run", first)], model=MODEL
+        ),
+        effort=EFFORT,
+    )
+    run.start()
+
+    session = run.answer_evidence("ER-001", "There is none on the drawing.")
+
+    assert [(finding.id, finding.inputs) for finding in session.findings] == [
+        ("F-001", ["hol:0001", "hol:0003"]),
+        ("F-002", ["hol:0002", "hol:0004"]),
+    ]
 
 
 # --- resume rule (d): max_steps is a per-turn budget --------------------------------------------
