@@ -13,6 +13,7 @@ from typing import Annotated, Any
 
 import typer
 
+from swreview.checks.standards.profile import DEFAULT_PATH
 from swreview.seat import health, transparency, volume_unit
 
 app = typer.Typer(
@@ -39,18 +40,16 @@ def health_command(
     ] = None,
     profile: Annotated[
         Path | None,
-        typer.Option(
-            "--profile",
-            help="The standards profile. Default: %LOCALAPPDATA%\\SwReview\\standards.yaml.",
-        ),
+        typer.Option("--profile", help=f"The standards profile. Default: {DEFAULT_PATH}."),
     ] = None,
     json_output: Json = False,
 ) -> None:
     """After starting SOLIDWORKS: PASS or FAIL for every health check a file can prove.
 
     Reads `addin.log` and the backend logs, the standards profile and the checkout (runbook
-    section 6); the pane's own checks are listed as MANUAL. Starts nothing but two read-only `git`
-    commands, reads no key and prints no path. Exit 1 on any FAIL.
+    section 6); the pane's own checks are listed as MANUAL. Run it right after a start: a latest
+    load more than two hours old fails. Starts nothing but two read-only `git` commands, writes
+    nothing, reads no key and prints no path. Exit 1 on any FAIL.
     """
     checks = health.run(
         logs or health.default_logs(),

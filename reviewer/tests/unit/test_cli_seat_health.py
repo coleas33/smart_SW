@@ -19,7 +19,7 @@ import json
 import os
 import shutil
 import subprocess
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -39,12 +39,12 @@ FICTIONAL_NAME = "Jane Fict"
 CHECKS = ["add-in load", "tool service", "backend", "profile", "uv", "extractor", "checkout"]
 LOG_CHECKS = {"add-in load", "tool service", "backend"}
 
-LATEST_LOAD = datetime(2026, 10, 31, 9, 15, 4, tzinfo=timezone.utc)
+LATEST_LOAD = datetime(2026, 10, 31, 9, 15, 4, tzinfo=UTC)
 """The all-good log's latest `Attached to SOLIDWORKS.`, two seconds after its latest start."""
 
 
 def at(monkeypatch: pytest.MonkeyPatch, when: datetime) -> None:
-    monkeypatch.setattr(seat_health, "now", lambda: when, raising=False)
+    monkeypatch.setattr(seat_health, "now", lambda: when)
 
 
 @pytest.fixture(autouse=True)
@@ -194,7 +194,7 @@ def test_a_stale_backend_log_fails_the_backend_check(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert failing(result) == {"backend"}
-    assert "since the latest start" in reason(result, "backend")
+    assert "since the latest load" in reason(result, "backend")
 
 
 def test_a_missing_profile_fails_the_profile_check(tmp_path: Path) -> None:
@@ -264,7 +264,9 @@ def test_a_continuation_line_that_begins_with_a_bracket_is_not_a_line_of_its_own
 
 
 def test_a_drawing_on_a_continuation_line_that_begins_with_a_bracket_fails(tmp_path: Path) -> None:
-    logs = logs_with(tmp_path, "[D:\\Users\\Jane Fict\\made-up-bracket.SLDDRW] was the active document")
+    logs = logs_with(
+        tmp_path, "[D:\\Users\\Jane Fict\\made-up-bracket.SLDDRW] was the active document"
+    )
 
     result = health("", checkout(tmp_path), "--json", logs=logs)
 
@@ -295,7 +297,7 @@ def test_a_start_that_wrote_no_lines_fails_the_three_log_checks(
 ) -> None:
     """docs/addin-load-fix.md: a reverted check box, or a broken registration, loads nothing, so
     the start just made adds no line and yesterday's session is the latest the log holds."""
-    at(monkeypatch, datetime(2026, 11, 1, 8, 30, tzinfo=timezone.utc))
+    at(monkeypatch, datetime(2026, 11, 1, 8, 30, tzinfo=UTC))
 
     result = health("all-good", checkout(tmp_path), "--json")
 
@@ -337,10 +339,11 @@ def test_a_reload_that_attached_again_passes_on_its_own_lines(
     )
     (logs / "backend-20261031-121005.log").write_text(
         "[2026-10-31T12:10:05.0000000+00:00] starting uv run swreview chat serve\n"
-        "[2026-10-31T12:10:09.0000000+00:00] backend healthy on http://127.0.0.1:52012 (pid 4343)\n",
+        "[2026-10-31T12:10:09.0000000+00:00] backend healthy on http://127.0.0.1:52012 "
+        "(pid 4343)\n",
         encoding="utf-8",
     )
-    at(monkeypatch, datetime(2026, 10, 31, 12, 15, tzinfo=timezone.utc))
+    at(monkeypatch, datetime(2026, 10, 31, 12, 15, tzinfo=UTC))
 
     result = health("", checkout(tmp_path), "--json", logs=logs)
 
