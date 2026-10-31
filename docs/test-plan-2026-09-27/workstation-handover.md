@@ -33,6 +33,25 @@ each in a commit of its own. What can only be seen with a switch on is 011 T095,
 after that. Two tasks are the development machine's once the folders come back: 008 T105 (replay
 the sitting's runs) and 009 T085 (restore them offline).
 
+## The next sitting is S1 (decision 167A)
+
+*Added 2026-10-31.* The next sitting is not the whole list below: it is S1, about three hours
+with no key and no paid call, and its order is the test plan's section "S1: Start readiness",
+which wins where this list differs. In that order: the update and the health checks, with
+`swreview seat health` (004 T353) and 004 T140's manifest test (the test plan's steps 1.1 to 1.6),
+the fingerprint taken there before SOLIDWORKS starts, since part J is the health checks' part;
+the product Help > About names (004 T164, step 1.7); step 21's first run, moved early because it
+asks for no reorder (004 T036 to T039, and 004 T187's PROBE-8 readings); step 8's two D14 runs
+on part J (011 T077, 013 T142) and PROBE-15 on J (003 T088; the test plan's step 3.9);
+the retest's box and part J's Plan with the open's seconds (004 T185, 004 T186, 011 T171, 004
+T182; step 5.3); the close in process, idle and then with a dialog open (004 T303a; step 5.3),
+which ends only the backend the add-in started, by its number; optionally, two made-up
+assemblies built at the seat and never committed (006 T102's transparency, 001 T076's volume
+unit; decision 172A); Window > Close All, since part J is still open, then step 21's second and
+third runs, the third holding the five probes Start waits on; and the test plan's handoff steps
+6.0, 6.1, 6.3 and 6.5. The later sittings, S2 to S5, are each 3.5 hours or less and on one theme (the
+test plan's section "Sittings").
+
 ## Where the 2026-09-26 sitting stopped, and what the next sitting adds
 
 *Added 2026-09-27.* The sitting of 2026-09-26 ran the build of that day and stopped early in this
@@ -97,18 +116,23 @@ copy; and part J's hash, size and time are unchanged. The step also records how 
 which sets the add-in's wait on the copy's open (004 T182). What the next sitting must prove
 before the development machine sets the Start switch (`RemodelStart.SeatValidated`, in a commit
 of its own), in this order: first step 21's blocking probes - PROBE-1, 2, 3, 4 and 12 (004 T033
-to T035 and 004 T037) - each `verified`; then step 5.3's Plan on one real part's copy, part J, with
-that part's hash unchanged. 004 T180, what a plan holds while Start is on, is decided on the
-development machine before the switch too. *Added 2026-10-19 (decision 144A):* the pane seat calls
+to T035 and 004 T037) - each `verified`, all five in step 21's third run, whose answers file is
+committed under `benchmarks/native/capabilities/` and judged ready by `swreview remodel ledger`
+(004 research R27.8); then step 5.3's Plan on one real part's copy, part J, with that part's hash
+unchanged. 004 T180 is done (decision 168A). *Since 2026-10-31* the list is longer: 004 T303a (S1),
+IDENTITY calibrated (004 T187's readings, 004 T138's freeze; decision 170A) and the owner's call on
+the no-handle unwind (R26.10), with 004 T303b first after the switch (decision 169A); R22.14 and
+R25.13 are done (decision 165A); the test plan's step 5.3 has it whole. *Added 2026-10-19 (decision 144A):* the pane seat calls
 SOLIDWORKS through a gate of its own in this build, so step 5.3's item B, on the box before its
 Discard, also runs 011 T171: Open copy, then Start, and the run's `remodel.log` must hold exactly
 four `seat=` lines - a begin line and an outcome line for the plan's activation of the copy, and
 the same for the open - none with `refused=` or `error=`. *Added 2026-10-20 (decision 148A):* the
 seat's guard is a closed allowlist and `OpenDoc7` is called by its qualified key at every caller, so
 T171 also reads the plan's `remodel.open` line in the same `remodel.log` (`status=ok`, its `gated=`
-naming `ISldWorks.OpenDoc7`, no `refused=`), and at step 21's first run PROBE-12's reopen (the run's
-`interop members:` line naming `ISldWorks.OpenDoc7`, PROBE-12's lines with a reason and no
-`error`).
+naming `ISldWorks.OpenDoc7`, no `refused=`), and at step 21's third run PROBE-12's reopen (the run's
+`interop members:` line naming `ISldWorks.OpenDoc7`, PROBE-12 with a reason and no `error`; on an
+error, whether the console's line after
+`PROBE-12 threw; its message is kept in this log, never the ledger:` contains `OpenDoc7`).
 
 Two more the owner asked for on 2026-09-27, with step 20:
 
@@ -161,9 +185,8 @@ repeated when step 5 comes.
 2. **The o200k_base vocabulary**, if the seat's web filter blocks its download: the file
    `fb374d419588a4632f3f557e76b4b70aebbca790` from the development machine's
    `%LOCALAPPDATA%\SwReview\tokenizer\` (runbook section 2).
-3. **A provider key** for the pane's Settings (the paid reviews), with the model and effort to use,
-   and **a Gemini key** for 008 T106, which is set for one shell only, at a hidden prompt. The
-   people and the cap for the big assembly's review are in the test plan's section 0.1. A
+3. **A provider key** for the pane's Settings (the paid reviews), with the model and effort to
+   use. The people and the cap for the big assembly's review are in the test plan's section 0.1. A
    "Before this review" panel is answered as the owner decided (decision 14A, 2026-09-24, not a
    default awaiting confirmation): write down its first line, press "Review available evidence",
    and never resolve or unsuppress a part (the test plan's step 4, item 1).
@@ -189,7 +212,8 @@ window: it sets `$R` (the checkout), `$H` (the handover folder, `<handover folde
 `swreview-extract` alias, and defines the helpers its steps call. Then its steps 1.2 to 1.4:
 
 ```powershell
-git status --porcelain; git branch --show-current     # nothing, then main
+git status --porcelain                               # nothing
+git branch --show-current                            # main
 if (-not (Test-Path "$H\notes\commit-before.txt")) { git rev-parse --short HEAD | Set-Content "$H\notes\commit-before.txt" }
 git fetch origin; git log --oneline HEAD..origin/main
 git pull --ff-only origin main; "pull exit code: $LASTEXITCODE"
@@ -199,8 +223,17 @@ git merge-base --is-ancestor 43436d3 HEAD; "holds 43436d3: $($LASTEXITCODE -eq 0
 Select-String -Path "$env:LOCALAPPDATA\SwReview\standards.yaml" -Pattern '^version:'   # after step 1 below
 ```
 
-Pass: `pull exit code: 0`, the script ends at its health step with no step failed, and runbook
-section 6's seven checks hold. The script fetches first even with `-NoPull`, and says
+Then its step 1.6, with SOLIDWORKS started on a part:
+
+```powershell
+Get-Content "$env:LOCALAPPDATA\SwReview\logs\addin.log" -Tail 12   # runbook section 6's check 1
+cd "$R\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd $R   # decision 166A's check
+```
+
+Pass: `pull exit code: 0`, the script ends at its health step with no step failed, runbook
+section 6's seven checks hold, and `swreview seat health` ends `exit code: 0`, every line it
+printed recorded as the test plan's step 1.6 says (a build without it:
+`seat health: not in this build`). The script fetches first even with `-NoPull`, and says
 `-NoPull: building what is checked out`; the test plan's step 1.3 says what each other line means.
 Record the commit before and after and the versions of section 2 at the top of the findings
 document, which the test plan starts at step 1.4. Every `swreview-extract` command below needs the
@@ -217,8 +250,7 @@ alias in the shell it runs in; every `uv run` command runs from `<repo>\reviewer
 | Step 11 (008 T102) | step 12 (T104) | T104 presses Retry on T102's run folder |
 | Step 13 (A's review, 008 T103; the test plan's step 4.1) | step 23 (014 T221; step 4.11), immediately after it | it reads that review's folder, with no extra paid review |
 | Steps 13 and 14, then 013 T143 (the test plan's step 4.8) | step 22 (015 T119; step 4.10), before step 5.1 | its restarts come after the review chips have been read |
-| everything else but step 21 | step 18 (009 T082) | it builds an older commit, then returns to `main` |
-| everything, step 18 included | step 21 (004 T033 to T039), then only the handoff | a refuted PROBE-1 can leave a "Cannot reorder" box holding SOLIDWORKS, and PROBE-1 asks for one on purpose |
+| everything | step 21 (004 T033 to T039), then only the handoff | a refuted PROBE-1 can leave a "Cannot reorder" box holding SOLIDWORKS, and PROBE-1 asks for one on purpose |
 
 ## 3. The script
 
@@ -265,9 +297,9 @@ row per step and task id. The development machine moves each answer into the res
    `swreview-extract probe drawings --out "<handover folder>\probes" --doc "<drawing>" --probe D1,D11`,
    then press Standards check, then
    `swreview-extract probe standards --doc "<drawing>"` into a file in the same folder (the test
-   plan's step 3.2); then 006 T103, T105 and T107 as their task texts say (T107's not-loaded model
-   is the test plan's step 3.5, on a drawing opened in Detailing mode). Pass: the probe report's
-   answers and its gate log (no writer, activation, open or close member). Record: the
+   plan's step 3.2); then 006 T103, 006 T105 and 006 T107 as their task texts say (T107's
+   not-loaded model is the test plan's step 3.5, on a drawing opened in Detailing mode). Pass: the
+   probe report's answers and its gate log (no writer, activation, open or close member). Record: the
    `drawings-probe-<time>.txt` files stay in the `--out` folder; the answers go to 011 research
    R4 and 006 research R4.
 4. **011 T063: discovery.** With the assembly and the three drawings open:
@@ -308,13 +340,10 @@ row per step and task id. The development machine moves each answer into the res
    unchanged, no save flag, released after the close, the counts). Then a pane review with the
    candidate, confirmed: the pane shows the host's refusal ("the read-only open of a confirmed
    drawing is not yet validated on a seat") and nothing opens - which is right while the switch
-   is off. Record: the report file and the pane's sentence. In the same pane reviews, 011 T101:
-   the lanes' live checks of User Story 5's part B (the test plan's part J; its B is the big
-   assembly) with the switch off - the `drawing.read` line of the
-   tool-service log, the `drawing.confirmed_open` coverage for a candidate left closed and for one
-   the engineer opened before confirming, the summary's drawings line before and after, one
-   `drawing.context` line per document, and the pane at 300 by 600 (the test plan's steps 4.6
-   and 4.7).
+   is off. Record: the report file and the pane's sentence. In the same pane reviews, 011 T101,
+   rewritten 2026-10-31: the pane at 300 by 600 with the drawings line on it (the test plan's step
+   4.7); its live checks with the question answered are 011 T095's, at the sitting after the
+   switch.
 9. **011 T067: the questions.** A pane review of the design with a candidate drawing and a
    doubly-drawn part: the two questions appear (at most four drawing questions), answering them
    records the answers, and the part's brief lists them with all five sections. The brief's size,
@@ -332,7 +361,7 @@ row per step and task id. The development machine moves each answer into the res
     dimension or an ISO 286 Hole Wizard fit on a joint; a report saying "no tolerance source is
     read for this package" means T068 is blocked at this sitting, not passed. The binding itself is
     T095.
-11. **008 T102, 010 T107 and 009 T079, T080: the big assembly, paid.** A pane review with the
+11. **008 T102, 010 T107, 009 T079 and 009 T080: the big assembly, paid.** A pane review with the
     defaults. Pass for T102: the report's input tokens, uncached plus cached, at most **995,853**
     (1.5 times the replay's "Requested, pane defaults" figure for `big-assembly`, 663,902, in
     `docs/llm-efficiency-options.md`); every detected interference group judged, as a finding or
@@ -371,21 +400,11 @@ row per step and task id. The development machine moves each answer into the res
     holding the review could save over them; its `session.json` carrying the baseline is the
     evidence.
 
-14. **009 T081, T083, T084.** Configuration switch (T081), chips and restore (T083), three open
-    questions answered in one send (T084), each as its task text says; T084's resumed turn's
-    first round input goes beside the pane's resume sentence.
-15. **008 T106: the live Gemini test.** The key at a hidden prompt, never on a command line
-    (PSReadLine keeps every command line in a history file), and `GOOGLE_API_KEY` cleared, since
-    the test reads it first:
-    ```powershell
-    if (Test-Path Env:GOOGLE_API_KEY) { 'GOOGLE_API_KEY is set and would be used instead; cleared for this window'; Remove-Item Env:GOOGLE_API_KEY }
-    $env:GEMINI_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR((Read-Host 'Paste the Gemini key' -AsSecureString)))
-    cd "$R\reviewer"; uv run pytest tests/live/test_gemini_live_function_response.py -m live -rs -p no:warnings; cd $R
-    Remove-Item Env:GEMINI_API_KEY
-    ```
-    Pass: `1 passed` and no `SKIPPED` line. A skip proves nothing; a refused key or an unreachable
-    API fails with its own sentence and is setup, not the protocol failure. After a Ctrl+C, close
-    the window to drop the key.
+14. **009 T081, 009 T083, 009 T084.** Configuration switch (T081), chips and restore (T083),
+    three open questions answered in one send (T084), each as its task text says; T084's resumed
+    turn's first round input goes beside the pane's resume sentence.
+15. **008 T106: closed.** *Closed 2026-10-31* by decision 173A, under decision 94A (OpenAI only),
+    with the test plan's step 5.4: nothing to run.
 16. **Evidence.** Zip the whole run folders of steps 1, 3 to 14, 20, 22 and 23 (their `tool-results\`
     included), the dump folders of step 2, the probe `--out` folders (step 21's three among them)
     and the logs into the handover
@@ -395,30 +414,10 @@ row per step and task id. The development machine moves each answer into the res
 17. **The findings document**, in the handover folder: the Results table filled (every row
     `pass`, `fail` or `blocked`) and every step's record above, in order, with the commit and the
     versions at the top; no company value in it. The key audit runs again after it is written.
-18. **009 T082: before and after the FR-023 fix,** last, SOLIDWORKS closed for each build:
-    ```powershell
-    git status --porcelain; git branch --show-current       # nothing, then main
-    Copy-Item "$env:APPDATA\SwReview\settings.json" "$env:APPDATA\SwReview\settings.json.before-5.5"
-    git checkout 69fbb4a                                     # the parent of b15c0b0, the fix
-    .\extractor\tools\update-workstation.ps1 -NoPull -SkipTests
-    # SOLIDWORKS: review A, Model check on part J, Show in SOLIDWORKS on an A finding - which package did it resolve against?
-    git checkout main
-    .\extractor\tools\update-workstation.ps1 -NoPull
-    git log --oneline -1; (Get-Item "$R\extractor\SwReview.AddIn\bin\x64\Release\net48\SwReview.AddIn.dll").LastWriteTime
-    # the same three presses: Show in SOLIDWORKS selects A's entity
-    ```
-    Registration survives both rebuilds. The older build's own script is used for its build, and
-    `-SkipTests` only there: it is built to be looked at, not shipped. Every version of the script
-    runs `git fetch origin` first, even with `-NoPull`, and on the detached checkout says
-    `on 'HEAD' with -NoPull: building what is checked out`, which is expected; the older one has no
-    `-SolidWorksRoot`. On a seat installed elsewhere, or when that fetch is refused (on the way
-    there or back), build with
-    `dotnet build extractor\SwReview.sln -c Release "-p:SwRedist=$sw\api\redist"` instead, `$sw`
-    the SOLIDWORKS install folder (the Python side needs nothing: its lock file is the same on both
-    builds). After the return, the add-in DLL's time must be after the return build started; if
-    the return stops at a gate, run it once more, then with `-SkipTests`, and if `dotnet build`
-    fails, clear SwReview's boxes in Tools > Add-ins: never leave the seat on the older add-in (the
-    test plan's step 5.5). Record both answers.
+18. **009 T082: after the FR-023 fix**, on the current build (decision 175A dropped the "before"
+    half, a swap to an older build to show a bug already fixed): review A, Model check on part J,
+    then Show in SOLIDWORKS on one of A's findings selects A's own entity (the test plan's step
+    5.5). Record the answer.
 19. **004 T164: FeatureWorks, for the record.** Feature 004's import path is on the back burner
     (its spec, owner decision 2026-09-19); whether the seat has FeatureWorks, the add-in that
     recognises features in an imported solid, informs the feasibility probe if the owner reopens
@@ -438,20 +437,30 @@ row per step and task id. The development machine moves each answer into the res
 21. **004 T033 to T039: the re-modeler probes,** last before the handoff, SOLIDWORKS running with
     no document open (the probe refuses otherwise), on the current build. Three runs, each into
     its own folder, since a second run into the same folder overwrites the first one's answers
-    file; first the probes that never reorder, then the three reorders no watchdog times, then
-    PROBE-1 alone, which provokes a "Cannot reorder" box with the flag clear on purpose:
+    file; first the other probes that never reorder, then PROBE-5's and PROBE-20's reorders, which
+    no watchdog times, then the five probes Start waits on together, so that one answers file can
+    be judged for it (004 research R27.4): PROBE-2, 4 and 12, then PROBE-3, then PROBE-1 last,
+    which provokes a "Cannot reorder" box with the flag clear on purpose:
     ```powershell
-    swreview-extract probe remodel --probe PROBE-2,PROBE-4,PROBE-6,PROBE-7,PROBE-8,PROBE-9,PROBE-10,PROBE-11,PROBE-12,PROBE-13,PROBE-21 --out "$H\probes\remodel-no-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
-    swreview-extract probe remodel --probe PROBE-3,PROBE-5,PROBE-20 --out "$H\probes\remodel-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
-    swreview-extract probe remodel --probe PROBE-1 --out "$H\probes\remodel-probe-1" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    swreview-extract probe remodel --probe PROBE-6,PROBE-7,PROBE-8,PROBE-9,PROBE-10,PROBE-11,PROBE-13,PROBE-21 --out "$H\probes\remodel-no-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    Show-RemodelLedger "$H\probes\remodel-no-reorder"
+    swreview-extract probe remodel --probe PROBE-5,PROBE-20 --out "$H\probes\remodel-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    Show-RemodelLedger "$H\probes\remodel-reorder"
+    swreview-extract probe remodel --probe PROBE-2,PROBE-4,PROBE-12,PROBE-3,PROBE-1 --out "$H\probes\remodel-start" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    Show-RemodelLedger "$H\probes\remodel-start"
     ```
     After each, `Show-RemodelLedger` on its folder prints each probe's id, blocking flag, verdict
-    (`verified`, `refuted` or `unresolved`) and reason. A message box is answered only after 30
+    (`verified`, `refuted` or `unresolved`) and reason, and last the line
+    `RemodelStart.SeatValidated: not ready - ` with its reasons, which in S1 reads `not ready`
+    after every run by design (only the third holds Start's five, and IDENTITY is calibrated only
+    after S1, by 004 T138): it is recorded, not judged. A message box is answered only after 30
     seconds (PROBE-1 times each of its two tries for 5 seconds), with OK; a run that hangs is recovered as the test
-    plan's "If SOLIDWORKS stops answering" says and is not run again. Each run turns three
+    plan's "If SOLIDWORKS stops answering" says and is not run again, and its answers file keeps
+    every probe that finished. Each run turns three
     SOLIDWORKS options off and puts them back when it ends; the plan notes them before the runs
     and checks them after (its step 5.6). Pass per probe: `verified`; `refuted` is a fail that is
-    the answer the probe exists for, `unresolved` or a run that did not finish is blocked. Record:
+    the answer the probe exists for; `unresolved`, or `not finished` in a run that hung or failed,
+    is blocked. Record:
     per run its exit code and `probes:` line, each `BLOCKING` line up to its colon, every box,
     the verdicts; the answers files `capabilities\remodel-<version>.yaml` and the logs stay in
     their folders under `<handover folder>\probes` and travel with it.
@@ -502,7 +511,7 @@ research R5. If T066 and T077 passed, the development machine sets each switch i
 own, editing the one pin test the task names, and 011 T095 goes into the next handover, with 013
 T142's second half (the host answers `opens_closed`, and the review offers the read-only open once
 per drawing file). Feature 010's fine-pitch amendment (2026-10-08) added two seat tasks after this
-list was written, 010 T123 and T124 (what Hole Wizard writes for fine tapped holes and a cosmetic
+list was written, 010 T123 and 010 T124 (what Hole Wizard writes for fine tapped holes and a cosmetic
 thread callout, and whether a part opened on its own gives hole rows); this sitting does not ask
 them, and they go into the next sitting plan. Feature 013's census reruns over the N folders' packages, counts only; 013 T141
 to T144's results are ticked from the findings document, and the version 4 profile, like the
@@ -515,5 +524,17 @@ refuted blocking probe goes to the owner. The stage-1 runs, 004 T135 to T141, wa
 switch: the production seat adapter and its wiring, 004 T152 to T160 (decision 17A), and its
 teardown, 004 T167, are in this build, and the development machine sets
 `RemodelStart.SeatValidated` (004 T172) in a commit of its own only once step 21's blocking
-probes are `verified`, the test plan's step 5.3 has planned on part J's copy with J's hash
-unchanged, and 004 T180 is decided; a later sitting runs them.
+probes are `verified` in its third answers file, committed and judged ready, the test plan's step
+5.3 has planned on part J's copy with J's hash unchanged, and the rest the test plan's step 5.3
+names under "What the Start switch waits on" holds (004 T303a, IDENTITY calibrated, the owner's
+call on the no-handle unwind); a later sitting runs them.
+
+*Added 2026-10-31 (owner decision 166A; 004 T362):* every feature's open seat tasks are held to
+this list and to the test plan, not only those of the features above. Those this list does not
+run are in the test plan's "Not in this sitting", each with its reason: 001 T061, 001 T076 and
+001 T103; 002 T044, 002 T051, 002 T063 and 002 T067; 003 T062, 003 T088 and 003 T089;
+004 T135 to T141, and 004 T303, which decision 169A splits into 004 T303a (the close in process
+with no plan waiting for Start, at the next sitting) and 004 T303b (a plan holding its session for
+Start, after Start is switched on); 005 T034, 005 T085a, 005 T086, 005 T092, 005 T093, 005 T095,
+005 T100, 005 T101, 005 T103 and 005 T108; 006 T104, 006 T106, 006 T108, 006 T109 and 006 T110;
+007 T061 to T063; and 016 T010 and 016 T015.

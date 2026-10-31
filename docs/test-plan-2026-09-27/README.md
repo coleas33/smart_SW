@@ -21,6 +21,9 @@ do not follow them.
 
 ## Where this sitting starts
 
+- *Since 2026-10-31* **the next sitting is S1** (decision 167A): about three hours, with no key and
+  no paid call, for Remodel Start's evidence. The plan's sections "Sittings" and "S1: Start
+  readiness" give its steps, in order; the bullets below describe the two-day sitting S1 replaces.
 - The 2026-09-26 sitting reached steps 1.3, 1.6, 1.7, 2.2 and 2.3 on an older build.
 - **This sitting still runs step 1 first**, so the update brings the new build and the gates run. It
   then **continues from step 2.4**. The handover's section "Where the 2026-09-26 sitting stopped"

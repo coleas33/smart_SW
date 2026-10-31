@@ -104,7 +104,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T041 [US1] Implement `reviewer/src/swreview/agent/runner.py`: `client.beta.messages.tool_runner(model="claude-opus-5", max_tokens=64000, output_config={"effort": effort}, tools=..., messages=...)` with streaming, message mirroring, `pause_turn` restart cap, `max_steps`, and session finalization (open requests and unchecked checklist items become `unresolved` coverage)
 - [X] T042 [US1] Implement `reviewer/src/swreview/report/markdown.py` (discrepancies, findings grouped by severity, evidence requests, coverage, navigation links) and `reviewer/src/swreview/report/dispositions.py`
 - [X] T043 [US1] Implement `reviewer/src/swreview/cli.py` commands `validate`, `ingest`, `review`, `report`, `disposition` per contracts/cli.md with exit codes 0/1/2 and `--json`
-- [ ] T044 [US1] Assemble `benchmarks/packages/cover-blind-tap/` (manifest, BOM, drawing PDFs with one flattened page, seeded drill-depth-only hole) and run quickstart Scenario 1; record the day-one result and time in `benchmarks/packages/cover-blind-tap/notes.md`
+- [x] T044 [US1] Assemble `benchmarks/packages/cover-blind-tap/` (manifest, BOM, drawing PDFs with one flattened page, seeded drill-depth-only hole) and run quickstart Scenario 1; record the day-one result and time in `benchmarks/packages/cover-blind-tap/notes.md` *Closed 2026-10-31 (owner decision 173A): replaced by feature 014's design-review eval: `cover-blind-tap` is a generated case there (014 FR-010; `benchmarks/README.md`), the lever studies' smoke set `benchmarks/sets/pilot.json`, and its runs are 014's paid runs (014 T244 to T262).*
 
 **Checkpoint**: US1 delivers an evidence-linked review on exported files with no SOLIDWORKS process.
 
@@ -137,7 +137,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T058 [US2] Implement `extractor/SwReview.Extractor/Dump/PackageWriter.cs` orchestrating the dumpers, `GapCollector`, id allocation (`cmp:NNNN`), and `package.json` plus `meshes/` output
 - [X] T059 [US2] Implement `extractor/SwReview.Extractor.Console/Program.cs` commands `dump` and `resolve` per contracts/cli.md (attach to running SOLIDWORKS via `GetObject`, else create; `extract.log`)
 - [X] T060 [US2] Implement `extractor/SwReview.AddIn/` (COM registration, Task Pane with **Dump IR** button calling `PackageWriter` on the active document, progress and error dialog)
-- [ ] T061 [US2] On the workstation, prepare `benchmarks/native/bracket-assy/` (assembly with tapped holes, Toolbox screws, a suppressed component, a pattern) and `benchmarks/native/bracket-assy/answer-key.json`; run quickstart Scenario 2 including the reopen and `resolve` round trip; record results in `benchmarks/native/bracket-assy/notes.md`
+- [ ] T061 [W] [US2] On the workstation, prepare `benchmarks/native/bracket-assy/` (assembly with tapped holes, Toolbox screws, a suppressed component, a pattern) and `benchmarks/native/bracket-assy/answer-key.json`; run quickstart Scenario 2 including the reopen and `resolve` round trip; record results in `benchmarks/native/bracket-assy/notes.md`
 
 **Checkpoint**: Native packages load in the reviewer (`swreview validate`) and US1 reviews run against them.
 
@@ -168,7 +168,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T073 [US3] Implement `reviewer/src/swreview/bridge/client.py` and the tools `bridge_capture`, `bridge_measure`, `bridge_interference` in `reviewer/src/swreview/tools/bridge.py`, registered only with `--bridge`; `request_capture` uses the bridge when present
 - [X] T074 [US3] Add CLI commands `exceptions accept` and `exceptions list` to `reviewer/src/swreview/cli.py`
 - [X] T075 [US3] Create golden fixture `reviewer/tests/golden/fixtures/bracket-assy-interference/` (three seeded interferences, one six-instance pattern, one accepted exception, one truncated pair) with expected grouped findings and coverage
-- [ ] T076 [US3] Add Task Pane buttons **Interference** and **Capture selection** to `extractor/SwReview.AddIn/`; run quickstart Scenario 3 on the workstation and record results in `benchmarks/native/bracket-assy/notes.md`
+- [ ] T076 [W] [US3] Add Task Pane buttons **Interference** and **Capture selection** to `extractor/SwReview.AddIn/`; run quickstart Scenario 3 on the workstation and record results in `benchmarks/native/bracket-assy/notes.md`
 
 *Added 2026-10-31 (owner decision 172A; research R15):* T069's one-time check of the `Volume` unit against a known box overlap is still open (`InterferenceRunner.VolumeUnitVerified` is false). The engineer may build two made-up cubes by hand at the seat, never committed, and a judge reads the unit off the package. These three need no seat; the seat run itself is the recipe's, at the stage 1 sitting.
 
@@ -249,8 +249,8 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T095 [P] [US6] Implement `reviewer/src/swreview/benchmark/sets.py` (`pilot.json` schema: package dirs, held-out flags) and `answer_key.py` (loaded only by the scorer)
 - [X] T096 [US6] Implement `reviewer/src/swreview/benchmark/runner.py` (runs `review` per package into a run directory; records unattended runtime) and `scorecard.py` (matching, aggregates, `scorecard.json` and `scorecard.md`)
 - [X] T097 [US6] Add CLI commands `benchmark run|score|time` to `reviewer/src/swreview/cli.py`
-- [ ] T098 [US6] Assemble `benchmarks/sets/pilot.json` with 5 to 10 packages (including a shaft/bearing fit, a bolted plate stack, a sheet-metal or welded assembly, at least two held out) and their answer keys in `benchmarks/answer_keys/`; record human baseline times with `swreview benchmark time`
-- [ ] T099 [US6] Run `swreview benchmark run` and `score` on the pilot set; commit `runs/benchmark-<date>/scorecard.md` to `benchmarks/results/` and summarize the continue/narrow/revise/stop evidence in `benchmarks/results/checkpoint-2026-10-03.md`
+- [x] T098 [US6] Assemble `benchmarks/sets/pilot.json` with 5 to 10 packages (including a shaft/bearing fit, a bolted plate stack, a sheet-metal or welded assembly, at least two held out) and their answer keys in `benchmarks/answer_keys/`; record human baseline times with `swreview benchmark time` *Closed 2026-10-31 (owner decision 173A): replaced by feature 014's generated, keyed sets: `benchmarks/sets/committed.json`, the pane study's set with its held-out items, and `pilot.json`, each entry naming its answer key (`benchmarks/README.md`; 014 decision 67A). 014 records no human baseline time per package; `swreview benchmark time` still can.*
+- [x] T099 [US6] Run `swreview benchmark run` and `score` on the pilot set; commit `runs/benchmark-<date>/scorecard.md` to `benchmarks/results/` and summarize the continue/narrow/revise/stop evidence in `benchmarks/results/checkpoint-2026-10-03.md` *Closed 2026-10-31 (owner decision 173A): replaced by feature 014's paid runs and verdict, the smoke run, the pilot and the study, each scored and compared (014 T244 to T262), whose verdict takes the place of `checkpoint-2026-10-03.md`.*
 
 **Checkpoint**: A scorecard with per-package and aggregate results exists for the checkpoint.
 
@@ -261,7 +261,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T100 [P] Write the root `README.md`: purpose, layout, how to build the extractor and run the reviewer, link to `specs/001-agentic-design-review/quickstart.md`
 - [X] T101 [P] Add `NOTICE.md` attributing MIT-derived patterns (`solidworks-skills` connection manager and circuit breaker ideas) and stating that SwpilotCLI is referenced only
 - [X] T102 [P] Add a CI workflow `.github/workflows/reviewer.yml` running `uv run pytest` on Windows and Ubuntu (integration tests skipped) and `ruff check`
-- [ ] T103 Run every quickstart scenario end to end; fix discrepancies between quickstart, contracts, and behavior
+- [ ] T103 [W] Run every quickstart scenario end to end; fix discrepancies between quickstart, contracts, and behavior
 - [X] T104 DRY and constitution review across `reviewer/src/swreview/checks/` and `tools/`: one finding builder, one unit module, no duplicated id resolution; update `research.md` with any decision changes
 - [X] T105 Regenerate `contracts/ir.schema.json` from the models (`python -m swreview.ir.schema --write`) and confirm `test_schema_sync` and the C# serializer test still pass *(Done as verification: `test_schema_sync` proves the generated schema is semantically equal to the hand-authored contract and the cover-blind-tap package validates against both; the contract file is kept hand-authored for readability.)*
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from tests.support.seat_tasks import PACKAGES, REPO, named_tasks, open_seat_tasks
+from tests.support.seat_tasks import PACKAGES, REPO, open_seat_tasks, qualified_tasks
 
 DOCS = REPO / "docs"
 
@@ -37,20 +37,21 @@ def test_the_runbook_points_at_the_newest_handover() -> None:
     assert relative == "docs/test-plan-2026-09-27/workstation-handover.md"
 
 
-def test_the_handover_names_every_open_seat_task_of_features_008_to_011() -> None:
+def test_the_handover_names_every_open_seat_task_with_its_package() -> None:
+    """*Changed 2026-10-31 on review (004 T373; research R29.9):* each task is read with its package
+    in front of it (`001 T103`), as the plan's pin reads it. The bare id this read before let 001
+    T103 leave the handover with the test green, since `008 T102 and T103` names a T103 too, and
+    with every package read (166A) most ids are shared."""
     handover = newest_handover().read_text(encoding="utf-8")
-    named = named_tasks(handover)
+    named = qualified_tasks(handover)
 
     for package in PACKAGES:
         tasks = open_seat_tasks(package)
         assert tasks, package
-        missing = [task for task in tasks if task not in named]
+        missing = [task for task in tasks if (package[:3], task) not in named]
         assert missing == [], f"{package}: {missing}"
         assert package[:3] in handover
-
-
-def test_a_range_names_each_task_in_it() -> None:
-    assert named_tasks("010 T103 to T106, and T079") == {"T103", "T104", "T105", "T106", "T079"}
+    assert ("001", "T103") not in qualified_tasks("008 T102 and T103; 001 T061 and T076")
 
 
 def test_the_handover_script_keeps_numbered_steps_in_order_and_smoke_timing_explicit() -> None:

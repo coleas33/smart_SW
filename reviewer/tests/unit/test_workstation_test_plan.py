@@ -31,30 +31,38 @@ what it promises is held in its text:
   FeatureWorks record (004 T164, dated in 004's `tasks.md`) at step 1.7 is read only and prints
   one line; the owner's parts at step 5.1 give 004 T003 its packages and no name; the probes
   004 T033 to T039 are step 5.6, the last before the handoff, in three runs into three folders -
-  every probe whose body never reorders first, PROBE-1 alone last - that cover the probe
-  catalog once; `Show-RemodelLedger` reads a ledger in `RemodelProbeLedger.Render`'s shape; a
-  message box waits out PROBE-1's watchdog; and the lines step 5.6 reads are the console's;
+  every other probe whose body never reorders first, Start's five together last with PROBE-1
+  last of all - that cover the probe catalog once; `Show-RemodelLedger` reads a ledger in
+  `RemodelProbeLedger.Render`'s shape; a message box waits out PROBE-1's watchdog; and the lines
+  step 5.6 reads are the console's;
 - and since feature 004's seat adapter is in the build (2026-09-27), step 5.3 plans on a copy with
   Start refused by the switch, checks the settings after Plan (004 T176) and times it (004 T182),
   and the plan, the development machine's table and the handover say what the Start switch waits
-  on: step 5.6's blocking probes, then a Plan on one real part's copy, and 004 T180.
+  on: step 5.6's blocking probes in one answers file, then a Plan on one real part's copy, and the
+  rest of 004 research R25.9's list.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from typer.main import get_command
 from typer.testing import CliRunner
 
+from swreview.chat.remodel import OPEN_DIAGNOSTICS_FILE, _open_phase
 from swreview.cli import app
 from swreview.ir.loader import load_package
+from swreview.remodel.ledger import START_PROBES, load_ledger, summary, summary_lines
 from swreview.report.attention import load_policy, rank
 from swreview.report.attention_record import StaleAttentionRecord, write_attention_record
 from swreview.report.finding_groups import findings_by_type
@@ -69,6 +77,7 @@ from tests.support.seat_tasks import (
     REPO,
     open_seat_tasks,
     qualified_tasks,
+    seat_tasks_in,
 )
 
 PLAN = REPO / "docs" / "test-plan-2026-09-27" / "workstation-test-plan.md"
@@ -327,6 +336,15 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("baseline_geometry.begin", "reviewer/src/swreview/chat/remodel.py"),
     ("stage=", "extractor/SwReview.AddIn/ToolService/ToolServiceHost.cs"),
     ("get_Density", "extractor/SwReview.Extractor/Rms/RemodelGeometry.cs"),
+    # S1 (decisions 167A and 169A; 004 T365): the backend's number, the close in process, 004
+    # T140's test and PROBE-15's line.
+    ("backend healthy on ", "extractor/SwReview.AddIn/Review/BackendProcess.cs"),
+    ("remodel close in process thread=", "extractor/SwReview.AddIn/ToolService/ToolServiceHost.cs"),
+    ("nothing closed: this bridge holds no session of that run",
+     "extractor/SwReview.AddIn/ToolService/ToolServiceHost.cs"),
+    ("InstalledAssemblyMatchesManifest",
+     "extractor/SwReview.Extractor.Tests/RemodelInteropManifestTests.cs"),
+    ("root_component: ", "extractor/SwReview.Extractor.Console/Program.cs"),
 )
 """Every product sentence the plan quotes, with the file that says it."""
 
@@ -475,8 +493,10 @@ evidence**."""
 
 def test_every_step_outside_step_4_that_presses_review_answers_the_panel(plan: str) -> None:
     """Step 4's box answers a Before this review panel for the steps under it; a step elsewhere
-    that presses Review says the owner's answer itself, and step 5.5 opens A resolved both
-    times, as step 4.1 does."""
+    that presses Review says the owner's answer itself, and step 5.5 opens A resolved, as step
+    4.1 does. *Changed 2026-10-31 on purpose (decision 175A; 004 T363):* step 5.5 kept 009
+    T082's "after" half only, so it opens A once, on the current build, where it opened it on
+    each of two builds."""
     flat = {
         number: re.sub(r"\s+", " ", step(plan, number)) for number in STEP_HEADING.findall(plan)
     }
@@ -490,7 +510,7 @@ def test_every_step_outside_step_4_that_presses_review_answers_the_panel(plan: s
     for number in outside:
         assert "decision 14A" in flat[number], number
         assert "never resolve or unsuppress a part" in flat[number], number
-    assert flat["5.5"].count("open A resolved and part J") == 2
+    assert flat["5.5"].count("open A resolved and part J") == 1
     assert [
         match.group(0)
         for match in PRESS_REVIEW.finditer(
@@ -613,11 +633,54 @@ def test_no_value_of_a_named_dimension_goes_into_the_findings_document(plan: str
 
 def test_the_plan_never_lets_the_update_script_pull(plan: str) -> None:
     """Every run of the script in the plan builds what is checked out: the pull is step 1.3's own
-    line, before it, so the script that runs is the one that arrived."""
+    line, before it, so the script that runs is the one that arrived. *Changed 2026-10-31 on
+    purpose (decision 175A; 004 T363):* step 5.5's four runs, to the older build and back, left
+    with its "before" half, so three runs remain: step 1.3's two spellings and the way back to the
+    build the seat had."""
     runs = re.findall(r"\.\\extractor\\tools\\update-workstation\.ps1[^`\n]*", plan)
 
-    assert len(runs) >= 6
+    assert len(runs) >= 3
     assert [run for run in runs if " -NoPull" not in run] == []
+
+
+def test_no_document_of_the_sitting_asks_for_a_gemini_key(plan: str, results: str) -> None:
+    """Decision 94A defers Gemini's own behaviour and 004 T361 closed 008 T106, the live Gemini
+    test, under it (decision 173A), so no step runs that test and no document of the sitting asks
+    for a Gemini key or names `GEMINI_API_KEY` (004 T363)."""
+    documents = {
+        "plan": plan,
+        "results": results,
+        "handover": HANDOVER.read_text(encoding="utf-8"),
+        "runbook": RUNBOOK.read_text(encoding="utf-8"),
+    }
+    tasks = (REPO / "specs" / "008-checks-first-review" / "tasks.md").read_text(encoding="utf-8")
+    [t106] = [line for line in tasks.splitlines() if re.match(r"- \[[ x]\] T106 ", line)]
+
+    for name, text in documents.items():
+        for words in ("GEMINI_API_KEY", "test_gemini_live_function_response", "Gemini key"):
+            assert words not in text, (name, words)
+    assert ("008", "T106") not in tagged_tasks(plan)
+    assert ("008", "T106") not in rowed_tasks(results)
+    assert t106.startswith("- [x] T106 ") and "94A" in t106
+
+
+def test_step_5_5_is_009_t082s_after_half_on_the_current_build(plan: str) -> None:
+    """Decision 175A drops 009 T082's "before" half, a one-hour swap to an older build to show a
+    bug already fixed, and keeps its "after" half: on the build of step 1.4, Show in SOLIDWORKS
+    on one of A's findings selects A's own entity (004 T363). Nothing checks out another commit,
+    builds without the gates, or copies the settings aside for a way back."""
+    show = re.sub(r"\s+", " ", step(plan, "5.5"))
+    handover = HANDOVER.read_text(encoding="utf-8")
+    tasks = (REPO / "specs" / "009-engineer-workspace" / "tasks.md").read_text(encoding="utf-8")
+    [t082] = [line for line in tasks.splitlines() if line.startswith("- [ ] T082 ")]
+
+    assert "Show in SOLIDWORKS selects A's own entity" in show
+    for words in ("git checkout", "-SkipTests", "settings.json.before-5.5", "update-workstation"):
+        assert words not in show, words
+    for text in (plan, handover):
+        assert "69fbb4a" not in text
+        assert "settings.json.before-5.5" not in text
+    assert "175A" in t082
 
 
 def test_the_update_script_fetches_before_it_decides_not_to_pull() -> None:
@@ -778,6 +841,49 @@ def test_a_qualified_range_names_each_task_in_it_and_a_bare_id_names_nothing() -
     assert qualified_tasks("[010 T103 to T106; 009 T080] and T077") == {
         ("010", "T103"), ("010", "T104"), ("010", "T105"), ("010", "T106"), ("009", "T080"),
     }
+
+
+def test_a_seat_task_is_tagged_w_or_says_workstation_and_its_id_is_read_whole() -> None:
+    """Decision 166A (004 T360): a seat task is open and tagged `[W]` among its leading tags, as
+    005 tags `[P] [W]`, or says `Workstation` first after them, as 003 and 004 do; a task tagged
+    only `[K]`, or saying so later in its text, is not one. An id ending in a letter is that task,
+    not the one without it: `004 T303a` is not `004 T303`."""
+    tasks = "\n".join([
+        "- [ ] T001 [W] On the seat.",
+        "- [ ] T002 [P] [W] [L9] Probe P3.",
+        "- [ ] T003 [US6] Workstation: probes 14 and 15.",
+        "- [ ] T004 Workstation, read only: the record.",
+        "- [ ] T085a [W] The harness.",
+        "- [x] T005 [W] Done already.",
+        "- [ ] T006 [P] [K] A live probe.",
+        "- [ ] T007 Run it on the workstation later.",
+        "- [ ] T008 [WK] Not the tag.",
+    ])
+
+    assert seat_tasks_in(tasks) == ["T001", "T002", "T003", "T004", "T085a"]
+    assert qualified_tasks("004 T303a and 004 T303b, then 005 T085a; 004 T303") == {
+        ("004", "T303a"), ("004", "T303b"), ("005", "T085a"), ("004", "T303"),
+    }
+    assert qualified_tasks("004 T303ab") == set()
+
+
+def test_every_feature_with_an_open_seat_task_is_one_the_plan_is_held_to() -> None:
+    """Decision 166A: the pins read every feature package with an open seat task, so a seat task
+    cannot drift out of the plan as 004 T303 did while 004 was not among the packages read.
+    *Corrected 2026-10-31 on review (004 T370):* a feature whose last seat task is ticked, as 014
+    and 015 will be after S3, leaves `PACKAGES`, whose every package must still have one (`assert
+    tasks, package` in the plan's and the handover's pins), so only the features that have one
+    are held here. 002 T044, quickstart Scenario 1 in the pane on the native bracket assembly,
+    needs the seat though its provider is the fake, so it is read as one too."""
+    tasks = sorted((REPO / "specs").glob("*/tasks.md"))
+    features = [path.parent.name for path in tasks]
+    seated = [path.parent.name for path in tasks if seat_tasks_in(path.read_text(encoding="utf-8"))]
+
+    assert len(features) >= 15
+    assert [feature for feature in seated if feature not in PACKAGES] == []
+    assert [package for package in PACKAGES if package not in features] == []
+    assert "002-task-pane-assistant" in seated
+    assert "T044" in open_seat_tasks("002-task-pane-assistant")
 
 
 def test_the_plan_says_what_allows_each_switch_and_names_every_probe(plan: str) -> None:
@@ -1307,8 +1413,10 @@ def test_each_decision_18a_item_has_its_one_place(plan: str, results: str) -> No
 
 def test_the_remodel_probes_are_the_last_step_before_the_handoff(plan: str) -> None:
     """A "Cannot reorder" box can hold SOLIDWORKS, and PROBE-1 asks for one, so step 5.6 comes
-    after everything but the handoff - after 5.5's return to the current build - with no
-    document open, and 5.5 no longer calls itself last."""
+    after everything but the handoff, with no document open, and 5.5 no longer calls itself
+    last. *Changed 2026-10-31 on purpose (decision 175A; 004 T363):* step 5.5 no longer builds
+    an older commit, so step 5.6 waits on no return to the current build and is never `blocked
+    by 5.5`."""
     numbers = STEP_HEADING.findall(plan)
     headings = re.findall(r"^### (5\.[56]) (.*)$", plan, re.MULTILINE)
     probes = re.sub(r"\s+", " ", step(plan, "5.6"))
@@ -1316,7 +1424,7 @@ def test_the_remodel_probes_are_the_last_step_before_the_handoff(plan: str) -> N
     assert numbers[numbers.index("6.0") - 1] == "5.6"
     assert dict(headings)["5.6"].startswith("The re-modeler probes, with no document open: last ")
     assert "last" not in dict(headings)["5.5"]
-    assert "blocked by 5.5" in probes
+    assert "blocked by 5.5" not in plan
     assert "Window > Close All, **Don't Save**, so that no document is open" in probes
     assert "--allow-start" not in probes and "--keep-part" not in probes
 
@@ -1357,29 +1465,46 @@ REMODEL_RUN = re.compile(
 """One run of step 5.6: its probe list and its folder under the handover folder's probes."""
 
 
-def test_the_three_runs_cover_the_catalog_once_with_probe_1_alone_and_last(plan: str) -> None:
+def test_the_three_runs_cover_the_catalog_once_with_starts_five_last_and_probe_1_last_of_all(
+    plan: str,
+) -> None:
     """Each run writes `capabilities/remodel-<version>.yaml` in its own `--out` folder and a
-    second run into the same folder would overwrite it, so the three folders differ. A run that
-    hangs never writes its ledger, so the first run holds exactly the probes whose bodies never
-    reorder (read from the executors, so a body that starts reordering moves this pin), the
-    second the remaining reorders, and the third PROBE-1 alone; together they are the catalog,
-    once each, each run in the catalog's order. Each run is read back from its own folder."""
+    second run into the same folder would overwrite it, so the three folders differ; together the
+    runs are the catalog, once each, and each is read back from its own folder.
+
+    *Changed 2026-10-31 on purpose (004 T377, review finding RR1; research R27.4):* this pinned
+    PROBE-1 alone in the third run, which split the five probes Start waits on over three answers
+    files, while `swreview remodel ledger` judges Start from one file and the switch's pin wants
+    one committed file judged ready, so no run of the plan could give it. Now the third run holds
+    exactly the reader's own `START_PROBES`: those whose bodies never reorder first, in the
+    catalog's order, then PROBE-3, then PROBE-1, which asks for a box, last of all - the answers
+    file is rewritten as each probe finishes (R27.2), so a hang keeps every earlier row. The
+    first run holds every other probe whose body never reorders (read from the executors, so a
+    body that starts reordering moves this pin) and the second every other reorder, each in the
+    catalog's order."""
     probes = step(plan, "5.6")
     runs = [(ids.split(","), folder) for ids, folder in REMODEL_RUN.findall(probes)]
     catalog = catalog_probes()
     reorders = reordering_probes()
+    start = set(START_PROBES)
     ledger = (RMS / "RemodelProbe.cs").read_text(encoding="utf-8")
 
     assert plan.count("swreview-extract probe remodel --") == len(runs) == 3
     assert len({folder for _, folder in runs}) == 3
     assert sorted(probe for ids, _ in runs for probe in ids) == sorted(catalog)
-    for ids, folder in runs:
-        assert ids == [probe for probe in catalog if probe in ids], folder
+    for _, folder in runs:
         assert f'Show-RemodelLedger "$H\\probes\\{folder}"' in probes, folder
-    assert set(runs[0][0]) == set(catalog) - reorders
-    assert set(runs[1][0]) == reorders - {"PROBE-1"}
-    assert runs[2][0] == ["PROBE-1"]
-    assert "PROBE-1" in reorders
+    for ids, folder in runs[:2]:
+        assert ids == [probe for probe in catalog if probe in ids], folder
+    assert set(runs[0][0]) == set(catalog) - reorders - start
+    assert set(runs[1][0]) == reorders - start
+    assert runs[2][0] == (
+        [probe for probe in catalog if probe in start - reorders]
+        + [probe for probe in catalog if probe in (start & reorders) - {"PROBE-1"}]
+        + ["PROBE-1"]
+    )
+    assert "PROBE-1" in reorders and "PROBE-1" in start
+    assert "so that one answers file holds all five" in re.sub(r"\s+", " ", probes)
     for constant in ('DirectoryName = "capabilities"', 'FileNamePrefix = "remodel-"',
                      'FileNameExtension = ".yaml"'):
         assert constant in ledger
@@ -1483,6 +1608,80 @@ def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
     assert "the three boxes are as item 1 noted" in probes
 
 
+def test_every_run_reads_start_not_ready_in_s1_and_the_line_is_recorded_not_judged(
+    plan: str, tmp_path: Path
+) -> None:
+    """`swreview remodel ledger` ends with one line per switch, `RemodelStart.SeatValidated:` and
+    `ready` or `not ready - ` with every reason; in S1 it reads `not ready` after every run, by
+    design: only the third run holds Start's five probes, and IDENTITY is calibrated only after
+    S1, by 004 T138 (decision 170A). Step 5.6's item 4 and the handover's step 21 say so and have
+    the line recorded, not judged (004 T377, review finding RR1). Here the reader reads the third
+    run's best case, all five verified with a reason: its one reason is IDENTITY's. Once T138
+    calibrates IDENTITY this fails, and the plan's sentence is changed with it."""
+    ledger = tmp_path / "remodel-32.5.0.yaml"
+    ledger.write_text(
+        rendered_ledger(
+            [(probe, True, "verified", {"reason": "answered as asked"}) for probe in START_PROBES]
+        ),
+        encoding="utf-8-sig",
+    )
+    payload = summary(load_ledger(ledger), ledger.name)
+    probes = re.sub(r"\s+", " ", step(plan, "5.6"))
+    handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
+    probe_step = handover[handover.index("21. **004 T033 to T039") :]
+    probe_step = probe_step[: probe_step.index("22. **015 T119")]
+
+    assert [switch["reasons"] for switch in payload["switches"]] == [
+        ["the IDENTITY tolerance profile is not calibrated: T138 freezes it against PROBE-8's "
+         "numbers (decision 170A)"]
+    ]
+    assert summary_lines(payload)[-1].startswith("RemodelStart.SeatValidated: not ready - ")
+    for text in (probes, probe_step):
+        assert "`RemodelStart.SeatValidated: not ready - `" in text
+        assert "recorded, not judged" in text
+    assert "`only IDENTITY`" in probes
+
+
+def test_a_hung_run_keeps_its_finished_probes_and_probe_12s_error_is_read_on_the_console(
+    plan: str, results: str
+) -> None:
+    """Since 004 T330 to T343 the probe log is written line by line, and the answers file is
+    started before anything is built and rewritten as each probe finishes, so after a hang or
+    Ctrl+C both hold every finished probe: item 6 keeps their verdicts and writes `blocked: hung
+    in run <n>` only for those the reader prints `not finished` (004 T377, review finding RR4).
+    And a thrown probe's row keeps only its type and code (decision 171A), so decision 148A's
+    question, whether PROBE-12's error names `OpenDoc7`, is read from the console: `probe remodel`
+    writes its line, then the exception's message on the line after it (R27.9.3), never from the
+    reader's `threw <type> 0x<code>` (review finding RR5)."""
+    console = REPO / "extractor" / "SwReview.Extractor.Console"
+    program = (console / "Program.cs").read_text(encoding="utf-8")
+    log = (console / "ExtractLog.cs").read_text(encoding="utf-8")
+    reader = (REVIEWER / "src" / "swreview" / "remodel" / "ledger.py").read_text(encoding="utf-8")
+    probes = re.sub(r"\s+", " ", step(plan, "5.6"))
+    handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
+    probe_step = handover[handover.index("21. **004 T033 to T039") :]
+    probe_step = probe_step[: probe_step.index("22. **015 T119")]
+    write_error = log[log.index("public void WriteError(") : log.index("public void Dispose(")]
+    threw = "`PROBE-12 threw; its message is kept in this log, never the ledger:`"
+    [row] = [line for line in results.splitlines() if line.startswith("| 5.6 | 011 T171: ")]
+
+    gone = "writes its answers file and its log only when it ends"
+    assert gone not in probes and gone not in handover
+    assert 'f"{probe}: not finished - the run stopped before this probe ended"' in reader
+    assert "`blocked: hung in run <n>` only for the probes it prints `not finished`" in probes
+    assert "`not finished`" in probe_step
+
+    assert '$"{probe} threw; its message is kept in this log, never the ledger:", error));' in (
+        program
+    )
+    assert write_error.index("Write(message);") < write_error.index(
+        "System.Console.Error.WriteLine(error.Message);"
+    )
+    assert threw in probes and threw in handover and "PROBE-12 threw;" in row
+    assert "whether the line after it contains `OpenDoc7`" in probes
+    assert "whether it names `OpenDoc7`" not in probes
+
+
 def test_the_fixture_ledger_has_the_shape_render_writes() -> None:
     """`Show-RemodelLedger` matches lines by their indentation and key, so the fixture's
     prefixes are the ones `RemodelProbeLedger.Render` appends, and the two raw_result keys it
@@ -1505,47 +1704,44 @@ def test_the_fixture_ledger_has_the_shape_render_writes() -> None:
 
 
 @pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
-def test_show_remodel_ledger_prints_each_probes_verdict_and_reason(
+def test_show_remodel_ledger_hands_each_answers_file_to_swreview_remodel_ledger(
     plan: str, tmp_path: Path
 ) -> None:
+    """*Changed 2026-10-31 on purpose (decision 166A; 004 T365):* `Show-RemodelLedger` no longer
+    reads the answers file line by line itself; it hands each file to `swreview remodel ledger`,
+    the reader another lane builds, from `$R\reviewer` as every `uv run` of the plan runs, and
+    still says when a run wrote none. That command is not this test's: `uv` is stood in for by a
+    function that prints what it was asked, so nothing of that lane's runs here."""
     run = tmp_path / "remodel-no-reorder"
     (run / "capabilities").mkdir(parents=True)
-    (run / "capabilities" / "remodel-32.5.0.48.yaml").write_text(
+    ledger = run / "capabilities" / "remodel-32.5.0.48.yaml"
+    ledger.write_text(
         rendered_ledger(
             [
-                ("PROBE-2", True, "verified", {
-                    "equation_count": "1",
-                    "equation_text": '\\"w\\" = 120',
-                    "reason": "get_Value returned 120.",
-                }),
+                ("PROBE-2", True, "verified", {"reason": "get_Value returned 120."}),
                 ("PROBE-13", False, "unresolved", {"error": "the call threw"}),
-                ("PROBE-21", False, "refuted", {}),
             ]
         ),
         encoding="utf-8-sig",
     )
     empty = tmp_path / "remodel-probe-1"
     empty.mkdir()
+    reviewer = tmp_path / "checkout" / "reviewer"
+    reviewer.mkdir(parents=True)
     function = plan_function(plan, "Show-RemodelLedger")
-    quoted, quoted_empty = (str(folder).replace("'", "''") for folder in (run, empty))
+    quoted, quoted_empty, checkout = (
+        str(folder).replace("'", "''") for folder in (run, empty, reviewer.parent)
+    )
+    stub = "function uv { \"uv $($args -join ' ') | from $((Get-Location).Path)\" }"
 
     lines = run_powershell(
-        f"{function}\nShow-RemodelLedger '{quoted}'\nShow-RemodelLedger '{quoted_empty}\\'\n",
+        f"$R = '{checkout}'\n{stub}\n{function}\nShow-RemodelLedger '{quoted}'\n"
+        f"Show-RemodelLedger '{quoted_empty}\\'\n",
         tmp_path,
     )
 
     assert lines == [
-        '- probe_id: "PROBE-2"',
-        "blocking: true",
-        "verdict: verified",
-        '"reason": "get_Value returned 120."',
-        '- probe_id: "PROBE-13"',
-        "blocking: false",
-        "verdict: unresolved",
-        '"error": "the call threw"',
-        '- probe_id: "PROBE-21"',
-        "blocking: false",
-        "verdict: refuted",
+        f"uv run swreview remodel ledger {ledger} | from {reviewer}",
         "no answers file in this folder: the run did not finish",
     ]
     assert plan.index("function Show-RemodelLedger ") < plan.index("Set-Location $R")
@@ -1695,8 +1891,11 @@ def test_the_start_switch_waits_on_the_blocking_probes_then_a_real_plan(plan: st
     """What the next sitting must prove before the development machine sets
     `RemodelStart.SeatValidated`, in this order: step 5.6's blocking probes, the ones 004 T172 and
     `RemodelStart.cs` name, each `verified` - their tasks read off step 5.6's own table - then step
-    5.3's Plan on one real part's copy with that part's hash unchanged; and 004 T180 is decided
-    first. The development machine's table and the handover say the same."""
+    5.3's Plan on one real part's copy with that part's hash unchanged. The development machine's
+    table and the handover say the same. *Changed 2026-10-31 on purpose (004 T377, review finding
+    RR3):* this asked for 004 T180 among what is decided before the switch; decision 168A closed
+    T180 (004 research R25.9, R26.5), so each of the three now says it is done, and none says it
+    is still to be decided."""
     waits = re.sub(r"\s+", " ", step(plan, "5.3"))
     waits = waits[waits.index("**What the Start switch waits on.**") :]
     tasks = (FEATURE_004 / "tasks.md").read_text(encoding="utf-8")
@@ -1712,15 +1911,20 @@ def test_the_start_switch_waits_on_the_blocking_probes_then_a_real_plan(plan: st
     assert SWITCH_PROBES in start and SWITCH_PROBES in tasks
     assert SWITCH_PROBES in waits
     assert blocking == {("004", "T033"), ("004", "T034"), ("004", "T035"), ("004", "T037")}
-    assert blocking | {("004", "T180")} <= qualified_tasks(waits)
+    assert blocking <= qualified_tasks(waits)
     assert "`RemodelStart.SeatValidated`" in waits
     assert waits.index("step 5.6's blocking probes") < waits.index(
         "this step's Plan on one real part's copy"
     )
     assert "hash, size and time unchanged" in waits
-    assert blocking | {("004", "T172"), ("004", "T180"), ("004", "T182")} <= qualified_tasks(row)
+    assert blocking | {("004", "T172"), ("004", "T182")} <= qualified_tasks(row)
     assert "step 5.3" in row and "hash" in row
-    assert blocking | {("004", "T172"), ("004", "T180")} <= qualified_tasks(handover)
+    assert blocking | {("004", "T172")} <= qualified_tasks(handover)
+    assert "Done already: 004 T180" in waits
+    assert "004 T180 is done (decision 168A)" in row
+    assert "004 T180 is done (decision 168A)" in handover
+    for text in (waits, row, handover):
+        assert re.search(r"004 T180\b[^.;]*\bdecided\b", text) is None
     assert handover.index("first step 21's blocking probes") < handover.index(
         "then step 5.3's Plan on one real part's copy"
     )
@@ -1969,6 +2173,14 @@ DECISION_144A_IN_STEP_5 = 5
 """Step 5.3's item B for 011 T171 (decision 144A, 2026-10-19): the box's Open copy, then Start,
 and the run's four `seat=` lines, 5 minutes."""
 
+DECISION_169A_IN_STEP_5 = 25
+"""Step 5.3's close in process, 004 T303a, idle and with a dialog open (decision 169A, 2026-10-31;
+004 T365), 25 minutes."""
+
+GEMINI_TEST_IN_STEP_5 = 5
+"""Step 5.4's live Gemini test (008 T106), part of step 5.1 to 5.4's first 35 minutes, withdrawn
+when decision 173A closed 008 T106 under decision 94A (004 T363), 5 minutes."""
+
 
 def minutes(estimate: str) -> int:
     """`3 h 55 min`, `3 h` or `50 min` as minutes."""
@@ -1993,7 +2205,11 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     smoke checks at step 4.11, reading step 4.1's review without another paid review. Decision
     144A (011 T171, 2026-10-19, edited deliberately) adds `DECISION_144A_IN_STEP_5` to step 5.1
     to 5.4's row, for the pane seat's gate at step 5.3's item B, which the decision 18A range
-    leaves out too."""
+    leaves out too. *Changed 2026-10-31 on purpose (004 T363):* step 5.1 to 5.4's row loses
+    `GEMINI_TEST_IN_STEP_5` with step 5.4's Gemini test (decisions 94A and 173A), and step 5.5's
+    row falls from an hour to 15 minutes with 009 T082's "before" half (decision 175A). *Changed
+    2026-10-31 on purpose (004 T365):* step 5.1 to 5.4's row gains `DECISION_169A_IN_STEP_5` for
+    004 T303a in step 5.3, and step 3's row 10 minutes for PROBE-15 at step 3.9 (003 T088)."""
     section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
     rows = re.findall(r"^\| ([^|]+) \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
     [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
@@ -2001,13 +2217,15 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
 
     assert len(rows) == 8
     assert abs(sum(estimates.values()) - (int(hours) * 60 + int(mins or 0))) <= 7
-    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 90
+    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 110
+    assert estimates["5.5"] == 15
     decision_18a_in_step_5 = (
         estimates["5.1 to 5.4"]
-        - 35
+        - (35 - GEMINI_TEST_IN_STEP_5)
         - FEATURE_013_IN_STEP_5
         - RETEST_2026_09_28_IN_STEP_5
         - DECISION_144A_IN_STEP_5
+        - DECISION_169A_IN_STEP_5
     )
     assert 30 <= estimates["5.6"] + (estimates["1"] - 50) + decision_18a_in_step_5 <= 45
     assert (estimates["2"], estimates["4"]) == (40, 300)
@@ -2103,3 +2321,792 @@ def test_every_command_written_in_the_text_parses(tmp_path: Path) -> None:
     assert len(spans) >= 70
 
     assert powershell_parse_errors(spans, tmp_path) == ""
+
+
+SITTING_ROW = re.compile(r"^\| (S\d) \| ([^|]+) \| ([^|]+) \| [^|]+ \|$", re.MULTILINE)
+"""A row of the plan's Sittings table: the sitting, its theme and its length."""
+S1_ROW = re.compile(r"^\| (\d+) \| ([^|]+) \| ([^|]*) \| ([^|]+) \|$", re.MULTILINE)
+"""A row of S1's table: its order, the steps it runs, their task ids and its estimate."""
+STEP_NUMBER = re.compile(r"\b(\d\.\d{1,2})\b")
+PAID_STEPS = frozenset({"2.5", "2.7", "3.4", "5.5"})
+"""The steps outside step 4 that use the key: it is saved (2.5), lever 14's live test reads it
+(2.7), and a pane review sends to the model (3.4, 5.5); every step of step 4 is a review too."""
+S1_TASKS = frozenset({
+    ("004", "T140"), ("004", "T164"), ("004", "T187"), ("011", "T077"), ("013", "T142"),
+    ("003", "T088"), ("004", "T185"), ("004", "T186"), ("011", "T171"), ("004", "T182"),
+    ("004", "T303a"), ("006", "T102"), ("001", "T076"), ("004", "T353"),
+})
+"""What S1 answers, as decisions 167A, 169A and 172A put it, besides the probes of step 5.6."""
+
+
+def section(plan: str, heading: str) -> str:
+    """The plan's section `## <heading>`, to the next heading of its level."""
+    start = plan.index(f"## {heading}\n")
+    end = plan.find("\n## ", start + 1)
+    return plan[start : end if end >= 0 else len(plan)]
+
+
+def s1_rows(plan: str) -> list[tuple[int, str, str, int]]:
+    """`(order, steps, tasks, minutes)` of each row of S1's table."""
+    return [
+        (int(order), steps.strip(), tasks, minutes(estimate))
+        for order, steps, tasks, estimate in S1_ROW.findall(section(plan, "S1: Start readiness"))
+    ]
+
+
+def t303a(plan: str) -> str:
+    """Step 5.3's part for 004 T303a, the close in process (decision 169A)."""
+    remodel = step(plan, "5.3")
+    end = remodel.index("**What the Start switch waits on.**")
+    return remodel[remodel.index("**004 T303a") : end]
+
+
+def test_the_plan_is_run_in_short_themed_sittings_s1_first(plan: str) -> None:
+    """Decision 167A: the next sitting is S1, about three hours, and later sittings are short and
+    themed, each 3.5 hours or less, in place of the two-day plan (004 T365)."""
+    sittings = section(plan, "Sittings")
+    rows = SITTING_ROW.findall(sittings)
+    lengths = {sitting: length.strip() for sitting, _, length in rows}
+
+    assert [(sitting, theme.strip()) for sitting, theme, _ in rows] == [
+        ("S1", "Start readiness"), ("S2", "Start on"), ("S3", "paid review"),
+        ("S4", "drawings"), ("S5", "fixtures"),
+    ]
+    assert lengths["S1"] == "3 h 10 min, and an optional 25 min"
+    assert [lengths[sitting] for sitting in ("S2", "S3", "S4", "S5")] == ["3 h 30 min at most"] * 4
+    assert "decision 167A" in re.sub(r"\s+", " ", sittings)
+    assert ("004", "T303b") in qualified_tasks(sittings)
+    assert (
+        plan.index("## Sittings\n")
+        < plan.index("## S1: Start readiness\n")
+        < plan.index("## The next sitting: where 2026-09-26 stopped")
+    )
+
+
+def test_s1_is_a_selection_of_the_plans_steps_whose_minutes_are_its_headline(plan: str) -> None:
+    """S1 runs steps the plan already has, none that uses the key, and its estimates add up to its
+    headline, 3 h 10 min, the optional block's 25 minutes apart; together they answer what
+    decisions 167A, 169A and 172A put in it (004 T365)."""
+    flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+    rows = s1_rows(plan)
+    [(hours, mins, optional)] = re.findall(
+        r"about \*\*(\d+) hours (\d+) minutes\*\* at the seat, plus an optional (\d+) minutes", flat
+    )
+    steps = set(STEP_HEADING.findall(plan))
+    named = [set(STEP_NUMBER.findall(cell)) for _, cell, _, _ in rows]
+    used = set().union(*named)
+    tasks = set().union(*(qualified_tasks(cell) for _, _, cell, _ in rows))
+
+    assert [order for order, *_ in rows] == list(range(1, len(rows) + 1))
+    assert sum(m for _, cell, _, m in rows if "optional" not in cell) == 190
+    assert int(hours) * 60 + int(mins) == 190
+    assert [m for _, cell, _, m in rows if "optional" in cell] == [int(optional)] == [25]
+    assert [cell for (_, cell, _, _), numbers in zip(rows, named, strict=True)
+            if not numbers and "optional" not in cell] == []
+    assert used <= steps, sorted(used - steps)
+    assert sorted(n for n in used if n.startswith("4.") or n in PAID_STEPS) == []
+    assert "no key and no paid call" in flat
+    assert S1_TASKS | set(PROBE_RUNS) <= tasks
+
+
+def test_s1_runs_the_probes_that_never_reorder_early_and_the_reorders_last(plan: str) -> None:
+    """Step 5.6's first run asks SOLIDWORKS for no reorder, so no "Cannot reorder" box can hold
+    it, and it comes early; its second and third runs stay last before the handoff. If SOLIDWORKS
+    closes during step 5.3, the close in process is skipped; the optional block is the first thing
+    cut; and after S1 the development machine's three switches each go in a pull request of their
+    own (decision 167A; 004 T365)."""
+    cells = [cell for _, cell, _, _ in s1_rows(plan)]
+    flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+
+    def at(words: str) -> int:
+        [index] = [index for index, cell in enumerate(cells) if words in cell]
+        return index
+
+    assert (
+        at("first run")
+        < at("3.9")
+        < at("5.3: items")
+        < at("close in process")
+        < at("optional")
+        < at("second and third runs")
+        == len(cells) - 2
+    )
+    assert set(STEP_NUMBER.findall(cells[-1])) == {"6.0", "6.1", "6.3", "6.5"}
+    assert "If SOLIDWORKS closes during step 5.3" in flat
+    assert "go straight to 5.6's second and third runs" in flat
+    assert "2 h 30" in flat
+    assert ("004", "T138") in qualified_tasks(flat)
+    for words in ("`RemodelStart.SeatValidated`", "`DrawingOpenScope.SeatValidated`",
+                  "each as its own pull request"):
+        assert words in flat, words
+    assert "In S1 the first run comes early" in re.sub(r"\s+", " ", step(plan, "5.6"))
+
+
+def test_s1s_steps_hold_what_s1_asks_of_them(plan: str) -> None:
+    """Step 1.3 names 004 T140's one test, which the C# gate runs unnamed; step 1.6 runs
+    `swreview seat health` (decision 166A, another lane's command, only pasted here); step 1.7
+    keeps the product name 004 T164 still needs; step 3.9 runs PROBE-15 on part J (003 T088); and
+    004's tasks say what is left of T140 and T164 (004 T365)."""
+    tasks = (FEATURE_004 / "tasks.md").read_text(encoding="utf-8")
+    [t140] = [line for line in tasks.splitlines() if line.startswith("- [ ] T140 ")]
+    [t164] = [line for line in tasks.splitlines() if line.startswith("- [ ] T164 ")]
+    manifest_tests = (
+        REPO / "extractor" / "SwReview.Extractor.Tests" / "RemodelInteropManifestTests.cs"
+    )
+
+    assert (
+        'dotnet test extractor\\SwReview.Extractor.Tests\\SwReview.Extractor.Tests.csproj '
+        '-c Release --no-build --filter "FullyQualifiedName~InstalledAssemblyMatchesManifest" '
+        '--logger "console;verbosity=normal"'
+    ) in step(plan, "1.3")
+    assert "public void InstalledAssemblyMatchesManifest()" in manifest_tests.read_text(
+        encoding="utf-8"
+    )
+    assert ("004", "T140") in qualified_tasks(step(plan, "1.3"))
+    assert 'cd "$R\\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd $R' in (
+        step(plan, "1.6")
+    )
+    assert "In S1 only the product" in re.sub(r"\s+", " ", step(plan, "1.7"))
+    assert (
+        'swreview-extract probe rms --doc "<full path of part J>" | Out-File -FilePath '
+        '"$H\\probes\\probe-rms-J.txt" -Encoding utf8; "exit code: $LASTEXITCODE"'
+    ) in step(plan, "3.9")
+    assert {("003", "T088"), ("011", "T077")} <= qualified_tasks(step(plan, "3.9"))
+    rms = re.sub(r"\s+", " ", step(plan, "3.9"))
+    assert "the `root_component:` line whole" not in rms
+    assert "write only `a component name`, never the name" in rms
+    assert "`InstalledAssemblyMatchesManifest`" in t140 and "passed, not skipped" in t140
+    assert "*Amended 2026-10-31" in t164 and "the product Help > About names" in t164
+
+
+def test_t303a_ends_only_the_backend_the_add_in_started_and_only_by_its_pid(plan: str) -> None:
+    """004 T303a ends the review backend the add-in started, by the number its own log gives
+    (`BackendProcess`), and only once that number is still a backend's process; no document of
+    the sitting ends a process by its name. The close it reads for is the tool service's own line,
+    and what cannot be made by hand stays the fakes' (decision 169A; 004 T365)."""
+    part = t303a(plan)
+    flat = re.sub(r"\s+", " ", part)
+    backend = (REPO / "extractor" / "SwReview.AddIn" / "Review" / "BackendProcess.cs").read_text(
+        encoding="utf-8"
+    )
+
+    for path in (PLAN, HANDOVER, RUNBOOK):
+        text = path.read_text(encoding="utf-8")
+        assert re.findall(r"Stop-Process(?! -Id \$backend\b)", text) == [], path.name
+        assert "taskkill" not in text.lower(), path.name
+    assert "Stop-Process -Id $backend" in part
+    assert "$p.ProcessName -in 'uv', 'swreview', 'python'" in part
+    assert '$"backend healthy on {Origin} (pid {ProcessId})"' in backend
+    assert (
+        "remodel close in process thread=posted reason=remodel.close verified=true "
+        "tag_removed=true copy_closed=true"
+    ) in flat
+    assert "decision 169A" in flat and "the fakes" in flat
+    assert "Of the barrier, which decision 169A puts here," in flat
+    assert "which items 2 to 4 check" in flat
+    assert ("004", "T303a") in qualified_tasks(part)
+    assert ("004", "T303a") in tagged_tasks(plan)
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_t303a_reads_the_newest_backend_logs_pid_and_ends_that_process_once_the_copy_is_open(
+    plan: str, tmp_path: Path
+) -> None:
+    """T303a's first two blocks, pasted as they stand, over a stand-in `LOCALAPPDATA` and run
+    root: the number is the newest backend log's, and the process is ended only once a remodel
+    folder made after the wait began holds `open_record.written` - here a sleeping Python this
+    test started, the backend's stand-in (004 T365). *Strengthened 2026-10-31 on review (004
+    T370):* the older log takes the later name, so only the sort by write time finds the newer;
+    an older remodel folder already holds `open_record.written`, so only the folder's creation
+    time keeps the block waiting; and the copy's open begins a second before it is written, the
+    backend still running then, so a block that ended it at `copy_open.begin` - inside the open,
+    the barrier's case the plan leaves to the fakes - fails here."""
+    [number, wait, *_] = POWERSHELL_BLOCK.findall(t303a(plan))
+    logs = tmp_path / "local" / "SwReview" / "logs"
+    logs.mkdir(parents=True)
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    earlier = runs / "20261031-080000-J-remodel"
+    earlier.mkdir()
+    (earlier / "remodel-open.jsonl").write_text(
+        '{"at": "2026-10-31T08:00:09+00:00", "phase": "open_record.written"}\n', encoding="utf-8"
+    )
+    marker = tmp_path / "waiting"
+    alive_inside_the_open: list[bool] = []
+    sleeper = subprocess.Popen([sys._base_executable, "-c", "import time; time.sleep(90)"])
+    try:
+        older = logs / "backend-20261031-110000.log"
+        older.write_text(
+            "[2026-10-31T09:00:01+00:00] backend healthy on http://127.0.0.1:50001 (pid 4)\n",
+            encoding="utf-8",
+        )
+        os.utime(older, (1_000_000_000, 1_000_000_000))
+        (logs / "backend-20261031-100000.log").write_text(
+            "[2026-10-31T10:00:00+00:00] starting\n"
+            f"[2026-10-31T10:00:01+00:00] backend healthy on http://127.0.0.1:50002 "
+            f"(pid {sleeper.pid})\n",
+            encoding="utf-8",
+        )
+
+        def open_a_copy() -> None:
+            deadline = time.monotonic() + 120
+            while not marker.exists() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            time.sleep(1)
+            run = runs / "20261031-100500-J-remodel"
+            run.mkdir()
+            record = run / "remodel-open.jsonl"
+            record.write_text(
+                '{"at": "2026-10-31T10:05:01+00:00", "phase": "copy_open.begin"}\n',
+                encoding="utf-8",
+            )
+            time.sleep(1)
+            alive_inside_the_open.append(sleeper.poll() is None)
+            with record.open("a", encoding="utf-8") as appended:
+                appended.write(
+                    '{"at": "2026-10-31T10:05:09+00:00", "phase": "open_record.written"}\n'
+                )
+
+        writer = threading.Thread(target=open_a_copy, daemon=True)
+        writer.start()
+        local, root, waiting, handover = (
+            str(path).replace("'", "''")
+            for path in (tmp_path / "local", runs, marker, tmp_path / "handover")
+        )
+        lines = run_powershell(
+            f"$env:LOCALAPPDATA = '{local}'\n$runs = '{root}'\n$H = '{handover}'\n{number}\n"
+            f"New-Item -ItemType File '{waiting}' | Out-Null\n{wait}\n",
+            tmp_path,
+        )
+        writer.join(timeout=150)
+
+        assert lines == [
+            f"backend pid {sleeper.pid} | running: True",
+            f"ended the backend, pid {sleeper.pid}",
+        ]
+        assert alive_inside_the_open == [True]
+        assert sleeper.wait(timeout=30) is not None
+    finally:
+        if sleeper.poll() is None:
+            sleeper.kill()
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_t303a_times_the_close_from_save_and_reads_it_before_the_new_backends_start(
+    plan: str, tmp_path: Path
+) -> None:
+    """004 T303 asks for the close's line before the new backend's start, within 30 seconds of
+    Save, and the Windows clock shows minutes only: Save's time is taken from a line pasted just
+    before it, and T303a's reading block, pasted as it stands over a stand-in `LOCALAPPDATA`,
+    prints the seconds from Save to the close and whether the newest backend log began after it -
+    `False` when that backend began first (004 T370, on review)."""
+    blocks = POWERSHELL_BLOCK.findall(t303a(plan))
+    [save] = [block for block in blocks if "$save = " in block]
+    [read] = [block for block in blocks if "$started" in block]
+    logs = tmp_path / "local" / "SwReview" / "logs"
+    logs.mkdir(parents=True)
+    run = tmp_path / "runs" / "20261031-100500-J-remodel"
+    run.mkdir(parents=True)
+    close = (
+        "[2026-10-31T10:06:12.5000000+00:00] remodel close in process thread=posted "
+        "reason=remodel.close verified=true tag_removed=true copy_closed=true "
+        "gated=ISldWorks.CloseDoc"
+    )
+    (logs / "tool-service-20261031-090000.log").write_text(
+        "[2026-10-31T09:30:00.0000000+00:00] remodel close in process thread=posted run=x "
+        "nothing closed: this bridge holds no session of that run\n" + close + "\n",
+        encoding="utf-8",
+    )
+    (run / "remodel.log").write_text(close + "\n", encoding="utf-8")
+    older = logs / "backend-20261031-100000.log"
+    older.write_text(
+        "[2026-10-31T10:00:00.0000000+00:00] starting uv run swreview serve\n"
+        "[2026-10-31T10:06:10.0000000+00:00] backend stopped\n",
+        encoding="utf-8",
+    )
+    os.utime(older, (1_000_000_000, 1_000_000_000))
+    newest = logs / "backend-20261031-100613.log"
+    local, folder = (str(path).replace("'", "''") for path in (tmp_path / "local", run))
+    setup = (
+        f"$env:LOCALAPPDATA = '{local}'\n$open = Get-Item -LiteralPath '{folder}'\n"
+        "$save = [DateTimeOffset]'2026-10-31T10:06:00+00:00'\n"
+    )
+
+    def reading(started: str) -> list[str]:
+        newest.write_text(f"[{started}] starting uv run swreview serve\n", encoding="utf-8")
+        return run_powershell(f"{setup}{read}\n", tmp_path)
+
+    assert "$save = [DateTimeOffset]::Now" in save and "'HH:mm:ss.fff'" in save
+    assert reading("2026-10-31T10:06:13.1000000+00:00") == [
+        close, close, "close 12.5 s after Save | before the new backend's start: True",
+    ]
+    assert reading("2026-10-31T10:06:05.0000000+00:00")[-1] == (
+        "close 12.5 s after Save | before the new backend's start: False"
+    )
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_t303a_leaves_the_folder_for_runs_outside_the_handover_folder(
+    plan: str, tmp_path: Path
+) -> None:
+    """T303a moves the folder for runs into the handover folder and back. Item 2 can end nothing,
+    after which item 3 never moved it, so item 4 moves it to the other of the two; whatever
+    happened, step 5.3 ends with it at `$runs`; and step 6.0's line, pasted as it stands over a
+    stand-in `APPDATA`, says whether the saved folder for runs is outside the handover folder, so
+    the seat is not left writing its runs into it (004 T370, on review)."""
+    part = re.sub(r"\s+", " ", t303a(plan))
+    [line] = [
+        line for block in POWERSHELL_BLOCK.findall(step(plan, "6.0"))
+        for line in block.splitlines() if "folder for runs outside the handover folder" in line
+    ]
+    appdata = tmp_path / "roaming"
+    (appdata / "SwReview").mkdir(parents=True)
+    settings = appdata / "SwReview" / "settings.json"
+    handover = tmp_path / "handover" / "2026-10-31"
+    roaming, quoted = (str(path).replace("'", "''") for path in (appdata, handover))
+
+    def check(run_root: Path | None) -> list[str]:
+        if run_root is None:
+            settings.unlink(missing_ok=True)
+        else:
+            settings.write_text(json.dumps({"run_root": str(run_root)}), encoding="utf-8")
+        return run_powershell(f"$env:APPDATA = '{roaming}'\n$H = '{quoted}'\n{line}\n", tmp_path)
+
+    assert "set the folder for runs to the other of the two" in part
+    assert "**Before leaving step 5.3, whatever happened above**" in part
+    assert check(handover / "runs-t303a") == ["folder for runs outside the handover folder: False"]
+    assert check(Path(str(handover).upper())) == [
+        "folder for runs outside the handover folder: False"
+    ]
+    assert check(tmp_path / "handover" / "2026-10-31-other") == [
+        "folder for runs outside the handover folder: True"
+    ]
+    assert check(tmp_path / "runs") == ["folder for runs outside the handover folder: True"]
+    assert check(None) == ["folder for runs outside the handover folder: True"]
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_the_opens_seconds_are_read_from_the_runs_remodel_open_record(
+    plan: str, tmp_path: Path
+) -> None:
+    """004 T182 sets the open route's wait from the time the open takes on a real part, so step
+    5.3 reads it from the run's own `remodel-open.jsonl`, in the shape the backend writes it, from
+    the first phase to the last (004 T365)."""
+    [block] = [
+        found for found in POWERSHELL_BLOCK.findall(step(plan, "5.3")) if "$phases" in found
+    ]
+    run = tmp_path / "20261031-101112-J-remodel"
+    run.mkdir()
+    _open_phase(run, "copy_open.begin")
+    [written] = (run / OPEN_DIAGNOSTICS_FILE).read_text(encoding="utf-8").splitlines()
+    assert set(json.loads(written)) == {"at", "phase"}
+    began = datetime(2026, 10, 31, 10, 11, 12, 345678, tzinfo=UTC)
+    phases = ((0, "copy_open.begin"), (4.5, "baseline_geometry.begin"),
+              (12.34, "open_record.written"))
+    (run / OPEN_DIAGNOSTICS_FILE).write_text(
+        "".join(
+            json.dumps({"at": (began + timedelta(seconds=at)).isoformat(), "phase": phase}) + "\n"
+            for at, phase in phases
+        ),
+        encoding="utf-8",
+    )
+    quoted = str(run).replace("'", "''")
+
+    lines = run_powershell(f"$run = Get-Item -LiteralPath '{quoted}'\n{block}\n", tmp_path)
+
+    assert lines == ["open: 12.3 s, from copy_open.begin to open_record.written"]
+
+
+def test_the_handover_says_the_next_sitting_is_s1(plan: str) -> None:
+    """The handover gives the assistant S1's order and points at the plan's table, which wins
+    (decision 167A; 004 T365)."""
+    handover = HANDOVER.read_text(encoding="utf-8")
+    s1 = handover[handover.index("## The next sitting is S1") :]
+    s1 = s1[: s1.index("\n## ")]
+
+    assert "the test plan's section \"S1: Start readiness\"" in re.sub(r"\s+", " ", s1)
+    assert S1_TASKS <= qualified_tasks(s1) | qualified_tasks(section(plan, "S1: Start readiness"))
+    assert ("004", "T303a") in qualified_tasks(s1)
+
+
+START_WAITS_ON = frozenset({("004", "T303a"), ("004", "T303b"), ("004", "T138"), ("004", "T187")})
+"""What Start waits on besides the blocking probes and a real Plan: the close in process's two
+halves (decision 169A) and IDENTITY's calibration (decision 170A: Start refuses every change while
+it is uncalibrated); with R22.14 and R25.13, fixed under decision 165A. *Changed 2026-10-31 on
+purpose (004 T377, review finding RR3):* 004 T180 is no longer here, since decision 168A closed it;
+the Start test asserts that the plan says it is done."""
+
+
+def test_what_the_start_switch_waits_on_is_what_004_research_lists(plan: str) -> None:
+    """004 research R25.9 lists what Start (T172) waits on: T303, R22.14, T180, the blocking probes,
+    a real Plan and R25.13; decision 169A splits T303 and decision 170A adds T138 and T187. Step
+    5.3's paragraph and the development machine's row say all of it (004 T367). *Since 2026-10-31*
+    (004 T377, review finding RR3) also the two that R25.9 and R27.8 add: the owner's call on the
+    no-handle unwind (Codex's CX1, R26.10), and the blocking probes' answers file committed under
+    `benchmarks/native/capabilities/` and judged ready by `swreview remodel ledger`, which
+    `test_seat_switch_evidence.py` holds the switch to; "After S1" and the handover say both."""
+    waits = re.sub(r"\s+", " ", step(plan, "5.3"))
+    waits = waits[waits.index("**What the Start switch waits on.**") :]
+    [row] = [
+        line for line in plan[plan.index("## Not in this sitting") :].splitlines()
+        if "`RemodelStart.SeatValidated`" in line
+    ]
+    research = (FEATURE_004 / "research.md").read_text(encoding="utf-8")
+    listed = research[research.index("### R25.9 ") : research.index("### R25.10 ")]
+
+    for reference in ("R22.14", "R25.13"):
+        assert reference in listed, reference
+    after = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+    after = after[after.index("### After S1") :]
+    handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
+    evidence = (REVIEWER / "tests" / "unit" / "test_seat_switch_evidence.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "no-handle unwind" in listed and "R26.10" in listed
+    assert "*Done (168A; R26.5):* T180" in listed
+    assert "`benchmarks/native/capabilities/` is one `swreview remodel ledger` judges ready" in (
+        evidence
+    )
+    for text in (waits, row):
+        missing = START_WAITS_ON - qualified_tasks(text)
+        assert missing == set(), sorted(missing)
+        assert "R22.14" in text and "R25.13" in text
+        assert "decision 170A" in text
+    for text in (waits, row, after, handover):
+        assert "no-handle unwind" in text and "R26.10" in text
+        assert "`benchmarks/native/capabilities/`" in text and "R27.8" in text
+        assert "judged ready by `swreview remodel ledger`" in text
+
+
+def test_the_plan_says_001_t076s_buttons_are_built(plan: str) -> None:
+    """001 T076's Interference and Capture selection buttons are on the Extract tab
+    (`TaskPaneControl`), so no row says they are not built; S1's optional block settles the
+    volume unit T076 reads (decision 172A; 004 T367)."""
+    pane = (REPO / "extractor" / "SwReview.AddIn" / "TaskPaneControl.cs").read_text(
+        encoding="utf-8"
+    )
+    [row] = [line for line in plan.splitlines() if line.startswith("| 001 | 001 T061, 001 T076 |")]
+
+    assert 'Text = "Interference",' in pane and 'Text = "Capture selection",' in pane
+    assert "not built" not in row
+    assert "**Interference**" in row and "**Capture selection**" in row
+    assert "decision 172A" in row
+
+
+def test_the_specs_readme_says_which_features_mark_seat_tasks_and_how() -> None:
+    """`specs/README.md` said features 001 to 004 and 016 use no `[W]`; 004 T303 carried it, and
+    since decision 166A the workstation tasks of 001, 002 and 016 are tagged too, while 003 and 004
+    also say `Workstation` first. The pins read both (004 T367)."""
+    readme = re.sub(r"\s+", " ", (REPO / "specs" / "README.md").read_text(encoding="utf-8"))
+
+    assert "Features 001 to 004 and 016 do not use `[W]`" not in readme
+    assert "begins `Workstation`" in readme
+    assert "`reviewer/tests/support/seat_tasks.py`" in readme
+    assert "decision 166A" in readme
+
+
+def test_the_seat_work_found_after_the_plan_has_a_place(plan: str) -> None:
+    """Work for the seat found after the plan was written has a place in it: 004 T188's native
+    configuration-watch timing (`docs/development-handoff-2026-10-23.md`), 004 T187 (step 5.6)
+    and the focused retest of 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`), whose
+    Review half waits on the owner (004 T367)."""
+    aside = plan[plan.index("## Not in this sitting") :]
+    flat = re.sub(r"\s+", " ", aside)
+
+    assert ("004", "T188") in qualified_tasks(aside)
+    assert "`docs/development-handoff-2026-10-23.md`" in flat
+    assert "`docs/history/testing-feedback-2026-10-13.md`" in flat
+    assert ("004", "T187") in tagged_tasks(plan)
+    # On review (004 T370): neither the watch nor its start writes a log line, so S1's logs
+    # cannot show the timing.
+    [watch] = [line for line in aside.splitlines() if "004 T188" in line]
+    assert "S1 cannot show it" in watch and "at S2" in watch
+    assert "reads it from S1's" not in watch
+
+
+def test_011_t101_is_its_screenshot_and_its_live_checks_are_011_t095s(
+    plan: str, results: str
+) -> None:
+    """011 T101 could not pass as written: since 013 T142 no same-name question is asked while the
+    read-only open's switch is off, and with it on, its part 1's refusal cannot happen. Its part 1
+    is dropped, its parts 2 and 3 are 011 T095's, at the sitting after the switch, and its part 4,
+    the screenshot, stays at step 4.7 (004 T368)."""
+    tasks = (REPO / "specs" / "011-drawing-context" / "tasks.md").read_text(encoding="utf-8")
+    [t101] = [line for line in tasks.splitlines() if line.startswith("- [ ] T101 ")]
+    [t095] = [line for line in tasks.splitlines() if line.startswith("- [ ] T095 ")]
+
+    assert_named_only_at({("011", "T101"): {"4.7"}}, plan, results)
+    assert "*Rewritten 2026-10-31" in t101 and "300 by 600" in t101
+    assert "011 T101's parts 2 and 3" in t095
+
+
+STEP_RANGE = re.compile(r"\b(\d)\.(\d{1,2}) to \1\.(\d{1,2})\b")
+"""A range of one step's parts: `2.5 to 2.7`."""
+WHOLE_STEP = re.compile(r"\bsteps? (\d)\b(?!\.\d)")
+"""A whole step: `step 4`, `step 6's handoff`."""
+
+
+def steps_named(text: str, steps: set[str]) -> set[str]:
+    """Which of the plan's `steps` the text names: `5.5`, a range `2.5 to 2.7`, or a whole step,
+    `step 4`."""
+    named = set(STEP_NUMBER.findall(text))
+    for major, first, last in STEP_RANGE.findall(text):
+        named |= {f"{major}.{minor}" for minor in range(int(first), int(last) + 1)}
+    for major in WHOLE_STEP.findall(text):
+        named |= {number for number in steps if number.startswith(f"{major}.")}
+    return named & steps
+
+
+def test_every_step_has_a_sitting_or_is_named_as_not_yet_placed(plan: str) -> None:
+    """Every step of steps 1 to 6 is S1's, or the Sittings section names it: in a later
+    sitting's row, as opening or closing every sitting, as not yet placed, or as withdrawn. Step
+    5.5, a paid review, is S3's (decision 167A; 004 T370, on review)."""
+    steps = {number for number in STEP_HEADING.findall(plan) if not number.startswith("0.")}
+    sittings = section(plan, "Sittings")
+    s1 = set().union(*(steps_named(cell, steps) for _, cell, _, _ in s1_rows(plan)))
+    [s3] = [line for line in sittings.splitlines() if line.startswith("| S3 |")]
+
+    assert steps_named("steps 2.5 to 2.7, 3.4, step 4 and 5.5", steps) >= {
+        "2.5", "2.6", "2.7", "3.4", "4.1", "4.11", "5.5",
+    }
+    assert len(steps) >= 40
+    assert sorted(steps - s1 - steps_named(sittings, steps)) == []
+    assert "5.5" in steps_named(s3, steps)
+    assert "not yet placed" in re.sub(r"\s+", " ", sittings)
+
+
+def test_s1_with_its_optional_block_still_ends_within_3_h_30(plan: str) -> None:
+    """Every sitting is 3 h 30 min or less (decision 167A), S1 with its optional block too: the
+    block starts only when its 25 minutes and every row after it still end by then. S1's rows
+    before it end at 2 h 30 on their estimates, so it runs only when S1 is ahead (004 T370, on
+    review)."""
+    flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+    rows = s1_rows(plan)
+    [optional] = [index for index, (_, cell, _, _) in enumerate(rows) if "optional" in cell]
+    [(hours, mins)] = re.findall(
+        r"\*\*The optional block\*\* starts only by (\d) h (\d+) on the sitting's clock", flat
+    )
+
+    assert "each 3 hours 30 minutes or less, S1 first" in re.sub(
+        r"\s+", " ", section(plan, "Sittings")
+    )
+    assert int(hours) * 60 + int(mins) + sum(m for *_, m in rows[optional:]) == 210
+    assert sum(m for *_, m in rows[:optional]) == 150
+    assert "at least five minutes ahead" in flat
+
+
+def test_not_in_this_sitting_says_what_s1_runs_of_the_tasks_it_holds(plan: str) -> None:
+    """003 T088's PROBE-15 runs at step 3.9 and 004 T140's manifest half at step 1.3, both in S1,
+    so the rows that hold those tasks say so; and the section no longer says no step runs what it
+    holds, since S2 and S5 name some of it (004 T370, on review)."""
+    aside = plan[plan.index("## Not in this sitting") :]
+    lines = aside.splitlines()
+    [rms] = [line for line in lines if line.startswith("| 003 | 003 T062, 003 T088, 003 T089 |")]
+    [stage] = [line for line in lines if line.startswith("| 004 | 004 T135 to T141 |")]
+    head = re.sub(r"\s+", " ", aside[: aside.index("| Package |")])
+
+    assert "step 3.9" in rms and "S1" in rms
+    assert "step 1.3" in stage and "004 T140" in stage
+    assert "what none of its steps runs" not in head
+    assert "S2 and S5" in head
+
+
+def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
+    """Decision 173A closes a replaced or deferred task by ticking it with a dated note, so the
+    README no longer counts an unticked `SUPERSEDED (127A)` task as superseded, and the rows of
+    the four features whose tasks 004 T361 closed are recounted (004 T370, on review).
+
+    *Changed 2026-10-31 on review (004 T388; research R29.11, RR8):* main's merges added tasks to
+    001, 005 and 008 after that count, and 004's row still listed T180, which decision 168A
+    closed: the rows of 001, 002, 004, 005 and 008 are recounted from this tree's task lists. The
+    counts stay literals, checked by hand at each recount: a pin that computed them would turn
+    every lane that adds a task red."""
+    readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
+    flat = re.sub(r"\s+", " ", readme)
+    rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
+
+    assert "is counted as superseded, not open" not in flat
+    assert "decision 173A" in flat
+    for number, counts, closed in (
+        ("001", "107 / 3 / 0", "T098"),
+        ("002", "298 / 4 / 0", "T055a"),
+        ("005", "90 / 27 / 0", "T073"),
+        ("008", "132 / 5 / 0", "T106"),
+    ):
+        assert f"| {counts} |" in rows[number], number
+        assert "Closed on 2026-10-31 (decision 173A)" in rows[number], number
+        assert closed in rows[number].split("Closed on 2026-10-31")[1], number
+    assert "| 388 / 22 / 0 |" in rows["004"]
+    assert "T180" not in rows["004"]
+    for task in ("T182", "T187", "T303a", "T303b", "T353"):
+        assert re.search(rf"\b{task}\b", rows["004"]), task
+    assert "the rows of 001, 002, 004, 005 and 008 were recounted on 2026-10-31" in flat
+
+
+def test_swreview_remodel_ledger_prints_what_step_5_6_reads(tmp_path: Path) -> None:
+    """`Show-RemodelLedger` hands each answers file to `swreview remodel ledger` (decision 166A),
+    and step 5.6 reads from it each probe's id, verdict and reason: an answers file in
+    `RemodelProbeLedger.Render`'s shape is read through it (004 T370, on review).
+
+    *Changed 2026-10-31 on review (004 T388; research R29.11, RR9):* the reader is on main since
+    PR #53, so the skip that waited for it is gone: a checkout without the command fails here."""
+    ledger = tmp_path / "remodel-32.5.0.48.yaml"
+    ledger.write_text(
+        rendered_ledger(
+            [
+                ("PROBE-2", True, "verified", {"reason": "get_Value returned 120."}),
+                ("PROBE-13", False, "unresolved", {"error": "InvalidCastException"}),
+            ]
+        ),
+        encoding="utf-8-sig",
+    )
+
+    result = CliRunner().invoke(app, ["remodel", "ledger", str(ledger)])
+    output = plain_one_line(result.output)
+
+    assert result.exit_code == 0, output
+    for words in ("PROBE-2", "verified", "get_Value returned 120.", "PROBE-13", "unresolved"):
+        assert words in output, words
+
+
+SUPERSEDED_BY_S1 = "*Superseded 2026-10-31 by S1 (decision 167A):*"
+"""How each older section that told the next sitting where to start opens since S1."""
+
+
+def test_only_s1_says_what_the_next_sitting_runs(plan: str) -> None:
+    """S1 is the next sitting and runs only its table's steps, with no key and no paid call
+    (decision 167A). Two older sections told "the next sitting" where to start: at step 2.4, and
+    with the retest of 2026-09-28, whose step 4.9 presses Review on a seat that has had the owner's
+    key since then. Each now opens with a dated line saying S1 supersedes it, step 4.9's own
+    header says it is S3's, and no section but S1's says what the next sitting runs or where it
+    starts (004 T377, review finding RR2)."""
+    for heading in (
+        "The next sitting: where 2026-09-26 stopped, and what feature 013 adds",
+        "First: the retest of 2026-09-28's findings U25 to U27",
+    ):
+        [_, opening, *_] = section(plan, heading).split("\n\n")
+        assert opening.startswith(SUPERSEDED_BY_S1), heading
+        assert "step 4.9 is S3's" in re.sub(r"\s+", " ", opening), heading
+    header = re.sub(r"\s+", " ", step(plan, "4.9").split("\n\n")[1])
+    assert "S3" in header and "decision 167A" in header and "not in S1" in header
+    for part in re.split(r"(?m)^## ", plan)[1:]:
+        if part.startswith("S1: Start readiness\n"):
+            continue
+        flat = re.sub(r"\s+", " ", part.replace("**", ""))
+        assert re.search(r"\b[Tt]he next sitting (?:runs|starts)\b", flat) is None, part[:60]
+
+
+def test_t303a_records_its_stuck_case_as_its_task_allows(plan: str, results: str) -> None:
+    """004 T303a asks for the close once with the backend ended and once with it stuck, its
+    process suspended by its PID, and, if the seat cannot suspend a process, for that to be
+    recorded and the stuck case left to the fakes it names. The plan made only the first: Windows
+    has no command that suspends a process, and when the backend runs through `uv` the number
+    item 1 reads is uv's, whose server runs under it in the backend's job, so suspending that
+    number leaves the server answering. The plan now says so and has the engineer write the
+    task's own fallback in a row of its own (004 T377, review finding RR6)."""
+    part = re.sub(r"\s+", " ", t303a(plan))
+    tasks = (FEATURE_004 / "tasks.md").read_text(encoding="utf-8")
+    task = line_starting(tasks.splitlines(), "- [ ] T303a ")
+    backend = (REPO / "extractor" / "SwReview.AddIn" / "Review" / "BackendProcess.cs").read_text(
+        encoding="utf-8"
+    )
+    record = "`stuck case: the seat cannot suspend a process; left to the fakes (169A)`"
+    stuck_fake = (
+        "RemodelHostTests.ARunRootChangeWhoseOldRunsCloseIsNotAnsweredStopsTheOldBackendThen"
+        "ClosesItInProcess"
+    )
+    rows = [line for line in results.splitlines() if line.startswith("| 5.3 | 004 T303a")]
+
+    assert (
+        "once with it stuck (its process suspended by its PID; if the seat cannot suspend a "
+        "process, record that and leave the stuck case to the fakes below)"
+    ) in task
+    assert stuck_fake in task
+    assert "// grandchildren `uv run` leaves between us and the server." in backend
+    assert record in part and f"`{stuck_fake}`" in part
+    assert "Record in 004 T303a's three rows" in part
+    assert len(rows) == 3 and "the stuck case" in rows[-1]
+
+
+def test_step_1_6_records_every_line_seat_health_prints(
+    plan: str, results: str, tmp_path: Path
+) -> None:
+    """004 T353 asks for every line `swreview seat health` prints recorded, each FAIL with what
+    was done about it, read against runbook section 7, and the MANUAL lines checked by eye; and
+    the command ties `addin.log` to the one SOLIDWORKS running, so it runs while the one step 1.6
+    started is the only one (004 research R28.7). Step 1.6 recorded only its exit code. The kinds
+    of line the plan names are the ones the command prints, and it prints no path of the machine,
+    so every line may be copied; runbook section 6, which the command serves, names it (004 T388,
+    review finding RR7)."""
+    part = re.sub(r"\s+", " ", step(plan, "1.6"))
+    rows = [line for line in results.splitlines() if line.startswith("| 1.6 | 004 T353")]
+    runbook = re.sub(r"\s+", " ", RUNBOOK.read_text(encoding="utf-8"))
+    checks = runbook[runbook.index("## 6. Health checks") : runbook.index("## 7. Failure modes")]
+    result = CliRunner().invoke(
+        app,
+        [
+            "seat", "health",
+            "--logs", str(tmp_path / "logs"),
+            "--repo", str(tmp_path / "repo"),
+            "--profile", str(tmp_path / "standards.yaml"),
+        ],
+    )
+    lines = result.output.splitlines()
+
+    assert result.exit_code == 1, result.output
+    assert {line.split(" ", 1)[0] for line in lines} <= {"PASS", "FAIL", "MANUAL", "health:"}
+    assert lines[-1].startswith("health: ") and str(tmp_path) not in result.output
+    for kind in ("`PASS`", "`FAIL`", "`MANUAL`", "`health:`"):
+        assert kind in part, kind
+    assert "every line from the first `PASS` or `FAIL` line to the `health:` line" in part
+    assert "what was done about it, from runbook section 7" in part
+    assert "by eye" in part
+    assert "the only SOLIDWORKS running" in part and "R28.7" in part
+    assert "Any other: copy what it printed" not in part
+    assert len(rows) == 1 and "every line" in rows[0] and "what was done about it" in rows[0]
+    assert "`uv run swreview seat health`" in checks and "section 7" in checks
+
+
+def test_s1_closes_its_documents_before_the_last_runs_and_fingerprints_before_j_opens(
+    plan: str,
+) -> None:
+    """Three gaps in S1's order (004 T388, review finding RR10). (a) Row 8 ran step 5.6's second
+    and third runs straight after rows 4 to 7, with part J still open (step 5.3 keeps it open) and
+    perhaps the optional block's assemblies, so the second run was refused: the row now does 5.6's
+    item 1's Window > Close All first. (b) Step 1.6 opens a part, in S1 part J, the only document
+    S1 has, while `Save-Fingerprint 'before'` ran at row 4, said to be before J was first opened:
+    it now runs at step 1.6, before SOLIDWORKS starts. (c) Rule 1's list of the sitting's only
+    saves names the optional block's saves into `$H\\scratch` (decision 172A)."""
+    rows = s1_rows(plan)
+    [last_runs] = [cell for _, cell, _, _ in rows if "second and third runs" in cell]
+    flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+    health = step(plan, "1.6")
+    rules = section(plan, "The rules for the whole sitting")
+    rule_1 = re.sub(
+        r"\s+", " ", rules[rules.index("1. **Save nothing") : rules.index("2. **Edit no file")]
+    )
+
+    assert "5.6's item 1" in last_runs and "Window > Close All, Don't Save" in last_runs
+    assert "Save-Fingerprint 'before'" in rows[0][1] and "part J" in rows[0][1]
+    assert [cell for _, cell, _, _ in rows[1:] if "Save-Fingerprint" in cell] == []
+    assert "before step 3.9 first opens part J" not in flat
+    assert "runs at step 1.6, before SOLIDWORKS starts" in flat
+    assert "*In S1*" in health and "part J" in health
+    assert health.index("`Save-Fingerprint 'before'`") < health.index("Start SOLIDWORKS and open")
+    assert "S1's optional block" in rule_1 and "`$H\\scratch`" in rule_1
+
+
+def test_002_t063_is_codex_only_since_t055a_is_closed() -> None:
+    """002 T063 still waited on T055a for Gemini and asked for the refusal probe for both CLIs,
+    while T055a is closed (decisions 94A and 173A) and the plan's row reads T063 as the terminal's
+    Codex run: it carries a dated note that it is Codex only (004 T388, review finding RR11)."""
+    lines = (REPO / "specs" / "002-task-pane-assistant" / "tasks.md").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    t055a = line_starting(lines, "- [x] T055a ")
+    t063 = line_starting(lines, "- [ ] T063 ")
+
+    assert "*Closed 2026-10-31 (owner decision 173A)" in t055a
+    assert "*Amended 2026-10-31 (owner decisions 94A and 173A):" in t063
+    assert "Codex only" in t063.split("*Amended 2026-10-31")[1]
