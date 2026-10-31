@@ -1,0 +1,5 @@
+[2026-10-31T09:15:02.1234567+00:00] AssemblyRedirect installed.
+[2026-10-31T09:15:04.0000000+00:00] Attached to SOLIDWORKS.
+[2026-10-31T09:15:05.0000000+00:00] Task Pane created.
+[2026-10-31T09:15:05.5000000+00:00] Review host started.
+[2026-10-31T09:15:07.0000000+00:00] The SwReview tool service is not attaching to 'D:\fict-seat\made-up-bracket.SLDDRW': a drawing has no configuration to attach to. Open the part or assembly it documents.

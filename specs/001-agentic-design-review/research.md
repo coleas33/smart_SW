@@ -245,6 +245,78 @@ manager and circuit breaker ideas, `text-to-cad` STEP inspection as a later opti
 with attribution; do not link GPL-3.0 code (CADAM). `Multi-Agent-CAD` patterns (evidence
 contracts, bounded retries) are adopted as design ideas, not code.
 
+## R15. The interference volume unit, judged on a made-up overlap (decision 172A; T106 to T108; 2026-10-31)
+
+T069 asked for a one-time workstation check of `IInterference.Volume`'s unit against a known box
+overlap. It was never made: `InterferenceRunner.VolumeUnitVerified` is still `false`, so every run
+labels the number m3 (`AssumedVolumeUnit`) and adds the gap `interference_volume_unit`. Owner
+decision 172A lets the engineer build two tiny made-up assemblies by hand at the stage 1 sitting,
+in an optional 25-minute block, never committed; this is one of them (the other is 006's PROBE-2,
+006 research R11).
+
+**Decision**: the seat builds two 20 mm cubes, the second moved 10 mm along each axis, which
+overlap by exactly 1000 mm3 (`benchmarks/native/interference-volume/RECIPE.md`), checks that
+SOLIDWORKS' own Interference Detection reads 1000 mm^3, dumps the assembly, runs
+`swreview-extract interference --pairs all` into the same folder, and runs
+`uv run swreview seat volume-unit "<folder>\package" --expected-mm3 1000`
+(`reviewer/src/swreview/seat/volume_unit.py`):
+
+- exactly one computed interference with a volume is judged; none, or more than one, is
+  inconclusive;
+- the recorded number is compared, whatever its label, with the known overlap in m3 and in mm3,
+  within 1 per cent; the two candidates are 10^9 apart, so at most one matches;
+- a match names the extractor change it asks for: `VolumeUnitVerified = true` alone when the
+  label (m3 today) holds, and `AssumedVolumeUnit = VolumeUnit.Mm3` as well when it does not. That
+  change is the owner's, in `extractor/`, and is not made here;
+- no match is inconclusive, with the number; when it is the overlap in cubic inches, the reason
+  says the assembly was built from an inch template;
+- it reads a package folder, its `package.json`, or one interference record, through the IR
+  models, and nothing under the answer keys (R15.1); anything else is an error. Exit 0 on `m3`
+  or `mm3`, 1 otherwise; `--json`.
+
+**Rationale**: the label is the assumption under test, so only the raw number is compared. The
+tolerance absorbs floating error and display rounding, not a sloppy model: the recipe types the
+move in (To XYZ Position) and its step 4 shows SOLIDWORKS' own figure before the extractor's is
+judged.
+
+**What one answer cannot tell.** The recipe uses the millimetre template. An `m3` answer is then
+unambiguous: SOLIDWORKS answered in its system units, not the document's. An `mm3` answer is
+not: it may be "always mm3" or "the document's own unit", and only the same overlap in an
+inch-template assembly would tell them apart. That second build is not in 172A's block; whether
+to make it is the owner's call if the answer is `mm3`.
+
+**Alternatives considered**: reading the volume off SOLIDWORKS' Interference Detection dialog
+alone (it proves the geometry, not the API's unit; kept as the recipe's check); a fixture
+committed to the repository (172A: never committed, and the repository is public); a probe in the
+extractor (a C# change for a question the dump and `interference` commands already record the
+answer to).
+
+**Tests** (T106): `reviewer/tests/unit/test_cli_seat_volume_unit.py`, 21 cases over fictional
+packages and records made in the test's temp folder, all red before T107 (no command) and green
+after it. Gates: recorded in 004 research R28.5, which ran them once for the whole lane.
+
+### R15.1 Review round 1: the answer-key guard and what an error prints (T109, T110; 2026-10-31)
+
+The lane's review (004 research R28.6 lists every finding) found, and the code confirmed, that a
+single interference record was read with `Interference.model_validate_json` and no
+`reject_answer_key_path`, the guard every other reviewer read goes through (`swreview.ir.loader`);
+that a package folder under `benchmarks/answer_keys/` raised `AnswerKeyAccessError`, a
+`RuntimeError` the command did not catch, so a traceback named the resolved path; and that the
+error for a folder with no `package.json` quoted the loader's message, which names the resolved
+absolute path even when the engineer typed a relative one.
+
+`volume_unit.interferences` now refuses anything under the answer keys or the case files before
+it opens it, and says "there is no package.json in it" itself. The command answers each in one
+sentence on stderr, exit 1, naming the path as it was given: "lies under benchmarks/answer_keys
+or benchmarks/case_files, which are withheld from the reviewer", or "is neither a package nor an
+interference record" with the reason - an `OSError` by its `strerror`, never its `str()`, and
+anything else by its first line (a validation error's names the model, not the file).
+
+**Tests** (T109): 24 cases, 3 red before T110 (the record and the package under the answer keys,
+the relative folder) and all green after it; the stderr sentence for a file that is neither was
+already printed and is now asserted, since a judge that stopped catching `ValueError` also exits
+1 with an empty stdout.
+
 ## Open questions carried into the plan as risks
 
 1. Where manufacturing tolerances are stored and how consistently (README next action 1).
@@ -258,6 +330,6 @@ contracts, bounded retries) are adopted as design ideas, not code.
    (mitigated by `persist_ref_scope`, the re-resolution test in quickstart Scenario 2, and
    component-level refs as a fallback locator).
 5. `IInterference.Volume` units are undocumented; verify against a known overlap before
-   any interference finding reports a volume.
+   any interference finding reports a volume. R15 is that check.
 6. `AccessSelections` rolls the model back; every hole or thread read that needs it must
    release in a `finally` block, and the add-in must never leave a document rolled back.

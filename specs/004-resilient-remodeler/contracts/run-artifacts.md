@@ -69,7 +69,11 @@ T185, research R16.1):*
   the rollback, the rolled-back walk, the rebuild, the error
   count, the copy's signals, its save flag and units, and `CommandInProgress` put back - and around
   the unwind's `unwind.CloseDoc`, `unwind.DeleteCopy` and `unwind.PutBackSettings`. They go to the
-  run folder the host bound, before the run exists.
+  run folder the host bound, before the run exists. *Amended 2026-10-31 (owner decision 165A; `research.md` R26.1):*
+  when the unwind leaves the copy - another document open at the copy's path, or one that could not be read - one
+  fixed marker, `stage=skipped unwind.DeleteCopy: the document open at the copy's path is not the one this open
+  opened, or could not be read, so it was neither closed nor deleted`, stands in place of `unwind.DeleteCopy`'s two;
+  it names no path.
 - `remodel.geometry` markers start with the selection clear (`IModelDoc2.ClearSelection2`), and the
   mass property sequence is the whole-part one: no `set_AccuracyLevel`, no `set_SelectedItems`.
 - A `[<time>] id=<id> command=<command> begin` line for every request, written before the command

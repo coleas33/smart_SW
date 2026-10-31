@@ -184,6 +184,7 @@ from swreview.report.rerender import (
     run_folder_session,
 )
 from swreview.report.session import CoverageBucket, ReviewSession, load_session, save_session
+from swreview.seat.cli import app as seat_app
 from swreview.secrets import KEY_ENV_VARS as KEY_ENV_VARS
 from swreview.secrets import KEY_SHAPES
 from swreview.secrets import (
@@ -273,6 +274,7 @@ app.add_typer(tokenizer_app, name="tokenizer")
 app.add_typer(drawing_app, name="drawing")
 app.add_typer(profile_app, name="profile")
 app.add_typer(engineering_context_app, name="context")
+app.add_typer(seat_app, name="seat")
 
 FAKE_REVIEW_SCRIPT: tuple[ScriptedTurn, ...] = (
     ScriptedTurn(

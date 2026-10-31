@@ -1106,6 +1106,16 @@ public sealed class RemodelHost : IDisposable
     {
         if (outcome != null && outcome.HadSession)
         {
+            // Owner decision 159A (004 research R22.14): an end of the attempt in flight marks it ended. Owner decision 165A
+            // (R26.2): marked before the run is looked for, so an end that crosses Track is seen by one of the two.
+            lock (_attemptLock)
+            {
+                if (_attemptRun != null && SamePath(_attemptRun, outcome.RunDirectory))
+                {
+                    _attemptEnded = true;
+                }
+            }
+
             // A late teardown belongs only to the known run and copy it actually names. It must
             // not invalidate a newer plan merely because that plan is now the latest one.
             RemodelRun? run = FindRun(outcome.RunDirectory);
@@ -1126,16 +1136,8 @@ public sealed class RemodelHost : IDisposable
 
             // Owner decision 159A (004 research R22.13, Codex's fourth review): a failed plan is never a tracked run, so
             // the end of its session - its close's, late or not, or a teardown's - lets its record go: that exact record
-            // alone, so a newer attempt's, recorded meanwhile, survives. R22.14: an end of the attempt in flight, told
-            // before it has a record, marks it ended, so its failure makes none.
-            lock (_attemptLock)
-            {
-                if (_attemptRun != null && SamePath(_attemptRun, outcome.RunDirectory))
-                {
-                    _attemptEnded = true;
-                }
-            }
-
+            // alone, so a newer attempt's, recorded meanwhile, survives. R22.14: the attempt marked ended above, told
+            // before it has a record, makes none when it fails.
             Tuple<string, string?>? failed = _failedPlanToClose;
             if (failed != null && SamePath(failed.Item1, outcome.RunDirectory))
             {
@@ -2236,7 +2238,9 @@ public sealed class RemodelHost : IDisposable
     /// <c>planned</c>. A close the bridge answered, with or without something left, marks the plan
     /// <see cref="RemodelRun.SessionClosedAtPlan"/>, so no close is sent for it again; one it could
     /// not answer leaves the plan holding its session, so Discard, planning again, a re-attach or an
-    /// unload still end it. With Start switched on the plan keeps its session for Start.
+    /// unload still end it. With Start switched on the plan keeps its session for Start. Owner decision 165A (004 research
+    /// R26.2): a session the bridge already ended while the plan finished is over, so no close is sent for it, and the plan
+    /// is marked as one closed at the plan would be.
     /// </summary>
     private void EndTheSessionNoStartCanUse(IRemodelPipeline pipeline, RemodelRun run)
     {
@@ -2245,7 +2249,7 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        if (CloseSession(pipeline, run.RunDirectory, out _) != CloseAnswer.NotAnswered)
+        if (run.SessionEnded || CloseSession(pipeline, run.RunDirectory, out _) != CloseAnswer.NotAnswered)
         {
             run.MarkSessionClosedAtPlan();
         }
@@ -3207,6 +3211,11 @@ public sealed class RemodelHost : IDisposable
     /// Here and nowhere else, because this is the one moment a remodel folder comes into
     /// existence as something the pane is looking at: a refused plan records no run and must
     /// leave the pane pointed wherever it already was.
+    ///
+    /// Owner decision 165A (004 research R22.14, R26.2): a run whose session the bridge said had ended while its plan was
+    /// still finishing - before the run was here for <see cref="SessionEnded(RemodelSessionEnd)"/> to find - is recorded
+    /// as ended, so nothing reads a session it does not hold. The run is added before the attempt is read, and an end marks
+    /// the attempt before it looks for the run, so an end that crosses this is seen by one or the other.
     /// </summary>
     private RemodelRun Track(string runDirectory, string copyPath, string? toolServiceAttachment)
     {
@@ -3216,6 +3225,18 @@ public sealed class RemodelHost : IDisposable
             _runs.Add(run);
             LatestRun = run;
         }
+
+        bool endedWhilePlanning;
+        lock (_attemptLock)
+        {
+            endedWhilePlanning = _attemptEnded && SamePath(_attemptRun, runDirectory);
+        }
+
+        if (endedWhilePlanning)
+        {
+            run.MarkSessionEnded();
+        }
+
         _options.RegisterLatestRun(runDirectory);
         return run;
     }
