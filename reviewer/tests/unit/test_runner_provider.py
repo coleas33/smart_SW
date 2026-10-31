@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -39,10 +40,14 @@ from swreview.agent.providers import (
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.checks import part_roles
 from swreview.checks.provenance import PROVENANCE_CHECK
+from swreview.checks.thread_pitch import CHECK_FINE_PITCH
+from swreview.findings import Disposition, Finding, build_finding
+from swreview.ir.loader import save_package
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession
 from swreview.report.titles import display_title, pane_finding, title_from
 from tests.support.contracts import contract_validator
+from tests.support.packages import build_package, persist_ref
 from tests.support.roles_review import review_brief
 
 MODEL = "fake-1"
@@ -1013,6 +1018,273 @@ def test_a_rerun_that_covers_something_else_is_a_second_finding(
     session = run.answer_evidence("ER-001", "12 mm")
 
     assert [finding.id for finding in session.findings] == ["F-001", "F-002"]
+
+
+def test_a_rerun_of_one_of_two_hole_pairs_on_the_same_components_keeps_each_its_verdict(
+    tmp_path: Path,
+) -> None:
+    """Two `hole.coaxiality` findings on the same two components, with no tolerance, differ
+    only by their holes (008 research R2.8): re-running the first pair folds onto the first
+    and leaves the second pair's verdict where it was (owner decision 166A)."""
+    template = build_package().holes[0]
+    holes = [
+        template.model_copy(
+            update={"id": hole_id, "persist_ref": persist_ref(hole_id), "component_id": owner}
+        )
+        for hole_id, owner in (
+            ("hol:0001", "cmp:0001"),
+            ("hol:0002", "cmp:0001"),
+            ("hol:0003", "cmp:0002"),
+            ("hol:0004", "cmp:0002"),
+        )
+    ]
+    package = tmp_path / "package"
+    save_package(build_package(holes=holes, gaps=[]), package)
+    first = call("check_hole_alignment", hole_id_a="hol:0001", hole_id_b="hol:0003")
+    second = call("check_hole_alignment", hole_id_a="hol:0002", hole_id_b="hol:0004")
+    asked = call(
+        "request_evidence",
+        what="The position tolerance of hol:0001 and hol:0003",
+        why="hole.coaxiality needs it",
+        entity_ids=["hol:0001", "hol:0003"],
+    )
+    run = runner.start_review(
+        package,
+        tmp_path / "out",
+        provider=FakeProvider(
+            script=[turn("blocked", first, second, asked), turn("re-run", first)], model=MODEL
+        ),
+        effort=EFFORT,
+    )
+    run.start()
+
+    session = run.answer_evidence("ER-001", "There is none on the drawing.")
+
+    assert [(finding.id, finding.inputs) for finding in session.findings] == [
+        ("F-001", ["hol:0001", "hol:0003"]),
+        ("F-002", ["hol:0002", "hol:0004"]),
+    ]
+
+
+def test_a_rerun_of_two_joints_on_the_same_components_keeps_each_its_verdict(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """Two joints across the same two components, with no drawing location, differ only by
+    their hole instances as the joint map numbers them (`hol:0001#1`, `checks/joints.py`): a
+    resumed turn's re-run of both folds each onto its own (008 T132)."""
+    run = review([turn("nothing yet")])
+
+    def joint(finding_id: str, number: int, status: str) -> Finding:
+        return build_finding(
+            finding_id=finding_id,
+            check="hole.nominal_alignment",
+            title=f"Joint {number}",
+            status=status,  # type: ignore[arg-type]
+            severity="medium",
+            package=run.context.ir,
+            configuration=run.context.ir.design.active_configuration,
+            observed=f"joint {number} is {status}",
+            requirement="the member axes meet within the joint's clearance",
+            recommended_action="look again",
+            component_ids=["cmp:0001", "cmp:0002"],
+            inputs=[f"hol:0001#{number}", f"hol:0003#{number}"],
+            coverage_limits=["the position tolerance is not on the drawing"],
+            numeric=False,
+        )
+
+    session = run.session
+    session.findings[:] = [
+        joint("F-001", 1, "unresolved"),
+        joint("F-002", 2, "unresolved"),
+        joint("F-003", 1, "suspected"),
+        joint("F-004", 2, "unresolved"),
+    ]
+
+    runner._reconcile_reruns(session, 2)
+
+    assert [(finding.id, finding.inputs, finding.status) for finding in session.findings] == [
+        ("F-001", ["hol:0001#1", "hol:0003#1"], "suspected"),
+        ("F-002", ["hol:0001#2", "hol:0003#2"], "unresolved"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "place", [{"sheet": "Sheet1"}, {"annotation": "D3"}], ids=["sheet", "annotation"]
+)
+def test_a_rerun_citing_the_same_place_with_its_reference_yields_one_verdict(
+    review: Callable[..., runner.ReviewRun], place: dict[str, str]
+) -> None:
+    """The model's citation of a sheet or an annotation first without and then with the
+    persistent reference is one place: the re-run folds onto the finding it re-judges (008
+    T132, T136)."""
+    [locator] = place.values()
+
+    def cited(status: str, **reference: str) -> ScriptedToolCall:
+        return ScriptedToolCall(
+            name="record_drawing_finding",
+            arguments={
+                **DRAWING_FINDING_ARGUMENTS,
+                "source_refs": [{"document_id": "doc:2", **place, **reference}],
+                "status": status,
+            },
+        )
+
+    run = review(
+        [
+            turn(
+                "blocked",
+                cited("unresolved"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("resolved", cited("suspected", persist_ref=persist_ref(locator))),
+        ]
+    )
+
+    session = run.answer_evidence("ER-001", "The usable thread depth is 12 mm.")
+
+    assert [(finding.id, finding.status) for finding in session.findings] == [
+        ("F-001", "suspected")
+    ]
+
+
+def test_a_rerun_citing_another_reference_alone_is_a_second_finding(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """A citation by persistent reference alone names its item by that reference, so another
+    reference is another place and another finding (008 T132; owner decision 25A)."""
+
+    def by_reference(seed: str, status: str) -> ScriptedToolCall:
+        return ScriptedToolCall(
+            name="record_drawing_finding",
+            arguments={
+                **DRAWING_FINDING_ARGUMENTS,
+                "source_refs": [{"document_id": "doc:2", "persist_ref": persist_ref(seed)}],
+                "status": status,
+            },
+        )
+
+    run = review(
+        [
+            turn(
+                "blocked",
+                by_reference("note-1", "unresolved"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("and another note", by_reference("note-2", "suspected")),
+        ]
+    )
+
+    session = run.answer_evidence("ER-001", "12 mm")
+
+    assert [(finding.id, finding.status) for finding in session.findings] == [
+        ("F-001", "unresolved"),
+        ("F-002", "suspected"),
+    ]
+
+
+def on_the_pair(finding_id: str, *inputs: str, check: str = "hole.coaxiality") -> Finding:
+    """A finding on `cmp:0001` and `cmp:0002` that only its entity ids tell from its siblings."""
+    package = build_package()
+    return build_finding(
+        finding_id=finding_id,
+        check=check,
+        title="Holes on the pair",
+        status="unresolved",
+        severity="medium",
+        package=package,
+        configuration=package.design.active_configuration,
+        observed="the hole axes are not shown to meet",
+        requirement="the member axes meet within the joint's clearance",
+        recommended_action="look again",
+        component_ids=["cmp:0001", "cmp:0002"],
+        inputs=list(inputs),
+        coverage_limits=["the position tolerance is not on the drawing"],
+        numeric=False,
+    )
+
+
+def test_a_restated_finding_on_other_holes_re_judges_no_earlier_finding() -> None:
+    """The regrade only drops a finding's newly bought sources, so a restated finding about
+    other holes of the same components takes neither the earlier finding's id nor its
+    disposition (008 T134)."""
+    earlier = [on_the_pair("F-001", "hol:0004", "hol:0010")]
+    restated = [on_the_pair("F-009", "hol:0017", "hol:0027")]
+
+    assert runner._restated_targets(earlier, restated) == {}
+
+
+def test_a_restated_finding_that_lost_a_bought_source_re_judges_the_earlier_one() -> None:
+    """The regrade left the fastener and dropped the newly bought tapped hole: the restated
+    finding's entity ids are a subset of the earlier one's (58A; 008 T133, T134)."""
+    earlier = [on_the_pair("F-001", "fst:0001", "hol:0004", check=CHECK_FINE_PITCH)]
+    restated = [on_the_pair("F-009", "fst:0001", check=CHECK_FINE_PITCH)]
+
+    assert runner._restated_targets(earlier, restated) == {0: 0}
+
+
+def test_a_restated_finding_with_the_same_entity_ids_re_judges_its_own_earlier_one() -> None:
+    """Equal entity ids match through the verdict key, so two siblings that share the key less
+    their entity ids each find their own (166A; 008 T134)."""
+    earlier = [
+        on_the_pair("F-001", "hol:0004", "hol:0010"),
+        on_the_pair("F-002", "hol:0017", "hol:0027"),
+    ]
+    restated = [
+        on_the_pair("F-009", "hol:0017", "hol:0027"),
+        on_the_pair("F-010", "hol:0004", "hol:0010"),
+    ]
+
+    assert runner._restated_targets(earlier, restated) == {0: 1, 1: 0}
+
+
+def test_two_earlier_findings_a_restated_one_could_narrow_leave_it_unmatched() -> None:
+    """Two unmatched earlier findings share the key less their entity ids, each with its own
+    disposition, and the restated finding narrows either: which it re-judges is unknown, so it
+    takes neither id nor disposition (58A; 008 T136)."""
+    when = datetime(2026, 10, 31, tzinfo=UTC)
+    earlier = [
+        on_the_pair("F-001", "fst:0001", "hol:0004", check=CHECK_FINE_PITCH).model_copy(
+            update={"disposition": Disposition(decision="accepted", note="meant", by="a", at=when)}
+        ),
+        on_the_pair("F-002", "fst:0001", "hol:0010", check=CHECK_FINE_PITCH).model_copy(
+            update={"disposition": Disposition(decision="rejected", note="a slip", by="a", at=when)}
+        ),
+    ]
+    restated = [on_the_pair("F-009", "fst:0001", check=CHECK_FINE_PITCH)]
+
+    assert runner._restated_targets(earlier, restated) == {}
+
+
+def test_two_restated_findings_that_could_narrow_one_earlier_finding_take_nothing() -> None:
+    """The mirror: two unmatched restated findings each narrow the one earlier finding, so
+    neither takes it (008 T136)."""
+    earlier = [on_the_pair("F-001", "fst:0001", "hol:0004", check=CHECK_FINE_PITCH)]
+    restated = [
+        on_the_pair("F-009", "fst:0001", check=CHECK_FINE_PITCH),
+        on_the_pair("F-010", "hol:0004", check=CHECK_FINE_PITCH),
+    ]
+
+    assert runner._restated_targets(earlier, restated) == {}
+
+
+def test_a_resumed_turn_on_another_hole_pair_of_the_same_components_is_a_second_finding(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """In a resumed turn a finding on other holes of the same two components is the model
+    checking something else: it never takes the earlier pair's id (166A; 008 T136)."""
+    run = review([turn("nothing yet")])
+    session = run.session
+    session.findings[:] = [
+        on_the_pair("F-001", "hol:0004", "hol:0010"),
+        on_the_pair("F-002", "hol:0017", "hol:0027"),
+    ]
+
+    runner._reconcile_reruns(session, 1)
+
+    assert [(finding.id, finding.inputs) for finding in session.findings] == [
+        ("F-001", ["hol:0004", "hol:0010"]),
+        ("F-002", ["hol:0017", "hol:0027"]),
+    ]
 
 
 # --- resume rule (d): max_steps is a per-turn budget --------------------------------------------

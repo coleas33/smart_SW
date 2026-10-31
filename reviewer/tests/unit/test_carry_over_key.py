@@ -248,9 +248,26 @@ def test_the_rms_rule_version_is_in_the_key(monkeypatch: pytest.MonkeyPatch) -> 
     previous = previous_session(package, [rms_finding(package)])
     assert json.loads(previous.findings[0].carry_over_key)[8] == RULES_VERSION
 
-    monkeypatch.setattr(carry_over, "RULES_VERSION", "2")
+    monkeypatch.setattr(carry_over, "RULES_VERSION", f"{RULES_VERSION}-next")
 
     decision = select_carry_over(package, previous, at=CARRIED_AT)
+    assert decision.carried == ()
+    assert len(decision.re_run) == 1
+
+
+def test_a_verdict_stamped_before_revcut_and_helix_classified_is_recomputed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Feature 003 T094 classified the 2024 names `RevCut` and `Helix`, which can change an
+    `rms.*` verdict over an unchanged tree, so the rules moved past version 1: a finding
+    stamped under it is re-run, never carried (003 T095)."""
+    package = carry_package()
+    monkeypatch.setattr(carry_over, "RULES_VERSION", "1")
+    previous = previous_session(package, [rms_finding(package)])
+    monkeypatch.undo()
+
+    decision = select_carry_over(package, previous, at=CARRIED_AT)
+
     assert decision.carried == ()
     assert len(decision.re_run) == 1
 

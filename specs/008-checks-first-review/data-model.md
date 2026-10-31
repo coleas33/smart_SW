@@ -118,7 +118,7 @@ of `finding_subject_key` minus the check (since owner decision 25A, each locatio
 
 | Name | Definition |
 |---|---|
-| `ENTITY_ID` | `re.compile(r"^[a-z]{3,4}:[0-9]{4,}$")` |
+| `ENTITY_ID` | `re.compile(r"^[a-z]{3,4}:[0-9]{4,}$")`. *Amended 2026-10-31 (owner decision 166A, T133):* `re.compile(r"^[a-z]{3,4}:[0-9]{4,}(?:#[1-9][0-9]*)?$")`, which also reads a hole instance as the joint map numbers it (`hol:0014#2`): two joints on one pair of components differ by nothing else (research R2.8) |
 | `subject_locations(locations)` | *Added 2026-09-25 (owner decision 25A):* the drawing locations of a key, `(document_id, sheet, view, annotation, page, persist_ref)` each (`SubjectLocation`), sorted with `None` last; `finding_subject_key` orders with it, and the fixture generator orders a recorded key's locations again with it once its map has changed them |
 | `finding_subject_key(finding)` | `(check, tuple(sorted(component_ids)), tuple(sorted((document_id, sheet, view, annotation, page, persist_ref) for each drawing location)), tuple(sorted(s for s in inputs if ENTITY_ID.match(s))), configuration)`, sorted with `None` last; ignores `id`, `tool_result_ids` and `capture_ids`. *Amended 2026-09-25 (owner decision 25A, T128):* each location keeps its `persist_ref` (`None` where it has none), which the key ignored before; compared only between a recording and its replay or its fixture, never across two dumps (research R2.8). *Corrected 2026-09-25 on review (T129):* a finding lever 11a carried can hold an earlier dump's references, so `replay.compare_finding_keys` compares a carried finding nothing matched by reference with every reference left out on both sides (`contracts/replay.md` section 5) |
 

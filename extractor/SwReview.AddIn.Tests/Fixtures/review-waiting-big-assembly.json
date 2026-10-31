@@ -14696,9 +14696,6 @@
             "configuration": "Kamibat",
             "positions": [],
             "document_ids": [
-              "doc:792f2ea287a0",
-              "doc:3676f64593c8",
-              "doc:8c00e50ebd40",
               "doc:9c7425f72c64",
               "doc:bea71039d48c",
               "doc:f21001d02278",
@@ -14707,13 +14704,15 @@
               "doc:4788f3676f64",
               "doc:7befe7ecd1b4",
               "doc:cfb91d5bb128",
+              "doc:3676f64593c8",
+              "doc:8c00e50ebd40",
               "doc:9d12e22f99ed",
               "doc:bf46ec524205",
               "doc:e0ec179d6940",
               "doc:ae34ef307679"
             ]
           },
-          "reason": "feature type names not in the calibrated table: RevCut x3, MateReferenceGroupFolder x7, PosGroupFolder x7, ConfigTableFolder x6, Split x3, Helix x4, CombineBodies x1, CutListFolder x2, SheetMetal x1, SMBaseFlange x1, FlatPattern x1, FoldUpDownSketchFolder x1, BaseBody x59",
+          "reason": "feature type names not in the calibrated table: MateReferenceGroupFolder x7, PosGroupFolder x7, ConfigTableFolder x6, Split x3, CombineBodies x1, CutListFolder x2, SheetMetal x1, SMBaseFlange x1, FlatPattern x1, FoldUpDownSketchFolder x1, BaseBody x59",
           "error": null
         }
       },
@@ -33542,9 +33541,6 @@
             "configuration": "Kamibat",
             "positions": [],
             "document_ids": [
-              "doc:792f2ea287a0",
-              "doc:3676f64593c8",
-              "doc:8c00e50ebd40",
               "doc:9c7425f72c64",
               "doc:bea71039d48c",
               "doc:f21001d02278",
@@ -33553,13 +33549,15 @@
               "doc:4788f3676f64",
               "doc:7befe7ecd1b4",
               "doc:cfb91d5bb128",
+              "doc:3676f64593c8",
+              "doc:8c00e50ebd40",
               "doc:9d12e22f99ed",
               "doc:bf46ec524205",
               "doc:e0ec179d6940",
               "doc:ae34ef307679"
             ]
           },
-          "reason": "feature type names not in the calibrated table: RevCut x3, MateReferenceGroupFolder x7, PosGroupFolder x7, ConfigTableFolder x6, Split x3, Helix x4, CombineBodies x1, CutListFolder x2, SheetMetal x1, SMBaseFlange x1, FlatPattern x1, FoldUpDownSketchFolder x1, BaseBody x59",
+          "reason": "feature type names not in the calibrated table: MateReferenceGroupFolder x7, PosGroupFolder x7, ConfigTableFolder x6, Split x3, CombineBodies x1, CutListFolder x2, SheetMetal x1, SMBaseFlange x1, FlatPattern x1, FoldUpDownSketchFolder x1, BaseBody x59",
           "error": null
         }
       },
@@ -52388,9 +52386,6 @@
             "configuration": "Kamibat",
             "positions": [],
             "document_ids": [
-              "doc:792f2ea287a0",
-              "doc:3676f64593c8",
-              "doc:8c00e50ebd40",
               "doc:9c7425f72c64",
               "doc:bea71039d48c",
               "doc:f21001d02278",
@@ -52399,13 +52394,15 @@
               "doc:4788f3676f64",
               "doc:7befe7ecd1b4",
               "doc:cfb91d5bb128",
+              "doc:3676f64593c8",
+              "doc:8c00e50ebd40",
               "doc:9d12e22f99ed",
               "doc:bf46ec524205",
               "doc:e0ec179d6940",
               "doc:ae34ef307679"
             ]
           },
-          "reason": "feature type names not in the calibrated table: RevCut x3, MateReferenceGroupFolder x7, PosGroupFolder x7, ConfigTableFolder x6, Split x3, Helix x4, CombineBodies x1, CutListFolder x2, SheetMetal x1, SMBaseFlange x1, FlatPattern x1, FoldUpDownSketchFolder x1, BaseBody x59",
+          "reason": "feature type names not in the calibrated table: MateReferenceGroupFolder x7, PosGroupFolder x7, ConfigTableFolder x6, Split x3, CombineBodies x1, CutListFolder x2, SheetMetal x1, SMBaseFlange x1, FlatPattern x1, FoldUpDownSketchFolder x1, BaseBody x59",
           "error": null
         }
       },

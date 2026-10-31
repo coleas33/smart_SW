@@ -249,8 +249,10 @@ def carried_and_computed(findings: Sequence[Finding]) -> tuple[int, int]:
     return carried, len(findings) - carried
 
 
-ENTITY_ID = re.compile(r"^[a-z]{3,4}:[0-9]{4,}$")
-"""The shape of every IR entity id (`cmp:0001`, `hol:0007`, `feat:12345`).
+ENTITY_ID = re.compile(r"^[a-z]{3,4}:[0-9]{4,}(?:#[1-9][0-9]*)?$")
+"""The shape of every IR entity id (`cmp:0001`, `hol:0007`, `feat:12345`), and of a hole
+instance as the joint map numbers it (`hol:0014#2`, `checks/joints.py`), which is all that tells
+two joints on one pair of components apart (008 T133).
 
 `finding_subject_key` reads the inputs that have it, whole, with `fullmatch`: a prose input
 that merely mentions an id (`"int:0001 cmp:0015+cmp:0026 Default computed"`) is prose.

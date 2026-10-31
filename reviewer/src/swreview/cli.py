@@ -2841,10 +2841,25 @@ def benchmark_run(
             # Row 6's price entry: the scripted provider's cost is synthetic.
             if study in (PANE_STUDY, PRIVATE_PANE_STUDY) and provider != ProviderName.FAKE:
                 if prices.price_entry(prices.load_prices(), provider, settings.model) is None:
+                    from swreview.agent.settings import DEFAULT_MODELS, PAID_TEST_MODEL
+
+                    add = "add the entry with its source and date"
+                    paid = (
+                        f"name a priced model, as a paid test run names --model {PAID_TEST_MODEL} "
+                        "(owner decision 174A)"
+                    )
+                    if provider != ProviderName.OPENAI:
+                        fix = add
+                    elif settings.model == DEFAULT_MODELS[provider]:
+                        fix = (
+                            f"{paid}; {settings.model} is priced by the variant that answers "
+                            "(owner decision 102A)"
+                        )
+                    else:
+                        fix = f"{paid}, or {add}"
                     raise ValueError(
                         f"no price for {provider.value} {settings.model} in benchmark/prices.yaml: "
-                        "a pane study's cost must be known (SC-008); add the entry with its "
-                        "source and date"
+                        f"a pane study's cost must be known (SC-008); {fix}"
                     )
             # Row 7, P-3.
             if declares_a_study:
@@ -3304,6 +3319,8 @@ def benchmark_pilot(
     def shown(value: object) -> str:
         return "unknown" if value is None else str(value)
 
+    basis = pilot.cost_basis(records)
+
     lines = [
         f"wrote {out} (unapproved)",
         f"result: {result.state}",
@@ -3324,6 +3341,7 @@ def benchmark_pilot(
         f"stress case (shown, never bounded): {shown(result.stress_case)}",
         f"estimated study cost: {shown(result.estimated_study_cost)} "
         "(off-arm package-run mean for both arms)",
+        *(f"estimated study cost basis: {note}" for note in basis),
         f"mean package-run cost: {shown(cost_time.mean_cost)}; "
         f"cost unknown: {cost_time.unknown_cost_count} package runs left out",
         f"mean package-run wall clock: {shown(cost_time.mean_wall_clock_s)} s",
