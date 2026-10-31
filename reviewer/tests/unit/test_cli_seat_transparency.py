@@ -30,6 +30,7 @@ from typing import Any
 import pytest
 
 from swreview.checks.standards.assembly import ONE_IS_OPAQUE, ZERO_IS_OPAQUE
+from tests.support.console import plain_words
 from tests.unit.test_cli import invoke
 
 PROBE2 = Path(__file__).resolve().parents[1] / "fixtures" / "seat" / "probe2"
@@ -292,4 +293,4 @@ def test_a_missing_file_is_a_usage_error(tmp_path: Path) -> None:
     result = decide(tmp_path / "absent.txt")
 
     assert result.exit_code == 2
-    assert "does not exist" in result.output
+    assert "does not exist" in plain_words(result.output)

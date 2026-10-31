@@ -9,17 +9,20 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
-from swreview.seat import health
+from swreview.seat import health, transparency
 
 app = typer.Typer(
     no_args_is_help=True,
     help="Checks the engineer runs at the SOLIDWORKS seat: offline, read-only, no key.",
 )
 Json = Annotated[bool, typer.Option("--json", help="Print machine-readable JSON only.")]
+SeatFile = Annotated[
+    Path, typer.Argument(exists=True, dir_okay=False, readable=True, help="What the seat saved.")
+]
 
 
 @app.command("health")
@@ -72,4 +75,43 @@ def health_command(
             "MANUAL, for the eye"
         )
     if failures:
+        raise typer.Exit(1)
+
+
+def _name(role: str) -> Any:
+    default = transparency.DEFAULT_NAMES[role]
+    return typer.Option(f"--{role}", help=f"The {role} block's component name. Default: {default}.")
+
+
+@app.command("transparency")
+def transparency_command(
+    probe_output: SeatFile,
+    transparent: Annotated[str, _name("transparent")] = transparency.DEFAULT_NAMES["transparent"],
+    opaque: Annotated[str, _name("opaque")] = transparency.DEFAULT_NAMES["opaque"],
+    plain: Annotated[str, _name("plain")] = transparency.DEFAULT_NAMES["plain"],
+    json_output: Json = False,
+) -> None:
+    """Which transparency polarity PROBE-2 showed, from a saved `probe standards` run (006 T102).
+
+    Reads only the PROBE-2 lines of the recipe's three blocks
+    (benchmarks/native/probe2-polarity/RECIPE.md). Prints zero_is_opaque or one_is_opaque and the
+    one edit, or inconclusive with what did not hold, slot 7 refuted among them. Exit 1 when
+    inconclusive.
+    """
+    names = {"transparent": transparent, "opaque": opaque, "plain": plain}
+    decision = transparency.decide(transparency.read_text(probe_output), names)
+    if json_output:
+        typer.echo(json.dumps(asdict(decision), indent=2))
+    else:
+        typer.echo(f"verdict: {decision.verdict}")
+        typer.echo(f"reason: {decision.reason}")
+        for reading in decision.readings:
+            line = f"{reading.role} {reading.name}: "
+            line += f"HasMaterialPropertyValues={reading.has_override}"
+            if reading.slots is not None and len(reading.slots) > transparency.SLOT:
+                line += f", slot 7 = {reading.slots[transparency.SLOT]:g}"
+            typer.echo(line)
+        if decision.next:
+            typer.echo(f"next: {decision.next}")
+    if decision.verdict == transparency.INCONCLUSIVE:
         raise typer.Exit(1)
