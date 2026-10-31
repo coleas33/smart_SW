@@ -272,7 +272,7 @@ public sealed class FaceDumper : IFaceSource
 
             if (!(component.Node.Handle is IComponent2 handle))
             {
-                ComponentDocuments.RecordDocumentNode(scope, component, "face", "its faces were not read");
+                ComponentDocuments.RecordDocumentNode(scope, component, "face", "its faces were not read", assemblyNotRead: null);
                 continue;
             }
 

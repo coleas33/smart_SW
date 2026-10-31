@@ -97,6 +97,13 @@ public sealed class MeshExporter : IMeshSource
         string meshDirectory,
         List<BodyRef> bodies)
     {
+        if (component.Node.Suppression == SuppressionState.Resolved && component.Node.Handle is IModelDoc2)
+        {
+            // A part root or a model a drawing references is resolved; say how it is reviewed (T132).
+            ComponentDocuments.RecordDocumentNode(scope, component, "body", "no mesh was written for it", assemblyNotRead: null);
+            return;
+        }
+
         if (component.Node.Suppression != SuppressionState.Resolved
             || !(component.Node.Handle is IComponent2 handle))
         {

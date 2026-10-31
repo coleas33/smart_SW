@@ -132,7 +132,9 @@ public sealed class HoleDumper : IHoleSource
 
             if (!(component.Node.Handle is IComponent2 handle))
             {
-                ComponentDocuments.RecordDocumentNode(scope, component, "hole", "its holes and threads were not read");
+                ComponentDocuments.RecordDocumentNode(
+                    scope, component, "hole", "its holes and threads were not read",
+                    assemblyNotRead: "the holes and threads of its own assembly features were not read");
                 continue;
             }
 

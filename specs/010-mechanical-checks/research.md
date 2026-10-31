@@ -1150,7 +1150,9 @@ of its own" in the hole, fastener and face reads; the mesh export says "is not r
 part document nodes; an assembly a drawing references records the part sentence and a fastener,
 face and body gap; the plate read through an instance is named as unread; and the configuration
 and suppressed cases read the old words. The nine that pass are the part root's three gaps and
-the six pins of what does not change.
+the six pins of what does not change. After T132: `Passed: 19, Total: 19`, and the whole C#
+suite green (extractor 10235 passed, add-in 4276 passed, the build zero warnings with
+`--no-incremental`).
 
 ## R3. Verified facts the plan relies on
 
