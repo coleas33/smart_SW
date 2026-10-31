@@ -6686,6 +6686,13 @@ public sealed class RemodelHostTests
             Assert.False(world.Host.HoldsASessionLeftUnder(oldRoot));
             Assert.Empty(world.Pipeline.Closed);
             Assert.Equal(startOn ? 1 : 0, world.AllPosted("remodel.plan_lost").Length);
+            if (startOn)
+            {
+                // The review round (004 T329c; research R26.10, F4): a Start of the ended plan is refused, and nothing runs.
+                world.Receive("remodel.start", "s1", new { run_dir = first });
+                Assert.Equal("SessionLost", world.ErrorClass("s1"));
+                Assert.Equal(0, world.Pipeline.Count("run"));
+            }
 
             restart.Save("save", restart.NewRoot);
 
