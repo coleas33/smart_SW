@@ -212,7 +212,7 @@ whatever its question was numbered when it was asked, and is entered in the tabl
 same commit as the change it governs, with its date, a one-line summary, its status and where
 else it is recorded (the feature's `research.md` when a feature governs it, the commits that
 carry it out). Ids before 121A stay as they were written; the runs above remain their index. The
-next new decision is **176A**.
+next new decision is **179A**.
 
 **The mapping.** The first eight decisions of 2026-10-18 were asked in two rounds of four
 questions, each labelled 1A to 4A at the time; a third round, asked as 5A and 6A, became 129A and
@@ -228,7 +228,10 @@ had landed, became 152A to 155A, and an eleventh, asked as 1A to 4A on 2026-10-2
 156A had landed, became 157A to 160A, and a twelfth, asked as 1A and 2A on 2026-10-27, became
 161A and 162A, and a thirteenth, asked as 1A and 2A on 2026-10-29, became 163A and 164A, and a
 fourteenth, asked as 1A to 4A on 2026-10-31, became 165A to 175A: 1A to 3A as 165A to 167A, and 4A,
-which took the recommended option of the eight smaller questions put with it, as 168A to 175A.
+which took the recommended option of the eight smaller questions put with it, as 168A to 175A, and a
+fifteenth, asked as 1A to 4A on 2026-10-31 after its lanes merged, became 176A to 178A: 1A to 3A;
+its 4A, removing old worktrees from the development machine, changed nothing in the repository and is
+not numbered.
 The first round's 2A, 3A and 4A were written into commit
 messages on `main` and into the documentation branch under those labels before decision 128A
 numbered them, and those messages are not rewritten for it: read "2A" in a commit of that day as
@@ -291,6 +294,9 @@ numbered them, and those messages are not rewritten for it: read "2A" in a commi
 | 173A | 2026-10-31 | 4A, fourteenth round (6 of 8) | A task replaced by later work, or deferred by an owner decision, is closed by ticking it with a dated note that names the decision or work that replaced or deferred it (for example 94A or 127A). | Done 2026-10-31. 005 T073, T074, T078 and T079 (127A); 001 T044, T098 and T099 (feature 014's pipeline); 005 T028 to T030 and T065 to T069, 002 T055a and 008 T106 (94A) are ticked with dated notes, and the Gemini step and key lines are gone from the sitting documents. | The features' `tasks.md`; 004 `research.md` R29; [PR #54](https://github.com/coleas33/smart_SW/pull/54). |
 | 174A | 2026-10-31 | 4A, fourteenth round (7 of 8) | Paid test runs name `gpt-5.6-sol` explicitly (`--model`, `SWREVIEW_LIVE_MODEL`), and the variants are not aliases of `gpt-5.6`; this settles the alias question feature 014 deferred under 33C. The review's default model stays `gpt-5.6`, priced by the variant that answers (102A). | Done 2026-10-31. `PAID_TEST_MODEL` is `gpt-5.6-sol`; every OpenAI live test defaults to it, T171's attempt refuses an unpriced model before it spends, and the pane-study price refusal names `--model gpt-5.6-sol`. The default model and the alias rule are unchanged. Applied to all three OpenAI live tests, not only T171's: for the owner to confirm. | 014 `tasks.md` T267 to T270; 014 `research.md` (33C, 102A); [PR #52](https://github.com/coleas33/smart_SW/pull/52). |
 | 175A | 2026-10-31 | 4A, fourteenth round (8 of 8) | 009 T082's "before" half, a one-hour swap to an older build at the seat to show a bug already fixed, is dropped; its "after" half stays. | Done 2026-10-31. 009 T082 keeps only its "after" half, and the plan's step 5.5 with it. | 009 `tasks.md` T082; [PR #54](https://github.com/coleas33/smart_SW/pull/54). |
+| 176A | 2026-10-31 | 1A, fifteenth round (S1 follow-up) | Start's five blocking probes (PROBE-2, 4, 12 and 3, then PROBE-1 last) run in one probe run at S1, so one answers file holds them all, and `swreview remodel ledger` keeps judging one file; the reader is not taught to judge several. | Done 2026-10-31: the plan already runs them so (R29.10, RR1). | [004 research.md R29.12](../specs/004-resilient-remodeler/research.md#r2912-the-owners-answers-of-2026-10-31-176a-to-178a); 004 `research.md` R27.4, R27.9.8 and R29.10; `docs/test-plan-2026-09-27/workstation-test-plan.md` step 5.6. |
+| 177A | 2026-10-31 | 2A, fifteenth round (S1 follow-up) | T303a's stuck-backend case is not run by hand: S1 records the task's own fallback line, `stuck case: the seat cannot suspend a process; left to the fakes (169A)`, and no seat step suspends a process. | Done 2026-10-31: the plan's T303a item 5 and the results row already say so (R29.10, RR6). | [004 research.md R29.12](../specs/004-resilient-remodeler/research.md#r2912-the-owners-answers-of-2026-10-31-176a-to-178a); 004 `tasks.md` T303a; 004 `research.md` R29.10. |
+| 178A | 2026-10-31 | 3A, fifteenth round (S1 follow-up) | The ledger reader accepts both spellings of the frozen release, `32.5.0.48` and `32.5.0` (`SW_VERSIONS`), since `ISldWorks.RevisionNumber` answers the second. | Done 2026-10-31: no change; `SW_VERSIONS` already holds both (R27.4). | [004 research.md R29.12](../specs/004-resilient-remodeler/research.md#r2912-the-owners-answers-of-2026-10-31-176a-to-178a); 004 `research.md` R27.4 and R27.9.8; `reviewer/src/swreview/remodel/ledger.py`. |
 
 The owner's decision of the same day to keep this repository as the public upstream of private
 downstream forks is not numbered; it is recorded as
