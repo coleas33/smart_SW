@@ -1077,8 +1077,9 @@ row; no fixture or golden was regenerated.
 
 ### R2.28 Review round 1 of R2.27: the sentence says how the node is reviewed, and a document read through an instance records nothing (amendment 2026-10-31, owner decision 166A)
 
-The review of T127 to T130 raised eight findings (F1 to F8). Each was checked against the code;
-five are fixed by T131 to T133, one becomes an open task, and two are recorded.
+The review of T127 to T130 raised eight findings (F1 to F8). Each was checked against the code
+and none was rejected: F1, F2, F4 and F6 are fixed by T131 and T132, F3 and F7 are taken in the
+tasks and in T133, F5 becomes the open task T135, and F8 is recorded.
 
 - **F1, fixed (T131, T132).** R2.27's one sentence is false of two of its three shapes. An
   assembly a drawing references is walked below its node as `IComponent2` components
@@ -1119,7 +1120,11 @@ five are fixed by T131 to T133, one becomes an open task, and two are recorded.
   nothing, and a node read through an instance records nothing (F2). A suppressed or unresolved
   component, and the drawing forest root, keep the old gap. `checks/mass.py` counts every `body`
   gap toward its coverage row, so that count drops by one for each referenced assembly and each
-  model read through an instance - nodes whose bodies were meshed through their components.
+  model read through an instance - nodes whose bodies were meshed through their components. Over
+  the bridge (`tessellate`, lever 10a) such a node now answers no body and no gap, as a component
+  whose `GetBodies2` answers null already does (F5); the reviewer still writes `the bridge fetched no
+  body for it` for it (`tools/bridge.py` `_fetch_component`), so nothing is cleared in silence,
+  and only the old, false parenthesis is gone.
 - **F5, recorded, T135.** The `--faces all` sweep skips a suppressed component, one with no
   loaded model and a null `GetBodies2` with no gap, and `MeshExporter.ExportComponent` the last
   two; and the mesh export's gap on the drawing forest root is false of a document with no
