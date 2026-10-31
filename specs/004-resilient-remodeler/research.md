@@ -4604,7 +4604,7 @@ removed before commit.
   a run that holds no session, and the cleanup would send one redundant close, answered with no
   SOLIDWORKS call. Nothing can end that session then short of an unload: the plan holds the tool
   service, so no re-attach lands, and the backend closes only on failure. So it is recorded, not
-  coded.
+  coded. *Fixed 2026-10-31 (owner decision 165A; R26.2):* the run is recorded as ended, and no close is sent for it.
 - **Not covered, already recorded.** The old backend gone (R22.4). The old backend alive but not
   answering, which R22.11 and R22.12 make honest in words but do not end. The native ordering of
   an abandoned close (R22.3). One surviving mutation whose window no case can hold open: M56,
@@ -5588,7 +5588,7 @@ plan's record go. The open then went on to publish a session nothing tracks.
 **Settled (T317).** `remodel.open` asks `RefuseAFolderEndedByCleanup` again after its last native call
 and immediately before the session is constructed and published. A folder recorded meanwhile throws
 `target_mismatch` inside the open's own `try`, so it fails through the existing failed-open unwind:
-`CloseAfterAFailedOpen` closes the copy the open opened by its path (`CloseCopyUnsaved`; *corrected by R25.13:* no COM-identity comparison is made at this close), the copy is deleted,
+`CloseAfterAFailedOpen` closes the copy the open opened by its path (`CloseCopyUnsaved`; *corrected by R25.13:* no COM-identity comparison is made at this close; *fixed by R26.1, owner decision 165A:* the identity is now compared first, and another document at the copy's path is neither closed nor deleted), the copy is deleted,
 the four settings are put back, and the host is told the open failed (`ReasonOpenFailed`).
 
 **The points where native code can pump, checked by reading `OpenIn`.** Before the copy: the source
@@ -5668,3 +5668,116 @@ unwind and compare identities before the close, skipping the close and delete on
 R25.9's list of what Start waits on.
 
 No code changed; no gate is affected beyond the link and line-ending checks.
+
+*Fixed 2026-10-31 (owner decision 165A; R26.1):* the unwind now compares the opened document's COM identity with the one
+open at the copy's path before it closes and deletes, as Codex recommended.
+
+## R26 Start's two narrow prerequisites, T180, T303 and the IDENTITY profile (decisions 165A, 168A, 169A and 170A; T320 to T328; 2026-10-31)
+
+Owner decisions 165A, 168A, 169A and 170A (2026-10-31, fourteenth round; their rows are in
+[`docs/decisions.md`](../../docs/decisions.md)), on branch `startfix-165a` from main `a2d4c47`. 165A fixes the two
+narrow Start prerequisites R25.13 and R22.14 now, test first. 168A closes T180 on a one-page brief. 169A splits T303.
+170A puts T138 and T187 on the list of what Start waits on. No guard key, allowlist entry, bridge command, secret or
+write path is added, `git diff a2d4c47 -- extractor/SwReview.Extractor/Guard` names no file, and Start stays switched
+off.
+
+### R26.1 A failed open's unwind compares identity before it closes and deletes (165A; R25.13; T320, T321)
+
+**The defect (R25.13).** With a document handle back, `CloseAfterAFailedOpen` closed the copy by its path
+(`CloseCopyUnsaved`) and the unwind then deleted the file, without asking whether the document SOLIDWORKS had open at
+that path was the one the open returned. A re-entrant action that closed the copy and opened it again at the same path
+while a native call of the open pumped - after the close in process had recorded the folder and before the barrier's
+recheck refused - would have had the replacement closed unsaved and its file deleted.
+
+**Settled (T321).** `remodel.open`'s unwind hands `CloseAfterAFailedOpen` the document the open returned. With one,
+`AnotherDocumentAtTheCopy` asks `VerifyTarget`'s check 3's two reads - the handle's `GetDocumentIdentity()` and
+`GetOpenDocumentIdentity(copy)`, the `Marshal.GetIUnknownForObject` identities `SwRemodelCopyDocument` answers - ungated,
+as `VerifyTarget` asks them, and before the close:
+
+| What is open at the copy's path | The unwind |
+|---|---|
+| The open's own document (the same identity) | closed unsaved and confirmed, then deleted: unchanged |
+| Nothing | the same, unchanged: a copy closed underneath and not opened again is the run's own file, and nothing holds it |
+| Another document, or an identity of the handle that reads zero | nothing closed and the file kept; `copy_closed` false and the failure "close: SOLIDWORKS has another document open at the copy's path than the one this open opened, so it was not closed and the copy's file was not deleted" |
+| The reads throw | the same, with "close: which document SOLIDWORKS has open at the copy's path could not be read, so it was not closed and the copy's file was not deleted: {type}: {message}" |
+
+With no handle back the unwind is unchanged (T183: the seat is asked first). Whatever the identity answers, the four
+settings are put back and the ending is told with the reason `remodel.open`, so a copy left open reaches the pane as
+T167's status ("The copy may still be open") and the tool-service log and the run's `remodel.log` carry the failure by
+the rules every ending follows (`SessionEndLine`). The sentences name no path and no run. The identity reads run inside
+the `unwind.CloseDoc` marker; a delete held back writes no `unwind.DeleteCopy` marker, as a copy never made writes
+none.
+
+Why both the close and the delete are held back: closing a document the open did not open, and deleting a file it may
+hold, are each the defect, and an identity that cannot be shown equal is not the open's, as check 3 reads it. What is
+left is the run's own copy in the run's own folder, kept as evidence as a run folder is (constitution Principle I). The
+fix covers every failure after `OpenDoc7` with a handle back, not only the barrier's: a copy reopened before the
+rollback or the rebuild write fails `VerifyTarget`'s check 3 there, and that unwind now leaves it too.
+
+### R26.2 A plan whose session ended while it was finishing is tracked as ended (165A; R22.14; T322, T323)
+
+**The defect (R22.14, "Not covered").** When the bridge told the end of a plan's session while the plan was still
+finishing - inside `OpenCopy` after the bridge's open answered, or inside the `Plan` step - and the plan then
+succeeded, `SessionEnded` found no tracked run yet and marked only the attempt, which nothing read on success. `Track`
+then recorded a run taken to hold its session. With Start on, `HoldsASessionLeftUnder` read a session left and a
+restart that moved the run root sent the run a close; with Start off, the close at the plan (T176) was sent for a
+session already over.
+
+**Settled (T323).**
+
+- `Track` adds the run, then reads the attempt under `_attemptLock` and, when the bridge told this attempt's end
+  meanwhile, marks the run's session ended (`RemodelRun.MarkSessionEnded`).
+- `SessionEnded` marks the attempt before it looks for a tracked run (it marked it after). So an end that crosses
+  `Track` on another thread is seen by one of the two: if its mark comes first under the lock, `Track` reads it; if
+  `Track`'s read comes first, the run was added before it, and the end's look, after its own mark, finds the run and
+  marks it. Nothing new is called under `_attemptLock`.
+- `EndTheSessionNoStartCanUse` sends no close for a session already ended, and marks the plan closed at the plan, as
+  the answered close would have (the bridge answers a close with no session `target_mismatch`). With Start off the page
+  is therefore told what it was told before - the plan is not lost, as 159A settled for a plan closed at the plan.
+
+With Start on, the run is lost by the existing rule (`IsLostPlan`: its session ended): told once as the host is freed,
+and a Start of it refused `SessionLost`. That is what is true: the session Start would run on is gone. No words, class
+or contract changes. As R22.14 said, nothing short of an unload can end a session during a Plan in this build; the fix
+makes the record right whatever ends it.
+
+### R26.3 Tests changed on purpose, and one slip corrected
+
+- `RemodelHostTests.FakePipeline.OpenCopy`: an open that answers opens the fake session before `DuringCopy` runs, as
+  the bridge's open answers before the backend's steps after it. `DuringCopy` was set only by T293's failing open, whose
+  path is unchanged; every other case passed unchanged.
+- `FakeRemodelDocument` gains `ReopenedAs` (another document's identity at its path, or zero for none) and
+  `OpenIdentityFailure`, unset in every older case.
+- T322's first commit (`7d3758c`) had a slip in its own harness: its two "copy" rows asserted that the fake's
+  `EndSessionInProcess` answered a copy path, which the fake has not yet set inside `OpenCopy`, so those rows failed with
+  a `HostError` before their assertions. Corrected in `d7a3497`, before the fix and checked with the fix taken out: the
+  rows ask that the fake session was open and is ended, and all four rows then failed on the run not recorded as ended.
+  Nothing was loosened.
+- No existing assertion changed. T316's case says the unwind closed the copy "after the identity check", which is now
+  true.
+
+### R26.4 Test-first evidence and mutations
+
+T320 (`4d4c566`) is the deliberately red commit for R26.1: both rows failed on their assertions (the copy closed), and
+T316's two rows passed as guards. T322 (`7d3758c`, corrected in `d7a3497`) is the one for R26.2: all four rows failed on
+their assertions. All green after T321 (`2530d46`) and T323 (`5fde7dc`). Added with T321, a guard:
+`AnUnwindStillClosesAndDeletesACopyClosedUnderneathAndNotReopened`.
+
+Each fix taken out once, alone, by an exact replacement matching once, built and run - the dispatcher's against
+`RemodelTeardownTests`, `RemodelOpenHandlerTests`, `RemodelIdleSettingsTests`, `BridgeDispatcherTests`, `GuardTests` and
+`RemodelFinishHandlerTests` (728 cases, 729 with the guard); the host's against `RemodelHostTests`,
+`DeferredRestartTests` and `RemodelWiringTests` (1,017 cases) - then restored from the bytes read before, sha256
+checked equal.
+
+| # | Fix taken out | Failed | Cases that failed | Restored |
+|---|---|---|---|---|
+| M100 | `BridgeDispatcher.cs`: the identity not asked | 2 of 728 | `AnUnwindLeavesADocumentOpenedAgainAtTheCopysPathMidOpenAndItsFile` (both rows) | sha256 equal |
+| M101 | `BridgeDispatcher.cs`: the delete not held back | 2 of 728 | the same two | sha256 equal |
+| M102 | `BridgeDispatcher.cs`: nothing open at the copy's path read as another document | 1 of 729 | `AnUnwindStillClosesAndDeletesACopyClosedUnderneathAndNotReopened` (it survived, 0 of 728, until that guard was added with the fix) | sha256 equal |
+| M103 | `BridgeDispatcher.cs`: the close not held back | 2 of 728 | `AnUnwindLeavesADocumentOpenedAgain...` (both rows) | sha256 equal |
+| M104 | `BridgeDispatcher.cs`: reads that throw taken as the same document | 1 of 728 | `AnUnwindLeavesADocumentOpenedAgain...` (cannot be read) | sha256 equal |
+| M105 | `RemodelHost.cs`: `Track` not reading the attempt | 4 of 1017 | `APlansSessionEndedWhileThePlanFinishesIsTrackedAsEnded` (all rows) | sha256 equal |
+| M106 | `RemodelHost.cs`: the close at the plan sent for a session already ended | 2 of 1017 | `APlansSessionEndedWhileThePlanFinishes...` (both Start-off rows) | sha256 equal |
+
+Every row failed at least one case. Not mutation-testable here: the order in `SessionEnded` - the attempt marked before
+the run is looked for - matters only when the end and `Track` run on two threads; it is reasoned in R26.2, as R24.8
+records the lock rule.

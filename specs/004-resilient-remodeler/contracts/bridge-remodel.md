@@ -136,7 +136,7 @@ read or write; no token is added. No command, secret, guard key or allowlist ent
 *Amended on the third review (`research.md` R25.12):* the open asks again after its last native call and
 before its session is published, since a native call such as `OpenDoc7` or the rebuild can pump the
 queue the close was posted to; a folder recorded meanwhile fails the open through its own unwind - the
-copy it opened closed by its path and deleted (no COM-identity comparison at that close; research R25.13), the settings put back, `remodel.open`'s
+copy it opened closed and deleted once its COM identity is the document open at the copy's path (owner decision 165A; research R25.13, R26.1), the settings put back, `remodel.open`'s
 failure told - and answers `target_mismatch`. The backend reads that token as `RunFolderFailed`, which is
 not marked retryable, though another Plan works.
 
@@ -333,6 +333,13 @@ copy deleted whatever the close did, and all four settings restored - each step 
 the others did, and none of their failures replaces the error the open answers. The ending is then
 told to `BridgeServices.RemodelSessionEnded` with the reason `remodel.open`, `copy_closed` true when
 no document was opened, and `verified` and `tag_removed` false.
+
+*Amended 2026-10-31 (owner decision 165A; `research.md` R25.13, R26.1):* when a document handle came back, the unwind
+first asks `VerifyTarget`'s check 3's two reads - the handle's COM identity and that of the document SOLIDWORKS has open
+at the copy's path. The same identity, or nothing open there, is closed and deleted as above. Another document there - the
+copy closed and opened again underneath the open while a native call pumped - or reads that throw: nothing is closed and
+the copy's file is not deleted, `copy_closed` is false, and a failure that names no path says why. The settings are put
+back and the ending told either way.
 
 *Amended 2026-09-28 (U27; default taken 2026-09-28, the owner may revise; `tasks.md` T185,
 research R16.1):* each step above that calls SOLIDWORKS, and the file work between them, is marked
