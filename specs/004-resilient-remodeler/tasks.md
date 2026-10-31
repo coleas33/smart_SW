@@ -535,6 +535,12 @@ On the decision's final review (2026-10-21; research R19.20 to R19.26): the revi
 - [x] T352 Record R28 (what the command proves and what it leaves to the eye, the defaults, what it never prints, the command names for the test plan's lane) and run the gates: both Python suites, ruff, the link check and the LF check. Acceptance recorded in R28
 - [ ] T353 [W] At the stage 1 sitting (owner decision 166A), after starting SOLIDWORKS with a part or assembly active and opening the Review tab until it reads `Backend ready`, run `uv run swreview seat health` from `<repo>\reviewer` and copy its lines into the sitting's findings document; read any FAIL against the runbook's section 7 and check the MANUAL lines by eye. Acceptance: every line recorded, each FAIL with what was done about it
 
+*Added 2026-10-31 (owner decision 166A; research R28.6):* the lane's review round 1 found that a start which wrote nothing passed on the session before it, and smaller defects in how `addin.log` is read and what the command writes and prints.
+
+- [ ] T354 [P] Test first (owner decision 166A; research R28.6). In `reviewer/tests/unit/test_cli_seat_health.py`, the clock set five minutes after the fixtures' latest load: a latest load more than two hours old fails the three log checks naming its age (the start that wrote no line, and the two-hour edge both ways); a reload in the same process passes on its own lines and needs a backend log begun since it, and one whose pane failed or that could not attach fails; a line beginning with a bracket that is not a time with its offset continues the line before (its text never printed, a drawing in it caught), and a time with no offset is no line the add-in wrote; the newest backend log is the one that began last by its own clock, and one that cannot be read fails naming only its file; the example profile with other line endings fails; the `uv` reason claims only this shell's PATH; the checkout check leaves `.git/index` alone; and the privacy case covers a plain tool-service failure (`tool-service-after-start`) and a profile whose loader reason quotes a value
+- [ ] T355 Implement T354 (owner decision 166A; research R28.6) in `reviewer/src/swreview/seat/health.py` and the `seat health` help. Acceptance: every T350 and T354 case green
+- [ ] T356 Record R28.6 (the review round: each finding verified, and fixed or rejected with the evidence) and correct R28.2 and R28.3; run both Python suites, ruff, the link check and the LF check. Acceptance recorded in R28.6
+
 
 
 

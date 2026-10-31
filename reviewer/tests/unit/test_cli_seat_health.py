@@ -9,19 +9,23 @@ the checkout is clean on `main`. The pane's own checks stay manual, and the outp
 
 Every log here is fictional (`tests/fixtures/seat/health/`, one folder per case); each checkout is
 a throwaway git repository made in the test's temp folder, so no case reads this machine's
-`%LOCALAPPDATA%\\SwReview` or this checkout's own state.
+`%LOCALAPPDATA%\\SwReview` or this checkout's own state. The clock is set: five minutes after the
+fixtures' latest start, as the runbook has the command run.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from swreview.seat import health as seat_health
 from tests.unit.test_cli import invoke
 from tests.unit.test_cli_profile_upgrade import PROFILE_A, as_version, write
 
@@ -30,8 +34,23 @@ EXTRACTOR = Path("extractor/SwReview.Extractor.Console/bin/x64/Release/net48/swr
 EXAMPLE = Path("config/standards.example.yaml")
 FICTIONAL_DRAWING = "made-up-bracket"
 FICTIONAL_FOLDER = "fict-seat"
+FICTIONAL_NAME = "Jane Fict"
 
 CHECKS = ["add-in load", "tool service", "backend", "profile", "uv", "extractor", "checkout"]
+LOG_CHECKS = {"add-in load", "tool service", "backend"}
+
+LATEST_LOAD = datetime(2026, 10, 31, 9, 15, 4, tzinfo=timezone.utc)
+"""The all-good log's latest `Attached to SOLIDWORKS.`, two seconds after its latest start."""
+
+
+def at(monkeypatch: pytest.MonkeyPatch, when: datetime) -> None:
+    monkeypatch.setattr(seat_health, "now", lambda: when, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Five minutes after the latest load; a case that wants another time sets its own."""
+    at(monkeypatch, LATEST_LOAD + timedelta(minutes=5))
 
 
 @pytest.fixture(autouse=True)
@@ -43,6 +62,15 @@ def uv_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
         return "fict-uv" if name == "uv" else real(name, *args, **kwargs)
 
     monkeypatch.setattr(shutil, "which", which)
+
+
+def logs_with(tmp_path: Path, *lines: str, case: str = "all-good") -> Path:
+    """A copy of `case`'s logs with `lines` appended to its `addin.log`."""
+    logs = tmp_path / "logs"
+    shutil.copytree(LOGS / case, logs)
+    with (logs / "addin.log").open("a", encoding="utf-8") as log:
+        log.write("".join(f"{line}\n" for line in lines))
+    return logs
 
 
 def checkout(
@@ -190,10 +218,9 @@ def test_a_dirty_tree_fails_the_checkout_check(tmp_path: Path) -> None:
 
 
 def test_a_tool_service_line_with_no_drawing_also_fails(tmp_path: Path) -> None:
-    logs = tmp_path / "logs"
-    shutil.copytree(LOGS / "all-good", logs)
-    with (logs / "addin.log").open("a", encoding="utf-8") as log:
-        log.write("[2026-10-31T09:16:00.0000000+00:00] The SwReview tool service did not start.\n")
+    logs = logs_with(
+        tmp_path, "[2026-10-31T09:16:00.0000000+00:00] The SwReview tool service did not start."
+    )
 
     result = health("", checkout(tmp_path), "--json", logs=logs)
 
@@ -204,18 +231,164 @@ def test_a_tool_service_line_with_no_drawing_also_fails(tmp_path: Path) -> None:
 def test_a_line_naming_a_drawing_fails_even_when_it_is_not_the_tool_services(
     tmp_path: Path,
 ) -> None:
-    logs = tmp_path / "logs"
-    shutil.copytree(LOGS / "all-good", logs)
-    with (logs / "addin.log").open("a", encoding="utf-8") as log:
-        log.write(
-            "[2026-10-31T09:16:00.0000000+00:00] A fictional failure.\n"
-            "   at a frame reading D:\\fict-seat\\made-up-bracket.slddrw\n"
-        )
+    logs = logs_with(
+        tmp_path,
+        "[2026-10-31T09:16:00.0000000+00:00] A fictional failure.",
+        "   at a frame reading D:\\fict-seat\\made-up-bracket.slddrw",
+    )
 
     result = health("", checkout(tmp_path), "--json", logs=logs)
 
     assert failing(result) == {"tool service"}
     assert FICTIONAL_DRAWING not in result.stdout
+
+
+# --- a line is one AddInLog wrote only when it begins with a time and its offset ----------------
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_a_continuation_line_that_begins_with_a_bracket_is_not_a_line_of_its_own(
+    tmp_path: Path, as_json: bool
+) -> None:
+    """An exception's text in `addin.log` can begin a line with a bracket; it continues the line
+    before it, and its bracketed text is never quoted as that line's time."""
+    logs = logs_with(
+        tmp_path, '["C:\\Users\\Jane Fict\\x.sldprt"] The SwReview tool service is fictional'
+    )
+
+    result = health("", checkout(tmp_path), *(["--json"] if as_json else []), logs=logs)
+
+    assert result.exit_code == 0, result.stdout
+    assert FICTIONAL_NAME not in result.stdout
+    assert "x.sldprt" not in result.stdout
+
+
+def test_a_drawing_on_a_continuation_line_that_begins_with_a_bracket_fails(tmp_path: Path) -> None:
+    logs = logs_with(tmp_path, "[D:\\Users\\Jane Fict\\made-up-bracket.SLDDRW] was the active document")
+
+    result = health("", checkout(tmp_path), "--json", logs=logs)
+
+    assert failing(result) == {"tool service"}
+    assert FICTIONAL_NAME not in result.stdout
+    assert FICTIONAL_DRAWING not in result.stdout
+
+
+def test_a_time_with_no_offset_is_not_a_line_the_add_in_wrote(tmp_path: Path) -> None:
+    """`AddInLog` stamps every line `{0:O}`, which always carries the offset: a time without one
+    cannot be ordered against the backend log's, and is not that file's."""
+    logs = tmp_path / "logs"
+    shutil.copytree(LOGS / "all-good", logs)
+    text = (logs / "addin.log").read_text(encoding="utf-8")
+    (logs / "addin.log").write_text(text.replace("+00:00]", "]"), encoding="utf-8")
+
+    result = health("", checkout(tmp_path), "--json", logs=logs)
+
+    assert failing(result) == LOG_CHECKS
+    assert "AssemblyRedirect installed." in reason(result, "add-in load")
+
+
+# --- the latest load is this start's, or the command says it is not ----------------------------
+
+
+def test_a_start_that_wrote_no_lines_fails_the_three_log_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """docs/addin-load-fix.md: a reverted check box, or a broken registration, loads nothing, so
+    the start just made adds no line and yesterday's session is the latest the log holds."""
+    at(monkeypatch, datetime(2026, 11, 1, 8, 30, tzinfo=timezone.utc))
+
+    result = health("all-good", checkout(tmp_path), "--json")
+
+    assert result.exit_code == 1
+    assert failing(result) == LOG_CHECKS
+    for check in LOG_CHECKS:
+        assert "23 h 14 min" in reason(result, check)
+    assert "Tools > Add-ins" in reason(result, "add-in load")
+
+
+@pytest.mark.parametrize(
+    ("after", "status"),
+    [(timedelta(hours=1, minutes=59), "PASS"), (timedelta(hours=2, minutes=1), "FAIL")],
+    ids=["within two hours", "beyond two hours"],
+)
+def test_the_latest_load_may_be_at_most_two_hours_old(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, after: timedelta, status: str
+) -> None:
+    at(monkeypatch, LATEST_LOAD + after)
+
+    result = health("all-good", checkout(tmp_path), "--json")
+
+    assert {check: statuses(result)[check] for check in LOG_CHECKS} == dict.fromkeys(
+        LOG_CHECKS, status
+    )
+
+
+def test_a_reload_that_attached_again_passes_on_its_own_lines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unticking and ticking the add-in calls `ConnectToSW` again in the same process, which writes
+    no new start line: the latest load is its own `Attached to SOLIDWORKS.`, the start three hours
+    old, and the backend log is the one begun since that load."""
+    logs = logs_with(
+        tmp_path,
+        "[2026-10-31T12:10:00.0000000+00:00] Attached to SOLIDWORKS.",
+        "[2026-10-31T12:10:01.0000000+00:00] Task Pane created.",
+        "[2026-10-31T12:10:02.0000000+00:00] Review host started.",
+    )
+    (logs / "backend-20261031-121005.log").write_text(
+        "[2026-10-31T12:10:05.0000000+00:00] starting uv run swreview chat serve\n"
+        "[2026-10-31T12:10:09.0000000+00:00] backend healthy on http://127.0.0.1:52012 (pid 4343)\n",
+        encoding="utf-8",
+    )
+    at(monkeypatch, datetime(2026, 10, 31, 12, 15, tzinfo=timezone.utc))
+
+    result = health("", checkout(tmp_path), "--json", logs=logs)
+
+    assert failing(result) == set(), result.stdout
+    assert "2026-10-31T12:10:00" in reason(result, "add-in load")
+    assert "backend-20261031-121005.log" in reason(result, "backend")
+
+
+def test_a_reload_needs_a_backend_log_begun_since_it(tmp_path: Path) -> None:
+    logs = logs_with(
+        tmp_path,
+        "[2026-10-31T09:17:00.0000000+00:00] Attached to SOLIDWORKS.",
+        "[2026-10-31T09:17:01.0000000+00:00] Task Pane created.",
+        "[2026-10-31T09:17:02.0000000+00:00] Review host started.",
+    )
+
+    result = health("", checkout(tmp_path), "--json", logs=logs)
+
+    assert failing(result) == {"backend"}
+
+
+def test_a_reload_whose_pane_failed_fails_though_the_first_load_was_good(tmp_path: Path) -> None:
+    logs = logs_with(
+        tmp_path,
+        "[2026-10-31T09:17:00.0000000+00:00] Attached to SOLIDWORKS.",
+        "[2026-10-31T09:17:01.0000000+00:00] The SwReview Task Pane could not be created. "
+        "System.InvalidOperationException: a fictional failure",
+        "   at Fict.Stack.Frame()",
+        "[2026-10-31T09:17:02.0000000+00:00] Review host started.",
+    )
+
+    result = health("", checkout(tmp_path), "--json", logs=logs)
+
+    assert "add-in load" in failing(result)
+    assert "Task Pane created." in reason(result, "add-in load")
+
+
+def test_a_reload_that_could_not_attach_fails(tmp_path: Path) -> None:
+    logs = logs_with(
+        tmp_path,
+        "[2026-10-31T09:17:00.0000000+00:00] The SwReview add-in could not attach to SOLIDWORKS. "
+        "System.Runtime.InteropServices.COMException: a fictional failure",
+    )
+
+    result = health("", checkout(tmp_path), "--json", logs=logs)
+
+    assert "add-in load" in failing(result)
+    assert "could not attach" in reason(result, "add-in load")
 
 
 def test_a_missing_checkpoint_is_named(tmp_path: Path) -> None:
@@ -285,6 +458,36 @@ def test_a_backend_log_is_ordered_by_its_own_clock_whatever_its_offset(tmp_path:
     assert failing(result) == {"backend"}
 
 
+def test_the_newest_backend_log_is_the_one_that_began_last_by_its_own_clock(
+    tmp_path: Path,
+) -> None:
+    """Its name sorts first, but its first line is the latest: that is the one read."""
+    logs = tmp_path / "logs"
+    shutil.copytree(LOGS / "all-good", logs)
+    (logs / "backend-20261031-090000.log").write_text(
+        "[2026-10-31T09:17:00.0000000+00:00] starting uv run swreview chat serve\n",
+        encoding="utf-8",
+    )
+
+    result = health("", checkout(tmp_path), "--json", logs=logs)
+
+    assert failing(result) == {"backend"}
+    assert "backend-20261031-090000.log" in reason(result, "backend")
+
+
+def test_a_backend_log_that_cannot_be_read_fails_naming_only_its_file(tmp_path: Path) -> None:
+    logs = tmp_path / "logs"
+    shutil.copytree(LOGS / "all-good", logs)
+    (logs / "backend-20261031-092000.log").mkdir()
+
+    result = health("", checkout(tmp_path), "--json", logs=logs)
+
+    assert result.exit_code == 1, result.output
+    assert failing(result) == {"backend"}
+    assert "backend-20261031-092000.log" in reason(result, "backend")
+    assert str(tmp_path) not in result.stdout
+
+
 def test_a_profile_below_version_3_fails(tmp_path: Path) -> None:
     profile = write(tmp_path / "standards.yaml", as_version(2))
 
@@ -295,13 +498,16 @@ def test_a_profile_below_version_3_fails(tmp_path: Path) -> None:
 
 
 def test_a_profile_that_does_not_validate_fails_without_quoting_it(tmp_path: Path) -> None:
+    """The loader's reason for this file quotes its version, a folder; neither it nor the
+    profile's path reaches the output."""
     profile = tmp_path / "standards.yaml"
-    profile.write_text("version: 4\nvault_root: D:/fict-seat/vault\n", encoding="utf-8")
+    profile.write_text("version: D:/fict-seat/vault\n", encoding="utf-8")
 
     result = health("all-good", checkout(tmp_path), "--json", profile=profile)
 
     assert failing(result) == {"profile"}
     assert FICTIONAL_FOLDER not in result.stdout
+    assert str(tmp_path) not in result.stdout
 
 
 def test_the_example_profile_copied_into_place_fails(tmp_path: Path) -> None:
@@ -310,6 +516,21 @@ def test_the_example_profile_copied_into_place_fails(tmp_path: Path) -> None:
     shutil.copy(PROFILE_A, repo / EXAMPLE)
 
     result = health("all-good", repo, "--json")
+
+    assert failing(result) == {"profile"}
+    assert "example" in reason(result, "profile")
+
+
+def test_the_example_profile_copied_with_other_line_endings_fails(tmp_path: Path) -> None:
+    """Downloaded or checked out with LF, saved with CRLF: other bytes, the same profile."""
+    text = PROFILE_A.read_text(encoding="utf-8").replace("\r\n", "\n")
+    repo = checkout(tmp_path)
+    (repo / EXAMPLE).parent.mkdir(parents=True)
+    (repo / EXAMPLE).write_bytes(text.encode("utf-8"))
+    profile = tmp_path / "standards.yaml"
+    profile.write_bytes(text.replace("\n", "\r\n").encode("utf-8"))
+
+    result = health("all-good", repo, "--json", profile=profile)
 
     assert failing(result) == {"profile"}
     assert "example" in reason(result, "profile")
@@ -327,6 +548,16 @@ def test_uv_missing_from_path_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     result = health("all-good", checkout(tmp_path), "--json")
 
     assert failing(result) == {"uv"}
+
+
+def test_the_uv_check_claims_only_this_shells_path(tmp_path: Path) -> None:
+    """SOLIDWORKS started from the Start menu inherits Explorer's PATH from the login, not this
+    shell's (runbook section 2): the backend check is what proves SOLIDWORKS found `uv`."""
+    said = reason(health("all-good", checkout(tmp_path), "--json"), "uv")
+
+    assert "this shell" in said
+    assert "backend" in said
+    assert "SOLIDWORKS inherits" not in said
 
 
 def test_an_unbuilt_extractor_fails(tmp_path: Path) -> None:
@@ -353,10 +584,31 @@ def test_a_folder_that_is_not_a_checkout_fails_the_two_checks_that_need_one(
     assert failing(result) == {"extractor", "checkout"}
 
 
+def test_the_checkout_check_leaves_the_index_alone(tmp_path: Path) -> None:
+    """A plain `git status` refreshes stale stat data and rewrites `.git/index` under
+    `index.lock`, which can make a git command running beside it, `update-workstation.ps1`'s,
+    fail. The check takes no optional lock, so it writes nothing."""
+    repo = checkout(tmp_path)
+    tracked = repo / "tracked.txt"
+    tracked.write_text("a fictional tracked file\n", encoding="utf-8")
+    git = ["git", "-C", str(repo), "-c", "user.name=Fict", "-c", "user.email=fict@example.invalid"]
+    subprocess.run([*git, "add", "tracked.txt"], check=True)
+    subprocess.run([*git, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "fict"], check=True)
+    os.utime(tracked, (1_600_000_000, 1_600_000_000))
+    index = (repo / ".git" / "index").read_bytes()
+
+    result = health("all-good", repo, "--json")
+
+    assert statuses(result)["checkout"] == "PASS", reason(result, "checkout")
+    assert (repo / ".git" / "index").read_bytes() == index
+
+
 # --- what it prints, and what it never prints ------------------------------------------------
 
 
-@pytest.mark.parametrize("case", ["all-good", "refusal-after-start", "stale-backend"])
+@pytest.mark.parametrize(
+    "case", ["all-good", "refusal-after-start", "tool-service-after-start", "stale-backend"]
+)
 @pytest.mark.parametrize("as_json", [False, True])
 def test_no_path_is_printed_from_the_logs_or_the_options(
     tmp_path: Path, case: str, as_json: bool
