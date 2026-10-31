@@ -39,6 +39,7 @@ from swreview.agent.providers import (
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.checks import part_roles
 from swreview.checks.provenance import PROVENANCE_CHECK
+from swreview.findings import Finding, build_finding
 from swreview.ir.loader import save_package
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession
@@ -1060,6 +1061,116 @@ def test_a_rerun_of_one_of_two_hole_pairs_on_the_same_components_keeps_each_its_
     assert [(finding.id, finding.inputs) for finding in session.findings] == [
         ("F-001", ["hol:0001", "hol:0003"]),
         ("F-002", ["hol:0002", "hol:0004"]),
+    ]
+
+
+def test_a_rerun_of_two_joints_on_the_same_components_keeps_each_its_verdict(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """Two joints across the same two components, with no drawing location, differ only by
+    their hole instances as the joint map numbers them (`hol:0001#1`, `checks/joints.py`): a
+    resumed turn's re-run of both folds each onto its own (008 T132)."""
+    run = review([turn("nothing yet")])
+
+    def joint(finding_id: str, number: int, status: str) -> Finding:
+        return build_finding(
+            finding_id=finding_id,
+            check="hole.nominal_alignment",
+            title=f"Joint {number}",
+            status=status,  # type: ignore[arg-type]
+            severity="medium",
+            package=run.context.ir,
+            configuration=run.context.ir.design.active_configuration,
+            observed=f"joint {number} is {status}",
+            requirement="the member axes meet within the joint's clearance",
+            recommended_action="look again",
+            component_ids=["cmp:0001", "cmp:0002"],
+            inputs=[f"hol:0001#{number}", f"hol:0003#{number}"],
+            coverage_limits=["the position tolerance is not on the drawing"],
+            numeric=False,
+        )
+
+    session = run.session
+    session.findings[:] = [
+        joint("F-001", 1, "unresolved"),
+        joint("F-002", 2, "unresolved"),
+        joint("F-003", 1, "suspected"),
+        joint("F-004", 2, "unresolved"),
+    ]
+
+    runner._reconcile_reruns(session, 2)
+
+    assert [(finding.id, finding.inputs, finding.status) for finding in session.findings] == [
+        ("F-001", ["hol:0001#1", "hol:0003#1"], "suspected"),
+        ("F-002", ["hol:0001#2", "hol:0003#2"], "unresolved"),
+    ]
+
+
+def test_a_rerun_citing_the_same_place_with_its_reference_yields_one_verdict(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The model's citation of a sheet first without and then with the persistent reference is
+    one place: the re-run folds onto the finding it re-judges (008 T132)."""
+    cited = ScriptedToolCall(
+        name="record_drawing_finding",
+        arguments={
+            **DRAWING_FINDING_ARGUMENTS,
+            "source_refs": [
+                {"document_id": "doc:2", "sheet": "Sheet1", "persist_ref": persist_ref("Sheet1")}
+            ],
+            "status": "suspected",
+        },
+    )
+    run = review(
+        [
+            turn(
+                "blocked",
+                drawing_finding("unresolved"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("resolved", cited),
+        ]
+    )
+
+    session = run.answer_evidence("ER-001", "The usable thread depth is 12 mm.")
+
+    assert [(finding.id, finding.status) for finding in session.findings] == [
+        ("F-001", "suspected")
+    ]
+
+
+def test_a_rerun_citing_another_reference_alone_is_a_second_finding(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """A citation by persistent reference alone names its item by that reference, so another
+    reference is another place and another finding (008 T132; owner decision 25A)."""
+
+    def by_reference(seed: str, status: str) -> ScriptedToolCall:
+        return ScriptedToolCall(
+            name="record_drawing_finding",
+            arguments={
+                **DRAWING_FINDING_ARGUMENTS,
+                "source_refs": [{"document_id": "doc:2", "persist_ref": persist_ref(seed)}],
+                "status": status,
+            },
+        )
+
+    run = review(
+        [
+            turn(
+                "blocked",
+                by_reference("note-1", "unresolved"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("and another note", by_reference("note-2", "suspected")),
+        ]
+    )
+
+    session = run.answer_evidence("ER-001", "12 mm")
+
+    assert [(finding.id, finding.status) for finding in session.findings] == [
+        ("F-001", "unresolved"),
+        ("F-002", "suspected"),
     ]
 
 

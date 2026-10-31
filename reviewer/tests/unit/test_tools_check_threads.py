@@ -295,12 +295,14 @@ PIN_THREADS: tuple[tuple[str, str], ...] = (
 )
 
 
-def threads_review(tmp_path: Path, events: Events) -> runner.ReviewRun:
+def threads_review(
+    tmp_path: Path, events: Events, *, screw_hole: bool = False
+) -> runner.ReviewRun:
     """`roles_review`'s shape - an assembly, the custom plate, the unclear pin and the version
     3 profile - with the pin's three tapped holes, `M8x1`, `M6x0.75` and a coarse `M5x0.8`, and
-    a second unclear part carrying an `M10x1.25` fastener row; checks first on, so the pre-run
-    runs `check_threads` and the answer's restate restates it. The pin has one instance, so
-    its coarse hole counts once."""
+    a second unclear part carrying an `M10x1.25` fastener row (and, with `screw_hole`, an
+    `M10x1.25` tapped hole too); checks first on, so the pre-run runs `check_threads` and the
+    answer's restate restates it. The pin has one instance, so its coarse hole counts once."""
     builder = PackageBuilder(design_stem=ROOT_STEM)
     builder.component(builder.document(PLATE_STEM, "part"))
     pin = builder.component(builder.document(PIN_STEM, "part"))
@@ -308,6 +310,8 @@ def threads_review(tmp_path: Path, events: Events) -> runner.ReviewRun:
         tapped(builder, pin, thread, name)
     screw = builder.component(builder.document(FASTENER_STEM, "part"))
     builder.fastener_row(screw, designation="M10x1.25")
+    if screw_hole:
+        tapped(builder, screw, "M10x1.25", size="M10")
     folder = tmp_path / "run-0001"
     builder.build().write(folder)
     run = runner.start_review(
@@ -452,6 +456,35 @@ def test_none_bought_keeps_the_pins_finding_its_id_and_its_accepted_disposition(
     assert kept.disposition == accepted.disposition, "the engineer's Accept stands (58A)"
     assert kept.coverage_limits == [limit for limit in pin.coverage_limits if limit != note]
     assert withdrawn(events[mark:]) == []
+
+
+def test_all_bought_keeps_a_finding_that_loses_its_tapped_hole_its_id_and_its_accept(
+    tmp_path: Path,
+) -> None:
+    """The unclear part's fastener and tapped hole share one fine pitch, so one finding cites
+    both. "All bought" moves the hole to the bought row and the fastener stays graded: the
+    restated finding no longer cites the hole, yet it re-judges the same part, so it keeps the
+    id and the engineer's Accept and is not withdrawn (58A; 008 T132)."""
+    from swreview.chat.sessions import record_disposition
+
+    events: Events = []
+    run = threads_review(tmp_path, events, screw_hole=True)
+    [screw] = fine_on(run, FASTENER_STEM)
+    [hole] = [item.id for item in run.context.ir.holes if item.component_id in screw.component_ids]
+    assert hole in screw.inputs
+    record_disposition(
+        run, screw.id, decision="accepted", note="the fine pitch is meant", by="a.engineer"
+    )
+    [accepted] = fine_on(run, FASTENER_STEM)
+    mark = len(events)
+
+    run.answer_evidence_batch([("ER-001", "All bought")])
+
+    [kept] = fine_on(run, FASTENER_STEM)
+    assert hole not in kept.inputs, "the bought hole is no longer graded"
+    assert kept.id == screw.id
+    assert kept.disposition == accepted.disposition, "the engineer's Accept stands (58A)"
+    assert screw.id not in [body["finding_id"] for body in withdrawn(events[mark:])]
 
 
 def test_none_bought_leaves_one_checked_row_counting_the_coarse_hole_once(
