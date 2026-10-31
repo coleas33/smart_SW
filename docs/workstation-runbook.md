@@ -65,7 +65,7 @@ Run these first on a fresh machine and after any Windows or SOLIDWORKS update.
 | The o200k_base vocabulary (the gate fails without it) | from `<repo>\reviewer`: `uv run swreview tokenizer fetch` prints `written` or `already in place` | the download needs the vocabulary host, which a web filter may block: carry the file above from the development machine's `%LOCALAPPDATA%\SwReview\tokenizer\` by hand, outside the repository as the profile is, then `uv run swreview tokenizer fetch --from "<file>"` (or `update-workstation.ps1 -TokenizerFrom "<file>"`); the hash is checked either way |
 | WebView2 runtime (the Review, Model check, Standards and Remodel tabs) | `foreach ($k in 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') { if (Test-Path $k) { 'WebView2 ' + (Get-ItemProperty $k -Name pv).pv } }` prints a version (a per-machine install is under HKLM, a per-user one under HKCU) | install the Evergreen WebView2 runtime |
 | Codex CLI (the Ask tab's terminal) | not needed: the Ask tab is hidden in this build (`TaskPaneControl.AskTabShown` is false) | when the tab is shown again: `npm install -g @openai/codex`, then sign in once |
-| A provider key, for the Review tab only | entered in the pane's Settings; never in a file you write | the Model check and Standards tabs need no key. The one exception is 008 T106's live test, which reads `GEMINI_API_KEY` from the environment: set it for that one shell, run the handover's command, and `Remove-Item Env:GEMINI_API_KEY` after; never in a profile script |
+| A provider key, for the Review tab only | entered in the pane's Settings; never in a file you write | the Model check and Standards tabs need no key |
 
 ## 3. First install
 
@@ -118,7 +118,7 @@ cd reviewer
 uv sync --all-extras                  # picks up dependency and package changes
 uv run swreview tokenizer fetch       # nothing to do once it is in place
 $env:SWREVIEW_REQUIRE_TOKENIZER = "1"
-uv run pytest -q -m "not live"        # the live tests call a paid API; 008 T106 runs one on its own
+uv run pytest -q -m "not live"        # the live tests call a paid API, and run only when a step asks
 Remove-Item Env:SWREVIEW_REQUIRE_TOKENIZER
 cd ..
 # SOLIDWORKS must be closed from here

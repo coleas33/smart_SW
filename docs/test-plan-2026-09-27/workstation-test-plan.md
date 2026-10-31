@@ -86,14 +86,13 @@ SOLIDWORKS closes during step 5.3, follow its item C before anything else, and g
    and 6.0 fingerprint your files and show whether anything changed.
 2. **Edit no file in the checkout, and commit or push nothing.** The findings document travels in
    the handover folder; the owner reads it and commits it from the development machine (step
-   6.5). Step 5.5 switches the checkout to an older build and back, and that is the one thing done
-   to it. A wrong result is a finding to write down, never something to fix at the seat. The
+   6.5). A wrong result is a finding to write down, never something to fix at the seat. The
    standards profile is the owner's: the one line you may change is the vault location (step
    2.2).
-3. **Close SOLIDWORKS before building** (steps 1 and 5.5).
-4. **Keys go in two places only**: the OpenAI key in the pane's Settings (step 2.5), which step 2.7
-   reads back for one command without showing it, and the Gemini key at the prompt of step 5.4.
-   Never in a file, on a command line, in a chat or in the findings document.
+3. **Close SOLIDWORKS before building** (step 1).
+4. **The key goes in one place only**: the OpenAI key in the pane's Settings (step 2.5), which
+   step 2.7 reads back for one command without showing it. Never in a file, on a command line, in
+   a chat or in the findings document.
 5. **In the findings document, call documents by their letters** (section 0.2), not by their file
    names; the two recorded assemblies may also be called the small assembly (A) and the big
    assembly (B), never by their numbers (the owner's decision 11B: no committed file names them).
@@ -121,7 +120,7 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 | What failed | What to do | What is blocked |
 |---|---|---|
-| SOLIDWORKS will not start (no licence, a crash at start) | **Stop.** Record the message. | everything but 1.7's registry line, 5.4 and step 6 |
+| SOLIDWORKS will not start (no licence, a crash at start) | **Stop.** Record the message. | everything but 1.7's registry line and step 6 |
 | A gate at 1.3 (a red line ending `failed with exit code <n>; nothing after it was run.`) | **Stop** and call the owner; see "Going back to the build you had" at the end | everything |
 | The vocabulary download is refused and the owner's file is not at hand | **Stop**: the gate needs it | everything |
 | 1.5 (registration), or 1.6 check 1 still failing after one retry | Go on with the console steps. The retry: read the `addin.log` line after the last good one and look it up in runbook section 7; restart SOLIDWORKS once; if SwReview's box is clear in Tools > Add-ins, tick it under **Active** and **Start Up** and restart; if SwReview is not listed at all, do 1.5 once | every pane step: `blocked by 1.6` |
@@ -136,7 +135,6 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 | The Standards probe at 3.1 fails (an exit code other than 0, or a gate log word other than `none`) | Record the lines, after checking they hold no path, write `fail` in 006 T101's and T102's rows, and go on: nothing else in the sitting needs it | nothing more |
 | A D14 report at 3.9 ends `against confirmed-open.md: not as required: ...` | Go on: the switch stays off | nothing more |
 | 014 T221 at step 4.11 (a smoke check fails or its facts cannot be read) | **Stop.** The fix is a task of its own on the development machine, failing test first; repeat the review on its build | every paid benchmark run (014 T244 on), until this passes |
-| Step 5.5 did not come back to the current build | Its own last paragraph; call the owner | 5.6: `blocked by 5.5` in its rows |
 | A re-modeler probe run at 5.6 hangs, or SOLIDWORKS stops answering in it | 5.6's "If a run hangs": that run is not run again | that run's probes: `blocked: hung in run <n>` |
 | 6.1 or 6.5 names a leaked file | **Stop and send nothing**; call the owner | the handoff |
 
@@ -163,7 +161,7 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 ## How long it takes
 
-About **14 hours 15 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
+About **13 hours 25 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
 steps 4 to 6. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
 inside steps 3.1, 4.1, 4.5, 5.1 and 5.2; feature 004's three items (decision 18A) about 40
 minutes more: the FeatureWorks record at step 1.7 (5 minutes), the owner's parts at step 5.1 (10
@@ -177,7 +175,7 @@ about 35 minutes more (decision 4A): two SOLIDWORKS restarts, the waiting review
 assembly's unticked review and timings; feature 014's smoke checks at step 4.11 take 10 minutes
 more, reading step 4.1's review without another paid review; and decision 144A's check of the
 re-modeler's pane seat at step 5.3's item B (011 T171) about 5 minutes more. The next sitting, which
-runs the retest first and then starts at step 2.4 after its update, needs about 13 hours 45 minutes. Keep
+runs the retest first and then starts at step 2.4 after its update, needs about 12 hours 55 minutes. Keep
 SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
 the review chips of steps 4.4 and 4.5 live only as long as the SOLIDWORKS session. Before the
 sitting, allow **half a day** to find and note documents C to N, Q and S, and the components of
@@ -190,8 +188,8 @@ A and B step 3.1 asks about (section 0.2), while the owner names the parts P; a 
 | 2 | Profile and key, the profile's version 4, and lever 14's live test | 40 min |
 | 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
 | 4 | The pane reviews, with the findings by type, the timing of A's review, A again with the version 4 profile, a drawing active, and A unticked then sent, with B's timings and A's smoke checks | 5 h |
-| 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel (the retest's box, with the pane seat's gate, and crash capture first), the Gemini test | 1 h 30 min |
-| 5.5 | The older build and back: two builds, two SOLIDWORKS restarts, two reviews of A | 1 h |
+| 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel (the retest's box, with the pane seat's gate, and crash capture first) | 1 h 25 min |
+| 5.5 | Show in SOLIDWORKS on the current build: A reviewed, J Model checked, one Show | 15 min |
 | 5.6 | The re-modeler probes: three runs with no document open, and the three options checked | 25 min |
 | 6 | Handoff | 45 min |
 
@@ -222,7 +220,7 @@ estimate from the replay's figures, not a measurement.
    development machine's `%LOCALAPPDATA%\SwReview\tokenizer\`, in case the seat's web filter blocks
    its download (step 1.3).
 4. **An OpenAI key** for the pane's reviews, with **the model and reasoning effort** to use (the
-   recorded runs used `gpt-5.6-luna` at `high`), and **a Gemini key** for step 5.4. The owner writes
+   recorded runs used `gpt-5.6-luna` at `high`). The owner writes
    the model and effort, never a key, in `notes\documents.txt`.
 5. **People**: the owner reachable by phone on both days (steps 1.3, 2.2 to 2.4, 6.1); the engineer
    who knows A, at step 4.1 (about 15 minutes, with the minutes 007 T060 records) and again at
@@ -2277,94 +2275,27 @@ Plan on one real part's copy - part J - with that part's hash, size and time unc
 what a plan holds while Start is on, is decided on the development machine before it too. The
 stage-1 runs (004 T135 to T141) are for the sitting after that.
 
-### 5.4 The live Gemini test [008 T106]
+### 5.4 Withdrawn: the live Gemini test
 
-The prompt hides the key as you paste it and keeps it out of the command history (a file, which
-the task's own rule forbids); the last line clears it:
+*Withdrawn 2026-10-31.* 008 T106, the live Gemini test this step ran, is closed: decision 94A
+builds and tests only OpenAI's behaviour, and decision 173A closes a task an owner decision
+deferred. Nothing to do here; the step's number is kept so that the steps after it keep theirs.
 
-```powershell
-if (Test-Path Env:GOOGLE_API_KEY) { 'GOOGLE_API_KEY is set and would be used instead; cleared for this window'; Remove-Item Env:GOOGLE_API_KEY }
-$env:GEMINI_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR((Read-Host 'Paste the Gemini key' -AsSecureString)))
-cd "$R\reviewer"; uv run pytest tests/live/test_gemini_live_function_response.py -m live -rs -p no:warnings; cd $R
-Remove-Item Env:GEMINI_API_KEY
-```
+### 5.5 Show in SOLIDWORKS selects A's own entity [009 T082]
 
-Pass: `1 passed` and **no** `SKIPPED` line. A skip proves nothing: record it as `blocked`, with the
-reason the `SKIPPED` line gives. A failure saying the key was refused is setup, not the defect this
-test looks for; a failure naming a connection, a proxy or a certificate is setup too: record
-`blocked: network`. The defect is a failure beginning `the forced tool call was rejected` or `a
-role="tool" function response was rejected`. Record the last lines. If you pressed Ctrl+C, or are
-not sure the last line ran, close this PowerShell window: that is the sure way to drop the key.
-Open a new one and paste the setup block.
+*Since 2026-10-31* this step is 009 T082's "after" half only: decision 175A dropped its "before"
+half, an hour's swap to an older build to show a bug already fixed. On the build of step 1.4,
+start SOLIDWORKS, open A resolved and part J, and:
 
-### 5.5 Before and after the Show fix, on the older build [009 T082]
-
-This builds an older version, looks at one thing, and comes back. Close SOLIDWORKS (Don't Save).
-Then check the checkout and keep a copy of the settings file beside it (not in `$H`: it holds the
-protected key):
-
-```powershell
-git status --porcelain; git branch --show-current
-Copy-Item "$env:APPDATA\SwReview\settings.json" "$env:APPDATA\SwReview\settings.json.before-5.5"
-```
-
-Pass: nothing, then `main`. Anything else: stop and call the owner. Then:
-
-```powershell
-git checkout 69fbb4a
-.\extractor\tools\update-workstation.ps1 -NoPull -SkipTests
-```
-
-git prints `You are in 'detached HEAD' state` and a few lines of advice: that is expected. `69fbb4a`
-is the build before the fix (`b15c0b0`); `-SkipTests` only here, because this build is only looked
-at. If Windows says running scripts is disabled, run
-`powershell -ExecutionPolicy Bypass -File .\extractor\tools\update-workstation.ps1 -NoPull -SkipTests`.
-Like the current script, the older one starts with `== git fetch origin` even with `-NoPull` (the
-fetch changes nothing checked out), then prints `on 'HEAD' with -NoPull: building what is checked
-out`, because the checkout is detached: both are expected here. The older script has no
-`-SolidWorksRoot`. If SOLIDWORKS is not in its usual folder, or the script stops at
-`== git fetch origin` (the network refused the fetch), build directly instead (the Python side
-needs nothing: its lock file is the same on both builds, and the backend runs from the checkout):
-
-```powershell
-$sw = "C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS"   # or "<SOLIDWORKS install folder>"
-dotnet build extractor\SwReview.sln -c Release "-p:SwRedist=$sw\api\redist"
-```
-
-Then start SOLIDWORKS, open A resolved and part J, and:
-
-1. With A active, press Review (the key is still in Settings); if a **Before this review** panel
+1. With A active, press Review (the key is in Settings); if a **Before this review** panel
    appears, write down its first line, press **Review available evidence**, and never resolve or
    unsuppress a part (the owner's decision 14A; step 4's box, item 1). Wait for it to finish.
 2. Make J active and on the Model check tab press **Model check**.
 3. Make A active again, and in the Review tab press **Show in SOLIDWORKS** on one of A's findings.
-   Record what SOLIDWORKS selected: something in A, something in J, nothing, or an error.
 
-If the older build's review of A stops, or shows no finding, write `blocked` in the 009 T082 row
-with the reason, and come back all the same. Close SOLIDWORKS (Don't Save) and come back to the
-current build:
-
-```powershell
-git checkout main
-.\extractor\tools\update-workstation.ps1 -NoPull
-git log --oneline -1; (Get-Item "$R\extractor\SwReview.AddIn\bin\x64\Release\net48\SwReview.AddIn.dll").LastWriteTime
-```
-
-Pass: the script reaches `== health` as in step 1.3, the log line names the commit of step 1.4,
-and the add-in's time is after the return build started. The return fetches first too: if it stops
-at `== git fetch origin`, build directly with the same two lines as above (`$sw` and
-`dotnet build`), which pass when `dotnet build` ends `Build succeeded.` (the gates passed on this
-commit at 1.3), then run the third line. If the return stops at pytest or ruff (both passed on this
-commit at 1.3), run it once more. If it stops again, run
-`.\extractor\tools\update-workstation.ps1 -NoPull -SkipTests`, so the current add-in is at least
-built, and record the failing test. If `dotnet build` fails, clear SwReview's two boxes (Active and
-Start Up) in Tools > Add-ins and call the owner. **Never leave the seat on the older add-in.**
-
-Start SOLIDWORKS, open A resolved and part J, and repeat the three presses, a **Before this
-review** panel answered as in item 1. Pass: this time Show in SOLIDWORKS selects A's own
-entity. Record: both answers. The registration survives both builds; nothing to register. If
-Settings now shows a different provider, model or no key, close SOLIDWORKS and put the copy back:
-`Copy-Item "$env:APPDATA\SwReview\settings.json.before-5.5" "$env:APPDATA\SwReview\settings.json"`.
+Pass: Show in SOLIDWORKS selects A's own entity, not something in J. Record what it selected:
+something in A, something in J, nothing, or an error. If the review of A stops, or shows no
+finding, write `blocked` in the 009 T082 row with the reason.
 
 ### 5.6 The re-modeler probes, with no document open: last [004 T033 to T039; 011 T171]
 
@@ -2376,9 +2307,7 @@ verdict per probe, to `capabilities\remodel-<SOLIDWORKS version>.yaml` in its fo
 file. This is the last step before the handoff because a "Cannot reorder" message box can hold
 SOLIDWORKS until someone answers it, and PROBE-1 asks for one on purpose.
 
-1. **Before.** Step 5.5 must have come back to the current build (its last check passed);
-   otherwise write `blocked by 5.5` in the rows of 5.6 and go on to step 6. In SOLIDWORKS,
-   Window > Close All, **Don't Save**, so that no document is open, and leave SOLIDWORKS running:
+1. **Before.** In SOLIDWORKS, Window > Close All, **Don't Save**, so that no document is open, and leave SOLIDWORKS running:
    the probe attaches to it and never starts one. Then open Tools > Options > System Options,
    General page, note in `notes\documents.txt` whether **Input dimension value**, **Show errors
    every rebuild** and **Warn before saving documents with update errors** are ticked
@@ -2612,7 +2541,14 @@ git checkout --detach $previous; git log --oneline -1
 Pass: the log line names the commit in `commit-before.txt`, and the script reaches `== health`; on
 the way it prints `on 'HEAD' with -NoPull: building what is checked out`, which is expected here.
 If it stops at `== git fetch origin` (the script fetches even with `-NoPull`, and the network
-refused), build directly with step 5.5's two lines (`$sw` and `dotnet build`). The checkout is now
+refused), build directly instead (the Python side needs nothing more):
+
+```powershell
+$sw = "C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS"   # or "<SOLIDWORKS install folder>"
+dotnet build extractor\SwReview.sln -c Release "-p:SwRedist=$sw\api\redist"
+```
+
+which passes when `dotnet build` ends `Build succeeded.`. The checkout is now
 detached. The next update starts with `git checkout main`, and nothing does it for you: with
 `-NoPull` the script does not refuse a detached checkout, it builds it again. Step 1.2's second
 line, which prints nothing instead of `main` while the checkout is detached, is the check that stops

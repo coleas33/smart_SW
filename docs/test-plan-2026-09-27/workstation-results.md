@@ -128,8 +128,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 5.3 | 004 T185: if SOLIDWORKS closed: item C's six answers, and what was kept | | | |
 | 5.3 | 011 T171: the box's Open copy, then Start; exactly four `seat=` lines in `remodel.log`, the activation's and the open's, none with `refused=` or `error=`; and the plan's `remodel.open` line, `status=ok`, `gated=` naming `ISldWorks.OpenDoc7`, no `refused=` (item B; decision 148A) | | | |
 | 5.3 | 004 T186: J checked in: planned with the read-only option not ticked, or refused naming it with the option ticked; `IsReadOnly` unchanged | | | |
-| 5.4 | 008 T106: the live Gemini test | | | |
-| 5.5 | 009 T082: Show before and after the fix | | | |
+| 5.5 | 009 T082: Show in SOLIDWORKS selects A's own entity, on the current build | | | |
 | 5.6 | 004 T033: PROBE-1, the "Cannot reorder" box with the flag clear and set | | | |
 | 5.6 | 004 T034: PROBE-3 and PROBE-4, the reorder and folder contiguity | | | |
 | 5.6 | 004 T035: PROBE-2, the equation unit | | | |
@@ -178,7 +177,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 
 ### 4.11 A's smoke review for feature 014
 
-### 5. The other tabs, the Gemini test, the older build
+### 5. The other tabs, and Show in SOLIDWORKS
 
 ### 5.3 Remodel: the retest of U26 and U27, the box, and J
 

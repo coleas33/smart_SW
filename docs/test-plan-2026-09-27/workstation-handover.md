@@ -161,9 +161,8 @@ repeated when step 5 comes.
 2. **The o200k_base vocabulary**, if the seat's web filter blocks its download: the file
    `fb374d419588a4632f3f557e76b4b70aebbca790` from the development machine's
    `%LOCALAPPDATA%\SwReview\tokenizer\` (runbook section 2).
-3. **A provider key** for the pane's Settings (the paid reviews), with the model and effort to use,
-   and **a Gemini key** for 008 T106, which is set for one shell only, at a hidden prompt. The
-   people and the cap for the big assembly's review are in the test plan's section 0.1. A
+3. **A provider key** for the pane's Settings (the paid reviews), with the model and effort to
+   use. The people and the cap for the big assembly's review are in the test plan's section 0.1. A
    "Before this review" panel is answered as the owner decided (decision 14A, 2026-09-24, not a
    default awaiting confirmation): write down its first line, press "Review available evidence",
    and never resolve or unsuppress a part (the test plan's step 4, item 1).
@@ -189,13 +188,15 @@ window: it sets `$R` (the checkout), `$H` (the handover folder, `<handover folde
 `swreview-extract` alias, and defines the helpers its steps call. Then its steps 1.2 to 1.4:
 
 ```powershell
-git status --porcelain; git branch --show-current     # nothing, then main
+git status --porcelain                               # nothing
+git branch --show-current                            # main
 if (-not (Test-Path "$H\notes\commit-before.txt")) { git rev-parse --short HEAD | Set-Content "$H\notes\commit-before.txt" }
 git fetch origin; git log --oneline HEAD..origin/main
 git pull --ff-only origin main; "pull exit code: $LASTEXITCODE"
 .\extractor\tools\update-workstation.ps1 -NoPull      # add -TokenizerFrom "<file>" or -SolidWorksRoot "<root>" as section 2 says
 git log --oneline -1; Test-Path docs\test-plan-2026-09-27\workstation-results.md   # the commit, then True: the results sheet is there
 git merge-base --is-ancestor 43436d3 HEAD; "holds 43436d3: $($LASTEXITCODE -eq 0)"   # True: the probe names each dimension (T066)
+Get-Content "$env:LOCALAPPDATA\SwReview\logs\addin.log" -Tail 12   # SOLIDWORKS started on a part: runbook section 6's check 1
 Select-String -Path "$env:LOCALAPPDATA\SwReview\standards.yaml" -Pattern '^version:'   # after step 1 below
 ```
 
@@ -217,8 +218,7 @@ alias in the shell it runs in; every `uv run` command runs from `<repo>\reviewer
 | Step 11 (008 T102) | step 12 (T104) | T104 presses Retry on T102's run folder |
 | Step 13 (A's review, 008 T103; the test plan's step 4.1) | step 23 (014 T221; step 4.11), immediately after it | it reads that review's folder, with no extra paid review |
 | Steps 13 and 14, then 013 T143 (the test plan's step 4.8) | step 22 (015 T119; step 4.10), before step 5.1 | its restarts come after the review chips have been read |
-| everything else but step 21 | step 18 (009 T082) | it builds an older commit, then returns to `main` |
-| everything, step 18 included | step 21 (004 T033 to T039), then only the handoff | a refuted PROBE-1 can leave a "Cannot reorder" box holding SOLIDWORKS, and PROBE-1 asks for one on purpose |
+| everything | step 21 (004 T033 to T039), then only the handoff | a refuted PROBE-1 can leave a "Cannot reorder" box holding SOLIDWORKS, and PROBE-1 asks for one on purpose |
 
 ## 3. The script
 
@@ -374,18 +374,8 @@ row per step and task id. The development machine moves each answer into the res
 14. **009 T081, T083, T084.** Configuration switch (T081), chips and restore (T083), three open
     questions answered in one send (T084), each as its task text says; T084's resumed turn's
     first round input goes beside the pane's resume sentence.
-15. **008 T106: the live Gemini test.** The key at a hidden prompt, never on a command line
-    (PSReadLine keeps every command line in a history file), and `GOOGLE_API_KEY` cleared, since
-    the test reads it first:
-    ```powershell
-    if (Test-Path Env:GOOGLE_API_KEY) { 'GOOGLE_API_KEY is set and would be used instead; cleared for this window'; Remove-Item Env:GOOGLE_API_KEY }
-    $env:GEMINI_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR((Read-Host 'Paste the Gemini key' -AsSecureString)))
-    cd "$R\reviewer"; uv run pytest tests/live/test_gemini_live_function_response.py -m live -rs -p no:warnings; cd $R
-    Remove-Item Env:GEMINI_API_KEY
-    ```
-    Pass: `1 passed` and no `SKIPPED` line. A skip proves nothing; a refused key or an unreachable
-    API fails with its own sentence and is setup, not the protocol failure. After a Ctrl+C, close
-    the window to drop the key.
+15. **008 T106: closed.** *Closed 2026-10-31* by decision 173A, under decision 94A (OpenAI only),
+    with the test plan's step 5.4: nothing to run.
 16. **Evidence.** Zip the whole run folders of steps 1, 3 to 14, 20, 22 and 23 (their `tool-results\`
     included), the dump folders of step 2, the probe `--out` folders (step 21's three among them)
     and the logs into the handover
@@ -395,30 +385,10 @@ row per step and task id. The development machine moves each answer into the res
 17. **The findings document**, in the handover folder: the Results table filled (every row
     `pass`, `fail` or `blocked`) and every step's record above, in order, with the commit and the
     versions at the top; no company value in it. The key audit runs again after it is written.
-18. **009 T082: before and after the FR-023 fix,** last, SOLIDWORKS closed for each build:
-    ```powershell
-    git status --porcelain; git branch --show-current       # nothing, then main
-    Copy-Item "$env:APPDATA\SwReview\settings.json" "$env:APPDATA\SwReview\settings.json.before-5.5"
-    git checkout 69fbb4a                                     # the parent of b15c0b0, the fix
-    .\extractor\tools\update-workstation.ps1 -NoPull -SkipTests
-    # SOLIDWORKS: review A, Model check on part J, Show in SOLIDWORKS on an A finding - which package did it resolve against?
-    git checkout main
-    .\extractor\tools\update-workstation.ps1 -NoPull
-    git log --oneline -1; (Get-Item "$R\extractor\SwReview.AddIn\bin\x64\Release\net48\SwReview.AddIn.dll").LastWriteTime
-    # the same three presses: Show in SOLIDWORKS selects A's entity
-    ```
-    Registration survives both rebuilds. The older build's own script is used for its build, and
-    `-SkipTests` only there: it is built to be looked at, not shipped. Every version of the script
-    runs `git fetch origin` first, even with `-NoPull`, and on the detached checkout says
-    `on 'HEAD' with -NoPull: building what is checked out`, which is expected; the older one has no
-    `-SolidWorksRoot`. On a seat installed elsewhere, or when that fetch is refused (on the way
-    there or back), build with
-    `dotnet build extractor\SwReview.sln -c Release "-p:SwRedist=$sw\api\redist"` instead, `$sw`
-    the SOLIDWORKS install folder (the Python side needs nothing: its lock file is the same on both
-    builds). After the return, the add-in DLL's time must be after the return build started; if
-    the return stops at a gate, run it once more, then with `-SkipTests`, and if `dotnet build`
-    fails, clear SwReview's boxes in Tools > Add-ins: never leave the seat on the older add-in (the
-    test plan's step 5.5). Record both answers.
+18. **009 T082: after the FR-023 fix**, on the current build (decision 175A dropped the "before"
+    half, a swap to an older build to show a bug already fixed): review A, Model check on part J,
+    then Show in SOLIDWORKS on one of A's findings selects A's own entity (the test plan's step
+    5.5). Record the answer.
 19. **004 T164: FeatureWorks, for the record.** Feature 004's import path is on the back burner
     (its spec, owner decision 2026-09-19); whether the seat has FeatureWorks, the add-in that
     recognises features in an imported solid, informs the feasibility probe if the owner reopens
@@ -442,8 +412,11 @@ row per step and task id. The development machine moves each answer into the res
     PROBE-1 alone, which provokes a "Cannot reorder" box with the flag clear on purpose:
     ```powershell
     swreview-extract probe remodel --probe PROBE-2,PROBE-4,PROBE-6,PROBE-7,PROBE-8,PROBE-9,PROBE-10,PROBE-11,PROBE-12,PROBE-13,PROBE-21 --out "$H\probes\remodel-no-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    Show-RemodelLedger "$H\probes\remodel-no-reorder"
     swreview-extract probe remodel --probe PROBE-3,PROBE-5,PROBE-20 --out "$H\probes\remodel-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    Show-RemodelLedger "$H\probes\remodel-reorder"
     swreview-extract probe remodel --probe PROBE-1 --out "$H\probes\remodel-probe-1" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    Show-RemodelLedger "$H\probes\remodel-probe-1"
     ```
     After each, `Show-RemodelLedger` on its folder prints each probe's id, blocking flag, verdict
     (`verified`, `refuted` or `unresolved`) and reason. A message box is answered only after 30
