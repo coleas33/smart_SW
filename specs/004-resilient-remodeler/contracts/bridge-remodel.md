@@ -136,7 +136,7 @@ read or write; no token is added. No command, secret, guard key or allowlist ent
 *Amended on the third review (`research.md` R25.12):* the open asks again after its last native call and
 before its session is published, since a native call such as `OpenDoc7` or the rebuild can pump the
 queue the close was posted to; a folder recorded meanwhile fails the open through its own unwind - the
-copy it opened closed and deleted once its COM identity is the document open at the copy's path (owner decision 165A; research R25.13, R26.1), the settings put back, `remodel.open`'s
+copy it opened closed and deleted once the document open at the copy's path is the one it opened, or none is (owner decision 165A; research R25.13, R26.1, R26.10), the settings put back, `remodel.open`'s
 failure told - and answers `target_mismatch`. The backend reads that token as `RunFolderFailed`, which is
 not marked retryable, though another Plan works.
 
@@ -340,7 +340,12 @@ at the copy's path. The same identity, or nothing open there, is closed and dele
 copy closed and opened again underneath the open while a native call pumped - or reads that throw: nothing is closed and
 the copy's file is not deleted, `copy_closed` is false, and a failure that names no path says why; in place of
 `unwind.DeleteCopy`'s markers the run's `remodel.log` gets one fixed marker, `skipped unwind.DeleteCopy: ...`
-(`run-artifacts.md`). The settings are put back and the ending told either way.
+(`run-artifacts.md`). The settings are put back and the ending told either way. *Amended on its review round
+(`research.md` R26.10):* a close that is not confirmed - it threw, or the copy is still open - is followed by the same two
+reads before the delete, since `CloseDoc` or its confirmation may have pumped an action that opened the copy again: the
+open's own document, or none, is deleted as above; another document, or reads that throw, keep the file and write the
+same marker. The failure sentences reach neither the Remodel tab, which hears only that the copy may still be open, nor
+a log; the marker is the record of a copy left.
 
 *Amended 2026-09-28 (U27; default taken 2026-09-28, the owner may revise; `tasks.md` T185,
 research R16.1):* each step above that calls SOLIDWORKS, and the file work between them, is marked
