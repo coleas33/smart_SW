@@ -86,6 +86,7 @@ public sealed class FastenerDumper : IFastenerSource
     {
         if (!(component.Node.Handle is IComponent2 handle))
         {
+            ComponentDocuments.RecordDocumentNode(scope, component, "fastener", "whether it is a fastener was not read");
             return null;
         }
 

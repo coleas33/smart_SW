@@ -1060,7 +1060,8 @@ part root is the node to read at all.
 
 **Results.** T127, run before T128 on the development machine: `Failed: 9, Passed: 5, Total: 14`
 (`DocumentNodeGapTests`) - each of the three dumpers on each of the three document nodes records
-no gap; the five pins of what does not change pass.
+no gap; the five pins of what does not change pass. After T128: `Passed: 14, Total: 14`, and
+the whole C# suite green (extractor 10230 passed, add-in 4276 passed, the build zero warnings).
 
 ## R3. Verified facts the plan relies on
 

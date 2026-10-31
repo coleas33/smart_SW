@@ -265,9 +265,14 @@ public sealed class FaceDumper : IFaceSource
 
         foreach (ScopedComponent component in scope.Components)
         {
-            if (component.Node.Suppression != SuppressionState.Resolved
-                || !(component.Node.Handle is IComponent2 handle))
+            if (component.Node.Suppression != SuppressionState.Resolved)
             {
+                continue;
+            }
+
+            if (!(component.Node.Handle is IComponent2 handle))
+            {
+                ComponentDocuments.RecordDocumentNode(scope, component, "face", "its faces were not read");
                 continue;
             }
 
