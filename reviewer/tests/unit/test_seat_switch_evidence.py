@@ -22,8 +22,10 @@ other form fails its reader rather than being read past (004 T345). While every 
 pass; flipping any one of them turns its pin red (R27.5 and R27.9 record each mutation).
 
 A committed ledger is also held to decision 171A: the reader reads it (no path, the frozen
-version), the committable-path scanner finds nothing in it, and every exception text in it is a type
-and an HRESULT.
+version), the committable-path scanner finds nothing in it, every feature name in it is one the
+probe gives what it builds, one of SOLIDWORKS's default part-template names or a placeholder (the
+name scan, 004 T349), and every exception text in it is a type and an HRESULT. Every file under the
+folder is scanned for a local folder and for a design named in a probe's printed forms.
 """
 
 from __future__ import annotations
@@ -49,7 +51,8 @@ from tests.support.remodel_ledger import (
 )
 from tests.support.seat_tasks import REPO
 
-START_SOURCE = REPO / "extractor" / "SwReview.Extractor" / "Rms" / "RemodelStart.cs"
+RMS = REPO / "extractor" / "SwReview.Extractor" / "Rms"
+START_SOURCE = RMS / "RemodelStart.cs"
 DRAWING_OPEN_SOURCE = REPO / "extractor" / "SwReview.Extractor" / "Sw" / "DrawingOpenScope.cs"
 BINDING_SOURCE = REPO / "reviewer" / "src" / "swreview" / "drawings" / "binding.py"
 
@@ -117,9 +120,8 @@ def ready_for_start(root: Path = CAPABILITIES, identity: Tolerances = IDENTITY) 
 def exception_keys() -> set[str]:
     """The `raw_result` keys the C# fills with an exception's text, read from the source: the
     runner's `error`, and every key a probe body sets through `ProbeText.Failure`."""
-    rms = REPO / "extractor" / "SwReview.Extractor" / "Rms"
-    executors = (rms / "RemodelProbeExecutors.cs").read_text(encoding="utf-8")
-    runner = (rms / "RemodelProbe.cs").read_text(encoding="utf-8")
+    executors = (RMS / "RemodelProbeExecutors.cs").read_text(encoding="utf-8")
+    runner = (RMS / "RemodelProbe.cs").read_text(encoding="utf-8")
     keys = set(re.findall(r'raw\["(\w+)"\] = (?:"error: " \+ )?ProbeText\.Failure\(', executors))
     assert "[ErrorKey] = HostFailure(error)" in runner
     assert 'public const string ErrorKey = "error";' in runner
@@ -148,24 +150,93 @@ PLACEHOLDER = r"<template feature \d+>"
 """What the person committing a ledger writes for each name the scan does not list, one number per
 name, so PROBE-11's census keys stay distinct (the README's checklist; 004 T348)."""
 
+TEMPLATE_NAMES = frozenset({
+    "Favorites", "History", "Selection Sets", "Sensors", "Design Binder", "Annotations", "Notes",
+    "Notes Area", "Markups", "Lights, Cameras and Scene", "Ambient", "Directional1",
+    "Directional2", "Directional3", "Solid Bodies", "Surface Bodies", "Comments", "Equations",
+    "Material <not specified>", "Front Plane", "Top Plane", "Right Plane", "Origin",
+})
+"""SOLIDWORKS's own English names for what a new part from its default template holds, as a walk
+from `FirstFeature` lists them: the product's names, never a company's, so none needs scrubbing.
+A template's own names - a renamed plane, a logo sketch, a company folder - are not here and fail
+the scan. Not confirmed on the seat (004 research R27.10): a default this list lacks fails closed,
+and is replaced by a placeholder or added here in a commit of its own."""
+
+MARKER_REASON = re.compile(r"a marker-like name \('(.*)'\) was found but names neither")
+"""PROBE-10's one reason that quotes a feature's name (`RemodelProbe10Logic.Decide`)."""
+
+DESIGN_NAME = re.compile(
+    r'name "[^"\n]*", view "|[^\s"\'`<>|/\\]+\.(?:sldprt|sldasm|slddrw)\b', re.IGNORECASE
+)
+"""The two forms in which a probe prints a design's name: a SOLIDWORKS document's file name, and
+D6's and D8's dimension line, `name "D1@Sketch2", view "Drawing View1", value ...` (011
+`contracts/probes.md` section 1). A space before the extension (`a .SLDPRT`) names no document,
+nor does `<drawing>.SLDDRW`."""
+
+
 def recipe_names() -> set[str]:
-    """Stub (004 T348)."""
-    return set()
+    """The names `probe remodel` gives what it builds, read from the C#: each step of
+    `RemodelProbePartRecipe.Default()`, and the name PROBE-10 renames the recipe's folder to."""
+    probe = (RMS / "RemodelProbe.cs").read_text(encoding="utf-8")
+    executors = (RMS / "RemodelProbeExecutors.cs").read_text(encoding="utf-8")
+    recipe = probe[probe.index("public static RemodelProbePartRecipe Default()"):]
+    recipe = recipe[: recipe.index("\n    }\n")]
+    return {
+        *re.findall(r'const string \w+ = "([^"]+)";', recipe),
+        *re.findall(r'new RemodelProbeFeatureStep\(\s*"([^"]+)"', recipe),
+        *re.findall(r'const string renamed = "([^"]+)";', executors),
+    }
 
 
 def tree_keys() -> set[str]:
-    """Stub (004 T348)."""
-    return set()
+    """The `raw_result` keys the C# fills with a walk of the part's feature names joined by commas;
+    and a check that the other readings that name a feature are the ones `unlisted_names` reads:
+    PROBE-10's marker and its reason, and PROBE-11's census keys."""
+    executors = (RMS / "RemodelProbeExecutors.cs").read_text(encoding="utf-8")
+    assert '["marker_name_after"] = markerAfter ?? "(none)"' in executors
+    assert "$\"a marker-like name ('{markerNameAfter}') was found but names neither" in executors
+    assert 'raw[$"type[{name}]"] = typeName' in executors
+    return set(re.findall(r'\["(\w+)"\] = string\.Join\(",", ', executors))
 
 
 def unlisted_names(ledger: Ledger) -> list[str]:
-    """Stub (004 T348)."""
-    return []
+    """`PROBE-n.key` for each reading in `ledger` that names a feature the probe did not build and
+    SOLIDWORKS's default part template does not hold (decision 171A's name scan): the walked
+    trees, PROBE-10's marker and the reason that quotes it, and PROBE-11's census keys, each given
+    by its place among its row's readings, `type[#n]`, never by its name. Each name is matched
+    whole: listed, a placeholder, or either with the end-tag marker after it."""
+    listed = "|".join(re.escape(name) for name in sorted(recipe_names() | TEMPLATE_NAMES))
+    name = f"(?:{listed}|{PLACEHOLDER})(?:{re.escape(END_TAG)})?"
+    trees = tree_keys()
+    found = []
+    for row in ledger.probes:
+        for place, (key, value) in enumerate(row.raw_result.items(), start=1):
+            marker = MARKER_REASON.search(value) if key == "reason" else None
+            if key in trees:
+                text, pattern, label = value, f"(?:{name}(?:,{name})*)?", key
+            elif key == "marker_name_after":
+                text, pattern, label = value, rf"\(none\)|{name}", key
+            elif key.startswith("type[") and key.endswith("]"):
+                text, pattern, label = key[len("type["):-1], name, f"type[#{place}]"
+            elif marker:
+                text, pattern, label = marker.group(1), name, key
+            else:
+                continue
+            if not re.fullmatch(pattern, text):
+                found.append(f"{row.probe_id}.{label}")
+    return found
 
 
 def design_names(root: Path = CAPABILITIES) -> list[str]:
-    """Stub (004 T348)."""
-    return []
+    """`<file>:<line>` for each line of a file under `root` that names a design in one of
+    `DESIGN_NAME`'s forms."""
+    return [
+        f"{path.relative_to(root).as_posix()}:{number}"
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
+        if DESIGN_NAME.search(line)
+    ]
 
 
 # --- the three switches -----------------------------------------------------------------------

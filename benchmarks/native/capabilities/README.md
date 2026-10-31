@@ -26,7 +26,15 @@ throwaway part it builds itself, once:
    2024 SP5 reports itself, or `32.5.0.48`);
 3. the CI pins pass on it: the committable-path scanner (`reviewer/tests/support/local_paths.py`)
    finds no checkout, home or temporary folder in it, and every exception text in it is a type
-   and an HRESULT.
+   and an HRESULT;
+4. the name scan passes on it (research R27.10). The throwaway part is built from the
+   workstation's default part template, and the ledger records the name of every feature in it:
+   PROBE-3's and PROBE-10's walked trees, PROBE-10's marker and the reason that quotes it, and
+   PROBE-11's census keys. Each name must be one the probe gives what it builds or one of
+   SOLIDWORKS's own default template names (`TEMPLATE_NAMES` in the pin). Replace every other
+   name - a renamed plane, a logo sketch, a company folder - everywhere it appears in the file,
+   with `<template feature 1>`, `<template feature 2>` and so on, one number per name, so
+   PROBE-11's keys stay distinct. The pin names each reading it refuses, never the name.
 
 Copy the ledger alone, never the run's `remodel-probe.log`, whose first line names the `--out`
 folder and which keeps each thrown probe's exception message, path and all (research R27.9). Keep
@@ -49,4 +57,8 @@ member answers and enum numbers, never a name, path or value:
   reference equals the face phase's, and whether its name's shape matches the part's.
 
 What makes either file sufficient stays T077's and T066's decision; the pin checks only that the
-file is here when the switch is on.
+file is here when the switch is on. Every file in this folder is also scanned, in CI, for a local
+folder or path and for the two forms in which a probe prints a design's name: a SOLIDWORKS
+document's file name (`<stem>.SLDDRW`, `.SLDPRT` or `.SLDASM`) and D6's and D8's dimension line,
+which quotes the dimension's name and its view's. Any other name a hand-written record could hold
+is its writer's to leave out.
