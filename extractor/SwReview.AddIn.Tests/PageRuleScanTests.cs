@@ -158,6 +158,15 @@ public sealed class PageRuleScanTests
                 "whether an evidence request has been answered"
             },
             {
+                // `triageRow` in Review/ReviewPage/render.js (added on purpose 2026-11-01, 002
+                // T335; owner decision 187A): a pass's card - the backend's `checked_within_scope`
+                // - offers the one triage a pass takes, the miss, where a flagged finding's offers
+                // the four. A card state the backend's status decides, as `check-page.js`'s chip
+                // is; it puts no card before another, and the backend refuses any other triage.
+                "Review/ReviewPage/render.js|body.status === 'checked_within_scope'",
+                "which triage a finding card offers"
+            },
+            {
                 // `changeRow` in Remodel/RemodelPage/remodel.js: a change record's own lifecycle -
                 // written as `attempting` before its call and again with its outcome - which
                 // decides whether the row carries the "written before the call" note. Not a
