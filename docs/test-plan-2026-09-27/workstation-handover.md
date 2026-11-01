@@ -407,7 +407,14 @@ row per step and task id. The development machine moves each answer into the res
     setup and the review the engineer still did by hand, in the words of the test plan's step
     4.1, and `swreview timing` records the six, since the net reads unknown until both are
     recorded; the same step gives every finding one of the four triage outcomes beside its
-    decision (002 FR-031, decision 185A).
+    decision (002 FR-031, decision 185A). *Since 2026-11-01* (decision 186A) the seat writes the
+    six, and the sitting's update minutes, in `notes\timing.txt` in the handover folder, never
+    in the findings document, which records the net saved and the run folder's stamp only: a
+    real design's timing figures are company facts and stay in the private fork. The review's
+    start and end times go in `notes\timing.txt` too, since a review watched throughout has them
+    as its supervision (decision 192A (the owner's answer of 2026-11-01, 13A)), and so does a
+    timing failure's message, of which the findings document records the exit code, the error's
+    name and the field only.
 
 14. **009 T081, 009 T083, 009 T084.** Configuration switch (T081), chips and restore (T083),
     three open questions answered in one send (T084), each as its task text says; T084's resumed
@@ -422,7 +429,10 @@ row per step and task id. The development machine moves each answer into the res
     small key-masked summary beside the evidence, never in its place.
 17. **The findings document**, in the handover folder: the Results table filled (every row
     `pass`, `fail` or `blocked`) and every step's record above, in order, with the commit and the
-    versions at the top; no company value in it. The key audit runs again after it is written.
+    versions at the top; no company value in it, a real design's timing figures among them: of a
+    design's timing it holds the net saved only, the rest, the timed review's start and end times
+    among it, staying in `notes\timing.txt` (decision 186A; decision 192A (the owner's answer of
+    2026-11-01, 13A)). The key audit runs again after it is written.
 18. **009 T082: after the FR-023 fix**, on the current build (decision 175A dropped the "before"
     half, a swap to an older build to show a bug already fixed): review A, Model check on part J,
     then Show in SOLIDWORKS on one of A's findings selects A's own entity (the test plan's step
@@ -511,7 +521,10 @@ row per step and task id. The development machine moves each answer into the res
 ## 4. After the sitting, on the development machine
 
 The findings document and the zipped folders arrive by hand; the owner reads the document and
-commits it. Before 008 T101 is ticked, the returned run folders are scanned for the owner's profile
+commits it, with no company value in it: of a real design's timing it holds the net saved only,
+not the timed review's start and end times, and `notes\timing.txt` stays in the private fork
+(decision 186A; decision 192A (the owner's answer of 2026-11-01, 13A)). Before 008 T101 is
+ticked, the returned run folders are scanned for the owner's profile
 values (006 T100's audit half); 010 T104's Hole Wizard fields and 010 T106's engagement are counted
 from the dump folder and the big assembly's run folder. 008 T105 replays each run folder;
 009 T085 restores each through `GET /reviews/{run_id}`; the answers move into 011 research R4,

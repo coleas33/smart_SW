@@ -210,7 +210,11 @@ SOLIDWORKS closes during step 5.3, follow its item C before anything else, and g
 5. **In the findings document, call documents by their letters** (section 0.2), not by their file
    names; the two recorded assemblies may also be called the small assembly (A) and the big
    assembly (B), never by their numbers (the owner's decision 11B: no committed file names them).
-   No vault path, folder name, property name or value, sheet format or template name goes in it.
+   No vault path, folder name, property name or value, sheet format or template name goes in it,
+   and of a real design's timing only its net saved: its baseline, its five assisted minutes, the
+   update's minutes and the timed review's start and end times go in `notes\timing.txt`, and so
+   does a timing failure's message (steps 4.1 and 4.5; decision 186A; decision 192A (the owner's
+   answer of 2026-11-01, 13A)).
    A run folder is named after its document: write it as its time stamp and letter (for example
    `20261001-101112-A`), never its name. Copy a log line only as far as the end of its `gated=`
    list; if it has `target=`, write that it did and how many paths, never the paths; replace any
@@ -354,7 +358,10 @@ Find these before the sitting and write the list, letter by letter with the file
 means, in `notes\documents.txt` in the handover folder (the setup block below makes the folder;
 `notepad "$H\notes\documents.txt"` opens the file). Also write `notes\paths.txt`: the full path of
 every lettered file, one per line (Copy as path; the quotes are fine). Both files stay in the
-handover folder and travel by hand; they are never pushed.
+handover folder and travel by hand; they are never pushed. The same holds for every file in
+`notes\`, `notes\timing.txt` among them, where step 4.1 writes a real design's minutes and its
+timed review's start and end times (decision 186A; decision 192A (the owner's answer of
+2026-11-01, 13A)).
 
 | Letter | What it must be | Used by |
 |---|---|---|
@@ -770,7 +777,10 @@ of step 1. Keep the document open and fill in the Results table as each step end
 Each result is one word:
 
 - `pass`: every pass condition the step gives for this task held.
-- `fail`: the step ran and a condition did not hold. Quote the line that shows it in Observed.
+- `fail`: the step ran and a condition did not hold. Quote the line that shows it in Observed,
+  except a timing failure at step 4.5: its lines carry a design's figures, so they go in
+  `notes\timing.txt`, and Observed holds only the exit code, the error's name and the field
+  (decision 186A).
 - `blocked`: the step could not run, or the case it needs did not arise. Name the step, letter or
   condition in Notes, for example `blocked by 2.3: profile version 1`, `blocked: no document K` or
   `blocked: B ended without an error card`.
@@ -1702,7 +1712,9 @@ itself, or press its chip. Pressing the chip of the review already on screen doe
 ### 4.1 A, the small assembly [008 T103; 009 T079; 007 T059]
 
 Open A resolved and make it active; press Review (the box above). Note the time it started and
-finished.
+finished in `notes\timing.txt`, with A's minutes (the 007 T060 bullet below), never in the
+findings document: when you watch the whole review, the two times are its supervision (decision
+192A (the owner's answer of 2026-11-01, 13A)).
 
 - 008 T103, pass: the `tokens` line's `input` is **at most 300,000**. The last sitting's reviews of
   the small assembly took 1.47 million and 1.58 million. Fail: above 300,000. The task counts the
@@ -1747,23 +1759,28 @@ finished.
   (<outcome>) by ...`. The outcome is theirs and says nothing about the decision: a real finding
   they already knew may still be accepted.
 - 007 T060, the minutes (the command that records them runs at step 4.5, item 4, once the backend
-  no longer holds this review). Before the engineer who knows A leaves, ask them how many minutes
-  a review of A by hand, without SwReview, takes them: the **baseline**. Then write down five
-  more, in whole minutes (decisions 183A and 184A): **setup**, this design's own setup only -
-  preparing the package, opening the assembly, attaching drawings, starting the review and any
-  rerun; the sitting's software update is not part of it, so write its minutes apart, as a pilot
-  cost; **supervision**, the minutes you spent on A's review while it ran (pressing, watching the
-  Transcript, answering its questions; if you watched throughout, its start-to-end minutes);
-  **verification**, the minutes you and the engineer spent checking findings they judged right;
-  **false alarms**, the minutes spent on findings they judged wrong (a correction counts in
-  whichever of the two its finding belongs to); and **by hand**, the minutes the engineer still
-  spent checking by hand what the review did not reach (0 if none: 0 is a number, and the net
-  needs it). Verification and false alarms together are the whole time spent checking the
-  findings; count no minute twice. Write the six numbers under this step's heading in the
-  findings document.
+  no longer holds this review). They are A's real figures, company facts that stay in the private
+  fork (decision 186A): write them in a private note in the handover folder, `notes\timing.txt`
+  (`notepad "$H\notes\timing.txt"` opens it), a line `A` and then each number on a line of its own
+  with its name, and never in the findings document. Before the engineer who knows A leaves, ask
+  them how many minutes a review of A by hand, without SwReview, takes them: the **baseline**.
+  Then write down five more, in whole minutes (decisions 183A and 184A): **setup**,
+  this design's own setup only - preparing the package, opening the assembly, attaching drawings,
+  starting the review and any rerun; the sitting's software update is not part of it, so write
+  its minutes apart in the same note, as a pilot cost; **supervision**, the minutes you spent on
+  A's review while it ran (pressing, watching the Transcript, answering its questions; if you
+  watched throughout, its start-to-end minutes); **verification**, the minutes you and the
+  engineer spent checking findings they judged right; **false alarms**, the minutes spent on
+  findings they judged wrong (a correction counts in whichever of the two its finding belongs
+  to); and **by hand**, the minutes the engineer still spent checking by hand what the review did
+  not reach (0 if none: 0 is a number, and the net needs it). Verification and false alarms
+  together are the whole time spent checking the findings; count no minute twice. The six numbers,
+  the update's minutes and the review's start and end times go in `notes\timing.txt` only: of A's
+  timing, the findings document holds the net saved alone, which step 4.5 records.
 
 Record: the facts, the headline, the tally line, the not-reached line, the groups' goal lines,
-the drawings line (with letters in place of names), the usage line, and the start and end times.
+the drawings line (with letters in place of names) and the usage line; never the start and end
+times, which stay in `notes\timing.txt` (decision 192A (the owner's answer of 2026-11-01, 13A)).
 
 Do step 4.11 (014 T221) now on this review's folder, then step 4.2.
 
@@ -1889,35 +1906,47 @@ Record: each pass or fail. Save no configuration change.
    Pass: `kept and deleted`. Any other line: nothing was lost; fix the cause (the pasted path, free
    space) and run it again. Then press **Clear review**, then A-pin's chip. Pass:
    `This review can no longer be restored.` with a **Remove** button; Remove takes the chip away.
-4. **007 T060: record the timing of A's review**, with the six minutes you wrote at step 4.1.
-   It is done here because since item 2's restart the backend no longer holds A's review, so
-   nothing can save over what this writes; it writes only in A's run folder (`session.json`, then
-   `report.md` and `attention.json` rendered again). Make A active and press its chip, press
-   **Open run folder**, copy the address bar, and close that Explorer window. Then replace each
-   `'<...>'` of the second line with its number of minutes (the quotes may stay):
+4. **007 T060: record the timing of A's review**, with the six minutes you wrote in
+   `notes\timing.txt` at step 4.1. It is done here because since item 2's restart the backend no
+   longer holds A's review, so nothing can save over what this writes; it writes only in A's run
+   folder (`session.json`, then `report.md` and `attention.json` rendered again). Make A active
+   and press its chip, press **Open run folder**, copy the address bar, and close that Explorer
+   window. Then replace each `'<...>'` of the second line with its number of minutes from that
+   note (the quotes may stay):
 
    ```powershell
    $run = '<paste the run folder of A, from step 4.1>'
    cd "$R\reviewer"; uv run swreview timing $run --baseline '<baseline minutes>' --supervision '<supervision minutes>' --verification '<verification minutes>' --false-alarms '<false-alarm minutes>' --setup '<setup minutes>' --by-hand '<by-hand minutes>'; "exit code: $LASTEXITCODE"; cd $R
    Select-String -LiteralPath "$run\report.md" -SimpleMatch 'Net saved minutes:' | ForEach-Object { $_.Line }
-   (Get-Content -LiteralPath "$run\session.json" -Raw -Encoding UTF8 | ConvertFrom-Json).timing.baseline_minutes
+   "session.json carries a baseline: $($null -ne (Get-Content -LiteralPath "$run\session.json" -Raw -Encoding UTF8 | ConvertFrom-Json).timing.baseline_minutes)"
    ```
 
    Pass: the command prints `baseline <b>, supervision <s>, verification <v>, false alarms <f>,
    setup <u>, by hand <h>` with your six numbers (written with `.0`), `net saved: <n>` with `<n>`
    the baseline less the other five, and a line `report: ...`, which holds a path (never copy
    it); then
-   `exit code: 0`; then `- Net saved minutes: <n>` (the report's Timing section); and last the
-   baseline again: the run's `session.json` now carries it, which is the evidence 007 T060
-   names. A message `Invalid value for '--baseline'` (or another input) with `exit code: 2` means a
-   `'<...>'` was left as it was: put the number in and run the line again. Fail: `exit code: 1`
-   (copy its message, with any path replaced by `<run folder>`), or any number other than the
-   ones you typed. With no baseline from the engineer, write `blocked: no baseline` and run
-   nothing. From here on the owner times each pilot run the same way; at this sitting, A's review
-   is the one timed.
+   `exit code: 0`; then `- Net saved minutes: <n>` (the report's Timing section); and last
+   `session.json carries a baseline: True`, the evidence 007 T060 names. Of these lines only the
+   net saved may go in the findings document: the first is A's six minutes, to compare with the
+   note and never copy, and `report.md`'s Timing section holds the same minutes and the review's
+   runtime (decision 186A; decision 192A (the owner's answer of 2026-11-01, 13A)). A message
+   `Invalid value for '--baseline'` (or another input) with `exit code: 2` means a `'<...>'` was
+   left as it was: put the number in and run the line again. Fail: `exit code: 1`,
+   `session.json carries a baseline: False` (quote it: it holds no figure), or any number other
+   than the ones you typed. This command's messages carry figures, a refused input's
+   `input_value=` and a stored baseline's, so here, as an exception to step 1.4's rule to quote a
+   failing line, copy the whole message or line, with any path replaced by `<run folder>`, into
+   `notes\timing.txt`, and write in the findings document only the exit code, the error's name and
+   the field it names (as `exit code: 1, ValidationError, baseline_minutes`), or, for a number
+   other than the one you typed, the input's name, never its number (decision 186A). With no
+   baseline from the engineer, write `blocked: no baseline` and run nothing. From here on the
+   owner times each pilot run the same way; at this sitting, A's review is the one timed.
 
-Record: each pass or fail; for 007 T060 the six minutes, the net saved and A's run folder stamp
-(`<stamp>-A`). From here on SOLIDWORKS may be closed and reopened.
+Record: each pass or fail; for 007 T060 the net saved, as `swreview timing` printed it
+(`net saved: <n>`), and A's run folder stamp (`<stamp>-A`), never the six minutes, the update's,
+the review's start and end times or a timing failure's message, which stay in `notes\timing.txt`
+(decision 186A; decision 192A (the owner's answer of 2026-11-01, 13A)). From here on SOLIDWORKS
+may be closed and reopened.
 
 ### 4.6 Drawing questions, three answers in one send, and a confirmed candidate left closed [011 T067; 009 T084; 011 T077]
 
@@ -2849,12 +2878,15 @@ paths: they travel in the handover folder only and are never committed.
 Open it (`notepad $findings`). At the top: the commit and versions from 1.4, SOLIDWORKS's version
 from 1.6, `registration: done` or `not needed`, and the commit before the update (from
 `notes\commit-before.txt`). Pass: every row of the Results table holds `pass`, `fail` or `blocked`,
-each `fail` quotes its line, and each `blocked` names what blocked it. Under each step's heading
-goes what the step said to record; last, "What to look at first next time".
+each `fail` quotes its line (a timing failure only its exit code, error's name and field: step
+4.5), and each `blocked` names what blocked it. Under each step's heading goes what the step said
+to record; last, "What to look at first next time".
 
-No vault path, folder name, property name or value, template or sheet format name, and no key
-(rule 5). The probe reports, dump folders, zips, screenshots and `notes\` sit beside it in the
-handover folder.
+No vault path, folder name, property name or value, template or sheet format name, no timing
+figure of a real design but its net saved, and not its timed review's start and end times
+(`notes\timing.txt` holds them; decision 186A; decision 192A (the owner's answer of 2026-11-01,
+13A)), and no key (rule 5). The probe reports, dump folders, zips, screenshots and `notes\` sit
+beside it in the handover folder.
 
 ### 6.5 Check again, then hand it over
 
@@ -2864,8 +2896,12 @@ first run. Pass, and the same two readings, as at 6.1.
 This sitting pushes nothing. The findings document stays in the handover folder with everything
 else; tell the owner the folder is ready: it travels by hand, whole. The owner reads the document
 and commits it from the development machine (the repository is public, and the owner is the one
-who can see a company value in it). If git ever asks who you are, or a GitHub sign-in window
-opens, you have run a command this plan does not give: close it and call the owner.
+who can see a company value in it; a real design's timing figures are company values too: of a
+design's timing the document holds the net saved only, not even its timed review's start and end
+times, decision 186A; decision 192A (the owner's answer of 2026-11-01, 13A)). Like every file in
+`notes\`, `notes\timing.txt` travels in the folder and is never committed: the owner keeps it in
+the private fork. If git ever asks who you are, or a GitHub sign-in window opens, you have run a
+command this plan does not give: close it and call the owner.
 
 ### 6.6 The checkout is clean
 

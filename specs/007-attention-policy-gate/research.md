@@ -622,3 +622,130 @@ must-fix.
   an input or a net not recorded, where the report prints `unknown` (older for the baseline and
   the net); and `SCORING_RULES_VERSION` stays 4 although the assisted minutes and the net changed
   meaning (*Not changed*, above).
+
+## R8. Owner decision 186A (2026-11-01): a real design's timing stays in the private fork
+
+**Decision**: a real design's timing figures are company facts and stay in the private fork: the
+engineer's baseline, the five assisted inputs and a sitting's update minutes. The public
+repository holds only each design's net minutes saved and, later, their median. It changes the
+seat plan's step 4.1, where its figures are written, and the public-repository rule in
+`CONTRIBUTING.md`, which gains them. Asked as 4A in roadmap run 2's owner round, and applied
+before M0-a, the first sitting that times a real design
+([`docs/roadmap/README.md`](../../docs/roadmap/README.md), cycle 4).
+
+**Why**: step 4.1 had the engineer write the six numbers under its heading in the findings
+document, the sitting's update minutes beside them as a pilot cost, and step 4.5's Record line
+asked for the six again; the owner commits that document to this public repository from the
+development machine (the plan's step 6.5). The public-repository rule, which calls itself the
+full list, named no timing. `swreview timing` writes the same minutes into the run folder's
+`session.json` and `report.md`, but a run folder travels only in the handover folder and is never
+committed (the plan's step 6.3), so the findings document was the one place that would carry them
+into this repository. The north star needs only the net, per design and as a median
+([`docs/roadmap/metrics.md`](../../docs/roadmap/metrics.md)), so the figures behind it can stay
+private and the measure loses nothing.
+
+**What it changes**: no code. At the seat the six minutes and the update's go in a private note
+in the handover folder, `notes\timing.txt`, beside `notes\documents.txt` and `notes\paths.txt`,
+and never in the findings document; the note travels by hand with the folder and is never pushed,
+and the owner keeps it in the private fork. Step 4.5's command takes the minutes from it; a number
+the command prints wrong is named in the findings document, never quoted; and its Record line
+records the net saved, as `swreview timing` prints it, and A's run folder stamp. Every check of
+what stays out of the findings document names them: rule 5 and steps 6.4 and 6.5 of the plan, the
+results sheet's header and its 007 T060 row, the handover's timed run, its findings document and
+the owner's reading after the sitting, and the runbook's section 8, whose seat may push the
+document on a branch. `CONTRIBUTING.md`'s rule gains a real design's review timing, its net
+minutes saved and their median apart. T060, FR-036 and the Assumptions take dated notes. Tasks
+T070 to T073, Phase 10 of [tasks.md](tasks.md).
+
+**Not changed**: `swreview timing`, the route and the report, which record and print the six in
+the run folder as 183A built them. Fictional figures stay where they are: the quickstart's
+Scenario 1 and the tests time fixture folders, and the ledger's median column reads benchmark
+studies. The roadmap's own pages are brought up to date by its update runs, not here.
+
+**Built** (2026-11-01, T072), as *What it changes* says. The note is `notes\timing.txt`, in the
+folder the setup block already makes: a line `A`, then each number on a line of its own with its
+name, and the update's minutes apart in the same note. Section 0.2 says every file in `notes\`,
+the note among them, is never pushed, as it says of `notes\documents.txt` and `notes\paths.txt`;
+step 6.5 says the note travels in the folder, is never committed and stays in the private fork.
+The fail of step 4.5's item 4 that shows a number other than the one typed names the input in the
+findings document and copies the printed line into the note, since the general rule for a fail,
+quoting the line in Observed, would carry the six minutes. T060's dated note keeps its Done note,
+which the development machine commits, to the net saved and the stamp.
+
+**Tests changed on purpose**: none. Two pins were added to `test_workstation_test_plan.py`, and
+every existing case of the three modules that read the changed files passed before and after with
+no edit, among them the pins that read steps 4.1 and 4.5:
+`test_the_timing_is_recorded_once_the_backend_no_longer_holds_the_review`,
+`test_the_timing_line_passes_every_input_swreview_timing_takes` and
+`test_every_sentence_the_plan_quotes_is_the_products`.
+
+**Tests first**: T071's two pins failed before T072, each for want of the words it pins:
+`test_a_real_designs_timing_figures_stay_out_of_the_findings_document` at step 4.1's note, and
+`test_every_check_before_the_findings_document_is_committed_names_the_timing_figures` at rule 5.
+Read one by one on the documents as they stood, 41 of their 42 checks were red; the one that held
+is the guard that section 0.2's notes are never pushed. In a first draft the check that step 4.1's
+old sentence is gone read the plan unflattened, and so held against the old text, which breaks
+that sentence across lines; both checks that an old sentence is gone read the flattened plan
+before the pins were committed, and were red with the rest.
+
+**Gates** (T073; 2026-11-01), on T073's tree:
+
+- Python 3.12.3, in the worktree's own environment (`uv sync --python 3.12 --all-extras`), and
+  3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required, over the three
+  modules that read the changed files - `test_workstation_test_plan.py`,
+  `test_workstation_handover.py` and `test_update_workstation_script.py`: 296 passed on each.
+- `ruff check src tests` clean.
+- The link check over the cycle's changed Markdown: 302 relative links, anchors included, none
+  broken. Every changed file LF in the index.
+- No C# file changed, so no C# gate. Not run in this lane: the whole non-live suites, which run
+  before the pull request and in its CI, among them
+  `test_tracked_files_carry_no_recorded_number.py`, which reads the owner's lists outside the
+  repository. No SOLIDWORKS process, seat task, or paid or live test ran.
+
+**Review** (Tier 2, decision 180A; 2026-11-01): one Codex review of the branch, two findings,
+both fixed test first under T072.
+
+- High: step 4.5 still had the engineer copy an exit-code-1 message of `swreview timing`, paths
+  replaced, into the findings document, and the command's messages carry figures: a refused
+  input's `input_value=` (`error: ValidationError: 1 validation error for Timing ...`), and, when
+  the session's stored timing is malformed, the stored baseline's. Fixed: a timing failure goes
+  whole into `notes\timing.txt`, and the findings document records only its exit code, its
+  error's name and the field it names, an exception that step 4.5 states and that step 1.4's rule
+  to quote a failing line, step 6.4's check and the results sheet's rule each name. Every line
+  steps 4.1 and 4.5 print or record was read for a figure: of step 4.5's printed lines only the
+  net saved may be recorded, the first, the six minutes, being compared with the note and never
+  copied; `report.md`'s Timing section holds the same minutes and the runtime; and the stored
+  baseline is now checked, not printed (`session.json carries a baseline: True`).
+- Medium: when the engineer watched the whole review, supervision is its start-to-end span, and
+  step 4.1's Record line put both times in the findings document, the point this record had left
+  open. The owner answered on 2026-11-01 (13A), to be registered as decision 192A: the review's
+  start and end times go in `notes\timing.txt` with the six minutes; the findings document keeps
+  only the net saved and A's run folder stamp, so no private figure can be worked out from it;
+  the runtime stays in the run folder, which is never committed. Fixed: step 4.1 notes the times
+  in the note and its Record line keeps them out; rule 5, steps 6.4 and 6.5, the results sheet's
+  header, the handover's timed run, its findings document and the owner's reading after the
+  sitting, the runbook's section 8, T060, `CONTRIBUTING.md`'s rule and the Assumptions' note name
+  them, as decision 192A (the owner's answer of 2026-11-01, 13A).
+- Tests changed on purpose, none loosened: T071's two pins, each with a dated note - the first
+  gains the exception, the printed lines and the times, the second the times and decision 192A in
+  each of its nine places - and a guard,
+  `test_no_line_sends_a_real_designs_timing_figure_to_the_findings_document`: no Record
+  instruction of the plan asks for a timing figure before its first `never`; no clause of the
+  plan, the results sheet, the handover or the runbook that names the findings document or
+  Observed names one unless it sends it to the note or says never; and no clause of steps 4.1 and
+  4.5 copies or quotes a message or a line outside the note.
+- Tests first: the three pins failed on cycle 4's documents as T073 left them, before the fix and
+  not only before cycle 4 - the first at step 4.5's exception, the second at rule 5, the third at
+  step 4.1's Record line. Read one by one, 27 of the 28 new checks were red; the one that held is
+  the guard's clause scan, which has nothing to find since T072 and flags the plan as it stood
+  before cycle 4, as its Record and copy scans flag that plan's two Record lines and its copy
+  instruction. After the fix the guard caught one of the fix's own sentences, in the handover,
+  which sent the times to "the note" without naming it; it names `notes\timing.txt` now.
+- Gates, on the fixed tree: the three modules, 297 passed on each of Python 3.12.3 and 3.11.16
+  with the tokenizer required; `ruff check` clean; the link check over the cycle's changed
+  Markdown clean (302 relative links); every changed file LF in the index.
+- Not changed: step 4.2 still notes B's start and end times, since B is not timed at this
+  sitting and they bound no one's supervision; a sitting that times B routes them as step 4.1
+  does. [`docs/roadmap/metrics.md`](../../docs/roadmap/metrics.md) keeps "Review wall time" as a
+  guardrail, and its pages are its update runs' to change: under decision 192A a timed review's
+  runtime stays in its run folder, so that row cannot take one.

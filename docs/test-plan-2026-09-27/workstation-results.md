@@ -7,7 +7,11 @@ each step ends; step 6.4 finishes it and step 6.5 hands it over with the folder.
 ever pasted into a chat.
 
 Documents by letter only (the list is `notes\documents.txt` in the handover folder). No vault path,
-folder name, property name or value, sheet format or template name, and no key. A run folder is
+folder name, property name or value, sheet format or template name, and no key. Of a real design's
+timing, the net saved only: its baseline, its five assisted minutes, the update's minutes and the
+timed review's start and end times stay in `notes\timing.txt`, and so does a timing failure's
+message (the plan's steps 4.1 and 4.5; decision 186A; decision 192A (the owner's answer of
+2026-11-01, 13A)). A run folder is
 written as its time stamp and letter (`20261001-101112-A`), never its name. From a D6 or D8 line of
 a probe report, its id only: never a dimension's name, view, value or radius. From a Standards
 probe report, a component's id only (`cmp:` and four digits), never its name, and no
@@ -42,7 +46,9 @@ other row blank.
 ## Results
 
 Each result is one word: `pass` (every pass condition the step gives for this task held), `fail`
-(the step ran and a condition did not hold: quote the line that shows it in Observed) or `blocked`
+(the step ran and a condition did not hold: quote the line that shows it in Observed, except a
+timing failure at the plan's step 4.5, of which Observed holds only the exit code, the error's name
+and the field, its line going in `notes\timing.txt`) or `blocked`
 (the step could not run, or the case it needs did not arise: name the step, letter or condition in
 Notes, for example `blocked by 2.3: profile version 1`). A task spread over several rows passes
 only if every row passed, fails if any row failed, and otherwise is blocked. Observed holds a count,
@@ -101,7 +107,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 4.3 | 008 T104: Retry | | | |
 | 4.4 | 009 T081: configuration switch on a part and an assembly | | | |
 | 4.5 | 009 T083: chips, the restart, the deleted folder | | | |
-| 4.5 | 007 T060: A's review timed, its baseline in `session.json` | | | |
+| 4.5 | 007 T060: A's review timed, its baseline in `session.json`; Observed holds the net saved only, never the six minutes (decision 186A) | | | |
 | 4.6 | 011 T067: the two questions, at most four, the brief | | | |
 | 4.6 | 009 T084: three or more answers in one send | | | |
 | 4.6 | 011 T077: the pane half, switch off | | | |
