@@ -54,6 +54,7 @@ body. Written to `events.jsonl` and streamed as server-sent events with `id = se
 | `evidence.requested` | `EvidenceRequest` | session tools |
 | `evidence.answered` | `request_id`, `answer` | server (engineer) |
 | `disposition` | `finding_id`, `Disposition` | server (engineer) |
+| `disposition.cleared` | `finding_id`, `disposition` (the one cleared), `reason` (the words file's line naming its decision and triage): a re-run after an answer changed a decided finding's status or severity (*added 2026-11-01, owner decisions 189A and 191A*) | runner, after the fold's `finding` event |
 | `coverage` | `bucket`, `CoverageItem` | tools |
 | `coverage.withdrawn` | `checks`, `buckets` (each non-empty): every item of those checks left those buckets before the check restated them (feature 011 T092) | tools (`ToolContext.withdraw_coverage`) |
 | `turn.ended` | `reason: end \| max_steps \| error \| stopped \| truncated` | runner |
@@ -118,6 +119,16 @@ asserts each of them:
    finding id, or carries `supersedes: <finding_id>` and the superseded finding is excluded
    from the report body and from the severity counts. The report never shows two
    contradictory verdicts for one check.
+   *Amended 2026-11-01 (roadmap hole H-d-008; owner decisions 189A and 191A):* the new
+   finding keeps the earlier finding's id and place (`_reconcile_reruns`), and its whole
+   disposition - decision, triage, note, `by` and `at` - when its status and severity are
+   both the ones the earlier finding was decided on, as a restated finding keeps it (58A).
+   When either changed, the disposition is cleared, and after the fold's `finding` event a
+   `disposition.cleared` event names the finding, the disposition cleared and the words
+   file's line, which the Review page prints on the finding's card so the engineer decides
+   again. Each re-run is compared with the finding as decided, never with an earlier re-run
+   of the same turn. The persisted `Finding` gains no field: `session.json` holds the folded
+   finding undecided, and the notice is in `events.jsonl` alone.
 4. **`max_steps` is a per-turn budget.** The runner compares the steps taken *this turn*
    against `max_steps`; the cumulative step count is recorded separately on the session. A
    resumed turn never no-ops because an earlier turn exhausted the budget.

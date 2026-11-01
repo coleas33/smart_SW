@@ -757,7 +757,10 @@ recorded before their code):
   earlier finding's disposition; a finding the restate withdraws is withdrawn as before.
   `_reconcile_reruns` (rule 3, `runner.py:826-857`), which folds a check the model itself runs
   again in the resumed turn, copies the same way; it is not a restate, so 58A leaves it as it is,
-  recorded here for the owner.
+  recorded here for the owner. *Settled 2026-11-01 (owner decisions 189A and 191A; 002 T327):* the
+  fold keeps the earlier finding's whole disposition when the re-run's status and severity are
+  unchanged, and when either changed clears it and says so on the finding's card (002
+  [research.md](../002-task-pane-assistant/research.md), H-d-008); 58A's restate is unchanged.
 - **63A, the goal lines stay as they are.** The question (the third review, D25): with the
   Fasteners goal owning `thread.`, the `thread.pitch` rows reach its goal line - a coarse pass
   lifts it to "checked", and with none a skipped row turns "not applicable (out of scope)" into
@@ -1316,7 +1319,7 @@ Still open:
 | The interference volume unit and `IsPossibleInterference` on zero-volume rows (T069 of feature 001) | next sitting | the contact rule's inputs being verified at the source |
 | The coarse-pitch table checked against the shop's copies of ISO 261 and ASME B1.1 (R2.26, added 2026-10-08) | owner | nothing; it ships as transcribed, and a correction is one edit of `contracts/coarse-pitch.json` and its two pinned copies |
 | The defaults D1 to D25 of R2.26 (2026-10-08), except D3 and D25, which the owner's decisions 57A and 63A replaced | owner | nothing; each ships as written until revised |
-| Whether a check the model runs again in a resumed turn (`_reconcile_reruns`, rule 3) should keep an earlier finding's disposition as a restate does after 58A (R2.26, 2026-10-08) | owner | nothing; 58A fixes the restate only |
+| Settled 2026-11-01 (owner decisions 189A and 191A; 002 T325 to T330): whether a check the model runs again in a resumed turn (`_reconcile_reruns`, rule 3) should keep an earlier finding's disposition as a restate does after 58A (R2.26, 2026-10-08). It keeps the whole disposition when the re-run's status and severity are unchanged, and when either changed clears it and says so on the finding's card, so the engineer decides again (002 [research.md](../002-task-pane-assistant/research.md), H-d-008) | owner | nothing |
 | What Hole Wizard writes for an ISO fine tapped hole, a UNF tapped hole and a cosmetic thread callout, and whether a part reviewed on its own yields any hole rows (R2.26, T123, T124) | next sitting | SC-012 |
 
 ## R6. Where this design differs from the analyst's recommendations

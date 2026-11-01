@@ -309,6 +309,23 @@ class SendWords(ReviewModel):
     rerun_failed: str
 
 
+class RerunWords(ReviewModel):
+    """The line a finding's card shows when a check run again after the engineer's answer
+    changed its verdict - its status or its severity - and so cleared its decision and triage
+    (feature 002 FR-031; owner decisions 189A and 191A). The backend fills it, and the page
+    prints it as sent."""
+
+    cleared: str
+    cleared_with_triage: str
+
+    def of(self, decision: str, triage: str | None) -> str:
+        """The line for the cleared `decision`, its noun ("Accept"), naming `triage`, its word, when
+        the disposition held one."""
+        if triage is None:
+            return self.cleared.format(decision=decision)
+        return self.cleared_with_triage.format(decision=decision, triage=triage)
+
+
 class Labels(ReviewModel):
     """The card vocabulary `GET /labels` serves, verbatim (data-model section 7)."""
 
@@ -347,6 +364,7 @@ class Words(ReviewModel):
     resume: ResumeWords
     send: SendWords
     answer_basis: AnswerBasisWords
+    rerun: RerunWords
     read_only_lead: str
     read_only_off: str
     goal_states: dict[GoalState, str]

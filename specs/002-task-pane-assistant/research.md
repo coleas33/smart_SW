@@ -6136,7 +6136,9 @@ the decision register now records 160A as done.
   (`agent/runner.py`, `_reconcile_reruns`), which drops a decision when the model runs a check
   again in a turn an answered question resumed, now drops its triage too, as 58A left it (010
   [research.md](../010-mechanical-checks/research.md), 58A): triage after the last turn, or fix it
-  test first as a task of its own.
+  test first as a task of its own. *Settled 2026-11-01 (roadmap hole H-d-008; owner decisions 189A
+  and 191A; T327):* the fold keeps the whole disposition when the re-run's status and severity are
+  unchanged, and clears it and says so on the card when either changed (H-d-008 below).
 - **Tests**: T308, T310, T312, T314 and T316 in [tasks.md](tasks.md), Phase 23, each written
   first; T309, T311, T313, T315 and T317 make them green, and T318 closes the records.
 - **speckit-converge**, run once on 2026-11-01 (T307), bounded to FR-031, scenarios 7 and 8, the

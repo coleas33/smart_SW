@@ -10,7 +10,7 @@
     "seq": { "type": "integer", "minimum": 1 },
     "at": { "type": "string", "format": "date-time" },
     "type": {
-      "enum": ["session.started", "session.sent", "text.delta", "text.done", "tool.started", "tool.finished", "finding", "finding.withdrawn", "evidence.requested", "evidence.answered", "disposition", "coverage", "coverage.withdrawn", "usage", "turn.ended", "session.ended", "error"]
+      "enum": ["session.started", "session.sent", "text.delta", "text.done", "tool.started", "tool.finished", "finding", "finding.withdrawn", "evidence.requested", "evidence.answered", "disposition", "disposition.cleared", "coverage", "coverage.withdrawn", "usage", "turn.ended", "session.ended", "error"]
     },
     "body": { "type": "object" }
   },
@@ -45,6 +45,10 @@
     { "if": { "properties": { "type": { "const": "disposition" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["finding_id", "disposition"],
         "properties": { "finding_id": { "type": "string" }, "disposition": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/Disposition" } } } } } },
+    { "if": { "properties": { "type": { "const": "disposition.cleared" } } },
+      "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["finding_id", "disposition", "reason"],
+        "description": "Feature 002 (owner decisions 189A and 191A; FR-031): a check the model ran again after an answered evidence request resumed its turn folded onto a decided finding (rule 3) with another verdict - another status or severity - so the finding's disposition was cleared. Emitted by the runner after the fold's finding event for the same id, once per finding, in session order. disposition is the one cleared; reason is the words file's line naming its decision and triage, which the page prints on the finding's card. A re-run with the status and severity decided keeps the disposition, and nothing is emitted.",
+        "properties": { "finding_id": { "type": "string", "pattern": "^F-[0-9]{3,}$" }, "disposition": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/Disposition" }, "reason": { "type": "string" } } } } } },
     { "if": { "properties": { "type": { "const": "coverage" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["bucket", "item"],
         "properties": { "bucket": { "enum": ["checked", "skipped", "unresolved", "failed", "out_of_scope"] }, "item": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/CoverageItem" } } } } } },

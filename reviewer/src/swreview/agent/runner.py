@@ -105,7 +105,13 @@ from swreview.drawings.evidence import DrawingIndex, file_key
 from swreview.engineering_context.brief import build_summary, compact_json
 from swreview.engineering_context.models import ContextArtifact, canonical_bytes, context_digest
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
-from swreview.findings import Finding, SubjectKey, finding_subject_key, subject_locations
+from swreview.findings import (
+    Disposition,
+    Finding,
+    SubjectKey,
+    finding_subject_key,
+    subject_locations,
+)
 from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import (
@@ -989,7 +995,9 @@ def _restated_targets(earlier: Sequence[Finding], restated: Sequence[Finding]) -
     return targets
 
 
-def _reconcile_reruns(session: ReviewSession, before: int) -> list[Finding]:
+def _reconcile_reruns(
+    session: ReviewSession, before: int
+) -> tuple[list[Finding], list[tuple[str, Disposition]]]:
     """Fold a re-run check's new finding onto the one it re-judges (rule 3).
 
     `before` is how many findings the session held when the answer went in; everything
@@ -998,16 +1006,25 @@ def _reconcile_reruns(session: ReviewSession, before: int) -> list[Finding]:
     verdict per check in its original position instead of two contradictory ones. A new
     finding that matches nothing is simply a new finding.
 
+    The earlier finding's disposition - decision, triage, note, `by` and `at` - goes with
+    the fold when the re-run's status and severity are the ones it was decided on, as a
+    restated finding keeps it (58A), and is cleared when either changed (owner decisions 189A
+    and 191A). Each re-run is compared with the finding as decided, never with an earlier
+    re-run of the same turn, so of two that fold onto one finding the last alone says
+    whether its decision stands.
+
     Only findings from a turn that an answered evidence request started are reconciled:
     inside one ordinary turn, two calls to the same check are the model's own doing and
     are left exactly as it recorded them.
 
-    Returns the folded findings in their final form. The tool layer already announced each
-    of them under the id it was allocated, so the caller re-announces it under the id it
-    was folded onto: the stream's last word on a finding id is then the verdict
-    `session.json` holds.
+    Returns the folded findings in their final form, and the id and the disposition of each
+    earlier finding whose decision the folds cleared, in session order. The tool layer
+    already announced each folded finding under the id it was allocated, so the caller
+    re-announces it under the id it was folded onto - the stream's last word on a finding
+    id is then the verdict `session.json` holds - and then says which decisions it cleared.
     """
-    previous = list(session.findings[:before])
+    decided = list(session.findings[:before])
+    previous = list(decided)
     added = list(session.findings[before:])
     by_key = {_verdict_key(finding): index for index, finding in enumerate(previous)}
     kept: list[Finding] = []
@@ -1017,10 +1034,19 @@ def _reconcile_reruns(session: ReviewSession, before: int) -> list[Finding]:
         if index is None:
             kept.append(finding)
             continue
-        previous[index] = finding.model_copy(update={"id": previous[index].id})
+        earlier = decided[index]
+        same = (finding.status, finding.severity) == (earlier.status, earlier.severity)
+        previous[index] = finding.model_copy(
+            update={"id": earlier.id, "disposition": earlier.disposition if same else None}
+        )
         folded.append(previous[index])
     session.findings[:] = [*previous, *kept]
-    return folded
+    cleared = [
+        (earlier.id, earlier.disposition)
+        for earlier, now in zip(decided, previous, strict=True)
+        if earlier.disposition is not None and now.disposition is None
+    ]
+    return folded, cleared
 
 
 # --- answering evidence requests (feature 008 contracts/answer-batch.md) ---------------------
@@ -1141,7 +1167,21 @@ NOT_CARRIED_PROFILE = (
 an earlier id, never a path, and the items are joined with "; " in the carry's order."""
 
 DECISION_NOUNS = {"accepted": "Accept", "rejected": "Reject", "deferred": "Defer"}
-"""How a decision is named in a `coverage.recheck` item: "the Reject of F-007"."""
+"""How a decision is named in a `coverage.recheck` item, "the Reject of F-007", and in the line
+a re-run that cleared one leaves on its card (owner decisions 189A and 191A)."""
+
+
+def _cleared_body(finding_id: str, disposition: Disposition) -> dict[str, Any]:
+    """The `disposition.cleared` body (002 FR-031; owner decisions 189A and 191A): the finding,
+    the disposition a re-run after an answer cleared, and the words file's line the page prints
+    on the finding's card, naming the decision and, when one was recorded, its triage."""
+    words = load_words()
+    triage = None if disposition.triage is None else words.labels.triage[disposition.triage]
+    return {
+        "finding_id": finding_id,
+        "disposition": disposition.model_dump(mode="json"),
+        "reason": words.rerun.of(DECISION_NOUNS[disposition.decision], triage),
+    }
 
 
 def _same_profile(
@@ -1406,7 +1446,8 @@ class ReviewRun:
         one line below it (feature 013); byte for byte otherwise. The requests stop being
         open, so finalization no longer reports them as unresolved (rule 2), and a check the
         resumed turn re-runs replaces its earlier verdict rather than adding a second one
-        (rule 3).
+        (rule 3), keeping its decision when the status and severity are unchanged and clearing
+        it, announced with `disposition.cleared`, when either changed (189A and 191A).
         """
         if self.awaiting_send:
             requests = self._answer_requests(answers)
@@ -1429,8 +1470,12 @@ class ReviewRun:
         # finding into the earlier part, where it would stay as a duplicate under a new id.
         before = len(self.session.findings)
         self._ask(message)
-        for finding in _reconcile_reruns(self.session, before):
+        folded, cleared = _reconcile_reruns(self.session, before)
+        for finding in folded:
             self.sink.emit("finding", self.context.finding_body(finding))
+        # After the last `finding` of each id, so the line lands on the card the fold drew.
+        for finding_id, disposition in cleared:
+            self.sink.emit("disposition.cleared", _cleared_body(finding_id, disposition))
         return self.finalize()
 
     def _apply_answers(
