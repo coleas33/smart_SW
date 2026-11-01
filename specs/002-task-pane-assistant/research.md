@@ -6503,3 +6503,99 @@ the decision register now records 160A as done.
   [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 3: a later press or Show
   replaces the line for good; the re-run's first card under its own id stays on the page; two
   earlier findings with one verdict key fold onto the last; and the tests the review listed.
+
+### 187A and 188A. A pass takes no triage but a miss, counted apart, and the four outcomes defined (2026-11-01)
+
+- **Question**: roadmap holes H-g-009 and H-a-009 (roadmap run 2). Since 185A every finding
+  card's fold carried the four triage buttons, a pass's too (`render.js`, `triageRow`), and
+  `report.md`'s `- By triage:` (`report/markdown.py`, `_by_triage`) counted every finding of every
+  status, the passes among "not recorded". A pass - a `checked_within_scope` finding, which the page
+  draws in the "Checked, no issue" fold - is a check saying there is no problem, so of the four
+  outcomes only "wrong" fits one, and a pass judged wrong is a miss, which the count booked as a
+  false alarm; every correct pass either took an outcome that does not fit it or stayed "not
+  recorded", so M0's first exit criterion could not be read from the count (H-g-009, with H-a-012
+  and H-d-007 folded in). Example: A's review of 2026-09-26 held two passes, the pin's and the
+  plate's mass checks ([`docs/roadmap/capabilities.md`](../../docs/roadmap/capabilities.md), F2):
+  judged right, each stays "not recorded"; judged wrong, each adds a false alarm. Nor did anything
+  say what "real but already known" is measured against, though M0's triaged reviews are of A,
+  reviewed on five earlier seat days, so a finding agreed real at an earlier sitting could read as
+  already known, and new and real findings on A trend to zero by construction (H-a-009).
+- **Decided**: 187A (2026-11-01, 5A of roadmap run 2's second owner round): a pass takes no triage;
+  a pass the engineer judges wrong is marked wrong and counted as a miss, apart from false alarms,
+  and `report.md` counts flagged findings and passes apart; it changes the reach of 185A (FR-031)
+  and the seat plan's step 4.1. 188A (6A of the same round): "real but already known" means known
+  before SwReview first showed it, so a real finding SwReview first showed at an earlier sitting
+  stays "new and real", with that sitting's date in its note; step 4.1 defines each of the four
+  outcomes in one line before M0-a.
+- **Not changed**: the four outcomes, their tokens and their words; 185A's rule for a flagged
+  finding - optional, independent of the decision, a late triage once, a second one refused; the
+  unresolved findings, which stay flagged findings (H-a-012's route); 58A's restate, 189A's fold and
+  what 015's carry does with a decision; and the constitution, whose Principle VI already measures
+  missed known defects and false alarms apart.
+- **Settled with it**:
+  - **A pass.** A finding of status `checked_within_scope`: the one status the page draws in the
+    "Checked, no issue" fold, and the report's `SUPPRESSED_STATUS` (`report/attention.py`), which
+    the summary's groups and the goals already read as a pass. Every other status - demonstrated,
+    suspected, unresolved - is a flagged finding.
+  - **The one token.** `findings.MISS`, `wrong`, beside `TRIAGES`: the one triage a pass takes,
+    read by the record, the live route, the re-run's carry, the report and the words file's checks.
+  - **Accept, Reject and Defer on a pass.** Accept says the engineer agrees the check found no issue
+    within its scope; Reject that the engineer does not take the pass as it stands, its verdict or
+    its scope, which is not by itself a miss; Defer that the engineer will judge it later. None of
+    them counts a miss: the miss is `wrong` alone, pressed beside any of the three, as 185A keeps
+    the triage and the decision apart. Example: a pass whose stated scope left out a pair the
+    engineer cares about may be rejected with no triage, and no miss is counted, since nothing the
+    check examined was missed. So the three buttons stay on a pass's card, recorded, ranked and
+    rendered as before.
+  - **The record's refusal.** `report/dispositions.py` refuses any triage but `wrong` on a pass with
+    `TriageOnAPassError`, a `ValueError` of its own class, before anything changes and before the
+    state machine is read, whatever the decision, a late triage included, as a triage outside the
+    four is refused before the finding is looked at. Its own class so the live route can answer it
+    as the route's refusal and the console can name it. A pass's triage recorded before 187A
+    stands as recorded: nothing removes it, and a Defer holding one keeps it when a later decision
+    names none, as 185A keeps a Defer's triage.
+  - **The route's class.** Options: A, `400 InvalidTriage`, the class a triage outside the four
+    already has; B, a class of its own, with a sentence of its own. A: the refusal is of the same
+    kind - a triage the finding does not take - and is answered the same way: 400, not retryable,
+    checked before the chat's state, nothing written. The page never sends one, since a pass's card
+    offers the one outcome, so no press of the page's needs a sentence of its own, unlike H-g-012's
+    `TriageAlreadyRecorded`, whose class came from a press the page could make; `InvalidTriage`'s
+    sentence is reworded to stay true of both. The route looks the finding up in the live session
+    before it reads the chat's state; an id the session does not hold is left to the record, which
+    refuses it as `404 UnknownFinding` after the chat's state, as before; and should the finding
+    become a pass between the two - a waiting review's answer grading it again - the record's
+    `TriageOnAPassError` is answered `InvalidTriage` too.
+  - **The report.** `- By triage:` counts the flagged findings alone, its "not recorded" theirs, and
+    `- Passes judged wrong (misses): <n>` follows it, counting the passes marked `wrong`. Both
+    appear only when some finding records a triage, as the one line did, so every report with none
+    keeps its bytes, every committed golden among them; and a review triaged at all shows both, so
+    no miss reads as 0 rather than as nothing recorded. A pass's triage other than `wrong`, recorded
+    before 187A, is counted in neither line and shown under its decision, as before.
+  - **The re-run's carry (feature 015).** `_carry_decisions` passes the earlier triage to
+    `set_disposition`, which now refuses a triage a pass does not take, and a carried `wrong` would
+    change what it counts: a flagged finding's `wrong` is a false alarm, a pass's a miss. Options: A,
+    the decision carried as before, its triage only between two passes or two flagged findings and
+    only one the finding it lands on takes, any other named in `coverage.recheck`; B, the whole
+    decision left behind across the line; C, the triage carried across, `wrong` changing its count.
+    A: whether a decision carries across a changed status is the question cycle 3's Tier 1 review
+    left for the owner (58A's restate and 015's carry keep a decision whatever the status and
+    severity now are), so the decision's carry is unchanged, and only the triage, whose count 187A
+    splits, stops at the line. One item each way, after the decision's items.
+  - **The words.** `labels.pass_triage`, after `triage` and before `source`, so `source` stays just
+    before `errors`: `{wrong: "wrong: a miss"}`, keyed by `MISS`, the word on a pass's one button,
+    lowercase as the four are. Not in `triage`, whose keys are the four tokens in their order, and
+    keyed by the token so the page looks it up through `labelOf`, the token itself with no labels
+    (FR-030). The card's disposition sentence and `report.md`'s line under a decision name a pass's
+    `wrong` by `labels.triage`'s word, as they name any triage.
+  - **The page.** A pass's card offers `wrong` alone, in the row and through the press and the
+    decision a flagged finding's four use. Which row a card carries is decided by comparing the
+    finding's status with `checked_within_scope` once (`render.js`, `triageRow`): a card state the
+    backend's status decides, never a rank, so the comparison is added to
+    `PageRuleScanTests.AllowedComparisons` with that reason, beside `check-page.js`'s comparison of
+    the same status for a reason of the same kind. The rule is the backend's: the page draws the
+    one button and refuses nothing.
+  - **188A's definitions.** Step 4.1's triage bullet lists the four outcomes, one line each, then
+    says what "already known" is measured against and what a pass takes; no code reads them. The
+    earlier sitting's date goes in the card's note box.
+- **Tests**: T332, T334 and T336 in [tasks.md](tasks.md), Phase 26, each written first; T333, T335
+  and T337 make them green, and T338 closes the records.
