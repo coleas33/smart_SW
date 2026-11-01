@@ -99,6 +99,14 @@ def files_in(directory: Path) -> dict[str, bytes]:
     return {path.name: path.read_bytes() for path in sorted(directory.iterdir())}
 
 
+def timing_section(run_dir: Path) -> list[str]:
+    """The lines of `report.md`'s `## Timing` section, up to the next heading."""
+    lines = (run_dir / "report.md").read_text(encoding="utf-8").splitlines()
+    start = lines.index("## Timing")
+    ends = [index for index in range(start + 1, len(lines)) if lines[index].startswith("## ")]
+    return lines[start : ends[0] if ends else len(lines)]
+
+
 # --- 1. the recording --------------------------------------------------------------
 
 
@@ -198,6 +206,33 @@ def test_the_report_is_re_rendered_with_the_net_and_the_package(review_dir: Path
     assert "- Net saved minutes: 28.0" in report
     assert NAMED_COMPONENT in report
     assert PLACEHOLDER not in report
+
+
+def test_the_report_prints_setup_and_the_review_left_by_hand_even_when_unknown(
+    review_dir: Path,
+) -> None:
+    """Owner decision 183A (007 T067): the Timing section prints both new inputs always,
+    `unknown` until recorded as the baseline's line does, so a reader of a net that is unknown
+    sees why; once both are recorded it prints them and the net, 120 less 57."""
+    record(
+        review_dir,
+        "--baseline", "120", "--supervision", "6", "--verification", "9", "--false-alarms", "2",
+    )
+    before = timing_section(review_dir)
+
+    record(review_dir, "--setup", "10", "--by-hand", "30")
+    after = timing_section(review_dir)
+
+    assert {
+        "- Setup minutes: unknown",
+        "- Review by hand minutes: unknown",
+        "- Net saved minutes: unknown",
+    } <= set(before)
+    assert {
+        "- Setup minutes: 10.0",
+        "- Review by hand minutes: 30.0",
+        "- Net saved minutes: 63.0",
+    } <= set(after)
 
 
 def test_a_standards_check_folder_keeps_its_verdict_header(standards_dir: Path) -> None:

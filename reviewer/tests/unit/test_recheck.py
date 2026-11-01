@@ -58,10 +58,12 @@ from swreview.report.attention_record import StaleAttentionRecord, read_attentio
 from swreview.report.markdown import render_report
 from swreview.report.names import plural
 from swreview.report.session import (
+    HUMAN_TIMING_FIELDS,
     DrawingOutcome,
     EvidenceRequest,
     ReviewSession,
     SendFailure,
+    Timing,
     load_session,
     save_session,
 )
@@ -1741,6 +1743,40 @@ def test_the_timing_inputs_and_a_failed_sends_status_are_carried(bare: Any) -> N
     assert status.rechecked_from == earlier.session_id
     assert status.checked_at == checked
     assert status.document == earlier.model_status.document
+
+
+def test_every_human_timing_input_is_carried(bare: Any) -> None:
+    """Owner decision 183A (007 T067; 72A): a re-run copies every human input of the earlier
+    record, setup and the review by hand among them, so a waiting review's minutes are not lost
+    to its re-run, and its net is the earlier one; the unattended runtime is the re-run's own.
+    The six are every field of `Timing` but the runtime and the derived net, so an input added
+    later is carried too."""
+    run, earlier, _ = bare
+    earlier.timing = earlier.timing.replace(
+        baseline_minutes=120.0,
+        assisted_supervision_minutes=6.0,
+        assisted_verification_minutes=9.0,
+        false_alarm_handling_minutes=2.0,
+        setup_minutes=10.0,
+        review_by_hand_minutes=30.0,
+        unattended_runtime_minutes=4.5,
+    )
+    own = run.session.timing.unattended_runtime_minutes
+    assert own != 4.5
+
+    run.carry_from(earlier)
+
+    timing = run.session.timing
+    assert (
+        timing.baseline_minutes, timing.assisted_supervision_minutes,
+        timing.assisted_verification_minutes, timing.false_alarm_handling_minutes,
+        timing.setup_minutes, timing.review_by_hand_minutes,
+    ) == (120.0, 6.0, 9.0, 2.0, 10.0, 30.0)
+    assert timing.unattended_runtime_minutes == own
+    assert timing.net_saved_minutes == 63.0
+    assert set(HUMAN_TIMING_FIELDS) == set(Timing.model_fields) - {
+        "unattended_runtime_minutes", "net_saved_minutes",
+    }
 
 
 @pytest.mark.parametrize("state", ["not_sent", "send_failed"])
