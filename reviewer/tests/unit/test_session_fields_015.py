@@ -217,7 +217,11 @@ def test_committed_session_keeps_its_existing_bytes(path: Path, tmp_path: Path) 
     assert written.read_bytes() == path.read_bytes()
 
 
-def test_old_save_bytes_are_the_captured_pre_feature_output(tmp_path: Path) -> None:
+def test_old_save_bytes_are_the_captured_pre_feature_output_but_for_the_net(
+    tmp_path: Path,
+) -> None:
+    """*Renamed 2026-11-01 (owner decision 183A; the Tier 1 review of cycle 1):* its pin moved
+    in 007 T066, since 183A makes this session's net unknown (module docstring)."""
     raw = records.save_session(build_session(), tmp_path / "session.json").read_bytes()
     assert hashlib.sha256(raw).hexdigest() == BASELINE_SAVE_SHA256[os.name]
 

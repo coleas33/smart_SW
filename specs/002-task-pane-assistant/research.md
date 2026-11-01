@@ -6217,3 +6217,17 @@ the decision register now records 160A as done.
     broken. Every changed file LF in the index.
   - The whole non-live suites were not run in this lane: they run before the pull request and in
     its CI. No SOLIDWORKS process, seat task, or paid or live test ran.
+- **Gates before the pull request** (2026-11-01, on `e46747b`'s tree, the branch as the lanes
+  left it): the whole non-live suites with the tokenizer required, 18,735 passed and 5 skipped on
+  Python 3.12.3 and the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`);
+  `ruff check` clean; the C# build with zero warnings, and 10,274 extractor and 4,288 add-in tests
+  passed.
+- **Review** (Tier 1, decision 180A; 2026-11-01): one Opus and one Codex review of the branch, no
+  must-fix, and no finding against the triage's record, route, console, re-run carry, restate or
+  handoff; the Opus review read the late-triage rule through each of them. One should-fix is left
+  in [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 1: after the backend refuses a
+  decision, the Review page keeps the refused pick pressed and shows the refusal in place of the
+  recorded disposition, so until a reload the card can show a triage the record does not hold,
+  and `IllegalTransition`'s sentence reads as a refused decision when a second triage was
+  refused. The timing findings, and the one fix the review made, are in 007
+  [research.md](../007-attention-policy-gate/research.md), R7.

@@ -8,7 +8,8 @@ already states.
 *Amended 2026-11-01 (owner decisions 183A and 184A; spec FR-036; tasks T065 to T068):* the human
 inputs are six. `Timing` gains `setup_minutes` and `review_by_hand_minutes`, each a number of at
 least 0 or not recorded, both left out of `session.json` while not recorded, so a session written
-before them loads and keeps its bytes; the review-session contract names them in `properties`
+before them loads and keeps its bytes, but for a net derived from the four earlier inputs alone,
+which now reads unknown and is saved as null; the review-session contract names them in `properties`
 only. What each counts is 184A's: setup is this design's own setup only - preparing the package,
 opening the assembly, attaching drawings, starting the review and any rerun - and a sitting's
 software update is reported apart, as a pilot cost; corrections count inside verification or

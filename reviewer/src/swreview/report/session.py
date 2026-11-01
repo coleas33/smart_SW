@@ -555,7 +555,8 @@ class Timing(ReviewModel):
     @model_serializer(mode="wrap")
     def _omit_unrecorded_inputs(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         """Leave setup and the review by hand out while they are not recorded, so a session
-        written before them keeps its bytes, and so do `session.ended` and its readers."""
+        written before them keeps its bytes, and so do `session.ended` and its readers, but for a
+        net derived from the four earlier inputs alone, which 183A makes unknown, so null."""
         return omit_when_null(handler, self, "setup_minutes", "review_by_hand_minutes")
 
 

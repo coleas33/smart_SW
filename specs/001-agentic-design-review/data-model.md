@@ -251,7 +251,8 @@ Accept or Reject names none.
 
 *Amended 2026-11-01 (owner decisions 183A and 184A; feature 007 FR-036):* two more inputs,
 `setup_minutes` and `review_by_hand_minutes`, each `float | null` and at least 0, left out of
-`session.json` while not recorded, so a session written before them keeps its bytes. The
+`session.json` while not recorded, so a session written before them keeps its bytes, but for a
+net derived from the four earlier inputs alone, saved again as null (below). The
 assisted minutes (`Timing.assisted_minutes`) are setup, supervision, verification, false-alarm
 handling and the review by hand, and `net_saved_minutes` is null until the baseline and both
 new inputs are recorded; a recorded 0 is a value. Setup is this design's own setup, a

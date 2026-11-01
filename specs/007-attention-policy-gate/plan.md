@@ -44,7 +44,8 @@ after the build. `Timing` gains two optional inputs, setup and the review by han
 same writer, both commands and the route; the assisted minutes are the five together, one
 property that the net and the scorecard both read, and the net is unknown until both are
 recorded. The two fields sit in `Timing`, inside `ReviewSession` (here and in Constraints below),
-and are left out of `session.json` while unrecorded, so every earlier session keeps its bytes;
+and are left out of `session.json` while unrecorded, so every earlier session keeps its bytes but
+for a net derived from the four earlier inputs alone, which now reads unknown and is saved as null;
 `Finding` is still untouched by this feature. `Timing.baseline_minutes`' `ge=0` is no longer the
 one model change, and Storage's "four timing inputs" are six.
 
@@ -128,8 +129,11 @@ the table).*
 
 *Re-checked 2026-11-01 for owner decisions 183A and 184A (FR-036):* I and VI hold, and more
 strictly. VI: the net counts all of the engineer's effort, so net time saved is measured per
-design without leaving setup or the review by hand out. I: an input not recorded stays unknown,
-and the net with it; nothing reads an unrecorded input as 0.
+design without leaving setup or the review by hand out. I: setup and the review by hand stay
+unknown until recorded, and the net with them; neither is read as 0. Supervision, verification
+and false-alarm handling start at 0 when a review starts, as before 183A, so once the baseline
+and both new inputs are recorded the net is a number whether or not those three were
+(`docs/review-backlog.md`, cycle 1).
 
 ## Project Structure
 

@@ -508,7 +508,8 @@ def test_a_session_written_before_the_new_inputs_loads_and_keeps_its_bytes(
 ) -> None:
     """A committed session holds the six timing keys written before 183A: it loads with setup
     and the review by hand not recorded, and saving it again writes its own bytes, since an
-    input not recorded is left out of `session.json`."""
+    input not recorded is left out of `session.json`. Its baseline is not recorded, so its net
+    was null already; a session with a recorded net is the next test's."""
     raw = REVIEW_FIXTURE.read_text(encoding="utf-8")
     assert not any(name in raw for name in NEW_INPUTS)
     session = load_session(REVIEW_FIXTURE)
@@ -518,6 +519,39 @@ def test_a_session_written_before_the_new_inputs_loads_and_keeps_its_bytes(
 
     assert (session.timing.setup_minutes, session.timing.review_by_hand_minutes) == (None, None)
     assert target.read_text(encoding="utf-8") == raw
+
+
+def test_an_older_sessions_recorded_net_reads_unknown_and_is_saved_as_null(
+    tmp_path: Path,
+) -> None:
+    """A session written before 183A with a recorded baseline holds a net derived from the
+    four earlier inputs alone. It loads with that net unknown, since setup and the review by
+    hand are not recorded, and saving it again writes null for the net and changes nothing
+    else: every input keeps its value and its bytes (owner decision 183A; FR-036). The net is
+    derived, never supplied, so the file does not keep a figure the rule no longer gives."""
+    data = json.loads(REVIEW_FIXTURE.read_text(encoding="utf-8"))
+    recorded = {
+        "baseline_minutes": 90.0,
+        "assisted_supervision_minutes": 10.0,
+        "assisted_verification_minutes": 8.0,
+        "false_alarm_handling_minutes": 2.0,
+    }
+    data["timing"].update(recorded, net_saved_minutes=70.0)
+    older = json.dumps(data, indent=2) + "\n"
+    source = tmp_path / "older" / "session.json"
+    source.parent.mkdir()
+    source.write_text(older, encoding="utf-8")
+    target = tmp_path / "session.json"
+
+    session = load_session(source)
+    save_session(session, target)
+
+    assert session.timing.net_saved_minutes is None
+    assert {name: getattr(session.timing, name) for name in recorded} == recorded
+    assert older.count('"net_saved_minutes": 70.0') == 1
+    assert target.read_text(encoding="utf-8") == older.replace(
+        '"net_saved_minutes": 70.0', '"net_saved_minutes": null'
+    )
 
 
 def test_the_contract_names_exactly_the_models_timing_fields() -> None:

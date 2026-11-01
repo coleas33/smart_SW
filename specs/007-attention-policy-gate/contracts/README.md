@@ -16,7 +16,8 @@ The review-session contract gains one optional lever name and no other change; t
 untouched. *Amended 2026-11-01 (owner decisions 183A and 184A; FR-036):* it gains two more,
 `Timing.setup_minutes` and `Timing.review_by_hand_minutes`, in `properties` only and left out
 of `session.json` while not recorded, so every earlier session still validates and keeps its
-bytes (`timing.md`).
+bytes, but for a net derived from the four earlier inputs alone, saved again as null
+(`timing.md`).
 
 ## What this feature does *not* move
 

@@ -520,7 +520,8 @@ from 001 SC-001 and this feature's contract. The options, as asked in cycle 1's 
 SC-001, User Story 1's scenario 1 and the Timing edge cases, and scenario 7; `contracts/timing.md`
 sections 1 to 3; the plan's Summary, its touch points and point 1. In the code: two optional
 fields on `Timing`, `setup_minutes` and `review_by_hand_minutes`, left out of `session.json`
-while not recorded so every earlier session keeps its bytes; one `Timing.assisted_minutes` that
+while not recorded so every earlier session keeps its bytes, but for a net derived from the four
+earlier inputs alone, which now reads unknown and is saved as null; one `Timing.assisted_minutes` that
 the net and the scorecard both read, so the two cannot disagree; `TIMING_INPUTS` grows to six,
 so the route takes both with no logic of its own; `--setup` and `--by-hand` on `swreview timing`
 and `swreview benchmark time`, declared once; the report's Timing section prints both always,
@@ -594,3 +595,30 @@ touched or that pin its files green on Python 3.12 and 3.11 with the tokenizer r
 passed and 1 skipped on each; `ruff check` clean; the C# build with zero warnings, and its
 10,274 extractor and 4,288 add-in tests passed; the link check clean; every changed file LF in
 the index. The whole non-live suites were not run in that lane.
+
+**Review** (Tier 1, decision 180A; 2026-11-01): one Opus and one Codex review of the branch, no
+must-fix.
+
+- Codex (medium) and Opus (should-fix) found the same gap: "every earlier session keeps its
+  bytes" held only for a session with no baseline. A session timed before 183A holds a net
+  derived from the four earlier inputs alone; it now loads with that net unknown and, saved
+  again for any reason, writes null for it. That is 183A's rule, and every reader of the net
+  reads the model's, so the code stays. Codex's alternative, keeping the old figure in the file
+  until the timing is edited, would keep the overstated net 183A exists to stop and set the file
+  against the model. Fixed in the claims instead - FR-036 and the edge-case note, the plan, this
+  record, `contracts/timing.md` and `contracts/README.md`, 001's data model, contracts README and
+  schema descriptions, the serializer's docstring, Phase 9's checkpoint and 183A's register row -
+  and by `test_session.py::test_an_older_sessions_recorded_net_reads_unknown_and_is_saved_as_null`:
+  a session with a baseline of 90 and a net of 70 reads its net unknown, keeps every input, and
+  is saved again with the net alone changed. It passed on arrival, the behaviour being T066's,
+  and fails with the derivation changed to keep an older net. `test_session_fields_015.py`'s
+  moved pin is the same case, and its test is renamed to say so.
+- Opus, should-fix: the plan's re-check said nothing reads an unrecorded input as 0, which is
+  untrue of supervision, verification and false-alarm handling: they start at 0 when a review
+  starts, as before 183A, so once the baseline and both new inputs are recorded the net is a
+  number whether or not those three were. The re-check now says so; whether the net should wait
+  for all five is left to the owner in [`docs/review-backlog.md`](../../docs/review-backlog.md).
+- Opus, should-fix, left in the backlog: `swreview timing` and `benchmark time` print `None` for
+  an input or a net not recorded, where the report prints `unknown` (older for the baseline and
+  the net); and `SCORING_RULES_VERSION` stays 4 although the assisted minutes and the net changed
+  meaning (*Not changed*, above).

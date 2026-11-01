@@ -7,7 +7,8 @@ owner decisions 183A and 184A, its FR-036):* `review-session.schema.json` gains 
 `triage` on `Disposition`, an enum of the four triage outcomes (`findings.TRIAGES`), and
 `setup_minutes` and `review_by_hand_minutes` on `Timing`, each a number of at least 0 or null;
 all three in `properties` only and left out while absent, so older sessions still validate and
-keep their bytes. [data-model.md](../data-model.md) holds the rules: the triage beside the
+keep their bytes, but for a net derived from the four earlier inputs alone, saved again as null.
+[data-model.md](../data-model.md) holds the rules: the triage beside the
 decision and its one late triage (`Disposition`, section 5), and the net that stays unknown
 until both new inputs are recorded (`Timing`).
 

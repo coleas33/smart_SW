@@ -209,7 +209,7 @@ description: "Task list for the attention policy and the procedural gate"
 
 **Order**: T064 first; then T065 before T066 and T067 before T068. T066 lands first, since every surface records through it and the seat plan's pasted line must name the options the command takes in the same commit. T069 last.
 
-**Checkpoint**: Setup and the review by hand are recorded on every path the four inputs are - the writer, both commands and the route - and printed in the report, `unknown` when not recorded; the assisted minutes are the five together, in the net and the scorecard alike; the net is unknown until both are recorded, and a recorded 0 is a value; every earlier session loads and keeps its bytes; a re-run carries all six; and the seat plan asks for both, in 184A's words, before M0-a.
+**Checkpoint**: Setup and the review by hand are recorded on every path the four inputs are - the writer, both commands and the route - and printed in the report, `unknown` when not recorded; the assisted minutes are the five together, in the net and the scorecard alike; the net is unknown until both are recorded, and a recorded 0 is a value; every earlier session loads and keeps its bytes, but for a net derived from the four earlier inputs alone, which now reads unknown and is saved as null; a re-run carries all six; and the seat plan asks for both, in 184A's words, before M0-a.
 
 ---
 
