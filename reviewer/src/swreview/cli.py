@@ -168,7 +168,7 @@ from swreview.exceptions import (
     ReviewException,
     fingerprint_kind_for,
 )
-from swreview.findings import Finding
+from swreview.findings import TRIAGES, Finding
 from swreview.ingest.package_builder import build_package
 from swreview.ir.loader import AnswerKeyAccessError, load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
@@ -332,6 +332,11 @@ class Decision(StrEnum):
     accepted = "accepted"
     rejected = "rejected"
     deferred = "deferred"
+
+
+TriageChoice = StrEnum("TriageChoice", {token: token for token in TRIAGES})  # type: ignore[misc]
+"""`--triage`'s four choices, built from `findings.TRIAGES` so the option can name no fifth
+(owner decision 185A): Typer refuses any other value as a usage error."""
 
 
 # --- the option types every command shares ---------------------------------------
@@ -966,25 +971,49 @@ def disposition(
     by: Annotated[
         str | None, typer.Option("--by", help="Who decided; defaults to the current user.")
     ] = None,
+    triage: Annotated[
+        TriageChoice | None,
+        typer.Option(
+            "--triage",
+            help="The finding's triage beside the decision: new and real, real but already "
+            "known, wrong, or true but not worth flagging. Optional.",
+        ),
+    ] = None,
     json_output: JsonFlag = False,
 ) -> None:
-    """Record an engineer's decision on a finding and re-render the report."""
+    """Record an engineer's decision on a finding and re-render the report.
+
+    A decision recorded without `--triage` may take one once, sent again with the same decision
+    (owner decision 185A); the payload and the line name the disposition as recorded, which
+    then keeps the first note, `by` and time.
+    """
     decided_by = by if by else _default_user()
     with _errors_as_exit_1():
-        apply_disposition(run_dir, finding_id, decision.value, note, decided_by)
+        session = apply_disposition(
+            run_dir,
+            finding_id,
+            decision.value,
+            note,
+            decided_by,
+            triage=triage.value if triage is not None else None,
+        )
+    recorded = find_finding(session, finding_id).disposition
+    assert recorded is not None  # apply_disposition has just set it
 
     run_dir = Path(run_dir).resolve()
     payload = {
         "run_dir": str(run_dir),
         "finding_id": finding_id,
-        "decision": decision.value,
-        "by": decided_by,
-        "note": note,
+        "decision": recorded.decision,
+        "by": recorded.by,
+        "note": recorded.note,
+        "triage": recorded.triage,
         "session_file": str(run_dir / SESSION_FILE_NAME),
         "report_file": str(run_dir / REPORT_FILE_NAME),
     }
+    triaged = f" ({recorded.triage})" if recorded.triage is not None else ""
     lines = [
-        f"{finding_id}: {decision.value} by {decided_by}",
+        f"{finding_id}: {recorded.decision}{triaged} by {recorded.by}",
         f"report: {payload['report_file']}",
     ]
     _emit(payload, lines, json_output)

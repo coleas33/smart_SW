@@ -17,6 +17,9 @@ namespace SwReview.AddIn.Tests;
 /// Feature 013 adds the `source` group (T103): the words for who wrote a record, which the page prints on a
 /// finding's line, a question's pager line, an evidence record's head, a goal's recorded sentence
 /// and a coverage row whenever the body states its source (contracts/sources.md section 2).
+///
+/// Owner decision 185A (002 T311) adds the `triage` group: the words of a finding's four triage outcomes,
+/// the words file's own.
 /// </summary>
 internal static class LabelsSample
 {
@@ -98,6 +101,16 @@ internal static class LabelsSample
                 { "zero_volume", "touching" },
                 { "possible_only", "possible only" },
                 { "thread_model", "thread model" },
+            }
+        },
+        {
+            // Owner decision 185A (002 FR-031): a finding's four triage outcomes, in words.
+            "triage", new Dictionary<string, string>
+            {
+                { "new_and_real", "new and real" },
+                { "already_known", "real but already known" },
+                { "wrong", "wrong" },
+                { "not_worth_flagging", "true but not worth flagging" },
             }
         },
         {

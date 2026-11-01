@@ -34,6 +34,19 @@ only when its body carries `detail_source` or `NotClosed.source`, which are sent
 `report.md` uses the same two words: "Source: AI guidance" on a model finding, a Source column in the
 evidence requests table, and "(AI guidance)" after a close-out sentence the model wrote.
 
+*Amended 2026-11-01 (feature 002, owner decision 185A; its FR-031):* the block gains `triage`, the
+words of a finding's four triage outcomes, after `contact_kind` and before `source`, so `source`
+still comes just before `errors`, which stays last: `{new_and_real: "new and real", already_known:
+"real but already known", wrong: "wrong", not_worth_flagging: "true but not worth flagging"}`, keyed
+by the tokens of `findings.TRIAGES` in their order, and `errors` gains `InvalidTriage`'s sentence. The page prints `labelOf(labels, "triage", token, token)`, the raw
+token with no labels; `report.md` prints the same words under a finding's decision and in its "By
+triage" count.
+
+| Surface | Word from |
+|---|---|
+| the four triage buttons beside Accept, Reject and Defer, and the card's disposition sentence | `triage` |
+| `report.md`'s triage line under a decision, and its "By triage" line | `triage` |
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and

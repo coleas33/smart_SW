@@ -29,6 +29,12 @@
       "possible_only": "possible only",
       "thread_model": "thread model"
     },
+    "triage": {
+      "new_and_real": "new and real",
+      "already_known": "real but already known",
+      "wrong": "wrong",
+      "not_worth_flagging": "true but not worth flagging"
+    },
     "source": {
       "code": "Checked by code",
       "model": "AI guidance"
@@ -64,6 +70,7 @@
       "InvalidRunDir": "The backend refused the run folder's path: it writes only into a local folder inside the run root. Check the run root in Settings.",
       "InvalidSettings": "Check the provider, the model and the effort, then save again.",
       "InvalidTiming": "Enter the minutes as numbers, then save again.",
+      "InvalidTriage": "Pick one of the four triage outcomes, or none, then press the decision again.",
       "NoDocument": "Open the part or assembly you want reviewed, then press Review.",
       "NotAPart": "Remodel works on one part. Open a part, then try again.",
       "NotAttached": "The add-in is not attached to SOLIDWORKS yet. Wait a moment, then try again.",
