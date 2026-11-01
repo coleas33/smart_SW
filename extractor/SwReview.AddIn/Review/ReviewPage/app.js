@@ -1067,16 +1067,18 @@
    *
    * Both writers go through here - the `disposition` event from the stream and the reply to the
    * engineer's own press - so a decided finding looks the same whichever recorded it, and the
-   * "decided" class agrees with the one `render.findingCard` puts on a card it builds fresh.
+   * "decided" class agrees with the one `render.findingCard` puts on a card it builds fresh. The
+   * triage row shows the recorded triage pressed, in place of any pick (owner decision 185A).
    */
   function showDisposition(card, disposition) {
     var status = card ? card.querySelector('.card-status') : null;
     if (!status) {
       return;
     }
-    var text = render.dispositionText(disposition);
+    var text = render.dispositionText(disposition, state.labels);
     status.className = render.dispositionClass(text);
     status.textContent = text;
+    render.pressTriage(card, disposition ? disposition.triage : null);
   }
 
   /**
@@ -1895,7 +1897,8 @@
     // Every card of the review, wherever it stands: in the holding list or moved into its row.
     var controls = ui.results.querySelectorAll(
       '.card.finding [data-action="accept"], .card.finding [data-action="reject"], '
-        + '.card.finding [data-action="defer"], .card.finding .card-tools input.note');
+        + '.card.finding [data-action="defer"], .card.finding [data-action="triage"], '
+        + '.card.finding .card-tools input.note');
     for (var index = 0; index < controls.length; index++) {
       controls[index].disabled = locked;
     }
@@ -2409,6 +2412,10 @@
       case 'defer':
         decide(card, 'deferred');
         return;
+      case 'triage':
+        // A pick, sent with the decision pressed next; a second press lets it go (owner decision 185A).
+        render.pressTriage(card, target.getAttribute('aria-pressed') === 'true' ? null : target.getAttribute('data-triage'));
+        return;
       case 'retry':
         if (isDrawing(state.documentInfo)) {
           // Nothing is sent: the host would refuse a drawing. Say why on the card rather than
@@ -2539,6 +2546,13 @@
     }
 
     var note = card.querySelector('.note');
+    var body = { decision: decision, note: note ? note.value : '' };
+    // The picked triage travels with the decision, and no key when none is picked: the backend
+    // records it, keeps a Defer's, or refuses it, and the reply says which (owner decision 185A).
+    var picked = card.querySelector('[data-action="triage"][aria-pressed="true"]');
+    if (picked) {
+      body.triage = picked.getAttribute('data-triage');
+    }
     cardStatus(card, 'Recording ' + decision + '...', false);
 
     // `by` is left to the backend, which attributes the disposition to the session's engineer:
@@ -2546,7 +2560,7 @@
     call(
       sessionPath('/findings/' + encodeURIComponent(findingId) + '/disposition'),
       'POST',
-      { decision: decision, note: note ? note.value : '' }
+      body
     ).then(function (finding) {
       showDisposition(card, finding && finding.disposition);
     }).catch(function (error) {

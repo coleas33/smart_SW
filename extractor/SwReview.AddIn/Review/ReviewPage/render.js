@@ -101,6 +101,13 @@
   /** The unit a contact's overlap volume is recorded in (feature 010's `volume_mm3`), as an escape. */
   var CUBIC_MILLIMETRES = 'mm\u00b3';
 
+  /**
+   * A finding's four triage outcomes (owner decision 185A; 002 FR-031), in the record's order
+   * (`findings.TRIAGES`), held here so the row renders with no labels (FR-030); ReviewPageTriageTests
+   * pins it to review-session.schema.json's `Disposition.triage`.
+   */
+  var TRIAGES = ['new_and_real', 'already_known', 'wrong', 'not_worth_flagging'];
+
   // ---- formatting ---------------------------------------------------------------------
 
   function location(reference) {
@@ -332,7 +339,7 @@
    * and how hard, and which check said so, and the title under it - and nothing else, so a
    * review reads as a list of headlines (U10, docs/history/pane-findings-2026-09-20-review-gui.md
    * section 3). Everything else - the observed evidence first, then every field feature 001
-   * defines, Show in SOLIDWORKS, and the three dispositions - is inside the fold.
+   * defines, the triage, Show in SOLIDWORKS, and the three dispositions - is inside the fold.
    *
    * Nothing the card used to show has gone; what moved, moved inward. `observed` was the one
    * fact printed before the fold until U10, and its first sentence is the title itself, so a
@@ -365,7 +372,7 @@
     actions.appendChild(button('Details', 'expand', 'action expand'));
     card.appendChild(actions);
 
-    card.appendChild(details(body));
+    card.appendChild(details(body, labels));
     return card;
   }
 
@@ -401,6 +408,34 @@
   }
 
   /**
+   * The triage beside the decision (owner decision 185A; 002 FR-031): one choice of four, optional and
+   * independent of the decision, so a row of its own before the tools rather than more segments of
+   * the decisions' `.seg`, and one that wraps at a docked pane's 300 px. A press only picks (`app.js`);
+   * the decision pressed next carries it. The words are the backend's (`labels.triage`), the token
+   * with none.
+   */
+  function triageRow(disposition, labels) {
+    var row = el('div', 'row triage-options');
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', 'Triage');
+    for (var index = 0; index < TRIAGES.length; index++) {
+      var option = button(labelOf(labels, 'triage', TRIAGES[index], TRIAGES[index]), 'triage', 'action triage');
+      option.setAttribute('data-triage', TRIAGES[index]);
+      row.appendChild(option);
+    }
+    pressTriage(row, disposition ? disposition.triage : null);
+    return row;
+  }
+
+  /** Presses the triage button whose token is `token` and lets the others go; none for none. */
+  function pressTriage(root, token) {
+    var options = root.querySelectorAll('[data-action="triage"]');
+    for (var index = 0; index < options.length; index++) {
+      options[index].setAttribute('aria-pressed', options[index].getAttribute('data-triage') === token ? 'true' : 'false');
+    }
+  }
+
+  /**
    * The disposition sentence, and the class that says there is one. `app.js` rewrites both when
    * a decision is recorded, so the two agree about what a settled finding looks like.
    */
@@ -408,11 +443,14 @@
     return text ? 'card-status decided' : 'card-status';
   }
 
-  function dispositionText(disposition) {
+  function dispositionText(disposition, labels) {
     if (!disposition || !disposition.decision) {
       return '';
     }
     var text = 'Disposition: ' + disposition.decision;
+    if (disposition.triage) {
+      text += ' (' + labelOf(labels, 'triage', disposition.triage, disposition.triage) + ')';
+    }
     if (disposition.by) {
       text += ' by ' + disposition.by;
     }
@@ -427,7 +465,7 @@
 
   /**
    * The expandable half of a finding card: what was observed, every field feature 001 defines
-   * (FR-003), then the two controls.
+   * (FR-003), then the triage and the two controls.
    *
    * `observed` is the first row, because it is the evidence the verdict rests on and the first
    * thing an engineer who opened the fold is looking for. (`app.js` puts the finding's U5
@@ -439,7 +477,7 @@
    * session is a different claim from one it computed, and an engineer reading a finding is
    * owed that in the same place as its provenance.
    */
-  function details(body) {
+  function details(body, labels) {
     var panel = el('div', 'details');
     panel.hidden = true;
 
@@ -465,10 +503,11 @@
         ['Carried over from', body.carried_over_from],
         ['Carried over at', body.carried_over_at]
       ]),
+      triageRow(body.disposition, labels),
       decisions(body)
     ]);
 
-    var text = dispositionText(body.disposition);
+    var text = dispositionText(body.disposition, labels);
     panel.appendChild(el('p', dispositionClass(text), text));
     return panel;
   }
@@ -1262,6 +1301,7 @@
     findingCard: findingCard,
     dispositionText: dispositionText,
     dispositionClass: dispositionClass,
+    pressTriage: pressTriage,
     evidenceCard: evidenceCard,
     questionsPanel: questionsPanel,
     errorCard: errorCard,

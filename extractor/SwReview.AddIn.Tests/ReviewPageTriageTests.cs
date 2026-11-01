@@ -13,7 +13,7 @@ namespace SwReview.AddIn.Tests;
 /// outcomes beside Accept, Reject and Defer, optional and independent of the decision.
 ///
 /// The fold holds a row of four toggle buttons of its own, before the tools row and outside the `.seg`
-/// of the three decisions, which would clip four words at a docked pane's 300 px. A press only picks;
+/// of the three decisions, and the row wraps at a docked pane's 300 px. A press only picks;
 /// the decision pressed next carries the pick in its body, and no `triage` key when none is picked.
 /// What the backend recorded - the reply to a decision, a `disposition` event, a finding's own body or
 /// a restore - is what the row shows pressed and what the card's sentence names, in the backend's
@@ -471,8 +471,9 @@ return JSON.stringify({
 });";
 
     /// <summary>
-    /// Opens one card's fold and measures each triage button brought into view: inside the window and
-    /// every ancestor that clips, on both axes, with its words inside it; and no sideways page scroll.
+    /// Opens one card's fold and measures each triage button brought into view: no box scrolled
+    /// sideways to show it, inside the window and every ancestor that clips, on both axes, with its
+    /// words inside it; and no sideways page scroll.
     /// </summary>
     private static string ReadWhole(string findingId) => @"
 var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
@@ -483,6 +484,8 @@ var whole = function (node) {
   if (rect.width === 0 || rect.height === 0) { return false; }
   if (node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1) { return false; }
   for (var p = node.parentElement; p; p = p.parentElement) {
+    // The pane scrolls up and down only: a box scrolled sideways to show the button cuts it off at rest.
+    if (p.scrollLeft !== 0) { return false; }
     var style = getComputedStyle(p);
     if (style.overflowX !== 'visible' || style.overflowY !== 'visible') {
       var box = p.getBoundingClientRect();
