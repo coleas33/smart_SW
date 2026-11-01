@@ -6201,3 +6201,19 @@ the decision register now records 160A as done.
   T315, its guard green before and after; and T316's seven facts before T317, each for want of
   a triage button, while the four extended copies stayed green (84 cases), which is why
   `ARestoredReviewLocksItsTriageButtons` is the lock's own red.
+- **Gates** (T318, with 007 T069; 2026-11-01), on `dbbd2a3`'s tree, and the README's pin again
+  after the recount:
+  - Python 3.12.3 and 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer
+    required, over every test module the cycle touched and every module that pins its files (63
+    modules): 3,196 passed and 1 skipped on each, the skip a symlink case this machine cannot
+    make. A first 3.11 run, with a `--basetemp` under a long temporary folder named by a UUID,
+    failed three cases that print or normalize the temporary path - two whose error line, bounded
+    by `cli._cut`, was cut before the words they look for, and one that masked the UUID - and
+    passed whole with pytest's own temporary folder; no product file was involved.
+  - `ruff check` clean.
+  - C#: the Release build with zero warnings (`--no-incremental`); 10,274 extractor and 4,288
+    add-in tests passed.
+  - The link check over the cycle's changed Markdown: 429 relative links, anchors included, none
+    broken. Every changed file LF in the index.
+  - The whole non-live suites were not run in this lane: they run before the pull request and in
+    its CI. No SOLIDWORKS process, seat task, or paid or live test ran.

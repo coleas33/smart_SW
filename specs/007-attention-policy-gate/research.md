@@ -587,3 +587,10 @@ each for want of the two fields, keywords, options or body keys, `test_scorecard
 the renamed signature pin, which pins the writers' agreement and passed as it stood. T067's two
 cases failed before T068: the report printed neither line, and `carry_from` named the four
 earlier inputs, so setup and the review by hand came back `None`.
+
+**Gates** (T069, 2026-11-01): run once for cycle 1 with 002 T318 and recorded in full in 002
+[research.md](../002-task-pane-assistant/research.md), 185A: the 63 test modules the cycle
+touched or that pin its files green on Python 3.12 and 3.11 with the tokenizer required, 3,196
+passed and 1 skipped on each; `ruff check` clean; the C# build with zero warnings, and its
+10,274 extractor and 4,288 add-in tests passed; the link check clean; every changed file LF in
+the index. The whole non-live suites were not run in that lane.
