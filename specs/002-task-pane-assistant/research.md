@@ -6416,3 +6416,73 @@ the decision register now records 160A as done.
     nothing in Results, which are the snapshot, as a replayed `disposition` changes nothing.
 - **Tests**: T326 and T328 in [tasks.md](tasks.md), Phase 25, each written first; T327 and T329
   make them green, and T330 closes the records.
+- **Built** (2026-11-01, T327 and T329):
+  - The fold (T327): `_reconcile_reruns` compares each re-run with the finding as decided - the
+    session's findings when the answer went in - and folds the earlier finding's whole disposition
+    with it when the status and the severity are both its own, and none when either changed. It
+    returns the folds, as before, and the id and disposition of each decision the folds cleared,
+    read from the final state, so of two re-runs of one finding the last alone decides and a
+    decision is named once. `answer_evidence_batch` announces the folds as before, then one
+    `disposition.cleared` per decision cleared, after the last `finding` event of its id.
+    `_cleared_body` builds it: the finding, the disposition cleared, and the line, its decision
+    named by `DECISION_NOUNS` and its triage by `labels.triage`.
+  - The words (T327): the words file's `rerun` block before `labels`, `cleared` and
+    `cleared_with_triage`, which `summary.Words.rerun` fills (`RerunWords.of`). `labels` is
+    unchanged, so `LabelsSample.cs` is too, and the pane fixtures, which embed the labels block,
+    came out of their three generators byte-identical: no fixture and no pin moved.
+  - The contract (T327): `disposition.cleared`, `{finding_id, disposition, reason}`, in
+    `chat-events.schema.json`, its `disposition` the review-session `Disposition`, and in
+    `EventType`.
+  - The page (T329): `clearedDisposition` writes the event's line on the card's status line, as
+    sent, in the class `cleared`, which `app.css` sets in the `--judge` hue; a replayed one is read
+    and changes nothing in Results. No host, proxy or page message changes.
+  - The records: FR-031's amendment; dated notes in [contracts/README.md](contracts/README.md),
+    [data-model.md](data-model.md) sections 2 and 3, 185A's "Not changed" above, 009
+    [data-model.md](../009-engineer-workspace/data-model.md) section 1 and
+    [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md) section 1, 008
+    [contracts/answer-batch.md](../008-checks-first-review/contracts/answer-batch.md), and 010
+    [research.md](../010-mechanical-checks/research.md) R2.26, with R5's open row on rule 3
+    closed; 191A registered, and 189A and 191A marked done, in
+    [`docs/decisions.md`](../../docs/decisions.md).
+- **Tests changed on purpose**, none loosened:
+  - `test_events_schema.py::test_a_full_run_emits_every_event_type_the_runner_and_tools_can_emit`:
+    a third run, which clears a decision, the one producer of `disposition.cleared`, its events
+    validated as the waiting run's are.
+  - `test_gate_same_session.py::test_a_gated_run_emits_no_event_type_outside_the_seventeen`,
+    now `..._outside_the_eighteen`: the contract holds eighteen types, the new one the runner's,
+    not the gate's; renamed with a dated line, as 011 T092, 013 T038 and 015 T064 each renamed it.
+  - `test_review_words.py`: the placeholders' table and the extra-key paths gain the `rerun`
+    block; `test_provider_protocol.py`: the table of one valid body per type and the ref-following
+    case gain `disposition.cleared`.
+  - `test_runner_provider.py`'s module docstring, resume rule (c), names the decision kept or
+    cleared.
+  - `ReviewPageTriageTests`: H-g-012's 300 px measure of a refused press is shared with the
+    cleared line's through `ReadPartsWhole`, its script and assertions unchanged; `Finding` takes
+    a status and a severity, its defaults the ones every fact used.
+  - `test_workstation_test_plan.py::test_the_specs_readme_counts_a_task_173a_closed_as_done`, its
+    002 literal following 002's recount (T325, and T330).
+- **Tests first**: T326's sixteen cases failed before T327 - the kept cases for want of the
+  disposition the fold dropped, the cleared cases on the stream for want of a
+  `disposition.cleared`, the status-only, severity-only and changed-last cases for want of the
+  pair `_reconcile_reruns` returns, the three protocol cases for want of the event type and the
+  three words cases for want of the block - while the two undecided-finding cases and the extended
+  producer test, guards, passed before and after. The agreement of `session.json` and `report.md`
+  with the fold is tested through the chat server's routes, because `report.md` is rendered by the
+  server after every turn (`_render_report`) and not by `finalize`: read straight after the
+  runner's answer, it would still be the one the decision wrote before the answer. T328's four
+  facts failed before T329, each for want of the event read (an empty status line, a missing line
+  at 300 px, and "This page could not read an event" in a replayed Transcript), while the kept fact,
+  a guard, and the class's twelve other facts passed.
+- **Gates** (T330; 2026-11-01), on the cycle's final tree:
+  - Python 3.12.3 (the worktree's own environment, `uv sync --python 3.12 --all-extras`) and
+    3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required, over the 150
+    test modules that pin the runner, the events, the words, the session, the report, the pane
+    fixtures or the specs' counts: 7,431 passed and 2 skipped on each.
+  - `ruff check src tests` clean.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then
+    `dotnet test extractor\SwReview.sln -c Release --no-build`: 10,274 extractor and 4,298
+    add-in tests passed, on T329's tree; T330 changes no C# file.
+  - The link check over the cycle's changed Markdown: 419 relative links, anchors included, none
+    broken. Every changed file LF in the index.
+  - Not run in this lane: the whole non-live suites, which run before the pull request and in its
+    CI. No SOLIDWORKS process, seat task, or paid or live test ran.
