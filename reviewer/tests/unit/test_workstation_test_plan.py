@@ -3308,6 +3308,9 @@ def test_start_stays_off_through_m0s_two_sittings(plan: str) -> None:
 TIMING_NOTE = "`notes\\timing.txt`"
 """The private note in the handover folder where step 4.1 writes a real design's minutes, as the
 documents write its name (decision 186A; 007 T071)."""
+DECISION_192A = "decision 192A (the owner's answer of 2026-11-01, 13A)"
+"""How the documents name the owner's answer of 2026-11-01 (13A): the timed review's start and
+end times go in the private note with the six minutes (007 T072, on Codex's review)."""
 
 
 def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
@@ -3325,10 +3328,22 @@ def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
     never the six minutes; the results sheet's 007 T060 row asks for the net alone; and the
     public-repository rule of `CONTRIBUTING.md`, the full list, names a real design's review
     timing, a design's net minutes saved and their median being the part that may be
-    committed."""
+    committed.
+
+    *Changed 2026-11-01 on review (007 T072; Codex's Tier 2 review):* two more ways in are
+    closed. `swreview timing`'s messages carry figures - a refused input's `input_value=`, a
+    stored baseline's - so a timing failure goes whole into the note and the findings document
+    records only its exit code, its error's name and the field, an exception that step 1.4's
+    rule to quote a failing line, step 6.4's check and the results sheet each name; and of the
+    lines step 4.5 prints only the net saved may be recorded, the stored baseline being checked,
+    not printed. And under decision 192A (the owner's answer of 2026-11-01, 13A) the timed
+    review's start and end times, which are its supervision when the engineer watched
+    throughout, go in the note with the six minutes and leave step 4.1's Record line."""
     flat = re.sub(r"\s+", " ", plan)
-    minutes = re.sub(r"\s+", " ", step(plan, "4.1"))
-    minutes = minutes[minutes.index("007 T060, the minutes") : minutes.index("Record: ")]
+    review = re.sub(r"\s+", " ", step(plan, "4.1"))
+    opening = review[: review.index("- 008 T103")]
+    minutes = review[review.index("007 T060, the minutes") : review.index("Record: ")]
+    record_41 = review[review.index("Record: the facts") : review.index("Do step 4.11")]
     chips = re.sub(r"\s+", " ", step(plan, "4.5"))
     chips = chips[chips.index("**007 T060: record the timing of A's review**") :]
     item_4, record = chips[: chips.index("Record: ")], chips[chips.index("Record: ") :]
@@ -3353,6 +3368,33 @@ def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
     assert (
         "a design's net minutes saved, and their median, may be committed (decision 186A)"
     ) in rule
+    # A timing failure's message: whole into the note, and only its names in the document.
+    assert "as an exception to step 1.4's rule to quote a failing line" in item_4
+    assert (
+        f"copy the whole message or line, with any path replaced by `<run folder>`, into "
+        f"{TIMING_NOTE}"
+    ) in item_4
+    assert "only the exit code, the error's name and the field it names" in item_4
+    assert "(copy its message, with any path replaced by `<run folder>`)" not in flat
+    assert "except a timing failure at step 4.5" in re.sub(r"\s+", " ", step(plan, "1.4"))
+    assert "(a timing failure only its exit code, error's name and field: step 4.5)" in (
+        re.sub(r"\s+", " ", step(plan, "6.4"))
+    )
+    assert "except a timing failure at the plan's step 4.5" in re.sub(r"\s+", " ", results)
+    # What step 4.5 prints: the net may be recorded; the stored baseline is checked, not printed.
+    assert "Of these lines only the net saved may go in the findings document" in item_4
+    assert "`session.json carries a baseline: True`" in item_4
+    assert re.search(r"(?m)\.timing\.baseline_minutes\s*$", step(plan, "4.5")) is None
+    # The timed review's start and end times (decision 192A).
+    assert f"Note the time it started and finished in {TIMING_NOTE}" in opening
+    assert DECISION_192A in opening
+    assert "never the start and end times" in record_41
+    assert "the usage line, and the start and end times" not in flat
+    assert (
+        f"The six numbers, the update's minutes and the review's start and end times go in "
+        f"{TIMING_NOTE} only"
+    ) in minutes
+    assert "the timed review's start and end times" in rule
 
 
 def test_every_check_before_the_findings_document_is_committed_names_the_timing_figures(
@@ -3366,7 +3408,12 @@ def test_every_check_before_the_findings_document_is_committed_names_the_timing_
     its findings document and the owner's reading after the sitting; the runbook's section 8,
     whose seat may push the document on a branch; and 007 T060, whose Done note the development
     machine commits. Section 0.2 says the note travels in the handover folder and is never
-    pushed, as `notes\\paths.txt` does."""
+    pushed, as `notes\\paths.txt` does.
+
+    *Changed 2026-11-01 on review (007 T072; Codex's Tier 2 review):* each place also names the
+    timed review's start and end times, which decision 192A (the owner's answer of 2026-11-01,
+    13A) keeps in the note with the six minutes, since a review watched throughout has them as
+    its supervision."""
     rules = section(plan, "The rules for the whole sitting")
     handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
     runbook = RUNBOOK.read_text(encoding="utf-8")
@@ -3396,5 +3443,66 @@ def test_every_check_before_the_findings_document_is_committed_names_the_timing_
         assert "decision 186A" in flat, name
         assert TIMING_NOTE in flat, name
         assert "net saved" in flat, name
+        assert "start and end times" in flat and DECISION_192A in flat, name
     assert f"every file in `notes\\`, {TIMING_NOTE} among them" in documents
     assert "never pushed" in documents
+
+
+TIMING_FIGURE = re.compile(
+    r"\b(?:six (?:minutes|numbers)|update'?s? minutes|baseline|supervision|setup minutes"
+    r"|start and end times|started and finished)\b"
+)
+"""How the documents name one of a real design's timing figures (decisions 186A and 192A): the
+six minutes, the update's minutes, an input by its name, the timed review's start and end
+times."""
+
+
+def clauses(text: str) -> list[str]:
+    """`text` with its whitespace made single spaces, cut into clauses after each `.`, `;` or
+    `:` that a space follows."""
+    return re.split(r"(?<=[.;:]) ", re.sub(r"\s+", " ", text))
+
+
+def test_no_line_sends_a_real_designs_timing_figure_to_the_findings_document(
+    plan: str, results: str
+) -> None:
+    """Decisions 186A and 192A (007 T072, on Codex's Tier 2 review): a guard over every line, so
+    that no later edit sends one of a real design's timing figures to the findings document
+    again, in words the two pins above do not name. No Record instruction of the plan asks for
+    one before its first `never`; no clause of the plan, the results sheet, the handover or the
+    runbook that names the findings document or Observed names one, unless it sends it to the
+    note or says never; and no clause of steps 4.1 and 4.5 copies or quotes a message or a line
+    without sending it to the note or saying never, since `swreview timing`'s messages carry a
+    refused input's value and a stored baseline's. Decision 192A is the owner's answer of
+    2026-11-01, 13A."""
+    documents = (
+        plan, results, HANDOVER.read_text(encoding="utf-8"), RUNBOOK.read_text(encoding="utf-8")
+    )
+    records = [
+        record.split("never")[0]
+        for record in re.findall(r"\bRecord\b[^.]*", re.sub(r"\s+", " ", plan))
+    ]
+    named = [
+        clause
+        for text in documents
+        for clause in clauses(text)
+        if re.search(r"findings document|\bObserved\b", clause)
+        and TIMING_FIGURE.search(clause)
+        and TIMING_NOTE not in clause
+        and "never" not in clause
+    ]
+    copied = [
+        clause
+        for number in ("4.1", "4.5")
+        for clause in clauses(step(plan, number))
+        if re.search(r"\b(?:copy|quote)\b[^.;]*\b(?:message|line)\b", clause)
+        and TIMING_NOTE not in clause
+        and "never" not in clause
+    ]
+
+    assert [record for record in records if TIMING_FIGURE.search(record)] == []
+    assert named == []
+    assert copied == []
+    assert TIMING_FIGURE.findall(
+        "the six minutes, the update's minutes, the baseline, the start and end times"
+    ) == ["six minutes", "update's minutes", "baseline", "start and end times"]
