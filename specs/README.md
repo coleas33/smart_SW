@@ -53,7 +53,8 @@ task), taken at commit `9da0057` and updated for decision 127A of 2026-10-18; th
 merges (004 research R29.11), and 004's again on 2026-11-01, with T390 to T394 (R29.13), and
 002's and 007's the same day, with cycle 1's tasks (002 T307 to T318, 007 T064 to T069; decisions
 183A to 185A), and 002's again with cycle 2's (T319 to T324; roadmap hole H-g-012) and cycle
-3's (T325 to T330; roadmap hole H-d-008). Until then an
+3's (T325 to T330; roadmap hole H-d-008), and 007's again with cycle 4's (T070 to T073;
+decisions 186A and 192A). Until then an
 unticked task whose description began `SUPERSEDED (127A):` was counted as superseded, not open
 (feature 005's lever 5 and 6 tasks). Since decision 173A a task that later work replaced, or that
 an owner decision deferred, is closed by ticking it with a dated note naming that decision or
