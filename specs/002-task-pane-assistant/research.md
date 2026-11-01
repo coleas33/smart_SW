@@ -6600,3 +6600,101 @@ the decision register now records 160A as done.
     earlier sitting's date goes in the card's note box.
 - **Tests**: T332, T334 and T336 in [tasks.md](tasks.md), Phase 26, each written first; T333, T335
   and T337 make them green, and T338 closes the records.
+- **Built** (2026-11-01, T333, T335 and T337):
+  - The record (T333): `findings.MISS`, `wrong`, beside `TRIAGES`; in `report/dispositions.py`,
+    `TriageOnAPassError`, `takes_triage` and `refuse_a_triage_a_pass_does_not_take`, which
+    `set_disposition` calls as soon as it has found the finding, before 185A's late triage and the
+    state machine are read. `swreview disposition` needed no change: its `HANDLED_ERRORS` catches
+    the subclass, and its one line names it.
+  - The route (T333): `_refuse_a_pass_triage`, called after the triage's own check and before
+    `_require_idle`, reads the finding from the session the run holds and answers `400
+    InvalidTriage`; the route's one `try` answers the record's `TriageOnAPassError` the same way.
+    `InvalidTriage`'s docstring names both refusals.
+  - The re-run's carry (T333): `_carry_decisions` asks `_carries_triage` - the same kind on both
+    sides, and a triage the finding it lands on takes - and otherwise names the triage with
+    `NOT_CARRIED_TRIAGE_PASS` or `NOT_CARRIED_TRIAGE_NOT_A_PASS` and carries the decision with
+    none.
+  - The report (T333): `_by_triage` returns the two lines, or none while no finding records a
+    triage.
+  - The words (T333): `labels.pass_triage`, `{wrong: "wrong: a miss"}`, after `triage`, and
+    `summary.Labels.pass_triage`; `InvalidTriage`'s sentence, "Pick one of the four triage
+    outcomes, or none, then press the decision again. A finding in Checked, no issue takes only
+    wrong: a miss."
+  - The fixtures (T333): the pane fixtures' three generators wrote the four that embed the labels
+    block with the new group and the reworded sentence alone, and the drawing-questions fixture
+    and `review-not-sent-session.json` byte-identical; `review-send-failure-events.json`'s pin
+    moved to the regenerated `review-waiting.json` (CRLF), as H-g-012's did; `LabelsSample.cs`
+    mirrors the group as `Miss`.
+  - The page (T335): `render.js`'s `PASS_TRIAGES`, and `triageRow(body, labels)`, which draws a
+    pass's row with the one token and `labels.pass_triage`'s word, the token with none, and a
+    flagged finding's with the four, as before; the press, the decision and the reply are
+    unchanged. No host, proxy or page message changes, and no rule in the page.
+  - The seat plan and the metrics (T337): step 4.1's triage bullet gives every flagged finding
+    one of the four, says what "already known" is measured against and what a pass takes, and
+    lists the four outcomes one line each; it is the only part of step 4.1 changed, so cycle 4's
+    edits of the step's timing lines meet none of it. `docs/roadmap/metrics.md`'s "False alarms
+    per design" counts flagged findings triaged wrong, and "Missed known defects per design" names
+    the passes judged wrong at the seat as an instrument.
+  - The records: FR-031's amendments, its scenarios 7 and 8 and two edge cases; dated notes in
+    [contracts/chat-api.md](contracts/chat-api.md), 001
+    [data-model.md](../001-agentic-design-review/data-model.md) and
+    [contracts/cli.md](../001-agentic-design-review/contracts/cli.md), 009
+    [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md) section 1, and
+    015 [contracts/recheck.md](../015-review-send-gate/contracts/recheck.md) sections 4 and 5 and
+    [contracts/words.md](../015-review-send-gate/contracts/words.md) section 4; 187A and 188A
+    marked done in [`docs/decisions.md`](../../docs/decisions.md).
+- **Left open**, each for the owner or a later lane, none of them changed here:
+  - **58A's restate.** A waiting review's answer grades its checks again by code
+    (`_reconcile_restated`), and the restated finding keeps the earlier disposition whole, by a
+    `model_copy` that does not pass through the record, whatever its new status. So a restate
+    that turns a flagged finding into a pass keeps its triage, and since 187A `report.md` reads a
+    pass's `wrong` as a miss: a false alarm restated into a pass is counted as one, and another
+    outcome on a pass is counted in neither line. It is the question cycle 3's Tier 1 review left
+    for the owner (58A's restate and 015's carry keep a decision whatever the status and severity
+    now are); 015's carry now stops a triage at the line, and the restate has no word of its own
+    with which to say it did, so it needs the owner's answer first.
+  - **The handover.** `workstation-handover.md`, item 13, still says step 4.1 gives every finding
+    one of the four outcomes. Cycle 4 rewrites that very sentence, so it is left for the rebase
+    onto cycle 4 rather than edited on two branches.
+  - **The card's sentence.** It, and `report.md`'s line under a decision, word a pass's `wrong`
+    as `labels.triage` words it, "wrong", where the button says "wrong: a miss"; 187A asks only for
+    the offer to be worded as a miss.
+- **Tests changed on purpose**, none loosened:
+  - `test_chat_server.py::test_labels_answer_the_words_files_card_vocabulary`, its key set
+    extended with `pass_triage`; and `test_review_words.py::test_every_label_is_a_plain_word_not_a_token`,
+    extended to `labels.pass_triage`; each with a dated note.
+  - `PageRuleScanTests.AllowedComparisons`: one entry, `render.js`'s comparison of the status with
+    `checked_within_scope`, with its reason - the scan's own way to admit a comparison that decides
+    a card state and puts no card before another.
+  - The four pane fixtures that embed the labels block, regenerated, and the send-failure pin;
+    `LabelsSample.cs` mirrors the group.
+  - `test_workstation_test_plan.py::test_the_specs_readme_counts_a_task_173a_closed_as_done`, its
+    002 literal following 002's recount (T331, and T338).
+- **Tests first**: T332's twenty cases failed before T333 - the record's nine refusal cases and
+  its wrong-or-none case for want of the refusal, the report's three for want of the split count,
+  the route case answered 200 where `400 InvalidTriage` was due, the console case exited 0, the
+  carry case carried the triage across the line, and the labels, words and plain-word cases for
+  want of `labels.pass_triage`, `findings.MISS` and the reworded sentence - while the guard on a
+  report with no triage passed before and after, with the five modules' other 585 cases. T334's
+  four facts failed before T335, each for want of the pass's one button (four tokens, four words,
+  four buttons measured), while the class's seventeen other facts passed. T336's two pins failed
+  before T337, for want of the definitions and of 187A's words, while the module's other 281
+  cases passed.
+- **Gates** (T338; 2026-11-01), on the cycle's final tree:
+  - Python 3.12.3 (the worktree's own environment, `uv sync --python 3.12 --all-extras`) and
+    3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required, over the 113
+    test modules that pin the record, the route, the console, the carry, the report, the words,
+    the pane fixtures, the seat plan or the specs' counts: 6,043 passed and 1 skipped on each, on
+    T337's tree; the six modules that read the task lists, the specs' README and the seat plan
+    again after this commit's records, 449 passed on each.
+  - `ruff check src tests` clean.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then
+    `dotnet test extractor\SwReview.sln -c Release --no-build`: 10,274 extractor and 4,302
+    add-in tests passed, on T335's tree; T336 to T338 change no C# file.
+  - The pane fixtures' three generators (T333): the four that embed the labels block moved by the
+    new group and the sentence alone; the others byte-identical.
+  - The link check over the cycle's changed Markdown and the register: 439 relative links,
+    anchors included, none broken. Every changed file LF in the index.
+  - Not run in this lane: the whole non-live suites, which run before the pull request and in its
+    CI, among them `test_tracked_files_carry_no_recorded_number.py`, which reads the owner's
+    denylist outside the repository. No SOLIDWORKS process, seat task, or paid or live test ran.
