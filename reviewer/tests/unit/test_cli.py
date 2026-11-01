@@ -3391,6 +3391,8 @@ def test_score_refuses_answer_keys_beside_a_keyed_set(
 
 
 def test_benchmark_time_records_the_human_minutes(benchmark_run_dir: Path) -> None:
+    """*Changed 2026-11-01 on purpose (owner decision 183A; 007 T065):* setup and the review by
+    hand are recorded as 0, since the net is unknown without them; the net keeps its value."""
     body = payload(
         invoke(
             "benchmark",
@@ -3405,6 +3407,10 @@ def test_benchmark_time_records_the_human_minutes(benchmark_run_dir: Path) -> No
             "5",
             "--false-alarms",
             "2",
+            "--setup",
+            "0",
+            "--by-hand",
+            "0",
             "--json",
         )
     )
@@ -3415,6 +3421,32 @@ def test_benchmark_time_records_the_human_minutes(benchmark_run_dir: Path) -> No
     assert timing["assisted_supervision_minutes"] == 10
     assert timing["net_saved_minutes"] == 73
     assert body["timing"]["net_saved_minutes"] == 73
+
+
+def test_benchmark_time_records_setup_and_the_review_left_by_hand(
+    benchmark_run_dir: Path,
+) -> None:
+    """Owner decision 183A (007 T065, FR-005): the benchmark's command takes the two inputs the
+    run folder's does, through the one writer, and prints the same line after the package id:
+    120 less 57 (User Story 1, scenario 7)."""
+    options = (
+        "--baseline", "120", "--supervision", "6", "--verification", "9",
+        "--false-alarms", "2", "--setup", "10", "--by-hand", "30",
+    )
+
+    body = payload(invoke("benchmark", "time", str(benchmark_run_dir), "cover", *options, "--json"))
+    result = invoke("benchmark", "time", str(benchmark_run_dir), "cover", *options)
+
+    session = json.loads((benchmark_run_dir / "cover" / "session.json").read_text("utf-8"))
+    for timing in (session["timing"], body["timing"]):
+        assert (timing["setup_minutes"], timing["review_by_hand_minutes"]) == (10, 30)
+        assert timing["net_saved_minutes"] == 63
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (
+        "cover: baseline 120.0, supervision 6.0, verification 9.0, false alarms 2.0, "
+        "setup 10.0, by hand 30.0"
+    ) in result.stdout
+    assert "net saved: 63.0" in result.stdout
 
 
 def test_benchmark_time_for_an_unknown_package_exits_1(benchmark_run_dir: Path) -> None:

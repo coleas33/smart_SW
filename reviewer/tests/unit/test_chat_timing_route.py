@@ -50,8 +50,14 @@ FOUR: dict[str, Any] = {
     "supervision": 6,
     "verification": 9,
     "false_alarms": 2,
+    "setup": 0,
+    "by_hand": 0,
 }
-"""Quickstart scenario 1's recording; the derived net is 28.0."""
+"""Quickstart scenario 1's recording; the derived net is 28.0.
+
+*Changed 2026-11-01 on purpose (owner decision 183A; 007 T065):* with setup and the review by
+hand recorded as 0, since the net is unknown without them; every figure read from it, here and
+in `test_waiting_answers.py`, keeps its value."""
 
 
 @pytest.fixture
@@ -153,6 +159,37 @@ def test_an_explicit_null_keeps_the_value_already_recorded(
     timing = post(client, timed_chat, {"baseline": None}).json()
 
     assert timing["baseline_minutes"] == 45.0
+
+
+def test_the_route_records_setup_and_the_review_left_by_hand(
+    client: TestClient, run_dir: Path, timed_chat: str
+) -> None:
+    """Owner decision 183A (007 T065): the body takes `setup` and `by_hand` beside the four, and
+    the live session and its file carry them: 120 less 57 (User Story 1, scenario 7). A field's
+    own name is still refused by name, as every key outside the six is."""
+    body = {
+        "baseline": 120,
+        "supervision": 6,
+        "verification": 9,
+        "false_alarms": 2,
+        "setup": 10,
+        "by_hand": 30,
+    }
+
+    response = post(client, timed_chat, body)
+
+    assert response.status_code == 200, response.text
+    timing = response.json()
+    assert (timing["setup_minutes"], timing["review_by_hand_minutes"]) == (10.0, 30.0)
+    assert timing["net_saved_minutes"] == 63.0
+    saved = load_session(run_dir / "session.json").timing
+    assert (saved.setup_minutes, saved.review_by_hand_minutes) == (10.0, 30.0)
+    assert saved.net_saved_minutes == 63.0
+    for key in ("setup_minutes", "review_by_hand_minutes"):
+        refused = post(client, timed_chat, {key: 5})
+        assert refused.status_code == 400, refused.text
+        assert refused.json()["error_class"] == "InvalidTiming"
+        assert key in refused.json()["message"]
 
 
 def test_timing_is_not_a_review_event(client: TestClient, run_dir: Path, timed_chat: str) -> None:

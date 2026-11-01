@@ -158,6 +158,8 @@ def test_net_saved_minutes_excludes_unattended_runtime() -> None:
         assisted_verification_minutes=8.0,
         false_alarm_handling_minutes=2.0,
         unattended_runtime_minutes=25.0,
+        setup_minutes=0.0,  # recorded since 183A, so the net stays a number (007 T065)
+        review_by_hand_minutes=0.0,
     )
 
     assert timing.net_saved_minutes == pytest.approx(70.0)
@@ -183,6 +185,8 @@ def test_net_saved_minutes_is_recomputed_when_loaded() -> None:
             "assisted_verification_minutes": 5.0,
             "false_alarm_handling_minutes": 0.0,
             "unattended_runtime_minutes": 40.0,
+            "setup_minutes": 0.0,  # recorded since 183A, so the net stays a number (007 T065)
+            "review_by_hand_minutes": 0.0,
             "net_saved_minutes": 999.0,
         }
     )
@@ -214,6 +218,8 @@ def test_a_zero_baseline_is_allowed_and_validates_against_the_contract() -> None
         assisted_verification_minutes=0.0,
         false_alarm_handling_minutes=0.0,
         unattended_runtime_minutes=0.0,
+        setup_minutes=0.0,  # recorded since 183A, so the net stays a number (007 T065)
+        review_by_hand_minutes=0.0,
     )
     assert timing.net_saved_minutes == pytest.approx(0.0)
 
@@ -490,6 +496,80 @@ def test_the_contract_names_exactly_the_models_disposition_fields() -> None:
     assert set(definition["properties"]) == set(Disposition.model_fields)
     assert definition["properties"]["triage"]["enum"] == list(TRIAGES)
     assert "triage" not in definition["required"]
+
+
+# --- owner decision 183A: setup and the review by hand (007 T065, FR-036) -----------------------
+
+NEW_INPUTS = ("setup_minutes", "review_by_hand_minutes")
+
+
+def test_a_session_written_before_the_new_inputs_loads_and_keeps_its_bytes(
+    tmp_path: Path,
+) -> None:
+    """A committed session holds the six timing keys written before 183A: it loads with setup
+    and the review by hand not recorded, and saving it again writes its own bytes, since an
+    input not recorded is left out of `session.json`."""
+    raw = REVIEW_FIXTURE.read_text(encoding="utf-8")
+    assert not any(name in raw for name in NEW_INPUTS)
+    session = load_session(REVIEW_FIXTURE)
+    target = tmp_path / "session.json"
+
+    save_session(session, target)
+
+    assert (session.timing.setup_minutes, session.timing.review_by_hand_minutes) == (None, None)
+    assert target.read_text(encoding="utf-8") == raw
+
+
+def test_the_contract_names_exactly_the_models_timing_fields() -> None:
+    """The contract's `Timing` names the model's fields, the two new inputs among them, each a
+    number of at least 0 and left out of `required`, so a session written before them still
+    validates."""
+    definition = load_contract("review-session.schema.json")["$defs"]["Timing"]
+
+    assert set(NEW_INPUTS) <= set(definition["properties"])
+    assert set(definition["properties"]) == set(Timing.model_fields)
+    assert set(NEW_INPUTS).isdisjoint(definition["required"])
+    for name in NEW_INPUTS:
+        assert definition["properties"][name]["minimum"] == 0, name
+        assert "number" in definition["properties"][name]["type"], name
+
+
+def test_a_session_with_setup_and_by_hand_validates_against_the_contract() -> None:
+    timing = Timing(
+        baseline_minutes=120.0,
+        assisted_supervision_minutes=6.0,
+        assisted_verification_minutes=9.0,
+        false_alarm_handling_minutes=2.0,
+        unattended_runtime_minutes=25.0,
+        setup_minutes=10.0,
+        review_by_hand_minutes=30.0,
+    )
+    payload = build_session(timing=timing).model_dump(mode="json")
+
+    assert [payload["timing"][name] for name in NEW_INPUTS] == [10.0, 30.0]
+    assert payload["timing"]["net_saved_minutes"] == pytest.approx(63.0)
+    errors = sorted(session_validator().iter_errors(payload), key=lambda e: list(e.absolute_path))
+    assert errors == [], [f"{list(e.absolute_path)}: {e.message}" for e in errors]
+
+
+def test_replace_sets_an_input_the_dump_leaves_out() -> None:
+    """`Timing.replace` takes the names from the model's fields: an input not recorded is left
+    out of the dump, and checking the names against the dump would refuse its first recording.
+    The derived net is still not an input."""
+    timing = Timing(
+        baseline_minutes=None,
+        assisted_supervision_minutes=0.0,
+        assisted_verification_minutes=0.0,
+        false_alarm_handling_minutes=0.0,
+        unattended_runtime_minutes=0.0,
+    )
+    assert not set(NEW_INPUTS) & set(timing.model_dump())
+
+    updated = timing.replace(setup_minutes=10.0)
+
+    assert (updated.setup_minutes, updated.review_by_hand_minutes) == (10.0, None)
+    with pytest.raises(ValueError, match="net_saved_minutes"):
+        timing.replace(net_saved_minutes=1.0)
 
 
 # --- the load rule of the one pre-013 model writer (feature 013 T096) ----------------------------

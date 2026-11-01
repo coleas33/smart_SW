@@ -93,7 +93,12 @@ TIMING = Timing(
     assisted_verification_minutes=8.0,
     false_alarm_handling_minutes=2.0,
     unattended_runtime_minutes=25.0,
+    setup_minutes=0.0,
+    review_by_hand_minutes=0.0,
 )
+"""*Changed 2026-11-01 on purpose (owner decision 183A; 007 T065):* setup and the review by hand
+are recorded as 0, since the net is unknown without them, so every figure read from this timing
+keeps its value."""
 
 JOINT = {"fastener": "fst:1", "hole": "hole:1"}
 """`build_package`'s one joint: the screw `fst:1` on the cover `cmp:0002` in the tapped hole
@@ -362,6 +367,32 @@ def test_score_run_computes_timing_fields(tmp_path: Path) -> None:
     assert score.assisted_minutes == pytest.approx(20.0)
     assert score.unattended_runtime_minutes == pytest.approx(25.0)
     assert score.net_saved_minutes == pytest.approx(70.0)
+
+
+def test_the_scorecards_assisted_minutes_are_the_sessions(tmp_path: Path) -> None:
+    """Owner decision 183A (007 T065): a package's assisted minutes are its session's own
+    `Timing.assisted_minutes` - setup, supervision, verification, false-alarm handling and the
+    review by hand together - so the scorecard and the net cannot disagree; and they are unknown,
+    as the net is, while setup or the review by hand is not recorded."""
+    timed = TIMING.replace(setup_minutes=10.0, review_by_hand_minutes=30.0)
+    four = Timing(
+        baseline_minutes=90.0,
+        assisted_supervision_minutes=10.0,
+        assisted_verification_minutes=8.0,
+        false_alarm_handling_minutes=2.0,
+        unattended_runtime_minutes=25.0,
+    )
+
+    scorecard = score_packages(
+        tmp_path,
+        write_package(tmp_path, "pkg-timed", [], timing=timed),
+        write_package(tmp_path, "pkg-four", [], timing=four),
+    )
+
+    timed_score, four_score = scorecard.per_package
+    assert timed_score.assisted_minutes == timed.assisted_minutes == pytest.approx(60.0)
+    assert timed_score.net_saved_minutes == pytest.approx(30.0)
+    assert (four_score.assisted_minutes, four_score.net_saved_minutes) == (None, None)
 
 
 def test_score_run_recall_is_read_from_the_item_tags(tmp_path: Path) -> None:
@@ -1663,6 +1694,8 @@ def test_distribution_matches_per_package_order(tmp_path: Path) -> None:
             assisted_verification_minutes=5.0,
             false_alarm_handling_minutes=0.0,
             unattended_runtime_minutes=1.0,
+            setup_minutes=0.0,  # recorded since 183A, so the net stays a number (007 T065)
+            review_by_hand_minutes=0.0,
         )
         refs.append(write_package(tmp_path, name, [], timing=timing))
         expected_net_saved.append(None if baseline is None else baseline - 10.0)

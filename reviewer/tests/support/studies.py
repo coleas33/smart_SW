@@ -160,13 +160,20 @@ class PackageSpec:
     cannot hold two opinions about what was saved."""
 
     def timing(self) -> Timing:
-        """This package's `Timing`, with the net derived by the model as everywhere else."""
+        """This package's `Timing`, with the net derived by the model as everywhere else.
+
+        *Changed 2026-11-01 on purpose (owner decision 183A; 007 T065):* `assisted_minutes` is
+        all supervision and the other four assisted inputs are recorded as 0, setup and the
+        review by hand among them, since the net is unknown without those two; so the timed
+        studies of `test_benchmark_compare.py` and `test_adoption_rule.py` keep their medians."""
         return Timing(
             baseline_minutes=self.baseline_minutes,
             assisted_supervision_minutes=self.assisted_minutes,
             assisted_verification_minutes=0.0,
             false_alarm_handling_minutes=0.0,
             unattended_runtime_minutes=9.0,
+            setup_minutes=0.0,
+            review_by_hand_minutes=0.0,
         )
 
     def usage(self) -> TokenUsage | None:
