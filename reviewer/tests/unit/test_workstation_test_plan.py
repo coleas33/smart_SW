@@ -2953,7 +2953,10 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
     001, 005 and 008 after that count, and 004's row still listed T180, which decision 168A
     closed: the rows of 001, 002, 004, 005 and 008 are recounted from this tree's task lists. The
     counts stay literals, checked by hand at each recount: a pin that computed them would turn
-    every lane that adds a task red."""
+    every lane that adds a task red.
+
+    *Changed 2026-11-01 on purpose (004 T392; research R29.13):* 004's row is recounted with T390
+    to T394, decision 181A's five tasks, ticked: 393 done, 22 open."""
     readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
     flat = re.sub(r"\s+", " ", readme)
     rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
@@ -2969,7 +2972,7 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
         assert f"| {counts} |" in rows[number], number
         assert "Closed on 2026-10-31 (decision 173A)" in rows[number], number
         assert closed in rows[number].split("Closed on 2026-10-31")[1], number
-    assert "| 388 / 22 / 0 |" in rows["004"]
+    assert "| 393 / 22 / 0 |" in rows["004"]
     assert "T180" not in rows["004"]
     for task in ("T182", "T187", "T303a", "T303b", "T353"):
         assert re.search(rf"\b{task}\b", rows["004"]), task

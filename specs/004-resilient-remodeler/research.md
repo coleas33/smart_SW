@@ -7219,3 +7219,142 @@ each with the recommended option:
   `32.5.0.48` and `32.5.0`.
 
 None of the three changes the plan, the reader or a test: each confirms what `main` already does.
+
+### R29.13 Decision 181A in the plan (T390 to T394)
+
+Decision 181A (roadmap run 1's second owner round, 2026-10-31; `docs/decisions.md`) orders the
+sittings after S1 and adds step 5.1's owner's parts to S1 if it runs ahead. It left the plan's
+change for after the owner's go, given on 2026-11-01. Fixed test first: T390 (`b3fb7d9`) failing,
+T391 (`8205318`) green; on the review, T393 (`dc07757`) failing, T394 (`4eae02e`) green.
+
+**What changed.**
+
+- **The Sittings table** runs S1, then M0-a and M0-b, the two sittings of the roadmap's milestone
+  M0 (`docs/roadmap/README.md`), then S2 to S5. M0-a has no key: A reviewed with the send box
+  unticked (step 4.10, items 1 and 2; an unticked review needs no key until Send, 015 US1's
+  scenario 2), every finding judged and the minutes kept with `swreview timing`, the escape
+  replay's pre-fix revisions each opened read-only, and step 5.1's owner's parts if S1 did not run
+  them. The replay has no step yet: it is written when M0-a is planned, with the revisions
+  lettered in section 0.2 so that the fingerprint covers them. M0-b is S3's first sitting: the key
+  (step 2.5), A with the model (4.1), B (4.2), the timing of A's review (4.5) and 014's smoke
+  review (4.11), as the roadmap's M0 lists them. S2 waits for M0's checkpoint and 004 T003's
+  numbers. M0-a's and M0-b's own tables are written when each is planned, as S2's to S5's are.
+- **Start's switch** waits for the same (review finding R1). "After S1" no longer sets
+  `RemodelStart.SeatValidated` overnight: its overnight pull requests are 004 T138's freeze and
+  `DrawingOpenScope.SeatValidated`, and the Start switch waits for everything step 5.3's "What the
+  Start switch waits on" names and for M0's checkpoint and 004 T003's numbers. Start then stays
+  off through M0-a and M0-b, and the sitting after the switch, which runs 004 T303b first
+  (decision 169A), is S2. Step 5.3's paragraph, the development machine's row under "Not in this
+  sitting" and the handover's two places say the same.
+- **S1's row 8** is step 5.1's owner's parts, P-1 to P-5 (004 T003, 10 minutes), after the
+  optional block: they start only by 2 h 40 on the sitting's clock, so that they and the rows
+  after them end by 3 h 30. The optional block's rule now leaves them out of its sum, step 5.3's
+  cut rule skips them, and M0-a runs what S1 does not.
+- **Before the sitting** the owner names P-1 to P-5 as section 0.2's row P says, their paths in
+  `notes\paths.txt` with part J's. `Save-Fingerprint` reads that file, so the fingerprint step 1.6
+  takes before SOLIDWORKS starts covers the parts before anything opens them, and step 6.0 shows
+  them unchanged. Step 1.6 and the S1 bullet no longer call J S1's only document.
+- **The handover's S1 paragraph** names the parts (its step 20) and the order after S1; **the
+  results sheet's S1 sentence** names 004 T003's row among the rows S1 fills in.
+- **The record**: 181A's outcome in `docs/decisions.md`; 004's row in `specs/README.md`
+  recounted to 393 / 22 with T390 to T394 ticked; the review's should-fix findings left for M0's
+  tables, and its notes, in `docs/review-backlog.md`.
+
+**One reading, recorded (the review's note R10).** 181A says the parts are added "if it runs
+ahead". The plan's rule is the 3 h 30 cap's own, as the optional block's is, so the parts also
+run when S1 is on time or up to ten minutes behind, provided the block was cut. "S1 runs as
+planned" keeps the block before them, so when S1 is five to fifteen minutes ahead the block runs
+and the parts go to M0-a. M0-a comes before S2 either way, so S2 still has 004 T003's numbers
+first. If the owner wants the parts before the block, rows 7 and 8 swap and both start times
+stay.
+
+**Tests changed on purpose**, each with its reason in its docstring:
+
+| Test or constant | Change | Reason |
+|---|---|---|
+| `SITTING_ROW` | reads `M0-a` and `M0-b` rows | 181A's two sittings are rows of the table |
+| `S1_TASKS` | gains 004 T003 | S1's row 8 answers it when its clock allows |
+| `test_the_plan_is_run_in_short_themed_sittings_s1_first` | the rows S1, M0-a, M0-b, S2 to S5; every sitting after S1 3 h 30 at most | 181A puts M0's two sittings between S1 and S2 |
+| `test_s1_is_a_selection_of_the_plans_steps_whose_minutes_are_its_headline` | the 190-minute sum leaves out the rows that wait for the clock; the parts' row is the headline's 10 minutes | the parts, like the block, run only when the clock allows |
+| `test_s1_runs_the_probes_that_never_reorder_early_and_the_reorders_last` | the parts' row between the block and 5.6's last runs | "as planned" keeps the block first |
+| `test_s1_with_its_optional_block_still_ends_within_3_h_30` | the rows after the block leave out the parts | they have their own start time and are cut once the block runs late |
+| `test_the_specs_readme_counts_a_task_173a_closed_as_done` | 004's literal 388 / 22 to 393 / 22 | T390 to T394 ticked |
+| T390's four new pins, at T393 | the M0 pin refuses any paid step and any step of step 4 but 4.10, and asks for the replay's no-step note; the fingerprint pin reads each of the parts' own clauses; the handover pin reads the order and the clock's condition; the parts' pin reads the two margins | the review's R2, R7, R3, R4 and R9: each pin could miss what it claimed to catch |
+
+Five pins are new: `test_after_s1_come_m0s_two_sittings_then_s2`,
+`test_s1_runs_the_owners_parts_when_its_clock_allows_and_m0_a_otherwise`,
+`test_the_owners_parts_are_named_and_fingerprinted_before_s1`,
+`test_the_handover_and_the_results_sheet_name_the_owners_parts_in_s1` and, at T393,
+`test_start_stays_off_through_m0s_two_sittings`.
+
+**Test-first evidence.** At T390 (`b3fb7d9`) the plan test file gave 272 passed and 8 failed,
+each because the plan did not yet say what it asked: the Sittings rows, S1's headline, S1's
+order, the handover's S1 tasks and the four new pins. After T391 (`8205318`) all 280 passed. At
+T393 (`dc07757`) the R1 and R7 pins failed and the four tightened pins were green; after T394
+(`4eae02e`) all 281 passed, and the three plan test files 294.
+
+**Mutations.** Each was made alone, the pins named were run, and the file was put back byte for
+byte. Of T390's pins (at T391):
+
+| # | Mutation | Failed |
+|---|---|---|
+| 1 | M0-b's row before M0-a's | the Sittings pin and the M0 pin |
+| 2 | M0-a reviewing with the model (step 4.1) | the M0 pin |
+| 3 | M0-a without the escape replay | the M0 pin |
+| 4 | S2 not waiting for M0's checkpoint and 004 T003's numbers | the M0 pin |
+| 5 | the parts' row at 15 minutes | the headline pin and the parts' clock pin |
+| 6 | the parts' row before the optional block | the S1 order pin |
+| 7 | the parts starting by 2 h 45 | the parts' clock pin |
+| 8 | the block's sum counting the parts | the parts' clock pin |
+| 9 | step 5.3's cut rule keeping the parts | the parts' clock pin |
+| 10 | no M0-a fallback | the parts' clock pin |
+| 11 | the parts not named before the sitting | the fingerprint pin |
+| 12 | step 1.6 calling J S1's only document again | the fingerprint pin |
+| 13 | the handover without 004 T003 | the handover and results pin |
+| 14 | the results sheet without 004 T003's row | the handover and results pin |
+
+Of T393's pins (at T394), the review's own mutations among them:
+
+| # | Mutation | Failed |
+|---|---|---|
+| 15 | Start's switch back in the overnight list, 181A's words kept | the Start pin |
+| 16 | step 5.3 without 181A's wait | the Start pin |
+| 17 | the development machine's row without it | the Start pin |
+| 18 | the handover without it, in both places | the Start pin |
+| 19 | M0-a naming step 4.8 (R2) | the M0 pin |
+| 20 | "Before the sitting" without the parts' paths (R3) | the fingerprint pin |
+| 21 | the fingerprint bullet without them (R3) | the fingerprint pin |
+| 22 | step 1.6 without them (R3) | the fingerprint pin |
+| 23 | the handover with S2 before M0 (R4) | the handover and results pin |
+| 24 | M0-a's replay without its no-step note (R7) | the M0 pin |
+| 25 | "fifteen minutes ahead" said as five (R9) | the parts' clock pin |
+| 26 | "ten minutes behind" said as twenty (R9) | the parts' clock pin |
+| 27 | the parts' start time at 2 h 30, the margins' words kept | the parts' clock pin |
+
+**The review (decision 180A, Tier 2: one review).** One Opus review of T390 and T391, read only,
+with the offline plan tests run, raised twelve findings: four must-fix, five should-fix and three
+notes. Each was checked against the files before anything changed. Tier 2 has no second round.
+
+| Finding | Disposition | Evidence and what changed |
+|---|---|---|
+| R1 (must-fix): "After S1" still set Start's switch overnight, so M0-a would be the sitting after the switch | fixed (T393, T394) | Confirmed: "After S1" listed `RemodelStart.SeatValidated` among the overnight pull requests, step 5.3 has 004 T303b first at the sitting after the switch (169A), and 181A has S2 wait for M0's checkpoint and 004 T003's numbers; the roadmap's M0 says Start stays off. Changed as "What changed" says |
+| R2 (must-fix): the M0 pin read four of step 4's reviews | fixed | Confirmed: the constant held 4.1, 4.2, 4.5 and 4.11 only, and the review's mutation, M0-a naming step 4.8, left the pin green. The pin now refuses any paid step and any step of step 4 but 4.10, as S1's pin reads S1's rows (mutation 19) |
+| R3 (must-fix): the fingerprint pin could not see the parts' paths go | fixed | Confirmed: part J's clause in the same bullet names `notes\paths.txt`. The pin reads each of the parts' own clauses (mutations 20 to 22) |
+| R4 (must-fix): the handover pin read only the words | fixed | Confirmed: the pin asserted only that the words appear, and the review's mutation, a handover with S2 first, left it green. The pin reads the order and the clock's condition (mutation 23) |
+| R5 (should-fix): step 4.10's preamble asks for the key and for step 4.8 first, while M0-a runs its items 1 and 2 with none | backlog | True; the row is right (015 US1's scenario 2). M0-a's own table adds a dated note to step 4.10 and the handover's step 22 |
+| R6 (should-fix): M0-a leaves the send box unticked and no step ticks it again before M0-b's paid reviews | backlog | True: the box is remembered for the Windows user (015 FR-002). M0-b's own table ticks it first |
+| R7 (should-fix): M0-a's row named the escape replay, which no step runs | fixed (T393, T394) | Confirmed. The row says there is no step yet, and how the revisions are lettered and fingerprinted when it is written (mutation 24) |
+| R8 (should-fix): `swreview timing` on a review still waiting for Send is lost at the next decision | backlog | True: `record_disposition` writes the session the run holds (`chat/sessions.py`), as `record_timing_live`'s docstring says. M0-a's own table times after a restart, as step 4.5's item 2 and item 4 do |
+| R9 (should-fix): the parts' rule's two margins were not pinned | fixed | The pin reads both (mutations 25 to 27) |
+| R10 (note): the reading of "if it runs ahead" | recorded | Above, "One reading, recorded" |
+| R11 (note): `docs/roadmap/capabilities.md` places step 5.6's last runs at S1's row 8, now row 9 | backlog | For the next roadmap update run: the file is run 1's dated snapshot |
+| R12 (note): M0-b holds no step 2.4, which gates step 4's reviews, and step 4.5's items 1 and 3 need step 4.4 | backlog | For M0-b's own table |
+
+Gates on the tree of this record: from `reviewer/`, with the tokenizer required, `pytest -q -m
+"not live"` on Python 3.12, 18,673 passed, 5 skipped, 0 failed (exit 0, counted from the progress
+lines, as the run printed no summary line), and the same on Python 3.11 (`uv run --isolated
+--python 3.11 --all-extras`), 18,673 passed, 5 skipped, 0 failed (exit 0): R29.11's count and the
+five new pins. `ruff check src tests` was clean; the link check over the changed Markdown found
+248 relative links and no broken one (`COUNT 0`); every changed file is LF in the index, and
+`git diff --check` is clean. No C# changed, so no C# gate was run. The three plan test files
+alone: 294 passed.
