@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-13
 
-**Status**: Built; 5 open (see [specs/README.md](../README.md)). Drafted as: Draft
+**Status**: Built; 4 open (see [specs/README.md](../README.md)). Drafted as: Draft
 
 **Input**: User description: "Task Pane assistant: a SOLIDWORKS Task Pane with a review chat driving the curated design reviewer on OpenAI or Gemini, plus an embedded Codex or Gemini CLI terminal for read-only general chat." Design approved in conversation on 2026-09-13 (reviewer first, general chat read-only, chat panel plus terminal tab, OpenAI default with Gemini, no Claude in the product).
 
@@ -28,6 +28,8 @@ An engineer with an assembly open in SOLIDWORKS opens the SwReview Task Pane, ch
 4. **Given** the assistant issued an evidence request, **When** the engineer types an answer, **Then** the request is marked answered with the text, the session resumes with that answer visible to the assistant, and any finding that was unresolved only because of that request is re-evaluated in the same session.
 5. **Given** a completed session, **When** the engineer types a follow-up question, **Then** the assistant answers within the same session using the same tools, and the new steps are appended to `session.json`.
 6. **Given** no document is open, **When** the engineer presses Review, **Then** the pane says so and nothing is extracted or started.
+7. **Given** a finding card (*added 2026-11-01, owner decision 185A*), **When** the engineer picks one of the four triage outcomes and presses Accept, Reject, or Defer, **Then** `session.json` records the triage beside the decision, `report.md` is re-rendered with it under the decision and the findings counted by triage, and the card shows it; a decision pressed with no outcome picked is recorded with none, as before (FR-031).
+8. **Given** a finding accepted or rejected with no triage (*added 2026-11-01, owner decision 185A*), **When** the engineer picks an outcome and presses the same decision again, **Then** the triage is recorded and the decision, note, engineer and time stay as first recorded; a different decision, or a second triage, is refused as any change to a settled finding is (FR-031).
 
 ---
 
@@ -105,6 +107,9 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 - A turn that ends on the provider's output ceiling (reasoning plus text exceeding `max_output_tokens`): the turn ends with reason `truncated`, the partial answer stays visible, and the unfinished work is recorded as unresolved coverage rather than reported as a completed check.
 - The engineer saves Settings while a turn is running: the save is refused with a clear message rather than restarting the backend and killing the live session; it is offered again when the turn ends.
 - The Terminal tab is opened before any review: the host creates a terminal run folder under the run root so the CLI, its generated profile, and `chat-log.jsonl` have a home. *Owner decision 156A amendment, 2026-10-20:* the pane has not shown the Terminal tab since 2026-09-19, so this describes a tab that is built and hidden. It cannot be opened in the pane now; were it shown again, this run-folder rule would hold as written.
+- A triage outside the four outcomes - another word, another case, the words in place of the token, an empty string, a number - is refused, naming the four, and nothing is written; no triage, or `null`, records the decision with none (*added 2026-11-01, owner decision 185A*; FR-031).
+- A decision recorded without a triage - in an older session, by `swreview disposition` without `--triage`, carried by a re-run from a record made before the field, by 51A's one-press Accept of a fine thread, or a Defer not yet judged - stays not recorded: `report.md` counts it so, and nothing infers a triage from the decision (*added 2026-11-01, owner decision 185A*).
+- A deferred finding that carries a triage keeps it when the later Accept or Reject names none, and takes the new one when it names another (*added 2026-11-01, owner decision 185A*).
 
 ## Requirements *(mandatory)*
 
@@ -117,7 +122,7 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 - **FR-001**: The add-in MUST present a Task Pane with a Review tab, an Extract tab, a Model check tab, a Remodel tab and a Standards tab, each carrying a one-line statement of what it is for; MUST show, above the tabs and at all times, the three steps (open a document, extract evidence, review) with each one marked done or pending and the reason it is pending; and MUST keep the existing extract-evidence, Interference, and Capture selection actions available on the Extract tab. *Owner decision 147A amendment, 2026-10-19:* FR-001 named a Review tab, an Ask tab (the CLI terminal) and an Extract tab, and the steps "open a document, extract evidence, review or ask". The pane has not shown the Ask tab since 2026-09-19 (`TaskPaneControl.AskTabShown` is false: the tab and its terminal, User Story 3, are built and hidden), and its strings name the tabs it shows (decision 139A), so FR-001 names those, in the pane's order; the Model check tab is feature 003's, the Remodel tab feature 004's and the Standards tab feature 006's. Were the Ask tab shown again, it would follow Review, and the third step would read "review or ask".
 - **FR-002**: The Review tab MUST show, as they occur, the assistant's text, each tool call with its recorded step summary and status, each finding, each evidence request, and coverage changes.
 - **FR-003**: Each finding MUST be shown with its status, severity, title, affected components or drawing locations, and a Show in SOLIDWORKS action; expanding the card MUST reveal the full finding fields defined in feature 001.
-- **FR-004**: The pane MUST let the engineer record a disposition (accepted, rejected, deferred) with a note on any finding, and MUST persist it to the session file and re-render the report.
+- **FR-004**: The pane MUST let the engineer record a disposition (accepted, rejected, deferred) with a note on any finding, and MUST persist it to the session file and re-render the report. *Owner decision 185A amendment, 2026-11-01:* the disposition may also carry a triage, one of four outcomes, optional and independent of the decision, and an Accept or Reject recorded without one may gain one once (FR-031).
 - **FR-005**: The pane MUST let the engineer answer an open evidence request in the chat and MUST resume the session with that answer.
 - **FR-006**: The pane MUST accept follow-up messages in an existing session after it has been sent to the model and MUST append the resulting steps and findings to the same session file. While a review waits for Send, the backend MUST refuse a follow-up with `409 NotSent` without changing the review (feature 015 T041).
 - **FR-007**: The pane MUST extract the open document into the run folder before starting a review and MUST refuse to start when no document is open.
@@ -148,6 +153,7 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 - **FR-023**: The pane MUST detect a missing or too-old CLI before launch and MUST show the install steps and versions.
 
 - **FR-030**: The pane MUST let the engineer stop a running turn; the turn ends at the next tool boundary and the session records `turn.ended` with reason `stopped`.
+- **FR-031** *(added 2026-11-01, owner decision 185A)*: A finding's disposition MAY carry a triage beside its decision, one of four outcomes: `new_and_real` ("new and real"), `already_known` ("real but already known"), `wrong` ("wrong") and `not_worth_flagging` ("true but not worth flagging"). The triage is optional and independent of the decision: any of the four MAY go with accepted, rejected or deferred, none is required, and it MUST NOT be inferred from the decision nor change what the decision does (feature 007's ranking, FR-008; the Decided tally; the re-run's carry). A value outside the four MUST be refused, naming the four, with nothing written. The engineer MUST be able to record it in the pane beside Accept, Reject and Defer, from the console (`swreview disposition --triage`) and through the live route. `report.md` MUST show a finding's triage under its decision and, only when some finding records one, a "By triage" line counting the four and the findings that record none ("not recorded"), read from the triage alone. A re-run carries it with its decision (feature 015), and the handoff carries it as it carries `session.json` and `report.md`. An Accept or Reject recorded without a triage MAY gain one once: the same decision sent again with a triage records the triage and nothing else, and a different decision or a second triage is refused, as before.
 
 **Boundaries**
 

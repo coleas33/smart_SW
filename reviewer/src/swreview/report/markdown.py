@@ -14,12 +14,12 @@ investigation trace (collapsed past 50 steps).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
 from swreview.checks.interference import interference_outcomes
-from swreview.findings import Calculation, Disposition, Finding, carried_and_computed
+from swreview.findings import TRIAGES, Calculation, Disposition, Finding, carried_and_computed
 from swreview.ir.models import (
     Angle,
     ComponentInstance,
@@ -269,6 +269,9 @@ def _render_summary(session: ReviewSession, package: EvidencePackage | None) -> 
             f"{severity}: {count}" for severity, count in sorted(by_severity.items())
         )
         lines.append(f"- By severity: {severity_text}")
+    by_triage = _by_triage(session.findings)
+    if by_triage is not None:
+        lines.append(by_triage)
 
     open_requests = sum(1 for request in session.evidence_requests if request.status == "open")
     lines.append(f"- Open evidence requests: {open_requests} of {len(session.evidence_requests)}")
@@ -283,6 +286,24 @@ def _render_summary(session: ReviewSession, package: EvidencePackage | None) -> 
         lines.append(f"- Not examined: {unread.sentence}")
 
     return lines
+
+
+def _by_triage(findings: Sequence[Finding]) -> str | None:
+    """`- By triage:` the four outcomes in `TRIAGES` order in the words file's words, then `not
+    recorded` for every finding without one, decided or not (owner decision 185A; 002 FR-031).
+
+    Counted from the triage alone, never the decision. Rendered only when some finding records
+    one, as the Bought parts section is, so every session without one keeps its report's bytes.
+    """
+    triages = [
+        finding.disposition.triage if finding.disposition is not None else None
+        for finding in findings
+    ]
+    if all(triage is None for triage in triages):
+        return None
+    words = load_words().labels.triage
+    counts = ", ".join(f"{words[triage]}: {triages.count(triage)}" for triage in TRIAGES)
+    return f"- By triage: {counts}, not recorded: {triages.count(None)}"
 
 
 # --- bought parts (feature 013) ----------------------------------------------------------
@@ -453,9 +474,16 @@ def _fmt_calculation(calculation: Calculation | None) -> list[str]:
 def _fmt_disposition(disposition: Disposition | None) -> list[str]:
     if disposition is None:
         return ["- Disposition: not yet dispositioned"]
+    # The triage's words under the decision, only when one is recorded (owner decision 185A).
+    triage = (
+        []
+        if disposition.triage is None
+        else [f"  - triage: {load_words().labels.triage[disposition.triage]}"]
+    )
     return [
         "- Disposition:",
         f"  - decision: {disposition.decision}",
+        *triage,
         f"  - by: {disposition.by}",
         f"  - at: {_fmt_dt(disposition.at)}",
         f"  - note: {disposition.note}",
@@ -767,6 +795,8 @@ def _render_timing(session: ReviewSession) -> list[str]:
         f"- Assisted supervision minutes: {timing.assisted_supervision_minutes}",
         f"- Assisted verification minutes: {timing.assisted_verification_minutes}",
         f"- False alarm handling minutes: {timing.false_alarm_handling_minutes}",
+        f"- Setup minutes: {_fmt_minutes(timing.setup_minutes)}",
+        f"- Review by hand minutes: {_fmt_minutes(timing.review_by_hand_minutes)}",
         f"- Unattended runtime minutes: {timing.unattended_runtime_minutes}",
         f"- Net saved minutes: {_fmt_minutes(timing.net_saved_minutes)}",
     ]

@@ -141,6 +141,7 @@ from swreview.checks.standards.run import (
 )
 from swreview.engineering_context.models import ContextArtifact
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
+from swreview.findings import TRIAGES
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
 from swreview.remodel.artifacts import grade_side_of
@@ -272,10 +273,21 @@ class InvalidDecision(ChatError):
     error_class = "InvalidDecision"
 
 
-class InvalidTiming(ChatError):
-    """A timing body that is not the four human inputs as numbers.
+class InvalidTriage(ChatError):
+    """A triage that is not one of the four outcomes, nor null (owner decision 185A).
 
-    Named rather than ignored for every key that is not one of the four, because
+    A class of its own, not `InvalidDecision`, whose sentence asks for accept, reject or defer.
+    The route checks it before the chat's state, as the decision is: the record's own refusal
+    is a `ValueError`, which the route answers as `IllegalTransition`.
+    """
+
+    error_class = "InvalidTriage"
+
+
+class InvalidTiming(ChatError):
+    """A timing body that is not the human inputs as numbers.
+
+    Named rather than ignored for every key that is not one of `TIMING_INPUTS`, because
     `Timing.model_validate` would silently accept a supplied `net_saved_minutes` and
     overwrite the derived figure with it (`contracts/timing.md` section 3, FR-004).
     """
@@ -483,11 +495,11 @@ class ProfileRefused(ChatError):
 
 
 def _timing_inputs(body: Mapping[str, Any]) -> dict[str, float]:
-    """The four human inputs `body` supplies, or `InvalidTiming` naming what was wrong.
+    """The human inputs `body` supplies, or `InvalidTiming` naming what was wrong.
 
     Every key is optional and `null` means "keep what is recorded", so an engineer corrects
-    one number without restating the other three. Anything else is refused **by name**: a
-    key that is not one of the four (`net_saved_minutes` first among them, because the net
+    one number without restating the others. Anything else is refused **by name**: a key
+    that is not one of `TIMING_INPUTS` (`net_saved_minutes` first among them, because the net
     is derived and never accepted), a value that is not a number, and a negative one. The
     negative is caught here rather than left to the model so the pane reads one error class
     for every bad body, and nothing is written on any of the four paths.
@@ -1590,6 +1602,10 @@ class ChatServer:
         decision = str(body.get("decision", ""))
         if decision not in DECISIONS:
             raise InvalidDecision(f"decision must be one of {sorted(DECISIONS)}, got {decision!r}")
+        # As sent, with no `str()`: null stays none, and a number or a list is refused.
+        triage = body.get("triage")
+        if triage is not None and not (isinstance(triage, str) and triage in TRIAGES):
+            raise InvalidTriage(f"triage must be one of {list(TRIAGES)} or null, got {triage!r}")
         self._require_idle(chat)
         run = self._run_of(chat)
         finding_id = request.path_params["finding_id"]
@@ -1602,6 +1618,7 @@ class ChatServer:
                 decision=decision,
                 note=str(body.get("note") or ""),
                 by=str(body.get("by") or chat.engineer),
+                triage=triage,
             )
             finding = await execute(chat, action) if execute else await run_in_threadpool(action)
         except KeyError as exc:

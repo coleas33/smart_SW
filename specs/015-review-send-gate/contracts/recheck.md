@@ -282,10 +282,18 @@ model's opening, and the id maps a page would need to re-key its own work are no
    another and `set_disposition` never meets a finding already decided by the carry. 72A says only
    that the many-to-one decision is named; that none of them is carried is a default taken
    2026-10-09 to fill that rule, which the owner may revise (the alternative: carry the first, by
-   the earlier record's order, and name the rest; research R7, 72A).
+   the earlier record's order, and name the rest; research R7, 72A). *Amended 2026-11-01 (feature
+   002, owner decision 185A; its FR-031):* the decision is carried whole, the triage beside it
+   included - `set_disposition(..., at=earlier.at, triage=earlier.triage)` - so the carried
+   disposition equals the earlier one, and the `disposition` event carries the triage; a decision
+   recorded with none is carried with none.
 3. **outcome lines.** `earlier.drawing_outcomes`, verbatim, in order.
 4. **timing.** The four human inputs of `earlier.timing` (baseline, supervision, verification, false
    alarms) are carried whole; the running time is the re-run's own (`records.md` section 3).
+   *Amended 2026-11-01 (feature 007, owner decision 183A; its FR-036):* the human inputs are six,
+   setup and the review by hand too, and the carry copies every one by
+   `report.session.HUMAN_TIMING_FIELDS` rather than by name, so an input added later is carried
+   as well (007 T068).
 5. **the record.** `model_status` is the earlier record's, carried: its `state` (`not_sent` or
    `send_failed`), `document` and `failures` (oldest first) stay as they were; `rechecked_from` is
    the earlier record's `session_id`; `checked_at` and `profile` are the re-run's own. So a re-run

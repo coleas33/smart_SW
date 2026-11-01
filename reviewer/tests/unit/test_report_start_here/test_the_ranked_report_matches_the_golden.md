@@ -393,6 +393,8 @@ None.
 - Assisted supervision minutes: 0.0
 - Assisted verification minutes: 0.0
 - False alarm handling minutes: 0.0
+- Setup minutes: unknown
+- Review by hand minutes: unknown
 - Unattended runtime minutes: 1.62
 - Net saved minutes: unknown
 

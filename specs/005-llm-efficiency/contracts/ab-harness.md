@@ -136,7 +136,11 @@ would carry both shas as `commit_off` and `commit_on` and would never be present
 
 **Human timing is recorded once per package per arm, not per repetition.** `swreview benchmark
 time` is unchanged. A human baseline does not change between repetitions, and pretending to
-re-measure it would put noise into `net_saved_minutes`.
+re-measure it would put noise into `net_saved_minutes`. *Amended 2026-11-01 (feature 007, owner
+decisions 183A and 184A; its FR-036):* `benchmark time` takes `--setup` and `--by-hand` beside
+the four, through the one writer, and a package's net, and so the ledger's median, is counted
+only once both are recorded; a scorecard scored before the change keeps its figures until it is
+scored again, `SCORING_RULES_VERSION` unchanged (007 research R7).
 
 *Amended 2026-10-07 by feature 014 (T051; its `contracts/benchmark-run.md` 2 and 3,
 `contracts/provenance.md` 3):* `benchmark run` resolves its switches through `cli._review_settings`,

@@ -1740,15 +1740,27 @@ finished.
   same ids in the same order (or `no row`), the checked fold last; and no row of a type group
   reads `checked within scope`. Fail: a group or an id missing, extra or out of order, or a pass in
   a type group. Record the printed lines.
+- 002 FR-031 (decision 185A): with the engineer who knows A, give every finding one of the four
+  triage outcomes beside its decision. In each finding's fold, press the outcome they name -
+  **new and real**, **real but already known**, **wrong** or **true but not worth flagging** -
+  then **Accept**, **Reject** or **Defer**; the card then reads `Disposition: <decision>
+  (<outcome>) by ...`. The outcome is theirs and says nothing about the decision: a real finding
+  they already knew may still be accepted.
 - 007 T060, the minutes (the command that records them runs at step 4.5, item 4, once the backend
   no longer holds this review). Before the engineer who knows A leaves, ask them how many minutes
-  a review of A by hand, without SwReview, takes them: the **baseline**. Then write down three
-  more, in whole minutes: **supervision**, the minutes you spent on A's review while it ran
-  (pressing, watching the Transcript, answering its questions; if you watched throughout, its
-  start-to-end minutes); **verification**, the minutes you and the engineer spent checking
-  findings they judged right; and **false alarms**, the minutes spent on findings they judged
-  wrong. The last two together are the whole time spent checking the findings; count no minute
-  twice. Write the four numbers under this step's heading in the findings document.
+  a review of A by hand, without SwReview, takes them: the **baseline**. Then write down five
+  more, in whole minutes (decisions 183A and 184A): **setup**, this design's own setup only -
+  preparing the package, opening the assembly, attaching drawings, starting the review and any
+  rerun; the sitting's software update is not part of it, so write its minutes apart, as a pilot
+  cost; **supervision**, the minutes you spent on A's review while it ran (pressing, watching the
+  Transcript, answering its questions; if you watched throughout, its start-to-end minutes);
+  **verification**, the minutes you and the engineer spent checking findings they judged right;
+  **false alarms**, the minutes spent on findings they judged wrong (a correction counts in
+  whichever of the two its finding belongs to); and **by hand**, the minutes the engineer still
+  spent checking by hand what the review did not reach (0 if none: 0 is a number, and the net
+  needs it). Verification and false alarms together are the whole time spent checking the
+  findings; count no minute twice. Write the six numbers under this step's heading in the
+  findings document.
 
 Record: the facts, the headline, the tally line, the not-reached line, the groups' goal lines,
 the drawings line (with letters in place of names), the usage line, and the start and end times.
@@ -1877,7 +1889,7 @@ Record: each pass or fail. Save no configuration change.
    Pass: `kept and deleted`. Any other line: nothing was lost; fix the cause (the pasted path, free
    space) and run it again. Then press **Clear review**, then A-pin's chip. Pass:
    `This review can no longer be restored.` with a **Remove** button; Remove takes the chip away.
-4. **007 T060: record the timing of A's review**, with the four minutes you wrote at step 4.1.
+4. **007 T060: record the timing of A's review**, with the six minutes you wrote at step 4.1.
    It is done here because since item 2's restart the backend no longer holds A's review, so
    nothing can save over what this writes; it writes only in A's run folder (`session.json`, then
    `report.md` and `attention.json` rendered again). Make A active and press its chip, press
@@ -1886,14 +1898,15 @@ Record: each pass or fail. Save no configuration change.
 
    ```powershell
    $run = '<paste the run folder of A, from step 4.1>'
-   cd "$R\reviewer"; uv run swreview timing $run --baseline '<baseline minutes>' --supervision '<supervision minutes>' --verification '<verification minutes>' --false-alarms '<false-alarm minutes>'; "exit code: $LASTEXITCODE"; cd $R
+   cd "$R\reviewer"; uv run swreview timing $run --baseline '<baseline minutes>' --supervision '<supervision minutes>' --verification '<verification minutes>' --false-alarms '<false-alarm minutes>' --setup '<setup minutes>' --by-hand '<by-hand minutes>'; "exit code: $LASTEXITCODE"; cd $R
    Select-String -LiteralPath "$run\report.md" -SimpleMatch 'Net saved minutes:' | ForEach-Object { $_.Line }
    (Get-Content -LiteralPath "$run\session.json" -Raw -Encoding UTF8 | ConvertFrom-Json).timing.baseline_minutes
    ```
 
-   Pass: the command prints `baseline <b>, supervision <s>, verification <v>, false alarms <f>`
-   with your four numbers (written with `.0`), `net saved: <n>` with `<n>` the baseline less the
-   other three, and a line `report: ...`, which holds a path (never copy it); then
+   Pass: the command prints `baseline <b>, supervision <s>, verification <v>, false alarms <f>,
+   setup <u>, by hand <h>` with your six numbers (written with `.0`), `net saved: <n>` with `<n>`
+   the baseline less the other five, and a line `report: ...`, which holds a path (never copy
+   it); then
    `exit code: 0`; then `- Net saved minutes: <n>` (the report's Timing section); and last the
    baseline again: the run's `session.json` now carries it, which is the evidence 007 T060
    names. A message `Invalid value for '--baseline'` (or another input) with `exit code: 2` means a
@@ -1903,7 +1916,7 @@ Record: each pass or fail. Save no configuration change.
    nothing. From here on the owner times each pilot run the same way; at this sitting, A's review
    is the one timed.
 
-Record: each pass or fail; for 007 T060 the four minutes, the net saved and A's run folder stamp
+Record: each pass or fail; for 007 T060 the six minutes, the net saved and A's run folder stamp
 (`<stamp>-A`). From here on SOLIDWORKS may be closed and reopened.
 
 ### 4.6 Drawing questions, three answers in one send, and a confirmed candidate left closed [011 T067; 009 T084; 011 T077]

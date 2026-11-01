@@ -475,3 +475,150 @@ failed before the change and pass after it.
 the check's own session, and `test_a_standards_folder_keeps_its_verdict_header_byte_for_byte`
 passes unchanged. Amended with it: `contracts/timing.md` section 2, and feature 001
 `contracts/cli.md`'s `swreview report` row.
+
+## R7. Owner decisions 183A and 184A (2026-11-01): the net counts all of the engineer's effort
+
+**Decision**: 183A: `swreview timing` records two more inputs, the design's setup and the review
+the engineer still does by hand, and the assisted minutes are setup, supervision, verification,
+false-alarm handling and the review by hand together. Until both new inputs are recorded the net
+reads unknown, as it does without a baseline; a recorded 0 is a value. 184A: setup is this
+design's own setup only - preparing the package, opening the assembly, attaching drawings,
+starting the review and any rerun - and the sitting's software update is reported apart, as a
+pilot cost; corrections count inside verification or false-alarm handling; the review by hand is
+the checking the engineer still does on what the tool did not reach; no minute is counted twice;
+the seat plan's step 4.1 states it before M0-a.
+
+**Why**: the net counted supervision, verification and false-alarm handling against the baseline
+and nothing else (`report/session.py`, `Timing._derive_net_saved_minutes`), while the pilot
+proposal counts "package preparation, recurring setup, supervision, verification, false-alarm
+handling, corrections, and remaining manual review" in assisted effort
+(`docs/history/pilot-proposal-2026-09-13.md`, "Success criteria and ROI"). A net recorded with
+the four inputs alone could therefore be overstated
+([`docs/roadmap/holes.md`](../../docs/roadmap/holes.md), H-a-002, which merged H-c-004), and
+H-a-002's skeptic made widening it an owner decision first, because the narrow definition comes
+from 001 SC-001 and this feature's contract. The options, as asked in cycle 1's round:
+
+- 183A, what the net reads while an input is not recorded. A, chosen: unknown until both are
+  recorded, a recorded 0 a value, so the report never prints a net that leaves effort out; the
+  cost is FR-002, FR-005 and `contracts/timing.md` section 1 amended, the existing tests' figures
+  rearranged to record the two as 0 with their expected values unchanged, and `benchmark time`
+  needing both numbers for a net. No stored value moves: no session or study has ever carried a
+  baseline. B: count an unrecorded input as 0 and print "not recorded" on its line - the
+  smallest change, but a review timed with the four numbers still prints the overstated net,
+  and the three assisted inputs already start at 0.0 (`tools/context.py`), so a baseline alone
+  reads as all saved. C: A for review folders and B for `benchmark time` - one number with two
+  rules, so the ledger's median and a seat review's net would mean different things.
+- 184A, what the two inputs cover. A, chosen: as above; comparable across designs and true of
+  the tool in use, though the net leaves out about an hour of update per sitting at today's
+  cadence, which is reported apart. B: the sitting's update divided over the designs it
+  reviewed - the most conservative net, but at one design a sitting the update alone takes about
+  55 of the 60-minute target, so M0 would mostly measure the update cadence. C: the engineer
+  defines it each time, in the findings document - nothing to write, and nothing comparable
+  across sittings or designs.
+
+**What it changes**: spec FR-036, with dated notes on FR-001, FR-002, FR-005, Key Entities,
+SC-001, User Story 1's scenario 1 and the Timing edge cases, and scenario 7; `contracts/timing.md`
+sections 1 to 3; the plan's Summary, its touch points and point 1. In the code: two optional
+fields on `Timing`, `setup_minutes` and `review_by_hand_minutes`, left out of `session.json`
+while not recorded so every earlier session keeps its bytes, but for a net derived from the four
+earlier inputs alone, which now reads unknown and is saved as null; one `Timing.assisted_minutes` that
+the net and the scorecard both read, so the two cannot disagree; `TIMING_INPUTS` grows to six,
+so the route takes both with no logic of its own; `--setup` and `--by-hand` on `swreview timing`
+and `swreview benchmark time`, declared once; the report's Timing section prints both always,
+`unknown` when not recorded; and feature 015's re-run copies every human input from one tuple
+rather than naming four. 001's FR-026 and SC-001, which define the net, take a dated note at the
+close (T069). Tasks T064 to T069, Phase 9 of [tasks.md](tasks.md).
+
+**Not changed**: no pane control for minutes (Assumptions keep it a follow-on); no separate
+inputs for preparation or corrections, which 184A folds into setup, verification and false
+alarms; `SCORING_RULES_VERSION` is not bumped, since timing is not finding matching and the
+scoring goldens exclude it (`tests/support/scoring_probes.py`, `GOLDEN_EXCLUDED`), and a scorecard
+scored before the change keeps its old assisted and net figures until it is scored again.
+`swreview timing` on a review the backend still holds is still lost at its next save
+(`docs/review-backlog.md`, the review of 004 T390 and T391, R8), and the two new inputs share
+that: step 4.5 times a review after the backend's restart.
+
+**speckit-converge**, run once on 2026-11-01 (T064), bounded to FR-036, its dated notes, scenario
+7, the dated edge cases, the contract's amendments and the plan's touch points: nine gaps - six
+`missing`, two `partial` (the scorecard's assisted minutes and the re-run carry, which name three
+and four inputs) and one `contradicts` (the net, derived from three assisted inputs) - each
+already in Phase 9, so its appended Phase 10 was removed and nothing was folded in.
+
+**Built** (2026-11-01, T066 and T068), as *What it changes* says: the two fields left out of the
+dump while `None` by a wrap serializer reusing `omit_when_null`; `Timing.assisted_minutes`, read
+by `_derive_net_saved_minutes` and by the scorecard's `PackageScore.assisted_minutes`;
+`Timing.replace` checking names against the model's fields, since the dump leaves out an input
+not recorded; `HUMAN_TIMING_FIELDS`, the six inputs beside `Timing`, which `carry_from` copies;
+`TIMING_INPUTS`' six, through which the writers, `record_timing_live` and the route take both;
+the six options declared once as `Annotated` aliases, with one `_timing_line` for both
+commands; and the report's two lines, `unknown` when not recorded. The seat plan's step 4.5
+line names the six options, its pass text reading "the baseline less the other five", and step
+4.1 asks for the two in 184A's words and gives every finding one of the four triage outcomes
+(002 FR-031, decision 185A), in T066's commit, since the plan's pin reads the command's options.
+
+**Tests changed on purpose**, none loosened, each because the net is unknown under 183A until
+setup and the review by hand are recorded:
+
+- The figures that read a net record the two as 0, their expected values unchanged:
+  `test_timing.py` (nine cases), `test_session.py` (three), `test_scorecard.py`'s `TIMING` and
+  its distribution case, `tests/support/studies.py`'s `PackageSpec.timing` (so
+  `test_benchmark_compare.py`'s and `test_adoption_rule.py`'s medians hold with no edit of their
+  own), `test_cli_timing.py`'s `four()`, `test_chat_timing_route.py`'s `FOUR` (which
+  `test_waiting_answers.py`'s timed Send imports), `test_cli.py`'s `benchmark time` case, and
+  `test_report_tokens.py`'s session, whose golden prints a net of 70.0: not in T065's list, but
+  without it T066 would have moved that golden's net line.
+- `test_timing.py`'s `test_the_four_input_names_are_the_writers_own_signature`, renamed
+  `test_the_input_names_are_the_writers_own_signature` and extended to `record_timing` and
+  `record_timing_live`; and the negative-input cases of `test_timing.py` and
+  `test_cli_timing.py`, extended to the two inputs.
+- `test_session_fields_015.py`'s SHA-256 save pin, moved: `build_session` records the four
+  earlier inputs alone, so its saved net reads null where it read 70.0, the one byte that
+  changed; putting 70.0 back reproduces both captured values. T066 had expected the pin to
+  hold, having read only the key set.
+- `test_workstation_test_plan.py`'s `test_the_timing_line_passes_the_four_inputs_swreview_timing_takes`,
+  renamed `test_the_timing_line_passes_every_input_swreview_timing_takes`, since the pasted line
+  names the six.
+- The six report goldens, regenerated with `--force-regen` and each diff read: the two lines and
+  nothing else, `unknown` in the ranked report and the four ticked-review goldens and `0.0` in the
+  tokens golden.
+
+**Tests first**: T065's new and rearranged cases failed before T066 - 287 failed and 9 errored,
+each for want of the two fields, keywords, options or body keys, `test_scorecard.py` and
+`test_scoring_rules_version.py` failing to collect since `TIMING` is built at import - but for
+the renamed signature pin, which pins the writers' agreement and passed as it stood. T067's two
+cases failed before T068: the report printed neither line, and `carry_from` named the four
+earlier inputs, so setup and the review by hand came back `None`.
+
+**Gates** (T069, 2026-11-01): run once for cycle 1 with 002 T318 and recorded in full in 002
+[research.md](../002-task-pane-assistant/research.md), 185A: the 63 test modules the cycle
+touched or that pin its files green on Python 3.12 and 3.11 with the tokenizer required, 3,196
+passed and 1 skipped on each; `ruff check` clean; the C# build with zero warnings, and its
+10,274 extractor and 4,288 add-in tests passed; the link check clean; every changed file LF in
+the index. The whole non-live suites were not run in that lane.
+
+**Review** (Tier 1, decision 180A; 2026-11-01): one Opus and one Codex review of the branch, no
+must-fix.
+
+- Codex (medium) and Opus (should-fix) found the same gap: "every earlier session keeps its
+  bytes" held only for a session with no baseline. A session timed before 183A holds a net
+  derived from the four earlier inputs alone; it now loads with that net unknown and, saved
+  again for any reason, writes null for it. That is 183A's rule, and every reader of the net
+  reads the model's, so the code stays. Codex's alternative, keeping the old figure in the file
+  until the timing is edited, would keep the overstated net 183A exists to stop and set the file
+  against the model. Fixed in the claims instead - FR-036 and the edge-case note, the plan, this
+  record, `contracts/timing.md` and `contracts/README.md`, 001's data model, contracts README and
+  schema descriptions, the serializer's docstring, Phase 9's checkpoint and 183A's register row -
+  and by `test_session.py::test_an_older_sessions_recorded_net_reads_unknown_and_is_saved_as_null`:
+  a session with a baseline of 90 and a net of 70 reads its net unknown, keeps every input, and
+  is saved again with the net alone changed. It passed on arrival, the behaviour being T066's,
+  and fails with the derivation changed to keep an older net. `test_session_fields_015.py`'s
+  moved pin is the same case, and its test is renamed to say so.
+- Opus, should-fix: the plan's re-check said nothing reads an unrecorded input as 0, which is
+  untrue of supervision, verification and false-alarm handling: they start at 0 when a review
+  starts, as before 183A, so once the baseline and both new inputs are recorded the net is a
+  number whether or not those three were. The re-check now says so; whether the net should wait
+  for all five is left to the owner in [`docs/review-backlog.md`](../../docs/review-backlog.md).
+- Opus, should-fix, left in the backlog: `swreview timing` and `benchmark time` print `None` for
+  an input or a net not recorded, where the report prints `unknown` (older for the baseline and
+  the net); and `SCORING_RULES_VERSION` stays 4 although the assisted minutes and the net changed
+  meaning (*Not changed*, above).

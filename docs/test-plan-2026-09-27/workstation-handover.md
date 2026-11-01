@@ -403,7 +403,11 @@ row per step and task id. The development machine moves each answer into the res
     verification and false-alarm minutes, and `swreview timing` records the four on its run
     folder only after a backend restart (the test plan's step 4.5, item 4), since a backend still
     holding the review could save over them; its `session.json` carrying the baseline is the
-    evidence.
+    evidence. *Since 2026-11-01* (decisions 183A and 184A) the seat also notes this design's
+    setup and the review the engineer still did by hand, in the words of the test plan's step
+    4.1, and `swreview timing` records the six, since the net reads unknown until both are
+    recorded; the same step gives every finding one of the four triage outcomes beside its
+    decision (002 FR-031, decision 185A).
 
 14. **009 T081, 009 T083, 009 T084.** Configuration switch (T081), chips and restore (T083),
     three open questions answered in one send (T084), each as its task text says; T084's resumed

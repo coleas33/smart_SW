@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Sequence
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 from uuid import UUID
 
 from pydantic import (
@@ -141,6 +141,19 @@ class Calculation(ReviewModel):
     function_version: str
 
 
+Triage = Literal["new_and_real", "already_known", "wrong", "not_worth_flagging"]
+"""A finding's triage, one of four outcomes beside its decision (owner decision 185A; 002
+FR-031): new and real, real but already known, wrong, or true but not worth flagging.
+
+Optional and independent of the decision: any of the four goes with any decision, none is
+required, and nothing infers one from the decision or reads one to rank, count or carry a
+decision. The words are the words file's `labels.triage`."""
+
+TRIAGES: tuple[Triage, ...] = get_args(Triage)
+"""The four triage tokens in their order: the one list the record, the live route, the console,
+the report and the words file's checks read."""
+
+
 class Disposition(ReviewModel):
     """The engineer's decision on a finding. Never written by the reviewer."""
 
@@ -148,6 +161,15 @@ class Disposition(ReviewModel):
     note: str
     by: str
     at: datetime = Field(strict=False)
+    triage: Triage | None = None
+    """The engineer's triage beside the decision (185A), or `None` when none was recorded.
+    Omitted while `None`, so a disposition without one keeps its bytes wherever it is written:
+    `session.json`, the `disposition` and `finding` events, the route's reply and the tool
+    payload the model reads."""
+
+    @model_serializer(mode="wrap")
+    def _omit_a_null_triage(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_when_null(handler, self, "triage")
 
 
 class FindingGroup(ReviewModel):

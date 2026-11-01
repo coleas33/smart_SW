@@ -1372,7 +1372,7 @@ return JSON.stringify({ok:true,count:controls.length,locked:Array.from(controls)
     }
 
     private const string ReadRecoveredApply = @"
-var reason=document.getElementById('read-only');var decisions=document.querySelectorAll('#results .card.finding [data-action=accept],#results .card.finding [data-action=reject],#results .card.finding [data-action=defer],#results .card.finding input.note');
+var reason=document.getElementById('read-only');var decisions=document.querySelectorAll('#results .card.finding [data-action=accept],#results .card.finding [data-action=reject],#results .card.finding [data-action=defer],#results .card.finding [data-action=triage],#results .card.finding input.note');
 var fold=document.querySelector('#send .error-fold');
 return JSON.stringify({ok:true,readOnly:h.rendered(reason),reason:reason.textContent,summary:document.getElementById('summary').textContent,
  decisionsLocked:Array.from(decisions).every(function(control){return control.disabled;}),

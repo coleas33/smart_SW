@@ -552,7 +552,7 @@ return JSON.stringify({
     private const string ReadState = @"
 var chips = document.querySelectorAll('#review-chips [data-action=""review-chip""]');
 var gone = document.querySelector('#review-chips .review-chip.gone');
-var decisions = document.querySelectorAll('#results .card.finding [data-action=""accept""], #results .card.finding [data-action=""reject""], #results .card.finding [data-action=""defer""], #results .card.finding input.note');
+var decisions = document.querySelectorAll('#results .card.finding [data-action=""accept""], #results .card.finding [data-action=""reject""], #results .card.finding [data-action=""defer""], #results .card.finding [data-action=""triage""], #results .card.finding input.note');
 var decisionsDisabled = decisions.length > 0;
 for (var i = 0; i < decisions.length; i++) { if (!decisions[i].disabled) { decisionsDisabled = false; } }
 var questionControls = document.querySelectorAll('#questions button, #questions input');

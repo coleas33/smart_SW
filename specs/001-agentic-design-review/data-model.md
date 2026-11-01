@@ -225,6 +225,14 @@ Validation: a finding with `status == "checked_within_scope"` or `"demonstrated"
 
 `decision: "accepted" | "rejected" | "deferred"`, `note`, `by`, `at`. Written by the engineer; never by the reviewer.
 
+*Amended 2026-11-01 (owner decision 185A; feature 002 FR-031):* `triage: "new_and_real" |
+"already_known" | "wrong" | "not_worth_flagging" | null`, the engineer's triage beside the
+decision (new and real; real but already known; wrong; true but not worth flagging): optional,
+independent of the decision and never inferred from it, and left out of `session.json` while
+null, so a disposition written before it keeps its bytes. A value outside the four is refused,
+naming them, before anything changes. A deferred finding keeps its triage when the later
+Accept or Reject names none.
+
 ### `Exception`
 
 | Field | Type | Rules |
@@ -240,6 +248,16 @@ Validation: a finding with `status == "checked_within_scope"` or `"demonstrated"
 ### `Timing`
 
 `baseline_minutes: float | null` (human review, recorded separately), `assisted_supervision_minutes`, `assisted_verification_minutes`, `false_alarm_handling_minutes`, `unattended_runtime_minutes`, `net_saved_minutes: float | null` (computed as baseline minus the sum of assisted minutes, excluding unattended runtime; FR-026).
+
+*Amended 2026-11-01 (owner decisions 183A and 184A; feature 007 FR-036):* two more inputs,
+`setup_minutes` and `review_by_hand_minutes`, each `float | null` and at least 0, left out of
+`session.json` while not recorded, so a session written before them keeps its bytes, but for a
+net derived from the four earlier inputs alone, saved again as null (below). The
+assisted minutes (`Timing.assisted_minutes`) are setup, supervision, verification, false-alarm
+handling and the review by hand, and `net_saved_minutes` is null until the baseline and both
+new inputs are recorded; a recorded 0 is a value. Setup is this design's own setup, a
+sitting's software update reported apart; the review by hand is the checking the engineer
+still does on what the tool did not reach.
 
 ### `BenchmarkPackage` and `Scorecard`
 
@@ -277,6 +295,11 @@ BenchmarkPackage 1 EvidencePackage + 1 AnswerKey ; Scorecard 1..* BenchmarkPacka
 **Finding.status** is set once by the check that produced it and does not change; a
 re-run produces a new session. **Disposition** transitions: none → accepted | rejected |
 deferred; deferred → accepted | rejected.
+
+*Amended 2026-11-01 (owner decision 185A; feature 002 FR-031):* accepted and rejected stay
+terminal with one exception: one recorded without a triage takes one once, sent again with the
+same decision, and the decision, note, `by` and `at` stay as first recorded. A different
+decision, a second triage, or the same decision with none is refused, as before.
 
 **Exception.status**: `active` → `needs_review` when a later package's fingerprint or
 configuration differs; `needs_review` → `active` (engineer re-accepts) or `retired`.

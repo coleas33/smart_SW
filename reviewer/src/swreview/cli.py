@@ -168,7 +168,7 @@ from swreview.exceptions import (
     ReviewException,
     fingerprint_kind_for,
 )
-from swreview.findings import Finding
+from swreview.findings import TRIAGES, Finding
 from swreview.ingest.package_builder import build_package
 from swreview.ir.loader import AnswerKeyAccessError, load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
@@ -184,7 +184,13 @@ from swreview.report.rerender import (
     rerender_run_folder,
     run_folder_session,
 )
-from swreview.report.session import CoverageBucket, ReviewSession, load_session, save_session
+from swreview.report.session import (
+    CoverageBucket,
+    ReviewSession,
+    Timing,
+    load_session,
+    save_session,
+)
 from swreview.seat.cli import app as seat_app
 from swreview.secrets import KEY_ENV_VARS as KEY_ENV_VARS
 from swreview.secrets import KEY_SHAPES
@@ -332,6 +338,11 @@ class Decision(StrEnum):
     accepted = "accepted"
     rejected = "rejected"
     deferred = "deferred"
+
+
+TriageChoice = StrEnum("TriageChoice", {token: token for token in TRIAGES})  # type: ignore[misc]
+"""`--triage`'s four choices, built from `findings.TRIAGES` so the option can name no fifth
+(owner decision 185A): Typer refuses any other value as a usage error."""
 
 
 # --- the option types every command shares ---------------------------------------
@@ -966,25 +977,49 @@ def disposition(
     by: Annotated[
         str | None, typer.Option("--by", help="Who decided; defaults to the current user.")
     ] = None,
+    triage: Annotated[
+        TriageChoice | None,
+        typer.Option(
+            "--triage",
+            help="The finding's triage beside the decision: new and real, real but already "
+            "known, wrong, or true but not worth flagging. Optional.",
+        ),
+    ] = None,
     json_output: JsonFlag = False,
 ) -> None:
-    """Record an engineer's decision on a finding and re-render the report."""
+    """Record an engineer's decision on a finding and re-render the report.
+
+    A decision recorded without `--triage` may take one once, sent again with the same decision
+    (owner decision 185A); the payload and the line name the disposition as recorded, which
+    then keeps the first note, `by` and time.
+    """
     decided_by = by if by else _default_user()
     with _errors_as_exit_1():
-        apply_disposition(run_dir, finding_id, decision.value, note, decided_by)
+        session = apply_disposition(
+            run_dir,
+            finding_id,
+            decision.value,
+            note,
+            decided_by,
+            triage=triage.value if triage is not None else None,
+        )
+    recorded = find_finding(session, finding_id).disposition
+    assert recorded is not None  # apply_disposition has just set it
 
     run_dir = Path(run_dir).resolve()
     payload = {
         "run_dir": str(run_dir),
         "finding_id": finding_id,
-        "decision": decision.value,
-        "by": decided_by,
-        "note": note,
+        "decision": recorded.decision,
+        "by": recorded.by,
+        "note": recorded.note,
+        "triage": recorded.triage,
         "session_file": str(run_dir / SESSION_FILE_NAME),
         "report_file": str(run_dir / REPORT_FILE_NAME),
     }
+    triaged = f" ({recorded.triage})" if recorded.triage is not None else ""
     lines = [
-        f"{finding_id}: {decision.value} by {decided_by}",
+        f"{finding_id}: {recorded.decision}{triaged} by {recorded.by}",
         f"report: {payload['report_file']}",
     ]
     _emit(payload, lines, json_output)
@@ -992,29 +1027,62 @@ def disposition(
 
 # --- timing ----------------------------------------------------------------------
 
+# The six inputs of `contracts/timing.md`, declared once for `timing` and `benchmark time`
+# (owner decision 183A added the last two; 184A says what they cover).
+BaselineOption = Annotated[
+    float | None, typer.Option("--baseline", help="Unassisted review minutes.")
+]
+SupervisionOption = Annotated[
+    float | None, typer.Option("--supervision", help="Minutes spent supervising the run.")
+]
+VerificationOption = Annotated[
+    float | None, typer.Option("--verification", help="Minutes spent verifying findings.")
+]
+FalseAlarmsOption = Annotated[
+    float | None, typer.Option("--false-alarms", help="Minutes spent on false alarms.")
+]
+SetupOption = Annotated[
+    float | None,
+    typer.Option(
+        "--setup",
+        help="Minutes setting this design up: the package, the assembly, its drawings, "
+        "starting the review and any rerun.",
+    ),
+]
+ByHandOption = Annotated[
+    float | None,
+    typer.Option("--by-hand", help="Minutes reviewing by hand what the tool did not reach."),
+]
+
+
+def _timing_line(timing: Timing) -> str:
+    """The six inputs as both timing commands print them, before `net saved:`."""
+    return (
+        f"baseline {timing.baseline_minutes}, "
+        f"supervision {timing.assisted_supervision_minutes}, "
+        f"verification {timing.assisted_verification_minutes}, "
+        f"false alarms {timing.false_alarm_handling_minutes}, "
+        f"setup {timing.setup_minutes}, "
+        f"by hand {timing.review_by_hand_minutes}"
+    )
+
 
 @app.command()
 def timing(
     run_dir: Annotated[Path, typer.Argument(help="Directory holding session.json.")],
-    baseline: Annotated[
-        float | None, typer.Option("--baseline", help="Unassisted review minutes.")
-    ] = None,
-    supervision: Annotated[
-        float | None, typer.Option("--supervision", help="Minutes spent supervising the run.")
-    ] = None,
-    verification: Annotated[
-        float | None, typer.Option("--verification", help="Minutes spent verifying findings.")
-    ] = None,
-    false_alarms: Annotated[
-        float | None, typer.Option("--false-alarms", help="Minutes spent on false alarms.")
-    ] = None,
+    baseline: BaselineOption = None,
+    supervision: SupervisionOption = None,
+    verification: VerificationOption = None,
+    false_alarms: FalseAlarmsOption = None,
+    setup: SetupOption = None,
+    by_hand: ByHandOption = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Record the engineer's minutes against a run folder and re-render the report.
 
-    The four inputs of `contracts/timing.md`; net saved minutes is derived by the model and
+    The six inputs of `contracts/timing.md`; net saved minutes is derived by the model and
     is deliberately not an option (FR-004). An omitted input keeps the value already
-    recorded, so one number can be corrected without restating the other three.
+    recorded, so one number can be corrected without restating the others.
     """
     with _errors_as_exit_1():
         recorded = record_timing_at(
@@ -1023,6 +1091,8 @@ def timing(
             supervision=supervision,
             verification=verification,
             false_alarms=false_alarms,
+            setup=setup,
+            by_hand=by_hand,
         )
         report_file = rerender_run_folder(run_dir)
 
@@ -1034,10 +1104,7 @@ def timing(
         "timing": to_jsonable_python(recorded),
     }
     lines = [
-        f"baseline {recorded.baseline_minutes}, "
-        f"supervision {recorded.assisted_supervision_minutes}, "
-        f"verification {recorded.assisted_verification_minutes}, "
-        f"false alarms {recorded.false_alarm_handling_minutes}",
+        _timing_line(recorded),
         f"net saved: {recorded.net_saved_minutes}",
         f"report: {payload['report_file']}",
     ]
@@ -3175,18 +3242,12 @@ def _refuse_answer_keys_beside_a_keyed_set(
 def benchmark_time(
     run_dir: Annotated[Path, typer.Argument(help="A benchmark run directory.")],
     package_id: Annotated[str, typer.Argument(help="Which package of the run.")],
-    baseline: Annotated[
-        float | None, typer.Option("--baseline", help="Unassisted review minutes.")
-    ] = None,
-    supervision: Annotated[
-        float | None, typer.Option("--supervision", help="Minutes spent supervising the run.")
-    ] = None,
-    verification: Annotated[
-        float | None, typer.Option("--verification", help="Minutes spent verifying findings.")
-    ] = None,
-    false_alarms: Annotated[
-        float | None, typer.Option("--false-alarms", help="Minutes spent on false alarms.")
-    ] = None,
+    baseline: BaselineOption = None,
+    supervision: SupervisionOption = None,
+    verification: VerificationOption = None,
+    false_alarms: FalseAlarmsOption = None,
+    setup: SetupOption = None,
+    by_hand: ByHandOption = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Record human timing against one package of a run, for net-savings computation."""
@@ -3198,6 +3259,8 @@ def benchmark_time(
             supervision=supervision,
             verification=verification,
             false_alarms=false_alarms,
+            setup=setup,
+            by_hand=by_hand,
         )
 
     payload = {
@@ -3206,10 +3269,7 @@ def benchmark_time(
         "timing": to_jsonable_python(timing),
     }
     lines = [
-        f"{package_id}: baseline {timing.baseline_minutes}, "
-        f"supervision {timing.assisted_supervision_minutes}, "
-        f"verification {timing.assisted_verification_minutes}, "
-        f"false alarms {timing.false_alarm_handling_minutes}",
+        f"{package_id}: {_timing_line(timing)}",
         f"net saved: {timing.net_saved_minutes}",
     ]
     _emit(payload, lines, json_output)

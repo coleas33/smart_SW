@@ -36,7 +36,7 @@ call-site enumeration finds exactly the eight production sites named in research
 
 ```powershell
 Copy-Item -Recurse tests/fixtures/attention/review-folder "$runs\review"
-uv run swreview timing "$runs\review" --baseline 45 --supervision 6 --verification 9 --false-alarms 2 --json
+uv run swreview timing "$runs\review" --baseline 45 --supervision 6 --verification 9 --false-alarms 2 --setup 0 --by-hand 0 --json
 uv run swreview timing "$runs\review" --baseline -1
 ```
 
@@ -45,6 +45,15 @@ minutes: 28.0`; the second exits 1 with `baseline_minutes` in the message and th
 unchanged. `uv run pytest tests/unit/test_timing.py -q` proves `benchmark time` still passes
 its six tests through the wrapper, and `tests/unit/test_chat_timing_route.py` proves the route
 writes the live session, survives the next turn, and refuses `net_saved_minutes` by name.
+
+*Amended 2026-11-01 (owner decisions 183A and 184A; FR-036):* the first command records setup
+and the review by hand as 0 too, since the net is unknown until both are recorded; it then
+prints `net saved: 28.0` as above, and the Timing section prints `Setup minutes: 0.0` and
+`Review by hand minutes: 0.0`. Without the two options it prints `net saved: None` and both
+lines `unknown`. `test_timing.py`'s six wrapper tests keep their figures the same way, by
+recording the two as 0; User Story 1's scenario 7 (`--baseline 120 --supervision 6
+--verification 9 --false-alarms 2 --setup 10 --by-hand 30`, a net of 63.0) is
+`test_cli_timing.py`'s.
 
 ## Scenario 2 (US2): the 2026-09-18 order
 

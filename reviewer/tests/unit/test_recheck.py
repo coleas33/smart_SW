@@ -58,10 +58,12 @@ from swreview.report.attention_record import StaleAttentionRecord, read_attentio
 from swreview.report.markdown import render_report
 from swreview.report.names import plural
 from swreview.report.session import (
+    HUMAN_TIMING_FIELDS,
     DrawingOutcome,
     EvidenceRequest,
     ReviewSession,
     SendFailure,
+    Timing,
     load_session,
     save_session,
 )
@@ -1573,6 +1575,29 @@ def test_two_coaxial_findings_on_one_pair_carry_the_reject_onto_its_own(bare: An
     assert recheck_row(run.session) == []
 
 
+def test_a_carried_decision_keeps_its_triage(bare: Any) -> None:
+    """Owner decision 185A (002 T312): a re-run carries a decision whole, the triage beside it
+    included (72A), and the `disposition` event that announces the carry says so."""
+    run, earlier, events = bare
+    run.session.findings[:] = [coaxial("F-001", "hol:0001"), coaxial("F-002", "hol:0002")]
+    triaged = Disposition(
+        decision="rejected", note="FICT note", by="FICT engineer", at=FIRST_DECIDED, triage="wrong"
+    )
+    earlier.findings[:] = [
+        coaxial("F-007", "hol:0001"),
+        coaxial("F-008", "hol:0002").model_copy(update={"disposition": triaged}),
+    ]
+
+    run.carry_from(earlier)
+
+    assert run.session.findings[0].disposition is None
+    assert run.session.findings[1].disposition == triaged
+    assert [body for kind, body in events if kind == "disposition"] == [
+        {"finding_id": "F-002", "disposition": triaged.model_dump(mode="json")}
+    ]
+    assert triaged.model_dump(mode="json")["triage"] == "wrong"
+
+
 def test_two_earlier_decisions_meeting_one_finding_carry_neither_and_name_each(
     bare: Any,
 ) -> None:
@@ -1718,6 +1743,40 @@ def test_the_timing_inputs_and_a_failed_sends_status_are_carried(bare: Any) -> N
     assert status.rechecked_from == earlier.session_id
     assert status.checked_at == checked
     assert status.document == earlier.model_status.document
+
+
+def test_every_human_timing_input_is_carried(bare: Any) -> None:
+    """Owner decision 183A (007 T067; 72A): a re-run copies every human input of the earlier
+    record, setup and the review by hand among them, so a waiting review's minutes are not lost
+    to its re-run, and its net is the earlier one; the unattended runtime is the re-run's own.
+    The six are every field of `Timing` but the runtime and the derived net, so an input added
+    later is carried too."""
+    run, earlier, _ = bare
+    earlier.timing = earlier.timing.replace(
+        baseline_minutes=120.0,
+        assisted_supervision_minutes=6.0,
+        assisted_verification_minutes=9.0,
+        false_alarm_handling_minutes=2.0,
+        setup_minutes=10.0,
+        review_by_hand_minutes=30.0,
+        unattended_runtime_minutes=4.5,
+    )
+    own = run.session.timing.unattended_runtime_minutes
+    assert own != 4.5
+
+    run.carry_from(earlier)
+
+    timing = run.session.timing
+    assert (
+        timing.baseline_minutes, timing.assisted_supervision_minutes,
+        timing.assisted_verification_minutes, timing.false_alarm_handling_minutes,
+        timing.setup_minutes, timing.review_by_hand_minutes,
+    ) == (120.0, 6.0, 9.0, 2.0, 10.0, 30.0)
+    assert timing.unattended_runtime_minutes == own
+    assert timing.net_saved_minutes == 63.0
+    assert set(HUMAN_TIMING_FIELDS) == set(Timing.model_fields) - {
+        "unattended_runtime_minutes", "net_saved_minutes",
+    }
 
 
 @pytest.mark.parametrize("state", ["not_sent", "send_failed"])

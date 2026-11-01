@@ -307,6 +307,7 @@ def record_disposition(
     decision: str,
     note: str,
     by: str,
+    triage: str | None = None,
 ) -> Finding:
     """Disposition one finding of a **live** review, and say so on the stream (FR-012).
 
@@ -324,10 +325,14 @@ def record_disposition(
     the report and the record, so the section the engineer re-opens and `attention.json`
     beside it are the same order (research R2.7).
 
-    Raises `KeyError` for an unknown finding id and `ValueError` for an unknown decision or
-    a transition the state machine forbids; nothing is written on either path.
+    `triage` is recorded beside the decision as `set_disposition` records it (owner decision
+    185A), so the file, the report and the event all carry what was recorded.
+
+    Raises `KeyError` for an unknown finding id and `ValueError` for an unknown decision, a
+    triage outside the four or a transition the state machine forbids; nothing is written on
+    either path.
     """
-    finding = set_disposition(run.session, finding_id, decision, note, by)
+    finding = set_disposition(run.session, finding_id, decision, note, by, triage=triage)
     run.write_views(save=True, best_effort=False)
     run.announce_disposition(finding)
     return finding
@@ -343,8 +348,10 @@ def record_timing_live(
     supervision: float | None = None,
     verification: float | None = None,
     false_alarms: float | None = None,
+    setup: float | None = None,
+    by_hand: float | None = None,
 ) -> Timing:
-    """Record the four human inputs on a **live** review and re-render its report.
+    """Record the human inputs on a **live** review and re-render its report.
 
     `benchmark.timing.record_timing_at` is the offline form, and it is exactly wrong for a
     chat for the reason `record_disposition` above gives: the run holds the session in
@@ -366,6 +373,8 @@ def record_timing_live(
         supervision=supervision,
         verification=verification,
         false_alarms=false_alarms,
+        setup=setup,
+        by_hand=by_hand,
     )
     run.write_views(save=True, best_effort=False)
     return session.timing

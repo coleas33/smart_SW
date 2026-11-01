@@ -72,7 +72,11 @@ def record(run_dir: Path, *options: str) -> Any:
 
 
 def four(run_dir: Path, *extra: str) -> Any:
-    """The scenario-1 recording: baseline 45, supervision 6, verification 9, false alarms 2."""
+    """The scenario-1 recording: baseline 45, supervision 6, verification 9, false alarms 2.
+
+    *Changed 2026-11-01 on purpose (owner decision 183A; 007 T065):* with setup and the review
+    by hand recorded as 0, since the net is unknown without them; every figure read from it
+    keeps its value."""
     return record(
         run_dir,
         "--baseline",
@@ -83,12 +87,24 @@ def four(run_dir: Path, *extra: str) -> Any:
         "9",
         "--false-alarms",
         "2",
+        "--setup",
+        "0",
+        "--by-hand",
+        "0",
         *extra,
     )
 
 
 def files_in(directory: Path) -> dict[str, bytes]:
     return {path.name: path.read_bytes() for path in sorted(directory.iterdir())}
+
+
+def timing_section(run_dir: Path) -> list[str]:
+    """The lines of `report.md`'s `## Timing` section, up to the next heading."""
+    lines = (run_dir / "report.md").read_text(encoding="utf-8").splitlines()
+    start = lines.index("## Timing")
+    ends = [index for index in range(start + 1, len(lines)) if lines[index].startswith("## ")]
+    return lines[start : ends[0] if ends else len(lines)]
 
 
 # --- 1. the recording --------------------------------------------------------------
@@ -105,6 +121,8 @@ def test_the_four_inputs_reach_the_session_and_the_net_is_derived(review_dir: Pa
         "assisted_supervision_minutes": 6.0,
         "assisted_verification_minutes": 9.0,
         "false_alarm_handling_minutes": 2.0,
+        "setup_minutes": 0.0,
+        "review_by_hand_minutes": 0.0,
         "unattended_runtime_minutes": body["timing"]["unattended_runtime_minutes"],
         "net_saved_minutes": 28.0,
     }
@@ -119,6 +137,33 @@ def test_the_lines_name_the_four_values_and_the_net(review_dir: Path) -> None:
     assert result.exit_code == 0, result.stdout + result.stderr
     assert "net saved: 28.0" in result.stdout
     assert "baseline 45.0" in result.stdout
+
+
+def test_setup_and_the_review_left_by_hand_reach_the_session_and_the_lines(
+    review_dir: Path,
+) -> None:
+    """Owner decision 183A (007 T065): `--setup` and `--by-hand` are recorded as the four are,
+    the payload carries them, and the printed line names the six before the net: 120 less 57
+    (User Story 1, scenario 7)."""
+    options = (
+        "--baseline", "120", "--supervision", "6", "--verification", "9",
+        "--false-alarms", "2", "--setup", "10", "--by-hand", "30",
+    )
+
+    body = payload(record(review_dir, *options, "--json"))
+    result = record(review_dir, *options)
+
+    assert body["timing"]["setup_minutes"] == 10.0
+    assert body["timing"]["review_by_hand_minutes"] == 30.0
+    assert body["timing"]["net_saved_minutes"] == 63.0
+    timing = load_session(review_dir / "session.json").timing
+    assert (timing.setup_minutes, timing.review_by_hand_minutes) == (10.0, 30.0)
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (
+        "baseline 120.0, supervision 6.0, verification 9.0, false alarms 2.0, "
+        "setup 10.0, by hand 30.0"
+    ) in result.stdout
+    assert "net saved: 63.0" in result.stdout
 
 
 def test_there_is_no_way_to_supply_the_net(review_dir: Path) -> None:
@@ -163,6 +208,33 @@ def test_the_report_is_re_rendered_with_the_net_and_the_package(review_dir: Path
     assert PLACEHOLDER not in report
 
 
+def test_the_report_prints_setup_and_the_review_left_by_hand_even_when_unknown(
+    review_dir: Path,
+) -> None:
+    """Owner decision 183A (007 T067): the Timing section prints both new inputs always,
+    `unknown` until recorded as the baseline's line does, so a reader of a net that is unknown
+    sees why; once both are recorded it prints them and the net, 120 less 57."""
+    record(
+        review_dir,
+        "--baseline", "120", "--supervision", "6", "--verification", "9", "--false-alarms", "2",
+    )
+    before = timing_section(review_dir)
+
+    record(review_dir, "--setup", "10", "--by-hand", "30")
+    after = timing_section(review_dir)
+
+    assert {
+        "- Setup minutes: unknown",
+        "- Review by hand minutes: unknown",
+        "- Net saved minutes: unknown",
+    } <= set(before)
+    assert {
+        "- Setup minutes: 10.0",
+        "- Review by hand minutes: 30.0",
+        "- Net saved minutes: 63.0",
+    } <= set(after)
+
+
 def test_a_standards_check_folder_keeps_its_verdict_header(standards_dir: Path) -> None:
     """The defect a second lossy re-render would have doubled (research R2.7)."""
     four(standards_dir)
@@ -195,6 +267,8 @@ def test_an_rms_check_folder_gets_no_header_and_is_still_timed(tmp_path: Path) -
         ("--supervision", "assisted_supervision_minutes"),
         ("--verification", "assisted_verification_minutes"),
         ("--false-alarms", "false_alarm_handling_minutes"),
+        ("--setup", "setup_minutes"),
+        ("--by-hand", "review_by_hand_minutes"),
     ],
 )
 def test_a_negative_input_exits_1_naming_the_field_and_writes_nothing(

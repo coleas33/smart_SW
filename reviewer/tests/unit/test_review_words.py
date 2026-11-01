@@ -28,7 +28,7 @@ from pydantic import ValidationError
 import swreview.chat.remodel  # noqa: F401 - registers the remodel routes' ChatError classes
 from swreview.agent.checklist import CHECKLIST_FILE
 from swreview.chat.server import ChatError
-from swreview.findings import FindingStatus, Severity
+from swreview.findings import TRIAGES, FindingStatus, Severity
 from swreview.report.attention import CHECKLIST_ITEM_IDS, CLOSEOUT_ITEM_ID, load_policy
 from swreview.report.session import CoverageBucket
 from swreview.report.summary import WORDS_FILE, Words, goal_of, load_words
@@ -237,10 +237,33 @@ def test_every_backend_error_class_has_a_next_step_sentence() -> None:
 
 
 def test_every_label_is_a_plain_word_not_a_token() -> None:
-    """A label is what the engineer reads in place of a token, so none is one."""
+    """A label is what the engineer reads in place of a token, so none is one.
+
+    *Changed 2026-11-01 on purpose (002 T310; owner decision 185A):* the triage words too."""
     labels = load_words().labels
-    for group in (labels.status, labels.severity, labels.bucket, labels.contact_kind):
+    for group in (
+        labels.status,
+        labels.severity,
+        labels.bucket,
+        labels.contact_kind,
+        labels.triage,
+    ):
         assert all("_" not in word for word in group.values())
+
+
+def test_the_triage_words_name_exactly_the_four() -> None:
+    """Owner decision 185A (002 FR-031): one word for each of a finding's four triage outcomes,
+    keyed by its token in the order of `TRIAGES`, and nothing else; the page and `report.md`
+    print these."""
+    triage = load_words().labels.triage
+
+    assert tuple(triage) == TRIAGES
+    assert list(triage.values()) == [
+        "new and real",
+        "real but already known",
+        "wrong",
+        "true but not worth flagging",
+    ]
 
 
 # --- the goals ------------------------------------------------------------------------------

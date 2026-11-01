@@ -407,7 +407,10 @@
     },
     "Disposition": {
       "type": "object", "additionalProperties": false, "required": ["decision", "note", "by", "at"],
-      "properties": { "decision": { "enum": ["accepted", "rejected", "deferred"] }, "note": { "type": "string" }, "by": { "type": "string" }, "at": { "type": "string", "format": "date-time" } }
+      "properties": {
+        "decision": { "enum": ["accepted", "rejected", "deferred"] }, "note": { "type": "string" }, "by": { "type": "string" }, "at": { "type": "string", "format": "date-time" },
+        "triage": { "enum": ["new_and_real", "already_known", "wrong", "not_worth_flagging"], "description": "The engineer's triage beside the decision (owner decision 185A; 002 FR-031): new and real, real but already known, wrong, or true but not worth flagging. Optional and independent of the decision, never inferred from it. Added to properties and left out of required, and omitted when absent, so a disposition written before the field still validates and keeps its bytes" }
+      }
     },
     "Finding": {
       "type": "object", "additionalProperties": false,
@@ -478,6 +481,8 @@
         "assisted_supervision_minutes": { "type": "number", "minimum": 0 },
         "assisted_verification_minutes": { "type": "number", "minimum": 0 },
         "false_alarm_handling_minutes": { "type": "number", "minimum": 0 },
+        "setup_minutes": { "type": ["number", "null"], "minimum": 0, "description": "This design's own setup (owner decisions 183A and 184A; 007 FR-036): preparing the package, opening the assembly, attaching drawings, starting the review and any rerun; a sitting's software update is reported apart. One of the assisted minutes, so the net is null until it is recorded. Added to properties and left out of required, and omitted when not recorded, so a session written before the field still validates and keeps its bytes, but for a net derived from the four earlier inputs alone, which now reads null" },
+        "review_by_hand_minutes": { "type": ["number", "null"], "minimum": 0, "description": "The checking the engineer still does by hand on what the tool did not reach (owner decisions 183A and 184A; 007 FR-036). One of the assisted minutes, so the net is null until it is recorded. Added to properties and left out of required, and omitted when not recorded, so a session written before the field still validates and keeps its bytes, but for a net derived from the four earlier inputs alone, which now reads null" },
         "unattended_runtime_minutes": { "type": "number", "minimum": 0 },
         "net_saved_minutes": { "type": ["number", "null"] }
       }

@@ -518,13 +518,16 @@ body.results-stale .card.evidence {
   overflow-wrap: anywhere;
 }
 
-.question-options {
+/* A finding's triage row (owner decision 185A) wraps and presses as the offered answers do. */
+.question-options,
+.triage-options {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.question-options button[aria-pressed="true"] {
+.question-options button[aria-pressed="true"],
+.triage-options button[aria-pressed="true"] {
   border-color: var(--judge);
   background: var(--judge-bg);
   color: var(--judge);

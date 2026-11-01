@@ -47,7 +47,7 @@ import yaml
 from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from swreview.drawings.evidence import file_key, file_name, id_order
-from swreview.findings import Finding, FindingStatus, ReviewModel, Severity
+from swreview.findings import Finding, FindingStatus, ReviewModel, Severity, Triage
 from swreview.ir.models import Document, EvidencePackage, omit_when_null
 from swreview.report.attention import (
     SUPPRESSED_STATUS,
@@ -318,6 +318,7 @@ class Labels(ReviewModel):
     bucket: dict[CoverageBucket, str]
     evidence_status: dict[EvidenceStatus, str]
     contact_kind: dict[ContactKind, str]
+    triage: dict[Triage, str]
     source: dict[Source, str]
     errors: dict[str, str]
 

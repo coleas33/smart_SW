@@ -142,6 +142,8 @@ def make_session(
             assisted_verification_minutes=8.0,
             false_alarm_handling_minutes=2.0,
             unattended_runtime_minutes=25.0,
+            setup_minutes=0.0,  # recorded since 183A, so the net stays a number (007 T065)
+            review_by_hand_minutes=0.0,
         ),
         usage=usage,
     )

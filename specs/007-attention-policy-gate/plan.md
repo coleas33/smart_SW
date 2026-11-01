@@ -39,6 +39,16 @@ model start where the deterministic checks stopped. Four pieces, in the order th
 No new agent stage, no second provider round trip, no new event type, no model input to the
 rank, no new field on `Finding` or `ReviewSession`.
 
+*Amended 2026-11-01 (owner decisions 183A and 184A; FR-036; tasks T064 to T069):* piece 1 widens
+after the build. `Timing` gains two optional inputs, setup and the review by hand, recorded by the
+same writer, both commands and the route; the assisted minutes are the five together, one
+property that the net and the scorecard both read, and the net is unknown until both are
+recorded. The two fields sit in `Timing`, inside `ReviewSession` (here and in Constraints below),
+and are left out of `session.json` while unrecorded, so every earlier session keeps its bytes but
+for a net derived from the four earlier inputs alone, which now reads unknown and is saved as null;
+`Finding` is still untouched by this feature. `Timing.baseline_minutes`' `ge=0` is no longer the
+one model change, and Storage's "four timing inputs" are six.
+
 ## Technical Context
 
 **Language/Version**: Python 3.11+ for everything but the pane rendering (the policy, the
@@ -116,6 +126,14 @@ the table).*
 | Technical constraint: no generic code execution exposed to the agent | No new tool | The gate registers no tool; it calls the check tools the model already has, and the standards tool is offered to a review context by the same attribute a standards run sets. The number guard narrows an existing tool. | PASS |
 
 **Post-design re-check**: no exception, no Complexity Tracking row.
+
+*Re-checked 2026-11-01 for owner decisions 183A and 184A (FR-036):* I and VI hold, and more
+strictly. VI: the net counts all of the engineer's effort, so net time saved is measured per
+design without leaving setup or the review by hand out. I: setup and the review by hand stay
+unknown until recorded, and the net with them; neither is read as 0. Supervision, verification
+and false-alarm handling start at 0 when a review starts, as before 183A, so once the baseline
+and both new inputs are recorded the net is a number whether or not those three were
+(`docs/review-backlog.md`, cycle 1).
 
 ## Project Structure
 
@@ -284,6 +302,25 @@ consumers are the renderer, the run folder and the CLI; the policy is not under 
 because it grades nothing and not under `agent/` because the model never sees it except
 rendered. The gate lives in `prerun.py` because it is that pre-run widened, not a second one.
 
+*Amended 2026-11-01 (owner decisions 183A and 184A; FR-036; tasks T064 to T069):* the two timing
+inputs touch these files beyond the tree above; `chat/server.py`'s route takes them through
+`TIMING_INPUTS` with no logic of its own.
+
+```text
+reviewer/src/swreview/
+├── report/session.py          # Timing.setup_minutes, review_by_hand_minutes (omitted while None);
+│                              #   assisted_minutes; the net from it; replace() checks model_fields
+├── benchmark/timing.py        # TIMING_INPUTS gains setup and by_hand; the writers take both
+├── chat/sessions.py           # record_timing_live takes both
+├── benchmark/scorecard.py     # PackageScore.assisted_minutes reads Timing.assisted_minutes
+├── cli.py                     # --setup and --by-hand on `timing` and `benchmark time`, declared once
+├── report/markdown.py         # the Timing section's two lines, "unknown" when not recorded
+└── agent/runner.py            # carry_from copies every human input (feature 015, 72A)
+
+docs/test-plan-2026-09-27/workstation-test-plan.md                   # step 4.1's definitions; 4.5's line
+specs/001-agentic-design-review/contracts/review-session.schema.json  # Timing: two fields, properties only
+```
+
 ## Phase 0 and Phase 1
 
 Research in [research.md](research.md) (R1 to R5). Design in [data-model.md](data-model.md)
@@ -296,7 +333,10 @@ and [contracts/](contracts/). Eleven points tasks must honour:
    `ge=0` its schema already states (research R2.9). The route copies `disposition`'s shape,
    writes the live session, and refuses any key that is not one of the four by name, because the
    model silently accepts a supplied net. The route reaches pane reviews; check folders are
-   timed from the command line.
+   timed from the command line. *Amended 2026-11-01 (owner decisions 183A and 184A):* six
+   inputs, named once in `TIMING_INPUTS`; the route refuses any key that is not one of the six;
+   the six wrapper tests keep their figures by recording setup and the review by hand as 0,
+   deliberately, since a net without them is unknown (contracts/timing.md section 1).
 2. **One policy, one table, no arithmetic.** `rank()` sorts by a tuple of nine named lookups.
    Suppressed means `checked_within_scope` or an accepted or rejected disposition, and nothing
    else (R2.1). The consequence table and the needs-judgement set are the policy file, so a

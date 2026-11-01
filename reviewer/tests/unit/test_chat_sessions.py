@@ -472,6 +472,43 @@ def test_a_disposition_is_written_to_the_session_the_report_and_the_stream(
     assert emitted[0].body["disposition"]["by"] == "a.engineer"
 
 
+def test_a_disposition_with_a_triage_reaches_the_session_the_report_and_the_stream(
+    chat: ChatSession, run_with_a_finding: runner.ReviewRun
+) -> None:
+    """Owner decision 185A (002 T310): the triage rides the live record's three writes, beside
+    the decision it was recorded with.
+
+    *Changed 2026-11-01 on purpose (002 T314):* `report.md` shows the triage's words under the
+    decision, once T315 renders them."""
+    run = run_with_a_finding
+    finding_id = run.session.findings[0].id
+    before = list(replay_events(chat.events_path))
+
+    finding = record_disposition(
+        run,
+        finding_id,
+        decision="accepted",
+        note="FICT note",
+        by="FICT-ENG",
+        triage="not_worth_flagging",
+    )
+
+    assert finding.disposition is not None
+    assert (finding.disposition.decision, finding.disposition.triage) == (
+        "accepted",
+        "not_worth_flagging",
+    )
+    saved = load_session(run.session_path).findings[0].disposition
+    assert saved is not None and saved == finding.disposition
+    report = (run.out_dir / "report.md").read_text(encoding="utf-8")
+    assert "  - decision: accepted\n  - triage: true but not worth flagging\n" in report
+    emitted = list(replay_events(chat.events_path))[len(before) :]
+    assert [(event.type, event.body["disposition"]) for event in emitted] == [
+        ("disposition", finding.disposition.model_dump(mode="json"))
+    ]
+    assert emitted[0].body["disposition"]["triage"] == "not_worth_flagging"
+
+
 def test_the_in_memory_session_carries_the_disposition_so_the_next_turn_cannot_drop_it(
     run_with_a_finding: runner.ReviewRun,
 ) -> None:

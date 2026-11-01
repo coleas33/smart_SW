@@ -50,9 +50,10 @@ amplified, and a block saying what the run could not reach. The rule is
 `swreview attention <run dir>` prints it with the key values behind every row without
 writing anything. The same rows appear above the chips on the Model check and Standards
 tabs and in a panel above the Review transcript when a session ends; no page computes
-them. `swreview timing <run dir>` records the engineer's minutes (baseline, assisted
-supervision, verification and false-alarm handling) against any run folder, and the report's
-Timing section prints the net figure. `swreview review --lever procedural_gate`, off by
+them. `swreview timing <run dir>` records the engineer's minutes (baseline, and the assisted
+setup, supervision, verification, false-alarm handling and review by hand; decisions 183A and
+184A) against any run folder, and the report's Timing section prints the net figure, unknown
+until setup and the review by hand are recorded. `swreview review --lever procedural_gate`, off by
 default, runs the deterministic checks first and opens the model's first user message with
 their ranked brief; `specs/007-attention-policy-gate/` has the contracts.
 

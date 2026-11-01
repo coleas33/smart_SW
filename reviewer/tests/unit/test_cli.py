@@ -1100,6 +1100,152 @@ def test_disposition_with_an_unknown_decision_is_a_usage_error(run_dir: Path) ->
     assert result.exit_code == 2
 
 
+# --- a finding's triage beside its decision (002 T310, owner decision 185A) ----------------------
+
+TRIAGE_TOKENS = ("new_and_real", "already_known", "wrong", "not_worth_flagging")
+"""`--triage`'s four choices as the usage error names them, in their order."""
+
+
+def run_files(run_dir: Path) -> dict[str, bytes]:
+    """The two files `swreview disposition` writes, by name."""
+    return {name: (run_dir / name).read_bytes() for name in ("session.json", "report.md")}
+
+
+def saved_disposition(run_dir: Path) -> dict[str, Any]:
+    """The one finding's disposition as `session.json` holds it."""
+    session = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
+    disposition: dict[str, Any] = session["findings"][0]["disposition"]
+    return disposition
+
+
+def test_disposition_records_the_triage_and_rerenders(run_dir: Path) -> None:
+    """*Changed 2026-11-01 on purpose (002 T314):* the re-rendered `report.md` shows the
+    triage's words under the decision, once T315 renders them."""
+    body = payload(
+        invoke(
+            "disposition",
+            str(run_dir),
+            "F-001",
+            "--decision",
+            "rejected",
+            "--triage",
+            "new_and_real",
+            "--note",
+            "FICT note",
+            "--by",
+            "FICT-ENG",
+            "--json",
+        )
+    )
+
+    disposition = saved_disposition(run_dir)
+    assert (disposition["decision"], disposition["triage"]) == ("rejected", "new_and_real")
+    assert (body["decision"], body["note"], body["by"], body["triage"]) == (
+        "rejected",
+        "FICT note",
+        "FICT-ENG",
+        "new_and_real",
+    )
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "  - decision: rejected\n  - triage: new and real\n" in report
+
+
+def test_disposition_with_an_unknown_triage_is_a_usage_error(run_dir: Path) -> None:
+    """A fifth value is refused by the option itself, naming the four, before anything is
+    read or written."""
+    before = run_files(run_dir)
+
+    result = invoke(
+        "disposition",
+        str(run_dir),
+        "F-001",
+        "--decision",
+        "accepted",
+        "--triage",
+        "new and real",
+        "--by",
+        "FICT-ENG",
+    )
+
+    assert result.exit_code == 2
+    refusal = plain_words(result.stderr)
+    assert "Invalid value for '--triage'" in refusal
+    assert [token for token in TRIAGE_TOKENS if token in refusal] == list(TRIAGE_TOKENS)
+    assert run_files(run_dir) == before
+
+
+def test_disposition_adds_a_late_triage_once(run_dir: Path, tmp_path: Path) -> None:
+    """185A: an Accept recorded without a triage takes one once, sent with the same decision.
+    The session keeps the first note, `by` and `at`; the payload and the printed line name the
+    disposition as recorded, not as typed. A second triage is refused, naming the terminal rule,
+    and changes nothing."""
+    first = payload(
+        invoke(
+            "disposition",
+            str(run_dir),
+            "F-001",
+            "--decision",
+            "accepted",
+            "--note",
+            "FICT first note",
+            "--by",
+            "FICT-ENG",
+            "--json",
+        )
+    )
+    assert first["triage"] is None
+    first_at = saved_disposition(run_dir)["at"]
+    printed_dir = tmp_path / "FICT-printed"
+    shutil.copytree(run_dir, printed_dir)
+    late = (
+        "--decision",
+        "accepted",
+        "--triage",
+        "already_known",
+        "--note",
+        "FICT later note",
+        "--by",
+        "FICT-ENG-2",
+    )
+
+    body = payload(invoke("disposition", str(run_dir), "F-001", *late, "--json"))
+    printed = invoke("disposition", str(printed_dir), "F-001", *late)
+
+    recorded = {
+        "decision": "accepted",
+        "note": "FICT first note",
+        "by": "FICT-ENG",
+        "at": first_at,
+        "triage": "already_known",
+    }
+    assert saved_disposition(run_dir) == recorded
+    assert (body["decision"], body["note"], body["by"], body["triage"]) == (
+        "accepted",
+        "FICT first note",
+        "FICT-ENG",
+        "already_known",
+    )
+    assert printed.exit_code == 0, printed.stdout + printed.stderr
+    assert printed.stdout.splitlines()[0] == "F-001: accepted (already_known) by FICT-ENG"
+    before = run_files(run_dir)
+
+    again = invoke(
+        "disposition",
+        str(run_dir),
+        "F-001",
+        "--decision",
+        "accepted",
+        "--triage",
+        "wrong",
+        "--by",
+        "FICT-ENG",
+    )
+
+    assert again.exit_code == 1
+    assert "terminal" in again.stderr
+    assert run_files(run_dir) == before
+
+
 # --- check fit / stack -----------------------------------------------------------
 
 
@@ -3245,6 +3391,8 @@ def test_score_refuses_answer_keys_beside_a_keyed_set(
 
 
 def test_benchmark_time_records_the_human_minutes(benchmark_run_dir: Path) -> None:
+    """*Changed 2026-11-01 on purpose (owner decision 183A; 007 T065):* setup and the review by
+    hand are recorded as 0, since the net is unknown without them; the net keeps its value."""
     body = payload(
         invoke(
             "benchmark",
@@ -3259,6 +3407,10 @@ def test_benchmark_time_records_the_human_minutes(benchmark_run_dir: Path) -> No
             "5",
             "--false-alarms",
             "2",
+            "--setup",
+            "0",
+            "--by-hand",
+            "0",
             "--json",
         )
     )
@@ -3269,6 +3421,32 @@ def test_benchmark_time_records_the_human_minutes(benchmark_run_dir: Path) -> No
     assert timing["assisted_supervision_minutes"] == 10
     assert timing["net_saved_minutes"] == 73
     assert body["timing"]["net_saved_minutes"] == 73
+
+
+def test_benchmark_time_records_setup_and_the_review_left_by_hand(
+    benchmark_run_dir: Path,
+) -> None:
+    """Owner decision 183A (007 T065, FR-005): the benchmark's command takes the two inputs the
+    run folder's does, through the one writer, and prints the same line after the package id:
+    120 less 57 (User Story 1, scenario 7)."""
+    options = (
+        "--baseline", "120", "--supervision", "6", "--verification", "9",
+        "--false-alarms", "2", "--setup", "10", "--by-hand", "30",
+    )
+
+    body = payload(invoke("benchmark", "time", str(benchmark_run_dir), "cover", *options, "--json"))
+    result = invoke("benchmark", "time", str(benchmark_run_dir), "cover", *options)
+
+    session = json.loads((benchmark_run_dir / "cover" / "session.json").read_text("utf-8"))
+    for timing in (session["timing"], body["timing"]):
+        assert (timing["setup_minutes"], timing["review_by_hand_minutes"]) == (10, 30)
+        assert timing["net_saved_minutes"] == 63
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (
+        "cover: baseline 120.0, supervision 6.0, verification 9.0, false alarms 2.0, "
+        "setup 10.0, by hand 30.0"
+    ) in result.stdout
+    assert "net saved: 63.0" in result.stdout
 
 
 def test_benchmark_time_for_an_unknown_package_exits_1(benchmark_run_dir: Path) -> None:

@@ -6067,3 +6067,167 @@ JUnit reports (zero failures/errors), the independent approval and the final C# 
 At the T302 record, decision 160A remained in progress pending CI and delivery.
 Delivery update, 2026-10-23: PR #34 passed all four required checks and merged at `6b0508c`;
 the decision register now records 160A as done.
+
+### 185A. A finding's triage beside its decision, and a late triage once (2026-11-01)
+
+- **Question**: a disposition held a decision (accepted, rejected, deferred) and a free note, and
+  decision 51A (2026-10-08, feature 010) made Accept also mean "intended" for a fine thread, so
+  neither the new and real findings of a review nor its false alarms could be counted without
+  reading notes ([`docs/roadmap/holes.md`](../../docs/roadmap/holes.md), H-g-007;
+  [`docs/roadmap/metrics.md`](../../docs/roadmap/metrics.md), "New and real findings per design"
+  and "False alarms per design"). Milestone M0 needs every finding given one of four outcomes:
+  new and real; real but already known; wrong; true but not worth flagging. The owner was asked,
+  as 3A of cycle 1's round on 2026-11-01, whether a triage may be added later to an Accept or
+  Reject recorded without one, since `report/dispositions.py` refuses any change to an accepted
+  or rejected finding ("already has a terminal disposition ... it cannot be changed").
+- **Options**: A: yes, once - the same decision sent again with a triage records the triage and
+  nothing else, and a different decision or a second triage is refused, as before. B: no -
+  Accept and Reject stay terminal, and a decision recorded without a triage counts as not
+  recorded for good; only a hand edit of `session.json` repairs one missed press, and M0's
+  first exit criterion is then unmet. C: the page refuses Accept and Reject until an outcome is
+  pressed while the API stays optional - no slip in the pane, but a page-side rule, a press
+  added to every 51A confirmation, and the console can still record a decision without one.
+- **Chosen**: A. One slip, such as pressing Accept before picking an outcome, can be repaired
+  from the pane or the console, at the cost of one narrow exception to feature 001's rule that
+  accepted and rejected are terminal (001 [data-model.md](../001-agentic-design-review/data-model.md),
+  the Disposition transitions).
+- **Settled with it**, from what the code and the earlier decisions already decide (the
+  register's row states the first two):
+  - **Independent of the decision.** The triage is a field of its own beside `decision`, never
+    derived from it and never constraining it. Under 51A an Accept of a fine thread means
+    intended: real but already known, or true but not worth flagging. A Reject can be wrong or
+    not worth flagging, and a Defer can hold any of the four, so no table from decision to
+    outcome holds. H-g-007's skeptic asked to keep the three decisions and add an optional
+    reason, and the metrics read the two apart: new and real findings and false alarms from the
+    triage, the accepted share from the decision. So nothing that ranks or counts decisions
+    changes: 007's `DECIDED_DECISIONS` and `is_decided` (007 FR-008, "a disposition of accepted
+    or rejected, and nothing else"), `attention.json`, the gate's brief, lever 11a's carry-over
+    guard, the Decided group and the decided count.
+  - **Optional.** An older session, `swreview disposition` without the option, a re-run's carry
+    of a decision recorded before the field, 51A's one-press confirmation and a Defer not yet
+    judged all record a decision without one; requiring it would refuse calls that work today.
+    M0's "every finding given one of the four" is made checkable rather than enforced:
+    `report.md` counts the findings not recorded.
+  - **Named `triage`, its tokens with underscores.** The roadmap calls them "the four triage
+    outcomes", and `outcome` already names `DrawingOutcome.outcome` and `drawing_outcomes` in the
+    same `session.json`. The tokens are `new_and_real`, `already_known`, `wrong` and
+    `not_worth_flagging`, one `Literal` in `findings.py` from which every other list derives;
+    underscores, because a dotted token reads as an undocumented message type to
+    `ReviewPageContractTests`. The words are a `triage` group in the words file's `labels`, before
+    `errors`, as `source` is (009 [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md)
+    section 1), served by `GET /labels` and printed in `report.md`.
+  - **The handoff needs no code change.** `session.json`, `report.md` and `events.jsonl` are
+    copied whole (`handoff.REQUIRED_ARTIFACTS`), and the manifest's `session_summary` gains
+    nothing.
+- **Edge cases**: a value outside the four - another word, another case, the words in place of
+  the token, an empty string, a number, `true`, a list - is refused before anything changes: 400
+  `InvalidTriage` on the route, checked before the chat's state so it is never read as an illegal
+  transition; a usage error (exit 2) on the console; a `ValueError` naming the four in the
+  record. `null` or no triage records the decision with none. A deferred finding keeps its
+  triage when the later Accept or Reject names none, and takes the one it names. A late triage
+  keeps the decision, note, engineer and time first recorded, whatever note and engineer the
+  second call carries, and the console prints the disposition as recorded. A second triage, the
+  same or another, a different decision, and the same decision with no triage are refused as
+  before. The model may read a recorded triage through `get_finding`, as it reads the decision
+  and the note; the field is left out while null, so an undecided finding's bytes never move.
+- **Not changed**, on purpose: no triage tally in the pane's summary; no outcome counts in the
+  handoff manifest; no split by family (M2's first exit criterion); the second reader's outcomes
+  are not stored in a session and stay a note in the private fork. The rule-3 fold
+  (`agent/runner.py`, `_reconcile_reruns`), which drops a decision when the model runs a check
+  again in a turn an answered question resumed, now drops its triage too, as 58A left it (010
+  [research.md](../010-mechanical-checks/research.md), 58A): triage after the last turn, or fix it
+  test first as a task of its own.
+- **Tests**: T308, T310, T312, T314 and T316 in [tasks.md](tasks.md), Phase 23, each written
+  first; T309, T311, T313, T315 and T317 make them green, and T318 closes the records.
+- **speckit-converge**, run once on 2026-11-01 (T307), bounded to FR-031, scenarios 7 and 8, the
+  dated edge cases and the plan's 185A touch points: nine gaps, all `missing` (eight high, and
+  the words medium), each already a pair of Phase 23, so its appended Phase 24 was removed and
+  nothing was folded in.
+- **Built** (2026-11-01, T309 to T317):
+  - The record (T309): `findings.Triage`, one `Literal` of the four tokens, and `TRIAGES` from
+    it, the list the record, the route, the console, the report and the words file's checks read
+    and the contract's enum is pinned to; `Disposition.triage`, left out of the dump while null
+    through `omit_when_null`. `set_disposition` and `apply_disposition` take `triage=`: a value
+    outside the four is a `ValueError` naming them before anything changes, a Defer's triage
+    stays when the later decision names none, and 185A's late triage is the terminal rule's one
+    exception (`_takes_a_late_triage`). The session contract's `Disposition.triage`, in
+    `properties` only.
+  - The route, the console and the words (T311): `400 InvalidTriage`, checked before the chat's
+    state; `record_disposition`'s keyword; `swreview disposition --triage`, its choices a
+    `StrEnum` built from `TRIAGES`, its payload and printed line naming the disposition as
+    recorded; the words file's `triage` group, after `contact_kind` and before `source`, which
+    `test_sources_labels.py` pins just before `errors`, with `InvalidTriage`'s sentence; and
+    `summary.Labels.triage`, served by `GET /labels`.
+  - The re-run (T313): `_carry_decisions` passes the triage; 58A's restate already copied the
+    whole disposition.
+  - `report.md` (T315): the triage's words on the line after the decision, and `- By triage:`
+    after `- By severity` once any finding records one - the four in `TRIAGES` order, then
+    `not recorded` for every finding without one, decided or not - counted from the field alone.
+  - The Review page (T317): a row of four toggle buttons in each finding's fold, before the
+    tools row and outside the `.seg` of the three decisions, built from one array of the tokens
+    and worded from `labels.triage`, or the token without labels. A press only picks; a decision
+    posts the picked token, or no key; the reply, a stream event or a restore shows the recorded
+    triage pressed; a read-only review locks the row; and the row wraps at 300 px. The page
+    holds no rule of its own: a second triage or another decision is the backend's to refuse.
+  - Nothing else: no host, proxy or pane-host message, no `handoff.py` change, no new event
+    type, and no report golden moved, since no committed fixture holds a triage.
+- **Tests changed on purpose**, none loosened:
+  - `test_chat_server.py::test_labels_answer_the_words_files_card_vocabulary`, its key set
+    extended with `triage`, FR-031's word group; and
+    `test_review_words.py::test_every_label_is_a_plain_word_not_a_token`, extended to
+    `labels.triage`.
+  - T310's two route cases, its session case and its console case, extended with T314 to read
+    `report.md`'s triage line, which only T315 renders.
+  - The pane fixtures that embed the labels block - `review-big-assembly.json` through
+    `generate_pane_fixture.py`, and `review-waiting.json`, `review-waiting-restored.json` and
+    `review-waiting-big-assembly.json` through `generate_waiting_fixtures.py --write` -
+    regenerated with only their labels block moving; `review-send-failure-events.json`'s pin
+    moved to the regenerated `review-waiting.json` (CRLF), as 160A's T275 and T289 did; and
+    `LabelsSample.cs` mirrors the group.
+  - The four read-only selector copies (`ReviewPageSessionsTests`,
+    `ReviewPageSessionsAcceptanceTests`, `ReviewPageSendGateTests`, `ReviewPageRecheckTests`)
+    gain `[data-action=triage]`, since a read-only review locks the triage buttons with the
+    decisions.
+  - `ReviewPageTriageTests`' 300 px fact, tightened with T317: it passed against a deliberately
+    clipping row, since `scrollIntoView` scrolls an `overflow: hidden` box sideways to reveal a
+    button, so a box scrolled sideways to show one now counts as cutting it off; a row that
+    cannot wrap fails it, naming the two cut buttons.
+  - `test_workstation_test_plan.py::test_the_specs_readme_counts_a_task_173a_closed_as_done`,
+    its 002 literal following 002's recount (T307, and T318).
+- **Tests first**: T308's cases failed before T309 - `test_triage.py` at collection, for want
+  of `TRIAGES`, and the other three for want of `TRIAGES` and the keyword - and its guards on
+  what must not move passed unedited after it. T310's ten new and extended cases failed before
+  T311; T312's one before T313; T314's three new cases and T310's four extended ones before
+  T315, its guard green before and after; and T316's seven facts before T317, each for want of
+  a triage button, while the four extended copies stayed green (84 cases), which is why
+  `ARestoredReviewLocksItsTriageButtons` is the lock's own red.
+- **Gates** (T318, with 007 T069; 2026-11-01), on `dbbd2a3`'s tree, and the README's pin again
+  after the recount:
+  - Python 3.12.3 and 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer
+    required, over every test module the cycle touched and every module that pins its files (63
+    modules): 3,196 passed and 1 skipped on each, the skip a symlink case this machine cannot
+    make. A first 3.11 run, with a `--basetemp` under a long temporary folder named by a UUID,
+    failed three cases that print or normalize the temporary path - two whose error line, bounded
+    by `cli._cut`, was cut before the words they look for, and one that masked the UUID - and
+    passed whole with pytest's own temporary folder; no product file was involved.
+  - `ruff check` clean.
+  - C#: the Release build with zero warnings (`--no-incremental`); 10,274 extractor and 4,288
+    add-in tests passed.
+  - The link check over the cycle's changed Markdown: 429 relative links, anchors included, none
+    broken. Every changed file LF in the index.
+  - The whole non-live suites were not run in this lane: they run before the pull request and in
+    its CI. No SOLIDWORKS process, seat task, or paid or live test ran.
+- **Gates before the pull request** (2026-11-01, on `e46747b`'s tree, the branch as the lanes
+  left it): the whole non-live suites with the tokenizer required, 18,735 passed and 5 skipped on
+  Python 3.12.3 and the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`);
+  `ruff check` clean; the C# build with zero warnings, and 10,274 extractor and 4,288 add-in tests
+  passed.
+- **Review** (Tier 1, decision 180A; 2026-11-01): one Opus and one Codex review of the branch, no
+  must-fix, and no finding against the triage's record, route, console, re-run carry, restate or
+  handoff; the Opus review read the late-triage rule through each of them. One should-fix is left
+  in [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 1: after the backend refuses a
+  decision, the Review page keeps the refused pick pressed and shows the refusal in place of the
+  recorded disposition, so until a reload the card can show a triage the record does not hold,
+  and `IllegalTransition`'s sentence reads as a refused decision when a second triage was
+  refused. The timing findings, and the one fix the review made, are in 007
+  [research.md](../007-attention-policy-gate/research.md), R7.

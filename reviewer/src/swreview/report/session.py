@@ -494,8 +494,36 @@ class Timing(ReviewModel):
     assisted_supervision_minutes: float = Field(ge=0)
     assisted_verification_minutes: float = Field(ge=0)
     false_alarm_handling_minutes: float = Field(ge=0)
+    setup_minutes: float | None = Field(default=None, ge=0)
+    """This design's own setup: preparing the package, opening the assembly, attaching
+    drawings, starting the review and any rerun; a sitting's software update is reported apart
+    (owner decisions 183A and 184A; 007 FR-036). `None` until recorded."""
+
+    review_by_hand_minutes: float | None = Field(default=None, ge=0)
+    """The checking the engineer still does by hand on what the tool did not reach (183A and
+    184A). `None` until recorded."""
+
     unattended_runtime_minutes: float = Field(ge=0)
     net_saved_minutes: float | None = None
+
+    @property
+    def assisted_minutes(self) -> float | None:
+        """Setup, supervision, verification, false-alarm handling and the review by hand
+        together, the engineer's whole effort on the assisted review (owner decision 183A).
+
+        `None` while setup or the review by hand is not recorded: an input not recorded stays
+        unknown and is never read as 0. The net below and the scorecard's assisted minutes
+        both read this one sum, so the two cannot disagree.
+        """
+        if self.setup_minutes is None or self.review_by_hand_minutes is None:
+            return None
+        return (
+            self.setup_minutes
+            + self.assisted_supervision_minutes
+            + self.assisted_verification_minutes
+            + self.false_alarm_handling_minutes
+            + self.review_by_hand_minutes
+        )
 
     def replace(self, **changes: float | None) -> Timing:
         """A copy with `changes` applied and `net_saved_minutes` derived again.
@@ -506,25 +534,43 @@ class Timing(ReviewModel):
         `swreview.benchmark.timing` (for `swreview timing` and `benchmark time` alike) and
         `swreview.chat.sessions.record_timing_live` (for a live pane review) - all come
         through here, so none of them can leave a stale net saving behind (FR-026). An
-        unknown field name raises.
+        unknown field name raises, and so does the derived net. The names are the model's
+        fields, not the dump's keys: the dump leaves out an input not recorded (183A).
         """
-        fields = self.model_dump(exclude={"net_saved_minutes"})
-        unknown = sorted(set(changes) - set(fields))
+        unknown = sorted(set(changes) - (set(type(self).model_fields) - {"net_saved_minutes"}))
         if unknown:
             raise ValueError(f"Timing has no field(s) {unknown}")
+        fields = self.model_dump(exclude={"net_saved_minutes"})
         return Timing(**{**fields, **changes})
 
     @model_validator(mode="after")
     def _derive_net_saved_minutes(self) -> Timing:
-        if self.baseline_minutes is None:
+        assisted = self.assisted_minutes
+        if self.baseline_minutes is None or assisted is None:
             self.net_saved_minutes = None
         else:
-            self.net_saved_minutes = self.baseline_minutes - (
-                self.assisted_supervision_minutes
-                + self.assisted_verification_minutes
-                + self.false_alarm_handling_minutes
-            )
+            self.net_saved_minutes = self.baseline_minutes - assisted
         return self
+
+    @model_serializer(mode="wrap")
+    def _omit_unrecorded_inputs(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Leave setup and the review by hand out while they are not recorded, so a session
+        written before them keeps its bytes, and so do `session.ended` and its readers, but for a
+        net derived from the four earlier inputs alone, which 183A makes unknown, so null."""
+        return omit_when_null(handler, self, "setup_minutes", "review_by_hand_minutes")
+
+
+HUMAN_TIMING_FIELDS: tuple[str, ...] = (
+    "baseline_minutes",
+    "assisted_supervision_minutes",
+    "assisted_verification_minutes",
+    "false_alarm_handling_minutes",
+    "setup_minutes",
+    "review_by_hand_minutes",
+)
+"""The engineer's six inputs to `Timing`, in the order of `benchmark.timing.TIMING_INPUTS`:
+every field but the runner's unattended runtime and the derived net (owner decision 183A).
+Feature 015's re-run carries exactly these (`ReviewRun.carry_from`)."""
 
 
 TOKEN_FIELDS: tuple[str, ...] = (
