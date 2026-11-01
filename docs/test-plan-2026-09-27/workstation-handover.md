@@ -125,7 +125,9 @@ committed under `benchmarks/native/capabilities/` and judged ready by `swreview 
 unchanged. 004 T180 is done (decision 168A). *Since 2026-10-31* the list is longer: 004 T303a (S1),
 IDENTITY calibrated (004 T187's readings, 004 T138's freeze; decision 170A) and the owner's call on
 the no-handle unwind (R26.10), with 004 T303b first after the switch (decision 169A); R22.14 and
-R25.13 are done (decision 165A); the test plan's step 5.3 has it whole. *Added 2026-10-19 (decision 144A):* the pane seat calls
+R25.13 are done (decision 165A); the test plan's step 5.3 has it whole. *Since 2026-11-01* the
+switch also waits for M0's checkpoint and 004 T003's numbers (decision 181A), so Start stays off
+through M0-a and M0-b. *Added 2026-10-19 (decision 144A):* the pane seat calls
 SOLIDWORKS through a gate of its own in this build, so step 5.3's item B, on the box before its
 Discard, also runs 011 T171: Open copy, then Start, and the run's `remodel.log` must hold exactly
 four `seat=` lines - a begin line and an outcome line for the plan's activation of the copy, and
@@ -530,7 +532,8 @@ teardown, 004 T167, are in this build, and the development machine sets
 probes are `verified` in its third answers file, committed and judged ready, the test plan's step
 5.3 has planned on part J's copy with J's hash unchanged, and the rest the test plan's step 5.3
 names under "What the Start switch waits on" holds (004 T303a, IDENTITY calibrated, the owner's
-call on the no-handle unwind); a later sitting runs them.
+call on the no-handle unwind), and not before M0's checkpoint and 004 T003's numbers
+(decision 181A); a later sitting runs them.
 
 *Added 2026-10-31 (owner decision 166A; 004 T362):* every feature's open seat tasks are held to
 this list and to the test plan, not only those of the features above. Those this list does not

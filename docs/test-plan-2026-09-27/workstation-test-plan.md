@@ -39,7 +39,7 @@ sitting. S2 comes after them. The table is in that order.
 | Sitting | Theme | Length | What it holds |
 |---|---|---|---|
 | S1 | Start readiness | 3 h 10 min, and an optional 25 min | the next section: Remodel Start's evidence, with no key and no paid call, and step 5.1's owner's parts when its clock allows |
-| M0-a | the first triaged review | 3 h 30 min at most | no key: A, a design the engineer knows, reviewed with the send box unticked (step 4.10, items 1 and 2), every finding judged and the minutes kept with `swreview timing`; the escape replay's pre-fix revisions, each opened read-only; step 5.1's owner's parts if S1 did not run them |
+| M0-a | the first triaged review | 3 h 30 min at most | no key: A, a design the engineer knows, reviewed with the send box unticked (step 4.10, items 1 and 2), every finding judged and the minutes kept with `swreview timing`; the escape replay's pre-fix revisions, each opened read-only (no step yet: it is written when M0-a is planned, with the revisions lettered in section 0.2 so that the fingerprint covers them); step 5.1's owner's parts if S1 did not run them |
 | M0-b | the first paid reviews | 3 h 30 min at most | S3's first sitting: the key (step 2.5), A reviewed with the model (step 4.1), B (step 4.2), the timing of A's review (step 4.5) and 014's smoke review (step 4.11), every finding judged and timed |
 | S2 | Start on | 3 h 30 min at most | after M0's checkpoint and 004 T003's numbers, the first sitting after the development machine switches Start on: 004 T303b first (decision 169A), then the stage-1 runs, 004 T135 to T141 |
 | S3 | paid review | 3 h 30 min at most | the key and the paid reviews M0-b leaves (steps 2.5 to 2.7, 3.4, step 4 and 5.5), in as many sittings of this length as they need |
@@ -118,12 +118,14 @@ opened or changed.
 ### After S1, on the development machine
 
 Overnight, each as its own pull request, and each only if S1's results allow it: 004 T138's
-IDENTITY profile frozen from the first run's PROBE-8 answers (decision 170A); Remodel's Start
-switch, `RemodelStart.SeatValidated`, once everything step 5.3's "What the Start switch waits on"
-names holds - among it step 5.6's third answers file committed under
-`benchmarks/native/capabilities/` and judged ready by `swreview remodel ledger` once T138 is in
-(004 research R27.8), and the owner's call on the no-handle unwind (R26.10); and
-`DrawingOpenScope.SeatValidated`, from step 3.9's two D14 reports (section 3.10).
+IDENTITY profile frozen from the first run's PROBE-8 answers (decision 170A), and
+`DrawingOpenScope.SeatValidated`, from step 3.9's two D14 reports (section 3.10). Remodel's Start
+switch, `RemodelStart.SeatValidated`, in a pull request of its own too, waits longer: for
+everything step 5.3's "What the Start switch waits on" names - among it step 5.6's third answers
+file committed under `benchmarks/native/capabilities/` and judged ready by
+`swreview remodel ledger` once T138 is in (004 research R27.8), and the owner's call on the
+no-handle unwind (R26.10) - and for M0's checkpoint and 004 T003's numbers (decision 181A), so
+that Start stays off through M0-a and M0-b.
 
 ## The next sitting: where 2026-09-26 stopped, and what feature 013 adds
 
@@ -2574,7 +2576,9 @@ no document handle back from a failed open, its unwind closes what is open at th
 deletes the copy, recorded and not fixed. Done already: 004 T180, what a plan holds while Start is
 on (decision 168A; R26.5), and two narrow defects found on review, fixed under decision 165A: an
 end told during a Plan that then succeeds (R22.14) and the barrier unwind's close by path
-(R25.13). The stage-1 runs (004 T135 to T141) are for the sitting after that.
+(R25.13). The stage-1 runs (004 T135 to T141) are for the sitting after that. *Since 2026-11-01*
+the switch also waits for M0's checkpoint and 004 T003's numbers (decision 181A): Start stays off
+through M0-a and M0-b, so the sitting after the switch, which runs 004 T303b first, is S2.
 
 ### 5.4 Withdrawn: the live Gemini test
 
@@ -2905,7 +2909,7 @@ that sitting is planned. For the development machine, once the folder comes back
 | 010, 011 | setting either switch; 010 T104's and T106's counts | the development machine, as sections 3.10, 3.1 and 4.2 say |
 | 006 | PROBE-1 to PROBE-3 into research R4; `TRANSPARENCY_POLARITY`'s flip | the development machine, from step 3.1's two Standards probe reports |
 | 013 | 013 T142's second half; the census's counts | the sitting after the development machine sets `DrawingOpenScope.SeatValidated`: the host answers `opens_closed` and a review offers the read-only open once per drawing file; and the development machine reruns the part-role census over step 5.1's N folders, counts only |
-| 004 | setting `RemodelStart.SeatValidated` (004 T172's switch); 004 T182's wait | the development machine, in a commit of its own for the switch, and only once a sitting has proved step 5.3's "What the Start switch waits on": step 5.6's blocking probes (004 T033 to T035 and 004 T037) each `verified` in the third run's answers file, committed under `benchmarks/native/capabilities/` and judged ready by `swreview remodel ledger` (004 research R27.8), then step 5.3's Plan on part J's copy with J's hash, size and time unchanged; and the rest that paragraph names: 004 T303a (S1), IDENTITY calibrated, 004 T187's readings and 004 T138's freeze (decision 170A), and the owner's call on the no-handle unwind (R26.10), with 004 T303b first at the sitting after the switch; 004 T180 is done (decision 168A), as are R22.14 and R25.13 (decision 165A); 004 T182 sets the add-in's wait on the copy's open from step 5.3's time |
+| 004 | setting `RemodelStart.SeatValidated` (004 T172's switch); 004 T182's wait | the development machine, in a commit of its own for the switch, and only once a sitting has proved step 5.3's "What the Start switch waits on": step 5.6's blocking probes (004 T033 to T035 and 004 T037) each `verified` in the third run's answers file, committed under `benchmarks/native/capabilities/` and judged ready by `swreview remodel ledger` (004 research R27.8), then step 5.3's Plan on part J's copy with J's hash, size and time unchanged; and the rest that paragraph names: 004 T303a (S1), IDENTITY calibrated, 004 T187's readings and 004 T138's freeze (decision 170A), and the owner's call on the no-handle unwind (R26.10), with 004 T303b first at the sitting after the switch, and not before M0's checkpoint and 004 T003's numbers (decision 181A); 004 T180 is done (decision 168A), as are R22.14 and R25.13 (decision 165A); 004 T182 sets the add-in's wait on the copy's open from step 5.3's time |
 | 004 | 004 T003's dry run itself; the re-modeler probes' verdicts into the record | the development machine: `swreview remodel plan` over each `package.json` of step 5.1's P folders, counts only, each part by its letter and never its file name, into T003's table (`specs/004-resilient-remodeler/phase0-decision.md` section 4), where they replace 004 T148's provisional counts (its section 4.1, taken from other parts the development machine already held); the verdicts and raw readings of step 5.6's three answers files, as quickstart Scenario 4 says |
 | 010 | 010 T123, 010 T124 | the fine-pitch amendment seat checks (2026-10-08), added after this plan; for the next sitting plan |
 
