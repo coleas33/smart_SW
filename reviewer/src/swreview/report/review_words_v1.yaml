@@ -280,6 +280,12 @@ labels:
     already_known: "real but already known"
     wrong: "wrong"
     not_worth_flagging: "true but not worth flagging"
+  # The one triage a pass takes (owner decision 187A, feature 002 FR-031): a pass - 'Checked, no
+  # issue' - takes no triage but `wrong`, keyed by `findings.MISS`, and its card's one button says
+  # it is the miss it is counted as, apart from the false alarms; `source` stays just before
+  # `errors`.
+  pass_triage:
+    wrong: "wrong: a miss"
   # Who wrote a finding, a question or a coverage row (feature 013): the page prints the word
   # for a record's `source` token and compares nothing; `report.md` uses the same two.
   source:
@@ -316,7 +322,7 @@ labels:
     InvalidRunDir: "The backend refused the run folder's path: it writes only into a local folder inside the run root. Check the run root in Settings."
     InvalidSettings: "Check the provider, the model and the effort, then save again."
     InvalidTiming: "Enter the minutes as numbers, then save again."
-    InvalidTriage: "Pick one of the four triage outcomes, or none, then press the decision again."
+    InvalidTriage: "Pick one of the four triage outcomes, or none, then press the decision again. A finding in Checked, no issue takes only wrong: a miss."
     NoDocument: "Open the part or assembly you want reviewed, then press Review."
     NotAPart: "Remodel works on one part. Open a part, then try again."
     NotAttached: "The add-in is not attached to SOLIDWORKS yet. Wait a moment, then try again."

@@ -286,7 +286,13 @@ model's opening, and the id maps a page would need to re-key its own work are no
    002, owner decision 185A; its FR-031):* the decision is carried whole, the triage beside it
    included - `set_disposition(..., at=earlier.at, triage=earlier.triage)` - so the carried
    disposition equals the earlier one, and the `disposition` event carries the triage; a decision
-   recorded with none is carried with none.
+   recorded with none is carried with none. *Amended 2026-11-01 (feature 002, owner decision 187A;
+   its FR-031):* the triage goes with the decision only between two passes or two flagged findings -
+   a pass is a `checked_within_scope` finding, and a pass's `wrong` is a miss where a flagged
+   finding's is a false alarm - and only when the finding it lands on takes it, a pass `wrong`
+   alone (`runner._carries_triage`); otherwise the decision is carried without it and the triage is
+   named (section 5). The decision itself is carried as before, whatever the two findings'
+   statuses.
 3. **outcome lines.** `earlier.drawing_outcomes`, verbatim, in order.
 4. **timing.** The four human inputs of `earlier.timing` (baseline, supervision, verification, false
    alarms) are carried whole; the running time is the re-run's own (`records.md` section 3).
@@ -360,6 +366,11 @@ Standards profile (section 4.7). No row when everything carried.
 answer that another earlier answer shares its one matching question with (neither is carried). The
 other is an answer whose drawing read was partial, so its question is asked again (section 4's
 *Landed as*). The items' words are `words.md` section 4.
+
+*Amended 2026-11-01 (feature 002, owner decision 187A):* the list gains a triage the carry left
+behind while carrying its decision (section 4, step 2), one item each way: one whose finding is a
+pass now, and one whose finding is no longer a pass. Each comes in the carry's order, among the
+decisions' items; their words are `words.md` section 4.
 
 ## 6. Failure
 

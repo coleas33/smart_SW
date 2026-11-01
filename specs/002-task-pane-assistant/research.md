@@ -6580,7 +6580,8 @@ the decision register now records 160A as done.
     A: whether a decision carries across a changed status is the question cycle 3's Tier 1 review
     left for the owner (58A's restate and 015's carry keep a decision whatever the status and
     severity now are), so the decision's carry is unchanged, and only the triage, whose count 187A
-    splits, stops at the line. One item each way, after the decision's items.
+    splits, stops at the line. One item each way, in the carry's order among the decisions'
+    items.
   - **The words.** `labels.pass_triage`, after `triage` and before `source`, so `source` stays just
     before `errors`: `{wrong: "wrong: a miss"}`, keyed by `MISS`, the word on a pass's one button,
     lowercase as the four are. Not in `triage`, whose keys are the four tokens in their order, and

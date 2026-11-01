@@ -153,6 +153,13 @@ TRIAGES: tuple[Triage, ...] = get_args(Triage)
 """The four triage tokens in their order: the one list the record, the live route, the console,
 the report and the words file's checks read."""
 
+MISS: Triage = "wrong"
+"""The one triage a pass takes (owner decision 187A; 002 FR-031). A pass, a `checked_within_scope`
+finding ('Checked, no issue'), takes no other: one the engineer judges wrong - the check missed a
+real problem - is marked `wrong`, which `report.md` counts as a miss, apart from the false alarms,
+the flagged findings marked `wrong`. Its word on a pass's card is the words file's
+`labels.pass_triage`."""
+
 
 class Disposition(ReviewModel):
     """The engineer's decision on a finding. Never written by the reviewer."""

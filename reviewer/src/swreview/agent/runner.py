@@ -132,9 +132,9 @@ from swreview.prerun import (
 from swreview.prerun import (
     returned_finding_ids as _returned_finding_ids,
 )
-from swreview.report.attention import rank
+from swreview.report.attention import SUPPRESSED_STATUS, rank
 from swreview.report.attention_record import write_attention_record
-from swreview.report.dispositions import REPORT_FILE_NAME, set_disposition
+from swreview.report.dispositions import REPORT_FILE_NAME, set_disposition, takes_triage
 from swreview.report.explanations import (
     explanation_signature,
     generate_explanations,
@@ -1156,6 +1156,13 @@ NOT_CARRIED_ANSWER_PARTIAL = (
 NOT_CARRIED_DECISION_GONE = "the {decision} of {id} (its finding is no longer raised)"
 NOT_CARRIED_DECISION_MANY = "the {decision} of {id} (it matches more than one finding)"
 NOT_CARRIED_DECISION_SHARED = "the {decision} of {id} (another decision matches the same finding)"
+NOT_CARRIED_TRIAGE_PASS = (
+    "the triage of {id} (its finding is a pass, whose one triage, wrong, is a miss)"
+)
+NOT_CARRIED_TRIAGE_NOT_A_PASS = (
+    "the triage of {id} (its finding is no longer a pass, and a pass's wrong is a miss, "
+    "not a false alarm)"
+)
 NOT_CARRIED_DRAWING = (
     "the outcome of the drawing read for {id} (the read that merged its drawing did not finish)"
 )
@@ -1165,6 +1172,15 @@ NOT_CARRIED_PROFILE = (
 )
 """`coverage.recheck`'s reason and its items (`contracts/words.md` section 4): each item names
 an earlier id, never a path, and the items are joined with "; " in the carry's order."""
+
+
+def _carries_triage(earlier: Finding, now: Finding, triage: str) -> bool:
+    """Whether a re-run carries `earlier`'s `triage` onto `now` with its decision (owner decision
+    187A): only between two passes or two flagged findings, since a pass's `wrong` is a miss and a
+    flagged finding's a false alarm, and only one `now` takes - a pass `wrong` alone."""
+    same_kind = (earlier.status == SUPPRESSED_STATUS) == (now.status == SUPPRESSED_STATUS)
+    return same_kind and takes_triage(now, triage)
+
 
 DECISION_NOUNS = {"accepted": "Accept", "rejected": "Reject", "deferred": "Defer"}
 """How a decision is named in a `coverage.recheck` item, "the Reject of F-007", and in the line
@@ -1663,7 +1679,8 @@ class ReviewRun:
         return answers, answered_at
 
     def _carry_decisions(self, earlier: ReviewSession, named: list[str]) -> None:
-        """Each earlier decision onto the one finding with its subject key (72A)."""
+        """Each earlier decision onto the one finding with its subject key (72A), its triage with
+        it only between two passes or two flagged findings (owner decision 187A)."""
         session = self.session
         by_key: dict[Any, list[Finding]] = {}
         for finding in session.findings:
@@ -1687,9 +1704,15 @@ class ReviewRun:
             elif shared[target[finding.id]] > 1:
                 named.append(NOT_CARRIED_DECISION_SHARED.format(**words))
             else:
+                triage = disposition.triage
+                if triage is not None and not _carries_triage(finding, matches[0], triage):
+                    on_a_pass = matches[0].status == SUPPRESSED_STATUS
+                    item = NOT_CARRIED_TRIAGE_PASS if on_a_pass else NOT_CARRIED_TRIAGE_NOT_A_PASS
+                    named.append(item.format(id=finding.id))
+                    triage = None
                 carried = set_disposition(
                     session, target[finding.id], disposition.decision, disposition.note,
-                    disposition.by, at=disposition.at, triage=disposition.triage,
+                    disposition.by, at=disposition.at, triage=triage,
                 )
                 self.announce_disposition(carried)
 

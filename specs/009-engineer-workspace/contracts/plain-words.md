@@ -65,6 +65,19 @@ nothing up: `labels` gains nothing, and with no labels the line is the same (FR-
 engineer's next decision writes its own sentence there; a replay leaves it out, as Results are the
 snapshot.
 
+*Amended 2026-11-01 (feature 002, owner decision 187A; 002 T333):* the block gains `pass_triage`,
+after `triage` and before `source`, so `source` still comes just before `errors`: `{wrong:
+"wrong: a miss"}`, keyed by `findings.MISS`, the one outcome a pass takes. A pass's card, in the
+Checked, no issue fold, prints `labelOf(labels, "pass_triage", "wrong", "wrong")` on its one
+triage button, the raw token with no labels; its disposition sentence and `report.md` name the
+triage by `triage`'s word, as for any finding. `errors`' `InvalidTriage` sentence says what a pass
+takes: "Pick one of the four triage outcomes, or none, then press the decision again. A finding in
+Checked, no issue takes only wrong: a miss."
+
+| Surface | Word from |
+|---|---|
+| a pass's one triage button | `pass_triage` |
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and

@@ -12,6 +12,9 @@ decision, and nothing else changes. A second triage is refused with a class of i
 
 A triage, one of `findings.TRIAGES`, may go with any decision and is never required (002
 FR-031). A deferred finding keeps its triage when the later Accept or Reject names none.
+
+A pass takes no triage but `findings.MISS`, `wrong`, the miss (owner decision 187A): any other is
+refused with `TriageOnAPassError` before anything changes, whatever the decision.
 """
 
 from __future__ import annotations
@@ -19,7 +22,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from swreview.findings import TRIAGES, Disposition, Finding
+from swreview.findings import MISS, TRIAGES, Disposition, Finding
+from swreview.report.attention import SUPPRESSED_STATUS
 from swreview.report.rerender import (
     REPORT_FILE_NAME,
     SESSION_FILE_NAME,
@@ -32,9 +36,12 @@ __all__ = [
     "REPORT_FILE_NAME",
     "SESSION_FILE_NAME",
     "TriageAlreadyRecordedError",
+    "TriageOnAPassError",
     "apply_disposition",
     "find_finding",
+    "refuse_a_triage_a_pass_does_not_take",
     "set_disposition",
+    "takes_triage",
 ]
 
 DECISIONS: frozenset[str] = frozenset({"accepted", "rejected", "deferred"})
@@ -49,6 +56,31 @@ class TriageAlreadyRecordedError(ValueError):
     a settled finding is; a class of its own so the route can say the recorded triage stands
     (`chat/server.py`, `TriageAlreadyRecorded`), where every other refusal's sentence reads as a
     refused decision. Still a `ValueError`, so every caller that refuses one refuses this."""
+
+
+class TriageOnAPassError(ValueError):
+    """A triage a pass does not take (owner decision 187A; 002 FR-031): a pass - a
+    `checked_within_scope` finding, 'Checked, no issue' - takes no triage but `MISS`, `wrong`,
+    the miss. A class of its own so the live route answers it as it answers a triage outside the
+    four, `400 InvalidTriage` (`chat/server.py`), and the console names it. Still a `ValueError`,
+    so every caller that refuses one refuses this."""
+
+
+def takes_triage(finding: Finding, triage: str) -> bool:
+    """Whether `finding` takes `triage` (owner decision 187A): a flagged finding any of the four,
+    and a pass - `SUPPRESSED_STATUS`, which the page draws in 'Checked, no issue' - `MISS` alone."""
+    return finding.status != SUPPRESSED_STATUS or triage == MISS
+
+
+def refuse_a_triage_a_pass_does_not_take(finding: Finding, triage: str | None) -> None:
+    """Raise `TriageOnAPassError` when `finding` is a pass and `triage` is not `MISS` (owner
+    decision 187A). The record calls it before anything changes, and the live route before it
+    reads the chat's state."""
+    if triage is not None and not takes_triage(finding, triage):
+        raise TriageOnAPassError(
+            f"finding {finding.id} is a pass ('Checked, no issue'), which takes no triage but "
+            f"{MISS!r}, a miss; got {triage!r}"
+        )
 
 
 def find_finding(session: ReviewSession, finding_id: str) -> Finding:
@@ -119,10 +151,14 @@ def set_disposition(
     or Reject recorded without one takes one once, sent with the same decision: only the triage
     is recorded, and the decision, note, `by` and `at` stay as first recorded.
 
-    Raises `ValueError` for an unknown decision, a triage outside the four (naming them) or a
-    transition the state machine forbids - a second triage as `TriageAlreadyRecordedError`, a
-    `ValueError` of its own class - and `KeyError` for a finding id that is not in the session.
-    Nothing is changed on any path.
+    A pass takes no triage but `MISS` (owner decision 187A): any other is refused before the
+    state machine is read, a late triage included.
+
+    Raises `ValueError` for an unknown decision, a triage outside the four (naming them), a
+    triage a pass does not take - `TriageOnAPassError` - or a transition the state machine
+    forbids - a second triage as `TriageAlreadyRecordedError` - both `ValueError`s of their own
+    class, and `KeyError` for a finding id that is not in the session. Nothing is changed on any
+    path.
     """
     if decision not in DECISIONS:
         raise ValueError(f"decision must be one of {sorted(DECISIONS)}, got {decision!r}")
@@ -131,6 +167,7 @@ def set_disposition(
         raise ValueError(f"triage must be one of {list(TRIAGES)}, got {triage!r}")
 
     finding = find_finding(session, finding_id)
+    refuse_a_triage_a_pass_does_not_take(finding, triage)
     current = finding.disposition
     if current is not None and _takes_a_late_triage(current, decision, triage):
         finding.disposition = current.model_copy(update={"triage": triage})
@@ -170,9 +207,9 @@ def apply_disposition(
 
     `triage` is recorded as `set_disposition` records it (owner decision 185A).
 
-    Raises `ValueError` for an unknown decision, a triage outside the four or a transition the
-    state machine forbids, and `KeyError` for a finding id that is not in the session; nothing
-    is written on either path.
+    Raises `ValueError` for an unknown decision, a triage outside the four, a triage a pass does
+    not take or a transition the state machine forbids, and `KeyError` for a finding id that is
+    not in the session; nothing is written on either path.
     """
     run_dir = Path(run_dir)
     session = load_session(run_dir / SESSION_FILE_NAME)
