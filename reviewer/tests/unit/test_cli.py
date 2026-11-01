@@ -61,7 +61,7 @@ from swreview.report.markdown import render_report
 from swreview.report.names import component_names
 from swreview.report.rerender import REPORT_FILE_NAME as REPORT_FILE
 from swreview.report.rerender import rerender_run_folder
-from swreview.report.session import load_session
+from swreview.report.session import load_session, save_session
 from tests.support.answer_keys import write_key
 from tests.support.console import plain_one_line, plain_words
 from tests.unit.test_benchmark_set_summary import (
@@ -1298,6 +1298,56 @@ def test_disposition_reports_a_second_triage_as_its_own_refusal(run_dir: Path) -
     assert other.exit_code == 1
     assert other.stderr.startswith("error: ValueError: finding F-001 already has a terminal")
     assert run_files(run_dir) == before
+
+
+def test_disposition_on_a_pass_takes_no_triage_but_wrong(run_dir: Path) -> None:
+    """Owner decision 187A (002 T332, FR-031): on a pass - 'Checked, no issue' - `--triage` with
+    any outcome but `wrong` is reported as any refusal is, exit 1 and one line on stderr, its line
+    naming `TriageOnAPassError`, the pass and `wrong`, and nothing is written; `--triage wrong`,
+    the miss, is recorded. The folder's one finding is made a pass in its `session.json`."""
+    session = load_session(run_dir / "session.json")
+    session.findings[0] = session.findings[0].model_copy(
+        update={"status": "checked_within_scope", "severity": "info"}
+    )
+    save_session(session, run_dir / "session.json")
+    before = run_files(run_dir)
+
+    refused = invoke(
+        "disposition",
+        str(run_dir),
+        "F-001",
+        "--decision",
+        "accepted",
+        "--triage",
+        "already_known",
+        "--by",
+        "FICT-ENG",
+    )
+
+    assert refused.exit_code == 1
+    assert refused.stderr.splitlines() == [
+        "error: TriageOnAPassError: finding F-001 is a pass ('Checked, no issue'), which takes "
+        "no triage but 'wrong', a miss; got 'already_known'"
+    ]
+    assert run_files(run_dir) == before
+
+    body = payload(
+        invoke(
+            "disposition",
+            str(run_dir),
+            "F-001",
+            "--decision",
+            "accepted",
+            "--triage",
+            "wrong",
+            "--by",
+            "FICT-ENG",
+            "--json",
+        )
+    )
+
+    assert (body["decision"], body["triage"]) == ("accepted", "wrong")
+    assert saved_disposition(run_dir)["triage"] == "wrong"
 
 
 # --- check fit / stack -----------------------------------------------------------

@@ -26,6 +26,7 @@ import yaml
 from pydantic import ValidationError
 
 import swreview.chat.remodel  # noqa: F401 - registers the remodel routes' ChatError classes
+from swreview import findings
 from swreview.agent.checklist import CHECKLIST_FILE
 from swreview.chat.server import ChatError
 from swreview.findings import TRIAGES, FindingStatus, Severity
@@ -259,7 +260,9 @@ def test_every_backend_error_class_has_a_next_step_sentence() -> None:
 def test_every_label_is_a_plain_word_not_a_token() -> None:
     """A label is what the engineer reads in place of a token, so none is one.
 
-    *Changed 2026-11-01 on purpose (002 T310; owner decision 185A):* the triage words too."""
+    *Changed 2026-11-01 on purpose (002 T310; owner decision 185A):* the triage words too.
+
+    *Changed 2026-11-01 on purpose (002 T332; owner decision 187A):* and a pass's miss word."""
     labels = load_words().labels
     for group in (
         labels.status,
@@ -267,6 +270,7 @@ def test_every_label_is_a_plain_word_not_a_token() -> None:
         labels.bucket,
         labels.contact_kind,
         labels.triage,
+        labels.pass_triage,
     ):
         assert all("_" not in word for word in group.values())
 
@@ -304,6 +308,30 @@ def test_a_refused_second_triage_says_the_recorded_one_stands() -> None:
     errors = load_words().labels.errors
     labels = {key: errors.get(key) for key in TRIAGE_ALREADY_RECORDED}
     assert labels == TRIAGE_ALREADY_RECORDED
+
+
+def test_a_pass_offers_its_one_triage_worded_as_a_miss() -> None:
+    """Owner decision 187A (002 FR-031): a pass - 'Checked, no issue' - takes no triage but
+    `wrong`, and its card offers that one, worded as the miss it is counted as, apart from the
+    false alarms. One key, `findings.MISS`, in a group of its own after `triage`, so `source` stays
+    just before `errors` (`test_sources_labels.py`); the page prints the token with no labels."""
+    labels = load_words().labels
+    order = list(raw_words()["labels"])
+
+    # Read from the module, so a missing name fails this case alone and not the collection.
+    assert findings.MISS == "wrong"
+    assert labels.pass_triage == {findings.MISS: "wrong: a miss"}
+    assert order.index("pass_triage") == order.index("triage") + 1
+
+
+def test_a_triage_a_finding_does_not_take_says_what_a_pass_takes() -> None:
+    """`InvalidTriage` answers both triages a finding does not take - one outside the four, and on
+    a pass any but `wrong` (owner decision 187A) - so its sentence is true of both, and names a
+    pass by the fold the engineer sees it in."""
+    assert load_words().labels.errors["InvalidTriage"] == (
+        "Pick one of the four triage outcomes, or none, then press the decision again. A finding "
+        "in Checked, no issue takes only wrong: a miss."
+    )
 
 
 # --- the goals ------------------------------------------------------------------------------

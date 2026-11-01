@@ -62,7 +62,7 @@ from swreview.chat.sessions import ChatSession, ChatState
 from swreview.checks.rms.run import is_check_folder
 from swreview.checks.rules.run import session_replaced
 from swreview.checks.standards.run import run_standards_check
-from swreview.findings import MODEL_FINDING_CHECK
+from swreview.findings import MODEL_FINDING_CHECK, TRIAGES
 from swreview.ir.loader import save_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import DIGEST_HEADER, RMS_PRERUN_TOOLS
@@ -432,7 +432,10 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
     `labels` block, verbatim, with its version, so every word on a card is the backend's.
 
     *Changed 2026-11-01 on purpose (002 T310; owner decision 185A, FR-031):* the block gains
-    the `triage` group, the words of a finding's four triage outcomes."""
+    the `triage` group, the words of a finding's four triage outcomes.
+
+    *Changed 2026-11-01 on purpose (002 T332; owner decision 187A, FR-031):* and the
+    `pass_triage` group, the word of the one outcome a pass takes, the miss."""
     from swreview.report.summary import load_words
 
     response = client.get("/labels")
@@ -450,6 +453,7 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
         "contact_kind",
         "source",
         "triage",
+        "pass_triage",
         "errors",
     }
     assert body["source"] == {"code": "Checked by code", "model": "AI guidance"}, "feature 013"
@@ -2996,6 +3000,63 @@ def test_a_second_triage_is_a_409_of_its_own_and_writes_nothing(
     assert [response.json()["retryable"] for response in refused] == [False] * len(refused)
     assert "with its triage ('wrong')" in refused[0].json()["message"]
     assert folder_files(run_dir) == before
+
+
+def test_a_pass_takes_no_triage_but_wrong_on_the_live_route(
+    app: Any,
+    client: TestClient,
+    run_dir: Path,
+    chat_with_a_finding: str,
+    provider_control: ProviderControl,
+) -> None:
+    """Owner decision 187A (002 T332, FR-031): on a pass - 'Checked, no issue' - any triage but
+    `wrong` is `400 InvalidTriage`, its message naming the pass, refused before the chat's state is
+    read, as a triage outside the four is: idle, and again while a turn runs, so never
+    `409 TurnRunning`; nothing is written. `wrong`, the miss, passes that check - while a turn runs
+    it meets the turn, as any decision does - and is recorded. The chat's one finding is made a
+    pass in the session the run holds, which is the session the route reads."""
+    run = app.state.server.chats[UUID(chat_with_a_finding)].run
+    run.session.findings[0] = run.session.findings[0].model_copy(
+        update={"status": "checked_within_scope", "severity": "info"}
+    )
+    url = disposition_url(chat_with_a_finding, run_dir)
+    others = [triage for triage in TRIAGES if triage != "wrong"]
+    before = folder_files(run_dir)
+
+    def post(triage: str) -> Any:
+        body = {"decision": "rejected", "note": "", "by": "FICT-ENG", "triage": triage}
+        return client.post(url, json=body)
+
+    idle = [post(triage) for triage in others]
+    written = folder_files(run_dir)
+    provider_control.hold()
+    client.post(f"/sessions/{chat_with_a_finding}/messages", json={"text": "keep going"})
+    wait_until(provider_control.started.is_set, "the follow-up turn to reach the gate")
+    running = [post(triage) for triage in others]
+    miss_while_running = post("wrong")
+    provider_control.release()
+    settle(client, chat_with_a_finding)
+
+    refusals = [(response.status_code, response.json().get("error_class")) for response in idle]
+    assert refusals == [(400, "InvalidTriage")] * len(others)
+    assert [(response.status_code, response.json()["error_class"]) for response in running] == (
+        refusals
+    )
+    assert all("is a pass" in response.json()["message"] for response in idle)
+    assert (miss_while_running.status_code, miss_while_running.json()["error_class"]) == (
+        409,
+        "TurnRunning",
+    )
+    assert written == before
+    assert recorded_dispositions(run_dir) == []
+
+    miss = post("wrong")
+
+    assert miss.status_code == 200, miss.text
+    assert miss.json()["disposition"]["triage"] == "wrong"
+    saved = load_session(run_dir / "session.json").findings[0]
+    assert saved.status == "checked_within_scope"
+    assert saved.disposition is not None and saved.disposition.triage == "wrong"
 
 
 # --- a check run again after an answer (002 T326; owner decisions 189A and 191A) ------------------
