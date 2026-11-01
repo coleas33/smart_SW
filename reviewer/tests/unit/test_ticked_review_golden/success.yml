@@ -1744,29 +1744,30 @@ files:
     \ is a part document and this check grades a drawing one; doc:0003 is a part document\
     \ and this check grades a drawing one |  |\r\n\r\n\r\n## Timing\r\n\r\n- Baseline\
     \ minutes: unknown\r\n- Assisted supervision minutes: 0.0\r\n- Assisted verification\
-    \ minutes: 0.0\r\n- False alarm handling minutes: 0.0\r\n- Unattended runtime\
-    \ minutes: <DURATION_58>\r\n- Net saved minutes: unknown\r\n\r\n## Tokens\r\n\r\
-    \n- Rounds: 6\r\n- Turns: 3\r\n- Input tokens: 8022\r\n- Cached input tokens:\
-    \ 2514\r\n- Uncached input tokens: 5508\r\n- Cache write tokens: not reported\r\
-    \n- Output tokens: 1266\r\n- Reasoning tokens: 402\r\n- Tool-result input tokens:\
-    \ not reported\r\n- Total tokens: 9288\r\n- Cached input share: unknown (probe\
-    \ L1 not recorded)\r\n- Model latency: 2.22 s\r\n\r\n## Largest tool results\r\
-    \n\r\nEstimated with o200k_base from each step's full result.\r\n\r\n| Step |\
-    \ Tool | Bytes | Tokens |\r\n|---|---|---|---|\r\n| 9 | check_standards | 5,516\
-    \ | 1,521 |\r\n| 1 | check_rms_part | 4,026 | 1,207 |\r\n| 2 | check_rms_equations\
-    \ | 3,910 | 1,054 |\r\n| 10 | check_rms_part | 2,225 | 666 |\r\n| 11 | check_rms_equations\
-    \ | 1,899 | 514 |\r\n\r\n## Investigation Trace\r\n\r\n| Index | Tool | Status\
-    \ | Elapsed (s) |\r\n|---|---|---|---|\r\n| 0 | bridge_interference | ok | <DURATION_59>\
-    \ |\r\n| 1 | check_rms_part | ok | <DURATION_60> |\r\n| 2 | check_rms_equations\
-    \ | ok | <DURATION_61> |\r\n| 3 | check_rms_assembly | ok | <DURATION_62> |\r\n\
-    | 4 | check_joints | ok | <DURATION_63> |\r\n| 5 | check_mass_material | ok |\
-    \ <DURATION_64> |\r\n| 6 | check_hygiene | ok | <DURATION_65> |\r\n| 7 | check_threads\
-    \ | ok | <DURATION_66> |\r\n| 8 | check_drawings | ok | <DURATION_67> |\r\n| 9\
-    \ | check_standards | ok | <DURATION_68> |\r\n| 10 | check_rms_part | ok | <DURATION_69>\
-    \ |\r\n| 11 | check_rms_equations | ok | <DURATION_70> |\r\n| 12 | check_rms_assembly\
-    \ | ok | <DURATION_71> |\r\n| 13 | check_hygiene | ok | <DURATION_72> |\r\n| 14\
-    \ | check_threads | ok | <DURATION_73> |\r\n| 15 | check_drawings | ok | <DURATION_74>\
-    \ |\r\n| 16 | record_drawing_finding | ok | <DURATION_75> |\r\n"
+    \ minutes: 0.0\r\n- False alarm handling minutes: 0.0\r\n- Setup minutes: unknown\r\
+    \n- Review by hand minutes: unknown\r\n- Unattended runtime minutes: <DURATION_58>\r\
+    \n- Net saved minutes: unknown\r\n\r\n## Tokens\r\n\r\n- Rounds: 6\r\n- Turns:\
+    \ 3\r\n- Input tokens: 8022\r\n- Cached input tokens: 2514\r\n- Uncached input\
+    \ tokens: 5508\r\n- Cache write tokens: not reported\r\n- Output tokens: 1266\r\
+    \n- Reasoning tokens: 402\r\n- Tool-result input tokens: not reported\r\n- Total\
+    \ tokens: 9288\r\n- Cached input share: unknown (probe L1 not recorded)\r\n- Model\
+    \ latency: 2.22 s\r\n\r\n## Largest tool results\r\n\r\nEstimated with o200k_base\
+    \ from each step's full result.\r\n\r\n| Step | Tool | Bytes | Tokens |\r\n|---|---|---|---|\r\
+    \n| 9 | check_standards | 5,516 | 1,521 |\r\n| 1 | check_rms_part | 4,026 | 1,207\
+    \ |\r\n| 2 | check_rms_equations | 3,910 | 1,054 |\r\n| 10 | check_rms_part |\
+    \ 2,225 | 666 |\r\n| 11 | check_rms_equations | 1,899 | 514 |\r\n\r\n## Investigation\
+    \ Trace\r\n\r\n| Index | Tool | Status | Elapsed (s) |\r\n|---|---|---|---|\r\n\
+    | 0 | bridge_interference | ok | <DURATION_59> |\r\n| 1 | check_rms_part | ok\
+    \ | <DURATION_60> |\r\n| 2 | check_rms_equations | ok | <DURATION_61> |\r\n| 3\
+    \ | check_rms_assembly | ok | <DURATION_62> |\r\n| 4 | check_joints | ok | <DURATION_63>\
+    \ |\r\n| 5 | check_mass_material | ok | <DURATION_64> |\r\n| 6 | check_hygiene\
+    \ | ok | <DURATION_65> |\r\n| 7 | check_threads | ok | <DURATION_66> |\r\n| 8\
+    \ | check_drawings | ok | <DURATION_67> |\r\n| 9 | check_standards | ok | <DURATION_68>\
+    \ |\r\n| 10 | check_rms_part | ok | <DURATION_69> |\r\n| 11 | check_rms_equations\
+    \ | ok | <DURATION_70> |\r\n| 12 | check_rms_assembly | ok | <DURATION_71> |\r\
+    \n| 13 | check_hygiene | ok | <DURATION_72> |\r\n| 14 | check_threads | ok | <DURATION_73>\
+    \ |\r\n| 15 | check_drawings | ok | <DURATION_74> |\r\n| 16 | record_drawing_finding\
+    \ | ok | <DURATION_75> |\r\n"
   session.json: "{\r\n  \"session_id\": \"<UUID_1>\",\r\n  \"package_id\": \"<UUID_2>\"\
     ,\r\n  \"design_id\": \"dsn:fict\",\r\n  \"started_at\": \"<TIME_251>\",\r\n \
     \ \"ended_at\": \"<TIME_252>\",\r\n  \"model\": \"fake-1\",\r\n  \"provider_info\"\

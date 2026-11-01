@@ -795,6 +795,8 @@ def _render_timing(session: ReviewSession) -> list[str]:
         f"- Assisted supervision minutes: {timing.assisted_supervision_minutes}",
         f"- Assisted verification minutes: {timing.assisted_verification_minutes}",
         f"- False alarm handling minutes: {timing.false_alarm_handling_minutes}",
+        f"- Setup minutes: {_fmt_minutes(timing.setup_minutes)}",
+        f"- Review by hand minutes: {_fmt_minutes(timing.review_by_hand_minutes)}",
         f"- Unattended runtime minutes: {timing.unattended_runtime_minutes}",
         f"- Net saved minutes: {_fmt_minutes(timing.net_saved_minutes)}",
     ]

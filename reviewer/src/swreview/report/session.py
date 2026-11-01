@@ -568,7 +568,8 @@ HUMAN_TIMING_FIELDS: tuple[str, ...] = (
     "review_by_hand_minutes",
 )
 """The engineer's six inputs to `Timing`, in the order of `benchmark.timing.TIMING_INPUTS`:
-every field but the runner's unattended runtime and the derived net (owner decision 183A)."""
+every field but the runner's unattended runtime and the derived net (owner decision 183A).
+Feature 015's re-run carries exactly these (`ReviewRun.carry_from`)."""
 
 
 TOKEN_FIELDS: tuple[str, ...] = (

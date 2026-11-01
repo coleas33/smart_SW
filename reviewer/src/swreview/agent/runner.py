@@ -138,6 +138,7 @@ from swreview.report.markdown import render_report
 from swreview.report.names import plural
 from swreview.report.session import (
     CLOSEOUT_CHECK,
+    HUMAN_TIMING_FIELDS,
     ORIGIN_MARKS_VERSION,
     CoverageBucket,
     CoverageItem,
@@ -1520,8 +1521,9 @@ class ReviewRun:
         answered code question onto the one question that `asks_same` (applied by code through
         `_apply_answers` with no drawing read), each decision onto the one finding with the same
         `finding_subject_key` (through `set_disposition` at its first time, announced as a live
-        decision is), the drawing outcome lines verbatim, the four human timing inputs and the
-        model status. What cannot be carried is named once in one `coverage.recheck` row.
+        decision is), the drawing outcome lines verbatim, every human timing input
+        (`HUMAN_TIMING_FIELDS`, owner decision 183A) and the model status. What cannot be
+        carried is named once in one `coverage.recheck` row.
         Nothing is written: no `save_session`, no report; `_open_waiting`'s finalization is the
         re-run's one write. When answers or outcome lines were carried, it ends as the waiting
         apply does, with `_settle_waiting`, so the opening at Send is rebuilt from them.
@@ -1541,10 +1543,7 @@ class ReviewRun:
         session.drawing_outcomes = [outcome.model_copy() for outcome in earlier.drawing_outcomes]
         named.extend(self._lost_drawing_outcomes(earlier, index))
         session.timing = session.timing.replace(
-            baseline_minutes=earlier.timing.baseline_minutes,
-            assisted_supervision_minutes=earlier.timing.assisted_supervision_minutes,
-            assisted_verification_minutes=earlier.timing.assisted_verification_minutes,
-            false_alarm_handling_minutes=earlier.timing.false_alarm_handling_minutes,
+            **{name: getattr(earlier.timing, name) for name in HUMAN_TIMING_FIELDS}
         )
         status, before = session.model_status, earlier.model_status
         if status is not None and before is not None:
