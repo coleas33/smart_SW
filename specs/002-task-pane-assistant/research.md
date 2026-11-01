@@ -6338,3 +6338,17 @@ the decision register now records 160A as done.
   - Not run in this lane: the whole non-live suites, which run before the pull request and in its
     CI, among them `test_tracked_files_carry_no_recorded_number.py`, which reads the owner's
     denylist outside the repository. No SOLIDWORKS process, seat task, or paid or live test ran.
+- **Review** (Tier 2; 2026-11-01): one Codex review of the branch, and one finding (medium):
+  `showDisposition` wrote the page's memory into `state.findings[id]` whatever card the reply was
+  for. A decision's reply that landed after the engineer switched to another review holding a
+  finding of the same id wrote the old review's disposition into the new review's memory, and the
+  new review's next refused press showed the old decision, triage, engineer and note as its own.
+  Fixed test first, under T324: `ReviewPageTriageTests.AReplyLandingAfterAReviewSwitchKeepsTheShownReviewsRecord`
+  holds chat-1's reply, switches by its chip to chat-2, releases the reply and refuses a press on
+  chat-2's F-001; it failed with chat-1's `wrong` pressed, and passes once `entryOf(card)` gives
+  the memory only to the card its entry holds - for the reply's write and the refusal's read
+  alike. Card identity covers the chat id and the restore epoch Codex also proposed checking:
+  every change of chat goes through `resetTranscript`, and a switch, a restore or a re-run builds
+  new cards. Not changed: a reply to a review the engineer left and came back to before it landed
+  reaches only the card it was pressed on, so the card restored meanwhile shows its snapshot until
+  a reload, as the card did before this cycle. No other finding.
