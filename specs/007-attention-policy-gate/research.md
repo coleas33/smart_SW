@@ -662,6 +662,46 @@ the run folder as 183A built them. Fictional figures stay where they are: the qu
 Scenario 1 and the tests time fixture folders, and the ledger's median column reads benchmark
 studies. The roadmap's own pages are brought up to date by its update runs, not here.
 
+**Built** (2026-11-01, T072), as *What it changes* says. The note is `notes\timing.txt`, in the
+folder the setup block already makes: a line `A`, then each number on a line of its own with its
+name, and the update's minutes apart in the same note. Section 0.2 says every file in `notes\`,
+the note among them, is never pushed, as it says of `notes\documents.txt` and `notes\paths.txt`;
+step 6.5 says the note travels in the folder, is never committed and stays in the private fork.
+The fail of step 4.5's item 4 that shows a number other than the one typed names the input in the
+findings document and copies the printed line into the note, since the general rule for a fail,
+quoting the line in Observed, would carry the six minutes. T060's dated note keeps its Done note,
+which the development machine commits, to the net saved and the stamp.
+
+**Tests changed on purpose**: none. Two pins were added to `test_workstation_test_plan.py`, and
+every existing case of the three modules that read the changed files passed before and after with
+no edit, among them the pins that read steps 4.1 and 4.5:
+`test_the_timing_is_recorded_once_the_backend_no_longer_holds_the_review`,
+`test_the_timing_line_passes_every_input_swreview_timing_takes` and
+`test_every_sentence_the_plan_quotes_is_the_products`.
+
+**Tests first**: T071's two pins failed before T072, each for want of the words it pins:
+`test_a_real_designs_timing_figures_stay_out_of_the_findings_document` at step 4.1's note, and
+`test_every_check_before_the_findings_document_is_committed_names_the_timing_figures` at rule 5.
+Read one by one on the documents as they stood, 41 of their 42 checks were red; the one that held
+is the guard that section 0.2's notes are never pushed. In a first draft the check that step 4.1's
+old sentence is gone read the plan unflattened, and so held against the old text, which breaks
+that sentence across lines; both checks that an old sentence is gone read the flattened plan
+before the pins were committed, and were red with the rest.
+
+**Gates** (T073; 2026-11-01), on the cycle's final tree:
+
+- Python 3.12.3, in the worktree's own environment (`uv sync --python 3.12 --all-extras`), and
+  3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required, over the three
+  modules that read the changed files - `test_workstation_test_plan.py`,
+  `test_workstation_handover.py` and `test_update_workstation_script.py`: 296 passed on each.
+- `ruff check src tests` clean.
+- The link check over the cycle's changed Markdown: 302 relative links, anchors included, none
+  broken. Every changed file LF in the index.
+- No C# file changed, so no C# gate. Not run in this lane: the whole non-live suites, which run
+  before the pull request and in its CI, among them
+  `test_tracked_files_carry_no_recorded_number.py`, which reads the owner's lists outside the
+  repository. No SOLIDWORKS process, seat task, or paid or live test ran.
+
 **Open, for the owner**: step 4.1 still records the review's start and end times in the findings
 document. They are the review's run time, which the north star reports apart and
 [`docs/roadmap/metrics.md`](../../docs/roadmap/metrics.md) keeps as a guardrail, not one of
