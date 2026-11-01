@@ -2142,3 +2142,13 @@ What the seat-readiness review of 2026-09-23 left for the owner; the rest of its
   - Fix: the owner's rule for the standards half: compared against a replay of the recording under the real profile (008 T105 can grade the sitting's folders either way), or left out of SC-010's count.
 - **specs/008-checks-first-review/spec.md** (SC-003, SC-010; owner, watch) - T103's line is 300,000 input tokens, SC-003's 0.3M, which assumes the regrouped estimate's behaviour (no repeat of a check the digest reported); the replay's requested figure for `small-assembly-a` is 459,000. A paid review that makes the recorded calls fails T103 by design; the tasks say so and ask the seat to record the repeated calls.
   - Fix: none unless the owner reads SC-010's "the replay's estimate" as the requested figure, in which case T103's line is 688,500 and the 0.3M is SC-003's replay target only.
+
+## Decision 181A's plan change: left for M0's own tables (2026-11-01)
+
+From the one review of 004 T390 and T391 (decision 180A, Tier 2; 004 `research.md` R29.13). Each waits for the table of the sitting it names, or for the next roadmap update run.
+
+- **docs/test-plan-2026-09-27/workstation-test-plan.md**, step 4.10 (R5, should-fix; M0-a) - The step asks for the owner's key and for step 4.8 first, while M0-a runs its items 1 and 2 with no key (015 US1, scenario 2). Fix: a dated *At M0-a* note in step 4.10 and in the handover's step 22.
+- **docs/test-plan-2026-09-27/workstation-test-plan.md**, Sittings, M0-b (R6, should-fix) - M0-a leaves the send box unticked, the seat keeps it so (015 FR-002), and no step ticks it again before M0-b's paid reviews. Fix: M0-b's table ticks it first.
+- **docs/test-plan-2026-09-27/workstation-test-plan.md**, Sittings, M0-a (R8, should-fix) - `swreview timing` on a review still waiting for Send is lost at the next decision, which saves the session the run holds (`chat/sessions.py`). Fix: M0-a's table times after a restart, as step 4.5's items 2 and 4 do.
+- **docs/test-plan-2026-09-27/workstation-test-plan.md**, Sittings, M0-b (R12, note) - M0-b holds no step 2.4, which gates step 4's reviews, and step 4.5's items 1 and 3 need step 4.4's reviews. Fix: M0-a or M0-b takes step 2.4 (no key); M0-b takes step 4.5's items 2 and 4.
+- **docs/roadmap/capabilities.md**, U7 and U24 (R11, note) - They place step 5.6's last runs at S1's row 8, now row 9. Fix: the next roadmap update run.

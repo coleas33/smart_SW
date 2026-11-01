@@ -24,8 +24,9 @@ Since 2026-09-28 the next sitting runs the retest of U25 to U27 first (the plan'
 the retest"): steps 4.9 and 5.3, right after step 1, and their rows are filled in then.
 
 Since 2026-10-31 the next sitting is S1 (the plan's section "S1: Start readiness", decision 167A):
-fill in only the rows of S1's steps - 1.3 to 1.7, 3.1's `real files fingerprinted`, 3.9, 5.3, 5.6
-and step 6's - and leave every other row blank.
+fill in only the rows of S1's steps - 1.3 to 1.7, 3.1's `real files fingerprinted`, 3.9, 5.3, 5.6,
+5.1's 004 T003 row when S1 runs the owner's parts (decision 181A), and step 6's - and leave every
+other row blank.
 
 | | |
 |---|---|

@@ -2323,8 +2323,9 @@ def test_every_command_written_in_the_text_parses(tmp_path: Path) -> None:
     assert powershell_parse_errors(spans, tmp_path) == ""
 
 
-SITTING_ROW = re.compile(r"^\| (S\d) \| ([^|]+) \| ([^|]+) \| [^|]+ \|$", re.MULTILINE)
-"""A row of the plan's Sittings table: the sitting, its theme and its length."""
+SITTING_ROW = re.compile(r"^\| (S\d|M0-[ab]) \| ([^|]+) \| ([^|]+) \| [^|]+ \|$", re.MULTILINE)
+"""A row of the plan's Sittings table: the sitting, its theme and its length. *Changed
+2026-11-01 on purpose (004 T390; decision 181A):* M0's two sittings, M0-a and M0-b, are rows too."""
 S1_ROW = re.compile(r"^\| (\d+) \| ([^|]+) \| ([^|]*) \| ([^|]+) \|$", re.MULTILINE)
 """A row of S1's table: its order, the steps it runs, their task ids and its estimate."""
 STEP_NUMBER = re.compile(r"\b(\d\.\d{1,2})\b")
@@ -2334,9 +2335,18 @@ PAID_STEPS = frozenset({"2.5", "2.7", "3.4", "5.5"})
 S1_TASKS = frozenset({
     ("004", "T140"), ("004", "T164"), ("004", "T187"), ("011", "T077"), ("013", "T142"),
     ("003", "T088"), ("004", "T185"), ("004", "T186"), ("011", "T171"), ("004", "T182"),
-    ("004", "T303a"), ("006", "T102"), ("001", "T076"), ("004", "T353"),
+    ("004", "T303a"), ("006", "T102"), ("001", "T076"), ("004", "T353"), ("004", "T003"),
 })
-"""What S1 answers, as decisions 167A, 169A and 172A put it, besides the probes of step 5.6."""
+"""What S1 answers, as decisions 167A, 169A, 172A and 181A put it, besides the probes of step
+5.6; 004 T003's owner's parts only when S1's clock allows."""
+OWNERS_PARTS = "5.1's owner's parts"
+"""The words of S1's row for step 5.1's owner's parts (decision 181A; 004 T390)."""
+
+
+def conditional(cell: str) -> bool:
+    """Whether a row of S1's table runs only when S1's clock allows: the optional block (decision
+    172A) and step 5.1's owner's parts (decision 181A)."""
+    return "optional" in cell or OWNERS_PARTS in cell
 
 
 def section(plan: str, heading: str) -> str:
@@ -2363,17 +2373,22 @@ def t303a(plan: str) -> str:
 
 def test_the_plan_is_run_in_short_themed_sittings_s1_first(plan: str) -> None:
     """Decision 167A: the next sitting is S1, about three hours, and later sittings are short and
-    themed, each 3.5 hours or less, in place of the two-day plan (004 T365)."""
+    themed, each 3.5 hours or less, in place of the two-day plan (004 T365).
+
+    *Changed 2026-11-01 on purpose (004 T390; decision 181A):* the two sittings of the roadmap's
+    milestone M0, M0-a with no key and M0-b, S3's first, come between S1 and S2."""
     sittings = section(plan, "Sittings")
     rows = SITTING_ROW.findall(sittings)
     lengths = {sitting: length.strip() for sitting, _, length in rows}
+    later = ("M0-a", "M0-b", "S2", "S3", "S4", "S5")
 
     assert [(sitting, theme.strip()) for sitting, theme, _ in rows] == [
-        ("S1", "Start readiness"), ("S2", "Start on"), ("S3", "paid review"),
+        ("S1", "Start readiness"), ("M0-a", "the first triaged review"),
+        ("M0-b", "the first paid reviews"), ("S2", "Start on"), ("S3", "paid review"),
         ("S4", "drawings"), ("S5", "fixtures"),
     ]
     assert lengths["S1"] == "3 h 10 min, and an optional 25 min"
-    assert [lengths[sitting] for sitting in ("S2", "S3", "S4", "S5")] == ["3 h 30 min at most"] * 4
+    assert [lengths[sitting] for sitting in later] == ["3 h 30 min at most"] * len(later)
     assert "decision 167A" in re.sub(r"\s+", " ", sittings)
     assert ("004", "T303b") in qualified_tasks(sittings)
     assert (
@@ -2386,11 +2401,18 @@ def test_the_plan_is_run_in_short_themed_sittings_s1_first(plan: str) -> None:
 def test_s1_is_a_selection_of_the_plans_steps_whose_minutes_are_its_headline(plan: str) -> None:
     """S1 runs steps the plan already has, none that uses the key, and its estimates add up to its
     headline, 3 h 10 min, the optional block's 25 minutes apart; together they answer what
-    decisions 167A, 169A and 172A put in it (004 T365)."""
+    decisions 167A, 169A and 172A put in it (004 T365).
+
+    *Changed 2026-11-01 on purpose (004 T390; decision 181A):* S1 gains a row for step 5.1's
+    owner's parts (004 T003, 10 minutes), which, like the optional block, runs only when S1's
+    clock allows, so it stays out of the headline's 190 minutes."""
     flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
     rows = s1_rows(plan)
     [(hours, mins, optional)] = re.findall(
         r"about \*\*(\d+) hours (\d+) minutes\*\* at the seat, plus an optional (\d+) minutes", flat
+    )
+    [parts] = re.findall(
+        r"when its clock allows, (\d+) minutes for step 5\.1's owner's parts", flat
     )
     steps = set(STEP_HEADING.findall(plan))
     named = [set(STEP_NUMBER.findall(cell)) for _, cell, _, _ in rows]
@@ -2398,9 +2420,10 @@ def test_s1_is_a_selection_of_the_plans_steps_whose_minutes_are_its_headline(pla
     tasks = set().union(*(qualified_tasks(cell) for _, _, cell, _ in rows))
 
     assert [order for order, *_ in rows] == list(range(1, len(rows) + 1))
-    assert sum(m for _, cell, _, m in rows if "optional" not in cell) == 190
+    assert sum(m for _, cell, _, m in rows if not conditional(cell)) == 190
     assert int(hours) * 60 + int(mins) == 190
     assert [m for _, cell, _, m in rows if "optional" in cell] == [int(optional)] == [25]
+    assert [m for _, cell, _, m in rows if OWNERS_PARTS in cell] == [int(parts)] == [10]
     assert [cell for (_, cell, _, _), numbers in zip(rows, named, strict=True)
             if not numbers and "optional" not in cell] == []
     assert used <= steps, sorted(used - steps)
@@ -2414,7 +2437,10 @@ def test_s1_runs_the_probes_that_never_reorder_early_and_the_reorders_last(plan:
     it, and it comes early; its second and third runs stay last before the handoff. If SOLIDWORKS
     closes during step 5.3, the close in process is skipped; the optional block is the first thing
     cut; and after S1 the development machine's three switches each go in a pull request of their
-    own (decision 167A; 004 T365)."""
+    own (decision 167A; 004 T365).
+
+    *Changed 2026-11-01 on purpose (004 T390; decision 181A):* step 5.1's owner's parts come
+    after the optional block and before 5.6's last runs."""
     cells = [cell for _, cell, _, _ in s1_rows(plan)]
     flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
 
@@ -2428,6 +2454,7 @@ def test_s1_runs_the_probes_that_never_reorder_early_and_the_reorders_last(plan:
         < at("5.3: items")
         < at("close in process")
         < at("optional")
+        < at(OWNERS_PARTS)
         < at("second and third runs")
         == len(cells) - 2
     )
@@ -2880,18 +2907,23 @@ def test_s1_with_its_optional_block_still_ends_within_3_h_30(plan: str) -> None:
     """Every sitting is 3 h 30 min or less (decision 167A), S1 with its optional block too: the
     block starts only when its 25 minutes and every row after it still end by then. S1's rows
     before it end at 2 h 30 on their estimates, so it runs only when S1 is ahead (004 T370, on
-    review)."""
+    review).
+
+    *Changed 2026-11-01 on purpose (004 T390; decision 181A):* the rows after the block leave out
+    step 5.1's owner's parts, which have their own start time and are cut once the block runs
+    late."""
     flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
     rows = s1_rows(plan)
     [optional] = [index for index, (_, cell, _, _) in enumerate(rows) if "optional" in cell]
     [(hours, mins)] = re.findall(
         r"\*\*The optional block\*\* starts only by (\d) h (\d+) on the sitting's clock", flat
     )
+    after = sum(m for _, cell, _, m in rows[optional + 1 :] if not conditional(cell))
 
     assert "each 3 hours 30 minutes or less, S1 first" in re.sub(
         r"\s+", " ", section(plan, "Sittings")
     )
-    assert int(hours) * 60 + int(mins) + sum(m for *_, m in rows[optional:]) == 210
+    assert int(hours) * 60 + int(mins) + rows[optional][3] + after == 210
     assert sum(m for *_, m in rows[:optional]) == 150
     assert "at least five minutes ahead" in flat
 
@@ -2921,7 +2953,10 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
     001, 005 and 008 after that count, and 004's row still listed T180, which decision 168A
     closed: the rows of 001, 002, 004, 005 and 008 are recounted from this tree's task lists. The
     counts stay literals, checked by hand at each recount: a pin that computed them would turn
-    every lane that adds a task red."""
+    every lane that adds a task red.
+
+    *Changed 2026-11-01 on purpose (004 T392; research R29.13):* 004's row is recounted with T390
+    to T394, decision 181A's five tasks, ticked: 393 done, 22 open."""
     readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
     flat = re.sub(r"\s+", " ", readme)
     rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
@@ -2937,7 +2972,7 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
         assert f"| {counts} |" in rows[number], number
         assert "Closed on 2026-10-31 (decision 173A)" in rows[number], number
         assert closed in rows[number].split("Closed on 2026-10-31")[1], number
-    assert "| 388 / 22 / 0 |" in rows["004"]
+    assert "| 393 / 22 / 0 |" in rows["004"]
     assert "T180" not in rows["004"]
     for task in ("T182", "T187", "T303a", "T303b", "T353"):
         assert re.search(rf"\b{task}\b", rows["004"]), task
@@ -3110,3 +3145,139 @@ def test_002_t063_is_codex_only_since_t055a_is_closed() -> None:
     assert "*Closed 2026-10-31 (owner decision 173A)" in t055a
     assert "*Amended 2026-10-31 (owner decisions 94A and 173A):" in t063
     assert "Codex only" in t063.split("*Amended 2026-10-31")[1]
+
+
+def test_after_s1_come_m0s_two_sittings_then_s2(plan: str) -> None:
+    """Decision 181A: after S1, the roadmap's milestone M0 takes two sittings before S2. M0-a,
+    with no key, reviews A with the send box unticked (step 4.10, items 1 and 2), every finding
+    judged and the minutes kept with `swreview timing`, opens the escape replay's pre-fix
+    revisions read-only, and runs step 5.1's owner's parts if S1 did not; M0-b is S3's first
+    sitting, the key and the first paid reviews (steps 2.5, 4.1, 4.2, 4.5 and 4.11); S2, Start
+    on, waits for M0's checkpoint and 004 T003's numbers (004 T390).
+
+    *Changed 2026-11-01 on review (004 T393; research R29.13, findings R2 and R7):* M0-a's row
+    names no paid step and no step of step 4 but 4.10, as S1's pin reads S1's rows, where it read
+    only four of step 4's reviews; and it says the escape replay has no step yet."""
+    sittings = section(plan, "Sittings")
+    lines = sittings.splitlines()
+    [m0a] = [line for line in lines if line.startswith("| M0-a |")]
+    [m0b] = [line for line in lines if line.startswith("| M0-b |")]
+    [s2] = [line for line in lines if line.startswith("| S2 |")]
+    order = [sitting for sitting, _, _ in SITTING_ROW.findall(sittings)]
+
+    assert order.index("S1") < order.index("M0-a") < order.index("M0-b") < order.index("S2")
+    assert "decision 181A" in re.sub(r"\s+", " ", sittings)
+    assert "](../roadmap/README.md)" in sittings
+    assert "no key" in m0a and "step 4.10, items 1 and 2" in m0a
+    assert "`swreview timing`" in m0a and "escape replay" in m0a and "read-only" in m0a
+    assert "no step yet" in m0a
+    assert OWNERS_PARTS in m0a
+    assert sorted(
+        number for number in STEP_NUMBER.findall(m0a)
+        if number in PAID_STEPS or (number.startswith("4.") and number != "4.10")
+    ) == []
+    assert "S3's first sitting" in m0b
+    assert {"2.5", "4.1", "4.2", "4.5", "4.11"} <= set(STEP_NUMBER.findall(m0b))
+    assert "M0's checkpoint" in s2 and ("004", "T003") in qualified_tasks(s2)
+
+
+def test_s1_runs_the_owners_parts_when_its_clock_allows_and_m0_a_otherwise(plan: str) -> None:
+    """Decision 181A adds step 5.1's owner's parts (004 T003, 10 minutes) to S1 if it runs
+    ahead. They come after the optional block and start only by 2 h 40 on the sitting's clock, so
+    that they and the rows after them end by 3 h 30, as the optional block's rule is made; the
+    block's own rule leaves them out, so they are cut once it runs late; step 5.3's cut rule skips
+    them too; and what S1 does not run of them, M0-a runs (004 T390).
+
+    *Changed 2026-11-01 on review (004 T393; research R29.13, finding R9):* the two margins the
+    rule states are pinned too: after the optional block the parts need S1 fifteen minutes ahead,
+    and with the block cut they still start when S1 is ten minutes behind."""
+    flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+    rows = s1_rows(plan)
+    [parts] = [index for index, (_, cell, _, _) in enumerate(rows) if OWNERS_PARTS in cell]
+    [(hours, mins)] = re.findall(
+        r"\*\*The owner's parts\*\* start only by (\d) h (\d+) on the sitting's clock", flat
+    )
+    start = int(hours) * 60 + int(mins)
+    after = sum(m for _, cell, _, m in rows[parts + 1 :] if not conditional(cell))
+    with_block = sum(m for *_, m in rows[:parts])
+    without_block = sum(m for _, cell, _, m in rows[:parts] if not conditional(cell))
+
+    assert start + rows[parts][3] + after == 210
+    assert with_block - start == 15 and "at least fifteen minutes ahead" in flat
+    assert start - without_block == 10 and "even when S1 is ten minutes behind" in flat
+    assert qualified_tasks(rows[parts][2]) == {("004", "T003")}
+    assert "Don't Save" in rows[parts][1]
+    assert "decision 181A" in flat and "M0-a runs" in flat
+    assert "so that it and the rows after it, the owner's parts apart, end by 3 h 30" in flat
+    assert "skip the close in process, the optional block and the owner's parts" in flat
+
+
+def test_the_owners_parts_are_named_and_fingerprinted_before_s1(plan: str) -> None:
+    """S1's owner's parts are named before the sitting, with their paths in `notes\\paths.txt`
+    beside part J's, which `Save-Fingerprint` reads, so the fingerprint step 1.6 takes before
+    SOLIDWORKS starts covers them before anything opens them, and step 6.0 shows them unchanged
+    (decision 181A; 004 T390).
+
+    *Changed 2026-11-01 on review (004 T393; research R29.13, finding R3):* each place is held to
+    its own clause about the parts' paths, since part J's clause beside it already names
+    `notes\\paths.txt`."""
+    flat = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+    before = flat[flat.index("**Before the sitting:**") : flat.index("**The findings document**")]
+    fingerprint = flat[flat.index("**The fingerprint.**") : flat.index("**Cut rule.**")]
+    health = re.sub(r"\s+", " ", step(plan, "1.6"))
+    function = plan[plan.index("function Save-Fingerprint ") :]
+
+    assert "P-1 to P-5 named as section 0.2's row P says, their paths there too" in before
+    assert "the owner's parts, whose paths `notes\\paths.txt` holds too" in fingerprint
+    assert "part J" in fingerprint
+    assert "the only document S1 has" not in flat + health
+    assert "the owner's parts (decision 181A), all of whose paths `notes\\paths.txt` holds" in (
+        health
+    )
+    assert '"$H\\notes\\paths.txt"' in function[: function.index("\n}\n")]
+
+
+def test_the_handover_and_the_results_sheet_name_the_owners_parts_in_s1(results: str) -> None:
+    """The handover's S1 paragraph says S1 runs step 5.1's owner's parts when its clock allows
+    and that M0-a and M0-b come before S2, and the results sheet's S1 sentence names 004 T003's
+    row among the rows S1 fills in (decision 181A; 004 T390).
+
+    *Changed 2026-11-01 on review (004 T393; research R29.13, finding R4):* the order is read, M0-a
+    and M0-b before S2, and the clock's condition, where only the words' presence was."""
+    handover = HANDOVER.read_text(encoding="utf-8")
+    s1 = handover[handover.index("## The next sitting is S1") :]
+    s1 = re.sub(r"\s+", " ", s1[: s1.index("\n## ")])
+    flat = re.sub(r"\s+", " ", results)
+    sentence = flat[flat.index("Since 2026-10-31 the next sitting is S1") :]
+    sentence = sentence[: sentence.index("leave every other row blank")]
+
+    assert ("004", "T003") in qualified_tasks(s1) and "decision 181A" in s1
+    assert "when S1's clock allows" in s1
+    assert s1.index("M0-a") < s1.index("M0-b") < s1.index("and then S2")
+    assert "004 T003" in sentence
+
+
+def test_start_stays_off_through_m0s_two_sittings(plan: str) -> None:
+    """Decision 181A: S2, Start on, waits for M0's checkpoint and 004 T003's numbers. So the
+    development machine sets Start's switch only after them, Start stays off through M0-a and
+    M0-b, and the sitting after the switch, which runs 004 T303b first (decision 169A), is S2.
+    Step 5.3's "What the Start switch waits on", the development machine's row, "After S1" and the
+    handover each say so, and "After S1" no longer sets the switch overnight (004 T393; research
+    R29.13, review finding R1)."""
+    waits = re.sub(r"\s+", " ", step(plan, "5.3"))
+    waits = waits[waits.index("**What the Start switch waits on.**") :]
+    [row] = [
+        line for line in plan[plan.index("## Not in this sitting") :].splitlines()
+        if "`RemodelStart.SeatValidated`" in line
+    ]
+    after = re.sub(r"\s+", " ", section(plan, "S1: Start readiness"))
+    after = after[after.index("### After S1") :]
+    overnight = after[after.index("Overnight") :]
+    overnight = overnight[: overnight.index(". ") + 1]
+    handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
+
+    for text in (waits, row, after, handover):
+        assert "M0's checkpoint and 004 T003's numbers (decision 181A)" in text
+    for text in (waits, after):
+        assert "Start stays off through M0-a and M0-b" in text
+    assert "`DrawingOpenScope.SeatValidated`" in overnight and "Start switch" not in overnight
