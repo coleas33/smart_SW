@@ -10,7 +10,9 @@ One test per resume rule, named after the rule it pins down:
 
 - (a) a second finalization produces the same coverage, not duplicates;
 - (b) an answered evidence request stops being unresolved coverage;
-- (c) a check re-run after its blocking request is answered yields one verdict;
+- (c) a check re-run after its blocking request is answered yields one verdict, keeping a
+  decision whose verdict - status and severity - is unchanged and clearing, with a notice, one
+  whose verdict changed (owner decisions 189A and 191A);
 - (d) `max_steps` is a per-turn budget and the cumulative count is kept separately;
 - (e) a turn the provider truncated is `turn.ended {reason: "truncated"}` plus unresolved
   coverage;
@@ -38,6 +40,7 @@ from swreview.agent.providers import (
     TurnResult,
 )
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.chat.sessions import record_disposition
 from swreview.checks import part_roles
 from swreview.checks.provenance import PROVENANCE_CHECK
 from swreview.checks.thread_pitch import CHECK_FINE_PITCH
@@ -1285,6 +1288,234 @@ def test_a_resumed_turn_on_another_hole_pair_of_the_same_components_is_a_second_
         ("F-001", ["hol:0004", "hol:0010"]),
         ("F-002", ["hol:0017", "hol:0027"]),
     ]
+
+
+# --- resume rule (c) and a decision: owner decisions 189A and 191A (002 T326) -------------------
+
+ENGINEER = "FICT-ENG"
+"""Who the decisions below are recorded by: a fictional engineer."""
+
+DECIDED = Disposition(
+    decision="accepted",
+    note="FICT intended",
+    by=ENGINEER,
+    at=datetime(2026, 11, 1, 9, 0, tzinfo=UTC),
+    triage="already_known",
+)
+"""An Accept with its triage, recorded on a finding before an answer resumed the turn."""
+
+CLEARED_LINE = (
+    "The check ran again after your answer and its verdict changed, so your Accept (real but "
+    "already known) was cleared. Decide again."
+)
+"""The words file's line for an Accept recorded as `already_known` that a re-run cleared."""
+
+
+def decided_before_the_answer(
+    review: Callable[..., runner.ReviewRun], rerun_status: str
+) -> tuple[runner.ReviewRun, Disposition]:
+    """A drawing finding recorded `suspected` (medium) beside an evidence request, accepted as
+    `already_known` through the live route while the request is open; then the request is
+    answered and the resumed turn records the finding again as `rerun_status`: `suspected`, the
+    verdict decided, or `unresolved`, another status and severity (low). Returns the run and the
+    disposition recorded before the answer."""
+    run = review(
+        [
+            turn(
+                "blocked",
+                drawing_finding("suspected"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("re-run", drawing_finding(rerun_status)),
+        ]
+    )
+    recorded = record_disposition(
+        run, "F-001", decision="accepted", note="FICT intended", by=ENGINEER, triage="already_known"
+    ).disposition
+    assert recorded is not None
+    run.answer_evidence("ER-001", "The usable thread depth is 12 mm.")
+    return run, recorded
+
+
+def judged(
+    finding_id: str, status: str = "unresolved", severity: str = "medium", **fields: Any
+) -> Finding:
+    """`on_the_pair`'s finding on `hol:0004` and `hol:0010`, with this verdict and these fields:
+    every one of them folds onto every other in a resumed turn."""
+    return on_the_pair(finding_id, "hol:0004", "hol:0010").model_copy(
+        update={"status": status, "severity": severity, **fields}
+    )
+
+
+def test_a_check_rerun_after_an_answer_keeps_the_decision_and_its_triage(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """Owner decisions 189A and 191A: the re-run's status and severity are the ones decided, so
+    the fold keeps the whole disposition - decision, triage, note, engineer and time - as a
+    restated finding keeps it (58A); its re-announcement carries it, and nothing is cleared."""
+    run, recorded = decided_before_the_answer(review, "suspected")
+
+    [folded] = run.session.findings
+    assert (folded.id, folded.status, folded.severity) == ("F-001", "suspected", "medium")
+    assert folded.disposition == recorded
+    assert recorded.triage == "already_known"
+    announced = bodies_of(run, "finding")
+    assert [body["id"] for body in announced] == ["F-001", "F-002", "F-001"]
+    assert announced[-1]["disposition"] == recorded.model_dump(mode="json")
+    assert bodies_of(run, "disposition.cleared") == []
+
+
+def test_a_check_rerun_with_another_verdict_clears_the_decision_and_says_so(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """Owner decisions 189A and 191A: the re-run changed the status and the severity, so the
+    folded finding carries no disposition, and right after the fold's `finding` event one
+    `disposition.cleared` names the finding, the disposition cleared and the line the card
+    prints, which names the decision and its triage and asks for a new decision."""
+    run, recorded = decided_before_the_answer(review, "unresolved")
+
+    [folded] = run.session.findings
+    assert (folded.id, folded.status, folded.severity) == ("F-001", "unresolved", "low")
+    assert folded.disposition is None
+    events = events_of(run)
+    refolded = max(
+        index
+        for index, event in enumerate(events)
+        if event["type"] == "finding" and event["body"]["id"] == "F-001"
+    )
+    assert events[refolded]["body"]["disposition"] is None
+    cleared = [
+        (index, event["body"])
+        for index, event in enumerate(events)
+        if event["type"] == "disposition.cleared"
+    ]
+    assert cleared == [
+        (
+            refolded + 1,
+            {
+                "finding_id": "F-001",
+                "disposition": recorded.model_dump(mode="json"),
+                "reason": CLEARED_LINE,
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("status", "severity"),
+    [("unresolved", "high"), ("suspected", "medium")],
+    ids=["severity", "status"],
+)
+def test_a_rerun_that_changes_only_the_status_or_only_the_severity_clears_the_decision(
+    review: Callable[..., runner.ReviewRun], status: str, severity: str
+) -> None:
+    """Owner decision 191A: a changed verdict is a changed status or severity, so either alone
+    clears the decision and its triage, and the fold names the disposition it cleared."""
+    run = review([turn("nothing yet")])
+    session = run.session
+    session.findings[:] = [judged("F-001", disposition=DECIDED), judged("F-002", status, severity)]
+
+    returned = runner._reconcile_reruns(session, 1)
+
+    assert [
+        (finding.id, finding.status, finding.severity, finding.disposition)
+        for finding in session.findings
+    ] == [("F-001", status, severity, None)]
+    assert returned == (session.findings, [("F-001", DECIDED)])
+
+
+def test_a_rerun_that_changes_neither_keeps_the_whole_disposition(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """Owner decision 191A: a re-run with the status and the severity decided keeps the whole
+    disposition - decision, triage, note, engineer and time - though what it observed reads
+    otherwise, and clears nothing."""
+    run = review([turn("nothing yet")])
+    session = run.session
+    observed = "FICT the axes now read further apart"
+    session.findings[:] = [
+        judged("F-001", disposition=DECIDED),
+        judged("F-002", observed=observed),
+    ]
+
+    returned = runner._reconcile_reruns(session, 1)
+
+    assert [
+        (finding.id, finding.observed, finding.disposition) for finding in session.findings
+    ] == [("F-001", observed, DECIDED)]
+    assert returned == (session.findings, [])
+
+
+@pytest.mark.parametrize(
+    ("first", "last", "kept"),
+    [("suspected", "unresolved", True), ("unresolved", "suspected", False)],
+    ids=["back-to-the-verdict-decided", "changed-last"],
+)
+def test_two_reruns_of_one_finding_are_judged_against_the_finding_as_decided(
+    review: Callable[..., runner.ReviewRun], first: str, last: str, kept: bool
+) -> None:
+    """Of two re-runs in one resumed turn that fold onto one decided finding, the last alone
+    says whether the decision stands: each is compared with the finding as decided, never with
+    the re-run before it, so one back to the verdict decided keeps the disposition and one
+    changed last clears it, named once."""
+    run = review([turn("nothing yet")])
+    session = run.session
+    session.findings[:] = [
+        judged("F-001", disposition=DECIDED),
+        judged("F-002", first),
+        judged("F-003", last),
+    ]
+
+    folded, cleared = runner._reconcile_reruns(session, 1)
+
+    [final] = session.findings
+    assert (final.id, final.status) == ("F-001", last)
+    assert final.disposition == (DECIDED if kept else None)
+    assert [finding.id for finding in folded] == ["F-001", "F-001"]
+    assert folded[-1] == final
+    assert cleared == ([] if kept else [("F-001", DECIDED)])
+
+
+@pytest.mark.parametrize(
+    "rerun_status", ["suspected", "unresolved"], ids=["same-verdict", "another-verdict"]
+)
+def test_a_check_rerun_of_an_undecided_finding_folds_as_before(
+    review: Callable[..., runner.ReviewRun], rerun_status: str
+) -> None:
+    """A finding nobody decided folds as it always has, whichever its re-run's verdict, and
+    nothing is cleared."""
+    run = review(
+        [
+            turn(
+                "blocked",
+                drawing_finding("suspected"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("re-run", drawing_finding(rerun_status)),
+        ]
+    )
+
+    session = run.answer_evidence("ER-001", "The usable thread depth is 12 mm.")
+
+    assert [
+        (finding.id, finding.status, finding.disposition) for finding in session.findings
+    ] == [("F-001", rerun_status, None)]
+    assert [body["id"] for body in bodies_of(run, "finding")] == ["F-001", "F-002", "F-001"]
+    assert bodies_of(run, "disposition.cleared") == []
+
+
+def test_a_cleared_decisions_notice_validates_against_the_events_contract(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The `disposition.cleared` event is in chat-events.schema.json, and the run that writes
+    it writes nothing the contract refuses."""
+    run, _ = decided_before_the_answer(review, "unresolved")
+
+    validator = contract_validator("chat-events.schema.json")
+    events = events_of(run)
+    for event in events:
+        validator.validate(event)
+    assert [event["type"] for event in events].count("disposition.cleared") == 1
 
 
 # --- resume rule (d): max_steps is a per-turn budget --------------------------------------------
