@@ -119,6 +119,13 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <!--
+      And for ReviewPageTriageTests (002 T316, owner decision 185A), which reads the four triage
+      tokens, in their order, out of the session contract's `Disposition`.
+    -->
+    <Content Include="..\..\specs\001-agentic-design-review\contracts\review-session.schema.json" Link="review-session.schema.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!--
       And for CliProfileWriterTests (T056), which compares the generated Codex config.toml
       with this file's own fenced block byte-for-byte: the contract is the expected value,
       not a second copy of it in the test.

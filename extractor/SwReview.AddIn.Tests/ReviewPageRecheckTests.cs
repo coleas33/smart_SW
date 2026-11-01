@@ -311,7 +311,7 @@ public sealed class ReviewPageRecheckTests
     internal const string ReadState = @"
 var send=document.querySelector('#send [data-action=send]');
 var reason=document.getElementById('read-only');
-var decisions=document.querySelectorAll('#results .card.finding [data-action=accept],#results .card.finding [data-action=reject],#results .card.finding [data-action=defer]');
+var decisions=document.querySelectorAll('#results .card.finding [data-action=accept],#results .card.finding [data-action=reject],#results .card.finding [data-action=defer],#results .card.finding [data-action=triage]');
 var questions=document.querySelectorAll('#questions button,#questions input');
 var chips=document.querySelectorAll('#review-chips [data-action=review-chip]');
 var failure=document.querySelector('#send .plain-error-text,#send .note.bad');
