@@ -407,7 +407,10 @@
     },
     "Disposition": {
       "type": "object", "additionalProperties": false, "required": ["decision", "note", "by", "at"],
-      "properties": { "decision": { "enum": ["accepted", "rejected", "deferred"] }, "note": { "type": "string" }, "by": { "type": "string" }, "at": { "type": "string", "format": "date-time" } }
+      "properties": {
+        "decision": { "enum": ["accepted", "rejected", "deferred"] }, "note": { "type": "string" }, "by": { "type": "string" }, "at": { "type": "string", "format": "date-time" },
+        "triage": { "enum": ["new_and_real", "already_known", "wrong", "not_worth_flagging"], "description": "The engineer's triage beside the decision (owner decision 185A; 002 FR-031): new and real, real but already known, wrong, or true but not worth flagging. Optional and independent of the decision, never inferred from it. Added to properties and left out of required, and omitted when absent, so a disposition written before the field still validates and keeps its bytes" }
+      }
     },
     "Finding": {
       "type": "object", "additionalProperties": false,
