@@ -4,6 +4,13 @@ The SHA-256 values below were captured with pre-feature ``save_session`` on the
 accepted 010/014 baseline, before T014. The Windows result contains 127 CRLFs;
 the other value is its LF spelling. The ticked scenario is read before its
 characterization normalizer ever runs.
+
+*Changed 2026-11-01 on purpose (owner decision 183A; 007 T066):* ``build_session``'s
+timing records the four earlier inputs alone, so its net is unknown under 183A and the
+saved ``net_saved_minutes`` reads ``null`` where it read ``70.0``. That one value is the
+only difference: putting ``70.0`` back reproduces both captured values
+(``a9373840...`` and ``25467c28...``) byte for byte, so the pins moved with it and
+nothing else.
 """
 
 from __future__ import annotations
@@ -37,8 +44,8 @@ run_dir = chat.run_dir
 WHEN = datetime(2026, 10, 8, 9, 12, tzinfo=timezone(timedelta(hours=5, minutes=30)))
 DOCUMENT = {"path": r"C:\Fictional\FICT-7000.SLDASM", "configuration": "Default"}
 BASELINE_SAVE_SHA256 = {
-    "nt": "a93738400f23128dfe7eb9a827a6eac03373abea6a8592e8823963e835aa0969",
-    "posix": "25467c28c50babadaee86094437fc0383bede4759378f8cc3ed866dc421a8ca6",
+    "nt": "2787bf5c25de3ec7eb7acda84b57d8c5e0290c5c9e7e633c672bb1bfa908731f",
+    "posix": "7490214dae5e09aa5918cc7503022d3ed6b7c855fe9dc1d39ded3066da2e64c9",
 }
 
 

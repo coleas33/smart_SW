@@ -184,7 +184,13 @@ from swreview.report.rerender import (
     rerender_run_folder,
     run_folder_session,
 )
-from swreview.report.session import CoverageBucket, ReviewSession, load_session, save_session
+from swreview.report.session import (
+    CoverageBucket,
+    ReviewSession,
+    Timing,
+    load_session,
+    save_session,
+)
 from swreview.seat.cli import app as seat_app
 from swreview.secrets import KEY_ENV_VARS as KEY_ENV_VARS
 from swreview.secrets import KEY_SHAPES
@@ -1021,29 +1027,62 @@ def disposition(
 
 # --- timing ----------------------------------------------------------------------
 
+# The six inputs of `contracts/timing.md`, declared once for `timing` and `benchmark time`
+# (owner decision 183A added the last two; 184A says what they cover).
+BaselineOption = Annotated[
+    float | None, typer.Option("--baseline", help="Unassisted review minutes.")
+]
+SupervisionOption = Annotated[
+    float | None, typer.Option("--supervision", help="Minutes spent supervising the run.")
+]
+VerificationOption = Annotated[
+    float | None, typer.Option("--verification", help="Minutes spent verifying findings.")
+]
+FalseAlarmsOption = Annotated[
+    float | None, typer.Option("--false-alarms", help="Minutes spent on false alarms.")
+]
+SetupOption = Annotated[
+    float | None,
+    typer.Option(
+        "--setup",
+        help="Minutes setting this design up: the package, the assembly, its drawings, "
+        "starting the review and any rerun.",
+    ),
+]
+ByHandOption = Annotated[
+    float | None,
+    typer.Option("--by-hand", help="Minutes reviewing by hand what the tool did not reach."),
+]
+
+
+def _timing_line(timing: Timing) -> str:
+    """The six inputs as both timing commands print them, before `net saved:`."""
+    return (
+        f"baseline {timing.baseline_minutes}, "
+        f"supervision {timing.assisted_supervision_minutes}, "
+        f"verification {timing.assisted_verification_minutes}, "
+        f"false alarms {timing.false_alarm_handling_minutes}, "
+        f"setup {timing.setup_minutes}, "
+        f"by hand {timing.review_by_hand_minutes}"
+    )
+
 
 @app.command()
 def timing(
     run_dir: Annotated[Path, typer.Argument(help="Directory holding session.json.")],
-    baseline: Annotated[
-        float | None, typer.Option("--baseline", help="Unassisted review minutes.")
-    ] = None,
-    supervision: Annotated[
-        float | None, typer.Option("--supervision", help="Minutes spent supervising the run.")
-    ] = None,
-    verification: Annotated[
-        float | None, typer.Option("--verification", help="Minutes spent verifying findings.")
-    ] = None,
-    false_alarms: Annotated[
-        float | None, typer.Option("--false-alarms", help="Minutes spent on false alarms.")
-    ] = None,
+    baseline: BaselineOption = None,
+    supervision: SupervisionOption = None,
+    verification: VerificationOption = None,
+    false_alarms: FalseAlarmsOption = None,
+    setup: SetupOption = None,
+    by_hand: ByHandOption = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Record the engineer's minutes against a run folder and re-render the report.
 
-    The four inputs of `contracts/timing.md`; net saved minutes is derived by the model and
+    The six inputs of `contracts/timing.md`; net saved minutes is derived by the model and
     is deliberately not an option (FR-004). An omitted input keeps the value already
-    recorded, so one number can be corrected without restating the other three.
+    recorded, so one number can be corrected without restating the others.
     """
     with _errors_as_exit_1():
         recorded = record_timing_at(
@@ -1052,6 +1091,8 @@ def timing(
             supervision=supervision,
             verification=verification,
             false_alarms=false_alarms,
+            setup=setup,
+            by_hand=by_hand,
         )
         report_file = rerender_run_folder(run_dir)
 
@@ -1063,10 +1104,7 @@ def timing(
         "timing": to_jsonable_python(recorded),
     }
     lines = [
-        f"baseline {recorded.baseline_minutes}, "
-        f"supervision {recorded.assisted_supervision_minutes}, "
-        f"verification {recorded.assisted_verification_minutes}, "
-        f"false alarms {recorded.false_alarm_handling_minutes}",
+        _timing_line(recorded),
         f"net saved: {recorded.net_saved_minutes}",
         f"report: {payload['report_file']}",
     ]
@@ -3204,18 +3242,12 @@ def _refuse_answer_keys_beside_a_keyed_set(
 def benchmark_time(
     run_dir: Annotated[Path, typer.Argument(help="A benchmark run directory.")],
     package_id: Annotated[str, typer.Argument(help="Which package of the run.")],
-    baseline: Annotated[
-        float | None, typer.Option("--baseline", help="Unassisted review minutes.")
-    ] = None,
-    supervision: Annotated[
-        float | None, typer.Option("--supervision", help="Minutes spent supervising the run.")
-    ] = None,
-    verification: Annotated[
-        float | None, typer.Option("--verification", help="Minutes spent verifying findings.")
-    ] = None,
-    false_alarms: Annotated[
-        float | None, typer.Option("--false-alarms", help="Minutes spent on false alarms.")
-    ] = None,
+    baseline: BaselineOption = None,
+    supervision: SupervisionOption = None,
+    verification: VerificationOption = None,
+    false_alarms: FalseAlarmsOption = None,
+    setup: SetupOption = None,
+    by_hand: ByHandOption = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Record human timing against one package of a run, for net-savings computation."""
@@ -3227,6 +3259,8 @@ def benchmark_time(
             supervision=supervision,
             verification=verification,
             false_alarms=false_alarms,
+            setup=setup,
+            by_hand=by_hand,
         )
 
     payload = {
@@ -3235,10 +3269,7 @@ def benchmark_time(
         "timing": to_jsonable_python(timing),
     }
     lines = [
-        f"{package_id}: baseline {timing.baseline_minutes}, "
-        f"supervision {timing.assisted_supervision_minutes}, "
-        f"verification {timing.assisted_verification_minutes}, "
-        f"false alarms {timing.false_alarm_handling_minutes}",
+        f"{package_id}: {_timing_line(timing)}",
         f"net saved: {timing.net_saved_minutes}",
     ]
     _emit(payload, lines, json_output)

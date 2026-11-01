@@ -348,8 +348,10 @@ def record_timing_live(
     supervision: float | None = None,
     verification: float | None = None,
     false_alarms: float | None = None,
+    setup: float | None = None,
+    by_hand: float | None = None,
 ) -> Timing:
-    """Record the four human inputs on a **live** review and re-render its report.
+    """Record the human inputs on a **live** review and re-render its report.
 
     `benchmark.timing.record_timing_at` is the offline form, and it is exactly wrong for a
     chat for the reason `record_disposition` above gives: the run holds the session in
@@ -371,6 +373,8 @@ def record_timing_live(
         supervision=supervision,
         verification=verification,
         false_alarms=false_alarms,
+        setup=setup,
+        by_hand=by_hand,
     )
     run.write_views(save=True, best_effort=False)
     return session.timing

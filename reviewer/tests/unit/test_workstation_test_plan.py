@@ -2042,12 +2042,16 @@ def test_the_timing_is_recorded_once_the_backend_no_longer_holds_the_review(plan
     assert "minutes written only to disk would be gone" in re.sub(r"\s+", " ", sessions)
 
 
-def test_the_timing_line_passes_the_four_inputs_swreview_timing_takes(
+def test_the_timing_line_passes_every_input_swreview_timing_takes(
     plan: str, tmp_path: Path
 ) -> None:
-    """The line step 4.5 pastes names each of the command's four inputs once, each a quoted
+    """The line step 4.5 pastes names each of the command's inputs once, each a quoted
     placeholder, and a placeholder left unreplaced is refused with the message the step
-    quotes, writing nothing."""
+    quotes, writing nothing.
+
+    *Changed 2026-11-01 on purpose (owner decision 183A; 007 T066):* renamed from
+    `test_the_timing_line_passes_the_four_inputs_swreview_timing_takes`, since the command takes
+    six; what it asserts is unchanged, and the line names `--setup` and `--by-hand` too."""
     [line] = [line for line in plan.splitlines() if "uv run swreview timing" in line]
     given = re.findall(r"(--[a-z-]+) '<[^'<>]+>'", line)
     timing = get_command(app).commands["timing"]

@@ -879,11 +879,6 @@ def _score_package(
         not_assessed["coverage_mismatches"] = NO_EXPECTED_COVERAGE
     not_assessed.update(asked.not_assessed)
     timing = session.timing
-    assisted_minutes = (
-        timing.assisted_supervision_minutes
-        + timing.assisted_verification_minutes
-        + timing.false_alarm_handling_minutes
-    )
     usage = session.usage
     because_withheld, unresolved_other = unresolved_split(session)
     return PackageScore(
@@ -898,7 +893,7 @@ def _score_package(
         false_alarms=len(false_alarm_ids),
         unresolved_count=sum(1 for finding in findings if finding.status == "unresolved"),
         baseline_minutes=timing.baseline_minutes,
-        assisted_minutes=assisted_minutes,
+        assisted_minutes=timing.assisted_minutes,
         unattended_runtime_minutes=timing.unattended_runtime_minutes,
         net_saved_minutes=timing.net_saved_minutes,
         usage=usage.totals if usage is not None else None,

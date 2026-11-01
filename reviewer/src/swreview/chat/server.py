@@ -285,9 +285,9 @@ class InvalidTriage(ChatError):
 
 
 class InvalidTiming(ChatError):
-    """A timing body that is not the four human inputs as numbers.
+    """A timing body that is not the human inputs as numbers.
 
-    Named rather than ignored for every key that is not one of the four, because
+    Named rather than ignored for every key that is not one of `TIMING_INPUTS`, because
     `Timing.model_validate` would silently accept a supplied `net_saved_minutes` and
     overwrite the derived figure with it (`contracts/timing.md` section 3, FR-004).
     """
@@ -495,11 +495,11 @@ class ProfileRefused(ChatError):
 
 
 def _timing_inputs(body: Mapping[str, Any]) -> dict[str, float]:
-    """The four human inputs `body` supplies, or `InvalidTiming` naming what was wrong.
+    """The human inputs `body` supplies, or `InvalidTiming` naming what was wrong.
 
     Every key is optional and `null` means "keep what is recorded", so an engineer corrects
-    one number without restating the other three. Anything else is refused **by name**: a
-    key that is not one of the four (`net_saved_minutes` first among them, because the net
+    one number without restating the others. Anything else is refused **by name**: a key
+    that is not one of `TIMING_INPUTS` (`net_saved_minutes` first among them, because the net
     is derived and never accepted), a value that is not a number, and a negative one. The
     negative is caught here rather than left to the model so the pane reads one error class
     for every bad body, and nothing is written on any of the four paths.
