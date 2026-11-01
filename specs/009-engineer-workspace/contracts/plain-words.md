@@ -146,6 +146,13 @@ too - a settings save written while the add-in unloads - whose sentence is "The 
 saved. The add-in is stopping; nothing else needs doing."; with no labels the save's line prints
 the message whole, as it does for `BackendNotRestarted`, rather than the class and the message.
 
+*Amended 2026-11-01 (feature 002, roadmap hole H-g-012):* a refused disposition keeps the record
+in view. The finding card's status line shows the recorded disposition's sentence on a line of its
+own, in the settled colour, above the refusal's sentence and its fold; with no labels, above the
+class and the message. The triage row presses the recorded triage, or none, in place of the
+refused pick. A finding with no disposition shows the refusal alone, as before. The page reads the
+record from its own memory of what was recorded and decides nothing about which press is refused.
+
 ## 6. Model check
 
 `check_result` carries `rule_statements` (data-model section 10). The grade header prints the counts
