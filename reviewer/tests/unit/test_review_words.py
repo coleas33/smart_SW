@@ -266,6 +266,26 @@ def test_the_triage_words_name_exactly_the_four() -> None:
     ]
 
 
+TRIAGE_ALREADY_RECORDED = {
+    "TriageAlreadyRecorded": (
+        "That finding already has a triage, and a triage is recorded only once. The one recorded "
+        "stands and is shown again."
+    ),
+}
+"""The class the disposition route refuses a second triage with (roadmap hole H-g-012; owner
+decision 185A, which takes a triage once): the same Accept or Reject sent again with a triage
+when the one recorded holds one. `IllegalTransition`'s sentence, which it met before, reads as a
+refused decision. The page then shows the recorded triage pressed again and the recorded
+disposition beside the refusal, so the sentence says the one recorded stands and is shown
+again."""
+
+
+def test_a_refused_second_triage_says_the_recorded_one_stands() -> None:
+    errors = load_words().labels.errors
+    labels = {key: errors.get(key) for key in TRIAGE_ALREADY_RECORDED}
+    assert labels == TRIAGE_ALREADY_RECORDED
+
+
 # --- the goals ------------------------------------------------------------------------------
 
 

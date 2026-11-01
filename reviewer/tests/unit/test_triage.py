@@ -11,7 +11,8 @@ decision and never inferred from it (002 research, 185A). What this pins:
   keeps its bytes; a deferred finding keeps its triage unless the later decision names another;
   and an Accept or Reject recorded without one takes one once - the same decision sent again
   with a triage records the triage and nothing else - while a second triage or another decision
-  is refused as before.
+  is refused as before, a second triage with a `ValueError` of its own class (002 T320, roadmap
+  hole H-g-012).
 - **the report** (002 T314): `report.md` shows a finding's triage in the words file's words under
   its decision and, once any finding records one, counts the four and the findings that record
   none, right after "By severity", read from the triage alone; a session with no triage renders
@@ -36,6 +37,7 @@ from swreview.agent.providers import AgentEvent
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.chat.sessions import record_disposition
 from swreview.findings import TRIAGES, Disposition
+from swreview.report import dispositions
 from swreview.report.attention import rank
 from swreview.report.dispositions import apply_disposition, find_finding, set_disposition
 from swreview.report.markdown import render_report
@@ -321,26 +323,37 @@ def test_a_decided_finding_without_a_triage_takes_one_once(tmp_path: Path, decis
 
 
 @pytest.mark.parametrize(
-    ("first", "then", "refusal"),
+    ("first", "then", "refusal", "own_class"),
     [
-        ([("accepted", "wrong")], ("accepted", "wrong"), TERMINAL),
-        ([("accepted", "wrong")], ("accepted", "already_known"), TERMINAL),
-        ([("accepted", "wrong")], ("accepted", None), TERMINAL),
-        ([("rejected", None), ("rejected", "wrong")], ("rejected", "already_known"), TERMINAL),
-        ([("rejected", None)], ("accepted", "wrong"), TERMINAL),
-        ([("accepted", None)], ("rejected", None), TERMINAL),
-        ([("accepted", None)], ("accepted", None), TERMINAL),
-        ([("deferred", None)], ("deferred", "wrong"), "is deferred"),
+        ([("accepted", "wrong")], ("accepted", "wrong"), TERMINAL, True),
+        ([("accepted", "wrong")], ("accepted", "already_known"), TERMINAL, True),
+        ([("accepted", "wrong")], ("accepted", None), TERMINAL, False),
+        (
+            [("rejected", None), ("rejected", "wrong")],
+            ("rejected", "already_known"),
+            TERMINAL,
+            True,
+        ),
+        ([("rejected", "not_worth_flagging")], ("rejected", "wrong"), TERMINAL, True),
+        ([("rejected", None)], ("accepted", "wrong"), TERMINAL, False),
+        ([("accepted", "wrong")], ("rejected", "wrong"), TERMINAL, False),
+        ([("accepted", None)], ("rejected", None), TERMINAL, False),
+        ([("accepted", None)], ("accepted", None), TERMINAL, False),
+        ([("deferred", None)], ("deferred", "wrong"), "is deferred", False),
+        ([("deferred", "wrong")], ("deferred", "already_known"), "is deferred", False),
     ],
     ids=[
         "the-same-triage-again",
         "another-triage",
         "the-same-decision-with-none",
         "a-second-late-triage",
+        "another-triage-on-a-reject",
         "another-decision-with-a-triage",
+        "another-decision-on-a-triage",
         "another-decision",
         "the-same-decision-with-no-triage",
         "a-defer-again-with-a-triage",
+        "a-defer-again-holding-a-triage",
     ],
 )
 def test_a_second_triage_or_another_decision_is_still_refused(
@@ -348,22 +361,34 @@ def test_a_second_triage_or_another_decision_is_still_refused(
     first: list[tuple[str, str | None]],
     then: tuple[str, str | None],
     refusal: str,
+    own_class: bool,
 ) -> None:
     """A second triage, the same or another, a different decision and the same decision with no
     triage are refused as any change to a settled finding is, with nothing changed; a Defer is
     not settled, and is refused a second Defer as before - the late triage is Accept's and
-    Reject's alone."""
+    Reject's alone.
+
+    *Changed 2026-11-01 on purpose (002 T320; roadmap hole H-g-012):* each refusal's class is
+    asserted as well as its words. A second triage - the same decision sent with a triage to an
+    Accept or Reject that holds one, whether recorded with the decision or late - is
+    `TriageAlreadyRecordedError`, still a `ValueError`, so the route can answer it with a sentence
+    of its own; every other refusal is exactly `ValueError`, as before. Three cases added: another
+    triage on a Reject that holds one, another decision on a finding that holds a triage, and a
+    Defer again that holds one."""
     run_dir = run_folder(tmp_path)
     for decision, triage in first:
         apply_disposition(run_dir, "F-001", decision, "FICT note", BY, at=FIRST_AT, triage=triage)
     before = folder_bytes(run_dir)
 
     decision, triage = then
-    with pytest.raises(ValueError, match=refusal):
+    with pytest.raises(ValueError, match=refusal) as refused:
         apply_disposition(
             run_dir, "F-001", decision, "FICT later note", OTHER_BY, at=LATER_AT, triage=triage
         )
 
+    # Read from the module, so a missing class fails these cases alone and not the collection.
+    expected = dispositions.TriageAlreadyRecordedError if own_class else ValueError
+    assert type(refused.value) is expected
     assert folder_bytes(run_dir) == before
 
 

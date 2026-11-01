@@ -2903,7 +2903,12 @@ def test_a_late_triage_records_the_triage_and_nothing_else(
     the note, `by` and `at` stay as first recorded. A different decision, or a second triage,
     is refused as any change to a settled finding is.
 
-    *Changed 2026-11-01 on purpose (002 T314):* `report.md` shows the late triage's words too."""
+    *Changed 2026-11-01 on purpose (002 T314):* `report.md` shows the late triage's words too.
+
+    *Changed 2026-11-01 on purpose (002 T320; roadmap hole H-g-012):* a second triage, the same
+    or another, is `409 TriageAlreadyRecorded`, a class of its own whose sentence says the triage
+    recorded stands, where it was `IllegalTransition`, whose sentence reads as a refused decision;
+    a different decision stays `IllegalTransition`."""
     url = disposition_url(chat_with_a_finding, run_dir)
     first = client.post(
         url, json={"decision": "accepted", "note": "FICT first note", "by": "FICT-ENG"}
@@ -2942,8 +2947,53 @@ def test_a_late_triage_records_the_triage_and_nothing_else(
     ]
 
     assert [(response.status_code, response.json()["error_class"]) for response in refused] == [
-        (409, "IllegalTransition")
-    ] * 3
+        (409, "IllegalTransition"),
+        (409, "TriageAlreadyRecorded"),
+        (409, "TriageAlreadyRecorded"),
+    ]
+    assert folder_files(run_dir) == before
+
+
+def test_a_second_triage_is_a_409_of_its_own_and_writes_nothing(
+    client: TestClient, run_dir: Path, chat_with_a_finding: str
+) -> None:
+    """Roadmap hole H-g-012 (185A unchanged): a finding rejected with a triage is refused a
+    second one - another, or the same again - as `409 TriageAlreadyRecorded`, not retryable, its
+    message naming the triage recorded, so the page can say the recorded one stands. Every other
+    refusal stays `409 IllegalTransition`: an Accept, with a triage or without, a Reject with none
+    and a Defer. None of them writes anything."""
+    url = disposition_url(chat_with_a_finding, run_dir)
+    first = client.post(
+        url,
+        json={"decision": "rejected", "note": "FICT note", "by": "FICT-ENG", "triage": "wrong"},
+    )
+    assert first.status_code == 200, first.text
+    before = folder_files(run_dir)
+
+    refused = [
+        client.post(
+            url, json={"decision": decision, "note": "", "by": "FICT-ENG", "triage": triage}
+        )
+        for decision, triage in (
+            ("rejected", "already_known"),
+            ("rejected", "wrong"),
+            ("accepted", "wrong"),
+            ("accepted", None),
+            ("rejected", None),
+            ("deferred", "wrong"),
+        )
+    ]
+
+    assert [(response.status_code, response.json()["error_class"]) for response in refused] == [
+        (409, "TriageAlreadyRecorded"),
+        (409, "TriageAlreadyRecorded"),
+        (409, "IllegalTransition"),
+        (409, "IllegalTransition"),
+        (409, "IllegalTransition"),
+        (409, "IllegalTransition"),
+    ]
+    assert [response.json()["retryable"] for response in refused] == [False] * len(refused)
+    assert "with its triage ('wrong')" in refused[0].json()["message"]
     assert folder_files(run_dir) == before
 
 
