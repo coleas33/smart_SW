@@ -44,6 +44,14 @@ single re-evaluated verdict, not two; Accept on a finding writes the disposition
 component; a follow-up question on the already-ended session appends steps to the same
 session. `events.jsonl` validates against `contracts/chat-events.schema.json`.
 
+*Amended 2026-11-01 by owner decision 185A (FR-031):* Accept with a triage. On one finding,
+press one of the four outcomes in its fold - new and real, real but already known, wrong, or
+true but not worth flagging - then Accept: `<run>/session.json` records the triage beside the
+decision, `report.md` shows it under the decision and adds a "By triage" line to its summary,
+and the card names it. On another finding press Accept with no outcome picked, then pick one
+and press Accept again: the triage is recorded, and the decision, note, engineer and time stay
+as first recorded; a second outcome is refused, as any change to a settled finding is.
+
 Record in the metric table in `benchmarks/native/bracket-assy/notes.md`: component count,
 seconds from pressing Review to extraction complete (SC-001, under 60), seconds to the first
 finding card (SC-001, under 180), seconds from the first `text.delta` in `events.jsonl` to

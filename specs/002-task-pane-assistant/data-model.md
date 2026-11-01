@@ -6,6 +6,16 @@ Feature 001's `EvidencePackage`, `ReviewSession`, `Finding`, `EvidenceRequest`, 
 and `Disposition` are reused unchanged. This feature adds the provider layer types, the
 chat event stream, the pane's settings and process records, and the general-chat log.
 
+*Amended 2026-11-01 by owner decision 185A (FR-031):* the `Disposition` the pane records is
+feature 001's, which gains an optional `triage` beside its decision - `new_and_real`,
+`already_known`, `wrong` or `not_worth_flagging` (`findings.TRIAGES`) - independent of the
+decision, never inferred from it, and left out while there is none, so a disposition without
+one keeps its bytes in `session.json`, the `disposition` and `finding` events and the route's
+reply. The Review page sends it beside the decision only when one is picked
+([contracts/chat-api.md](contracts/chat-api.md), the disposition route), and an Accept or
+Reject recorded without one takes one once (001
+[data-model.md](../001-agentic-design-review/data-model.md) section 5).
+
 ## 1. Provider layer (Python)
 
 | Type | Fields | Rules |

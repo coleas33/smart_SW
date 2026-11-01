@@ -154,7 +154,7 @@ The engineer runs the reviewer across a set of benchmark packages (5 to 10 repre
 - **FR-009**: Every finding MUST include: affected component instances and/or drawing sheet, view or annotation; file version, revision and configuration; observed condition; governing requirement; source dimensions with units and tolerances; tool result or calculation with assumptions and coverage limits; status from {demonstrated, suspected, unresolved, checked-within-scope}; recommended next action; and a disposition field for the engineer.
 - **FR-010**: The report MUST include a coverage section listing what was checked, skipped, unresolved, failed, and out of scope, including tool failures with their errors.
 - **FR-011**: The report MUST group repeated findings (same condition across pattern instances) into one finding with the instance list.
-- **FR-012**: The engineer MUST be able to navigate from a finding to the named component instance or drawing location in one action and to record a disposition (accepted, rejected, deferred) with a note.
+- **FR-012**: The engineer MUST be able to navigate from a finding to the named component instance or drawing location in one action and to record a disposition (accepted, rejected, deferred) with a note. *Amended 2026-11-01 (owner decision 185A; feature 002 FR-031):* the disposition may also carry a triage, one of four outcomes (new and real; real but already known; wrong; true but not worth flagging), optional and independent of the decision, and an Accept or Reject recorded without one may gain one once.
 - **FR-013**: The system MUST retain dispositions and accepted exceptions bound to the geometry and configuration they were made for, and MUST flag them for re-review when that geometry or configuration changes.
 
 **Native evidence extraction**
@@ -199,7 +199,7 @@ The engineer runs the reviewer across a set of benchmark packages (5 to 10 repre
 - **Finding**: An observed condition with governing requirement, evidence, calculation, status, recommended action, and disposition.
 - **Coverage Record**: What was checked, skipped, unresolved, failed, or out of scope for a review, with reasons.
 - **Exception**: An engineer-accepted deviation bound to specific geometry and configuration, with re-review trigger.
-- **Disposition**: The engineer's decision on a finding (accepted, rejected, deferred) with a note and timestamp.
+- **Disposition**: The engineer's decision on a finding (accepted, rejected, deferred) with a note and timestamp. *Amended 2026-11-01 (owner decision 185A):* and, optionally, a triage beside the decision (FR-012).
 - **Review Session**: One run of the reviewer over one package, with investigation steps, elapsed and supervised time.
 - **Benchmark Package**: A review package with a withheld answer key of known defects and correct conditions.
 - **Scorecard**: Per-package and aggregate results of a benchmark run plus time comparison.

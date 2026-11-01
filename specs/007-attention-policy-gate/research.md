@@ -542,3 +542,48 @@ that: step 4.5 times a review after the backend's restart.
 `missing`, two `partial` (the scorecard's assisted minutes and the re-run carry, which name three
 and four inputs) and one `contradicts` (the net, derived from three assisted inputs) - each
 already in Phase 9, so its appended Phase 10 was removed and nothing was folded in.
+
+**Built** (2026-11-01, T066 and T068), as *What it changes* says: the two fields left out of the
+dump while `None` by a wrap serializer reusing `omit_when_null`; `Timing.assisted_minutes`, read
+by `_derive_net_saved_minutes` and by the scorecard's `PackageScore.assisted_minutes`;
+`Timing.replace` checking names against the model's fields, since the dump leaves out an input
+not recorded; `HUMAN_TIMING_FIELDS`, the six inputs beside `Timing`, which `carry_from` copies;
+`TIMING_INPUTS`' six, through which the writers, `record_timing_live` and the route take both;
+the six options declared once as `Annotated` aliases, with one `_timing_line` for both
+commands; and the report's two lines, `unknown` when not recorded. The seat plan's step 4.5
+line names the six options, its pass text reading "the baseline less the other five", and step
+4.1 asks for the two in 184A's words and gives every finding one of the four triage outcomes
+(002 FR-031, decision 185A), in T066's commit, since the plan's pin reads the command's options.
+
+**Tests changed on purpose**, none loosened, each because the net is unknown under 183A until
+setup and the review by hand are recorded:
+
+- The figures that read a net record the two as 0, their expected values unchanged:
+  `test_timing.py` (nine cases), `test_session.py` (three), `test_scorecard.py`'s `TIMING` and
+  its distribution case, `tests/support/studies.py`'s `PackageSpec.timing` (so
+  `test_benchmark_compare.py`'s and `test_adoption_rule.py`'s medians hold with no edit of their
+  own), `test_cli_timing.py`'s `four()`, `test_chat_timing_route.py`'s `FOUR` (which
+  `test_waiting_answers.py`'s timed Send imports), `test_cli.py`'s `benchmark time` case, and
+  `test_report_tokens.py`'s session, whose golden prints a net of 70.0: not in T065's list, but
+  without it T066 would have moved that golden's net line.
+- `test_timing.py`'s `test_the_four_input_names_are_the_writers_own_signature`, renamed
+  `test_the_input_names_are_the_writers_own_signature` and extended to `record_timing` and
+  `record_timing_live`; and the negative-input cases of `test_timing.py` and
+  `test_cli_timing.py`, extended to the two inputs.
+- `test_session_fields_015.py`'s SHA-256 save pin, moved: `build_session` records the four
+  earlier inputs alone, so its saved net reads null where it read 70.0, the one byte that
+  changed; putting 70.0 back reproduces both captured values. T066 had expected the pin to
+  hold, having read only the key set.
+- `test_workstation_test_plan.py`'s `test_the_timing_line_passes_the_four_inputs_swreview_timing_takes`,
+  renamed `test_the_timing_line_passes_every_input_swreview_timing_takes`, since the pasted line
+  names the six.
+- The six report goldens, regenerated with `--force-regen` and each diff read: the two lines and
+  nothing else, `unknown` in the ranked report and the four ticked-review goldens and `0.0` in the
+  tokens golden.
+
+**Tests first**: T065's new and rearranged cases failed before T066 - 287 failed and 9 errored,
+each for want of the two fields, keywords, options or body keys, `test_scorecard.py` and
+`test_scoring_rules_version.py` failing to collect since `TIMING` is built at import - but for
+the renamed signature pin, which pins the writers' agreement and passed as it stood. T067's two
+cases failed before T068: the report printed neither line, and `carry_from` named the four
+earlier inputs, so setup and the review by hand came back `None`.

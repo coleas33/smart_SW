@@ -225,6 +225,14 @@ Validation: a finding with `status == "checked_within_scope"` or `"demonstrated"
 
 `decision: "accepted" | "rejected" | "deferred"`, `note`, `by`, `at`. Written by the engineer; never by the reviewer.
 
+*Amended 2026-11-01 (owner decision 185A; feature 002 FR-031):* `triage: "new_and_real" |
+"already_known" | "wrong" | "not_worth_flagging" | null`, the engineer's triage beside the
+decision (new and real; real but already known; wrong; true but not worth flagging): optional,
+independent of the decision and never inferred from it, and left out of `session.json` while
+null, so a disposition written before it keeps its bytes. A value outside the four is refused,
+naming them, before anything changes. A deferred finding keeps its triage when the later
+Accept or Reject names none.
+
 ### `Exception`
 
 | Field | Type | Rules |
@@ -286,6 +294,11 @@ BenchmarkPackage 1 EvidencePackage + 1 AnswerKey ; Scorecard 1..* BenchmarkPacka
 **Finding.status** is set once by the check that produced it and does not change; a
 re-run produces a new session. **Disposition** transitions: none → accepted | rejected |
 deferred; deferred → accepted | rejected.
+
+*Amended 2026-11-01 (owner decision 185A; feature 002 FR-031):* accepted and rejected stay
+terminal with one exception: one recorded without a triage takes one once, sent again with the
+same decision, and the decision, note, `by` and `at` stay as first recorded. A different
+decision, a second triage, or the same decision with none is refused, as before.
 
 **Exception.status**: `active` → `needs_review` when a later package's fingerprint or
 configuration differs; `needs_review` → `active` (engineer re-accepts) or `retired`.

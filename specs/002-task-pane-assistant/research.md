@@ -6143,3 +6143,61 @@ the decision register now records 160A as done.
   dated edge cases and the plan's 185A touch points: nine gaps, all `missing` (eight high, and
   the words medium), each already a pair of Phase 23, so its appended Phase 24 was removed and
   nothing was folded in.
+- **Built** (2026-11-01, T309 to T317):
+  - The record (T309): `findings.Triage`, one `Literal` of the four tokens, and `TRIAGES` from
+    it, the list the record, the route, the console, the report and the words file's checks read
+    and the contract's enum is pinned to; `Disposition.triage`, left out of the dump while null
+    through `omit_when_null`. `set_disposition` and `apply_disposition` take `triage=`: a value
+    outside the four is a `ValueError` naming them before anything changes, a Defer's triage
+    stays when the later decision names none, and 185A's late triage is the terminal rule's one
+    exception (`_takes_a_late_triage`). The session contract's `Disposition.triage`, in
+    `properties` only.
+  - The route, the console and the words (T311): `400 InvalidTriage`, checked before the chat's
+    state; `record_disposition`'s keyword; `swreview disposition --triage`, its choices a
+    `StrEnum` built from `TRIAGES`, its payload and printed line naming the disposition as
+    recorded; the words file's `triage` group, after `contact_kind` and before `source`, which
+    `test_sources_labels.py` pins just before `errors`, with `InvalidTriage`'s sentence; and
+    `summary.Labels.triage`, served by `GET /labels`.
+  - The re-run (T313): `_carry_decisions` passes the triage; 58A's restate already copied the
+    whole disposition.
+  - `report.md` (T315): the triage's words on the line after the decision, and `- By triage:`
+    after `- By severity` once any finding records one - the four in `TRIAGES` order, then
+    `not recorded` for every finding without one, decided or not - counted from the field alone.
+  - The Review page (T317): a row of four toggle buttons in each finding's fold, before the
+    tools row and outside the `.seg` of the three decisions, built from one array of the tokens
+    and worded from `labels.triage`, or the token without labels. A press only picks; a decision
+    posts the picked token, or no key; the reply, a stream event or a restore shows the recorded
+    triage pressed; a read-only review locks the row; and the row wraps at 300 px. The page
+    holds no rule of its own: a second triage or another decision is the backend's to refuse.
+  - Nothing else: no host, proxy or pane-host message, no `handoff.py` change, no new event
+    type, and no report golden moved, since no committed fixture holds a triage.
+- **Tests changed on purpose**, none loosened:
+  - `test_chat_server.py::test_labels_answer_the_words_files_card_vocabulary`, its key set
+    extended with `triage`, FR-031's word group; and
+    `test_review_words.py::test_every_label_is_a_plain_word_not_a_token`, extended to
+    `labels.triage`.
+  - T310's two route cases, its session case and its console case, extended with T314 to read
+    `report.md`'s triage line, which only T315 renders.
+  - The pane fixtures that embed the labels block - `review-big-assembly.json` through
+    `generate_pane_fixture.py`, and `review-waiting.json`, `review-waiting-restored.json` and
+    `review-waiting-big-assembly.json` through `generate_waiting_fixtures.py --write` -
+    regenerated with only their labels block moving; `review-send-failure-events.json`'s pin
+    moved to the regenerated `review-waiting.json` (CRLF), as 160A's T275 and T289 did; and
+    `LabelsSample.cs` mirrors the group.
+  - The four read-only selector copies (`ReviewPageSessionsTests`,
+    `ReviewPageSessionsAcceptanceTests`, `ReviewPageSendGateTests`, `ReviewPageRecheckTests`)
+    gain `[data-action=triage]`, since a read-only review locks the triage buttons with the
+    decisions.
+  - `ReviewPageTriageTests`' 300 px fact, tightened with T317: it passed against a deliberately
+    clipping row, since `scrollIntoView` scrolls an `overflow: hidden` box sideways to reveal a
+    button, so a box scrolled sideways to show one now counts as cutting it off; a row that
+    cannot wrap fails it, naming the two cut buttons.
+  - `test_workstation_test_plan.py::test_the_specs_readme_counts_a_task_173a_closed_as_done`,
+    its 002 literal following 002's recount (T307, and T318).
+- **Tests first**: T308's cases failed before T309 - `test_triage.py` at collection, for want
+  of `TRIAGES`, and the other three for want of `TRIAGES` and the keyword - and its guards on
+  what must not move passed unedited after it. T310's ten new and extended cases failed before
+  T311; T312's one before T313; T314's three new cases and T310's four extended ones before
+  T315, its guard green before and after; and T316's seven facts before T317, each for want of
+  a triage button, while the four extended copies stayed green (84 cases), which is why
+  `ARestoredReviewLocksItsTriageButtons` is the lock's own red.

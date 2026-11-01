@@ -54,6 +54,12 @@ the summary. The key is absent when the session's `model_status` is missing or n
 review sent at once. A non-mapping value, missing `state`, or non-string or unknown state is
 shown as `"model_status": null` and does not fail the export.
 
+*Amended 2026-11-01 by owner decision 185A (FR-031):* a finding's triage travels with its
+decision in `session.json` and `report.md`, and in the `disposition` events of `events.jsonl`
+for a decision recorded in the pane or carried by a re-run, records the archive already
+carries; the export adds nothing for it, and the manifest, its session summary included, is
+unchanged and counts no outcome.
+
 Configured secret values are redacted with the product redactor, and the known provider-key
 shapes are masked in text artifacts. This is a best-effort detector and never proves that
 unknown or undiscoverable secrets are absent. UTF-8 text is required for selected records;
