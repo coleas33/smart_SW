@@ -276,7 +276,9 @@ makes the next `update-workstation.ps1` refuse the tree.
   use `swreview handoff` for this: its bundle is a bounded allowlist that leaves `tool-results\`
   out by design. Run folders hold vault paths and must never be committed.
 - **No company value in the document**: no vault path, no library folder name, no property
-  name, no export-control phrase. Name the profile by its path only.
+  name, no export-control phrase, and of a real design's timing only the net saved, its minutes
+  staying in the handover folder's `notes\timing.txt` (decision 186A). Name the profile by its
+  path only.
 - **If `git push` works from this machine**, copy the document into `docs\` on a branch
   `workstation/<date>`, commit it alone, push that branch and `git checkout main` again, so the
   next update finds `main` clean. Never push `main`; never commit anything under the run root,

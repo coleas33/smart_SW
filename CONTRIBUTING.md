@@ -124,6 +124,10 @@ in an issue, a pull request, a commit message, a log or a screenshot:
   sheet format;
 - a SOLIDWORKS file, a drawing, or a screenshot of a real design;
 - a dump, recording, run folder or handover folder from real work;
+- a real design's review timing: the engineer's baseline, the assisted minutes (setup,
+  supervision, verification, false alarms and the review by hand) and a sitting's update
+  minutes, which stay in the private fork; a design's net minutes saved, and their median, may be
+  committed (decision 186A);
 - a log that shows real paths, user names or machine names (replace them with placeholders
   such as `C:\Users\<you>` or `<part>` before pasting);
 - an API key, a token or any other credential;
