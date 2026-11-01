@@ -358,7 +358,11 @@ def one_set(run: runner.ReviewRun) -> dict[str, list[CoverageItem]]:
 
 
 def withdrawn(events: Events) -> list[dict[str, Any]]:
-    return [body for kind, body in events if kind == "finding.withdrawn"]
+    """The findings the regrade withdrew. *Changed 2026-11-01 on purpose (002 T340):* a fold's
+    withdrawal of a restated finding's own id (`folded_into`) is not one; its verdict stands."""
+    return [
+        body for kind, body in events if kind == "finding.withdrawn" and "folded_into" not in body
+    ]
 
 
 def test_the_review_starts_with_one_pin_finding_listing_both_designations(

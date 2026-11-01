@@ -152,7 +152,14 @@ def ids_on(run: runner.ReviewRun, document_id: str) -> list[str]:
 
 
 def withdrawn(events: Events) -> list[dict[str, Any]]:
-    return [body for kind, body in events if kind == "finding.withdrawn"]
+    """The findings the regrade withdrew, each no longer produced.
+
+    *Changed 2026-11-01 on purpose (002 T340; the backlog's cycle 3 section):* a fold's
+    withdrawal of the id a restated finding was first announced under, which names the id it
+    folded onto (`folded_into`), is not one: its verdict stands under that id."""
+    return [
+        body for kind, body in events if kind == "finding.withdrawn" and "folded_into" not in body
+    ]
 
 
 def resumed_message(run: runner.ReviewRun) -> str:
@@ -183,11 +190,14 @@ def test_all_bought_withdraws_the_unclear_parts_findings_with_an_event_each(
 def test_the_withdrawal_events_validate_against_the_contract(
     tmp_path: Path, scripted_registry: None
 ) -> None:
+    """*Changed 2026-11-01 on purpose (002 T340):* every withdrawal is validated, a fold's among
+    them, not only the ones `withdrawn` counts."""
     events: Events = []
     graded(tmp_path, events=events).answer_evidence_batch([("ER-001", "All bought")])
 
     validator = contract_validator("chat-events.schema.json")
-    for seq, body in enumerate(withdrawn(events), start=1):
+    bodies = [body for kind, body in events if kind == "finding.withdrawn"]
+    for seq, body in enumerate(bodies, start=1):
         validator.validate(
             {"seq": seq, "at": "2026-09-26T09:00:00+00:00", "type": "finding.withdrawn",
              "body": body}
@@ -684,6 +694,40 @@ def test_none_bought_re_announces_each_finding_with_its_disposition(
         if kind == "finding" and body["id"] in ids
     ]
     assert announced == recorded
+
+
+def test_the_restate_withdraws_each_id_it_folded(tmp_path: Path, scripted_registry: None) -> None:
+    """002 T340 (the backlog's cycle 3 section; FR-031, the stream agrees with the fold): each
+    restated call announced its finding under a new id, and the restate folded it onto the
+    earlier finding it re-judges, so each new id is withdrawn - naming the id it folded onto - right
+    before that id's `finding` event. A reader of the stream then holds the session's ids, and no
+    card is left under a new one."""
+    events: Events = []
+    run = graded(tmp_path, events=events)
+    earlier = [finding.id for finding in run.session.findings]
+    mark = len(events)
+
+    run.answer_evidence_batch([("ER-001", "None bought")])
+
+    after = events[mark:]
+    folds = [
+        (index, body) for index, (kind, body) in enumerate(after) if kind == "finding.withdrawn"
+    ]
+    assert sorted(body["folded_into"] for _, body in folds) == sorted(earlier)
+    for index, body in folds:
+        assert body["finding_id"] not in earlier
+        assert body["reason"] == (
+            f"a second verdict on what {body['folded_into']} judges, shown as {body['folded_into']}"
+        )
+        kind, announced = after[index + 1]
+        assert (kind, announced["id"]) == ("finding", body["folded_into"])
+    held: set[str] = set()
+    for kind, body in events:
+        if kind == "finding":
+            held.add(body["id"])
+        elif kind == "finding.withdrawn":
+            held.discard(body["finding_id"])
+    assert held == {finding.id for finding in run.session.findings} == set(earlier)
 
 
 def test_all_bought_withdraws_an_accepted_pin_finding_as_before(

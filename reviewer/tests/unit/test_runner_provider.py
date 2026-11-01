@@ -1410,7 +1410,10 @@ def test_a_rerun_that_changes_only_the_status_or_only_the_severity_clears_the_de
     review: Callable[..., runner.ReviewRun], status: str, severity: str
 ) -> None:
     """Owner decision 191A: a changed verdict is a changed status or severity, so either alone
-    clears the decision and its triage, and the fold names the disposition it cleared."""
+    clears the decision and its triage, and the fold names the disposition it cleared.
+
+    *Changed 2026-11-01 on purpose (002 T340; the backlog's cycle 3 section):* each fold names
+    the id its re-run was first announced under, F-002, which the stream withdraws."""
     run = review([turn("nothing yet")])
     session = run.session
     session.findings[:] = [judged("F-001", disposition=DECIDED), judged("F-002", status, severity)]
@@ -1421,7 +1424,7 @@ def test_a_rerun_that_changes_only_the_status_or_only_the_severity_clears_the_de
         (finding.id, finding.status, finding.severity, finding.disposition)
         for finding in session.findings
     ] == [("F-001", status, severity, None)]
-    assert returned == (session.findings, [("F-001", DECIDED)])
+    assert returned == ([("F-002", session.findings[0])], [("F-001", DECIDED)])
 
 
 def test_a_rerun_that_changes_neither_keeps_the_whole_disposition(
@@ -1429,7 +1432,10 @@ def test_a_rerun_that_changes_neither_keeps_the_whole_disposition(
 ) -> None:
     """Owner decision 191A: a re-run with the status and the severity decided keeps the whole
     disposition - decision, triage, note, engineer and time - though what it observed reads
-    otherwise, and clears nothing."""
+    otherwise, and clears nothing.
+
+    *Changed 2026-11-01 on purpose (002 T340; the backlog's cycle 3 section):* the fold names
+    the id its re-run was first announced under, F-002, which the stream withdraws."""
     run = review([turn("nothing yet")])
     session = run.session
     observed = "FICT the axes now read further apart"
@@ -1443,7 +1449,7 @@ def test_a_rerun_that_changes_neither_keeps_the_whole_disposition(
     assert [
         (finding.id, finding.observed, finding.disposition) for finding in session.findings
     ] == [("F-001", observed, DECIDED)]
-    assert returned == (session.findings, [])
+    assert returned == ([("F-002", session.findings[0])], [])
 
 
 @pytest.mark.parametrize(
@@ -1457,7 +1463,10 @@ def test_two_reruns_of_one_finding_are_judged_against_the_finding_as_decided(
     """Of two re-runs in one resumed turn that fold onto one decided finding, the last alone
     says whether the decision stands: each is compared with the finding as decided, never with
     the re-run before it, so one back to the verdict decided keeps the disposition and one
-    changed last clears it, named once."""
+    changed last clears it, named once.
+
+    *Changed 2026-11-01 on purpose (002 T340; the backlog's cycle 3 section):* each fold names
+    the id its re-run was first announced under, which the stream withdraws."""
     run = review([turn("nothing yet")])
     session = run.session
     session.findings[:] = [
@@ -1471,8 +1480,11 @@ def test_two_reruns_of_one_finding_are_judged_against_the_finding_as_decided(
     [final] = session.findings
     assert (final.id, final.status) == ("F-001", last)
     assert final.disposition == (DECIDED if kept else None)
-    assert [finding.id for finding in folded] == ["F-001", "F-001"]
-    assert folded[-1] == final
+    assert [(spent, finding.id) for spent, finding in folded] == [
+        ("F-002", "F-001"),
+        ("F-003", "F-001"),
+    ]
+    assert folded[-1][1] == final
     assert cleared == ([] if kept else [("F-001", DECIDED)])
 
 
@@ -1516,6 +1528,208 @@ def test_a_cleared_decisions_notice_validates_against_the_events_contract(
     for event in events:
         validator.validate(event)
     assert [event["type"] for event in events].count("disposition.cleared") == 1
+
+
+# --- the re-run fixes on the card: owner decisions 193A and 194A (002 T340) ----------------------
+
+FOLDED_REASON = "a second verdict on what {id} judges, shown as {id}"
+"""Why the id a re-run or restated finding was first announced under is withdrawn once it folds."""
+
+RESTATED_LINE = (
+    "Your answer graded the checks again and this verdict changed, so your Accept (real but "
+    "already known) was cleared. Decide again."
+)
+"""The words file's line for an Accept recorded as `already_known` that a restate cleared."""
+
+
+def standing(events: Sequence[Mapping[str, Any]]) -> set[str]:
+    """The finding ids a reader of the stream holds at its end: every id a `finding` event
+    announced and no later `finding.withdrawn` dropped."""
+    held: set[str] = set()
+    for event in events:
+        if event["type"] == "finding":
+            held.add(event["body"]["id"])
+        elif event["type"] == "finding.withdrawn":
+            held.discard(event["body"]["finding_id"])
+    return held
+
+
+def on_sheet(sheet: str, status: str) -> ScriptedToolCall:
+    """`drawing_finding` cited on `sheet`: another place, so a finding of its own."""
+    return ScriptedToolCall(
+        name="record_drawing_finding",
+        arguments={
+            **DRAWING_FINDING_ARGUMENTS,
+            "sheet": sheet,
+            "source_refs": [{"document_id": "doc:2", "sheet": sheet}],
+            "status": status,
+        },
+    )
+
+
+def test_a_folded_reruns_own_id_is_withdrawn_before_the_fold_is_announced(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The backlog's cycle 3 section (FR-031: the stream MUST agree with the fold): the tool layer
+    announced the re-run under its own id, F-002, and the fold put it under F-001, so F-002 is
+    withdrawn - naming F-001, the id it folded onto - right before F-001's `finding` event. A
+    reader of the stream then holds exactly the ids the session holds, and every event validates
+    against the contract."""
+    run, _ = decided_before_the_answer(review, "unresolved")
+
+    events = events_of(run)
+    refolded = max(
+        index
+        for index, event in enumerate(events)
+        if event["type"] == "finding" and event["body"]["id"] == "F-001"
+    )
+    withdrawal = events[refolded - 1]
+    assert (withdrawal["type"], withdrawal["body"]) == (
+        "finding.withdrawn",
+        {
+            "finding_id": "F-002",
+            "reason": FOLDED_REASON.format(id="F-001"),
+            "folded_into": "F-001",
+        },
+    )
+    assert standing(events) == {finding.id for finding in run.session.findings} == {"F-001"}
+    validator = contract_validator("chat-events.schema.json")
+    for event in events:
+        validator.validate(event)
+
+
+def test_several_folds_at_once_announce_every_finding_before_any_cleared_line(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The backlog's cycle 3 section (its tests): two decided findings fold in one resumed turn -
+    Sheet1's Accept with its triage, run again with the verdict decided, and Sheet2's Defer with
+    no triage, run again with another verdict. The Accept stands whole; the Defer is cleared and
+    its line names it with no triage, exactly; and every `finding` and `finding.withdrawn` the
+    folds write comes before every `disposition.cleared`."""
+    run = review(
+        [
+            turn(
+                "blocked",
+                on_sheet("Sheet1", "suspected"),
+                on_sheet("Sheet2", "suspected"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("re-run", on_sheet("Sheet1", "suspected"), on_sheet("Sheet2", "unresolved")),
+        ]
+    )
+    accepted = record_disposition(
+        run, "F-001", decision="accepted", note="FICT intended", by=ENGINEER, triage="already_known"
+    ).disposition
+    deferred = record_disposition(
+        run, "F-002", decision="deferred", note="FICT later", by=ENGINEER
+    ).disposition
+    assert accepted is not None and deferred is not None and deferred.triage is None
+    mark = len(events_of(run))
+
+    run.answer_evidence("ER-001", "The usable thread depth is 12 mm.")
+
+    assert [(finding.id, finding.disposition) for finding in run.session.findings] == [
+        ("F-001", accepted),
+        ("F-002", None),
+    ]
+    after = events_of(run)[mark:]
+    kinds = [event["type"] for event in after]
+    cleared = [event["body"] for event in after if event["type"] == "disposition.cleared"]
+    assert cleared == [
+        {
+            "finding_id": "F-002",
+            "disposition": deferred.model_dump(mode="json"),
+            "reason": (
+                "The check ran again after your answer and its verdict changed, so your Defer "
+                "was cleared. Decide again."
+            ),
+        }
+    ]
+    last_fold = max(
+        index for index, kind in enumerate(kinds) if kind in ("finding", "finding.withdrawn")
+    )
+    assert last_fold < kinds.index("disposition.cleared")
+    assert standing(events_of(run)) == {"F-001", "F-002"}
+
+
+def test_two_earlier_findings_with_one_verdict_key_take_no_rerun(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The backlog's cycle 3 section: an ordinary turn's duplicates are left as recorded, so two
+    earlier findings can share a verdict key. Which one a re-run judges again is unknown, so it
+    folds onto neither and stays a finding of its own, and both decisions stand, as
+    `_restated_targets` takes neither when either could be re-judged (008 T136)."""
+    run = review([turn("nothing yet")])
+    session = run.session
+    rejected = DECIDED.model_copy(update={"decision": "rejected", "triage": "wrong"})
+    session.findings[:] = [
+        judged("F-001", disposition=DECIDED),
+        judged("F-002", disposition=rejected),
+        judged("F-003", "suspected", "high"),
+    ]
+
+    returned = runner._reconcile_reruns(session, 2)
+
+    assert [
+        (finding.id, finding.status, finding.disposition) for finding in session.findings
+    ] == [
+        ("F-001", "unresolved", DECIDED),
+        ("F-002", "unresolved", rejected),
+        ("F-003", "suspected", None),
+    ]
+    assert returned == ([], [])
+
+
+@pytest.mark.parametrize(
+    ("status", "severity", "kept"),
+    [("unresolved", "medium", True), ("suspected", "medium", False), ("unresolved", "high", False)],
+    ids=["neither", "status", "severity"],
+)
+def test_a_restate_keeps_or_clears_a_decision_as_a_rerun_does(
+    review: Callable[..., runner.ReviewRun], status: str, severity: str, kept: bool
+) -> None:
+    """Owner decision 194A: 191A's rule governs 58A's restate. F-002, restated, re-judges the
+    decided F-001 (`_restated_targets`, its verdict key): with the status and severity decided the
+    fold keeps the whole disposition, and with either changed it clears it and the card says so,
+    the line naming the restate. Either way F-002, which the restated call announced under its own
+    id, is withdrawn with `folded_into` right before F-001's `finding` event."""
+    run = review([turn("nothing yet")])
+    run.session.findings[:] = [
+        judged("F-001", disposition=DECIDED),
+        judged("F-002", status, severity),
+    ]
+    mark = len(events_of(run))
+
+    stale = run._reconcile_restated(1, {}, [], {})
+
+    [restated] = run.session.findings
+    assert (restated.id, restated.status, restated.severity) == ("F-001", status, severity)
+    assert restated.disposition == (DECIDED if kept else None)
+    assert stale == []
+    after = [(event["type"], event["body"]) for event in events_of(run)[mark:]]
+    assert after[0] == (
+        "finding.withdrawn",
+        {"finding_id": "F-002", "reason": FOLDED_REASON.format(id="F-001"), "folded_into": "F-001"},
+    )
+    assert (after[1][0], after[1][1]["id"], after[1][1]["disposition"]) == (
+        "finding",
+        "F-001",
+        DECIDED.model_dump(mode="json") if kept else None,
+    )
+    assert after[2:] == (
+        []
+        if kept
+        else [
+            (
+                "disposition.cleared",
+                {
+                    "finding_id": "F-001",
+                    "disposition": DECIDED.model_dump(mode="json"),
+                    "reason": RESTATED_LINE,
+                },
+            )
+        ]
+    )
 
 
 # --- resume rule (d): max_steps is a per-turn budget --------------------------------------------

@@ -18,12 +18,15 @@ for all three:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+from uuid import UUID
 
 import pytest
 from pydantic_core import to_jsonable_python
 
+from swreview.agent.providers import AgentEvent
+from swreview.findings import Disposition
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.names import component_names
@@ -313,3 +316,99 @@ def test_restoring_a_waiting_record_mutates_nothing(
 
     assert as_bytes(first) == as_bytes(restored_snapshot(record, package, run_id=RUN_ID))
     assert record.model_dump_json() == before
+
+
+# --- owner decision 193A (002 T340): a cleared decision's line, from the run's stream -------------
+
+AT = datetime(2026, 11, 1, 9, 0, tzinfo=UTC)
+"""When the fictional events below were written."""
+
+DECIDED = Disposition(decision="accepted", note="FICT intended", by="FICT-ENG", at=AT)
+"""A decision recorded on one of the fixture's findings, which a re-run cleared."""
+
+
+def event(seq: int, kind: str, body: dict[str, Any]) -> AgentEvent:
+    return AgentEvent(seq=seq, at=AT, type=kind, body=body)  # type: ignore[arg-type]
+
+
+def started(session_id: Any, seq: int = 1) -> AgentEvent:
+    """The `session.started` every review stream opens with, naming its session."""
+    return event(
+        seq,
+        "session.started",
+        {
+            "session_id": str(session_id),
+            "package_id": "FICT-package",
+            "provider": "fake",
+            "model": "fake-1",
+            "effort_mapping": {
+                "requested": "high", "provider_param": "fake.effort", "provider_value": "high"
+            },
+        },
+    )
+
+
+def cleared(seq: int, finding_id: str, line: str) -> AgentEvent:
+    return event(
+        seq,
+        "disposition.cleared",
+        {"finding_id": finding_id, "disposition": DECIDED.model_dump(mode="json"), "reason": line},
+    )
+
+
+def test_the_snapshot_names_each_undecided_findings_latest_cleared_line(
+    session: ReviewSession, package: EvidencePackage
+) -> None:
+    """Owner decision 193A: both snapshots name, for each finding still undecided, the last
+    `disposition.cleared` body its run's stream holds - F-002's later line, not its first - in
+    session order. F-003, decided again since its line, and an id the session no longer holds
+    lend none; the findings themselves are as the session holds them, with no field added."""
+    session.findings[2] = session.findings[2].model_copy(update={"disposition": DECIDED})
+    stream = [
+        started(session.session_id),
+        cleared(2, "F-004", "FICT F-004's line"),
+        cleared(3, "F-002", "FICT F-002's first line"),
+        cleared(4, "F-003", "FICT F-003's line"),
+        cleared(5, "F-099", "FICT a withdrawn finding's line"),
+        cleared(6, "F-002", "FICT F-002's latest line"),
+    ]
+
+    live = review_snapshot(session, package, run_id=RUN_ID, events=stream)
+    restored = restored_snapshot(session, package, run_id=RUN_ID, events=stream)
+
+    for snapshot in (live, restored):
+        assert snapshot["cleared"] == [stream[5].body, stream[1].body]
+        assert snapshot["findings"] == review_snapshot(session, package, run_id=RUN_ID)["findings"]
+
+
+@pytest.mark.parametrize("opening", ["another session", "no session.started"])
+def test_a_stream_of_another_session_lends_the_snapshot_no_line(
+    session: ReviewSession, package: EvidencePackage, opening: str
+) -> None:
+    """A stream whose first event does not start this session - a re-run that failed after its
+    rotation left its own stream beside the earlier record - lends no line, so no card shows
+    another session's."""
+    first = (
+        started(UUID("00000000-0000-4000-8000-000000000193"))
+        if opening == "another session"
+        else event(1, "text.delta", {"text": "FICT"})
+    )
+
+    snapshot = review_snapshot(
+        session, package, run_id=RUN_ID, events=[first, cleared(2, "F-002", "FICT line")]
+    )
+
+    assert "cleared" not in snapshot
+
+
+def test_a_snapshot_with_no_cleared_line_keeps_its_keys(
+    session: ReviewSession, package: EvidencePackage
+) -> None:
+    """Owner decision 193A: `cleared` is added only when there is a line, as `send_in_flight` is,
+    so a stream with none leaves every key and byte of the snapshot as it was."""
+    stream = [started(session.session_id), event(2, "text.delta", {"text": "FICT"})]
+
+    with_stream = review_snapshot(session, package, run_id=RUN_ID, events=stream)
+
+    assert set(with_stream) == KEYS
+    assert as_bytes(with_stream) == as_bytes(review_snapshot(session, package, run_id=RUN_ID))

@@ -246,10 +246,16 @@ def test_every_answer_turn_message_is_recorded_byte_for_byte(
     record = recorded(out)
     assert record["system"] == provider.systems[0]
     assert record["user_messages"] == sent
-    withdrawn = [
-        AgentEvent.model_validate_json(line).body["finding_id"]
+    # *Changed 2026-11-01 on purpose (002 T340):* a fold's withdrawal of a restated finding's own
+    # id (`folded_into`) is not a finding the answer withdrew; its verdict stands.
+    events = [
+        AgentEvent.model_validate_json(line)
         for line in (out / "events.jsonl").read_text(encoding="utf-8").splitlines()
-        if AgentEvent.model_validate_json(line).type == "finding.withdrawn"
+    ]
+    withdrawn = [
+        event.body["finding_id"]
+        for event in events
+        if event.type == "finding.withdrawn" and "folded_into" not in event.body
     ]
     assert withdrawn
     assert record["user_messages"][1] == (

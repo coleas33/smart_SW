@@ -3146,6 +3146,85 @@ def test_the_saved_session_and_report_agree_with_the_fold(
     assert types_of(run_dir).count("disposition.cleared") == (0 if kept else 1)
 
 
+def test_the_live_and_the_restored_snapshot_carry_a_cleared_line_until_a_decision(
+    client: TestClient,
+    run_root: Path,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    models: Models,
+) -> None:
+    """Owner decision 193A (002 T340), through the routes: a re-run after an answer cleared the
+    drawing finding's Accept. The live snapshot - what a reload or a review switch reads - and the
+    run folder's, read by a backend started again on the same run root - what a restart and a
+    read-only restore read - both name its line, the `disposition.cleared` body the stream holds.
+    Once the engineer decides again, neither does."""
+    provider_control.script = [
+        turn(
+            "I need the thread depth.",
+            call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS),
+            call("request_evidence", **EVIDENCE_ARGUMENTS),
+        ),
+        turn(
+            "Ran it again.",
+            call("record_drawing_finding", **{**DRAWING_FINDING_ARGUMENTS, "status": "unresolved"}),
+        ),
+    ]
+    chat_id = start_session(client, run_dir)["chat_id"]
+    assert settle(client, chat_id) == ChatState.WAITING_ENGINEER.value
+    [drawing] = [
+        finding.id
+        for finding in load_session(run_dir / "session.json").findings
+        if finding.check == MODEL_FINDING_CHECK
+    ]
+    decided = client.post(
+        f"/sessions/{chat_id}/findings/{drawing}/disposition",
+        json={"decision": "accepted", "note": "FICT intended", "triage": "already_known"},
+    )
+    assert decided.status_code == 200, decided.text
+    answered = client.post(f"/sessions/{chat_id}/evidence/ER-001", json={"answer": "12 mm."})
+    assert answered.status_code == 202, answered.text
+    assert settle(client, chat_id) == ChatState.ENDED.value
+    line = [
+        {
+            "finding_id": drawing,
+            "disposition": decided.json()["disposition"],
+            "reason": (
+                "The check ran again after your answer and its verdict changed, so your Accept "
+                "(real but already known) was cleared. Decide again."
+            ),
+        }
+    ]
+
+    def restored() -> dict[str, Any]:
+        """The run folder's snapshot, read by a backend started again on the same run root."""
+        again = create_app(
+            token=TOKEN,
+            allow_origin=ORIGIN,
+            run_root=run_root,
+            provider_factory=provider_control.factory,
+            list_models=models,
+        )
+        with TestClient(
+            again, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}
+        ) as fresh:
+            assert fresh.get(f"/sessions/{chat_id}/snapshot").status_code == 404
+            response = fresh.get(f"/reviews/{run_dir.name}")
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    assert client.get(f"/sessions/{chat_id}/snapshot").json().get("cleared") == line
+    assert restored().get("cleared") == line
+
+    again = client.post(
+        f"/sessions/{chat_id}/findings/{drawing}/disposition",
+        json={"decision": "rejected", "note": "FICT decided again"},
+    )
+
+    assert again.status_code == 200, again.text
+    assert "cleared" not in client.get(f"/sessions/{chat_id}/snapshot").json()
+    assert "cleared" not in restored()
+
+
 def test_the_report_is_served_as_markdown(
     client: TestClient, run_dir: Path, chat_with_a_finding: str
 ) -> None:

@@ -68,6 +68,7 @@ from swreview.report.session import (
     save_session,
 )
 from swreview.report.snapshot import restored_snapshot
+from tests.support.contracts import contract_validator
 from tests.support.prerun import LIVE_ROWS, live_prerun_package, prerun_package
 from tests.support.questions_package import build_questions_package
 from tests.support.recording_provider import RecordedRequest, RecordingProvider
@@ -1615,11 +1616,15 @@ def decided_with(finding: Finding, decision: str, triage: str) -> Finding:
 def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare: Any) -> None:
     """Owner decision 187A (002 T332, FR-031): a pass takes no triage but `wrong`, a pass's `wrong`
     is a miss and a flagged finding's a false alarm, so a re-run carries a triage only between two
-    passes or two flagged findings. Across the line it carries the decision without its triage and
-    names the triage in `coverage.recheck`: F-007's `already_known` and F-008's `wrong`, a false
-    alarm, onto F-001 and F-002, passes now; F-009's `wrong`, a pass's miss, onto F-003, flagged
-    now. F-010's miss onto F-004, a pass still, is carried whole, as is F-011's Defer onto F-005,
-    flagged still. Each decision is announced as recorded."""
+    passes or two flagged findings. F-010's miss onto F-004, a pass still, is carried whole, as is
+    F-011's Defer onto F-005, flagged still. Each decision is announced as recorded.
+
+    *Changed 2026-11-01 on purpose (002 T340; owner decision 194A):* a decision crosses no change
+    of status or severity either, so across the line nothing is carried: F-007's Accept and
+    F-008's Reject onto F-001 and F-002, passes now, and F-009's Reject onto F-003, flagged now,
+    are each cleared on the card they would have landed on, the carry's line naming the decision
+    and its triage, in the carry's order; and the `coverage.recheck` row names none of them, since
+    the card says it."""
     run, earlier, events = bare
     run.session.findings[:] = [
         as_pass(coaxial("F-001", "hol:0001")),
@@ -1640,27 +1645,112 @@ def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare:
 
     carried = [finding.disposition for finding in run.session.findings]
     assert [
-        (disposition.decision, disposition.triage)
+        None if disposition is None else (disposition.decision, disposition.triage)
         for disposition in carried
-        if disposition is not None
-    ] == [
-        ("accepted", None),
-        ("rejected", None),
-        ("rejected", None),
-        ("rejected", "wrong"),
-        ("deferred", "new_and_real"),
-    ]
-    assert [body for kind, body in events if kind == "disposition"] == [
-        {"finding_id": finding.id, "disposition": disposition.model_dump(mode="json")}
+    ] == [None, None, None, ("rejected", "wrong"), ("deferred", "new_and_real")]
+    left = [finding.disposition for finding in earlier.findings[:3]]
+    said = [(kind, body) for kind, body in events if kind.startswith("disposition")]
+    assert said == [
+        (
+            "disposition.cleared",
+            {
+                "finding_id": target,
+                "disposition": disposition.model_dump(mode="json"),
+                "reason": carried_line(decision, triage),
+            },
+        )
+        for target, disposition, decision, triage in zip(
+            ("F-001", "F-002", "F-003"),
+            [disposition for disposition in left if disposition is not None],
+            ("Accept", "Reject", "Reject"),
+            ("real but already known", "wrong", "wrong"),
+            strict=True,
+        )
+    ] + [
+        (
+            "disposition",
+            {"finding_id": finding.id, "disposition": disposition.model_dump(mode="json")},
+        )
         for finding, disposition in zip(run.session.findings, carried, strict=True)
         if disposition is not None
     ]
+    assert recheck_row(run.session) == []
+
+
+def carried_line(decision: str, triage: str | None) -> str:
+    """The words file's line for a decision a re-run did not carry because its verdict changed
+    (owner decision 194A): the decision's noun and, when one was recorded, its triage's word."""
+    triaged = decision if triage is None else f"{decision} ({triage})"
+    return (
+        "The checks ran again on the saved evidence and this verdict changed, so your "
+        f"{triaged} was not carried over. Decide again."
+    )
+
+
+def test_a_carried_decision_whose_severity_changed_is_cleared_and_says_so(bare: Any) -> None:
+    """Owner decision 194A: the re-run's finding has the status decided and another severity, so
+    the Accept and its triage are not carried. The carry sends `disposition.cleared` for that
+    finding - the disposition left behind and the carry's line naming the decision and its triage,
+    valid against the events contract - and the `coverage.recheck` row names nothing, since the
+    card says it. A Defer recorded with no triage onto a finding with the verdict decided is
+    carried whole beside it."""
+    run, earlier, events = bare
+    run.session.findings[:] = [
+        coaxial("F-001", "hol:0001").model_copy(update={"severity": "high"}),
+        coaxial("F-002", "hol:0002").model_copy(update={"severity": "medium"}),
+    ]
+    earlier.findings[:] = [
+        decided_with(
+            coaxial("F-007", "hol:0001").model_copy(update={"severity": "medium"}),
+            "accepted",
+            "already_known",
+        ),
+        coaxial("F-008", "hol:0002", "deferred").model_copy(update={"severity": "medium"}),
+    ]
+    left, kept = (finding.disposition for finding in earlier.findings)
+    assert left is not None and kept is not None
+
+    run.carry_from(earlier)
+
+    assert [finding.disposition for finding in run.session.findings] == [None, kept]
+    said = [(kind, body) for kind, body in events if kind.startswith("disposition")]
+    assert said == [
+        (
+            "disposition.cleared",
+            {
+                "finding_id": "F-001",
+                "disposition": left.model_dump(mode="json"),
+                "reason": carried_line("Accept", "real but already known"),
+            },
+        ),
+        ("disposition", {"finding_id": "F-002", "disposition": kept.model_dump(mode="json")}),
+    ]
+    validator = contract_validator("chat-events.schema.json")
+    for seq, (kind, body) in enumerate(said, start=1):
+        validator.validate(
+            {"seq": seq, "at": "2026-11-01T09:00:00+00:00", "type": kind, "body": body}
+        )
+    assert recheck_row(run.session) == []
+
+
+def test_a_pass_triage_recorded_before_187a_stays_behind_its_carried_decision(bare: Any) -> None:
+    """Owner decisions 187A and 194A: a pass's triage other than `wrong`, recorded before 187A, is
+    one a pass does not take. Onto a pass with the status and severity decided the Accept is
+    carried without it, the triage is named in `coverage.recheck`, and nothing is cleared."""
+    run, earlier, events = bare
+    run.session.findings[:] = [as_pass(coaxial("F-001", "hol:0001"))]
+    earlier.findings[:] = [
+        decided_with(as_pass(coaxial("F-007", "hol:0001")), "accepted", "already_known")
+    ]
+
+    run.carry_from(earlier)
+
+    carried = run.session.findings[0].disposition
+    assert carried is not None and (carried.decision, carried.triage) == ("accepted", None)
+    assert [kind for kind, _ in events if kind.startswith("disposition")] == ["disposition"]
     assert recheck_row(run.session) == [
         "Not carried from the earlier check run: "
-        "the triage of F-007 (its finding is a pass, whose one triage, wrong, is a miss); "
-        "the triage of F-008 (its finding is a pass, whose one triage, wrong, is a miss); "
-        "the triage of F-009 (its finding is no longer a pass, and a pass's wrong is a miss, "
-        "not a false alarm)."
+        "the triage of F-007 (its finding is a pass, whose one triage, wrong, is a miss)."
     ]
 
 

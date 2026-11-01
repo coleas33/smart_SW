@@ -127,8 +127,12 @@ def test_all_bought_regrades_and_withdraws_without_building_a_provider_or_turn(
     assert response.status_code == 202, response.text
     assert chat.settle(client, waiting.chat_id) == "awaiting_send"
     events = new_events(waiting, marker)
+    # *Changed 2026-11-01 on purpose (002 T340):* a fold's withdrawal of a restated finding's own
+    # id (`folded_into`) is not a finding the answer withdrew; its verdict stands.
     assert [
-        event.body["finding_id"] for event in events if event.type == "finding.withdrawn"
+        event.body["finding_id"]
+        for event in events
+        if event.type == "finding.withdrawn" and "folded_into" not in event.body
     ] == withdrawn
     assert [f.id for f in run.session.findings] == remaining
     assert provider_control.built == []
