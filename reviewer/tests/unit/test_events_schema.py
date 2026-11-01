@@ -249,6 +249,10 @@ def test_every_event_of_a_full_run_validates_against_the_contract(
 def test_a_full_run_emits_every_event_type_the_runner_and_tools_can_emit(
     full_run: runner.ReviewRun, tmp_path: Path, tmp_package_dir: Path,
 ) -> None:
+    """*Changed 2026-11-01 on purpose (002 T326; owner decisions 189A and 191A):* a third run
+    clears a decision - a drawing finding accepted while its question is open, then recorded
+    again after the answer with another status and severity - which is the one producer of
+    `disposition.cleared`, and its events are validated as the waiting run's are."""
     from swreview.agent.providers import ProviderName
     from swreview.agent.providers.deferred import DeferredProvider
     from swreview.agent.settings import ProviderSettings
@@ -262,15 +266,46 @@ def test_a_full_run_emits_every_event_type_the_runner_and_tools_can_emit(
         effort="high",
         send_when_checked=False,
     )
+    cleared = runner.start_review(
+        tmp_package_dir,
+        tmp_path / "FICT-schema-cleared",
+        provider=FakeProvider(
+            script=[
+                turn(
+                    "Recorded one finding and asked.",
+                    call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS),
+                    call("request_evidence", **EVIDENCE_ARGUMENTS),
+                ),
+                turn(
+                    "Ran it again.",
+                    call(
+                        "record_drawing_finding",
+                        **{**DRAWING_FINDING_ARGUMENTS, "status": "unresolved"},
+                    ),
+                ),
+            ],
+            model=MODEL,
+        ),
+        effort="high",
+    )
     try:
         waiting.close_waiting()
         waiting.send(lambda: FakeProvider(script=[ScriptedTurn(text="FICT sent")], model=MODEL))
         for event in events_of(waiting):
             contract_validator(EVENTS_CONTRACT).validate(event)
+        cleared.start()
+        record_disposition(
+            cleared, "F-001", decision="accepted", note="FICT intended", by="a.engineer"
+        )
+        cleared.answer_evidence(REQUEST_ID, "Tapped 12 mm deep, per the shop drawing.")
+        for event in events_of(cleared):
+            contract_validator(EVENTS_CONTRACT).validate(event)
         emitted = ({event["type"] for event in events_of(full_run)}
-                   | {event["type"] for event in events_of(waiting)})
+                   | {event["type"] for event in events_of(waiting)}
+                   | {event["type"] for event in events_of(cleared)})
     finally:
         waiting.close()
+        cleared.close()
     assert NOT_YET_EMITTED <= SCHEMA_EVENT_TYPES
     assert emitted == SCHEMA_EVENT_TYPES - NOT_YET_EMITTED
     assert emitted <= set(get_args(EventType))

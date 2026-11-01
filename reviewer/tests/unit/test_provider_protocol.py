@@ -156,6 +156,22 @@ def valid_bodies() -> dict[str, dict[str, Any]]:
                 "at": "2026-09-13T12:05:00Z",
             },
         },
+        # Feature 002 (owner decisions 189A and 191A): a decision a check run again after an
+        # answer cleared, its verdict changed, and the words file's line the card prints.
+        "disposition.cleared": {
+            "finding_id": "F-001",
+            "disposition": {
+                "decision": "accepted",
+                "note": "will open the hole",
+                "by": "engineer",
+                "at": "2026-09-13T12:05:00Z",
+                "triage": "already_known",
+            },
+            "reason": (
+                "The check ran again after your answer and its verdict changed, so your Accept "
+                "(real but already known) was cleared. Decide again."
+            ),
+        },
         "coverage": {"bucket": "checked", "item": coverage_item_body()},
         # Feature 011 T092: what a restating check withdrew before it restated.
         "coverage.withdrawn": {"checks": ["drawing.context"], "buckets": ["checked", "skipped"]},
@@ -230,6 +246,8 @@ def test_provider_name_matches_the_schema_enum() -> None:
         ("evidence.requested", "bad_id"),
         # disposition: nested $ref Disposition - an unknown decision must fail.
         ("disposition", "bad_decision"),
+        # disposition.cleared: nested $ref Disposition - an unknown decision must fail.
+        ("disposition.cleared", "bad_decision"),
         # coverage: nested $ref CoverageItem - an unknown scope key must fail.
         ("coverage", "extra_scope_key"),
         # session.ended: nested $ref Timing - a negative duration must fail.

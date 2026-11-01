@@ -73,6 +73,8 @@ PLACEHOLDERS: dict[str, set[str]] = {
     "send.not_started": {"reason", "time"},
     "send.restored_line": {"when"},
     "answer_basis.many": {"n"},
+    "rerun.cleared": {"decision"},
+    "rerun.cleared_with_triage": {"decision", "triage"},
     "resume.without": set(),
     "finding_group_text.one": set(),
     "finding_group_text.many": {"n"},
@@ -149,6 +151,7 @@ def test_the_words_are_loaded_once() -> None:
         ("questions",),
         ("bought_parts",),
         ("answer_basis",),
+        ("rerun",),
     ],
 )
 def test_an_extra_key_anywhere_is_refused(path: tuple[object, ...]) -> None:
@@ -200,6 +203,23 @@ def test_the_bought_parts_heading_and_the_text_box_placeholder_are_pane_words() 
     words = load_words()
     assert words.bought_parts.heading == "Bought parts"
     assert words.questions.text_placeholder == "Or name the bought ones, separated by commas"
+
+
+def test_the_rerun_line_names_the_decision_and_its_triage() -> None:
+    """Owner decisions 189A and 191A (002 FR-031): the line a finding's card shows when a check
+    run again after an answer changed its verdict - its status or its severity - and so cleared
+    its decision: the decision named by its noun, the triage by its word when one was recorded,
+    and a new decision asked for. The backend fills it; the page prints it as sent."""
+    rerun = load_words().rerun
+
+    assert rerun.of("Accept", "real but already known") == (
+        "The check ran again after your answer and its verdict changed, so your Accept (real but "
+        "already known) was cleared. Decide again."
+    )
+    assert rerun.of("Defer", None) == (
+        "The check ran again after your answer and its verdict changed, so your Defer was "
+        "cleared. Decide again."
+    )
 
 
 def test_the_three_owner_labels_are_decide_fix_verify() -> None:

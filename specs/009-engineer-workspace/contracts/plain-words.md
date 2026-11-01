@@ -54,6 +54,17 @@ route refuses a second triage with (002 `contracts/chat-api.md`, the disposition
 `IllegalTransition`, whose sentence reads as a refused decision. `errors` stays last, `source` just
 before it.
 
+*Amended 2026-11-01 (feature 002, roadmap hole H-d-008; owner decisions 189A and 191A; 002 T329):*
+a finding card's status line also prints the line of a `disposition.cleared` event, which the
+backend sends when a check run again after an answer changed a decided finding's status or
+severity and so cleared its decision and triage: "The check ran again after your answer and its
+verdict changed, so your Accept (real but already known) was cleared. Decide again." The backend
+words it from the words file's `rerun` block (data-model section 1), naming the decision and the
+triage, so the page prints it as sent, in the hue of what only the engineer can settle, and looks
+nothing up: `labels` gains nothing, and with no labels the line is the same (FR-030). The
+engineer's next decision writes its own sentence there; a replay leaves it out, as Results are the
+snapshot.
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and

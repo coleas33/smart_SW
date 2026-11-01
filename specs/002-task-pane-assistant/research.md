@@ -6136,7 +6136,9 @@ the decision register now records 160A as done.
   (`agent/runner.py`, `_reconcile_reruns`), which drops a decision when the model runs a check
   again in a turn an answered question resumed, now drops its triage too, as 58A left it (010
   [research.md](../010-mechanical-checks/research.md), 58A): triage after the last turn, or fix it
-  test first as a task of its own.
+  test first as a task of its own. *Settled 2026-11-01 (roadmap hole H-d-008; owner decisions 189A
+  and 191A; T327):* the fold keeps the whole disposition when the re-run's status and severity are
+  unchanged, and clears it and says so on the card when either changed (H-d-008 below).
 - **Tests**: T308, T310, T312, T314 and T316 in [tasks.md](tasks.md), Phase 23, each written
   first; T309, T311, T313, T315 and T317 make them green, and T318 closes the records.
 - **speckit-converge**, run once on 2026-11-01 (T307), bounded to FR-031, scenarios 7 and 8, the
@@ -6352,3 +6354,152 @@ the decision register now records 160A as done.
   new cards. Not changed: a reply to a review the engineer left and came back to before it landed
   reaches only the card it was pressed on, so the card restored meanwhile shows its snapshot until
   a reload, as the card did before this cycle. No other finding.
+
+### H-d-008. A check run again after an answer keeps an unchanged verdict's decision, and says so when it clears one (2026-11-01)
+
+- **Question**: roadmap hole H-d-008 (roadmap run 2): when an answered evidence request resumes the
+  model's turn and the model runs a check again on the same subject, `_reconcile_reruns`
+  (`agent/runner.py`; rule 3 of [data-model.md](data-model.md) section 3) folds the new finding
+  onto the earlier one - it takes the earlier id and place - and announces the fold again under
+  that id. The new finding carries no disposition, so an Accept, Reject or Defer recorded before
+  the answer, and since 185A its triage, vanish from `session.json`, from the card and from
+  `report.md`'s counts, with nothing said. Example: F-001 accepted as `already_known`; the
+  engineer answers ER-001; the resumed turn runs `check_fit` on the same pair again; F-001 comes
+  back undecided. Only checks the pre-run guard does not answer fold (`check_fit`,
+  `check_axial_stack`, `check_fastener_joint`, `check_hole_alignment`, `check_tool_envelope`, a
+  group or subset the pre-run did not judge), and only on a sent review: a waiting review's
+  answers apply by code, with no turn and no fold. The question had been open since 2026-10-08 as
+  the row on rule 3 in 010 [research.md](../010-mechanical-checks/research.md) R5, and 185A's
+  "Not changed" above left it for a task of its own.
+- **Decided**: 189A (2026-11-01, roadmap run 2's second owner round): the re-run keeps the earlier
+  finding's decision and triage when its verdict is unchanged, as a restated finding keeps them
+  (58A), and when the verdict changed they are cleared and the card says the re-run changed it,
+  so the engineer decides again. 191A (2026-11-01, the round after cycle 2's review): a changed
+  verdict is a changed `status` or `severity`; a re-run that changes either clears the
+  disposition and says so on the card, and one that changes neither keeps the whole disposition -
+  decision, triage, note, `by` and `at`.
+- **Not changed**: 58A's restate (`_reconcile_restated`), which keeps the disposition whatever the
+  restated verdict; 015's re-run of a waiting review (`_carry_decisions`), which carries a
+  decision onto the finding with its subject key and names in `coverage.recheck` what it cannot
+  carry; a waiting review's answers, which fold nothing; and the fold itself - which findings
+  fold, onto which, their ids and places, and the re-announced `finding` events.
+- **Settled with it**:
+  - **The verdict compared is the finding as decided.** Each re-run is compared with the earlier
+    finding as it stood when the answer went in, never with an earlier re-run of the same turn:
+    of two re-runs that fold onto one finding, the last alone says whether the decision stands,
+    so a re-run back to the verdict decided keeps it, and one changed last clears it, named once.
+  - **How the notice reaches the page.** Options: A, a new event, `disposition.cleared`, after the
+    fold's `finding` event; B, a field on the re-announced `finding` event's body; C, a
+    `disposition` event with no disposition and a reason. A: the `finding` body is the persisted
+    `Finding` (`review-session.schema.json`, closed to unknown fields), so B means either a field
+    on `Finding`, which an older build refuses on load, or a second definition of it for the
+    event; C changes what an existing event means to every reader of `events.jsonl`. The event
+    names the finding, the disposition cleared and the line, and comes after the fold's `finding`
+    event, so the card it lands on is the one the fold drew.
+  - **Not persisted.** `session.json` holds the folded finding undecided, `report.md` shows it
+    "not yet dispositioned" and counts it "not recorded", and `events.jsonl` keeps the notice. A
+    card drawn again from a snapshot - a review chosen again, a reload - is undecided and has no
+    line; keeping the line there would need a field on `Finding`, which an older build refuses,
+    or a record elsewhere, and neither is part of 189A.
+  - **The words.** The line lives in the words file, in a block of its own, `rerun`, before
+    `labels`: `cleared`, and `cleared_with_triage` for a disposition with a triage. The backend
+    fills them - the decision named by `DECISION_NOUNS` ("Accept"), as 015's re-run names a
+    decision it does not carry ([015 contracts/recheck.md](../015-review-send-gate/contracts/recheck.md)
+    section 5), and the triage by `labels.triage` - and the page prints the line as sent. Not in
+    `labels`: the page looks nothing up for it, so `GET /labels`, `LabelsSample.cs` and the pane
+    fixtures, which embed the labels block, do not move.
+  - **Where the line goes on the card.** The card's one status line, where the disposition's
+    sentence stood, in a class of its own, `cleared`, in the hue of the one class only an
+    engineer can settle (`--judge`). The engineer's next decision writes its own sentence there,
+    as any decision does.
+  - **A replay.** A `disposition.cleared` replayed into a restored review's Transcript changes
+    nothing in Results, which are the snapshot, as a replayed `disposition` changes nothing.
+- **Tests**: T326 and T328 in [tasks.md](tasks.md), Phase 25, each written first; T327 and T329
+  make them green, and T330 closes the records.
+- **Built** (2026-11-01, T327 and T329):
+  - The fold (T327): `_reconcile_reruns` compares each re-run with the finding as decided - the
+    session's findings when the answer went in - and folds the earlier finding's whole disposition
+    with it when the status and the severity are both its own, and none when either changed. It
+    returns the folds, as before, and the id and disposition of each decision the folds cleared,
+    read from the final state, so of two re-runs of one finding the last alone decides and a
+    decision is named once. `answer_evidence_batch` announces the folds as before, then one
+    `disposition.cleared` per decision cleared, after the last `finding` event of its id.
+    `_cleared_body` builds it: the finding, the disposition cleared, and the line, its decision
+    named by `DECISION_NOUNS` and its triage by `labels.triage`.
+  - The words (T327): the words file's `rerun` block before `labels`, `cleared` and
+    `cleared_with_triage`, which `summary.Words.rerun` fills (`RerunWords.of`). `labels` is
+    unchanged, so `LabelsSample.cs` is too, and the pane fixtures, which embed the labels block,
+    came out of their three generators byte-identical: no fixture and no pin moved.
+  - The contract (T327): `disposition.cleared`, `{finding_id, disposition, reason}`, in
+    `chat-events.schema.json`, its `disposition` the review-session `Disposition`, and in
+    `EventType`.
+  - The page (T329): `clearedDisposition` writes the event's line on the card's status line, as
+    sent, in the class `cleared`, which `app.css` sets in the `--judge` hue; a replayed one is read
+    and changes nothing in Results. No host, proxy or page message changes.
+  - The records: FR-031's amendment; dated notes in [contracts/README.md](contracts/README.md),
+    [data-model.md](data-model.md) sections 2 and 3, 185A's "Not changed" above, 009
+    [data-model.md](../009-engineer-workspace/data-model.md) section 1 and
+    [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md) section 1, 008
+    [contracts/answer-batch.md](../008-checks-first-review/contracts/answer-batch.md), and 010
+    [research.md](../010-mechanical-checks/research.md) R2.26, with R5's open row on rule 3
+    closed; 191A registered, and 189A and 191A marked done, in
+    [`docs/decisions.md`](../../docs/decisions.md).
+- **Tests changed on purpose**, none loosened:
+  - `test_events_schema.py::test_a_full_run_emits_every_event_type_the_runner_and_tools_can_emit`:
+    a third run, which clears a decision, the one producer of `disposition.cleared`, its events
+    validated as the waiting run's are.
+  - `test_gate_same_session.py::test_a_gated_run_emits_no_event_type_outside_the_seventeen`,
+    now `..._outside_the_eighteen`: the contract holds eighteen types, the new one the runner's,
+    not the gate's; renamed with a dated line, as 011 T092, 013 T038 and 015 T064 each renamed it.
+  - `test_review_words.py`: the placeholders' table and the extra-key paths gain the `rerun`
+    block; `test_provider_protocol.py`: the table of one valid body per type and the ref-following
+    case gain `disposition.cleared`.
+  - `test_runner_provider.py`'s module docstring, resume rule (c), names the decision kept or
+    cleared.
+  - `ReviewPageTriageTests`: H-g-012's 300 px measure of a refused press is shared with the
+    cleared line's through `ReadPartsWhole`, its script and assertions unchanged; `Finding` takes
+    a status and a severity, its defaults the ones every fact used.
+  - `test_workstation_test_plan.py::test_the_specs_readme_counts_a_task_173a_closed_as_done`, its
+    002 literal following 002's recount (T325, and T330).
+- **Tests first**: T326's sixteen cases failed before T327 - the kept cases for want of the
+  disposition the fold dropped, the cleared cases on the stream for want of a
+  `disposition.cleared`, the status-only, severity-only and changed-last cases for want of the
+  pair `_reconcile_reruns` returns, the three protocol cases for want of the event type and the
+  three words cases for want of the block - while the two undecided-finding cases and the extended
+  producer test, guards, passed before and after. The agreement of `session.json` and `report.md`
+  with the fold is tested through the chat server's routes, because `report.md` is rendered by the
+  server after every turn (`_render_report`) and not by `finalize`: read straight after the
+  runner's answer, it would still be the one the decision wrote before the answer. T328's four
+  facts failed before T329, each for want of the event read (an empty status line, a missing line
+  at 300 px, and "This page could not read an event" in a replayed Transcript), while the kept fact,
+  a guard, and the class's twelve other facts passed.
+- **Gates** (T330; 2026-11-01), on the cycle's final tree:
+  - Python 3.12.3 (the worktree's own environment, `uv sync --python 3.12 --all-extras`) and
+    3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required, over the 150
+    test modules that pin the runner, the events, the words, the session, the report, the pane
+    fixtures or the specs' counts: 7,431 passed and 2 skipped on each.
+  - `ruff check src tests` clean.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then
+    `dotnet test extractor\SwReview.sln -c Release --no-build`: 10,274 extractor and 4,298
+    add-in tests passed, on T329's tree; T330 changes no C# file.
+  - The link check over the cycle's changed Markdown: 419 relative links, anchors included, none
+    broken. Every changed file LF in the index.
+  - Not run in this lane: the whole non-live suites, which run before the pull request and in its
+    CI. No SOLIDWORKS process, seat task, or paid or live test ran.
+- **Gates before the pull request** (2026-11-01, on `0417907`'s tree): the whole non-live suite
+  on Python 3.12.3 with the tokenizer required, 18,759 passed and 5 skipped; `ruff check` clean;
+  the identifier scan, 58 passed; the C# build with zero warnings, and 10,274 extractor and 4,298
+  add-in tests passed.
+- **Review** (Tier 1, decision 180A; 2026-11-01): one Opus and one Codex review of the branch.
+  Codex approved, with no finding, after 8,192 in-memory fold cases and 24 scripted resume flows.
+  The Opus review found no must-fix: the fold is right on two re-runs in one turn, a re-run back
+  to the decided verdict, a Deferred finding, a triage, no disposition and several folds at once,
+  and 58A's restate and 015's carry are untouched. Of its seven should-fix findings, the records
+  one is fixed here (010 R5's settled row moved out of "Still open", and the register's 189A and
+  191A rows name this section); two go to the owner, since each would change what 189A or 191A
+  reach: the line lives on the live card only, so a reload, a review switch, a backend restart or
+  a read-only restore shows the finding undecided without it; and 58A's restate and 015's carry
+  keep a decision whatever the status and severity now are. The other four are in
+  [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 3: a later press or Show
+  replaces the line for good; the re-run's first card under its own id stays on the page; two
+  earlier findings with one verdict key fold onto the last; and the tests the review listed.

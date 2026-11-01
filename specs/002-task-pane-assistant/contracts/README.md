@@ -10,6 +10,8 @@ starts omit it and keep the previous body. Other new fields remain refused by th
 
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed 2026-09-27 (013 T038, T108):* `chat-events.schema.json`: `text.done`'s body gains optional `basis`, and a `finding.withdrawn` event is added; see 013 `contracts/sources.md` section 3 and `contracts/part-roles.md` section 9.
 
+*Amended 2026-11-01 (roadmap hole H-d-008; owner decisions 189A and 191A; T327):* `chat-events.schema.json` gains a `disposition.cleared` event, `{finding_id, disposition, reason}`: a check the model ran again after an answer folded onto a decided finding with another status or severity, so the disposition was cleared. The runner writes it after the fold's `finding` event for the same id; `disposition` is the one cleared and `reason` the words file's line naming its decision and triage, which the Review page prints on the finding's card. A re-run with the status and severity decided keeps the disposition and writes no such event ([data-model.md](../data-model.md) section 3, rule 3).
+
 | Contract | File | Producer → Consumer |
 |----------|------|---------------------|
 | Chat backend HTTP + SSE | `chat-api.md` | Python `swreview chat serve` → add-in Review page |

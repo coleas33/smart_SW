@@ -1314,6 +1314,12 @@ body.view-transcript #results {
   color: var(--critical);
 }
 
+/* A decision a re-run after an answer cleared asks for a new one, in the hue of the one class
+   only the engineer can settle (H-d-008). */
+.card-status.cleared {
+  color: var(--judge);
+}
+
 /* After a refused press the record stands above the refusal, as a settled card says it (H-g-012). */
 .card-status .card-record {
   display: block;

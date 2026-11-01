@@ -26,6 +26,14 @@ namespace SwReview.AddIn.Tests;
 /// recorded triage pressed, or none, in place of the refused pick, and the recorded disposition's
 /// sentence above the refusal's - read from the page's one memory of what is recorded, and a second
 /// triage is refused with its own class and sentence, `TriageAlreadyRecorded`.
+///
+/// Roadmap hole H-d-008 (owner decisions 189A and 191A; 002 T328): when a check the model ran again
+/// after an answer folds onto a decided finding with another status or severity, the backend clears
+/// the disposition, draws the card again through the fold's `finding` event, and then sends
+/// `disposition.cleared`, whose line - the backend's, naming the decision and the triage - the card
+/// prints on its status line, as sent. A fold that kept the verdict carries the disposition in its
+/// `finding` event, and the card shows it as any finding sent decided. A replay leaves Results as the
+/// snapshot holds them.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -55,6 +63,14 @@ public sealed class ReviewPageTriageTests
 
     /// <summary>A decision refused while a turn runs, which says nothing of the record.</summary>
     private static readonly string TurnRunning = Refusal("TurnRunning", "a turn is already running for chat-1", true);
+
+    /// <summary>
+    /// The backend's line for an Accept recorded as `already_known` that a re-run after an answer cleared (roadmap hole
+    /// H-d-008): the words file's `rerun.cleared_with_triage`, filled as the runner fills it and sent as
+    /// `disposition.cleared`'s `reason`. The page prints it as sent, with labels or without.
+    /// </summary>
+    private const string ClearedLine =
+        "The check ran again after your answer and its verdict changed, so your Accept (real but already known) was cleared. Decide again.";
 
     [Fact]
     public void TheReviewPageOffersTheFourOutcomesBesideAcceptRejectAndDefer()
@@ -470,6 +486,122 @@ public sealed class ReviewPageTriageTests
         });
     }
 
+    /// <summary>
+    /// Roadmap hole H-d-008 (owner decisions 189A and 191A): F-001 is accepted with `already known`; after an answer the
+    /// model ran its check again and the verdict changed, so the backend folded the re-run onto F-001 with no disposition
+    /// and then sent `disposition.cleared`. The card shows the new verdict undecided - no `Disposition:` sentence, its
+    /// triage row released - and the backend's line on its status line, as sent, in a class of its own; and the event is
+    /// read, so the Transcript says nothing of an event it could not read.
+    /// </summary>
+    [Fact]
+    public void ACardWhoseDecisionARerunClearedSaysSoAndIsUndecided()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await DecidedThenFolded(driver, true);
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Empty(Pressed(card));
+            Assert.Equal(ClearedLine, card.GetProperty("status").GetString());
+            Assert.Equal("card-status cleared", card.GetProperty("statusClass").GetString());
+            Assert.DoesNotContain("could not read", (await driver.Read(ReadTranscript)).GetProperty("text").GetString()!);
+        });
+    }
+
+    /// <summary>
+    /// H-d-008: a re-run that kept the status and the severity keeps the whole disposition, so the fold's `finding` event
+    /// carries it and the card shows it - its sentence and `already known` pressed - with no line.
+    /// </summary>
+    [Fact]
+    public void ARerunThatKeptItsVerdictShowsItsDispositionAndPressedTriage()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await DecidedThenFolded(driver, false);
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(new[] { "already_known" }, Pressed(card));
+            Assert.Equal(Sentence("accepted", "already_known", "FICT intended"), card.GetProperty("status").GetString());
+            Assert.Equal("card-status decided", card.GetProperty("statusClass").GetString());
+        });
+    }
+
+    /// <summary>
+    /// H-d-008 at a docked pane's 300 px: the cleared decision's line and every triage button are whole - inside the
+    /// window and every box that clips them, their words inside them - with no sideways page scroll.
+    /// </summary>
+    [Fact]
+    public void AClearedDecisionsLineIsWhollyVisibleAtThreeHundredPixels()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
+            await DecidedThenFolded(driver, true);
+
+            JsonElement measured = await driver.Read(ReadClearedWhole("F-001"));
+            Assert.Equal(300, measured.GetProperty("width").GetInt32());
+            Assert.True(measured.GetProperty("foldOpen").GetBoolean(), "the finding's fold did not open.");
+            Assert.Equal(5, measured.GetProperty("count").GetInt32());
+            Assert.Empty(ReviewPageDriver.Strings(measured, "clipped"));
+            Assert.True(measured.GetProperty("noHorizontalOverflow").GetBoolean(), measured.ToString());
+        });
+    }
+
+    /// <summary>
+    /// FR-030 with H-d-008: with no labels the card prints the backend's line as sent - the backend words it, so it needs
+    /// none - with the triage buttons printing their tokens and none pressed.
+    /// </summary>
+    [Fact]
+    public void WithNoLabelsAClearedCardShowsTheBackendsLine()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await DecidedThenFolded(driver, true);
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(ContractTriages(), ReviewPageDriver.Strings(card, "words"));
+            Assert.Empty(Pressed(card));
+            Assert.Equal(ClearedLine, card.GetProperty("status").GetString());
+            Assert.Equal("card-status cleared", card.GetProperty("statusClass").GetString());
+        });
+    }
+
+    /// <summary>
+    /// H-d-008: a review restored from its live chat shows its snapshot, in which the cleared finding is undecided, and its
+    /// Transcript, chosen, replays the stream: the `disposition.cleared` there is read and changes nothing in Results, as
+    /// a replayed `disposition` changes nothing - the card stays as its snapshot holds it, with no line - and the
+    /// Transcript says nothing of an event it could not read.
+    /// </summary>
+    [Fact]
+    public void AReplayedClearedDecisionLeavesTheRestoredCardAsItsSnapshotHoldsIt()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200,
+                Snapshot(OtherRun, false, Finding("F-001", null, "suspected", "low")));
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+
+            await driver.Click("view-transcript");
+            await driver.Push(OtherChat, 1, "finding", Finding("F-001"));
+            await driver.Push(OtherChat, 2, "disposition", DispositionEvent("F-001", AcceptedAlreadyKnown()));
+            await driver.Push(OtherChat, 3, "finding", Finding("F-001", null, "suspected", "low"));
+            await driver.Push(OtherChat, 4, "disposition.cleared", Cleared("F-001", AcceptedAlreadyKnown()));
+            await driver.Settle();
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Empty(Pressed(card));
+            Assert.Equal(string.Empty, card.GetProperty("status").GetString());
+            Assert.Equal("card-status", card.GetProperty("statusClass").GetString());
+            JsonElement transcript = await driver.Read(ReadTranscript);
+            Assert.Equal(2, ReviewPageDriver.Strings(transcript, "markers").Count(marker => marker.StartsWith("F-001 recorded:", StringComparison.Ordinal)));
+            Assert.DoesNotContain("could not read", transcript.GetProperty("text").GetString()!);
+        });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>
@@ -483,6 +615,33 @@ public sealed class ReviewPageTriageTests
         foreach (string finding in findings)
         {
             await driver.Push(Chat, ++seq, "finding", finding);
+        }
+
+        await driver.EndSession(Chat);
+    }
+
+    /// <summary>
+    /// F-001 accepted with `already known` - pressed on the card, as a guard - before an answer resumed the turn, then the
+    /// frames of the fold after it in the order the runner writes them (roadmap hole H-d-008): the re-run's `finding`
+    /// folded onto F-001, and - when <paramref name="changed"/> - with another status and severity and no disposition,
+    /// then `disposition.cleared`; otherwise with the verdict decided and the disposition kept.
+    /// </summary>
+    private static async Task DecidedThenFolded(ReviewPageDriver driver, bool changed)
+    {
+        await driver.StartReview();
+        await driver.Push(Chat, 1, "finding", Finding("F-001"));
+        await driver.Push(Chat, 2, "disposition", DispositionEvent("F-001", AcceptedAlreadyKnown()));
+        await driver.Settle();
+        Assert.Equal(new[] { "already_known" }, Pressed(await driver.Read(ReadCard("F-001"))));
+
+        if (changed)
+        {
+            await driver.Push(Chat, 3, "finding", Finding("F-001", null, "suspected", "low"));
+            await driver.Push(Chat, 4, "disposition.cleared", Cleared("F-001", AcceptedAlreadyKnown()));
+        }
+        else
+        {
+            await driver.Push(Chat, 3, "finding", Finding("F-001", AcceptedAlreadyKnown()));
         }
 
         await driver.EndSession(Chat);
@@ -567,14 +726,15 @@ public sealed class ReviewPageTriageTests
 
     // ---- samples ------------------------------------------------------------------------------
 
-    private static string Finding(string id, Dictionary<string, object?>? disposition = null) =>
+    private static string Finding(
+        string id, Dictionary<string, object?>? disposition = null, string status = "demonstrated", string severity = "medium") =>
         JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             { "id", id },
             { "check", "interference.static" },
             { "title", "FICT finding " + id },
-            { "status", "demonstrated" },
-            { "severity", "medium" },
+            { "status", status },
+            { "severity", severity },
             { "component_ids", new[] { "cmp:0002" } },
             { "observed", "FICT observed for " + id + "." },
             { "disposition", disposition },
@@ -600,6 +760,18 @@ public sealed class ReviewPageTriageTests
 
     private static string DispositionEvent(string findingId, Dictionary<string, object?> disposition) =>
         JsonSerializer.Serialize(new Dictionary<string, object?> { { "finding_id", findingId }, { "disposition", disposition } });
+
+    /// <summary>F-001's Accept with `already known`, recorded before an answer resumed the turn (roadmap hole H-d-008).</summary>
+    private static Dictionary<string, object?> AcceptedAlreadyKnown() => Disposition("accepted", "FICT intended", "already_known");
+
+    /// <summary>A `disposition.cleared` body as the runner writes it: the finding, the disposition cleared and the line.</summary>
+    private static string Cleared(string findingId, Dictionary<string, object?> disposition) =>
+        JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            { "finding_id", findingId },
+            { "disposition", disposition },
+            { "reason", ClearedLine },
+        });
 
     /// <summary>A refusal's body, as the route sends one.</summary>
     private static string Refusal(string errorClass, string message, bool retryable) =>
@@ -686,6 +858,11 @@ return JSON.stringify({
   segActions: h.attrs(fold.querySelector('.seg'), '[data-action]', 'data-action')
 });";
 
+    /// <summary>The Transcript's text and its finding markers.</summary>
+    private const string ReadTranscript = @"
+var transcript = document.getElementById('transcript');
+return JSON.stringify({ ok: true, text: transcript.textContent, markers: h.texts(transcript, '.marker') });";
+
     /// <summary>
     /// Opens one card's fold and measures each triage button brought into view: no box scrolled
     /// sideways to show it, inside the window and every ancestor that clips, on both axes, with its
@@ -714,16 +891,30 @@ return JSON.stringify({
     /// <see cref="ReadWhole"/> measures the triage buttons, the recorded disposition's sentence, the refusal's
     /// sentence, its Details summary and every triage button; a part that is missing counts as cut off.
     /// </summary>
-    private static string ReadRefusalWhole(string findingId) => @"
-var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
-card.querySelector('[data-action=""expand""]').click();
-" + Whole + @"
+    private static string ReadRefusalWhole(string findingId) => ReadPartsWhole(findingId, @"
 var status = card.querySelector('.card-status');
 var parts = [
   ['record', status.querySelector('.card-record')],
   ['refusal', status.querySelector('.plain-error-text')],
   ['details', status.querySelector('.error-fold > summary')]
-];
+];");
+
+    /// <summary>
+    /// After a re-run cleared a decision (H-d-008): opens one card's fold and measures the cleared decision's line and every
+    /// triage button, as <see cref="ReadRefusalWhole"/> measures; a line that is missing counts as cut off.
+    /// </summary>
+    private static string ReadClearedWhole(string findingId) => ReadPartsWhole(findingId, @"
+var parts = [['line', card.querySelector('.card-status.cleared')]];");
+
+    /// <summary>
+    /// Opens one card's fold and measures each of the named `parts` that <paramref name="parts"/> declares, then every
+    /// triage button, each brought into view by <see cref="Whole"/>; a part that is missing counts as cut off. The
+    /// refused press and the cleared decision share it rather than copy it.
+    /// </summary>
+    private static string ReadPartsWhole(string findingId, string parts) => @"
+var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
+card.querySelector('[data-action=""expand""]').click();
+" + Whole + parts + @"
 var buttons = card.querySelectorAll('[data-action=""triage""]');
 for (var b = 0; b < buttons.length; b++) { parts.push(['triage ' + buttons[b].getAttribute('data-triage'), buttons[b]]); }
 var clipped = [];

@@ -62,6 +62,7 @@ from swreview.chat.sessions import ChatSession, ChatState
 from swreview.checks.rms.run import is_check_folder
 from swreview.checks.rules.run import session_replaced
 from swreview.checks.standards.run import run_standards_check
+from swreview.findings import MODEL_FINDING_CHECK
 from swreview.ir.loader import save_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import DIGEST_HEADER, RMS_PRERUN_TOOLS
@@ -2995,6 +2996,93 @@ def test_a_second_triage_is_a_409_of_its_own_and_writes_nothing(
     assert [response.json()["retryable"] for response in refused] == [False] * len(refused)
     assert "with its triage ('wrong')" in refused[0].json()["message"]
     assert folder_files(run_dir) == before
+
+
+# --- a check run again after an answer (002 T326; owner decisions 189A and 191A) ------------------
+
+
+@pytest.mark.parametrize(
+    ("rerun_status", "kept", "recorded", "by_triage"),
+    [
+        (
+            "suspected",
+            True,
+            ["- Disposition:", "  - decision: accepted", "  - triage: real but already known"],
+            [
+                "- By triage: new and real: 0, real but already known: 1, wrong: 0, "
+                "true but not worth flagging: 0, not recorded: {others}"
+            ],
+        ),
+        ("unresolved", False, ["- Disposition: not yet dispositioned"], []),
+    ],
+    ids=["kept", "cleared"],
+)
+def test_the_saved_session_and_report_agree_with_the_fold(
+    client: TestClient,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    rerun_status: str,
+    kept: bool,
+    recorded: list[str],
+    by_triage: list[str],
+) -> None:
+    """Owner decisions 189A and 191A, through the live routes: the review's drawing finding is
+    accepted as `already_known` while its question is open, the question is answered, and the
+    resumed turn records the finding again - with the status and severity decided (`suspected`,
+    medium) or with others (`unresolved`, low). What the server writes once that turn ends is the
+    fold: `session.json` holds the folded finding with the decision kept whole or cleared, the
+    `report.md` it renders shows the decision and its triage and counts it by triage when kept,
+    and neither when cleared, and the stream says `disposition.cleared` only when it was cleared.
+    The checks run first and record findings of their own, which nobody decides."""
+    provider_control.script = [
+        turn(
+            "I need the thread depth.",
+            call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS),
+            call("request_evidence", **EVIDENCE_ARGUMENTS),
+        ),
+        turn(
+            "Ran it again.",
+            call("record_drawing_finding", **{**DRAWING_FINDING_ARGUMENTS, "status": rerun_status}),
+        ),
+    ]
+    chat_id = start_session(client, run_dir)["chat_id"]
+    assert settle(client, chat_id) == ChatState.WAITING_ENGINEER.value
+    [drawing] = [
+        finding.id
+        for finding in load_session(run_dir / "session.json").findings
+        if finding.check == MODEL_FINDING_CHECK
+    ]
+    decided = client.post(
+        f"/sessions/{chat_id}/findings/{drawing}/disposition",
+        json={
+            "decision": "accepted",
+            "note": "FICT intended",
+            "by": "FICT-ENG",
+            "triage": "already_known",
+        },
+    )
+    assert decided.status_code == 200, decided.text
+
+    answered = client.post(f"/sessions/{chat_id}/evidence/ER-001", json={"answer": "12 mm."})
+
+    assert answered.status_code == 202, answered.text
+    assert settle(client, chat_id) == ChatState.ENDED.value
+    saved = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))["findings"]
+    assert [
+        (finding["id"], finding["status"], finding["disposition"])
+        for finding in saved
+        if finding["check"] == MODEL_FINDING_CHECK
+    ] == [(drawing, rerun_status, decided.json()["disposition"] if kept else None)]
+    lines = (run_dir / "report.md").read_text(encoding="utf-8").splitlines()
+    heading = lines.index(next(line for line in lines if line.startswith(f"#### {drawing}:")))
+    disposition = next(
+        index for index in range(heading, len(lines)) if lines[index].startswith("- Disposition:")
+    )
+    assert lines[disposition : disposition + len(recorded)] == recorded
+    assert [line for line in lines if line.startswith("- By triage:")] == [
+        line.format(others=len(saved) - 1) for line in by_triage
+    ]
+    assert types_of(run_dir).count("disposition.cleared") == (0 if kept else 1)
 
 
 def test_the_report_is_served_as_markdown(

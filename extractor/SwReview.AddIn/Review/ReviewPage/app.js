@@ -624,6 +624,9 @@
       case 'disposition':
         applyDisposition(body);
         return;
+      case 'disposition.cleared':
+        clearedDisposition(body);
+        return;
       case 'coverage':
         recordCoverage(body);
         renderCoverage();
@@ -688,9 +691,10 @@
    * An event replayed into the Transcript of a restored review (contracts/sessions.md section
    * 8). Results already hold the snapshot, so nothing here touches them: a finding adds its
    * marker and never a second card, a coverage, withdrawal or disposition event is already in
-   * the snapshot, and the turn's and the session's end are lines in the chronology - neither
-   * closes the stream nor reads the ranking again. The prose, the tool calls, the evidence records and the usage
-   * build the Transcript and its head exactly as live.
+   * the snapshot - a cleared disposition too, its finding there undecided - and the turn's and the
+   * session's end are lines in the chronology - neither closes the stream nor reads the ranking
+   * again. The prose, the tool calls, the evidence records and the usage build the Transcript and
+   * its head exactly as live.
    */
   function onReplayedEvent(event) {
     var body = event.body || {};
@@ -704,6 +708,7 @@
       case 'coverage':
       case 'coverage.withdrawn':
       case 'disposition':
+      case 'disposition.cleared':
         return;
       case 'turn.ended':
         state.textBlock = null;
@@ -1087,6 +1092,25 @@
     status.className = render.dispositionClass(text);
     status.textContent = text;
     render.pressTriage(card, disposition ? disposition.triage : null);
+  }
+
+  /**
+   * A `disposition.cleared` body (roadmap hole H-d-008; owner decisions 189A and 191A): a check the
+   * model ran again after the engineer's answer changed a decided finding's status or severity, so
+   * the backend cleared the decision and its triage. The fold's `finding` event before it drew the
+   * card with the new verdict and nothing decided; this writes the backend's line - naming the
+   * decision and the triage cleared, and asking for a new decision - on the card's status line,
+   * where the disposition's sentence stood, as sent. The engineer's next decision writes its own
+   * sentence there. An id this page holds no card for is ignored.
+   */
+  function clearedDisposition(body) {
+    var entry = state.findings[String((body && body.finding_id) || '')];
+    var status = entry ? entry.card.querySelector('.card-status') : null;
+    if (!status) {
+      return;
+    }
+    status.className = 'card-status cleared';
+    status.textContent = String(body.reason || '');
   }
 
   /**

@@ -115,6 +115,16 @@ answer_basis:
   many: "Based on {n} results read for this answer."
   no_drawing: " No drawing was read in this review."
 
+# The line a finding's card shows when a check the model ran again after the engineer's answer
+# changed its verdict - its status or its severity - and so cleared the decision and its triage
+# (feature 002 FR-031, owner decisions 189A and 191A). `{decision}` is the decision's noun
+# ("Accept", "Reject", "Defer") and `{triage}` the triage's word in `labels.triage`;
+# `cleared_with_triage` is the line for a disposition that holds a triage. The backend fills
+# both and the page prints the line as sent.
+rerun:
+  cleared: "The check ran again after your answer and its verdict changed, so your {decision} was cleared. Decide again."
+  cleared_with_triage: "The check ran again after your answer and its verdict changed, so your {decision} ({triage}) was cleared. Decide again."
+
 read_only_lead: "The backend restarted, so this review is shown from its run folder."
 read_only_off: "Follow-ups, decisions and answers are off."
 
