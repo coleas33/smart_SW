@@ -39,6 +39,11 @@ public sealed class ReviewPageTriageTests
 
     private const string RestoredRun = "20261101-090000-bracket-restored";
 
+    /// <summary>An earlier review of the same document, kept by the host and live on the backend.</summary>
+    private const string OtherChat = "chat-2";
+
+    private const string OtherRun = "20261101-083000-bracket-2";
+
     private const string IllegalTransition =
         "{\"error_class\":\"IllegalTransition\",\"message\":\"FICT finding F-001 already has a terminal disposition ('accepted'); it cannot be changed\",\"retryable\":false}";
 
@@ -420,6 +425,51 @@ public sealed class ReviewPageTriageTests
         });
     }
 
+    /// <summary>
+    /// H-g-012, on the Tier 2 review (2026-11-01): a decision's reply that lands after the engineer switched reviews
+    /// belongs to the review it was pressed on. Review chat-1's F-001 is accepted with `wrong` and its reply held;
+    /// the engineer switches to review chat-2, whose F-001 was accepted with `already known`; the held reply then
+    /// lands. A press on chat-2's F-001 that the backend refuses shows chat-2's record again - `already known`
+    /// pressed and chat-2's own `Disposition: ...` sentence - and nothing of chat-1's.
+    /// </summary>
+    [Fact]
+    public void AReplyLandingAfterAReviewSwitchKeepsTheShownReviewsRecord()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-001"));
+            await driver.HoldRoute("POST", DispositionPath("F-001"), 200,
+                Finding("F-001", Disposition("accepted", "FICT note of the first review", "wrong")));
+            await Press(driver, "F-001", "wrong");
+            await Decide(driver, "F-001", "accept");
+
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200,
+                Snapshot(OtherRun, false, Finding("F-001", Disposition("accepted", "FICT note of the second review", "already_known"))));
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            await driver.ReleaseRoute("POST", DispositionPath("F-001"));
+
+            string recorded = Sentence("accepted", "already_known", "FICT note of the second review");
+            JsonElement shown = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(new[] { "already_known" }, Pressed(shown));
+            Assert.Equal(recorded, shown.GetProperty("status").GetString());
+
+            string otherPath = "/sessions/" + OtherChat + "/findings/F-001/disposition";
+            await driver.Route("POST", otherPath, 409, TriageAlreadyRecorded);
+            await driver.ClearCalls();
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "accept");
+
+            Assert.Equal(otherPath, Assert.Single(await DispositionCalls(driver)).GetProperty("path").GetString());
+            JsonElement refused = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(new[] { "already_known" }, Pressed(refused));
+            Assert.Equal(recorded, refused.GetProperty("record").GetString());
+            Assert.Equal("TriageAlreadyRecorded", refused.GetProperty("refusalClass").GetString());
+        });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>
@@ -556,17 +606,25 @@ public sealed class ReviewPageTriageTests
         JsonSerializer.Serialize(new { error_class = errorClass, message, retryable });
 
     /// <summary>A run folder's read-only snapshot: one finding accepted with a triage, one undecided, no ranking.</summary>
-    private static string RestoredSnapshot() => new JsonObject
+    private static string RestoredSnapshot() => Snapshot(
+        RestoredRun,
+        true,
+        Finding("F-100", Disposition("accepted", "FICT intended", "already_known")),
+        Finding("F-101"));
+
+    /// <summary>
+    /// A review's snapshot with <paramref name="findings"/> and no ranking: read-only from its run folder, or the
+    /// backend's live chat, its turn ended, whose findings take decisions.
+    /// </summary>
+    private static string Snapshot(string runId, bool readOnly, params string[] findings) => new JsonObject
     {
-        ["run_id"] = RestoredRun,
-        ["read_only"] = true,
-        ["read_only_reason"] = ReviewPageSessionsTests.ReadOnlyReason,
-        ["chat_state"] = null,
-        ["last_seq"] = null,
+        ["run_id"] = runId,
+        ["read_only"] = readOnly,
+        ["read_only_reason"] = readOnly ? ReviewPageSessionsTests.ReadOnlyReason : null,
+        ["chat_state"] = readOnly ? null : "ended",
+        ["last_seq"] = readOnly ? null : JsonValue.Create(9),
         ["document"] = JsonNode.Parse(JsonSerializer.Serialize(new { path = ReviewPageDriver.ReviewedPath, configuration = "Default" })),
-        ["findings"] = new JsonArray(
-            JsonNode.Parse(Finding("F-100", Disposition("accepted", "FICT intended", "already_known"))),
-            JsonNode.Parse(Finding("F-101"))),
+        ["findings"] = new JsonArray(findings.Select(finding => JsonNode.Parse(finding)).ToArray()),
         ["evidence_requests"] = new JsonArray(),
         ["coverage"] = new JsonArray(),
         ["ranking"] = null,
