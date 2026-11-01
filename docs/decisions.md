@@ -212,7 +212,7 @@ whatever its question was numbered when it was asked, and is entered in the tabl
 same commit as the change it governs, with its date, a one-line summary, its status and where
 else it is recorded (the feature's `research.md` when a feature governs it, the commits that
 carry it out). Ids before 121A stay as they were written; the runs above remain their index. The
-next new decision is **191A**.
+next new decision is **192A**.
 
 **The mapping.** The first eight decisions of 2026-10-18 were asked in two rounds of four
 questions, each labelled 1A to 4A at the time; a third round, asked as 5A and 6A, became 129A and
@@ -240,7 +240,9 @@ day after cycle 1's review set only the order of work and kept 183A (merging #59
 green; roadmap update run 2, then the Review page's refused pick and the rerun that drops a
 decision, each test first; 183A's net rule kept) and is not numbered; an eighteenth, asked as 4A
 the same day while roadmap update run 2 was paused for it, became 186A, and a nineteenth,
-asked as 5A to 8A the same day as run 2's second owner round, became 187A to 190A.
+asked as 5A to 8A the same day as run 2's second owner round, became 187A to 190A. A round asked
+as 11A and 12A the same day after cycle 2's review became 191A: its 11A, merging #61, is not
+numbered.
 The first round's 2A, 3A and 4A were written into commit
 messages on `main` and into the documentation branch under those labels before decision 128A
 numbered them, and those messages are not rewritten for it: read "2A" in a commit of that day as
@@ -318,6 +320,7 @@ numbered them, and those messages are not rewritten for it: read "2A" in a commi
 | 188A | 2026-11-01 | 6A, roadmap run 2's second owner round | 'Real but already known' means known before SwReview first showed it: a real finding SwReview first showed at an earlier sitting stays 'new and real', with that sitting's date in its note. Step 4.1 defines each of the four outcomes in one line before M0-a. | Decided 2026-11-01; applied to the seat plan before M0-a. | [`docs/roadmap/holes.md`](roadmap/holes.md), H-a-009; 185A. |
 | 189A | 2026-11-01 | 7A, roadmap run 2's second owner round | A check the model runs again after an answer resumes its turn keeps the earlier finding's decision and triage when its verdict is unchanged, as a restated finding does (58A); when the verdict changed, they are cleared and the card says the re-run changed it. Answers the open row on rule 3 in 010 `research.md` R5. | Decided 2026-11-01; tasks appended to 002, test first, before M0-b. | [`docs/roadmap/holes.md`](roadmap/holes.md), H-d-008; 58A; 185A. |
 | 190A | 2026-11-01 | 8A, roadmap run 2's second owner round | At M0-b, A's review is triaged in full and B is judged only on whether RD1 to RD3 show (M0's exit 4), so M0 fits its two sittings; M0-a's table runs A's review first and the escape replay until a set clock time. Narrows 181A's 'triaged and timed' for B. | Decided 2026-11-01; applied when M0-a and M0-b are planned. | [`docs/roadmap/README.md`](roadmap/README.md), M0; [`docs/roadmap/holes.md`](roadmap/holes.md), H-a-010; 181A. |
+| 191A | 2026-11-01 | 12A, the round after cycle 2's review | A changed verdict, for 189A, is a change of a finding's status or severity: a re-run that changes either clears the decision and triage and says so on the card; one that changes neither keeps the whole disposition. | Decided 2026-11-01; built with 189A (002, cycle 3). | [`docs/roadmap/holes.md`](roadmap/holes.md), H-d-008; 189A. |
 
 The owner's decision of the same day to keep this repository as the public upstream of private
 downstream forks is not numbered; it is recorded as

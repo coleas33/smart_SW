@@ -6352,3 +6352,65 @@ the decision register now records 160A as done.
   new cards. Not changed: a reply to a review the engineer left and came back to before it landed
   reaches only the card it was pressed on, so the card restored meanwhile shows its snapshot until
   a reload, as the card did before this cycle. No other finding.
+
+### H-d-008. A check run again after an answer keeps an unchanged verdict's decision, and says so when it clears one (2026-11-01)
+
+- **Question**: roadmap hole H-d-008 (roadmap run 2): when an answered evidence request resumes the
+  model's turn and the model runs a check again on the same subject, `_reconcile_reruns`
+  (`agent/runner.py`; rule 3 of [data-model.md](data-model.md) section 3) folds the new finding
+  onto the earlier one - it takes the earlier id and place - and announces the fold again under
+  that id. The new finding carries no disposition, so an Accept, Reject or Defer recorded before
+  the answer, and since 185A its triage, vanish from `session.json`, from the card and from
+  `report.md`'s counts, with nothing said. Example: F-001 accepted as `already_known`; the
+  engineer answers ER-001; the resumed turn runs `check_fit` on the same pair again; F-001 comes
+  back undecided. Only checks the pre-run guard does not answer fold (`check_fit`,
+  `check_axial_stack`, `check_fastener_joint`, `check_hole_alignment`, `check_tool_envelope`, a
+  group or subset the pre-run did not judge), and only on a sent review: a waiting review's
+  answers apply by code, with no turn and no fold. The question had been open since 2026-10-08 as
+  the row on rule 3 in 010 [research.md](../010-mechanical-checks/research.md) R5, and 185A's
+  "Not changed" above left it for a task of its own.
+- **Decided**: 189A (2026-11-01, roadmap run 2's second owner round): the re-run keeps the earlier
+  finding's decision and triage when its verdict is unchanged, as a restated finding keeps them
+  (58A), and when the verdict changed they are cleared and the card says the re-run changed it,
+  so the engineer decides again. 191A (2026-11-01, the round after cycle 2's review): a changed
+  verdict is a changed `status` or `severity`; a re-run that changes either clears the
+  disposition and says so on the card, and one that changes neither keeps the whole disposition -
+  decision, triage, note, `by` and `at`.
+- **Not changed**: 58A's restate (`_reconcile_restated`), which keeps the disposition whatever the
+  restated verdict; 015's re-run of a waiting review (`_carry_decisions`), which carries a
+  decision onto the finding with its subject key and names in `coverage.recheck` what it cannot
+  carry; a waiting review's answers, which fold nothing; and the fold itself - which findings
+  fold, onto which, their ids and places, and the re-announced `finding` events.
+- **Settled with it**:
+  - **The verdict compared is the finding as decided.** Each re-run is compared with the earlier
+    finding as it stood when the answer went in, never with an earlier re-run of the same turn:
+    of two re-runs that fold onto one finding, the last alone says whether the decision stands,
+    so a re-run back to the verdict decided keeps it, and one changed last clears it, named once.
+  - **How the notice reaches the page.** Options: A, a new event, `disposition.cleared`, after the
+    fold's `finding` event; B, a field on the re-announced `finding` event's body; C, a
+    `disposition` event with no disposition and a reason. A: the `finding` body is the persisted
+    `Finding` (`review-session.schema.json`, closed to unknown fields), so B means either a field
+    on `Finding`, which an older build refuses on load, or a second definition of it for the
+    event; C changes what an existing event means to every reader of `events.jsonl`. The event
+    names the finding, the disposition cleared and the line, and comes after the fold's `finding`
+    event, so the card it lands on is the one the fold drew.
+  - **Not persisted.** `session.json` holds the folded finding undecided, `report.md` shows it
+    "not yet dispositioned" and counts it "not recorded", and `events.jsonl` keeps the notice. A
+    card drawn again from a snapshot - a review chosen again, a reload - is undecided and has no
+    line; keeping the line there would need a field on `Finding`, which an older build refuses,
+    or a record elsewhere, and neither is part of 189A.
+  - **The words.** The line lives in the words file, in a block of its own, `rerun`, before
+    `labels`: `cleared`, and `cleared_with_triage` for a disposition with a triage. The backend
+    fills them - the decision named by `DECISION_NOUNS` ("Accept"), as 015's re-run names a
+    decision it does not carry ([015 contracts/recheck.md](../015-review-send-gate/contracts/recheck.md)
+    section 5), and the triage by `labels.triage` - and the page prints the line as sent. Not in
+    `labels`: the page looks nothing up for it, so `GET /labels`, `LabelsSample.cs` and the pane
+    fixtures, which embed the labels block, do not move.
+  - **Where the line goes on the card.** The card's one status line, where the disposition's
+    sentence stood, in a class of its own, `cleared`, in the hue of the one class only an
+    engineer can settle (`--judge`). The engineer's next decision writes its own sentence there,
+    as any decision does.
+  - **A replay.** A `disposition.cleared` replayed into a restored review's Transcript changes
+    nothing in Results, which are the snapshot, as a replayed `disposition` changes nothing.
+- **Tests**: T326 and T328 in [tasks.md](tasks.md), Phase 25, each written first; T327 and T329
+  make them green, and T330 closes the records.
