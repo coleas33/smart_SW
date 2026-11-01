@@ -180,7 +180,7 @@ The engineer runs the reviewer across a set of benchmark packages (5 to 10 repre
 **Evaluation**
 
 - **FR-025**: The system MUST run against a benchmark set with an answer key withheld from the reviewer and produce a scorecard of valid findings, missed known defects, false alarms, and unresolved coverage per package and in aggregate.
-- **FR-026**: The system MUST record baseline and assisted review effort per design and compute net time saved, with unattended runtime reported separately.
+- **FR-026**: The system MUST record baseline and assisted review effort per design and compute net time saved, with unattended runtime reported separately. *Amended 2026-11-01 (owner decisions 183A and 184A; feature 007 FR-036):* the assisted effort is setup, supervision, verification, false-alarm handling and the review the engineer still does by hand, and the net is unknown until setup and the review by hand are both recorded; setup is this design's own, a sitting's software update reported apart.
 
 **Boundaries**
 
@@ -208,7 +208,7 @@ The engineer runs the reviewer across a set of benchmark packages (5 to 10 repre
 
 ### Measurable Outcomes
 
-- **SC-001**: On the benchmark set, median net engineering effort saved per design is at least 60 minutes, measured as recorded baseline effort minus assisted effort (including supervision, verification and false-alarm handling).
+- **SC-001**: On the benchmark set, median net engineering effort saved per design is at least 60 minutes, measured as recorded baseline effort minus assisted effort (including supervision, verification and false-alarm handling). *Amended 2026-11-01 (owner decision 183A; feature 007 FR-036):* the assisted effort counts setup and the review by hand too, so a design's net is measured once both are recorded.
 - **SC-002**: The first real package yields, within one working day, at least one evidence-linked finding or precise missing-input request and at least one numerical check the engineer reproduces by hand with matching result.
 - **SC-003**: 100% of findings in every report contain all required fields (FR-009); an audit of the report finds no finding cleared on an inferred or defaulted input.
 - **SC-004**: On held-out benchmark packages, the reviewer surfaces at least 80% of seeded known defects as demonstrated or suspected findings, and no more than 30% of findings are false alarms.

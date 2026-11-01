@@ -290,6 +290,10 @@ model's opening, and the id maps a page would need to re-key its own work are no
 3. **outcome lines.** `earlier.drawing_outcomes`, verbatim, in order.
 4. **timing.** The four human inputs of `earlier.timing` (baseline, supervision, verification, false
    alarms) are carried whole; the running time is the re-run's own (`records.md` section 3).
+   *Amended 2026-11-01 (feature 007, owner decision 183A; its FR-036):* the human inputs are six,
+   setup and the review by hand too, and the carry copies every one by
+   `report.session.HUMAN_TIMING_FIELDS` rather than by name, so an input added later is carried
+   as well (007 T068).
 5. **the record.** `model_status` is the earlier record's, carried: its `state` (`not_sent` or
    `send_failed`), `document` and `failures` (oldest first) stay as they were; `rechecked_from` is
    the earlier record's `session_id`; `checked_at` and `profile` are the re-run's own. So a re-run

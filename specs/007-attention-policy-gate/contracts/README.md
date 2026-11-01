@@ -13,7 +13,10 @@ The policy is versioned by its file (`attention_policy_v1`) and the version trav
 record and every report footer. A change to a class, to the needs-judgement set or to a key is
 a new policy version and a new golden; an old report still says which version ordered it.
 The review-session contract gains one optional lever name and no other change; the IR is
-untouched.
+untouched. *Amended 2026-11-01 (owner decisions 183A and 184A; FR-036):* it gains two more,
+`Timing.setup_minutes` and `Timing.review_by_hand_minutes`, in `properties` only and left out
+of `session.json` while not recorded, so every earlier session still validates and keeps its
+bytes (`timing.md`).
 
 ## What this feature does *not* move
 
@@ -40,4 +43,8 @@ listing; the two blocks are identical, which is stated so no difference row is a
 section-6 table. Feature 001's `contracts/cli.md` gains three rows cross-referencing `cli.md`
 here as normative, and its `review-session.schema.json` gains the lever name in `properties`.
 Feature 005's `contracts/levers.md` gains a row and `contracts/ab-harness.md` records the
-ledger column in sections 5 and 10.8.
+ledger column in sections 5 and 10.8. *Amended 2026-11-01 (owner decisions 183A and 184A):*
+setup and the review by hand land as dated notes in 002's `chat-api.md` (the timing route's
+two body keys), 001's `cli.md` (`timing` and `benchmark time`), `data-model.md` (`Timing`) and
+`spec.md` (FR-026 and SC-001), 015's `recheck.md` section 4 and `data-model.md` (the re-run
+carries all six) and 005's `ab-harness.md` (`benchmark time`'s two options).

@@ -241,6 +241,15 @@ Validation: a finding with `status == "checked_within_scope"` or `"demonstrated"
 
 `baseline_minutes: float | null` (human review, recorded separately), `assisted_supervision_minutes`, `assisted_verification_minutes`, `false_alarm_handling_minutes`, `unattended_runtime_minutes`, `net_saved_minutes: float | null` (computed as baseline minus the sum of assisted minutes, excluding unattended runtime; FR-026).
 
+*Amended 2026-11-01 (owner decisions 183A and 184A; feature 007 FR-036):* two more inputs,
+`setup_minutes` and `review_by_hand_minutes`, each `float | null` and at least 0, left out of
+`session.json` while not recorded, so a session written before them keeps its bytes. The
+assisted minutes (`Timing.assisted_minutes`) are setup, supervision, verification, false-alarm
+handling and the review by hand, and `net_saved_minutes` is null until the baseline and both
+new inputs are recorded; a recorded 0 is a value. Setup is this design's own setup, a
+sitting's software update reported apart; the review by hand is the checking the engineer
+still does on what the tool did not reach.
+
 ### `BenchmarkPackage` and `Scorecard`
 
 `BenchmarkPackage`: `package_id`, `held_out: bool`, `answer_key_path` (a path the reviewer process cannot read; enforced by directory permissions and by the loader refusing paths under `benchmarks/answer_keys/`).

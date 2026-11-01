@@ -116,10 +116,21 @@ explicitly beside the session when a review claims an RMS check folder.
 |---|---|
 | `baseline_minutes: float \| None` | gains `Field(ge=0)`, matching the committed schema's `minimum: 0` |
 | the other five | unchanged |
+| `setup_minutes: float \| None`, `review_by_hand_minutes: float \| None` | *added 2026-11-01 (owner decisions 183A and 184A):* `Field(default=None, ge=0)`, left out of `session.json` while `None` |
 
 `record_timing_at(session_path, *, baseline, supervision, verification, false_alarms) ->
 Timing` is the one writer; `record_timing(run_dir, package_id, ...)` wraps it. The route body
 is `{baseline?, supervision?, verification?, false_alarms?}`; any other key is refused.
+
+*Amended 2026-11-01 (owner decisions 183A and 184A; FR-036):* the writer, its wrapper and
+`record_timing_live` take `setup` and `by_hand` after the four, and the route body gains
+`setup?` and `by_hand?` through `TIMING_INPUTS`. `Timing.assisted_minutes` is setup,
+supervision, verification, false-alarm handling and the review by hand together, `None` while
+either new input is not recorded; `net_saved_minutes` is the baseline less it, `None` when
+either is, and a recorded 0 is a value. The scorecard's `PackageScore.assisted_minutes` reads
+the same property. `HUMAN_TIMING_FIELDS`, beside `Timing`, names the six inputs, which feature
+015's re-run carries. `Timing.replace` takes its names from the model's fields, since the dump
+leaves out an input not recorded.
 
 ## 5. The ledger (existing models, one column)
 

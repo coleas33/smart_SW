@@ -246,7 +246,7 @@ read from the cache everywhere else. `approximate` is `provider == "gemini"`.
 | the Standards profile | not carried: the re-run grades with the profile in effect; its identity is compared with the earlier record's `model_status.profile` | a different path or sha256: named in `coverage.recheck` (default; research R6 question 3) |
 | the interference rows the first run could not write | not carried: with `persist_error`, the reviewed configuration's rows are removed from the in-memory package as the first run removed them, so the dump's stale rows are not judged | always, when `persist_error` is set: `INTERFERENCE_ROWS_NOT_CARRIED` |
 | a drawing outcome an unfinished read lost | nothing to carry: an earlier **open** drawing question whose drawing is now in the package and whose file no `drawing_outcomes` entry names | always: named in `coverage.recheck` (research R2.13) |
-| the four human timing inputs | the earlier record's `timing` (baseline, supervision, verification, false alarms) | never: carried whole |
+| the four human timing inputs | the earlier record's `timing` (baseline, supervision, verification, false alarms); *amended 2026-11-01 (feature 007, owner decision 183A):* six, setup and the review by hand too, every one of `HUMAN_TIMING_FIELDS` | never: carried whole |
 | the model status | the earlier record's `model_status`: `state`, `document` and `failures` whole; `rechecked_from` set; `checked_at` the re-run's | never |
 
 All of it is carried in memory; the carry writes nothing to disk, and the re-run's finalization is its

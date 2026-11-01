@@ -35,3 +35,8 @@
 - The spec names product artifacts (`report.md`, the run folder record, the lever name `procedural_gate`, check family names) because they are the product's own vocabulary that the engineer reads; it names no language, framework, module or function.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.
 - Re-validated 2026-09-19 (T058) against the spec as amended by research R4 (FR-033's sources are the cited drawing evidence; the coverage block prints close-out sentences; the Review tab reads one route). Every item above still holds: the amendments name product vocabulary, not modules, and each amended requirement has a test named in tasks.md.
+- Re-validated 2026-11-01 (T069) against the spec as amended by owner decisions 183A and 184A
+  (FR-036, scenario 7, the dated notes on FR-001, FR-002, FR-005, Key Entities, SC-001 and the
+  Timing edge cases). Every item above still holds: setup and the review by hand are named in
+  the engineer's words, the net rule is testable and measured (a net, or unknown), and each
+  part of FR-036 has a test named in tasks.md (T065 and T067).
