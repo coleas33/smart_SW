@@ -6231,3 +6231,53 @@ the decision register now records 160A as done.
   and `IllegalTransition`'s sentence reads as a refused decision when a second triage was
   refused. The timing findings, and the one fix the review made, are in 007
   [research.md](../007-attention-policy-gate/research.md), R7.
+
+### H-g-012. After a refused press the card shows the record, and a second triage has a sentence of its own (2026-11-01)
+
+- **Question**: roadmap hole H-g-012 (roadmap run 2), the should-fix cycle 1's Tier 1 review left
+  above and in [`docs/review-backlog.md`](../../docs/review-backlog.md): after the backend refuses a
+  decision, the Review page keeps the refused triage pick pressed and writes the refusal in place
+  of the recorded disposition (`app.js`, `decide` and `cardError`), so until a reload the card can
+  show a triage the record does not hold; and a second triage, refused by `set_disposition` with a
+  plain `ValueError` like every other refusal, is answered `409 IllegalTransition`, whose sentence,
+  "That decision cannot follow the one already recorded. Reload the review to see its state.",
+  reads as a refused decision. Example: F-001 accepted with `already_known`; the engineer picks
+  `wrong` and presses Accept again; the backend refuses, and the card keeps `wrong` pressed while
+  the record holds `already_known`. The owner's go of 2026-11-01, in the round after cycle 1's
+  review that set only the order of work (roadmap run 2, then the Review page's refused pick, test
+  first), made it cycle 2.
+- **Not changed** (the roadmap's skeptic, run 2: changing either is an owner question): 185A's
+  rule that a late triage records the triage and nothing else, the decision, note, `by` and `at`
+  staying as first recorded; and a second triage stays refused.
+- **Settled with it**:
+  - **The record's class.** `report/dispositions.py` raises `TriageAlreadyRecordedError`, a
+    `ValueError` subclass, when the recorded disposition is an Accept or Reject that holds a triage
+    and the request names the same decision with a triage. Named with the `Error` suffix as the
+    record's other `ValueError` subclasses are (`agent/runner.py`'s `EvidenceAlreadyAnsweredError`
+    and `UnknownEvidenceRequestError`; 008 `contracts/answer-batch.md` section 1), while the class
+    the page switches on is bare, `TriageAlreadyRecorded`, as `AlreadyAnswered` is. Still a
+    `ValueError`, so every caller that refuses one today - the console's `HANDLED_ERRORS`, the
+    route's last `except` - refuses it as before, and the class only adds to what it says. Every
+    other refusal - another decision, the same decision with none, a Defer again, a Defer's own
+    refusals - stays a plain `ValueError` and `409 IllegalTransition`.
+  - **The message keeps the terminal rule.** "finding F-001 already has a terminal disposition
+    ('accepted') with its triage ('already_known'); a triage is recorded once and cannot be
+    changed": the console still names the terminal rule, as 001 `contracts/cli.md` says, and now
+    the triage recorded.
+  - **The sentence.** The words file's `TriageAlreadyRecorded` says the triage recorded stands and
+    is shown again, which is what the page then does.
+  - **The page keeps one memory of the record.** `state.findings[id].body.disposition`:
+    `placeFinding` keeps it from the finding's own body (a stream's finding, a restate, a restore),
+    and `showDisposition`, through which every disposition the page shows goes - a decision's
+    reply and a `disposition` event - writes it there as well. `decide`'s refusal path reads it,
+    presses its triage or none in place of the pick, and writes its sentence above the refusal in
+    the card's one status line. The page compares nothing: which press is refused is the
+    backend's rule, never copied into the page.
+  - **Where the record goes on the card.** Options: A, the recorded sentence above the refusal in
+    the card's status line, on a line of its own in the settled colour; B, the refusal above it; C,
+    the sentence in an element of its own beside the status line. A: the sentence stays where it
+    stood before the press, and the refusal under it says the record stands. C was refused because
+    every card refusal - a decision, Show in SOLIDWORKS, the log - writes the one status line, which
+    `ReviewPageErrorsTests` reads.
+- **Tests**: T320 and T322 in [tasks.md](tasks.md), Phase 24, each written first; T321 and T323
+  make them green, and T324 closes the records.
