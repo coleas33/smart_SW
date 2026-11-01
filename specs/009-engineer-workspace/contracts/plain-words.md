@@ -47,6 +47,13 @@ triage" count.
 | the four triage buttons beside Accept, Reject and Defer, and the card's disposition sentence | `triage` |
 | `report.md`'s triage line under a decision, and its "By triage" line | `triage` |
 
+*Amended 2026-11-01 (feature 002, roadmap hole H-g-012; owner decision 185A unchanged):* `errors`
+gains `TriageAlreadyRecorded`'s sentence, "That finding already has a triage, and a triage is
+recorded only once. The one recorded stands and is shown again.", for the class the disposition
+route refuses a second triage with (002 `contracts/chat-api.md`, the disposition route), which was
+`IllegalTransition`, whose sentence reads as a refused decision. `errors` stays last, `source` just
+before it.
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and
@@ -138,6 +145,13 @@ for every class the Review host and `PaneActions` send, and for the classes `app
 too - a settings save written while the add-in unloads - whose sentence is "The settings are
 saved. The add-in is stopping; nothing else needs doing."; with no labels the save's line prints
 the message whole, as it does for `BackendNotRestarted`, rather than the class and the message.
+
+*Amended 2026-11-01 (feature 002, roadmap hole H-g-012):* a refused disposition keeps the record
+in view. The finding card's status line shows the recorded disposition's sentence on a line of its
+own, in the settled colour, above the refusal's sentence and its fold; with no labels, above the
+class and the message. The triage row presses the recorded triage, or none, in place of the
+refused pick. A finding with no disposition shows the refusal alone, as before. The page reads the
+record from its own memory of what was recorded and decides nothing about which press is refused.
 
 ## 6. Model check
 

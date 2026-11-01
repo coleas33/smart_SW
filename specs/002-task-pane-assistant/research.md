@@ -6231,3 +6231,124 @@ the decision register now records 160A as done.
   and `IllegalTransition`'s sentence reads as a refused decision when a second triage was
   refused. The timing findings, and the one fix the review made, are in 007
   [research.md](../007-attention-policy-gate/research.md), R7.
+
+### H-g-012. After a refused press the card shows the record, and a second triage has a sentence of its own (2026-11-01)
+
+- **Question**: roadmap hole H-g-012 (roadmap run 2), the should-fix cycle 1's Tier 1 review left
+  above and in [`docs/review-backlog.md`](../../docs/review-backlog.md): after the backend refuses a
+  decision, the Review page keeps the refused triage pick pressed and writes the refusal in place
+  of the recorded disposition (`app.js`, `decide` and `cardError`), so until a reload the card can
+  show a triage the record does not hold; and a second triage, refused by `set_disposition` with a
+  plain `ValueError` like every other refusal, is answered `409 IllegalTransition`, whose sentence,
+  "That decision cannot follow the one already recorded. Reload the review to see its state.",
+  reads as a refused decision. Example: F-001 accepted with `already_known`; the engineer picks
+  `wrong` and presses Accept again; the backend refuses, and the card keeps `wrong` pressed while
+  the record holds `already_known`. The owner's go of 2026-11-01, in the round after cycle 1's
+  review that set only the order of work (roadmap run 2, then the Review page's refused pick, test
+  first), made it cycle 2.
+- **Not changed** (the roadmap's skeptic, run 2: changing either is an owner question): 185A's
+  rule that a late triage records the triage and nothing else, the decision, note, `by` and `at`
+  staying as first recorded; and a second triage stays refused.
+- **Settled with it**:
+  - **The record's class.** `report/dispositions.py` raises `TriageAlreadyRecordedError`, a
+    `ValueError` subclass, when the recorded disposition is an Accept or Reject that holds a triage
+    and the request names the same decision with a triage. Named with the `Error` suffix as the
+    record's other `ValueError` subclasses are (`agent/runner.py`'s `EvidenceAlreadyAnsweredError`
+    and `UnknownEvidenceRequestError`; 008 `contracts/answer-batch.md` section 1), while the class
+    the page switches on is bare, `TriageAlreadyRecorded`, as `AlreadyAnswered` is. Still a
+    `ValueError`, so every caller that refuses one today - the console's `HANDLED_ERRORS`, the
+    route's last `except` - refuses it as before, and the class only adds to what it says. Every
+    other refusal - another decision, the same decision with none, a Defer again, a Defer's own
+    refusals - stays a plain `ValueError` and `409 IllegalTransition`.
+  - **The message keeps the terminal rule.** "finding F-001 already has a terminal disposition
+    ('accepted') with its triage ('already_known'); a triage is recorded once and cannot be
+    changed": the console still names the terminal rule, as 001 `contracts/cli.md` says, and now
+    the triage recorded.
+  - **The sentence.** The words file's `TriageAlreadyRecorded` says the triage recorded stands and
+    is shown again, which is what the page then does.
+  - **The page keeps one memory of the record.** `state.findings[id].body.disposition`:
+    `placeFinding` keeps it from the finding's own body (a stream's finding, a restate, a restore),
+    and `showDisposition`, through which every disposition the page shows goes - a decision's
+    reply and a `disposition` event - writes it there as well. `decide`'s refusal path reads it,
+    presses its triage or none in place of the pick, and writes its sentence above the refusal in
+    the card's one status line. The page compares nothing: which press is refused is the
+    backend's rule, never copied into the page.
+  - **Where the record goes on the card.** Options: A, the recorded sentence above the refusal in
+    the card's status line, on a line of its own in the settled colour; B, the refusal above it; C,
+    the sentence in an element of its own beside the status line. A: the sentence stays where it
+    stood before the press, and the refusal under it says the record stands. C was refused because
+    every card refusal - a decision, Show in SOLIDWORKS, the log - writes the one status line, which
+    `ReviewPageErrorsTests` reads.
+- **Tests**: T320 and T322 in [tasks.md](tasks.md), Phase 24, each written first; T321 and T323
+  make them green, and T324 closes the records.
+- **Built** (2026-11-01, T321 and T323):
+  - The record and the route (T321): `TriageAlreadyRecordedError` in `report/dispositions.py`,
+    raised by `_validate_transition`, which now takes the triage, after a Defer's own refusals and
+    before the terminal one. `_takes_a_late_triage` has taken a first triage by then, so the check
+    names the record's triage itself rather than lean on that order. `chat/server.py`:
+    `TriageAlreadyRecorded` (409), and the route's `except` for the record's class before its
+    `ValueError` one; the thread pool and a waiting review's worker both raise through that one
+    `try`. The words file's sentence; `swreview disposition` needed no change, its
+    `HANDLED_ERRORS` catching the subclass and its line printing the class's name.
+  - The fixtures (T321): both families regenerated by their generators, one labels line each, and
+    `review-not-sent-session.json` byte-identical; the send-failure pin moved to the regenerated
+    `review-waiting.json` (CRLF); `LabelsSample.cs` mirrors the sentence.
+  - The page (T323): `showDisposition` writes what it shows into
+    `state.findings[id].body.disposition`; `decide`'s refusal path reads it, presses its triage or
+    none, lets `cardError` write the refusal as every card refusal is written, and puts the
+    recorded sentence above it as a `span.card-record`, which `app.css` sets on a line of its own
+    in the settled colour (`--good`, the `decided` line's). No host, proxy or page message changes,
+    and no rule in the page.
+  - The records: FR-031's amendment and scenario 8's note; quickstart Scenario 1's note; 002
+    `contracts/chat-api.md`, 009 `contracts/plain-words.md` sections 1 and 5, and 001
+    `contracts/cli.md`, each with a dated note; the backlog's cycle 1 item resolved.
+- **Tests changed on purpose**, none loosened:
+  - `test_triage.py::test_a_second_triage_or_another_decision_is_still_refused`: each refusal's
+    class asserted as well as its words, and three cases added (another triage on a Reject that
+    holds one, another decision on a finding that holds a triage, a Defer again that holds one).
+  - `test_chat_server.py::test_a_late_triage_records_the_triage_and_nothing_else`: its second
+    triage, the same or another, is `409 TriageAlreadyRecorded`, where it was `IllegalTransition`.
+  - `ReviewPageTriageTests.ADecidedFindingWithoutATriageTakesOneWithTheSameDecision`: its second
+    triage scripted as the backend now refuses it, `409 TriageAlreadyRecorded`; after the refusal
+    the late triage asserted pressed again and the recorded sentence shown, where the fact
+    asserted no "Disposition:" on the card and checked no pressed button. The class's 300 px
+    measure is shared with the new refusal fact rather than copied, its assertions unchanged.
+  - `test_workstation_test_plan.py::test_the_specs_readme_counts_a_task_173a_closed_as_done`, its
+    002 literal following 002's recount (T319, and T324).
+  - The four pane fixtures that embed the labels block, regenerated, and the send-failure pin.
+- **Tests first**: T320's eight cases failed before T321 - the record test's four second-triage
+  cases for want of `TriageAlreadyRecordedError` (read from the module, so the module still
+  collected and nothing else went red), the two route cases answered `IllegalTransition`, the
+  console's line naming `ValueError` and the old message, and the words case for want of the
+  sentence - while the record test's seven guards passed before and after. T322's five facts
+  failed before T323, each for want of the record on the card after a refusal (the refused pick
+  still pressed; at 300 px no recorded sentence to measure), while the class's six other facts,
+  the 300 px row fact on the shared measure among them, and `ReviewPageErrorsTests`' five passed.
+- **Gates** (T324; 2026-11-01), on the cycle's final tree:
+  - Python 3.12.3, in the worktree's own environment (`uv sync --python 3.12 --all-extras`), and
+    3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required, over the 87
+    test modules that pin the record, the route, the words, the pane fixtures, the page's quoted
+    sentences or the specs' counts: 4,683 passed and 2 skipped on each.
+  - `ruff check src tests` clean.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then
+    `dotnet test extractor\SwReview.sln -c Release --no-build`: 10,274 extractor and 4,292 add-in
+    tests passed, on T323's tree; T324 changes no C# file.
+  - The link check over the cycle's changed Markdown: 212 relative links, anchors included,
+    none broken. Every changed file LF in the index.
+  - Not run in this lane: the whole non-live suites, which run before the pull request and in its
+    CI, among them `test_tracked_files_carry_no_recorded_number.py`, which reads the owner's
+    denylist outside the repository. No SOLIDWORKS process, seat task, or paid or live test ran.
+- **Review** (Tier 2; 2026-11-01): one Codex review of the branch, and one finding (medium):
+  `showDisposition` wrote the page's memory into `state.findings[id]` whatever card the reply was
+  for. A decision's reply that landed after the engineer switched to another review holding a
+  finding of the same id wrote the old review's disposition into the new review's memory, and the
+  new review's next refused press showed the old decision, triage, engineer and note as its own.
+  Fixed test first, under T324: `ReviewPageTriageTests.AReplyLandingAfterAReviewSwitchKeepsTheShownReviewsRecord`
+  holds chat-1's reply, switches by its chip to chat-2, releases the reply and refuses a press on
+  chat-2's F-001; it failed with chat-1's `wrong` pressed, and passes once `entryOf(card)` gives
+  the memory only to the card its entry holds - for the reply's write and the refusal's read
+  alike. Card identity covers the chat id and the restore epoch Codex also proposed checking:
+  every change of chat goes through `resetTranscript`, and a switch, a restore or a re-run builds
+  new cards. Not changed: a reply to a review the engineer left and came back to before it landed
+  reaches only the card it was pressed on, so the card restored meanwhile shows its snapshot until
+  a reload, as the card did before this cycle. No other finding.

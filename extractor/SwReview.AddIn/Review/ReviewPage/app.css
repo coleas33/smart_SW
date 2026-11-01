@@ -1314,6 +1314,12 @@ body.view-transcript #results {
   color: var(--critical);
 }
 
+/* After a refused press the record stands above the refusal, as a settled card says it (H-g-012). */
+.card-status .card-record {
+  display: block;
+  color: var(--good);
+}
+
 #review-preparation {
   flex: 0 1 auto;
   max-height: 18rem;

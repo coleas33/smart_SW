@@ -1069,8 +1069,16 @@
    * engineer's own press - so a decided finding looks the same whichever recorded it, and the
    * "decided" class agrees with the one `render.findingCard` puts on a card it builds fresh. The
    * triage row shows the recorded triage pressed, in place of any pick (owner decision 185A).
+   *
+   * It also keeps what is recorded in the finding's body, the page's one memory of it, which
+   * `placeFinding` holds from the finding as sent and `decide` shows again after a refusal
+   * (roadmap hole H-g-012) - only through the card that entry holds (`entryOf`).
    */
   function showDisposition(card, disposition) {
+    var entry = entryOf(card);
+    if (entry) {
+      entry.body.disposition = disposition;
+    }
     var status = card ? card.querySelector('.card-status') : null;
     if (!status) {
       return;
@@ -1079,6 +1087,17 @@
     status.className = render.dispositionClass(text);
     status.textContent = text;
     render.pressTriage(card, disposition ? disposition.triage : null);
+  }
+
+  /**
+   * The finding entry whose card `card` is, or null. A decision's reply can land after a review
+   * switch or a re-run built new cards; the card it was pressed on is then detached, and the
+   * entry of the same finding id is another review's or another card's record, which that reply
+   * must neither write nor read (H-g-012, the Tier 2 review).
+   */
+  function entryOf(card) {
+    var entry = card ? state.findings[card.getAttribute('data-finding-id')] : null;
+    return entry && entry.card === card ? entry : null;
   }
 
   /**
@@ -2564,7 +2583,18 @@
     ).then(function (finding) {
       showDisposition(card, finding && finding.disposition);
     }).catch(function (error) {
+      // Refused, so the record is as it was (roadmap hole H-g-012): the card shows it again - its
+      // triage pressed, or none, in place of the pick, and its sentence above the refusal. Which
+      // press is refused is the backend's rule; the page compares nothing.
+      var entry = entryOf(card);
+      var recorded = entry ? entry.body.disposition : null;
+      render.pressTriage(card, recorded ? recorded.triage : null);
       cardError(card, error, error.errorClass + ': ' + error.message);
+      var text = render.dispositionText(recorded, state.labels);
+      var status = card.querySelector('.card-status');
+      if (text && status) {
+        status.insertBefore(render.el('span', 'card-record', text), status.firstChild);
+      }
     });
   }
 

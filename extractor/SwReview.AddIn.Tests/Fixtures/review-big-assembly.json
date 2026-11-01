@@ -16938,6 +16938,7 @@
       "ScopeRefused": "The part changed or was not checked for this remodel. Plan it again.",
       "SelectionUnavailable": "Choose a saved target, or select one resolved component or face and try again.",
       "SessionFailed": "This review failed and cannot continue. Press Review to start a new one.",
+      "TriageAlreadyRecorded": "That finding already has a triage, and a triage is recorded only once. The one recorded stands and is shown again.",
       "TurnRunning": "A review turn is still running. Wait for it to finish, or press Stop.",
       "Unauthorized": "The review backend did not recognise this pane. Close and reopen the task pane.",
       "UnknownChat": "This review is no longer held by the backend. Press Review to start a new one.",

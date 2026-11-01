@@ -1246,6 +1246,60 @@ def test_disposition_adds_a_late_triage_once(run_dir: Path, tmp_path: Path) -> N
     assert run_files(run_dir) == before
 
 
+def test_disposition_reports_a_second_triage_as_its_own_refusal(run_dir: Path) -> None:
+    """Roadmap hole H-g-012 (185A unchanged): a second triage on a finding accepted with one is
+    reported as any refusal is - exit 1 and one line on stderr - its line naming its own class,
+    the terminal rule and the triage recorded; another decision's line names `ValueError`, as
+    before. Neither writes anything."""
+    payload(
+        invoke(
+            "disposition",
+            str(run_dir),
+            "F-001",
+            "--decision",
+            "accepted",
+            "--triage",
+            "wrong",
+            "--by",
+            "FICT-ENG",
+            "--json",
+        )
+    )
+    before = run_files(run_dir)
+
+    again = invoke(
+        "disposition",
+        str(run_dir),
+        "F-001",
+        "--decision",
+        "accepted",
+        "--triage",
+        "already_known",
+        "--by",
+        "FICT-ENG",
+    )
+    other = invoke(
+        "disposition",
+        str(run_dir),
+        "F-001",
+        "--decision",
+        "rejected",
+        "--triage",
+        "already_known",
+        "--by",
+        "FICT-ENG",
+    )
+
+    assert again.exit_code == 1
+    assert again.stderr.splitlines() == [
+        "error: TriageAlreadyRecordedError: finding F-001 already has a terminal disposition "
+        "('accepted') with its triage ('wrong'); a triage is recorded once and cannot be changed"
+    ]
+    assert other.exit_code == 1
+    assert other.stderr.startswith("error: ValueError: finding F-001 already has a terminal")
+    assert run_files(run_dir) == before
+
+
 # --- check fit / stack -----------------------------------------------------------
 
 

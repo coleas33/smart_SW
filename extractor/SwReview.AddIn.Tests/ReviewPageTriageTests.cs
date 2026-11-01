@@ -21,6 +21,11 @@ namespace SwReview.AddIn.Tests;
 /// no rule of its own: an Accept or Reject recorded without a triage takes one when the same decision
 /// is pressed again with one picked (185A's late triage), and whatever the backend refuses is shown on
 /// the card as any refused decision is.
+///
+/// Roadmap hole H-g-012 (002 T322): after any refused press the card shows the record again - the
+/// recorded triage pressed, or none, in place of the refused pick, and the recorded disposition's
+/// sentence above the refusal's - read from the page's one memory of what is recorded, and a second
+/// triage is refused with its own class and sentence, `TriageAlreadyRecorded`.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -34,8 +39,22 @@ public sealed class ReviewPageTriageTests
 
     private const string RestoredRun = "20261101-090000-bracket-restored";
 
+    /// <summary>An earlier review of the same document, kept by the host and live on the backend.</summary>
+    private const string OtherChat = "chat-2";
+
+    private const string OtherRun = "20261101-083000-bracket-2";
+
     private const string IllegalTransition =
         "{\"error_class\":\"IllegalTransition\",\"message\":\"FICT finding F-001 already has a terminal disposition ('accepted'); it cannot be changed\",\"retryable\":false}";
+
+    private const string TriageAlreadyRecordedMessage =
+        "FICT finding F-001 already has a terminal disposition ('accepted') with its triage ('already_known'); a triage is recorded once and cannot be changed";
+
+    /// <summary>The backend's refusal of a second triage (roadmap hole H-g-012), as the route sends it.</summary>
+    private static readonly string TriageAlreadyRecorded = Refusal("TriageAlreadyRecorded", TriageAlreadyRecordedMessage, false);
+
+    /// <summary>A decision refused while a turn runs, which says nothing of the record.</summary>
+    private static readonly string TurnRunning = Refusal("TurnRunning", "a turn is already running for chat-1", true);
 
     [Fact]
     public void TheReviewPageOffersTheFourOutcomesBesideAcceptRejectAndDefer()
@@ -228,6 +247,13 @@ public sealed class ReviewPageTriageTests
     /// and the reply - the triage recorded, the first note, engineer and time kept - is what the card
     /// shows. A second triage, which the backend refuses, is shown on the card as any refused
     /// decision is.
+    ///
+    /// *Changed 2026-11-01 on purpose (002 T322; roadmap hole H-g-012):* the second triage is
+    /// scripted as the backend now refuses it, `409 TriageAlreadyRecorded`, where it was
+    /// `IllegalTransition`; and after the refusal the late triage, `already known`, is asserted
+    /// pressed again, where nothing checked which button was pressed, and the recorded disposition's
+    /// sentence shown above the refusal, where the refusal replaced it and the fact asserted no
+    /// "Disposition:" on the card.
     /// </summary>
     [Fact]
     public void ADecidedFindingWithoutATriageTakesOneWithTheSameDecision()
@@ -263,7 +289,7 @@ public sealed class ReviewPageTriageTests
                 late.GetProperty("status").GetString());
             Assert.Equal("card-status decided", late.GetProperty("statusClass").GetString());
 
-            await driver.Route("POST", DispositionPath("F-001"), 409, IllegalTransition);
+            await driver.Route("POST", DispositionPath("F-001"), 409, TriageAlreadyRecorded);
             await driver.ClearCalls();
             await Press(driver, "F-001", "wrong");
             await Decide(driver, "F-001", "accept");
@@ -272,8 +298,175 @@ public sealed class ReviewPageTriageTests
                 Body(Assert.Single(await DispositionCalls(driver))));
             JsonElement refused = await driver.Read(ReadCard("F-001"));
             Assert.Equal("card-status bad", refused.GetProperty("statusClass").GetString());
-            Assert.Equal("IllegalTransition", refused.GetProperty("refusalClass").GetString());
-            Assert.DoesNotContain("Disposition:", refused.GetProperty("status").GetString()!);
+            Assert.Equal("TriageAlreadyRecorded", refused.GetProperty("refusalClass").GetString());
+            Assert.Equal(new[] { "already_known" }, Pressed(refused));
+            Assert.Equal(Sentence("accepted", "already_known", "FICT first note"), refused.GetProperty("record").GetString());
+            Assert.Equal(LabelsSample.TriageAlreadyRecorded, refused.GetProperty("refusal").GetString());
+        });
+    }
+
+    /// <summary>
+    /// Roadmap hole H-g-012: a finding the stream sends accepted with `already known`; `wrong` is picked and
+    /// Accept pressed, and the backend refuses the second triage (a scripted `409 TriageAlreadyRecorded`). The card
+    /// shows the record again: `already known` pressed and `wrong` let go, the recorded disposition's sentence above
+    /// the refusal's, which is the words' sentence for the class, and the class in the refusal's fold.
+    /// </summary>
+    [Fact]
+    public void ARefusedTriageShowsTheRecordedTriageAgain()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver, Finding("F-001", Disposition("accepted", "FICT first note", "already_known")));
+            await driver.Route("POST", DispositionPath("F-001"), 409, TriageAlreadyRecorded);
+            await Press(driver, "F-001", "wrong");
+            Assert.Equal(new[] { "wrong" }, Pressed(await driver.Read(ReadCard("F-001"))));
+            await driver.ClearCalls();
+
+            await Decide(driver, "F-001", "accept");
+
+            Assert.Equal("decision=accepted, note=, triage=wrong", Body(Assert.Single(await DispositionCalls(driver))));
+            JsonElement refused = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(new[] { "already_known" }, Pressed(refused));
+            Assert.Equal(Sentence("accepted", "already_known", "FICT first note"), refused.GetProperty("record").GetString());
+            Assert.Equal(LabelsSample.TriageAlreadyRecorded, refused.GetProperty("refusal").GetString());
+            Assert.Equal("TriageAlreadyRecorded", refused.GetProperty("refusalClass").GetString());
+            Assert.Equal("card-status bad", refused.GetProperty("statusClass").GetString());
+            Assert.True(refused.GetProperty("recordFirst").GetBoolean(), "the recorded sentence is not above the refusal.");
+        });
+    }
+
+    /// <summary>
+    /// Roadmap hole H-g-012: any refused decision leaves the card as recorded, the page deciding nothing. F-001's
+    /// Accept with `true but not worth flagging` arrives as a `disposition` event; `wrong` picked and Reject pressed
+    /// is refused (a scripted `409 IllegalTransition`): the recorded triage is pressed again and its sentence shown
+    /// above the refusal. F-002 is undecided; `new and real` picked and Defer pressed is refused (`409 TurnRunning`):
+    /// the pick goes back to none, and the refusal is shown alone, with no disposition sentence.
+    /// </summary>
+    [Fact]
+    public void ARefusedDecisionPressesTheRecordedTriageBackToo()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "finding", Finding("F-002"));
+            await driver.Push(Chat, 3, "disposition", DispositionEvent("F-001", Disposition("accepted", "FICT intended", "not_worth_flagging")));
+            await driver.EndSession(Chat);
+            await driver.Route("POST", DispositionPath("F-001"), 409, IllegalTransition);
+            await driver.Route("POST", DispositionPath("F-002"), 409, TurnRunning);
+
+            await Press(driver, "F-001", "wrong");
+            await Decide(driver, "F-001", "reject");
+            await Press(driver, "F-002", "new_and_real");
+            await Decide(driver, "F-002", "defer");
+
+            JsonElement decided = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(new[] { "not_worth_flagging" }, Pressed(decided));
+            Assert.Equal(Sentence("accepted", "not_worth_flagging", "FICT intended"), decided.GetProperty("record").GetString());
+            Assert.Equal("IllegalTransition", decided.GetProperty("refusalClass").GetString());
+            Assert.True(decided.GetProperty("recordFirst").GetBoolean(), "the recorded sentence is not above the refusal.");
+
+            JsonElement undecided = await driver.Read(ReadCard("F-002"));
+            Assert.Empty(Pressed(undecided));
+            Assert.Equal(JsonValueKind.Null, undecided.GetProperty("record").ValueKind);
+            Assert.DoesNotContain("Disposition:", undecided.GetProperty("status").GetString()!);
+            Assert.Equal(LabelsSample.TurnRunning, undecided.GetProperty("refusal").GetString());
+            Assert.Equal("TurnRunning", undecided.GetProperty("refusalClass").GetString());
+        });
+    }
+
+    /// <summary>
+    /// FR-030 with H-g-012: with no labels a refused press prints the class and the message, as every card's refusal
+    /// does with no labels, after the recorded disposition's sentence, which prints the triage's token; and the
+    /// recorded triage is pressed again.
+    /// </summary>
+    [Fact]
+    public void WithNoLabelsARefusedPressShowsTheRecordAndTheClassAndMessage()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await Reviewed(driver, Finding("F-001", Disposition("accepted", string.Empty, "already_known")));
+            await driver.Route("POST", DispositionPath("F-001"), 409, TriageAlreadyRecorded);
+            await Press(driver, "F-001", "wrong");
+            await Decide(driver, "F-001", "accept");
+
+            JsonElement refused = await driver.Read(ReadCard("F-001"));
+            string recorded = "Disposition: accepted (already_known) by " + Engineer + " at " + RecordedAt;
+            Assert.Equal(new[] { "already_known" }, Pressed(refused));
+            Assert.Equal(recorded, refused.GetProperty("record").GetString());
+            Assert.Equal(recorded + "TriageAlreadyRecorded: " + TriageAlreadyRecordedMessage, refused.GetProperty("status").GetString());
+            Assert.Equal("card-status bad", refused.GetProperty("statusClass").GetString());
+        });
+    }
+
+    /// <summary>
+    /// H-g-012 at a docked pane's 300 px: after a refused triage the recorded disposition's sentence, the refusal's
+    /// sentence, its Details fold and every triage button are whole - inside the window and every box that clips
+    /// them, their words inside them - with no sideways page scroll, as
+    /// <see cref="EveryTriageButtonIsWhollyVisibleAtThreeHundredPixels"/> holds the triage row.
+    /// </summary>
+    [Fact]
+    public void ARefusedPressIsWhollyVisibleAtThreeHundredPixels()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
+            await Reviewed(driver, Finding("F-001", Disposition("accepted", "FICT first note", "already_known")));
+            await driver.Route("POST", DispositionPath("F-001"), 409, TriageAlreadyRecorded);
+            await Press(driver, "F-001", "wrong");
+            await Decide(driver, "F-001", "accept");
+
+            JsonElement measured = await driver.Read(ReadRefusalWhole("F-001"));
+            Assert.Equal(300, measured.GetProperty("width").GetInt32());
+            Assert.True(measured.GetProperty("foldOpen").GetBoolean(), "the finding's fold did not open.");
+            Assert.Equal(7, measured.GetProperty("count").GetInt32());
+            Assert.Empty(ReviewPageDriver.Strings(measured, "clipped"));
+            Assert.True(measured.GetProperty("noHorizontalOverflow").GetBoolean(), measured.ToString());
+        });
+    }
+
+    /// <summary>
+    /// H-g-012, on the Tier 2 review (2026-11-01): a decision's reply that lands after the engineer switched reviews
+    /// belongs to the review it was pressed on. Review chat-1's F-001 is accepted with `wrong` and its reply held;
+    /// the engineer switches to review chat-2, whose F-001 was accepted with `already known`; the held reply then
+    /// lands. A press on chat-2's F-001 that the backend refuses shows chat-2's record again - `already known`
+    /// pressed and chat-2's own `Disposition: ...` sentence - and nothing of chat-1's.
+    /// </summary>
+    [Fact]
+    public void AReplyLandingAfterAReviewSwitchKeepsTheShownReviewsRecord()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-001"));
+            await driver.HoldRoute("POST", DispositionPath("F-001"), 200,
+                Finding("F-001", Disposition("accepted", "FICT note of the first review", "wrong")));
+            await Press(driver, "F-001", "wrong");
+            await Decide(driver, "F-001", "accept");
+
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200,
+                Snapshot(OtherRun, false, Finding("F-001", Disposition("accepted", "FICT note of the second review", "already_known"))));
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            await driver.ReleaseRoute("POST", DispositionPath("F-001"));
+
+            string recorded = Sentence("accepted", "already_known", "FICT note of the second review");
+            JsonElement shown = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(new[] { "already_known" }, Pressed(shown));
+            Assert.Equal(recorded, shown.GetProperty("status").GetString());
+
+            string otherPath = "/sessions/" + OtherChat + "/findings/F-001/disposition";
+            await driver.Route("POST", otherPath, 409, TriageAlreadyRecorded);
+            await driver.ClearCalls();
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "accept");
+
+            Assert.Equal(otherPath, Assert.Single(await DispositionCalls(driver)).GetProperty("path").GetString());
+            JsonElement refused = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(new[] { "already_known" }, Pressed(refused));
+            Assert.Equal(recorded, refused.GetProperty("record").GetString());
+            Assert.Equal("TriageAlreadyRecorded", refused.GetProperty("refusalClass").GetString());
         });
     }
 
@@ -367,6 +560,11 @@ public sealed class ReviewPageTriageTests
         }
     }
 
+    /// <summary>The card's sentence for a disposition recorded with a triage, in `LabelsSample`'s words.</summary>
+    private static string Sentence(string decision, string triage, string note) =>
+        "Disposition: " + decision + " (" + Word(triage) + ") by " + Engineer + " at " + RecordedAt
+        + (note.Length > 0 ? " - " + note : string.Empty);
+
     // ---- samples ------------------------------------------------------------------------------
 
     private static string Finding(string id, Dictionary<string, object?>? disposition = null) =>
@@ -403,18 +601,30 @@ public sealed class ReviewPageTriageTests
     private static string DispositionEvent(string findingId, Dictionary<string, object?> disposition) =>
         JsonSerializer.Serialize(new Dictionary<string, object?> { { "finding_id", findingId }, { "disposition", disposition } });
 
+    /// <summary>A refusal's body, as the route sends one.</summary>
+    private static string Refusal(string errorClass, string message, bool retryable) =>
+        JsonSerializer.Serialize(new { error_class = errorClass, message, retryable });
+
     /// <summary>A run folder's read-only snapshot: one finding accepted with a triage, one undecided, no ranking.</summary>
-    private static string RestoredSnapshot() => new JsonObject
+    private static string RestoredSnapshot() => Snapshot(
+        RestoredRun,
+        true,
+        Finding("F-100", Disposition("accepted", "FICT intended", "already_known")),
+        Finding("F-101"));
+
+    /// <summary>
+    /// A review's snapshot with <paramref name="findings"/> and no ranking: read-only from its run folder, or the
+    /// backend's live chat, its turn ended, whose findings take decisions.
+    /// </summary>
+    private static string Snapshot(string runId, bool readOnly, params string[] findings) => new JsonObject
     {
-        ["run_id"] = RestoredRun,
-        ["read_only"] = true,
-        ["read_only_reason"] = ReviewPageSessionsTests.ReadOnlyReason,
-        ["chat_state"] = null,
-        ["last_seq"] = null,
+        ["run_id"] = runId,
+        ["read_only"] = readOnly,
+        ["read_only_reason"] = readOnly ? ReviewPageSessionsTests.ReadOnlyReason : null,
+        ["chat_state"] = readOnly ? null : "ended",
+        ["last_seq"] = readOnly ? null : JsonValue.Create(9),
         ["document"] = JsonNode.Parse(JsonSerializer.Serialize(new { path = ReviewPageDriver.ReviewedPath, configuration = "Default" })),
-        ["findings"] = new JsonArray(
-            JsonNode.Parse(Finding("F-100", Disposition("accepted", "FICT intended", "already_known"))),
-            JsonNode.Parse(Finding("F-101"))),
+        ["findings"] = new JsonArray(findings.Select(finding => JsonNode.Parse(finding)).ToArray()),
         ["evidence_requests"] = new JsonArray(),
         ["coverage"] = new JsonArray(),
         ["ranking"] = null,
@@ -423,7 +633,10 @@ public sealed class ReviewPageTriageTests
 
     // ---- reading the page ---------------------------------------------------------------------
 
-    /// <summary>One card's triage buttons - tokens, words, pressed and off - its sentence, and a refusal's class.</summary>
+    /// <summary>
+    /// One card's triage buttons - tokens, words, pressed and off - its status line, and after a refusal the
+    /// recorded disposition's sentence beside it, the refusal's sentence and class, and which comes first.
+    /// </summary>
     private static string ReadCard(string findingId) => @"
 var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
 if (!card) { return JSON.stringify({ ok: false, error: 'no card " + findingId + @"' }); }
@@ -444,7 +657,10 @@ return JSON.stringify({
   disabled: disabled,
   status: status ? status.textContent : null,
   statusClass: status ? status.className : null,
-  refusalClass: status ? h.text(status, '.error-fold .error-class') : null
+  refusalClass: status ? h.text(status, '.error-fold .error-class') : null,
+  record: status ? h.text(status, '.card-record') : null,
+  refusal: status ? h.text(status, '.plain-error-text') : null,
+  recordFirst: !!status && h.before(status.querySelector('.card-record'), status.querySelector('.plain-error'))
 });";
 
     /// <summary>Where the triage buttons stand in one card: one row in the fold, before the tools row, outside the decisions.</summary>
@@ -478,22 +694,7 @@ return JSON.stringify({
     private static string ReadWhole(string findingId) => @"
 var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
 card.querySelector('[data-action=""expand""]').click();
-var whole = function (node) {
-  node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  var rect = node.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) { return false; }
-  if (node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1) { return false; }
-  for (var p = node.parentElement; p; p = p.parentElement) {
-    // The pane scrolls up and down only: a box scrolled sideways to show the button cuts it off at rest.
-    if (p.scrollLeft !== 0) { return false; }
-    var style = getComputedStyle(p);
-    if (style.overflowX !== 'visible' || style.overflowY !== 'visible') {
-      var box = p.getBoundingClientRect();
-      if (rect.left < box.left - 1 || rect.right > box.right + 1 || rect.top < box.top - 1 || rect.bottom > box.bottom + 1) { return false; }
-    }
-  }
-  return rect.left >= -1 && rect.right <= window.innerWidth + 1 && rect.top >= -1 && rect.bottom <= window.innerHeight + 1;
-};
+" + Whole + @"
 var buttons = card.querySelectorAll('[data-action=""triage""]');
 var clipped = [];
 for (var i = 0; i < buttons.length; i++) {
@@ -507,4 +708,58 @@ return JSON.stringify({
   clipped: clipped,
   noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth
 });";
+
+    /// <summary>
+    /// After a refused press (H-g-012): opens one card's fold and measures, each brought into view as
+    /// <see cref="ReadWhole"/> measures the triage buttons, the recorded disposition's sentence, the refusal's
+    /// sentence, its Details summary and every triage button; a part that is missing counts as cut off.
+    /// </summary>
+    private static string ReadRefusalWhole(string findingId) => @"
+var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
+card.querySelector('[data-action=""expand""]').click();
+" + Whole + @"
+var status = card.querySelector('.card-status');
+var parts = [
+  ['record', status.querySelector('.card-record')],
+  ['refusal', status.querySelector('.plain-error-text')],
+  ['details', status.querySelector('.error-fold > summary')]
+];
+var buttons = card.querySelectorAll('[data-action=""triage""]');
+for (var b = 0; b < buttons.length; b++) { parts.push(['triage ' + buttons[b].getAttribute('data-triage'), buttons[b]]); }
+var clipped = [];
+for (var i = 0; i < parts.length; i++) {
+  var node = parts[i][1];
+  if (!node) { clipped.push(parts[i][0] + ' missing'); }
+  else if (!whole(node)) { clipped.push(parts[i][0] + ' ' + JSON.stringify(node.getBoundingClientRect())); }
+}
+return JSON.stringify({
+  ok: true,
+  width: window.innerWidth,
+  count: parts.length,
+  foldOpen: !card.querySelector('.details').hidden,
+  clipped: clipped,
+  noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth
+});";
+
+    /// <summary>
+    /// `whole(node)`: the node, brought into view, is whole - no box scrolled sideways to show it, inside the window
+    /// and every ancestor that clips, on both axes, with its words inside it.
+    /// </summary>
+    private const string Whole = @"
+var whole = function (node) {
+  node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  var rect = node.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) { return false; }
+  if (node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1) { return false; }
+  for (var p = node.parentElement; p; p = p.parentElement) {
+    // The pane scrolls up and down only: a box scrolled sideways to show the node cuts it off at rest.
+    if (p.scrollLeft !== 0) { return false; }
+    var style = getComputedStyle(p);
+    if (style.overflowX !== 'visible' || style.overflowY !== 'visible') {
+      var box = p.getBoundingClientRect();
+      if (rect.left < box.left - 1 || rect.right > box.right + 1 || rect.top < box.top - 1 || rect.bottom > box.bottom + 1) { return false; }
+    }
+  }
+  return rect.left >= -1 && rect.right <= window.innerWidth + 1 && rect.top >= -1 && rect.bottom <= window.innerHeight + 1;
+};";
 }
