@@ -428,7 +428,10 @@ def test_health_names_the_providers_this_build_runs(client: TestClient) -> None:
 
 def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> None:
     """`GET /labels` (feature 009 T059, contracts/plain-words.md section 1): the words file's
-    `labels` block, verbatim, with its version, so every word on a card is the backend's."""
+    `labels` block, verbatim, with its version, so every word on a card is the backend's.
+
+    *Changed 2026-11-01 on purpose (002 T310; owner decision 185A, FR-031):* the block gains
+    the `triage` group, the words of a finding's four triage outcomes."""
     from swreview.report.summary import load_words
 
     response = client.get("/labels")
@@ -445,6 +448,7 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
         "evidence_status",
         "contact_kind",
         "source",
+        "triage",
         "errors",
     }
     assert body["source"] == {"code": "Checked by code", "model": "AI guidance"}, "feature 013"
@@ -2788,6 +2792,153 @@ def test_a_decision_the_state_machine_does_not_know_is_a_400(
 
     assert response.status_code == 400
     assert response.json()["error_class"] == "InvalidDecision"
+
+
+# --- a finding's triage beside its decision (002 T310, owner decision 185A) --------------------
+
+
+def disposition_url(chat_id: str, run_dir: Path) -> str:
+    """The disposition route of the chat's one finding."""
+    finding_id = load_session(run_dir / "session.json").findings[0].id
+    return f"/sessions/{chat_id}/findings/{finding_id}/disposition"
+
+
+def recorded_dispositions(run_dir: Path) -> list[dict[str, Any]]:
+    """Each `disposition` event's disposition, in the order the stream carried them."""
+    return [
+        event["body"]["disposition"]
+        for event in events_of(run_dir)
+        if event["type"] == "disposition"
+    ]
+
+
+def folder_files(run_dir: Path) -> dict[str, bytes]:
+    """The three files a disposition writes, by name: what a refusal must leave as it was."""
+    return {
+        name: (run_dir / name).read_bytes()
+        for name in ("session.json", "report.md", "events.jsonl")
+    }
+
+
+def test_a_disposition_records_its_triage_and_answers_it(
+    client: TestClient, run_dir: Path, chat_with_a_finding: str
+) -> None:
+    response = client.post(
+        disposition_url(chat_with_a_finding, run_dir),
+        json={
+            "decision": "rejected",
+            "note": "FICT note",
+            "by": "FICT-ENG",
+            "triage": "already_known",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    answered = response.json()["disposition"]
+    assert (answered["decision"], answered["note"], answered["by"], answered["triage"]) == (
+        "rejected",
+        "FICT note",
+        "FICT-ENG",
+        "already_known",
+    )
+    saved = load_session(run_dir / "session.json").findings[0].disposition
+    assert saved is not None and saved.model_dump(mode="json") == answered
+    assert recorded_dispositions(run_dir) == [answered]
+    assert "rejected" in (run_dir / "report.md").read_text(encoding="utf-8")
+
+
+def test_a_triage_outside_the_four_is_a_400_and_writes_nothing(
+    client: TestClient,
+    run_dir: Path,
+    chat_with_a_finding: str,
+    provider_control: ProviderControl,
+) -> None:
+    """Refused before the chat's state is read, so never `409 IllegalTransition` or
+    `TurnRunning`: idle, and again while a turn runs. Null, or no key, records none."""
+    url = disposition_url(chat_with_a_finding, run_dir)
+    outside: tuple[Any, ...] = ("maybe", "", 3, True, [])
+    before = folder_files(run_dir)
+
+    def post(value: Any) -> Any:
+        body = {"decision": "accepted", "note": "", "by": "FICT-ENG", "triage": value}
+        return client.post(url, json=body)
+
+    idle = [post(value) for value in outside]
+    written = folder_files(run_dir)
+    provider_control.hold()
+    client.post(f"/sessions/{chat_with_a_finding}/messages", json={"text": "keep going"})
+    wait_until(provider_control.started.is_set, "the follow-up turn to reach the gate")
+    running = [post(value) for value in outside]
+    provider_control.release()
+    settle(client, chat_with_a_finding)
+
+    refusals = [(response.status_code, response.json()["error_class"]) for response in idle]
+    assert refusals == [(400, "InvalidTriage")] * len(outside)
+    assert [(response.status_code, response.json()["error_class"]) for response in running] == (
+        refusals
+    )
+    assert written == before
+    assert load_session(run_dir / "session.json").findings[0].disposition is None
+    assert recorded_dispositions(run_dir) == []
+
+    deferred = client.post(
+        url, json={"decision": "deferred", "note": "", "by": "FICT-ENG", "triage": None}
+    )
+    accepted = client.post(url, json={"decision": "accepted", "note": "", "by": "FICT-ENG"})
+
+    assert [response.status_code for response in (deferred, accepted)] == [200, 200]
+    assert ["triage" in response.json()["disposition"] for response in (deferred, accepted)] == [
+        False,
+        False,
+    ]
+
+
+def test_a_late_triage_records_the_triage_and_nothing_else(
+    client: TestClient, run_dir: Path, chat_with_a_finding: str
+) -> None:
+    """185A: an Accept recorded without a triage takes one once, sent with the same decision;
+    the note, `by` and `at` stay as first recorded. A different decision, or a second triage,
+    is refused as any change to a settled finding is."""
+    url = disposition_url(chat_with_a_finding, run_dir)
+    first = client.post(
+        url, json={"decision": "accepted", "note": "FICT first note", "by": "FICT-ENG"}
+    ).json()["disposition"]
+
+    late = client.post(
+        url,
+        json={
+            "decision": "accepted",
+            "note": "FICT later note",
+            "by": "FICT-ENG-2",
+            "triage": "already_known",
+        },
+    )
+
+    assert late.status_code == 200, late.text
+    recorded = {**first, "triage": "already_known"}
+    assert late.json()["disposition"] == recorded
+    saved = load_session(run_dir / "session.json").findings[0].disposition
+    assert saved is not None and saved.model_dump(mode="json") == recorded
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "FICT first note" in report and "FICT later note" not in report
+    assert recorded_dispositions(run_dir) == [first, recorded]
+
+    before = folder_files(run_dir)
+    refused = [
+        client.post(
+            url, json={"decision": decision, "note": "", "by": "FICT-ENG", "triage": triage}
+        )
+        for decision, triage in (
+            ("rejected", "wrong"),
+            ("accepted", "wrong"),
+            ("accepted", "already_known"),
+        )
+    ]
+
+    assert [(response.status_code, response.json()["error_class"]) for response in refused] == [
+        (409, "IllegalTransition")
+    ] * 3
+    assert folder_files(run_dir) == before
 
 
 def test_the_report_is_served_as_markdown(

@@ -1100,6 +1100,149 @@ def test_disposition_with_an_unknown_decision_is_a_usage_error(run_dir: Path) ->
     assert result.exit_code == 2
 
 
+# --- a finding's triage beside its decision (002 T310, owner decision 185A) ----------------------
+
+TRIAGE_TOKENS = ("new_and_real", "already_known", "wrong", "not_worth_flagging")
+"""`--triage`'s four choices as the usage error names them, in their order."""
+
+
+def run_files(run_dir: Path) -> dict[str, bytes]:
+    """The two files `swreview disposition` writes, by name."""
+    return {name: (run_dir / name).read_bytes() for name in ("session.json", "report.md")}
+
+
+def saved_disposition(run_dir: Path) -> dict[str, Any]:
+    """The one finding's disposition as `session.json` holds it."""
+    session = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
+    disposition: dict[str, Any] = session["findings"][0]["disposition"]
+    return disposition
+
+
+def test_disposition_records_the_triage_and_rerenders(run_dir: Path) -> None:
+    body = payload(
+        invoke(
+            "disposition",
+            str(run_dir),
+            "F-001",
+            "--decision",
+            "rejected",
+            "--triage",
+            "new_and_real",
+            "--note",
+            "FICT note",
+            "--by",
+            "FICT-ENG",
+            "--json",
+        )
+    )
+
+    disposition = saved_disposition(run_dir)
+    assert (disposition["decision"], disposition["triage"]) == ("rejected", "new_and_real")
+    assert (body["decision"], body["note"], body["by"], body["triage"]) == (
+        "rejected",
+        "FICT note",
+        "FICT-ENG",
+        "new_and_real",
+    )
+    assert "rejected" in (run_dir / "report.md").read_text(encoding="utf-8")
+
+
+def test_disposition_with_an_unknown_triage_is_a_usage_error(run_dir: Path) -> None:
+    """A fifth value is refused by the option itself, naming the four, before anything is
+    read or written."""
+    before = run_files(run_dir)
+
+    result = invoke(
+        "disposition",
+        str(run_dir),
+        "F-001",
+        "--decision",
+        "accepted",
+        "--triage",
+        "new and real",
+        "--by",
+        "FICT-ENG",
+    )
+
+    assert result.exit_code == 2
+    refusal = plain_words(result.stderr)
+    assert "Invalid value for '--triage'" in refusal
+    assert [token for token in TRIAGE_TOKENS if token in refusal] == list(TRIAGE_TOKENS)
+    assert run_files(run_dir) == before
+
+
+def test_disposition_adds_a_late_triage_once(run_dir: Path, tmp_path: Path) -> None:
+    """185A: an Accept recorded without a triage takes one once, sent with the same decision.
+    The session keeps the first note, `by` and `at`; the payload and the printed line name the
+    disposition as recorded, not as typed. A second triage is refused, naming the terminal rule,
+    and changes nothing."""
+    first = payload(
+        invoke(
+            "disposition",
+            str(run_dir),
+            "F-001",
+            "--decision",
+            "accepted",
+            "--note",
+            "FICT first note",
+            "--by",
+            "FICT-ENG",
+            "--json",
+        )
+    )
+    assert first["triage"] is None
+    first_at = saved_disposition(run_dir)["at"]
+    printed_dir = tmp_path / "FICT-printed"
+    shutil.copytree(run_dir, printed_dir)
+    late = (
+        "--decision",
+        "accepted",
+        "--triage",
+        "already_known",
+        "--note",
+        "FICT later note",
+        "--by",
+        "FICT-ENG-2",
+    )
+
+    body = payload(invoke("disposition", str(run_dir), "F-001", *late, "--json"))
+    printed = invoke("disposition", str(printed_dir), "F-001", *late)
+
+    recorded = {
+        "decision": "accepted",
+        "note": "FICT first note",
+        "by": "FICT-ENG",
+        "at": first_at,
+        "triage": "already_known",
+    }
+    assert saved_disposition(run_dir) == recorded
+    assert (body["decision"], body["note"], body["by"], body["triage"]) == (
+        "accepted",
+        "FICT first note",
+        "FICT-ENG",
+        "already_known",
+    )
+    assert printed.exit_code == 0, printed.stdout + printed.stderr
+    assert printed.stdout.splitlines()[0] == "F-001: accepted (already_known) by FICT-ENG"
+    before = run_files(run_dir)
+
+    again = invoke(
+        "disposition",
+        str(run_dir),
+        "F-001",
+        "--decision",
+        "accepted",
+        "--triage",
+        "wrong",
+        "--by",
+        "FICT-ENG",
+    )
+
+    assert again.exit_code == 1
+    assert "terminal" in again.stderr
+    assert run_files(run_dir) == before
+
+
 # --- check fit / stack -----------------------------------------------------------
 
 
