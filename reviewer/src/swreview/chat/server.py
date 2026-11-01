@@ -147,7 +147,12 @@ from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
 from swreview.remodel.artifacts import grade_side_of
 from swreview.report.attention import rank
 from swreview.report.attention_record import ATTENTION_FILE_NAME
-from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
+from swreview.report.dispositions import (
+    DECISIONS,
+    REPORT_FILE_NAME,
+    TriageAlreadyRecordedError,
+    find_finding,
+)
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession, load_session
 from swreview.report.snapshot import WAITING_STATES, restored_snapshot, review_snapshot
@@ -278,7 +283,8 @@ class InvalidTriage(ChatError):
 
     A class of its own, not `InvalidDecision`, whose sentence asks for accept, reject or defer.
     The route checks it before the chat's state, as the decision is: the record's own refusal
-    is a `ValueError`, which the route answers as `IllegalTransition`.
+    is a `ValueError`, which the route answers as `IllegalTransition` (a second triage as
+    `TriageAlreadyRecorded`).
     """
 
     error_class = "InvalidTriage"
@@ -379,6 +385,16 @@ class IllegalTransition(ChatError):
 
     status = 409
     error_class = "IllegalTransition"
+
+
+class TriageAlreadyRecorded(ChatError):
+    """A second triage on an Accept or Reject that holds one (roadmap hole H-g-012; 185A takes a
+    triage once): the record's `TriageAlreadyRecordedError`. A class of its own because the page
+    shows its class's sentence, and `IllegalTransition`'s reads as a refused decision where this
+    one says the triage recorded stands."""
+
+    status = 409
+    error_class = "TriageAlreadyRecorded"
 
 
 class ProviderFailed(ChatError):
@@ -1623,6 +1639,8 @@ class ChatServer:
             finding = await execute(chat, action) if execute else await run_in_threadpool(action)
         except KeyError as exc:
             raise UnknownFinding(f"no finding {finding_id!r} in this session") from exc
+        except TriageAlreadyRecordedError as exc:
+            raise TriageAlreadyRecorded(str(exc)) from exc
         except ValueError as exc:
             raise IllegalTransition(str(exc)) from exc
         return JSONResponse(finding.model_dump(mode="json"))

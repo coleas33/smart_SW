@@ -19,7 +19,8 @@ namespace SwReview.AddIn.Tests;
 /// and a coverage row whenever the body states its source (contracts/sources.md section 2).
 ///
 /// Owner decision 185A (002 T311) adds the `triage` group: the words of a finding's four triage outcomes,
-/// the words file's own.
+/// the words file's own. Roadmap hole H-g-012 (002 T321) adds `TriageAlreadyRecorded`'s sentence, the words
+/// file's own: a second triage refused, the one recorded standing.
 /// </summary>
 internal static class LabelsSample
 {
@@ -46,6 +47,10 @@ internal static class LabelsSample
 
     public const string AddInStopping =
         "The settings are saved. The add-in is stopping; nothing else needs doing.";
+
+    /// <summary>A second triage refused (roadmap hole H-g-012; owner decision 185A): the words file's sentence for it.</summary>
+    public const string TriageAlreadyRecorded =
+        "That finding already has a triage, and a triage is recorded only once. The one recorded stands and is shown again.";
 
     /// <summary>
     /// A run root the run root rule refuses (owner decision 154A): the words file's sentence for it, true since the
@@ -132,6 +137,7 @@ internal static class LabelsSample
                 { "BackendNotRestarted", BackendNotRestarted },
                 { "AddInStopping", AddInStopping },
                 { "RunRootRefused", RunRootRefused },
+                { "TriageAlreadyRecorded", TriageAlreadyRecorded },
             }
         },
     };

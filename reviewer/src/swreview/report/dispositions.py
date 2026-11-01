@@ -7,7 +7,8 @@ from the updated session so the two never drift.
 State machine (data-model.md section 5): `none -> accepted | rejected | deferred`;
 `deferred -> accepted | rejected`; `accepted` and `rejected` are terminal, with one exception
 (owner decision 185A): one recorded without a triage takes one once, sent again with the same
-decision, and nothing else changes.
+decision, and nothing else changes. A second triage is refused with a class of its own,
+`TriageAlreadyRecordedError` (roadmap hole H-g-012).
 
 A triage, one of `findings.TRIAGES`, may go with any decision and is never required (002
 FR-031). A deferred finding keeps its triage when the later Accept or Reject names none.
@@ -30,6 +31,7 @@ __all__ = [
     "DECISIONS",
     "REPORT_FILE_NAME",
     "SESSION_FILE_NAME",
+    "TriageAlreadyRecordedError",
     "apply_disposition",
     "find_finding",
     "set_disposition",
@@ -39,6 +41,14 @@ DECISIONS: frozenset[str] = frozenset({"accepted", "rejected", "deferred"})
 """The three decisions an engineer can record. Public because the chat server validates a
 request body against them before it reaches `set_disposition` (`chat/server.py`)."""
 _ALLOWED_FROM_DEFERRED: frozenset[str] = frozenset({"accepted", "rejected"})
+
+
+class TriageAlreadyRecordedError(ValueError):
+    """A second triage: the same Accept or Reject sent again with a triage when the one recorded
+    holds one (roadmap hole H-g-012). 185A takes a triage once, so it is refused as any change to
+    a settled finding is; a class of its own so the route can say the recorded triage stands
+    (`chat/server.py`, `TriageAlreadyRecorded`), where every other refusal's sentence reads as a
+    refused decision. Still a `ValueError`, so every caller that refuses one refuses this."""
 
 
 def find_finding(session: ReviewSession, finding_id: str) -> Finding:
@@ -53,7 +63,7 @@ def find_finding(session: ReviewSession, finding_id: str) -> Finding:
     raise KeyError(f"no finding {finding_id!r} in this session")
 
 
-def _validate_transition(finding: Finding, decision: str) -> None:
+def _validate_transition(finding: Finding, decision: str, triage: str | None) -> None:
     current = finding.disposition
     if current is None:
         return
@@ -63,6 +73,12 @@ def _validate_transition(finding: Finding, decision: str) -> None:
         raise ValueError(
             f"finding {finding.id} is deferred; it can only move to accepted or rejected, "
             f"not {decision!r}"
+        )
+    if decision == current.decision and triage is not None and current.triage is not None:
+        raise TriageAlreadyRecordedError(
+            f"finding {finding.id} already has a terminal disposition ({current.decision!r}) "
+            f"with its triage ({current.triage!r}); a triage is recorded once and cannot be "
+            "changed"
         )
     raise ValueError(
         f"finding {finding.id} already has a terminal disposition ({current.decision!r}); "
@@ -104,8 +120,9 @@ def set_disposition(
     is recorded, and the decision, note, `by` and `at` stay as first recorded.
 
     Raises `ValueError` for an unknown decision, a triage outside the four (naming them) or a
-    transition the state machine forbids, and `KeyError` for a finding id that is not in the
-    session. Nothing is changed on any path.
+    transition the state machine forbids - a second triage as `TriageAlreadyRecordedError`, a
+    `ValueError` of its own class - and `KeyError` for a finding id that is not in the session.
+    Nothing is changed on any path.
     """
     if decision not in DECISIONS:
         raise ValueError(f"decision must be one of {sorted(DECISIONS)}, got {decision!r}")
@@ -118,7 +135,7 @@ def set_disposition(
     if current is not None and _takes_a_late_triage(current, decision, triage):
         finding.disposition = current.model_copy(update={"triage": triage})
         return finding
-    _validate_transition(finding, decision)
+    _validate_transition(finding, decision, triage)
 
     # Past the transition check `current` is none or a Defer, whose triage stays unless the
     # decision names another.

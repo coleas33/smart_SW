@@ -47,6 +47,13 @@ triage" count.
 | the four triage buttons beside Accept, Reject and Defer, and the card's disposition sentence | `triage` |
 | `report.md`'s triage line under a decision, and its "By triage" line | `triage` |
 
+*Amended 2026-11-01 (feature 002, roadmap hole H-g-012; owner decision 185A unchanged):* `errors`
+gains `TriageAlreadyRecorded`'s sentence, "That finding already has a triage, and a triage is
+recorded only once. The one recorded stands and is shown again.", for the class the disposition
+route refuses a second triage with (002 `contracts/chat-api.md`, the disposition route), which was
+`IllegalTransition`, whose sentence reads as a refused decision. `errors` stays last, `source` just
+before it.
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and
