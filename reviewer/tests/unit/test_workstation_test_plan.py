@@ -2069,6 +2069,54 @@ def test_the_timing_line_passes_every_input_swreview_timing_takes(
     assert (run / "session.json").read_bytes() == before
 
 
+# --- step 4.1's four outcomes and a pass's one (002 T336; owner decisions 187A and 188A) ----------
+
+
+def triage_bullet(plan: str) -> str:
+    """Step 4.1's bullet for 002 FR-031, the triage: from its dash to the next bullet of its
+    level, its own nested lines included."""
+    text = step(plan, "4.1")
+    start = text.index("\n- 002 FR-031 ") + 1
+    return text[start : text.index("\n- ", start)]
+
+
+def test_step_4_1_defines_each_of_the_four_outcomes_in_one_line(plan: str) -> None:
+    """Owner decision 188A: step 4.1 defines each of the four triage outcomes in one line before
+    M0-a - one line of the plan each, the bullet's last four, in the words the card prints (the
+    words file's `labels.triage`) and in their order - and says what "already known" is measured
+    against: known before SwReview first showed the finding, so a real finding SwReview first
+    showed at an earlier sitting stays new and real, with that sitting's date in its note."""
+    bullet = triage_bullet(plan)
+    words = list(load_words().labels.triage.values())
+    lines = [line for line in bullet.splitlines() if line.startswith("  - **")]
+    flat = re.sub(r"\s+", " ", bullet)
+
+    assert [line.split("**")[1] for line in lines] == words
+    assert bullet.splitlines()[-len(words) :] == lines
+    assert all(len(line) <= 100 and line.endswith(".") for line in lines)
+    assert lines[0].endswith(": a real problem not known before SwReview first showed it.")
+    assert lines[1].endswith(": a real problem known before SwReview first showed it.")
+    assert "a false alarm" in lines[2]
+    assert '"Already known" means known before SwReview first showed the finding' in flat
+    assert "SwReview first showed at an earlier sitting stays **new and real**" in flat
+    assert "with that sitting's date typed in the card's note box (decision 188A)" in flat
+
+
+def test_step_4_1_says_a_pass_takes_no_triage_but_a_miss(plan: str) -> None:
+    """Owner decision 187A: in step 4.1 the four outcomes go to every flagged finding; a pass, in
+    the Checked, no issue fold, takes no triage, and one the engineer judges wrong is marked with
+    the one outcome its card offers, in the words file's words (`labels.pass_triage`), and counts
+    as a miss, apart from the false alarms."""
+    flat = re.sub(r"\s+", " ", triage_bullet(plan))
+    miss = load_words().labels.pass_triage["wrong"]
+
+    assert flat.startswith("- 002 FR-031 (decisions 185A, 187A and 188A): ")
+    assert "give every flagged finding" in flat
+    assert "A pass, a finding in the **Checked, no issue** fold, takes no triage" in flat
+    assert f"press **{miss}**, the one outcome it offers, before its decision" in flat
+    assert "it counts as a miss, apart from the false alarms (decision 187A)" in flat
+
+
 def plan_function(text: str, name: str) -> str:
     """The whole PowerShell function `name` as the plan's setup block defines it."""
     start = text.index(f"function {name} ")
