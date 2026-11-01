@@ -47,10 +47,13 @@ the retest's box and part J's Plan with the open's seconds (004 T185, 004 T186, 
 T182; step 5.3); the close in process, idle and then with a dialog open (004 T303a; step 5.3),
 which ends only the backend the add-in started, by its number; optionally, two made-up
 assemblies built at the seat and never committed (006 T102's transparency, 001 T076's volume
-unit; decision 172A); Window > Close All, since part J is still open, then step 21's second and
-third runs, the third holding the five probes Start waits on; and the test plan's handoff steps
-6.0, 6.1, 6.3 and 6.5. The later sittings, S2 to S5, are each 3.5 hours or less and on one theme (the
-test plan's section "Sittings").
+unit; decision 172A); when S1's clock allows, step 20's Model check on the owner's parts P-1 to
+P-5, each closed without saving (004 T003; the test plan's step 5.1; decision 181A); Window >
+Close All, since part J is still open, then step 21's second and third runs, the third holding
+the five probes Start waits on; and the test plan's handoff steps 6.0, 6.1, 6.3 and 6.5. After S1
+come the roadmap's milestone M0's two sittings, M0-a with no key and M0-b, S3's first, and then S2
+(decision 181A); every later sitting is 3.5 hours or less and on one theme (the test plan's
+section "Sittings").
 
 ## Where the 2026-09-26 sitting stopped, and what the next sitting adds
 

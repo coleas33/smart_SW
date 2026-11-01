@@ -31,30 +31,40 @@ first; a later sitting's own table, a selection of the steps below as S1's is, i
 when it is planned, from what S1 brought back. A step keeps its number, its commands and its pass
 and fail in whichever sitting runs it.
 
+*Changed 2026-11-01 (owner decision 181A).* After S1 come the two sittings of the roadmap's
+milestone M0, "Does it find real problems in our designs?"
+([`docs/roadmap/README.md`](../roadmap/README.md)): M0-a, with no key, then M0-b, S3's first
+sitting. S2 comes after them. The table is in that order.
+
 | Sitting | Theme | Length | What it holds |
 |---|---|---|---|
-| S1 | Start readiness | 3 h 10 min, and an optional 25 min | the next section: Remodel Start's evidence, with no key and no paid call |
-| S2 | Start on | 3 h 30 min at most | the first sitting after the development machine switches Start on: 004 T303b first (decision 169A), then the stage-1 runs, 004 T135 to T141 |
-| S3 | paid review | 3 h 30 min at most | the key and the paid reviews (steps 2.5 to 2.7, 3.4, step 4 and 5.5), in as many sittings of this length as they need |
+| S1 | Start readiness | 3 h 10 min, and an optional 25 min | the next section: Remodel Start's evidence, with no key and no paid call, and step 5.1's owner's parts when its clock allows |
+| M0-a | the first triaged review | 3 h 30 min at most | no key: A, a design the engineer knows, reviewed with the send box unticked (step 4.10, items 1 and 2), every finding judged and the minutes kept with `swreview timing`; the escape replay's pre-fix revisions, each opened read-only; step 5.1's owner's parts if S1 did not run them |
+| M0-b | the first paid reviews | 3 h 30 min at most | S3's first sitting: the key (step 2.5), A reviewed with the model (step 4.1), B (step 4.2), the timing of A's review (step 4.5) and 014's smoke review (step 4.11), every finding judged and timed |
+| S2 | Start on | 3 h 30 min at most | after M0's checkpoint and 004 T003's numbers, the first sitting after the development machine switches Start on: 004 T303b first (decision 169A), then the stage-1 runs, 004 T135 to T141 |
+| S3 | paid review | 3 h 30 min at most | the key and the paid reviews M0-b leaves (steps 2.5 to 2.7, 3.4, step 4 and 5.5), in as many sittings of this length as they need |
 | S4 | drawings | 3 h 30 min at most | the drawing probes and reviews (steps 3.2 to 3.8), then 011 T095 once both drawing switches are set |
 | S5 | fixtures | 3 h 30 min at most | the made-up and benchmark parts (001 T061, 003 T062, 003 T089, 005 T034, 010 T123, 010 T124) |
 
 Every sitting opens with step 1's update and health checks and closes with step 6's handoff.
 Section 3.10, what allows each drawing switch, is read where its reports come from: S1 for D14,
-S4 for the rest. What S2 to S5 hold is provisional, each fixed when its sitting is planned, and
-steps 2.1 to 2.4, 3.1, 5.1 and 5.2 are not yet placed: the handover's order puts the profile
+S4 for the rest. What the sittings after S1 hold is provisional, each fixed when its sitting is
+planned, and steps 2.1 to 2.4, 3.1, 5.1 (its owner's parts apart) and 5.2 are not yet placed: the
+handover's order puts the profile
 (2.1 to 2.4) and the dumps (3.1) before the paid reviews they feed, and Model check and Standards
 (5.1 and 5.2) need no key, Standards the profile. Step 5.4 is withdrawn.
 
 ## S1: Start readiness
 
 The next sitting (decision 167A): about **3 hours 10 minutes** at the seat, plus an optional 25
-minutes, with **no key and no paid call**. It brings the development machine what step 5.3's
+minutes and, when its clock allows, 10 minutes for step 5.1's owner's parts (decision 181A), with
+**no key and no paid call**. It brings the development machine what step 5.3's
 "What the Start switch waits on" asks of a seat - the re-modeler probes, a Plan on part J's copy
 with J unchanged, and the close in process (004 T303a, decision 169A) - with the read-only open's
-two D14 reports and PROBE-15 beside them. Of the documents of section 0.2 only J is needed:
-`notes\paths.txt` holds part J and its drawing. S1 runs these steps, in this order, each as the
-step itself says:
+two D14 reports and PROBE-15 beside them, and the packages 004 T003's dry run reads, whose
+numbers S2 waits for. Of the documents of section 0.2 only J and P are needed:
+`notes\paths.txt` holds part J, its drawing and the owner's parts. S1 runs these steps, in this
+order, each as the step itself says:
 
 | Order | Steps | Tasks | Estimate |
 |---|---|---|---|
@@ -65,11 +75,13 @@ step itself says:
 | 5 | 5.3: items A and B on the box, then items 1 to 6 on part J, with the open's seconds | 004 T185, 004 T186, 011 T171, 004 T182 | 30 min |
 | 6 | 5.3's close in process, idle, then with a dialog open | 004 T303a | 25 min |
 | 7 | optional: two made-up assemblies (below) | 006 T102, 001 T076 | 25 min |
-| 8 | 5.6's item 1's Window > Close All, Don't Save (part J is still open, and perhaps row 7's assemblies, and a run refuses to start while any document is), then its second and third runs, then its items 4 to 7 | 004 T033 to T035, 004 T037, 004 T038 | 15 min |
-| 9 | 6.0, 6.1, 6.3 and 6.5: the handoff | none | 25 min |
+| 8 | when its clock allows (below): 5.1's owner's parts, P-1 to P-5, each opened on its own, Model check pressed, then closed, Don't Save | 004 T003 | 10 min |
+| 9 | 5.6's item 1's Window > Close All, Don't Save (part J is still open, and perhaps row 7's assemblies, and a run refuses to start while any document is), then its second and third runs, then its items 4 to 7 | 004 T033 to T035, 004 T037, 004 T038 | 15 min |
+| 10 | 6.0, 6.1, 6.3 and 6.5: the handoff | none | 25 min |
 
 - **Before the sitting:** section 0.1's items 1 and 3 (the build on GitHub, the vocabulary file),
-  and part J chosen as section 0.2 says, its own and its drawing's paths in `notes\paths.txt`.
+  and part J chosen as section 0.2 says, its own and its drawing's paths in `notes\paths.txt`,
+  and the owner's parts P-1 to P-5 named as section 0.2's row P says, their paths there too.
   No key, no standards profile and no other people are needed.
 - **The findings document** starts at step 1.4, as always. Fill in only the rows of S1's steps;
   every other row stays blank.
@@ -77,15 +89,20 @@ step itself says:
   "Cannot reorder" box can hold it (step 5.6, item 2): do its item 1 (no document open, the three
   options noted) before it and its item 7 (the options as noted) after it. The second and third
   runs stay last before the handoff, as step 5.6 says.
-- **The fingerprint.** Step 1.6's part is part J, the only document S1 has, so
+- **The fingerprint.** Step 1.6's part is part J, the first document S1 opens, so
   `Save-Fingerprint 'before'` (step 3.1's line) runs at step 1.6, before SOLIDWORKS starts, and
-  so before anything opens part J; step 6.0 compares, as always.
-- **Cut rule.** If SOLIDWORKS closes during step 5.3 (its item C), skip the close in process and
-  the optional block, and go straight to 5.6's second and third runs.
+  so before anything opens part J or the owner's parts, whose paths `notes\paths.txt` holds too;
+  step 6.0 compares, as always.
+- **Cut rule.** If SOLIDWORKS closes during step 5.3 (its item C), skip the close in process, the
+  optional block and the owner's parts, and go straight to 5.6's second and third runs.
 - **The optional block** starts only by 2 h 25 on the sitting's clock, counted from step 1.1, so
-  that it and the rows after it end by 3 h 30. The rows before it end at 2 h 30 on their
-  estimates, so it runs only when S1 is at least five minutes ahead; past 2 h 25 with it not
-  begun, cut it and start 5.6's second run.
+  that it and the rows after it, the owner's parts apart, end by 3 h 30. The rows before it end
+  at 2 h 30 on their estimates, so it runs only when S1 is at least five minutes ahead; past
+  2 h 25 with it not begun, cut it and go on to row 8.
+- **The owner's parts** start only by 2 h 40 on the sitting's clock, so that they and the rows
+  after them end by 3 h 30 (decision 181A): after the optional block, only when S1 was at least
+  fifteen minutes ahead; with the block cut, even when S1 is ten minutes behind. Past 2 h 40 with
+  them not begun, cut them and start row 9. What S1 does not run of them, M0-a runs.
 
 ### The optional block: two made-up assemblies (decision 172A)
 
@@ -782,9 +799,10 @@ step fails". Close the administrator window afterwards and carry on in the ordin
 
 ### 1.6 The health checks
 
-*In S1* (decision 167A) the part is part J, the only document S1 has. Before starting SOLIDWORKS,
-run step 3.1's `Save-Fingerprint 'before'`, so that the fingerprint is taken before anything opens
-J; its pass and its row are step 3.1's.
+*In S1* (decision 167A) the part is part J, the first document S1 opens. Before starting
+SOLIDWORKS, run step 3.1's `Save-Fingerprint 'before'`, so that the fingerprint is taken before
+anything opens J or the owner's parts (decision 181A), all of whose paths `notes\paths.txt` holds;
+its pass and its row are step 3.1's.
 
 Start SOLIDWORKS and open a **part** (not an assembly, not a drawing). Write SOLIDWORKS's version
 and service pack from Help > About at the top of the findings document. Then:
