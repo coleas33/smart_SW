@@ -476,7 +476,10 @@ def test_a_disposition_with_a_triage_reaches_the_session_the_report_and_the_stre
     chat: ChatSession, run_with_a_finding: runner.ReviewRun
 ) -> None:
     """Owner decision 185A (002 T310): the triage rides the live record's three writes, beside
-    the decision it was recorded with."""
+    the decision it was recorded with.
+
+    *Changed 2026-11-01 on purpose (002 T314):* `report.md` shows the triage's words under the
+    decision, once T315 renders them."""
     run = run_with_a_finding
     finding_id = run.session.findings[0].id
     before = list(replay_events(chat.events_path))
@@ -497,7 +500,8 @@ def test_a_disposition_with_a_triage_reaches_the_session_the_report_and_the_stre
     )
     saved = load_session(run.session_path).findings[0].disposition
     assert saved is not None and saved == finding.disposition
-    assert "accepted" in (run.out_dir / "report.md").read_text(encoding="utf-8")
+    report = (run.out_dir / "report.md").read_text(encoding="utf-8")
+    assert "  - decision: accepted\n  - triage: true but not worth flagging\n" in report
     emitted = list(replay_events(chat.events_path))[len(before) :]
     assert [(event.type, event.body["disposition"]) for event in emitted] == [
         ("disposition", finding.disposition.model_dump(mode="json"))

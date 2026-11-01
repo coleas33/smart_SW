@@ -12,6 +12,10 @@ decision and never inferred from it (002 research, 185A). What this pins:
   and an Accept or Reject recorded without one takes one once - the same decision sent again
   with a triage records the triage and nothing else - while a second triage or another decision
   is refused as before.
+- **the report** (002 T314): `report.md` shows a finding's triage in the words file's words under
+  its decision and, once any finding records one, counts the four and the findings that record
+  none, right after "By severity", read from the triage alone; a session with no triage renders
+  as before.
 
 Every fixture is fictional: FICT names, and an explicit `by` on every record.
 """
@@ -34,7 +38,9 @@ from swreview.chat.sessions import record_disposition
 from swreview.findings import TRIAGES, Disposition
 from swreview.report.attention import rank
 from swreview.report.dispositions import apply_disposition, find_finding, set_disposition
+from swreview.report.markdown import render_report
 from swreview.report.session import ReviewSession, Timing, load_session, save_session
+from swreview.report.summary import load_words
 from tests.support.contracts import contract_validator
 from tests.support.findings import PACKAGE, make_finding
 from tests.unit.test_chat_sessions import DRAWING_FINDING_ARGUMENTS
@@ -359,3 +365,93 @@ def test_a_second_triage_or_another_decision_is_still_refused(
         )
 
     assert folder_bytes(run_dir) == before
+
+
+# --- the report (002 T314) -----------------------------------------------------------------------
+
+REPORTED: tuple[tuple[str, str, str | None], ...] = (
+    ("F-001", "accepted", "new_and_real"),
+    ("F-002", "deferred", "new_and_real"),
+    ("F-003", "rejected", "wrong"),
+    ("F-004", "accepted", None),
+)
+"""Four of five findings' records - new and real accepted and deferred, wrong rejected, an Accept
+with no triage - and F-005 undecided."""
+
+BY_TRIAGE = (
+    "- By triage: new and real: 2, real but already known: 0, wrong: 1, "
+    "true but not worth flagging: 0, not recorded: 2"
+)
+"""`REPORTED`'s count: the four in their order, then every finding without a triage, decided or
+not."""
+
+
+def reported_session(records: tuple[tuple[str, str, str | None], ...] = REPORTED) -> ReviewSession:
+    """`triage_session(5)` with `records` set on it, each as `(finding, decision, triage)`."""
+    session = triage_session(5)
+    for finding_id, decision, triage in records:
+        set_disposition(session, finding_id, decision, "FICT note", BY, at=FIRST_AT, triage=triage)
+    return session
+
+
+def by_triage_lines(report: str) -> list[str]:
+    return [line for line in report.splitlines() if line.startswith("- By triage:")]
+
+
+def after_the_decision(report: str, finding_id: str) -> str:
+    """The line after the decision line of `finding_id`'s disposition in `report`."""
+    lines = report.splitlines()
+    heading = lines.index(next(line for line in lines if line.startswith(f"#### {finding_id}:")))
+    decision = next(
+        index for index in range(heading, len(lines)) if lines[index].startswith("  - decision: ")
+    )
+    return lines[decision + 1]
+
+
+def test_the_report_counts_findings_by_outcome() -> None:
+    lines = render_report(reported_session()).splitlines()
+
+    [severity] = [index for index, line in enumerate(lines) if line.startswith("- By severity:")]
+    assert lines[severity + 1] == BY_TRIAGE
+    assert by_triage_lines(render_report(reported_session())) == [BY_TRIAGE]
+
+
+def test_a_finding_shows_its_triage_under_its_decision(tmp_path: Path) -> None:
+    """Through the folder's own re-render, as `swreview disposition` writes it: each of the four
+    in the words file's words on the line after the decision, and no triage line where a
+    disposition records none."""
+    run_dir = run_folder(tmp_path, len(TRIAGES) + 1)
+    for index, triage in enumerate((*TRIAGES, None), start=1):
+        apply_disposition(
+            run_dir, f"F-{index:03d}", "accepted", "FICT note", BY, at=FIRST_AT, triage=triage
+        )
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    words = load_words().labels.triage
+
+    assert [
+        after_the_decision(report, f"F-{index:03d}") for index in range(1, len(TRIAGES) + 2)
+    ] == [*(f"  - triage: {words[triage]}" for triage in TRIAGES), f"  - by: {BY}"]
+
+
+def test_the_count_never_reads_the_decision() -> None:
+    """The same triages under other decisions count the same, and an Accept with none is not
+    recorded like an undecided finding: the line reads the triage alone."""
+    shuffled: tuple[tuple[str, str, str | None], ...] = (
+        ("F-001", "deferred", "new_and_real"),
+        ("F-002", "rejected", "new_and_real"),
+        ("F-003", "accepted", "wrong"),
+        ("F-004", "rejected", None),
+    )
+
+    assert by_triage_lines(render_report(reported_session(shuffled))) == [BY_TRIAGE]
+
+
+def test_a_session_without_a_triage_renders_as_before() -> None:
+    """A guard, green before T315 and after: with no triage recorded, decided or not, the report
+    carries no "By triage" line and no triage line, so every committed golden keeps its bytes."""
+    plain = tuple((finding_id, decision, None) for finding_id, decision, _ in REPORTED)
+
+    report = render_report(reported_session(plain))
+
+    assert by_triage_lines(report) == []
+    assert "- triage:" not in report

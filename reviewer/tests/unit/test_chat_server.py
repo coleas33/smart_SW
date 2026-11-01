@@ -2823,6 +2823,8 @@ def folder_files(run_dir: Path) -> dict[str, bytes]:
 def test_a_disposition_records_its_triage_and_answers_it(
     client: TestClient, run_dir: Path, chat_with_a_finding: str
 ) -> None:
+    """*Changed 2026-11-01 on purpose (002 T314):* `report.md` shows the triage's words under
+    the decision, once T315 renders them."""
     response = client.post(
         disposition_url(chat_with_a_finding, run_dir),
         json={
@@ -2844,7 +2846,8 @@ def test_a_disposition_records_its_triage_and_answers_it(
     saved = load_session(run_dir / "session.json").findings[0].disposition
     assert saved is not None and saved.model_dump(mode="json") == answered
     assert recorded_dispositions(run_dir) == [answered]
-    assert "rejected" in (run_dir / "report.md").read_text(encoding="utf-8")
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "  - decision: rejected\n  - triage: real but already known\n" in report
 
 
 def test_a_triage_outside_the_four_is_a_400_and_writes_nothing(
@@ -2898,7 +2901,9 @@ def test_a_late_triage_records_the_triage_and_nothing_else(
 ) -> None:
     """185A: an Accept recorded without a triage takes one once, sent with the same decision;
     the note, `by` and `at` stay as first recorded. A different decision, or a second triage,
-    is refused as any change to a settled finding is."""
+    is refused as any change to a settled finding is.
+
+    *Changed 2026-11-01 on purpose (002 T314):* `report.md` shows the late triage's words too."""
     url = disposition_url(chat_with_a_finding, run_dir)
     first = client.post(
         url, json={"decision": "accepted", "note": "FICT first note", "by": "FICT-ENG"}
@@ -2921,6 +2926,7 @@ def test_a_late_triage_records_the_triage_and_nothing_else(
     assert saved is not None and saved.model_dump(mode="json") == recorded
     report = (run_dir / "report.md").read_text(encoding="utf-8")
     assert "FICT first note" in report and "FICT later note" not in report
+    assert "  - decision: accepted\n  - triage: real but already known\n" in report
     assert recorded_dispositions(run_dir) == [first, recorded]
 
     before = folder_files(run_dir)

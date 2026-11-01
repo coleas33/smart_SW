@@ -1119,6 +1119,8 @@ def saved_disposition(run_dir: Path) -> dict[str, Any]:
 
 
 def test_disposition_records_the_triage_and_rerenders(run_dir: Path) -> None:
+    """*Changed 2026-11-01 on purpose (002 T314):* the re-rendered `report.md` shows the
+    triage's words under the decision, once T315 renders them."""
     body = payload(
         invoke(
             "disposition",
@@ -1144,7 +1146,8 @@ def test_disposition_records_the_triage_and_rerenders(run_dir: Path) -> None:
         "FICT-ENG",
         "new_and_real",
     )
-    assert "rejected" in (run_dir / "report.md").read_text(encoding="utf-8")
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "  - decision: rejected\n  - triage: new and real\n" in report
 
 
 def test_disposition_with_an_unknown_triage_is_a_usage_error(run_dir: Path) -> None:
