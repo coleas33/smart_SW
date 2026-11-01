@@ -622,3 +622,48 @@ must-fix.
   an input or a net not recorded, where the report prints `unknown` (older for the baseline and
   the net); and `SCORING_RULES_VERSION` stays 4 although the assisted minutes and the net changed
   meaning (*Not changed*, above).
+
+## R8. Owner decision 186A (2026-11-01): a real design's timing stays in the private fork
+
+**Decision**: a real design's timing figures are company facts and stay in the private fork: the
+engineer's baseline, the five assisted inputs and a sitting's update minutes. The public
+repository holds only each design's net minutes saved and, later, their median. It changes the
+seat plan's step 4.1, where its figures are written, and the public-repository rule in
+`CONTRIBUTING.md`, which gains them. Asked as 4A in roadmap run 2's owner round, and applied
+before M0-a, the first sitting that times a real design
+([`docs/roadmap/README.md`](../../docs/roadmap/README.md), cycle 4).
+
+**Why**: step 4.1 had the engineer write the six numbers under its heading in the findings
+document, the sitting's update minutes beside them as a pilot cost, and step 4.5's Record line
+asked for the six again; the owner commits that document to this public repository from the
+development machine (the plan's step 6.5). The public-repository rule, which calls itself the
+full list, named no timing. `swreview timing` writes the same minutes into the run folder's
+`session.json` and `report.md`, but a run folder travels only in the handover folder and is never
+committed (the plan's step 6.3), so the findings document was the one place that would carry them
+into this repository. The north star needs only the net, per design and as a median
+([`docs/roadmap/metrics.md`](../../docs/roadmap/metrics.md)), so the figures behind it can stay
+private and the measure loses nothing.
+
+**What it changes**: no code. At the seat the six minutes and the update's go in a private note
+in the handover folder, `notes\timing.txt`, beside `notes\documents.txt` and `notes\paths.txt`,
+and never in the findings document; the note travels by hand with the folder and is never pushed,
+and the owner keeps it in the private fork. Step 4.5's command takes the minutes from it; a number
+the command prints wrong is named in the findings document, never quoted; and its Record line
+records the net saved, as `swreview timing` prints it, and A's run folder stamp. Every check of
+what stays out of the findings document names them: rule 5 and steps 6.4 and 6.5 of the plan, the
+results sheet's header and its 007 T060 row, the handover's timed run, its findings document and
+the owner's reading after the sitting, and the runbook's section 8, whose seat may push the
+document on a branch. `CONTRIBUTING.md`'s rule gains a real design's review timing, its net
+minutes saved and their median apart. T060, FR-036 and the Assumptions take dated notes. Tasks
+T070 to T073, Phase 10 of [tasks.md](tasks.md).
+
+**Not changed**: `swreview timing`, the route and the report, which record and print the six in
+the run folder as 183A built them. Fictional figures stay where they are: the quickstart's
+Scenario 1 and the tests time fixture folders, and the ledger's median column reads benchmark
+studies. The roadmap's own pages are brought up to date by its update runs, not here.
+
+**Open, for the owner**: step 4.1 still records the review's start and end times in the findings
+document. They are the review's run time, which the north star reports apart and
+[`docs/roadmap/metrics.md`](../../docs/roadmap/metrics.md) keeps as a guardrail, not one of
+186A's figures; but step 4.1 counts supervision, for an engineer who watched the whole review, as
+its start-to-end minutes, so in that case the two times show it.

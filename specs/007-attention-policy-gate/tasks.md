@@ -213,6 +213,21 @@ description: "Task list for the attention policy and the procedural gate"
 
 ---
 
+## Phase 10: Owner decision 186A - a real design's timing stays in the private fork (2026-11-01)
+
+**Purpose**: The seat plan's step 4.1 had the engineer write a real design's six minutes under its heading in the findings document, the sitting's update minutes beside them, and step 4.5's Record line asked for the six again; the owner commits that document to this public repository (step 6.5). Under 186A a real design's timing figures - the engineer's baseline, the five assisted inputs and a sitting's update minutes - are company facts and stay in the private fork, and the public repository holds only each design's net minutes saved and, later, their median. The seat writes them in a private note in the handover folder, `notes\timing.txt`, which travels with the folder and is never pushed; the findings document records the net saved and the run folder's stamp; every check of what stays out of it names them; and `CONTRIBUTING.md`'s public-repository rule gains them. [research.md](research.md) R8 records the decision. No code changes: `swreview timing` still records the six in the run folder, which travels only in the handover folder. Every example is fictional.
+
+- [x] T070 Records first, no code (decision 186A; research R8): R8 in [research.md](research.md); this phase and its line under Phase dependencies; dated notes on FR-036 and on the Assumptions' timing bullet in [spec.md](spec.md); 007's row in `specs/README.md` and this spec's Status line recounted. Acceptance: the relative links added resolve; the plan's pins green; every changed file LF in the index *Done 2026-11-01: R8 opened with the decision, why, what it changes, what it does not and one point left to the owner; this phase and its dependency line; FR-036's and the Assumptions' dated notes; 007's row 65 / 8 / 0 and the Status line recounted; the links resolving and the plan's pins green.*
+- [ ] T071 Test first, a real design's minutes out of the findings document (decision 186A). `reviewer/tests/unit/test_workstation_test_plan.py`: `test_a_real_designs_timing_figures_stay_out_of_the_findings_document` (step 4.1 sends the six minutes and the update's to `notes\timing.txt` and never to the findings document; step 4.5's command takes them from the note, a wrong number is named and never quoted, and its Record line names the net saved, as `swreview timing` prints it, and A's run folder stamp, never the six minutes; the results sheet's 007 T060 row asks for the net only; `CONTRIBUTING.md`'s public-repository rule names a real design's review timing, with a design's net minutes saved and their median the part that may be committed) and `test_every_check_before_the_findings_document_is_committed_names_the_timing_figures` (section 0.2 says the note travels with `notes\` and is never pushed; rule 5, steps 6.4 and 6.5, the results sheet's header, the handover's timed run, its findings document and the owner's reading after the sitting, the runbook's section 8 and T060 each name the note, the net saved and 186A). Acceptance: both fail before T072, each for want of the words it pins
+- [ ] T072 The documents (decision 186A): `docs/test-plan-2026-09-27/workstation-test-plan.md` section 0.2, rule 5, step 4.1's 007 T060 bullet, step 4.5's item 4 and Record line, and steps 6.4 and 6.5; `docs/test-plan-2026-09-27/workstation-results.md`'s header and its 007 T060 row; `docs/test-plan-2026-09-27/workstation-handover.md`'s step 13 (the timed run), step 17 and section 4; `docs/workstation-runbook.md` section 8; `CONTRIBUTING.md`'s public-repository rule; and T060's dated note. Acceptance: T071 green; `test_the_timing_is_recorded_once_the_backend_no_longer_holds_the_review`, `test_the_timing_line_passes_every_input_swreview_timing_takes`, `test_every_sentence_the_plan_quotes_is_the_products`, `test_each_earlier_task_is_read_where_its_documents_are_already_open` and every other case of `test_workstation_test_plan.py`, `test_workstation_handover.py` and `test_update_workstation_script.py` green with no edit
+- [ ] T073 Close: research R8 completed with what changed, the test-first evidence and the gates; register row 186A marked done in `docs/decisions.md`; 007's row in `specs/README.md` and this spec's Status line recounted once T070 to T072 are ticked (not pinned). Acceptance: the link check is clean; the gates pass - Python 3.12 with the tokenizer required, and 3.11 (95A), over `test_workstation_test_plan.py`, `test_workstation_handover.py` and `test_update_workstation_script.py`, the modules that read the changed files; `ruff check`; every changed file LF in the index
+
+**Order**: T070 first; then T071 before T072; T073 last.
+
+**Checkpoint**: A real design's baseline, five assisted minutes and a sitting's update minutes are written in `notes\timing.txt` in the handover folder and never in the findings document; the findings document records the net saved and the run folder's stamp; every check of what stays out of the findings document names them; and `CONTRIBUTING.md`'s public-repository rule lists them, a design's net minutes saved and their median apart, before M0-a.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies
@@ -226,6 +241,7 @@ description: "Task list for the attention policy and the procedural gate"
 - **Polish (Phase 7)**: after every story chosen for the checkpoint
 - **Measurement (Phase 8)**: T059 after US3; T060 after US1; T061 to T063 after US4 and after T100 of feature 006
 - **Owner decisions 183A and 184A (Phase 9)**: after US1; T060's timed run records six inputs once T066 lands (*added 2026-11-01*)
+- **Owner decision 186A (Phase 10)**: after Phase 9; before M0-a, the first sitting that times a real design; T060's figures go in the private note once T072 lands (*added 2026-11-01*)
 
 ### Task-level dependencies
 
