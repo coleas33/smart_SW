@@ -212,7 +212,7 @@ whatever its question was numbered when it was asked, and is entered in the tabl
 same commit as the change it governs, with its date, a one-line summary, its status and where
 else it is recorded (the feature's `research.md` when a feature governs it, the commits that
 carry it out). Ids before 121A stay as they were written; the runs above remain their index. The
-next new decision is **192A**.
+next new decision is **195A**.
 
 **The mapping.** The first eight decisions of 2026-10-18 were asked in two rounds of four
 questions, each labelled 1A to 4A at the time; a third round, asked as 5A and 6A, became 129A and
@@ -242,7 +242,8 @@ decision, each test first; 183A's net rule kept) and is not numbered; an eightee
 the same day while roadmap update run 2 was paused for it, became 186A, and a nineteenth,
 asked as 5A to 8A the same day as run 2's second owner round, became 187A to 190A. A round asked
 as 11A and 12A the same day after cycle 2's review became 191A: its 11A, merging #61, is not
-numbered.
+numbered. The owner's 13A, asked during cycle 4's review, became 192A, and a round asked as
+14A to 16A after cycle 3's review became 193A and 194A: its 14A, merging #62, is not numbered.
 The first round's 2A, 3A and 4A were written into commit
 messages on `main` and into the documentation branch under those labels before decision 128A
 numbered them, and those messages are not rewritten for it: read "2A" in a commit of that day as
@@ -321,6 +322,9 @@ numbered them, and those messages are not rewritten for it: read "2A" in a commi
 | 189A | 2026-11-01 | 7A, roadmap run 2's second owner round | A check the model runs again after an answer resumes its turn keeps the earlier finding's decision and triage when its verdict is unchanged, as a restated finding does (58A); when the verdict changed, they are cleared and the card says the re-run changed it. Answers the open row on rule 3 in 010 `research.md` R5. | Decided 2026-11-01. Done 2026-11-01 (002 T325 to T330): a check the model runs again after an answer keeps the earlier finding's whole disposition when its status and severity are unchanged, and when either changed clears it and the card says so, naming the decision and the triage, through a `disposition.cleared` event; `session.json`, `report.md` and the stream agree with the fold; 010 R5's open row on rule 3 closed. | 002 `research.md`, H-d-008; 010 `research.md`, R5; [`docs/roadmap/holes.md`](roadmap/holes.md), H-d-008; 58A; 185A. |
 | 190A | 2026-11-01 | 8A, roadmap run 2's second owner round | At M0-b, A's review is triaged in full and B is judged only on whether RD1 to RD3 show (M0's exit 4), so M0 fits its two sittings; M0-a's table runs A's review first and the escape replay until a set clock time. Narrows 181A's 'triaged and timed' for B. | Decided 2026-11-01; applied when M0-a and M0-b are planned. | [`docs/roadmap/README.md`](roadmap/README.md), M0; [`docs/roadmap/holes.md`](roadmap/holes.md), H-a-010; 181A. |
 | 191A | 2026-11-01 | 12A, the round after cycle 2's review | A changed verdict, for 189A, is a change of a finding's status or severity: a re-run that changes either clears the decision and triage and says so on the card; one that changes neither keeps the whole disposition. | Decided 2026-11-01. Done 2026-11-01 (002 T325 to T330), built with 189A: a re-run that changes a finding's status or its severity clears the decision and triage and says so on the card; one that changes neither keeps the whole disposition - decision, triage, note, `by` and `at`. | 002 `research.md`, H-d-008; [`docs/roadmap/holes.md`](roadmap/holes.md), H-d-008; 189A. |
+| 192A | 2026-11-01 | 13A, the owner's answer during cycle 4's review | A real design's review start and end times stay in the private fork with its timing figures, so that no private figure can be worked out from the findings document; the findings document keeps the net minutes saved and the run folder's stamp. Widens 186A. | Decided 2026-11-01. Done 2026-11-01 (007 T072, cycle 4): step 4.1 notes the times in `notes\timing.txt`, and every place that says what stays out of the findings document names them. | 007 `research.md`, R8; 186A. |
+| 193A | 2026-11-01 | 15A, the round after cycle 3's review | The line that says a re-run after an answer cleared a decision (189A) comes back after a reload, a review switch, a backend restart or a read-only restore, and after a later press or Show on that card. It is worked out from the run's events, with no new field on the finding, so an older build still loads the session. | Decided 2026-11-01; tasks appended to 002, test first, before M0-b (review Tier 1). | 002 `research.md`, H-d-008; [`docs/review-backlog.md`](review-backlog.md), cycle 3; 189A. |
+| 194A | 2026-11-01 | 16A, the round after cycle 3's review | 191A's rule governs 58A's restate and feature 015's carry too: a restated or carried finding whose status or severity changed loses its decision and triage, and the card says so; one whose status and severity are unchanged keeps them. Changes 58A and 015's carry. | Decided 2026-11-01; tasks appended, test first, before M0-b (review Tier 1). | 002 `research.md`, H-d-008; 58A; 189A; 191A. |
 
 The owner's decision of the same day to keep this repository as the public upstream of private
 downstream forks is not numbered; it is recorded as
