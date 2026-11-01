@@ -34,6 +34,11 @@ namespace SwReview.AddIn.Tests;
 /// prints on its status line, as sent. A fold that kept the verdict carries the disposition in its
 /// `finding` event, and the card shows it as any finding sent decided. A replay leaves Results as the
 /// snapshot holds them.
+///
+/// Owner decision 187A (002 T334): a pass - a `checked_within_scope` finding, in the Checked, no issue fold - takes
+/// no triage but `wrong`, the miss. Its fold's row holds that one button, worded as the backend words a pass's miss
+/// (`labels.pass_triage`), or the token itself from a backend that sends no labels; picked, it travels with the
+/// decision as any outcome does. The rule is the backend's: the page draws the one button and refuses nothing.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -602,6 +607,101 @@ public sealed class ReviewPageTriageTests
         });
     }
 
+    /// <summary>
+    /// Owner decision 187A: a pass's fold holds one triage button, `wrong`, worded as the backend words a pass's miss, in
+    /// the one row a flagged finding's four stand in - before the tools row and outside the decisions - with none
+    /// pressed; and a flagged finding beside it still offers the four.
+    /// </summary>
+    [Fact]
+    public void APassOffersTheMissAloneWordedAsOne()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver, Pass("F-001"), Finding("F-002"));
+            JsonElement pass = await driver.Read(ReadCard("F-001"));
+            JsonElement fold = await driver.Read(ReadFold("F-001"));
+
+            Assert.Equal(new[] { "wrong" }, ReviewPageDriver.Strings(pass, "tokens"));
+            Assert.Equal(new[] { LabelsSample.Miss }, ReviewPageDriver.Strings(pass, "words"));
+            Assert.Equal(new[] { "false" }, ReviewPageDriver.Strings(pass, "ariaPressed"));
+            Assert.Equal(1, fold.GetProperty("rows").GetInt32());
+            Assert.Equal("group", fold.GetProperty("rowRole").GetString());
+            Assert.Equal("Triage", fold.GetProperty("rowLabel").GetString());
+            Assert.True(fold.GetProperty("rowInFold").GetBoolean(), "the miss is not in the pass's fold.");
+            Assert.True(fold.GetProperty("rowBeforeTools").GetBoolean(), "the miss is not before the tools row.");
+            Assert.Equal(0, fold.GetProperty("inSeg").GetInt32());
+            Assert.Equal(new[] { "accept", "reject", "defer" }, ReviewPageDriver.Strings(fold, "segActions"));
+            Assert.Equal(ContractTriages(), ReviewPageDriver.Strings(await driver.Read(ReadCard("F-002")), "tokens"));
+        });
+    }
+
+    /// <summary>
+    /// 187A: the miss is picked and sent as any outcome is. Pressed on a pass it picks `wrong` and sends nothing; Reject
+    /// pressed then posts `triage=wrong` with the note, and the reply - the backend records a pass's miss - is shown with
+    /// the miss pressed and the card's sentence naming its triage.
+    /// </summary>
+    [Fact]
+    public void ThePassesMissTravelsWithTheDecision()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver, Pass("F-001"));
+            await driver.Route("POST", DispositionPath("F-001"), 200, Pass("F-001", Disposition("rejected", "FICT the check missed it", "wrong")));
+            await driver.ClearCalls();
+
+            await Press(driver, "F-001", "wrong");
+            JsonElement picked = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(new[] { LabelsSample.Miss }, ReviewPageDriver.Strings(picked, "words"));
+            Assert.Equal(new[] { "wrong" }, Pressed(picked));
+            Assert.Empty(await driver.Calls());
+
+            await Note(driver, "F-001", "FICT the check missed it");
+            await Decide(driver, "F-001", "reject");
+
+            Assert.Equal("decision=rejected, note=FICT the check missed it, triage=wrong", Body(Assert.Single(await DispositionCalls(driver))));
+            JsonElement decided = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(new[] { "wrong" }, Pressed(decided));
+            Assert.Equal(Sentence("rejected", "wrong", "FICT the check missed it"), decided.GetProperty("status").GetString());
+            Assert.Equal("card-status decided", decided.GetProperty("statusClass").GetString());
+        });
+    }
+
+    /// <summary>
+    /// 187A at a docked pane's 300 px: a pass's one triage button is whole - inside the window and every box that clips
+    /// it, its words inside it - with no sideways page scroll.
+    /// </summary>
+    [Fact]
+    public void APassesMissIsWhollyVisibleAtThreeHundredPixels()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
+            await Reviewed(driver, Pass("F-001"));
+
+            JsonElement measured = await driver.Read(ReadWhole("F-001"));
+            Assert.Equal(300, measured.GetProperty("width").GetInt32());
+            Assert.Equal(1, measured.GetProperty("count").GetInt32());
+            Assert.True(measured.GetProperty("foldOpen").GetBoolean(), "the finding's fold did not open.");
+            Assert.Empty(ReviewPageDriver.Strings(measured, "clipped"));
+            Assert.True(measured.GetProperty("noHorizontalOverflow").GetBoolean(), measured.ToString());
+        });
+    }
+
+    /// <summary>FR-030 with 187A: an older backend sends no labels, and a pass's one button prints its token, `wrong`.</summary>
+    [Fact]
+    public void WithNoLabelsAPassesMissPrintsItsToken()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await Reviewed(driver, Pass("F-001"));
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(new[] { "wrong" }, ReviewPageDriver.Strings(card, "tokens"));
+            Assert.Equal(new[] { "wrong" }, ReviewPageDriver.Strings(card, "words"));
+            Assert.Empty(Pressed(card));
+        });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>
@@ -739,6 +839,10 @@ public sealed class ReviewPageTriageTests
             { "observed", "FICT observed for " + id + "." },
             { "disposition", disposition },
         });
+
+    /// <summary>A pass, 'Checked, no issue' (owner decision 187A): `checked_within_scope`, severity info.</summary>
+    private static string Pass(string id, Dictionary<string, object?>? disposition = null) =>
+        Finding(id, disposition, "checked_within_scope", "info");
 
     /// <summary>A recorded disposition; the triage is left out when none, as the backend leaves it out.</summary>
     private static Dictionary<string, object?> Disposition(string decision, string note, string? triage)
