@@ -84,6 +84,12 @@ windows at most per workstation.
 Post-design re-check: no violations. Decision 2026-09-13: the generated Codex profile disables
 the CLI's shell (`features.shell_tool = false`); general chat has MCP tools only.
 
+*Owner decision 185A re-check, 2026-11-01 (FR-031):* the triage beside a decision passes I and VI.
+I: a decision recorded without one stays not recorded, counted as such, and no triage is ever
+inferred from the decision. VI: the report shows each finding's triage and counts the four, so
+review quality - new and real findings, false alarms - is measured per design rather than read
+out of free notes. No other principle is touched: no SOLIDWORKS call, no tool, no rank.
+
 ## Project Structure
 
 ### Documentation (this feature)
@@ -161,6 +167,30 @@ STA worker; the add-in adds `InProcPipeServer` that marshals to the application 
 The chat page and terminal page are plain vendored HTML/JS with no build step, embedded as
 content files next to the add-in DLL.
 
+*Owner decision 185A amendment, 2026-11-01 (FR-031; tasks T307 to T318):* the triage beside a
+finding's decision touches these files; no host, proxy or pane-host message changes, because the
+page posts a disposition to the backend directly.
+
+```text
+reviewer/src/swreview/
+├── findings.py                     # Triage and TRIAGES, the one list; Disposition.triage, omitted when null
+├── report/dispositions.py          # set_disposition and apply_disposition take triage=; 185A's late triage
+├── report/markdown.py              # the finding's triage line; "By triage" in Summary, when any is recorded
+├── report/review_words_v1.yaml     # labels.triage, the four words, before errors; InvalidTriage's sentence
+├── report/summary.py               # Labels.triage
+├── chat/server.py                  # the disposition route reads triage; 400 InvalidTriage
+├── chat/sessions.py                # record_disposition takes triage=
+├── cli.py                          # swreview disposition --triage
+└── agent/runner.py                 # feature 015's re-run carry passes the triage (72A)
+
+extractor/SwReview.AddIn/Review/ReviewPage/
+├── render.js                       # the four-way row in the fold, before Accept, Reject and Defer
+├── app.js                          # pick, then press; the triage in the body; the card's sentence; read-only
+└── app.css                         # the row, beside the question options' pressed rule
+
+specs/001-agentic-design-review/contracts/review-session.schema.json  # Disposition.triage, properties only
+```
+
 ## Phase 0: Research
 
 Completed in [research.md](research.md): SwpilotCLI mechanism (R1), two runtimes (R2),
@@ -200,6 +230,17 @@ Key design points tasks must honor:
    text; the run folder never contains a key.
 7. **General chat cannot create findings.** The MCP server registers only the read-only
    subset; the check tools and `record_drawing_finding` are absent from it.
+8. **A triage beside the decision, never derived from it** (*owner decision 185A, 2026-11-01*;
+   FR-031). `Disposition.triage` is one of the four tokens of one `Literal` in `findings.py`,
+   from which the server, the console, the report, the words and the tests derive their lists;
+   it is optional, so every path that records a decision without one - an older session, the
+   console without `--triage`, a carried decision, 51A's one-press Accept, a Defer - keeps
+   working, and a disposition without one keeps its bytes because the field is left out of the
+   dump while null. Nothing that ranks, tallies or carries a decision reads it: 007's
+   `DECIDED_DECISIONS` and the Decided group and count read the decision alone, and lever 11a's
+   carry-over guard only whether a disposition exists. The one exception to the terminal rule is
+   185A's: an Accept or Reject recorded without a triage takes one, once, from the same decision
+   sent again.
 
 ## Delivery order (maps to user stories)
 

@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-18
 
-**Status**: Code complete; 5 workstation tasks open (see [specs/README.md](../README.md)). Drafted as: Draft
+**Status**: Built; 10 open (see [specs/README.md](../README.md)). Drafted as: Draft
 
 **Input**: User description: "We need to make decisions about which details are worth amplifying in priority from the reviewer and checks. How can we agentically review the assembly after the procedural reviews? When should we implement this? What is next steps and implementation order?" (owner, 2026-09-18), against the workstation record `docs/history/pane-findings-2026-09-18.md` and the review, model-check and extract results it reports. The design was decided in conversation on 2026-09-18: the owner chose a judgement-first ranking over consequence-first and over no judgement key; chose to build the gate as an eleventh efficiency lever rather than a plain switch or a change to lever 5; chose to claim, at the 2026-10-03 pilot checkpoint, the pane working end to end, timing recorded on every run and the ranking on the report and the two keyless tabs, and not to claim the gate or the model brief; and chose this spec package as the next artifact, after the two pane bugs the record names were fixed as their own commits. The event-stream bug is fixed (`4a763f1`); the drawing-attach bug is being fixed in parallel and is a dependency of User Story 4 only.
 
@@ -20,12 +20,13 @@ The pilot is judged on net engineer minutes saved per design. Today no real run 
 
 **Acceptance Scenarios**:
 
-1. **Given** a review run folder written by the pane, **When** the engineer records baseline 45, supervision 6, verification 9 and false alarms 2 from the command line, **Then** the run's session records those four values, `report.md` is re-rendered and its Timing section prints the derived net saved minutes, and the value is not accepted as an input anywhere.
+1. **Given** a review run folder written by the pane, **When** the engineer records baseline 45, supervision 6, verification 9 and false alarms 2 from the command line, **Then** the run's session records those four values, `report.md` is re-rendered and its Timing section prints the derived net saved minutes, and the value is not accepted as an input anywhere. *Amended 2026-11-01 (owner decision 183A):* the net is a number once setup and the review by hand are recorded too, and unknown until then (scenario 7).
 2. **Given** the same folder, **When** the four inputs are recorded through the backend route, **Then** the outcome is identical to scenario 1, byte for byte in the session and the report.
 3. **Given** any input below zero, **When** it is recorded, **Then** the recording is refused with a message naming the field and no file is changed.
 4. **Given** a folder that holds no session, **When** the engineer records timing against it, **Then** the recording is refused naming the folder, and nothing is created.
 5. **Given** a run whose four inputs were already recorded, **When** they are recorded again, **Then** the new values replace the old ones and the report is re-rendered; the earlier values are not silently kept.
 6. **Given** the adoption ledger, **When** a row is computed over runs of which some carry timing and some do not, **Then** the median net saved minutes column is computed over the runs that carry it, states how many were counted, and never turns an adoption decision by itself.
+7. **Given** a review run folder (*added 2026-11-01, owner decisions 183A and 184A*), **When** the engineer records baseline 120, supervision 6, verification 9, false alarms 2, setup 10 and the review by hand 30, **Then** the report's Timing section prints both new inputs and a net saved of 63.0; **Given** the same folder with setup or the review by hand not recorded, **Then** the net reads unknown, and a recorded 0 counts as a value (FR-036).
 
 ---
 
@@ -137,7 +138,8 @@ Written beside the policy are the preconditions for ever adding an agentic triag
 **Timing**
 
 - A negative input is refused naming the field; a missing input leaves the previous value; the net figure is derived and refused as an input; a folder with no session is refused naming the folder; re-recording replaces.
-- The benchmark harness's existing timing path is a thin wrapper over the shared writer and its tests pass unchanged.
+- The benchmark harness's existing timing path is a thin wrapper over the shared writer and its tests pass unchanged. *Amended 2026-11-01 (owner decision 183A):* its tests keep their figures by recording setup and the review by hand as 0.
+- *Added 2026-11-01 (owner decisions 183A and 184A):* a run timed with the four earlier inputs alone reads net unknown until setup and the review by hand are recorded, and 0 is a value; a session written before the two inputs loads with both not recorded, keeps its bytes, and its report prints them as unknown; a re-run carries all six; a negative setup or review by hand is refused naming the field, as the other inputs are.
 
 **The gate**
 
@@ -157,11 +159,11 @@ Written beside the policy are the preconditions for ever adding an agentic triag
 
 **Timing (User Story 1)**
 
-- **FR-001**: The engineer MUST be able to record baseline, assisted supervision, assisted verification and false-alarm handling minutes against any run folder that holds a session from the command line, and against a review the pane started through the backend.
-- **FR-002**: Net saved minutes MUST be derived from the four inputs and MUST NOT be accepted as an input on any path.
+- **FR-001**: The engineer MUST be able to record baseline, assisted supervision, assisted verification and false-alarm handling minutes against any run folder that holds a session from the command line, and against a review the pane started through the backend. *Amended 2026-11-01 (owner decisions 183A and 184A):* setup and the review by hand are recorded the same way, on the same paths (FR-036).
+- **FR-002**: Net saved minutes MUST be derived from the four inputs and MUST NOT be accepted as an input on any path. *Amended 2026-11-01 (owner decision 183A):* it is the baseline less the five assisted inputs, and unknown until setup and the review by hand are recorded as well (FR-036).
 - **FR-003**: A negative input MUST be refused naming the field; a folder without a session MUST be refused naming the folder; nothing is written on refusal.
 - **FR-004**: Recording MUST re-render the report so its Timing section prints the derived figure; re-recording MUST replace the earlier values.
-- **FR-005**: The benchmark harness's timing path MUST share one writer with FR-001 and its existing behaviour MUST be unchanged.
+- **FR-005**: The benchmark harness's timing path MUST share one writer with FR-001 and its existing behaviour MUST be unchanged. *Amended 2026-11-01 (owner decision 183A):* the shared writer takes the two new inputs too, and `benchmark time` gives a net only once both are recorded; that is the one behaviour 183A changes, and its tests keep their figures by recording both as 0.
 - **FR-006**: The adoption ledger MUST report median net saved minutes as a column stating how many runs carried timing, and MUST NOT gate an adoption decision on it.
 
 **The attention policy (User Story 2)**
@@ -203,13 +205,17 @@ Written beside the policy are the preconditions for ever adding an agentic triag
 - **FR-034**: The gate MUST NOT be adopted as a default until six alternated runs are recorded on the ledger, the per-run fit and axial-stack call counts have not fallen between arms, and the benchmark set holds held-out packages.
 - **FR-035**: The four preconditions for an agentic triage pass MUST be recorded beside the policy.
 
+**Timing after the build (User Story 1; owner decisions 183A and 184A, 2026-11-01)**
+
+- **FR-036**: The engineer MUST be able to record two more inputs on every path FR-001 and FR-005 name: setup minutes, and the minutes of the review the engineer still does by hand. The assisted minutes MUST be setup, supervision, verification, false-alarm handling and the review by hand together, and net saved minutes the baseline less them; until the baseline, setup and the review by hand are all recorded the net MUST read unknown, as it reads today without a baseline, and a recorded 0 is a value. Setup is this design's own setup only: preparing the package, opening the assembly, attaching drawings, starting the review and any rerun; a sitting's software update is reported apart, as a pilot cost. Corrections count inside verification or false-alarm handling. The review by hand is the checking the engineer still does on what the tool did not reach. No minute is counted twice. The report's Timing section MUST print both inputs, unknown when not recorded; a session written before them MUST load with both not recorded and keep its bytes; and a re-run (feature 015) MUST carry them with the other human inputs.
+
 ### Key Entities
 
 - **Attention policy**: the versioned rule - the needs-judgement set, the consequence-class table, the key order and the fold rule - that produces a ranking from a session; one artifact with a version.
 - **Attention row**: one ranked finding or group, with the values of each key that placed it and a one-line reason.
 - **Ranking**: the top rows, the folded groups, the not-amplified counts and the coverage block for one session; what the report renders and the pane fetches.
 - **Attention record**: the ranking as written beside the session, naming the policy version, reproducible from the session alone.
-- **Timing inputs**: the four human minute counts recorded against a run; net saved minutes is derived from them.
+- **Timing inputs**: the four human minute counts recorded against a run; net saved minutes is derived from them. *Amended 2026-11-01 (owner decisions 183A and 184A):* six - the baseline, and the five assisted inputs: setup, supervision, verification, false-alarm handling and the review by hand (FR-036).
 - **Gate brief**: the first user message with the gate on - the ranked rows, the three lists and the instruction - derived from the session the pre-run wrote, never recomputed.
 - **Consequence class**: one of six named classes assigned to every emittable check id.
 
@@ -217,7 +223,7 @@ Written beside the policy are the preconditions for ever adding an agentic triag
 
 ### Measurable Outcomes
 
-- **SC-001**: After landing, 100% of pilot runs can carry the four timing inputs and print a net saved minutes figure, and the ledger reports the median across designs.
+- **SC-001**: After landing, 100% of pilot runs can carry the four timing inputs and print a net saved minutes figure, and the ledger reports the median across designs. *Amended 2026-11-01 (owner decision 183A):* the six inputs; a run prints a net figure once its baseline, setup and review by hand are recorded.
 - **SC-002**: The 2026-09-18 review session ranks with the two interference rows first, and the 2026-09-18 model-check session ranks with the under-defined sketch first, in committed tests.
 - **SC-003**: Ranking a session and its shuffled copy produces byte-identical output in 100% of cases in the test suite.
 - **SC-004**: The existing golden of the report renderer is byte-identical with no ranking; a golden report with a ranking is kept. *Amended 2026-09-26 (feature 013 T052):* the ranked golden shows "Findings by type".

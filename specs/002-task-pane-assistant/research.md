@@ -6067,3 +6067,79 @@ JUnit reports (zero failures/errors), the independent approval and the final C# 
 At the T302 record, decision 160A remained in progress pending CI and delivery.
 Delivery update, 2026-10-23: PR #34 passed all four required checks and merged at `6b0508c`;
 the decision register now records 160A as done.
+
+### 185A. A finding's triage beside its decision, and a late triage once (2026-11-01)
+
+- **Question**: a disposition held a decision (accepted, rejected, deferred) and a free note, and
+  decision 51A (2026-10-08, feature 010) made Accept also mean "intended" for a fine thread, so
+  neither the new and real findings of a review nor its false alarms could be counted without
+  reading notes ([`docs/roadmap/holes.md`](../../docs/roadmap/holes.md), H-g-007;
+  [`docs/roadmap/metrics.md`](../../docs/roadmap/metrics.md), "New and real findings per design"
+  and "False alarms per design"). Milestone M0 needs every finding given one of four outcomes:
+  new and real; real but already known; wrong; true but not worth flagging. The owner was asked,
+  as 3A of cycle 1's round on 2026-11-01, whether a triage may be added later to an Accept or
+  Reject recorded without one, since `report/dispositions.py` refuses any change to an accepted
+  or rejected finding ("already has a terminal disposition ... it cannot be changed").
+- **Options**: A: yes, once - the same decision sent again with a triage records the triage and
+  nothing else, and a different decision or a second triage is refused, as before. B: no -
+  Accept and Reject stay terminal, and a decision recorded without a triage counts as not
+  recorded for good; only a hand edit of `session.json` repairs one missed press, and M0's
+  first exit criterion is then unmet. C: the page refuses Accept and Reject until an outcome is
+  pressed while the API stays optional - no slip in the pane, but a page-side rule, a press
+  added to every 51A confirmation, and the console can still record a decision without one.
+- **Chosen**: A. One slip, such as pressing Accept before picking an outcome, can be repaired
+  from the pane or the console, at the cost of one narrow exception to feature 001's rule that
+  accepted and rejected are terminal (001 [data-model.md](../001-agentic-design-review/data-model.md),
+  the Disposition transitions).
+- **Settled with it**, from what the code and the earlier decisions already decide (the
+  register's row states the first two):
+  - **Independent of the decision.** The triage is a field of its own beside `decision`, never
+    derived from it and never constraining it. Under 51A an Accept of a fine thread means
+    intended: real but already known, or true but not worth flagging. A Reject can be wrong or
+    not worth flagging, and a Defer can hold any of the four, so no table from decision to
+    outcome holds. H-g-007's skeptic asked to keep the three decisions and add an optional
+    reason, and the metrics read the two apart: new and real findings and false alarms from the
+    triage, the accepted share from the decision. So nothing that ranks or counts decisions
+    changes: 007's `DECIDED_DECISIONS` and `is_decided` (007 FR-008, "a disposition of accepted
+    or rejected, and nothing else"), `attention.json`, the gate's brief, lever 11a's carry-over
+    guard, the Decided group and the decided count.
+  - **Optional.** An older session, `swreview disposition` without the option, a re-run's carry
+    of a decision recorded before the field, 51A's one-press confirmation and a Defer not yet
+    judged all record a decision without one; requiring it would refuse calls that work today.
+    M0's "every finding given one of the four" is made checkable rather than enforced:
+    `report.md` counts the findings not recorded.
+  - **Named `triage`, its tokens with underscores.** The roadmap calls them "the four triage
+    outcomes", and `outcome` already names `DrawingOutcome.outcome` and `drawing_outcomes` in the
+    same `session.json`. The tokens are `new_and_real`, `already_known`, `wrong` and
+    `not_worth_flagging`, one `Literal` in `findings.py` from which every other list derives;
+    underscores, because a dotted token reads as an undocumented message type to
+    `ReviewPageContractTests`. The words are a `triage` group in the words file's `labels`, before
+    `errors`, as `source` is (009 [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md)
+    section 1), served by `GET /labels` and printed in `report.md`.
+  - **The handoff needs no code change.** `session.json`, `report.md` and `events.jsonl` are
+    copied whole (`handoff.REQUIRED_ARTIFACTS`), and the manifest's `session_summary` gains
+    nothing.
+- **Edge cases**: a value outside the four - another word, another case, the words in place of
+  the token, an empty string, a number, `true`, a list - is refused before anything changes: 400
+  `InvalidTriage` on the route, checked before the chat's state so it is never read as an illegal
+  transition; a usage error (exit 2) on the console; a `ValueError` naming the four in the
+  record. `null` or no triage records the decision with none. A deferred finding keeps its
+  triage when the later Accept or Reject names none, and takes the one it names. A late triage
+  keeps the decision, note, engineer and time first recorded, whatever note and engineer the
+  second call carries, and the console prints the disposition as recorded. A second triage, the
+  same or another, a different decision, and the same decision with no triage are refused as
+  before. The model may read a recorded triage through `get_finding`, as it reads the decision
+  and the note; the field is left out while null, so an undecided finding's bytes never move.
+- **Not changed**, on purpose: no triage tally in the pane's summary; no outcome counts in the
+  handoff manifest; no split by family (M2's first exit criterion); the second reader's outcomes
+  are not stored in a session and stay a note in the private fork. The rule-3 fold
+  (`agent/runner.py`, `_reconcile_reruns`), which drops a decision when the model runs a check
+  again in a turn an answered question resumed, now drops its triage too, as 58A left it (010
+  [research.md](../010-mechanical-checks/research.md), 58A): triage after the last turn, or fix it
+  test first as a task of its own.
+- **Tests**: T308, T310, T312, T314 and T316 in [tasks.md](tasks.md), Phase 23, each written
+  first; T309, T311, T313, T315 and T317 make them green, and T318 closes the records.
+- **speckit-converge**, run once on 2026-11-01 (T307), bounded to FR-031, scenarios 7 and 8, the
+  dated edge cases and the plan's 185A touch points: nine gaps, all `missing` (eight high, and
+  the words medium), each already a pair of Phase 23, so its appended Phase 24 was removed and
+  nothing was folded in.

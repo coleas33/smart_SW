@@ -5,6 +5,17 @@ the ledger's median column. The four human inputs and the derived net are the fe
 `Timing` shape; nothing here changes it except the `ge=0` on `baseline_minutes` its schema
 already states.
 
+*Amended 2026-11-01 (owner decisions 183A and 184A; spec FR-036; tasks T065 to T068):* the human
+inputs are six. `Timing` gains `setup_minutes` and `review_by_hand_minutes`, each a number of at
+least 0 or not recorded, both left out of `session.json` while not recorded, so a session written
+before them loads and keeps its bytes; the review-session contract names them in `properties`
+only. What each counts is 184A's: setup is this design's own setup only - preparing the package,
+opening the assembly, attaching drawings, starting the review and any rerun - and a sitting's
+software update is reported apart, as a pilot cost; corrections count inside verification or
+false-alarm handling; the review by hand is the checking the engineer still does on what the
+tool did not reach; no minute is counted twice. The public names are `setup` and `by_hand`
+(`--setup` and `--by-hand` on the command line), beside the four in `TIMING_INPUTS`.
+
 ## 1. One writer
 
 ```python
@@ -15,6 +26,8 @@ def record_timing_at(
     supervision: float | None = None,
     verification: float | None = None,
     false_alarms: float | None = None,
+    setup: float | None = None,        # amended 2026-11-01, 183A
+    by_hand: float | None = None,      # amended 2026-11-01, 183A
 ) -> Timing
 ```
 
@@ -24,19 +37,31 @@ refuses. `record_timing(run_dir, package_id, ...)` is `record_timing_at(run_dir 
 "session.json", ...)` and keeps its six tests unchanged. Net saved minutes is derived by the
 model and is not a parameter on any path.
 
+*Amended 2026-11-01 (owner decision 183A):* the assisted minutes are setup, supervision,
+verification, false-alarm handling and the review by hand together (`Timing.assisted_minutes`,
+which the scorecard reads too), and the net is the baseline less them: unknown while the
+baseline, setup or the review by hand is not recorded, as it was without a baseline, and a
+recorded 0 is a value. `record_timing`'s six tests keep their figures by recording setup and
+the review by hand as 0, deliberately, with 183A named as the reason; they are no longer
+unchanged. `Timing.replace` takes the names from the model's fields, since a dump that leaves out
+an input not recorded would refuse it.
+
 ## 2. `swreview timing <run_dir>`
 
 | Argument | Meaning |
 |---|---|
 | `<run_dir>` | A folder holding `session.json` directly: a pane review, a CLI review, an RMS check or a standards check folder |
-| `--baseline M`, `--supervision M`, `--verification M`, `--false-alarms M` | Minutes; each optional; an omitted one keeps its value |
+| `--baseline M`, `--supervision M`, `--verification M`, `--false-alarms M`, `--setup M`, `--by-hand M` (the last two *amended 2026-11-01, owner decision 183A*) | Minutes; each optional; an omitted one keeps its value |
 | `--json` | The payload instead of the lines |
 
 Writes `session.json`, then re-renders `report.md` and `attention.json` through
 `rerender_run_folder`, which loads `package.json` when the folder holds one and re-prepends the
 standards verdict header when `check.json` names that family and names the folder's session
 (*amended 2026-10-19, owner decision 139A*). Payload: `{run_dir, session_file,
-report_file, timing}`; lines: the four values and `net saved: <value>`.
+report_file, timing}`; lines: the four values and `net saved: <value>`. *Amended 2026-11-01
+(owner decision 183A):* the six values, then `net saved: <value>`, built by one helper that
+`benchmark time` shares; the report's Timing section prints setup and the review by hand always,
+`unknown` when not recorded as the baseline's line does, so a reader sees why a net is unknown.
 
 *Amended 2026-10-19 (owner decision 139A):* the header belongs to the standards check's own
 session, the one its `check.json` names, which is the rule that already decides whether the
@@ -56,9 +81,9 @@ Exit-1 conditions, each naming what was wrong:
 
 | | |
 |---|---|
-| Body | `{baseline?, supervision?, verification?, false_alarms?}` - numbers or null; every key optional |
+| Body | `{baseline?, supervision?, verification?, false_alarms?, setup?, by_hand?}` - numbers or null; every key optional (`setup` and `by_hand` *amended 2026-11-01, owner decision 183A*) |
 | Response | `200 {timing}` - the recomputed `Timing`, net included |
-| 400 `InvalidTiming` | a key that is not one of the four (including `net_saved_minutes`), a non-number, or a negative value; the message names the key |
+| 400 `InvalidTiming` | a key that is not one of the six (including `net_saved_minutes`), a non-number, or a negative value; the message names the key |
 | 404 `UnknownChat` | |
 | 409 `TurnRunning` / `SessionFailed` | as `disposition` |
 
