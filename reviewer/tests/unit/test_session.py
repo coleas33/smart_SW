@@ -479,6 +479,19 @@ def test_the_contract_names_exactly_the_models_evidence_request_fields() -> None
     assert {"question", "options", "blocks"}.isdisjoint(definition["required"])
 
 
+def test_the_contract_names_exactly_the_models_disposition_fields() -> None:
+    """Owner decision 185A (002 T308): a disposition's triage, one of the four outcomes, beside
+    its decision. The contract's enum is the model's one list, in its order, and the field is
+    optional, so a disposition written before it still validates."""
+    from swreview.findings import TRIAGES, Disposition
+
+    definition = load_contract("review-session.schema.json")["$defs"]["Disposition"]
+
+    assert set(definition["properties"]) == set(Disposition.model_fields)
+    assert definition["properties"]["triage"]["enum"] == list(TRIAGES)
+    assert "triage" not in definition["required"]
+
+
 # --- the load rule of the one pre-013 model writer (feature 013 T096) ----------------------------
 
 

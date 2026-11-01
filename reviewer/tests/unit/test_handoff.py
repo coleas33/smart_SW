@@ -1060,3 +1060,58 @@ def test_attention_is_checked_against_the_bytes_collected_for_the_bundle(
     assert manifest_of(entries)["excluded_artifacts"] == [{
         "path": "attention.json", "reason": "names another session than session.json",
     }]
+
+
+# --- a finding's triage travels with the session (002 FR-031, owner decision 185A) ----------
+
+
+def test_handoff_carries_each_findings_outcome(tmp_path: Path) -> None:
+    """`session.json`, `report.md` and `events.jsonl` are copied whole (`REQUIRED_ARTIFACTS`), so
+    every finding's triage reaches the bundle with no handoff code of its own, and the
+    manifest's `session_summary`, which counts no finding, gains nothing (002 T308): a FICT run
+    folder with a triage on each finding exports the summary of the same folder without one."""
+    from swreview.findings import TRIAGES
+    from swreview.report.dispositions import apply_disposition
+    from tests.support.findings import make_finding
+
+    def decided_run(name: str, *, triaged: bool) -> Path:
+        run_dir = tmp_path / name
+        session = ReviewSession(
+            session_id=UUID("cccccccc-0000-0000-0000-000000000185"),
+            package_id=UUID("cccccccc-0000-0000-0000-000000000002"),
+            design_id="FICT-triage-handoff",
+            started_at=STAMP,
+            model="FICT-scripted",
+            findings=[
+                make_finding(finding_id=f"F-{index:03d}", title=f"FICT finding {index}")
+                for index in range(1, len(TRIAGES) + 1)
+            ],
+            timing=Timing(
+                baseline_minutes=None,
+                assisted_supervision_minutes=0.0,
+                assisted_verification_minutes=0.0,
+                false_alarm_handling_minutes=0.0,
+                unattended_runtime_minutes=0.0,
+            ),
+        )
+        save_session(session, run_dir / "session.json")
+        for index, triage in enumerate(TRIAGES, start=1):
+            apply_disposition(
+                run_dir, f"F-{index:03d}", "accepted", "FICT note", "FICT-ENG", at=STAMP,
+                triage=triage if triaged else None,
+            )
+        (run_dir / "package.json").write_bytes(b'{"design_id": "FICT-triage-handoff"}\n')
+        (run_dir / "events.jsonl").write_bytes(b'{"type": "FICT-finished"}\n')
+        return run_dir
+
+    plain = decided_run("FICT-plain", triaged=False)
+    triaged = decided_run("FICT-triaged", triaged=True)
+
+    without = read_zip(export_handoff(plain, tmp_path / "FICT-plain.zip", exported_at=STAMP))
+    entries = read_zip(export_handoff(triaged, tmp_path / "FICT-triaged.zip", exported_at=STAMP))
+
+    carried = json.loads(entries["session.json"])
+    assert [finding["disposition"]["triage"] for finding in carried["findings"]] == list(TRIAGES)
+    assert entries["report.md"] == (triaged / "report.md").read_bytes()
+    assert manifest_of(entries)["missing_artifacts"] == []
+    assert manifest_of(entries)["session_summary"] == manifest_of(without)["session_summary"]

@@ -722,3 +722,39 @@ def test_all_bought_keeps_the_plate_findings_dispositions(
     ]
     assert recorded_dispositions(run.session.findings) == kept
     assert saved_dispositions(run) == kept
+
+
+def test_a_restated_finding_keeps_its_triage(tmp_path: Path, scripted_registry: None) -> None:
+    """Owner decision 185A (002 T308): a disposition's triage rides through the restate's fold
+    with its decision, note and `by` - 58A carries the whole disposition - in memory, in
+    `session.json` and in each finding's re-announcement. Set through `set_disposition`, the
+    record that `record_disposition` applies to the live session."""
+    from swreview.report.dispositions import set_disposition
+
+    events: Events = []
+    run = graded(tmp_path, events=events)
+    plate, pin = ids_on(run, PLATE_ID), ids_on(run, PIN_ID)
+    triages = {plate[0]: "already_known", plate[1]: "wrong", pin[0]: "new_and_real"}
+    decisions = ((plate[0], "accepted"), (plate[1], "rejected"), (pin[0], "deferred"))
+    for finding_id, decision in decisions:
+        set_disposition(
+            run.session, finding_id, decision, "FICT note", "FICT-ENG", triage=triages[finding_id]
+        )
+    recorded = recorded_dispositions(run.session.findings)
+    mark = len(events)
+
+    run.answer_evidence_batch([("ER-001", "None bought")])
+
+    assert recorded_dispositions(run.session.findings) == recorded
+    assert saved_dispositions(run) == recorded
+    assert {
+        finding_id: disposition["triage"]
+        for finding_id, disposition in recorded
+        if disposition is not None
+    } == triages
+    announced = {
+        body["id"]: body["disposition"]["triage"]
+        for kind, body in events[mark:]
+        if kind == "finding" and body["id"] in triages
+    }
+    assert announced == triages
