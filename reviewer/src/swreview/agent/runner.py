@@ -1645,7 +1645,7 @@ class ReviewRun:
             else:
                 carried = set_disposition(
                     session, target[finding.id], disposition.decision, disposition.note,
-                    disposition.by, at=disposition.at,
+                    disposition.by, at=disposition.at, triage=disposition.triage,
                 )
                 self.announce_disposition(carried)
 
