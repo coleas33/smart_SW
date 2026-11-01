@@ -1752,12 +1752,22 @@ findings document: when you watch the whole review, the two times are its superv
   same ids in the same order (or `no row`), the checked fold last; and no row of a type group
   reads `checked within scope`. Fail: a group or an id missing, extra or out of order, or a pass in
   a type group. Record the printed lines.
-- 002 FR-031 (decision 185A): with the engineer who knows A, give every finding one of the four
-  triage outcomes beside its decision. In each finding's fold, press the outcome they name -
-  **new and real**, **real but already known**, **wrong** or **true but not worth flagging** -
-  then **Accept**, **Reject** or **Defer**; the card then reads `Disposition: <decision>
-  (<outcome>) by ...`. The outcome is theirs and says nothing about the decision: a real finding
-  they already knew may still be accepted.
+- 002 FR-031 (decisions 185A, 187A and 188A): with the engineer who knows A, give every flagged
+  finding - every finding outside the **Checked, no issue** fold - one of the four triage outcomes
+  beside its decision. In each finding's fold, press the outcome they name, then **Accept**,
+  **Reject** or **Defer**; the card then reads `Disposition: <decision> (<outcome>) by ...`. The
+  outcome is theirs and says nothing about the decision: a real finding they already knew may
+  still be accepted. "Already known" means known before SwReview first showed the finding: a real
+  finding SwReview first showed at an earlier sitting stays **new and real**, with that sitting's
+  date typed in the card's note box (decision 188A). A pass, a finding in the **Checked, no
+  issue** fold, takes no triage: leave it, unless the engineer judges it wrong - the check missed
+  a real problem - and then press **wrong: a miss**, the one outcome it offers, before its
+  decision; it counts as a miss, apart from the false alarms (decision 187A). The four outcomes,
+  one line each:
+  - **new and real**: a real problem not known before SwReview first showed it.
+  - **real but already known**: a real problem known before SwReview first showed it.
+  - **wrong**: not a real problem: a false alarm.
+  - **true but not worth flagging**: true of the design, but not worth an engineer's attention.
 - 007 T060, the minutes (the command that records them runs at step 4.5, item 4, once the backend
   no longer holds this review). They are A's real figures, company facts that stay in the private
   fork (decision 186A): write them in a private note in the handover folder, `notes\timing.txt`

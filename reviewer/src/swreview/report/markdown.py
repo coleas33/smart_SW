@@ -19,7 +19,7 @@ from datetime import datetime
 
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
 from swreview.checks.interference import interference_outcomes
-from swreview.findings import TRIAGES, Calculation, Disposition, Finding, carried_and_computed
+from swreview.findings import MISS, TRIAGES, Calculation, Disposition, Finding, carried_and_computed
 from swreview.ir.models import (
     Angle,
     ComponentInstance,
@@ -30,6 +30,7 @@ from swreview.ir.models import (
     SourceRef,
 )
 from swreview.report.attention import (
+    SUPPRESSED_STATUS,
     Ranking,
     coverage_line,
     family_of,
@@ -269,9 +270,7 @@ def _render_summary(session: ReviewSession, package: EvidencePackage | None) -> 
             f"{severity}: {count}" for severity, count in sorted(by_severity.items())
         )
         lines.append(f"- By severity: {severity_text}")
-    by_triage = _by_triage(session.findings)
-    if by_triage is not None:
-        lines.append(by_triage)
+    lines.extend(_by_triage(session.findings))
 
     open_requests = sum(1 for request in session.evidence_requests if request.status == "open")
     lines.append(f"- Open evidence requests: {open_requests} of {len(session.evidence_requests)}")
@@ -288,22 +287,32 @@ def _render_summary(session: ReviewSession, package: EvidencePackage | None) -> 
     return lines
 
 
-def _by_triage(findings: Sequence[Finding]) -> str | None:
+def _by_triage(findings: Sequence[Finding]) -> list[str]:
     """`- By triage:` the four outcomes in `TRIAGES` order in the words file's words, then `not
-    recorded` for every finding without one, decided or not (owner decision 185A; 002 FR-031).
+    recorded` for every flagged finding without one, decided or not (owner decision 185A; 002
+    FR-031); then `- Passes judged wrong (misses):`, the passes marked `MISS` (owner decision
+    187A). The first counts the flagged findings alone - every status but a pass,
+    `SUPPRESSED_STATUS` - so a pass judged wrong is a miss and never a false alarm.
 
     Counted from the triage alone, never the decision. Rendered only when some finding records
-    one, as the Bought parts section is, so every session without one keeps its report's bytes.
+    one, as the Bought parts section is, so every session without one keeps its report's bytes;
+    then both lines, so no miss reads as 0. A pass's triage other than `MISS`, recorded before
+    187A, is counted in neither.
     """
     triages = [
-        finding.disposition.triage if finding.disposition is not None else None
+        (finding.status, finding.disposition.triage if finding.disposition is not None else None)
         for finding in findings
     ]
-    if all(triage is None for triage in triages):
-        return None
+    if all(triage is None for _, triage in triages):
+        return []
+    flagged = [triage for status, triage in triages if status != SUPPRESSED_STATUS]
+    misses = sum(1 for status, triage in triages if status == SUPPRESSED_STATUS and triage == MISS)
     words = load_words().labels.triage
-    counts = ", ".join(f"{words[triage]}: {triages.count(triage)}" for triage in TRIAGES)
-    return f"- By triage: {counts}, not recorded: {triages.count(None)}"
+    counts = ", ".join(f"{words[triage]}: {flagged.count(triage)}" for triage in TRIAGES)
+    return [
+        f"- By triage: {counts}, not recorded: {flagged.count(None)}",
+        f"- Passes judged wrong (misses): {misses}",
+    ]
 
 
 # --- bought parts (feature 013) ----------------------------------------------------------

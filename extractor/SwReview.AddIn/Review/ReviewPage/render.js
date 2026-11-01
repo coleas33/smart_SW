@@ -108,6 +108,13 @@
    */
   var TRIAGES = ['new_and_real', 'already_known', 'wrong', 'not_worth_flagging'];
 
+  /**
+   * The one triage a pass takes (owner decision 187A; 002 FR-031): a pass - 'Checked, no issue' - takes no
+   * triage but `wrong`, which counts it as a miss, apart from the false alarms (`findings.MISS`). Its button
+   * is worded as the miss it is (`labels.pass_triage`), the token with no labels.
+   */
+  var PASS_TRIAGES = ['wrong'];
+
   // ---- formatting ---------------------------------------------------------------------
 
   function location(reference) {
@@ -412,18 +419,23 @@
    * independent of the decision, so a row of its own before the tools rather than more segments of
    * the decisions' `.seg`, and one that wraps at a docked pane's 300 px. A press only picks (`app.js`);
    * the decision pressed next carries it. The words are the backend's (`labels.triage`), the token
-   * with none.
+   * with none. A pass's row holds its one triage, the miss, in `labels.pass_triage`'s word (187A).
    */
-  function triageRow(disposition, labels) {
+  function triageRow(body, labels) {
     var row = el('div', 'row triage-options');
     row.setAttribute('role', 'group');
     row.setAttribute('aria-label', 'Triage');
-    for (var index = 0; index < TRIAGES.length; index++) {
-      var option = button(labelOf(labels, 'triage', TRIAGES[index], TRIAGES[index]), 'triage', 'action triage');
-      option.setAttribute('data-triage', TRIAGES[index]);
+    // Which row a card carries is a card state the backend's status decides, never a rank
+    // (PageRuleScanTests); which triage a pass takes is the backend's rule, which refuses any other.
+    var pass = body.status === 'checked_within_scope';
+    var tokens = pass ? PASS_TRIAGES : TRIAGES;
+    var group = pass ? 'pass_triage' : 'triage';
+    for (var index = 0; index < tokens.length; index++) {
+      var option = button(labelOf(labels, group, tokens[index], tokens[index]), 'triage', 'action triage');
+      option.setAttribute('data-triage', tokens[index]);
       row.appendChild(option);
     }
-    pressTriage(row, disposition ? disposition.triage : null);
+    pressTriage(row, body.disposition ? body.disposition.triage : null);
     return row;
   }
 
@@ -503,7 +515,7 @@
         ['Carried over from', body.carried_over_from],
         ['Carried over at', body.carried_over_at]
       ]),
-      triageRow(body.disposition, labels),
+      triageRow(body, labels),
       decisions(body)
     ]);
 

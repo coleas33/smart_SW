@@ -6503,3 +6503,213 @@ the decision register now records 160A as done.
   [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 3: a later press or Show
   replaces the line for good; the re-run's first card under its own id stays on the page; two
   earlier findings with one verdict key fold onto the last; and the tests the review listed.
+
+### 187A and 188A. A pass takes no triage but a miss, counted apart, and the four outcomes defined (2026-11-01)
+
+- **Question**: roadmap holes H-g-009 and H-a-009 (roadmap run 2). Since 185A every finding
+  card's fold carried the four triage buttons, a pass's too (`render.js`, `triageRow`), and
+  `report.md`'s `- By triage:` (`report/markdown.py`, `_by_triage`) counted every finding of every
+  status, the passes among "not recorded". A pass - a `checked_within_scope` finding, which the page
+  draws in the "Checked, no issue" fold - is a check saying there is no problem, so of the four
+  outcomes only "wrong" fits one, and a pass judged wrong is a miss, which the count booked as a
+  false alarm; every correct pass either took an outcome that does not fit it or stayed "not
+  recorded", so M0's first exit criterion could not be read from the count (H-g-009, with H-a-012
+  and H-d-007 folded in). Example: A's review of 2026-09-26 held two passes, the pin's and the
+  plate's mass checks ([`docs/roadmap/capabilities.md`](../../docs/roadmap/capabilities.md), F2):
+  judged right, each stays "not recorded"; judged wrong, each adds a false alarm. Nor did anything
+  say what "real but already known" is measured against, though M0's triaged reviews are of A,
+  reviewed on five earlier seat days, so a finding agreed real at an earlier sitting could read as
+  already known, and new and real findings on A trend to zero by construction (H-a-009).
+- **Decided**: 187A (2026-11-01, 5A of roadmap run 2's second owner round): a pass takes no triage;
+  a pass the engineer judges wrong is marked wrong and counted as a miss, apart from false alarms,
+  and `report.md` counts flagged findings and passes apart; it changes the reach of 185A (FR-031)
+  and the seat plan's step 4.1. 188A (6A of the same round): "real but already known" means known
+  before SwReview first showed it, so a real finding SwReview first showed at an earlier sitting
+  stays "new and real", with that sitting's date in its note; step 4.1 defines each of the four
+  outcomes in one line before M0-a.
+- **Not changed**: the four outcomes, their tokens and their words; 185A's rule for a flagged
+  finding - optional, independent of the decision, a late triage once, a second one refused; the
+  unresolved findings, which stay flagged findings (H-a-012's route); 58A's restate, 189A's fold and
+  what 015's carry does with a decision; and the constitution, whose Principle VI already measures
+  missed known defects and false alarms apart.
+- **Settled with it**:
+  - **A pass.** A finding of status `checked_within_scope`: the one status the page draws in the
+    "Checked, no issue" fold, and the report's `SUPPRESSED_STATUS` (`report/attention.py`), which
+    the summary's groups and the goals already read as a pass. Every other status - demonstrated,
+    suspected, unresolved - is a flagged finding.
+  - **The one token.** `findings.MISS`, `wrong`, beside `TRIAGES`: the one triage a pass takes,
+    read by the record, the live route, the re-run's carry, the report and the words file's checks.
+  - **Accept, Reject and Defer on a pass.** Accept says the engineer agrees the check found no issue
+    within its scope; Reject that the engineer does not take the pass as it stands, its verdict or
+    its scope, which is not by itself a miss; Defer that the engineer will judge it later. None of
+    them counts a miss: the miss is `wrong` alone, pressed beside any of the three, as 185A keeps
+    the triage and the decision apart. Example: a pass whose stated scope left out a pair the
+    engineer cares about may be rejected with no triage, and no miss is counted, since nothing the
+    check examined was missed. So the three buttons stay on a pass's card, recorded, ranked and
+    rendered as before.
+  - **The record's refusal.** `report/dispositions.py` refuses any triage but `wrong` on a pass with
+    `TriageOnAPassError`, a `ValueError` of its own class, before anything changes and before the
+    state machine is read, whatever the decision, a late triage included, as a triage outside the
+    four is refused before the finding is looked at. Its own class so the live route can answer it
+    as the route's refusal and the console can name it. A pass's triage recorded before 187A
+    stands as recorded: nothing removes it, and a Defer holding one keeps it when a later decision
+    names none, as 185A keeps a Defer's triage.
+  - **The route's class.** Options: A, `400 InvalidTriage`, the class a triage outside the four
+    already has; B, a class of its own, with a sentence of its own. A: the refusal is of the same
+    kind - a triage the finding does not take - and is answered the same way: 400, not retryable,
+    checked before the chat's state, nothing written. The page never sends one, since a pass's card
+    offers the one outcome, so no press of the page's needs a sentence of its own, unlike H-g-012's
+    `TriageAlreadyRecorded`, whose class came from a press the page could make; `InvalidTriage`'s
+    sentence is reworded to stay true of both. The route looks the finding up in the live session
+    before it reads the chat's state; an id the session does not hold is left to the record, which
+    refuses it as `404 UnknownFinding` after the chat's state, as before; and should the finding
+    become a pass between the two - a waiting review's answer grading it again - the record's
+    `TriageOnAPassError` is answered `InvalidTriage` too.
+  - **The report.** `- By triage:` counts the flagged findings alone, its "not recorded" theirs, and
+    `- Passes judged wrong (misses): <n>` follows it, counting the passes marked `wrong`. Both
+    appear only when some finding records a triage, as the one line did, so every report with none
+    keeps its bytes, every committed golden among them; and a review triaged at all shows both, so
+    no miss reads as 0 rather than as nothing recorded. A pass's triage other than `wrong`, recorded
+    before 187A, is counted in neither line and shown under its decision, as before.
+  - **The re-run's carry (feature 015).** `_carry_decisions` passes the earlier triage to
+    `set_disposition`, which now refuses a triage a pass does not take, and a carried `wrong` would
+    change what it counts: a flagged finding's `wrong` is a false alarm, a pass's a miss. Options: A,
+    the decision carried as before, its triage only between two passes or two flagged findings and
+    only one the finding it lands on takes, any other named in `coverage.recheck`; B, the whole
+    decision left behind across the line; C, the triage carried across, `wrong` changing its count.
+    A: whether a decision carries across a changed status is the question cycle 3's Tier 1 review
+    left for the owner (58A's restate and 015's carry keep a decision whatever the status and
+    severity now are), so the decision's carry is unchanged, and only the triage, whose count 187A
+    splits, stops at the line. One item each way, in the carry's order among the decisions'
+    items.
+  - **The words.** `labels.pass_triage`, after `triage` and before `source`, so `source` stays just
+    before `errors`: `{wrong: "wrong: a miss"}`, keyed by `MISS`, the word on a pass's one button,
+    lowercase as the four are. Not in `triage`, whose keys are the four tokens in their order, and
+    keyed by the token so the page looks it up through `labelOf`, the token itself with no labels
+    (FR-030). The card's disposition sentence and `report.md`'s line under a decision name a pass's
+    `wrong` by `labels.triage`'s word, as they name any triage.
+  - **The page.** A pass's card offers `wrong` alone, in the row and through the press and the
+    decision a flagged finding's four use. Which row a card carries is decided by comparing the
+    finding's status with `checked_within_scope` once (`render.js`, `triageRow`): a card state the
+    backend's status decides, never a rank, so the comparison is added to
+    `PageRuleScanTests.AllowedComparisons` with that reason, beside `check-page.js`'s comparison of
+    the same status for a reason of the same kind. The rule is the backend's: the page draws the
+    one button and refuses nothing.
+  - **188A's definitions.** Step 4.1's triage bullet lists the four outcomes, one line each, then
+    says what "already known" is measured against and what a pass takes; no code reads them. The
+    earlier sitting's date goes in the card's note box.
+- **Tests**: T332, T334 and T336 in [tasks.md](tasks.md), Phase 26, each written first; T333, T335
+  and T337 make them green, and T338 closes the records.
+- **Built** (2026-11-01, T333, T335 and T337):
+  - The record (T333): `findings.MISS`, `wrong`, beside `TRIAGES`; in `report/dispositions.py`,
+    `TriageOnAPassError`, `takes_triage` and `refuse_a_triage_a_pass_does_not_take`, which
+    `set_disposition` calls as soon as it has found the finding, before 185A's late triage and the
+    state machine are read. `swreview disposition` needed no change: its `HANDLED_ERRORS` catches
+    the subclass, and its one line names it.
+  - The route (T333): `_refuse_a_pass_triage`, called after the triage's own check and before
+    `_require_idle`, reads the finding from the session the run holds and answers `400
+    InvalidTriage`; the route's one `try` answers the record's `TriageOnAPassError` the same way.
+    `InvalidTriage`'s docstring names both refusals.
+  - The re-run's carry (T333): `_carry_decisions` asks `_carries_triage` - the same kind on both
+    sides, and a triage the finding it lands on takes - and otherwise names the triage with
+    `NOT_CARRIED_TRIAGE_PASS` or `NOT_CARRIED_TRIAGE_NOT_A_PASS` and carries the decision with
+    none.
+  - The report (T333): `_by_triage` returns the two lines, or none while no finding records a
+    triage.
+  - The words (T333): `labels.pass_triage`, `{wrong: "wrong: a miss"}`, after `triage`, and
+    `summary.Labels.pass_triage`; `InvalidTriage`'s sentence, "Pick one of the four triage
+    outcomes, or none, then press the decision again. A finding in Checked, no issue takes only
+    wrong: a miss."
+  - The fixtures (T333): the pane fixtures' three generators wrote the four that embed the labels
+    block with the new group and the reworded sentence alone, and the drawing-questions fixture
+    and `review-not-sent-session.json` byte-identical; `review-send-failure-events.json`'s pin
+    moved to the regenerated `review-waiting.json` (CRLF), as H-g-012's did; `LabelsSample.cs`
+    mirrors the group as `Miss`.
+  - The page (T335): `render.js`'s `PASS_TRIAGES`, and `triageRow(body, labels)`, which draws a
+    pass's row with the one token and `labels.pass_triage`'s word, the token with none, and a
+    flagged finding's with the four, as before; the press, the decision and the reply are
+    unchanged. No host, proxy or page message changes, and no rule in the page.
+  - The seat plan and the metrics (T337): step 4.1's triage bullet gives every flagged finding
+    one of the four, says what "already known" is measured against and what a pass takes, and
+    lists the four outcomes one line each; it is the only part of step 4.1 changed, so cycle 4's
+    edits of the step's timing lines meet none of it. `docs/roadmap/metrics.md`'s "False alarms
+    per design" counts flagged findings triaged wrong, and "Missed known defects per design" names
+    the passes judged wrong at the seat as an instrument.
+  - The records: FR-031's amendments, its scenarios 7 and 8 and two edge cases; dated notes in
+    [contracts/chat-api.md](contracts/chat-api.md), 001
+    [data-model.md](../001-agentic-design-review/data-model.md) and
+    [contracts/cli.md](../001-agentic-design-review/contracts/cli.md), 009
+    [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md) section 1, and
+    015 [contracts/recheck.md](../015-review-send-gate/contracts/recheck.md) sections 4 and 5 and
+    [contracts/words.md](../015-review-send-gate/contracts/words.md) section 4; 187A and 188A
+    marked done in [`docs/decisions.md`](../../docs/decisions.md).
+- **Left open**, each for the owner or a later lane, none of them changed here:
+  - **58A's restate.** A waiting review's answer grades its checks again by code
+    (`_reconcile_restated`), and the restated finding keeps the earlier disposition whole, by a
+    `model_copy` that does not pass through the record, whatever its new status. So a restate
+    that turns a flagged finding into a pass keeps its triage, and since 187A `report.md` reads a
+    pass's `wrong` as a miss: a false alarm restated into a pass is counted as one, and another
+    outcome on a pass is counted in neither line. It is the question cycle 3's Tier 1 review left
+    for the owner (58A's restate and 015's carry keep a decision whatever the status and severity
+    now are); 015's carry now stops a triage at the line, and the restate has no word of its own
+    with which to say it did, so it needs the owner's answer first.
+  - **The handover.** `workstation-handover.md`, item 13, said step 4.1 gives every finding one
+    of the four outcomes. Cycle 4 rewrote that very sentence, so it waited for the rebase onto
+    cycle 4; after it, the sentence names a pass's one outcome (187A), and so does the
+    quickstart's Scenario 1 (the review's third finding).
+  - **The card's sentence.** It, and `report.md`'s line under a decision, word a pass's `wrong`
+    as `labels.triage` words it, "wrong", where the button says "wrong: a miss"; 187A asks only for
+    the offer to be worded as a miss.
+- **Tests changed on purpose**, none loosened:
+  - `test_chat_server.py::test_labels_answer_the_words_files_card_vocabulary`, its key set
+    extended with `pass_triage`; and `test_review_words.py::test_every_label_is_a_plain_word_not_a_token`,
+    extended to `labels.pass_triage`; each with a dated note.
+  - `PageRuleScanTests.AllowedComparisons`: one entry, `render.js`'s comparison of the status with
+    `checked_within_scope`, with its reason - the scan's own way to admit a comparison that decides
+    a card state and puts no card before another.
+  - The four pane fixtures that embed the labels block, regenerated, and the send-failure pin;
+    `LabelsSample.cs` mirrors the group.
+  - `test_workstation_test_plan.py::test_the_specs_readme_counts_a_task_173a_closed_as_done`, its
+    002 literal following 002's recount (T331, and T338).
+- **Tests first**: T332's twenty cases failed before T333 - the record's nine refusal cases and
+  its wrong-or-none case for want of the refusal, the report's three for want of the split count,
+  the route case answered 200 where `400 InvalidTriage` was due, the console case exited 0, the
+  carry case carried the triage across the line, and the labels, words and plain-word cases for
+  want of `labels.pass_triage`, `findings.MISS` and the reworded sentence - while the guard on a
+  report with no triage passed before and after, with the five modules' other 585 cases. T334's
+  four facts failed before T335, each for want of the pass's one button (four tokens, four words,
+  four buttons measured), while the class's seventeen other facts passed. T336's two pins failed
+  before T337, for want of the definitions and of 187A's words, while the module's other 281
+  cases passed.
+- **Gates** (T338; 2026-11-01), on the cycle's final tree:
+  - Python 3.12.3 (the worktree's own environment, `uv sync --python 3.12 --all-extras`) and
+    3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required, over the 113
+    test modules that pin the record, the route, the console, the carry, the report, the words,
+    the pane fixtures, the seat plan or the specs' counts: 6,043 passed and 1 skipped on each, on
+    T337's tree; the six modules that read the task lists, the specs' README and the seat plan
+    again after this commit's records, 449 passed on each.
+  - `ruff check src tests` clean.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then
+    `dotnet test extractor\SwReview.sln -c Release --no-build`: 10,274 extractor and 4,302
+    add-in tests passed, on T335's tree; T336 to T338 change no C# file.
+  - The pane fixtures' three generators (T333): the four that embed the labels block moved by the
+    new group and the sentence alone; the others byte-identical.
+  - The link check over the cycle's changed Markdown and the register: 439 relative links,
+    anchors included, none broken. Every changed file LF in the index.
+  - Not run in this lane: the whole non-live suites, which run before the pull request and in its
+    CI, among them `test_tracked_files_carry_no_recorded_number.py`, which reads the owner's
+    denylist outside the repository. No SOLIDWORKS process, seat task, or paid or live test ran.
+- **Rebased onto cycle 4** (PR #63, `7f4a63d`) before the pull request: the specs README's recount
+  note and the register's rows 186A to 188A kept both sides; the seat plan and its pins merged on
+  their own. **Gates on the rebased tree** (2026-11-01, on `f1d09f7`): the whole non-live suite on
+  Python 3.12.3 with the tokenizer required, 18,783 passed and 5 skipped; `ruff check` clean; the
+  identifier scan, 58 passed; the C# build with zero warnings, and 10,274 extractor and 4,302
+  add-in tests passed; the seat plan's, the handover's and the triage modules again after the
+  review's edits.
+- **Review** (Tier 2, decision 180A; 2026-11-01): one Opus review, no must-fix. Its five should-fix
+  findings: the handover and the quickstart still gave every finding the four outcomes (fixed
+  here); and four left in [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 5: the
+  carry's `takes_triage` half and two documented branches (the route's `TriageOnAPassError`
+  answer, `report.md`'s non-`wrong` pass) have no test; the 300 px fact measures a pass's card
+  outside the fold a ranking puts it in; and whether a finding is a pass is spelled in six places.
+  The review found the unlocked read of `_refuse_a_pass_triage` sound.

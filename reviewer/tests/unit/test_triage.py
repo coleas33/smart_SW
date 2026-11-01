@@ -17,6 +17,11 @@ decision and never inferred from it (002 research, 185A). What this pins:
   its decision and, once any finding records one, counts the four and the findings that record
   none, right after "By severity", read from the triage alone; a session with no triage renders
   as before.
+- **a pass** (002 T332, owner decision 187A): a pass - a `checked_within_scope` finding, 'Checked,
+  no issue' - takes no triage but `wrong`, the miss: the record refuses any other with a
+  `ValueError` of its own class, whatever the decision, a late triage included, and writes
+  nothing; and `report.md` counts the flagged findings by triage and the passes judged wrong apart,
+  as misses, while a report with no triage keeps its bytes.
 
 Every fixture is fictional: FICT names, and an explicit `by` on every record.
 """
@@ -479,4 +484,162 @@ def test_a_session_without_a_triage_renders_as_before() -> None:
     report = render_report(reported_session(plain))
 
     assert by_triage_lines(report) == []
+    assert "- triage:" not in report
+
+
+# --- a pass (002 T332; owner decision 187A) -------------------------------------------------------
+
+OTHER_THAN_WRONG = tuple(triage for triage in TRIAGES if triage != "wrong")
+"""The three outcomes a pass does not take (owner decision 187A)."""
+
+
+def with_passes(session: ReviewSession, *finding_ids: str) -> ReviewSession:
+    """`session` with each of `finding_ids` made a pass, 'Checked, no issue': `checked_within_scope`
+    and severity info, as a check that found no problem writes one."""
+    session.findings[:] = [
+        finding.model_copy(update={"status": "checked_within_scope", "severity": "info"})
+        if finding.id in finding_ids
+        else finding
+        for finding in session.findings
+    ]
+    return session
+
+
+def pass_folder(tmp_path: Path) -> Path:
+    """A run folder holding `triage_session(4)` with F-002 and F-004 passes, and nothing else."""
+    run_dir = tmp_path / "FICT-run"
+    save_session(with_passes(triage_session(4), "F-002", "F-004"), run_dir / "session.json")
+    return run_dir
+
+
+@pytest.mark.parametrize("decision", ["accepted", "rejected", "deferred"])
+@pytest.mark.parametrize("triage", OTHER_THAN_WRONG)
+def test_a_pass_takes_no_triage_but_wrong(tmp_path: Path, triage: str, decision: str) -> None:
+    """A pass takes no triage but `wrong`, the miss: each of the other three is refused on it,
+    whatever the decision, with `TriageOnAPassError`, a `ValueError` naming the pass, `wrong` and
+    the triage sent, and nothing is written."""
+    run_dir = pass_folder(tmp_path)
+    before = folder_bytes(run_dir)
+
+    with pytest.raises(ValueError, match="is a pass") as refused:
+        apply_disposition(run_dir, "F-002", decision, "FICT note", BY, at=FIRST_AT, triage=triage)
+
+    # Read from the module, so a missing class fails these cases alone and not the collection.
+    assert type(refused.value) is dispositions.TriageOnAPassError
+    assert "'wrong'" in str(refused.value) and repr(triage) in str(refused.value)
+    assert folder_bytes(run_dir) == before
+
+
+def test_a_pass_takes_wrong_or_none_and_a_late_wrong_once(tmp_path: Path) -> None:
+    """On a pass `wrong` is recorded as on any finding, and so is none; a pass accepted with none
+    is refused a late triage of another outcome, as the pass rule refuses it before 185A's late
+    triage is looked at, and takes a late `wrong` once. A flagged finding beside it still takes
+    the four."""
+    run_dir = pass_folder(tmp_path)
+    apply_disposition(run_dir, "F-002", "rejected", "FICT missed", BY, at=FIRST_AT, triage="wrong")
+    apply_disposition(run_dir, "F-004", "accepted", "FICT note", BY, at=FIRST_AT)
+    apply_disposition(
+        run_dir, "F-001", "accepted", "FICT note", BY, at=FIRST_AT, triage="already_known"
+    )
+    before = folder_bytes(run_dir)
+
+    with pytest.raises(ValueError, match="is a pass"):
+        apply_disposition(
+            run_dir, "F-004", "accepted", "FICT note", BY, at=LATER_AT, triage="new_and_real"
+        )
+    assert folder_bytes(run_dir) == before
+    apply_disposition(
+        run_dir, "F-004", "accepted", "FICT later", OTHER_BY, at=LATER_AT, triage="wrong"
+    )
+
+    assert recorded(run_dir, "F-002") == Disposition(
+        decision="rejected", note="FICT missed", by=BY, at=FIRST_AT, triage="wrong"
+    )
+    assert recorded(run_dir, "F-004") == Disposition(
+        decision="accepted", note="FICT note", by=BY, at=FIRST_AT, triage="wrong"
+    )
+    assert recorded(run_dir, "F-001").triage == "already_known"
+
+
+@pytest.mark.parametrize(
+    ("records", "counted"),
+    [
+        (
+            (
+                ("F-001", "accepted", "new_and_real"),
+                ("F-003", "rejected", "wrong"),
+                ("F-004", "rejected", "wrong"),
+                ("F-005", "accepted", None),
+            ),
+            (
+                "- By triage: new and real: 1, real but already known: 0, wrong: 1, "
+                "true but not worth flagging: 0, not recorded: 1",
+                "- Passes judged wrong (misses): 1",
+            ),
+        ),
+        (
+            (("F-001", "accepted", "new_and_real"), ("F-005", "accepted", None)),
+            (
+                "- By triage: new and real: 1, real but already known: 0, wrong: 0, "
+                "true but not worth flagging: 0, not recorded: 2",
+                "- Passes judged wrong (misses): 0",
+            ),
+        ),
+        (
+            (("F-004", "rejected", "wrong"),),
+            (
+                "- By triage: new and real: 0, real but already known: 0, wrong: 0, "
+                "true but not worth flagging: 0, not recorded: 3",
+                "- Passes judged wrong (misses): 1",
+            ),
+        ),
+    ],
+    ids=["both", "flagged-findings-only", "a-miss-only"],
+)
+def test_the_report_counts_passes_apart_from_findings_by_triage(
+    records: tuple[tuple[str, str, str | None], ...], counted: tuple[str, str]
+) -> None:
+    """`- By triage:` counts the flagged findings alone - every status but `checked_within_scope`
+    - their "not recorded" included, and the line after it counts the passes judged wrong, as
+    misses, apart from the false alarms, a flagged finding's `wrong`. F-001 to F-003 are flagged,
+    F-004 and F-005 passes: F-003's `wrong` is a false alarm, F-004's a miss, and F-005, a pass
+    with no triage, is in neither count. Once any finding records a triage both lines are shown,
+    so no miss reads as 0."""
+    session = with_passes(triage_session(5), "F-004", "F-005")
+    for finding_id, decision, triage in records:
+        set_disposition(session, finding_id, decision, "FICT note", BY, at=FIRST_AT, triage=triage)
+
+    lines = render_report(session).splitlines()
+    [at] = [index for index, line in enumerate(lines) if line.startswith("- By triage:")]
+
+    assert lines[at - 1].startswith("- By severity:")
+    assert tuple(lines[at : at + 2]) == counted
+    assert lines[at + 2].startswith("- Open evidence requests:")
+
+
+def test_a_report_with_passes_and_no_triage_keeps_its_bytes() -> None:
+    """A guard, green before T333 and after: passes and flagged findings decided, none triaged,
+    and the summary is the lines it always was - no "By triage" line and no misses line - so a
+    report with no triage, every committed golden among them, keeps its bytes."""
+    session = with_passes(triage_session(5), "F-004", "F-005")
+    for finding_id, decision in (
+        ("F-001", "accepted"),
+        ("F-003", "rejected"),
+        ("F-004", "rejected"),
+        ("F-005", "deferred"),
+    ):
+        set_disposition(session, finding_id, decision, "FICT note", BY, at=FIRST_AT)
+
+    report = render_report(session)
+    start = report.index("## Summary")
+
+    assert report[start : report.index("\n## ", start)].splitlines() == [
+        "## Summary",
+        "",
+        "- Total findings: 5",
+        "- By status: checked_within_scope: 2, suspected: 3",
+        "- By severity: info: 3, low: 1, medium: 1",
+        "- Open evidence requests: 0 of 0",
+        "- Coverage: Checked: 0, Skipped: 0, Unresolved: 0, Failed: 0, Out of Scope: 0",
+    ]
     assert "- triage:" not in report

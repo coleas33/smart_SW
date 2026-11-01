@@ -109,6 +109,8 @@ messages (`ANSWER_MESSAGE`, `ANSWERS_MESSAGE`) are not used for a review that wa
 | `CARRIED_LIVE_NOTE` (`prerun.py`) | "ran when the checks first ran; this check of the saved evidence carried its outcome and did not ask SOLIDWORKS again" | the `note` of a re-run's carried live-detection step (`recheck.md` section 3), read in the step's result and the Transcript's tool line |
 | `NOT_CARRIED_ANSWER_SHARED` (`runner.py`; owner decision 89A, landed 2026-10-14) | "the answer to {id} (another answer matches the same question)" | a `NOT_CARRIED` item: two earlier answers match one re-run question, so neither is carried (`recheck.md` section 4) |
 | `NOT_CARRIED_ANSWER_PARTIAL` (`runner.py`; owner decision 90A, landed 2026-10-14) | "the answer to {id} (part of its drawing read was refused or failed, so its question is asked again)" | a `NOT_CARRIED` item: the earlier read merged some of the question's drawings, and the re-run asks again about the rest (`recheck.md` section 4) |
+| `NOT_CARRIED_TRIAGE_PASS` (`runner.py`; feature 002, owner decision 187A, landed 2026-11-01) | "the triage of {id} (its finding is a pass, whose one triage, wrong, is a miss)" | a `NOT_CARRIED` item: the decision of {id} is carried onto a pass without its triage, a flagged finding's or one a pass does not take (`recheck.md` section 4) |
+| `NOT_CARRIED_TRIAGE_NOT_A_PASS` (`runner.py`; feature 002, owner decision 187A, landed 2026-11-01) | "the triage of {id} (its finding is no longer a pass, and a pass's wrong is a miss, not a false alarm)" | a `NOT_CARRIED` item: the decision of {id}, a pass's, is carried onto a flagged finding without its `wrong` (`recheck.md` section 4) |
 | report header (`markdown.py`) | "- Model: not sent to the model (checked by code only)"; "- Model: not sent to the model; the last attempt failed at {at}: {reason}"; "- Sent to the model: {sent_at} (checks finished {checked_at})"; "- Earlier attempts that failed: {n}"; "- Checked again from session: {id}" | `records.md` section 4 |
 | recording refusals (`benchmark/recording.py`) | "{RUN_DIR} was never sent to the model, so it has no model turn to replay"; "{RUN_DIR} was sent to the model after waiting for Send; the replay reads only reviews sent when their checks finished" | `records.md` section 6 |
 
@@ -120,6 +122,9 @@ messages (`ANSWER_MESSAGE`, `ANSWERS_MESSAGE`) are not used for a review that wa
 - **The decision's name.** `{decision}` is the decision's noun from `DECISION_NOUNS` ("Accept",
   "Reject", "Defer"), so an item reads "the Reject of F-007". It is not the stored value
   ("rejected").
+- **A triage left behind** (*added 2026-11-01, feature 002, owner decision 187A*).
+  `_TRIAGE_PASS` and `_TRIAGE_NOT_A_PASS` name a triage whose decision the carry carried without
+  it, in the carry's order, among the decisions' items.
 
 ## 5. Words the host writes: `extractor/SwReview.AddIn/Review/ReviewHost.cs`
 

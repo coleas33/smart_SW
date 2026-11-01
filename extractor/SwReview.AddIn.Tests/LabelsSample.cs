@@ -20,7 +20,8 @@ namespace SwReview.AddIn.Tests;
 ///
 /// Owner decision 185A (002 T311) adds the `triage` group: the words of a finding's four triage outcomes,
 /// the words file's own. Roadmap hole H-g-012 (002 T321) adds `TriageAlreadyRecorded`'s sentence, the words
-/// file's own: a second triage refused, the one recorded standing.
+/// file's own: a second triage refused, the one recorded standing. Owner decision 187A (002 T333) adds the
+/// `pass_triage` group, the words file's own: the word of the one outcome a pass takes, the miss.
 /// </summary>
 internal static class LabelsSample
 {
@@ -47,6 +48,9 @@ internal static class LabelsSample
 
     public const string AddInStopping =
         "The settings are saved. The add-in is stopping; nothing else needs doing.";
+
+    /// <summary>The one outcome a pass takes, `wrong`, worded as the miss it is counted as (owner decision 187A).</summary>
+    public const string Miss = "wrong: a miss";
 
     /// <summary>A second triage refused (roadmap hole H-g-012; owner decision 185A): the words file's sentence for it.</summary>
     public const string TriageAlreadyRecorded =
@@ -116,6 +120,13 @@ internal static class LabelsSample
                 { "already_known", "real but already known" },
                 { "wrong", "wrong" },
                 { "not_worth_flagging", "true but not worth flagging" },
+            }
+        },
+        {
+            // Owner decision 187A (002 FR-031): the one outcome a pass takes, the miss, in words.
+            "pass_triage", new Dictionary<string, string>
+            {
+                { "wrong", Miss },
             }
         },
         {

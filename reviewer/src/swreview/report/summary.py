@@ -336,6 +336,9 @@ class Labels(ReviewModel):
     evidence_status: dict[EvidenceStatus, str]
     contact_kind: dict[ContactKind, str]
     triage: dict[Triage, str]
+    pass_triage: dict[Triage, str]
+    """The one triage a pass takes, `findings.MISS`, in its word on a pass's card (owner decision
+    187A)."""
     source: dict[Source, str]
     errors: dict[str, str]
 

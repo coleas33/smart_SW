@@ -151,7 +151,9 @@ from swreview.report.dispositions import (
     DECISIONS,
     REPORT_FILE_NAME,
     TriageAlreadyRecordedError,
+    TriageOnAPassError,
     find_finding,
+    refuse_a_triage_a_pass_does_not_take,
 )
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession, load_session
@@ -279,12 +281,15 @@ class InvalidDecision(ChatError):
 
 
 class InvalidTriage(ChatError):
-    """A triage that is not one of the four outcomes, nor null (owner decision 185A).
+    """A triage that is not one of the four outcomes, nor null (owner decision 185A), or, on a
+    pass, any but `wrong` (owner decision 187A; the record's `TriageOnAPassError`).
 
     A class of its own, not `InvalidDecision`, whose sentence asks for accept, reject or defer.
-    The route checks it before the chat's state, as the decision is: the record's own refusal
+    The route checks both before the chat's state, as the decision is: the record's own refusal
     is a `ValueError`, which the route answers as `IllegalTransition` (a second triage as
-    `TriageAlreadyRecorded`).
+    `TriageAlreadyRecorded`, a triage a pass does not take as this class). One class for both,
+    since both are a triage the finding does not take, answered alike, and the page sends neither:
+    its pass card offers `wrong` alone.
     """
 
     error_class = "InvalidTriage"
@@ -1622,9 +1627,10 @@ class ChatServer:
         triage = body.get("triage")
         if triage is not None and not (isinstance(triage, str) and triage in TRIAGES):
             raise InvalidTriage(f"triage must be one of {list(TRIAGES)} or null, got {triage!r}")
+        finding_id = request.path_params["finding_id"]
+        self._refuse_a_pass_triage(chat, finding_id, triage)
         self._require_idle(chat)
         run = self._run_of(chat)
-        finding_id = request.path_params["finding_id"]
         try:
             execute = self._on_worker if chat.state is ChatState.AWAITING_SEND else None
             action = partial(
@@ -1641,9 +1647,25 @@ class ChatServer:
             raise UnknownFinding(f"no finding {finding_id!r} in this session") from exc
         except TriageAlreadyRecordedError as exc:
             raise TriageAlreadyRecorded(str(exc)) from exc
+        except TriageOnAPassError as exc:
+            # The finding became a pass after `_refuse_a_pass_triage`: an answer graded it again.
+            raise InvalidTriage(str(exc)) from exc
         except ValueError as exc:
             raise IllegalTransition(str(exc)) from exc
         return JSONResponse(finding.model_dump(mode="json"))
+
+    def _refuse_a_pass_triage(self, chat: ChatSession, finding_id: str, triage: Any) -> None:
+        """Owner decision 187A: on a pass any triage but `wrong` is `400 InvalidTriage`, refused
+        before the chat's state is read, as a triage outside the four is. Read from the session
+        the run holds, while a turn may run on it: a finding it is folding is read as it was or as
+        it is, and the record judges again. An id the session does not hold is left to the
+        record, which refuses it as `404 UnknownFinding` after the chat's state, as before."""
+        for finding in self._run_of(chat).session.findings:
+            if finding.id == finding_id:
+                try:
+                    refuse_a_triage_a_pass_does_not_take(finding, triage)
+                except TriageOnAPassError as exc:
+                    raise InvalidTriage(str(exc)) from exc
 
     async def timing(self, request: Request) -> Response:
         """Record the engineer's minutes against this review (`contracts/timing.md` 3).

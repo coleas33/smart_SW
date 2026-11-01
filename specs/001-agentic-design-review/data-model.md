@@ -233,6 +233,12 @@ null, so a disposition written before it keeps its bytes. A value outside the fo
 naming them, before anything changes. A deferred finding keeps its triage when the later
 Accept or Reject names none.
 
+*Amended 2026-11-01 (owner decision 187A; feature 002 FR-031):* a pass - a finding whose
+`status` is `checked_within_scope` - takes no triage but `wrong`, which counts it as a miss,
+apart from the false alarms; any other is refused, naming the pass and `wrong`, before
+anything changes, whatever the decision, a late triage included. A pass's triage recorded
+before the rule stands as recorded.
+
 ### `Exception`
 
 | Field | Type | Rules |

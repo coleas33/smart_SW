@@ -1598,6 +1598,72 @@ def test_a_carried_decision_keeps_its_triage(bare: Any) -> None:
     assert triaged.model_dump(mode="json")["triage"] == "wrong"
 
 
+def as_pass(finding: Finding) -> Finding:
+    """`finding` as a pass, 'Checked, no issue': `checked_within_scope` and severity info. Its
+    subject key is unchanged, so a re-run's pass and an earlier flagged finding meet."""
+    return finding.model_copy(update={"status": "checked_within_scope", "severity": "info"})
+
+
+def decided_with(finding: Finding, decision: str, triage: str) -> Finding:
+    """`finding` decided with `triage`."""
+    disposition = Disposition(
+        decision=decision, note="FICT note", by="FICT engineer", at=FIRST_DECIDED, triage=triage
+    )
+    return finding.model_copy(update={"disposition": disposition})
+
+
+def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare: Any) -> None:
+    """Owner decision 187A (002 T332, FR-031): a pass takes no triage but `wrong`, a pass's `wrong`
+    is a miss and a flagged finding's a false alarm, so a re-run carries a triage only between two
+    passes or two flagged findings. Across the line it carries the decision without its triage and
+    names the triage in `coverage.recheck`: F-007's `already_known` and F-008's `wrong`, a false
+    alarm, onto F-001 and F-002, passes now; F-009's `wrong`, a pass's miss, onto F-003, flagged
+    now. F-010's miss onto F-004, a pass still, is carried whole, as is F-011's Defer onto F-005,
+    flagged still. Each decision is announced as recorded."""
+    run, earlier, events = bare
+    run.session.findings[:] = [
+        as_pass(coaxial("F-001", "hol:0001")),
+        as_pass(coaxial("F-002", "hol:0002")),
+        coaxial("F-003", "hol:0003"),
+        as_pass(coaxial("F-004", "hol:0004")),
+        coaxial("F-005", "hol:0005"),
+    ]
+    earlier.findings[:] = [
+        decided_with(coaxial("F-007", "hol:0001"), "accepted", "already_known"),
+        decided_with(coaxial("F-008", "hol:0002"), "rejected", "wrong"),
+        decided_with(as_pass(coaxial("F-009", "hol:0003")), "rejected", "wrong"),
+        decided_with(as_pass(coaxial("F-010", "hol:0004")), "rejected", "wrong"),
+        decided_with(coaxial("F-011", "hol:0005"), "deferred", "new_and_real"),
+    ]
+
+    run.carry_from(earlier)
+
+    carried = [finding.disposition for finding in run.session.findings]
+    assert [
+        (disposition.decision, disposition.triage)
+        for disposition in carried
+        if disposition is not None
+    ] == [
+        ("accepted", None),
+        ("rejected", None),
+        ("rejected", None),
+        ("rejected", "wrong"),
+        ("deferred", "new_and_real"),
+    ]
+    assert [body for kind, body in events if kind == "disposition"] == [
+        {"finding_id": finding.id, "disposition": disposition.model_dump(mode="json")}
+        for finding, disposition in zip(run.session.findings, carried, strict=True)
+        if disposition is not None
+    ]
+    assert recheck_row(run.session) == [
+        "Not carried from the earlier check run: "
+        "the triage of F-007 (its finding is a pass, whose one triage, wrong, is a miss); "
+        "the triage of F-008 (its finding is a pass, whose one triage, wrong, is a miss); "
+        "the triage of F-009 (its finding is no longer a pass, and a pass's wrong is a miss, "
+        "not a false alarm)."
+    ]
+
+
 def test_two_earlier_decisions_meeting_one_finding_carry_neither_and_name_each(
     bare: Any,
 ) -> None:
