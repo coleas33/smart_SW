@@ -6486,3 +6486,20 @@ the decision register now records 160A as done.
     broken. Every changed file LF in the index.
   - Not run in this lane: the whole non-live suites, which run before the pull request and in its
     CI. No SOLIDWORKS process, seat task, or paid or live test ran.
+- **Gates before the pull request** (2026-11-01, on `0417907`'s tree): the whole non-live suite
+  on Python 3.12.3 with the tokenizer required, 18,759 passed and 5 skipped; `ruff check` clean;
+  the identifier scan, 58 passed; the C# build with zero warnings, and 10,274 extractor and 4,298
+  add-in tests passed.
+- **Review** (Tier 1, decision 180A; 2026-11-01): one Opus and one Codex review of the branch.
+  Codex approved, with no finding, after 8,192 in-memory fold cases and 24 scripted resume flows.
+  The Opus review found no must-fix: the fold is right on two re-runs in one turn, a re-run back
+  to the decided verdict, a Deferred finding, a triage, no disposition and several folds at once,
+  and 58A's restate and 015's carry are untouched. Of its seven should-fix findings, the records
+  one is fixed here (010 R5's settled row moved out of "Still open", and the register's 189A and
+  191A rows name this section); two go to the owner, since each would change what 189A or 191A
+  reach: the line lives on the live card only, so a reload, a review switch, a backend restart or
+  a read-only restore shows the finding undecided without it; and 58A's restate and 015's carry
+  keep a decision whatever the status and severity now are. The other four are in
+  [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 3: a later press or Show
+  replaces the line for good; the re-run's first card under its own id stays on the page; two
+  earlier findings with one verdict key fold onto the last; and the tests the review listed.
