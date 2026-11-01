@@ -1573,6 +1573,29 @@ def test_two_coaxial_findings_on_one_pair_carry_the_reject_onto_its_own(bare: An
     assert recheck_row(run.session) == []
 
 
+def test_a_carried_decision_keeps_its_triage(bare: Any) -> None:
+    """Owner decision 185A (002 T312): a re-run carries a decision whole, the triage beside it
+    included (72A), and the `disposition` event that announces the carry says so."""
+    run, earlier, events = bare
+    run.session.findings[:] = [coaxial("F-001", "hol:0001"), coaxial("F-002", "hol:0002")]
+    triaged = Disposition(
+        decision="rejected", note="FICT note", by="FICT engineer", at=FIRST_DECIDED, triage="wrong"
+    )
+    earlier.findings[:] = [
+        coaxial("F-007", "hol:0001"),
+        coaxial("F-008", "hol:0002").model_copy(update={"disposition": triaged}),
+    ]
+
+    run.carry_from(earlier)
+
+    assert run.session.findings[0].disposition is None
+    assert run.session.findings[1].disposition == triaged
+    assert [body for kind, body in events if kind == "disposition"] == [
+        {"finding_id": "F-002", "disposition": triaged.model_dump(mode="json")}
+    ]
+    assert triaged.model_dump(mode="json")["triage"] == "wrong"
+
+
 def test_two_earlier_decisions_meeting_one_finding_carry_neither_and_name_each(
     bare: Any,
 ) -> None:
