@@ -52,6 +52,11 @@ and the card names it. On another finding press Accept with no outcome picked, t
 and press Accept again: the triage is recorded, and the decision, note, engineer and time stay
 as first recorded; a second outcome is refused, as any change to a settled finding is.
 
+*Amended 2026-11-01 by owner decision 187A:* a pass, in "Checked, no issue", offers one
+outcome only, "wrong: a miss". Pressed with a decision on a pass the engineer judges wrong,
+it records `wrong`, and `report.md` counts that pass in its misses line, apart from the "By
+triage" count of flagged findings; any other outcome on a pass is refused.
+
 *Amended 2026-11-01 (roadmap hole H-g-012):* on that finding pick another outcome and press
 Accept once more: the card says the finding already has a triage and the one recorded stands, the
 recorded outcome is pressed again in place of the new pick, and the recorded `Disposition: ...`

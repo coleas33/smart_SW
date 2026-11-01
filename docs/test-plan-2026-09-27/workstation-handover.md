@@ -406,8 +406,9 @@ row per step and task id. The development machine moves each answer into the res
     evidence. *Since 2026-11-01* (decisions 183A and 184A) the seat also notes this design's
     setup and the review the engineer still did by hand, in the words of the test plan's step
     4.1, and `swreview timing` records the six, since the net reads unknown until both are
-    recorded; the same step gives every finding one of the four triage outcomes beside its
-    decision (002 FR-031, decision 185A). *Since 2026-11-01* (decision 186A) the seat writes the
+    recorded; the same step gives every flagged finding one of the four triage outcomes beside
+    its decision (002 FR-031, decision 185A), and a pass judged wrong its one outcome, "wrong:
+    a miss" (decision 187A). *Since 2026-11-01* (decision 186A) the seat writes the
     six, and the sitting's update minutes, in `notes\timing.txt` in the handover folder, never
     in the findings document, which records the net saved and the run folder's stamp only: a
     real design's timing figures are company facts and stay in the private fork. The review's

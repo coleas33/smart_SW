@@ -6653,9 +6653,10 @@ the decision register now records 160A as done.
     for the owner (58A's restate and 015's carry keep a decision whatever the status and severity
     now are); 015's carry now stops a triage at the line, and the restate has no word of its own
     with which to say it did, so it needs the owner's answer first.
-  - **The handover.** `workstation-handover.md`, item 13, still says step 4.1 gives every finding
-    one of the four outcomes. Cycle 4 rewrites that very sentence, so it is left for the rebase
-    onto cycle 4 rather than edited on two branches.
+  - **The handover.** `workstation-handover.md`, item 13, said step 4.1 gives every finding one
+    of the four outcomes. Cycle 4 rewrote that very sentence, so it waited for the rebase onto
+    cycle 4; after it, the sentence names a pass's one outcome (187A), and so does the
+    quickstart's Scenario 1 (the review's third finding).
   - **The card's sentence.** It, and `report.md`'s line under a decision, word a pass's `wrong`
     as `labels.triage` words it, "wrong", where the button says "wrong: a miss"; 187A asks only for
     the offer to be worded as a miss.
@@ -6698,3 +6699,17 @@ the decision register now records 160A as done.
   - Not run in this lane: the whole non-live suites, which run before the pull request and in its
     CI, among them `test_tracked_files_carry_no_recorded_number.py`, which reads the owner's
     denylist outside the repository. No SOLIDWORKS process, seat task, or paid or live test ran.
+- **Rebased onto cycle 4** (PR #63, `7f4a63d`) before the pull request: the specs README's recount
+  note and the register's rows 186A to 188A kept both sides; the seat plan and its pins merged on
+  their own. **Gates on the rebased tree** (2026-11-01, on `f1d09f7`): the whole non-live suite on
+  Python 3.12.3 with the tokenizer required, 18,783 passed and 5 skipped; `ruff check` clean; the
+  identifier scan, 58 passed; the C# build with zero warnings, and 10,274 extractor and 4,302
+  add-in tests passed; the seat plan's, the handover's and the triage modules again after the
+  review's edits.
+- **Review** (Tier 2, decision 180A; 2026-11-01): one Opus review, no must-fix. Its five should-fix
+  findings: the handover and the quickstart still gave every finding the four outcomes (fixed
+  here); and four left in [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 5: the
+  carry's `takes_triage` half and two documented branches (the route's `TriageOnAPassError`
+  answer, `report.md`'s non-`wrong` pass) have no test; the 300 px fact measures a pass's card
+  outside the fold a ranking puts it in; and whether a finding is a pass is spelled in six places.
+  The review found the unlocked read of `_refuse_a_pass_triage` sound.
