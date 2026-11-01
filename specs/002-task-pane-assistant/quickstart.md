@@ -52,6 +52,11 @@ and the card names it. On another finding press Accept with no outcome picked, t
 and press Accept again: the triage is recorded, and the decision, note, engineer and time stay
 as first recorded; a second outcome is refused, as any change to a settled finding is.
 
+*Amended 2026-11-01 (roadmap hole H-g-012):* on that finding pick another outcome and press
+Accept once more: the card says the finding already has a triage and the one recorded stands, the
+recorded outcome is pressed again in place of the new pick, and the recorded `Disposition: ...`
+line stays on the card above the refusal; `session.json` and `report.md` do not change.
+
 Record in the metric table in `benchmarks/native/bracket-assy/notes.md`: component count,
 seconds from pressing Review to extraction complete (SC-001, under 60), seconds to the first
 finding card (SC-001, under 180), seconds from the first `text.delta` in `events.jsonl` to
