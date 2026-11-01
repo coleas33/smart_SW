@@ -3303,3 +3303,98 @@ def test_start_stays_off_through_m0s_two_sittings(plan: str) -> None:
     for text in (waits, after):
         assert "Start stays off through M0-a and M0-b" in text
     assert "`DrawingOpenScope.SeatValidated`" in overnight and "Start switch" not in overnight
+
+
+TIMING_NOTE = "`notes\\timing.txt`"
+"""The private note in the handover folder where step 4.1 writes a real design's minutes, as the
+documents write its name (decision 186A; 007 T071)."""
+
+
+def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
+    plan: str, results: str
+) -> None:
+    """Decision 186A (007 T071): a real design's timing figures - the engineer's baseline, the
+    five assisted inputs and a sitting's update minutes - are company facts and stay in the
+    private fork, and the public repository holds only each design's net minutes saved and,
+    later, their median. Step 4.1 wrote the six numbers under its heading in the findings
+    document, which the owner commits to this public repository (step 6.5), with the update's
+    minutes beside them, and step 4.5 recorded the six again. So step 4.1 writes them in a
+    private note in the handover folder, never in the findings document; step 4.5's command
+    takes them from the note, a number it prints wrong is named there and never quoted, and its
+    Record line names the net saved, as `swreview timing` prints it, and A's run folder stamp,
+    never the six minutes; the results sheet's 007 T060 row asks for the net alone; and the
+    public-repository rule of `CONTRIBUTING.md`, the full list, names a real design's review
+    timing, a design's net minutes saved and their median being the part that may be
+    committed."""
+    flat = re.sub(r"\s+", " ", plan)
+    minutes = re.sub(r"\s+", " ", step(plan, "4.1"))
+    minutes = minutes[minutes.index("007 T060, the minutes") : minutes.index("Record: ")]
+    chips = re.sub(r"\s+", " ", step(plan, "4.5"))
+    chips = chips[chips.index("**007 T060: record the timing of A's review**") :]
+    item_4, record = chips[: chips.index("Record: ")], chips[chips.index("Record: ") :]
+    [row] = [line for line in results.splitlines() if line.startswith("| 4.5 | 007 T060")]
+    contributing = (REPO / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    rule = contributing[contributing.index("## The public-repository rule") :]
+    rule = re.sub(r"\s+", " ", rule[: rule.index("\n## ")])
+
+    assert TIMING_NOTE in minutes and "decision 186A" in minutes
+    assert "never in the findings document" in minutes
+    assert "write its minutes apart in the same note, as a pilot cost" in minutes
+    assert "Write the six numbers under this step's heading in the findings document" not in flat
+    assert f"the six minutes you wrote in {TIMING_NOTE} at step 4.1" in item_4
+    assert "never its number" in item_4
+    assert record.startswith(
+        "Record: each pass or fail; for 007 T060 the net saved, as `swreview timing` printed it"
+        " (`net saved: <n>`), and A's run folder stamp (`<stamp>-A`), never the six minutes"
+    )
+    assert TIMING_NOTE in record and "for 007 T060 the six minutes" not in flat
+    assert "Observed holds the net saved only, never the six minutes (decision 186A)" in row
+    assert "a real design's review timing" in rule
+    assert (
+        "a design's net minutes saved, and their median, may be committed (decision 186A)"
+    ) in rule
+
+
+def test_every_check_before_the_findings_document_is_committed_names_the_timing_figures(
+    plan: str, results: str
+) -> None:
+    """Decision 186A (007 T071): the findings document reaches this public repository through
+    the owner's reading (step 6.5), so every place that says what stays out of it names a real
+    design's timing figures, the private note that holds them and the net saved, the one figure
+    the document may hold: rule 5 and step 6.4, by which the engineer finishes the document; step
+    6.5, which hands it to the owner; the results sheet's own header; the handover's timed run,
+    its findings document and the owner's reading after the sitting; the runbook's section 8,
+    whose seat may push the document on a branch; and 007 T060, whose Done note the development
+    machine commits. Section 0.2 says the note travels in the handover folder and is never
+    pushed, as `notes\\paths.txt` does."""
+    rules = section(plan, "The rules for the whole sitting")
+    handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
+    runbook = RUNBOOK.read_text(encoding="utf-8")
+    tasks = (REPO / "specs" / "007-attention-policy-gate" / "tasks.md").read_text(encoding="utf-8")
+    [t060] = [line for line in tasks.splitlines() if re.match(r"- \[[ x]\] T060 ", line)]
+    places = {
+        "rule 5": rules[rules.index("5. **In the findings document") : rules.index("6. **Do not")],
+        "step 6.4": step(plan, "6.4"),
+        "step 6.5": step(plan, "6.5"),
+        "the results sheet's header": results[: results.index("## Results")],
+        "the handover's timed run": handover[
+            handover.index("And it is **007 T060**'s timed run") : handover.index("14. **009 T081")
+        ],
+        "the handover's findings document": handover[
+            handover.index("17. **The findings document**") : handover.index("18. **009 T082")
+        ],
+        "the handover's reading after the sitting": handover[
+            handover.index("## 4. After the sitting") : handover.index("Before 008 T101 is ticked")
+        ],
+        "the runbook's section 8": runbook[runbook.index("## 8. ") : runbook.index("## 9. ")],
+        "007 T060": t060,
+    }
+    documents = re.sub(r"\s+", " ", step(plan, "0.2"))
+
+    for name, text in places.items():
+        flat = re.sub(r"\s+", " ", text)
+        assert "decision 186A" in flat, name
+        assert TIMING_NOTE in flat, name
+        assert "net saved" in flat, name
+    assert f"every file in `notes\\`, {TIMING_NOTE} among them" in documents
+    assert "never pushed" in documents
