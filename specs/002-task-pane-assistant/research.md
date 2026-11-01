@@ -6713,3 +6713,46 @@ the decision register now records 160A as done.
   answer, `report.md`'s non-`wrong` pass) have no test; the 300 px fact measures a pass's card
   outside the fold a ranking puts it in; and whether a finding is a pass is spelled in six places.
   The review found the unlocked read of `_refuse_a_pass_triage` sound.
+
+### 193A and 194A. The re-run fixes on the card (2026-11-01)
+
+- **Question**: what cycle 3's Tier 1 review left (H-d-008 above, *Review*): the cleared line
+  lived on the live card only; 58A's restate and 015's carry kept a decision whatever the status
+  and severity now were; and from the backlog's cycle 3 section, a later press or Show replaced
+  the line for good, a re-run's first card stayed on the page under its own id (404 on a press),
+  and two earlier findings with one verdict key folded a re-run onto the last.
+- **Decided**: 193A (2026-11-01, 15A of the round after cycle 3's review): the line comes back
+  after a reload, a review switch, a backend restart or a read-only restore, and after a later
+  press or Show on that card, worked out from the run's events with no new field on the finding.
+  194A (16A of the same round): 191A's rule governs 58A's restate and 015's carry too.
+- **Settled with it**:
+  - **Where the line comes from.** Each snapshot names, for each finding still undecided, the
+    last `disposition.cleared` body its run's stream holds, under `cleared`, in session order;
+    the key is added only when there is a line, as `send_in_flight` is, so every other snapshot
+    and the pane fixtures keep their bytes. A stream whose first event names another session - a
+    re-run that failed after its rotation, beside the earlier record - lends none. Options: A,
+    from the stream; B, a field on `Finding`, which 193A rules out; C, a file of its own beside
+    the session, a second record of one fact. A.
+  - **The page.** The finding's entry keeps the line beside the disposition, written through its
+    own card (`entryOf`); a decision drops it; a card drawn again while undecided keeps it, so the
+    live card agrees with a snapshot taken then; and a status a press or Show writes shows it
+    above itself, in the `--judge` hue, as H-g-012 shows the record above a refusal.
+  - **The restate and the carry.** One fold rule for the resumed turn's re-run and the restate.
+    The carry carries a decision only onto a finding with the status and severity decided, and
+    otherwise sends `disposition.cleared` for the finding it would have landed on. Its line names
+    the restate or the carry: two more pairs in the words file's `rerun` block. A cleared decision
+    has a card to say so, so the `coverage.recheck` row does not name it (015 `recheck.md`
+    section 5 names what has no card); 187A's triage rule then reduces to "the finding takes it"
+    (`takes_triage`), since a decision crosses no change of status, and its item for a finding no
+    longer a pass can no longer be reached and goes.
+  - **The stray card.** Options: A, `finding.withdrawn` for the re-run's own id, as the backlog's
+    fix says, with an optional `folded_into` naming the id it folded onto; B, a new event type.
+    A: a reader still drops the id it names, and the one that reads a withdrawal as a verdict
+    taken back - the scorer's withdrawn forbidden hits (014 `scoring.md` 3.3) - and the page's
+    ranking read, which the session's end makes once, pass over a fold's. It is emitted right
+    before the fold's `finding` event, for the resumed turn's folds and the restate's alike.
+  - **Two earlier findings with one key.** The re-run folds onto neither and stays a finding of
+    its own, both decisions standing, as `_restated_targets` takes neither when either could be
+    re-judged (008 T136).
+- **Tests**: T340 and T342 in [tasks.md](tasks.md), Phase 27, each written first; T341 and T343
+  make them green, and T344 closes the records.
