@@ -45,7 +45,7 @@ None of these is a commitment; each says what was decided and what was not.
 
 | Document | What it is |
 |---|---|
-| [`future-capabilities-roadmap-2026-10-14.md`](future-capabilities-roadmap-2026-10-14.md) | The current roadmap: the remaining evaluation and send-gate work, and preparation for automated drawings, engineer-confirmed load context and later Simulation integration. Documentation only. |
+| [`roadmap/README.md`](roadmap/README.md) | The current roadmap, updated run by run from its prompt: what would show the tool helps engineers, the holes in the way, the milestones M0 to M3 and the first cycle. It supersedes [`future-capabilities-roadmap-2026-10-14.md`](future-capabilities-roadmap-2026-10-14.md), kept for its record. |
 | [`drawing-creation-d0-inventory.md`](drawing-creation-d0-inventory.md) | D0, the inventory the roadmap asks for before any drawing-creation feature (reserved number 012) is specified. |
 | [`feature-request-resolve-lightweight.md`](feature-request-resolve-lightweight.md) | A feature request raised at the workstation on 2026-09-19: let the engineer resolve lightweight components before a review, by choice. |
 | [`future/llm-assistants-2026-09-28.md`](future/llm-assistants-2026-09-28.md) | Two language-model assistant ideas (a concept assistant and a hand-calc assistant), researched and estimated; idea only. |
