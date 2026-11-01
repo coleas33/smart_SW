@@ -688,7 +688,7 @@ old sentence is gone read the plan unflattened, and so held against the old text
 that sentence across lines; both checks that an old sentence is gone read the flattened plan
 before the pins were committed, and were red with the rest.
 
-**Gates** (T073; 2026-11-01), on the cycle's final tree:
+**Gates** (T073; 2026-11-01), on T073's tree:
 
 - Python 3.12.3, in the worktree's own environment (`uv sync --python 3.12 --all-extras`), and
   3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required, over the three
@@ -702,8 +702,50 @@ before the pins were committed, and were red with the rest.
   `test_tracked_files_carry_no_recorded_number.py`, which reads the owner's lists outside the
   repository. No SOLIDWORKS process, seat task, or paid or live test ran.
 
-**Open, for the owner**: step 4.1 still records the review's start and end times in the findings
-document. They are the review's run time, which the north star reports apart and
-[`docs/roadmap/metrics.md`](../../docs/roadmap/metrics.md) keeps as a guardrail, not one of
-186A's figures; but step 4.1 counts supervision, for an engineer who watched the whole review, as
-its start-to-end minutes, so in that case the two times show it.
+**Review** (Tier 2, decision 180A; 2026-11-01): one Codex review of the branch, two findings,
+both fixed test first under T072.
+
+- High: step 4.5 still had the engineer copy an exit-code-1 message of `swreview timing`, paths
+  replaced, into the findings document, and the command's messages carry figures: a refused
+  input's `input_value=` (`error: ValidationError: 1 validation error for Timing ...`), and, when
+  the session's stored timing is malformed, the stored baseline's. Fixed: a timing failure goes
+  whole into `notes\timing.txt`, and the findings document records only its exit code, its
+  error's name and the field it names, an exception that step 4.5 states and that step 1.4's rule
+  to quote a failing line, step 6.4's check and the results sheet's rule each name. Every line
+  steps 4.1 and 4.5 print or record was read for a figure: of step 4.5's printed lines only the
+  net saved may be recorded, the first, the six minutes, being compared with the note and never
+  copied; `report.md`'s Timing section holds the same minutes and the runtime; and the stored
+  baseline is now checked, not printed (`session.json carries a baseline: True`).
+- Medium: when the engineer watched the whole review, supervision is its start-to-end span, and
+  step 4.1's Record line put both times in the findings document, the point this record had left
+  open. The owner answered on 2026-11-01 (13A), to be registered as decision 192A: the review's
+  start and end times go in `notes\timing.txt` with the six minutes; the findings document keeps
+  only the net saved and A's run folder stamp, so no private figure can be worked out from it;
+  the runtime stays in the run folder, which is never committed. Fixed: step 4.1 notes the times
+  in the note and its Record line keeps them out; rule 5, steps 6.4 and 6.5, the results sheet's
+  header, the handover's timed run, its findings document and the owner's reading after the
+  sitting, the runbook's section 8, T060, `CONTRIBUTING.md`'s rule and the Assumptions' note name
+  them, as decision 192A (the owner's answer of 2026-11-01, 13A).
+- Tests changed on purpose, none loosened: T071's two pins, each with a dated note - the first
+  gains the exception, the printed lines and the times, the second the times and decision 192A in
+  each of its nine places - and a guard,
+  `test_no_line_sends_a_real_designs_timing_figure_to_the_findings_document`: no Record
+  instruction of the plan asks for a timing figure before its first `never`; no clause of the
+  plan, the results sheet, the handover or the runbook that names the findings document or
+  Observed names one unless it sends it to the note or says never; and no clause of steps 4.1 and
+  4.5 copies or quotes a message or a line outside the note.
+- Tests first: the three pins failed on cycle 4's documents as T073 left them, before the fix and
+  not only before cycle 4 - the first at step 4.5's exception, the second at rule 5, the third at
+  step 4.1's Record line. Read one by one, 27 of the 28 new checks were red; the one that held is
+  the guard's clause scan, which has nothing to find since T072 and flags the plan as it stood
+  before cycle 4, as its Record and copy scans flag that plan's two Record lines and its copy
+  instruction. After the fix the guard caught one of the fix's own sentences, in the handover,
+  which sent the times to "the note" without naming it; it names `notes\timing.txt` now.
+- Gates, on the fixed tree: the three modules, 297 passed on each of Python 3.12.3 and 3.11.16
+  with the tokenizer required; `ruff check` clean; the link check over the cycle's changed
+  Markdown clean (302 relative links); every changed file LF in the index.
+- Not changed: step 4.2 still notes B's start and end times, since B is not timed at this
+  sitting and they bound no one's supervision; a sitting that times B routes them as step 4.1
+  does. [`docs/roadmap/metrics.md`](../../docs/roadmap/metrics.md) keeps "Review wall time" as a
+  guardrail, and its pages are its update runs' to change: under decision 192A a timed review's
+  runtime stays in its run folder, so that row cannot take one.
