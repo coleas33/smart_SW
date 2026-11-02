@@ -1935,7 +1935,9 @@ class ReviewRun:
         one that cites one of its earlier steps, and was not carried from another run, whose
         step numbers are that run's - is kept when a restated finding took its place or a
         restated call returned its id (a check that de-duplicates, as `check_drawings` does);
-        every other one is no longer produced and is withdrawn, its disposition with it.
+        every other one is no longer produced and is withdrawn, its disposition with it - before
+        the folds are announced, so each cleared notice's tally counts what the restate leaves
+        (002 cycle 7's Tier 2 review).
         """
         session = self.session
         earlier = list(session.findings[:mark])
@@ -1960,11 +1962,11 @@ class ReviewRun:
             if tool is not None and finding.id not in taken | returned:
                 stale.append((finding.id, reasons[tool]))
         session.findings[:] = [*merged, *added]
-        self._announce_folds(folds, _cleared(earlier, merged), cause="restate")
         for reason in dict.fromkeys(why for _, why in stale):
             self.context.withdraw_findings(
                 [finding_id for finding_id, why in stale if why == reason], reason
             )
+        self._announce_folds(folds, _cleared(earlier, merged), cause="restate")
         return stale
 
     def attach_provider(self, provider: AgentProvider) -> None:

@@ -232,6 +232,10 @@ and adds `cleared`, a list of `disposition.cleared` bodies, only when there is o
 finding still undecided, in session order, the last such body the stream names it in. A stream whose
 first event does not start this session lends none. Every other snapshot keeps its keys and bytes.
 
+*Amended 2026-11-01 (feature 002, cycle 7's Tier 2 review):* each `cleared` body leaves out the
+event's `triage_tally`, the tally its clear was written with, which a later decision may have
+outdated: a snapshot's one tally is its summary's (`ranking.summary.triage_tally`).
+
 The pane fixture `extractor/SwReview.AddIn.Tests/Fixtures/review-big-assembly.json` is this object
 for feature 008's `big-assembly` fixture, plus `labels` (section 7) so the page tests need no route.
 
