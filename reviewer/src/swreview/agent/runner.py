@@ -1408,6 +1408,8 @@ class ReviewRun:
         (owner decision 99A). Built again only when a confirmed read reloads the package."""
         self._explanation_allowed = False
         self._pending_turn_end: str | None = None
+        self._stopped_reruns_from: int | None = None
+        """A stopped resumed turn's `reruns_from`: the fold `end_stopped` writes after its end."""
         self.check_presentation_cancelled: Callable[[], None] = lambda: None
         self._basis_from = 0
         """The step marker of the answer basis (feature 013, `contracts/sources.md` section 3): the
@@ -1516,17 +1518,19 @@ class ReviewRun:
         try:
             self._ask(message, reruns_from=before)
         except TurnStopped:
-            # The caller closes a stopped turn and finalizes it (`end_stopped`).
-            self._fold_reruns(before)
+            # The caller closes a stopped turn (`end_stopped`), which folds after its end.
+            self._stopped_reruns_from = before
             raise
         self._fold_reruns(before)
         return self.finalize()
 
     def _fold_reruns(self, before: int) -> None:
         """Rule 3 on what the resumed turn recorded past `before` (`_reconcile_reruns`), said on
-        the stream (`_announce_folds`): once the turn ends, fails (`_run_turn`) or is stopped,
-        and before the finalization that saves the session, so `session.json`, `report.md`, the
-        stream and the page hold one verdict per check whichever way it ended."""
+        the stream (`_announce_folds`): once the turn has returned, or after the end of a turn
+        that failed (`_run_turn`) or was stopped (`end_stopped`) - so no reader files the fold
+        under a call a Stop cut short - and always before the finalization that saves the
+        session, so `session.json`, `report.md`, the stream and the page hold one verdict per
+        check whichever way the turn ended."""
         self._announce_folds(*_reconcile_reruns(self.session, before), cause="rerun")
 
     def _announce_folds(
@@ -2097,9 +2101,13 @@ class ReviewRun:
         return self.finalize()
 
     def end_stopped(self) -> ReviewSession:
-        """Close a stopped turn through the pane, attempt and replay's shared path."""
+        """Close a stopped turn through the pane, attempt and replay's shared path: its end, then
+        a stopped resumed turn's fold (`_fold_reruns`), then the finalization."""
         self.sink.emit("turn.ended", {"reason": "stopped"})
         self.cancel_presentation()
+        before, self._stopped_reruns_from = self._stopped_reruns_from, None
+        if before is not None:
+            self._fold_reruns(before)
         return self.finalize()
 
     def finalize(self) -> ReviewSession:
@@ -2242,13 +2250,15 @@ class ReviewRun:
         A turn that fails is still an ended session: the error is reported, the turn is
         closed out, the session is finalized and written, and only then does the exception
         travel on to the caller, who decides whether to retry (FR-008, FR-028). A resumed
-        turn's re-runs - what it recorded past `reruns_from` findings - fold first (rule 3,
-        `_fold_reruns`), so the session finalized holds one verdict per check.
+        turn's re-runs - what it recorded past `reruns_from` findings - fold between the turn's
+        end and the finalization (rule 3, `_fold_reruns`), so the session finalized holds one
+        verdict per check.
         """
         self.turns += 1
         self.session.ended_at = None
         self._explanation_allowed = False
         self._pending_turn_end = None
+        self._stopped_reruns_from = None
         self._answered = False
         if self._coverage_stop is not None:
             # Lever 7: the withdrawal lasts one turn. A follow-up question, or an answered
@@ -2287,9 +2297,9 @@ class ReviewRun:
                 self.provider = DeferredProvider(self.provider.name, self.provider.model)
             self._explanation_allowed = False
             self._close_basis()
+            emit_turn_failed(self.sink, exc, self.redact)
             if reruns_from is not None:
                 self._fold_reruns(reruns_from)
-            emit_turn_failed(self.sink, exc, self.redact)
             self.finalize()
             raise
 
