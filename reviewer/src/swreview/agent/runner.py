@@ -1480,7 +1480,9 @@ class ReviewRun:
         open, so finalization no longer reports them as unresolved (rule 2), and a check the
         resumed turn re-runs replaces its earlier verdict rather than adding a second one
         (rule 3), keeping its decision when the status and severity are unchanged and clearing
-        it, announced with `disposition.cleared`, when either changed (189A and 191A).
+        it, announced with `disposition.cleared`, when either changed (189A and 191A) - however
+        the turn ends: a turn the provider fails or the engineer stops folds its re-runs before
+        it is finalized too (`_fold_reruns`).
         """
         if self.awaiting_send:
             requests = self._answer_requests(answers)
@@ -1502,9 +1504,21 @@ class ReviewRun:
         # Taken only after `_restate` returns, so a withdrawal can never shift a restated
         # finding into the earlier part, where it would stay as a duplicate under a new id.
         before = len(self.session.findings)
-        self._ask(message)
-        self._announce_folds(*_reconcile_reruns(self.session, before), cause="rerun")
+        try:
+            self._ask(message, reruns_from=before)
+        except TurnStopped:
+            # The caller closes a stopped turn and finalizes it (`end_stopped`).
+            self._fold_reruns(before)
+            raise
+        self._fold_reruns(before)
         return self.finalize()
+
+    def _fold_reruns(self, before: int) -> None:
+        """Rule 3 on what the resumed turn recorded past `before` (`_reconcile_reruns`), said on
+        the stream (`_announce_folds`): once the turn ends, fails (`_run_turn`) or is stopped,
+        and before the finalization that saves the session, so `session.json`, `report.md`, the
+        stream and the page hold one verdict per check whichever way it ended."""
+        self._announce_folds(*_reconcile_reruns(self.session, before), cause="rerun")
 
     def _announce_folds(
         self,
@@ -2202,21 +2216,24 @@ class ReviewRun:
 
     # --- internals ----------------------------------------------------------------
 
-    def _ask(self, text: str) -> TurnResult:
-        """Append an engineer turn and run it. The caller decides when to finalize."""
+    def _ask(self, text: str, *, reruns_from: int | None = None) -> TurnResult:
+        """Append an engineer turn and run it. The caller decides when to finalize; `reruns_from`
+        is a resumed turn's (`_run_turn`)."""
         self.messages.append({"role": "user", "content": text})
-        return self._run_turn()
+        return self._run_turn(reruns_from=reruns_from)
 
     def _say(self, text: str) -> ReviewSession:
         self._ask(text)
         return self.finalize()
 
-    def _run_turn(self) -> TurnResult:
+    def _run_turn(self, *, reruns_from: int | None = None) -> TurnResult:
         """One provider turn, its budget, and how it ended.
 
         A turn that fails is still an ended session: the error is reported, the turn is
         closed out, the session is finalized and written, and only then does the exception
-        travel on to the caller, who decides whether to retry (FR-008, FR-028).
+        travel on to the caller, who decides whether to retry (FR-008, FR-028). A resumed
+        turn's re-runs - what it recorded past `reruns_from` findings - fold first (rule 3,
+        `_fold_reruns`), so the session finalized holds one verdict per check.
         """
         self.turns += 1
         self.session.ended_at = None
@@ -2260,6 +2277,8 @@ class ReviewRun:
                 self.provider = DeferredProvider(self.provider.name, self.provider.model)
             self._explanation_allowed = False
             self._close_basis()
+            if reruns_from is not None:
+                self._fold_reruns(reruns_from)
             emit_turn_failed(self.sink, exc, self.redact)
             self.finalize()
             raise
