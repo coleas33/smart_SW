@@ -7039,3 +7039,112 @@ the decision register now records 160A as done.
   two page paths gained a guard fact each, proved by a mutant: a reply with no triage that lands
   after a review switch draws no line on the shown review's card of the same id, and a reload and
   a switch bring the line back from the live snapshot.
+
+### H-g-010. A withdrawal or a clear says what it took (2026-11-02; cycle 10)
+
+- **Question**: a restate withdraws the findings an answer no longer produces, together with their
+  decision and triage, and none of the places an engineer looks says so: the Transcript says only
+  "<id> withdrawn: <reason>", and `report.md` shows a finding whose decision a re-run, a restate
+  or a carry cleared as simply undecided, with no word of the clear, so the owner's M0 counts lose
+  judgements with no line in `report.md` ([roadmap hole H-g-010](../../docs/roadmap/holes.md), its
+  code half).
+- **Settled**:
+  - **The withdrawal's words.** `ToolContext.withdraw_findings`, the one place a finding leaves
+    the session, adds two keys to the body of a finding that held a decision: `disposition`, the
+    one that went with it, and `taken`, the words file's clause naming the decision and its
+    triage (`withdrawn`: "your Reject (wrong) went with it"), worded as the cleared line words
+    them - a pass's `wrong` as a miss (187A) - by one helper the two now share. The Transcript
+    prints the clause after the reason, as sent. Options: A, two optional keys on
+    `finding.withdrawn`; B, a `disposition.cleared` for the withdrawn id, whose card is gone and
+    whose line says "Decide again." A. A fold's withdrawal is written by `_announce_folds`, not
+    here, and names none: its finding stands under the id it took, and the cleared line says what
+    the fold took.
+  - **`report.md`.** Under a finding still undecided, its cleared line (`  - cleared: <line>`):
+    the last `disposition.cleared` its stream holds, as both snapshots name it (193A's
+    `cleared_lines`). And right after the summary whose counts no longer hold them, "Withdrawn with
+    a decision": one line per finding withdrawn with a decision, the Transcript's own, in the order
+    they went. Each only when there is something to say, so every other report and every committed
+    golden keeps its bytes; from the stream alone, as 193A works the snapshots' lines out, so
+    `Finding` gains no field.
+  - **The writers.** `render_report` takes the run's events. `ReviewRun.write_views` - a turn's
+    end, a live decision, the minutes and Send's saves - and the console's re-render
+    (`render_folder_report`: `swreview disposition`, `timing`, `exceptions accept-*` and `report`)
+    read the stream the session wrote: `events.jsonl`, or the rotated one a re-run left
+    (`own_stream`, moved from `chat/server.py` beside `replay_events`, where the restore reads it
+    as before). The console is a writer too: the hole's sitting step runs `swreview timing` and
+    any console triage after the restart, and a re-render without the stream would drop both.
+    The one-shot `swreview review` renders a session no engineer has decided yet, so it has
+    nothing to say and is left as it is.
+  - **Not changed**, as the hole's brief leaves them: the console save-over (a held review saved
+    over a disk-only write, `chat/sessions.py`), and the seat steps' order, which M0's tables set.
+- **Tests**: T358 and T360 in [tasks.md](tasks.md), Phase 30, each written first; T359 and T361
+  make them green, and T362 closes the records.
+- **Built** (2026-11-02, T359 and T361):
+  - The withdrawal (T359): `ToolContext.withdraw_findings` adds `disposition` and `taken` to the
+    body of a finding that held a decision; the words file's `withdrawn` block (`took`,
+    `took_with_triage`) and `summary.WithdrawnWords`; and `summary.decision_words`, the decision's
+    noun and the triage's word as the card shows them, which `runner._cleared_body` now shares,
+    with `DECISION_NOUNS` moved beside it from `runner.py`.
+  - The report (T359): `render_report` takes `events`; `snapshot.withdrawn_lines` stands beside
+    `cleared_lines`, one rule for the session's own stream (`_own_events`); the cleared line is
+    printed under "- Disposition: not yet dispositioned" as `  - cleared: <line>`, and "Withdrawn
+    with a decision" right after the summary.
+  - The writers (T359): `own_stream` and `stream_session_id`, moved unchanged from
+    `chat/server.py` to `agent/events.py`, and `session_events`, which `ReviewRun.write_views`,
+    `report/rerender.render_folder_report` and the server's read-only restore read through.
+  - The contract (T359): `finding.withdrawn`'s optional `disposition` and `taken`, each requiring
+    the other (`dependentRequired`); dated notes in [contracts/README.md](contracts/README.md) and
+    the `withdrawn` row in 009 [data-model.md](../009-engineer-workspace/data-model.md) section 1.
+  - The page (T361): `render.withdrawalMarker` ends the line with "; " and the body's `taken`
+    when it carries one, so the live Transcript and a replayed one say the same; `app.js` is
+    unchanged.
+- **Tests changed on purpose**, none loosened:
+  - `test_all_bought_withdraws_an_accepted_pin_finding_as_before`: the accepted pin's withdrawal
+    names its Accept.
+  - `test_a_regrade_that_clears_a_decision_says_so_in_every_view`: it reads the cleared line under
+    the pin's disposition too; its helper `regraded_review` takes the answer.
+  - `test_review_words.py`'s `PLACEHOLDERS` and `test_an_extra_key_anywhere_is_refused`, extended
+    to the block.
+  - `test_recheck.py::test_a_records_own_stream_is_the_canonical_one_or_its_latest_rotated_one`:
+    it reaches the moved rule in `agent/events.py`, its cases as they were.
+  - The 002 literal of the specs-README pin (T357, T362).
+- **Tests first**: T358's seventeen cases failed before T359, each for want of the body's keys, the
+  words, the contract's keys, `render_report`'s events or a writer's stream, while the six modules'
+  other 506 passed. T360's two facts failed before T361 for want of the clause, while the guard and
+  the class's 46 others passed; a mutant page that always appended a clause failed the guard.
+- **Left open**:
+  - A Check again (015's re-run) starts a new session and stream, so its report names neither the
+    earlier record's withdrawals nor its cleared lines; with the backlog's cycle 6 carry item
+    ([`docs/review-backlog.md`](../../docs/review-backlog.md)).
+  - A finding whose decision a clear took, and which a later restate withdrew while still
+    undecided, is named in neither place: its cleared line goes with it, and its withdrawal took
+    no decision.
+  - The Transcript's line is the live chat's: a read-only restore after a restart replays no
+    Transcript, and `report.md` carries the part there.
+  - Older records name the rule by its old place, `server._own_stream` (the backlog's cycle 6 item,
+    193A above); they are history and left as they are. The hole's row in
+    [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the roadmap's next update run.
+- **Gates** (T362; 2026-11-02), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required: 18,843 passed and 5 skipped on Python
+    3.12.3, and the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), cycle 9's
+    18,830 and T358's thirteen. Its two warnings are neither of this cycle: the test client's
+    deprecation, and a serializer warning from `test_ir_loader_append.py`'s invalid row.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,330 add-in tests passed, on T361's tree, which T362 leaves as it was for C#
+    and the page.
+  - The link check over the cycle's six changed Markdown files, anchors included, none broken;
+    every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
+    ran.
+  - *Changed 2026-11-02:* that tree came before the Tier 2 review's fixes and the rebase onto
+    cycle 9's; the final tree's gates are T362's last sub-item in [tasks.md](tasks.md).
+- **Review** (Tier 2, decision 180A; 2026-11-02): two points, each taken test first, as T362's
+  dated sub-items record. The stream can run ahead of the record - a sent review's answer writes
+  the withdrawal during `_restate`, then runs the whole resumed turn, and `session.json` is saved
+  only by `finalize` - so a backend killed in that turn would leave a record still holding F-003
+  accepted beside a stream that withdrew it, and the sitting's `swreview timing` would print
+  "F-003 withdrawn ... your Accept went with it" beside it. `withdrawn_lines` now names no
+  withdrawal of a finding the session still holds. And a folded family's member prints its
+  cleared line inside the family's `<details>` block, as `_render_family` already did, now pinned
+  by a case proved by a mutant.

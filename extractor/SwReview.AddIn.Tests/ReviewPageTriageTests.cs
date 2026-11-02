@@ -63,6 +63,11 @@ namespace SwReview.AddIn.Tests;
 /// review's card of the same id, and a reload and a switch bring the line back from the live snapshot.
 /// *Added 2026-11-02 (002 T356; a read-only check of those fixes):* a switch between a live review and a read-only restore
 /// draws every card's line again for the review shown - the read-only words, or, once it is live again, the repair.
+///
+/// Roadmap hole H-g-010 (002 T360): a withdrawal says what it took. When an answer's restate withdraws a finding that held a
+/// decision, the `finding.withdrawn` body names the disposition and the backend's clause for it (`taken`), and the Transcript's
+/// line ends with that clause after the reason, printed as sent, live and in a replay; a fold's withdrawal carries none, the
+/// cleared line on the card saying what the fold took.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -1655,6 +1660,89 @@ public sealed class ReviewPageTriageTests
         });
     }
 
+    /// <summary>
+    /// Roadmap hole H-g-010 (002 T360): a withdrawal that takes a decided finding says what it took. F-001 is rejected as `wrong`
+    /// and F-002 accepted as `already_known`; an answer's restate no longer produces either, and the backend withdraws each,
+    /// naming the disposition and its clause. Each Transcript line ends with the clause after the reason, printed as sent -
+    /// backend text, characters and never markup - and both cards leave Results, as any withdrawn one does.
+    /// </summary>
+    [Fact]
+    public void AWithdrawalSaysWhatItTookAsSent()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "finding", Finding("F-002"));
+            await driver.Push(Chat, 3, "disposition", DispositionEvent("F-001", RejectedWrong()));
+            await driver.Push(Chat, 4, "disposition", DispositionEvent("F-002", AcceptedAlreadyKnown()));
+            await driver.Push(Chat, 5, "finding.withdrawn", Took("F-001", RejectedWrong(), TookRejectedWrong));
+            await driver.Push(Chat, 6, "finding.withdrawn", Took("F-002", AcceptedAlreadyKnown(), HostileClause));
+            await driver.Settle();
+
+            string[] markers = ReviewPageDriver.Strings(await driver.Read(ReadTranscript), "markers");
+            Assert.Contains("F-001 withdrawn: " + BoughtReason + "; " + TookRejectedWrong, markers);
+            Assert.Contains("F-002 withdrawn: " + BoughtReason + "; " + HostileClause, markers);
+            Assert.Equal(0, (await driver.Read(ReadInjected)).GetProperty("injected").GetInt32());
+            Assert.Empty(ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
+        });
+    }
+
+    /// <summary>
+    /// The line comes back with the Transcript (002 T360): a review switch restores chat-2 from its snapshot, the session after
+    /// the withdrawal, and replays its stream from the start into the Transcript, where the withdrawal's line ends with the
+    /// backend's clause, as it did live.
+    /// </summary>
+    [Fact]
+    public void AReplayedWithdrawalSaysWhatItTook()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200, Snapshot(OtherRun, false, Finding("F-002")));
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+
+            await driver.Click("view-transcript");
+            await driver.Push(OtherChat, 1, "finding", Finding("F-001"));
+            await driver.Push(OtherChat, 2, "finding", Finding("F-002"));
+            await driver.Push(OtherChat, 3, "disposition", DispositionEvent("F-001", RejectedWrong()));
+            await driver.Push(OtherChat, 4, "finding.withdrawn", Took("F-001", RejectedWrong(), TookRejectedWrong));
+            await driver.Settle();
+
+            Assert.Contains(
+                "F-001 withdrawn: " + BoughtReason + "; " + TookRejectedWrong,
+                ReviewPageDriver.Strings(await driver.Read(ReadTranscript), "markers"));
+        });
+    }
+
+    /// <summary>
+    /// A fold's withdrawal is not this case (002 T360; a guard): the re-run's own id leaves, naming the id it took, and its line
+    /// says why and nothing of a decision, while the cleared line on F-001's card says what the fold took.
+    /// </summary>
+    [Fact]
+    public void AFoldsWithdrawalSaysNothingOfADecision()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "disposition", DispositionEvent("F-001", AcceptedAlreadyKnown()));
+            await driver.Push(Chat, 3, "finding", Finding("F-002", null, "suspected", "low"));
+            await driver.Push(Chat, 4, "finding.withdrawn", Folded("F-002", "F-001"));
+            await driver.Push(Chat, 5, "finding", Finding("F-001", null, "suspected", "low"));
+            await driver.Push(Chat, 6, "disposition.cleared", Cleared("F-001", AcceptedAlreadyKnown()));
+            await driver.Settle();
+
+            string[] markers = ReviewPageDriver.Strings(await driver.Read(ReadTranscript), "markers");
+            Assert.Contains("F-002 withdrawn: a second verdict on what F-001 judges, shown as F-001", markers);
+            Assert.DoesNotContain(markers, marker => marker.IndexOf("went with it", StringComparison.Ordinal) >= 0);
+            Assert.Equal(ClearedLine, (await driver.Read(ReadCard("F-001"))).GetProperty("status").GetString());
+        });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>
@@ -1979,6 +2067,34 @@ public sealed class ReviewPageTriageTests
             { "folded_into", onto },
         });
 
+    /// <summary>Why an answer's restate withdrew a finding, as the runner words it (`BOUGHT_WITHDRAWAL`).</summary>
+    private const string BoughtReason = "bought part (your answer to ER-001)";
+
+    /// <summary>
+    /// The backend's clause for a Reject recorded as `wrong` that a withdrawal took (roadmap hole H-g-010): the words file's
+    /// `withdrawn.took_with_triage`, filled as `withdraw_findings` fills it and sent as the body's `taken`.
+    /// </summary>
+    private const string TookRejectedWrong = "your Reject (wrong) went with it";
+
+    /// <summary>A clause no page could compose, markup that must reach the Transcript as characters (FR-029).</summary>
+    private const string HostileClause = "<img src=x onerror=alert(8)></p><script>alert(9)</script> went with it";
+
+    /// <summary>F-001's Reject with `wrong`, recorded before an answer withdrew it (roadmap hole H-g-010).</summary>
+    private static Dictionary<string, object?> RejectedWrong() => Disposition("rejected", "FICT not a problem", "wrong");
+
+    /// <summary>
+    /// The `finding.withdrawn` body of a finding that held a decision, as `withdraw_findings` writes it (roadmap hole H-g-010):
+    /// the reason, the disposition that went with it and <paramref name="clause"/>, the backend's words naming it.
+    /// </summary>
+    private static string Took(string findingId, Dictionary<string, object?> disposition, string clause) =>
+        JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            { "finding_id", findingId },
+            { "reason", BoughtReason },
+            { "disposition", disposition },
+            { "taken", clause },
+        });
+
     // ---- reading the page ---------------------------------------------------------------------
 
     /// <summary>
@@ -2149,6 +2265,10 @@ return JSON.stringify({
     private const string ReadTranscript = @"
 var transcript = document.getElementById('transcript');
 return JSON.stringify({ ok: true, text: transcript.textContent, markers: h.texts(transcript, '.marker') });";
+
+    /// <summary>How many elements backend text injected into the Transcript.</summary>
+    private const string ReadInjected = @"
+return JSON.stringify({ ok: true, injected: h.injected(document.getElementById('transcript')) });";
 
     /// <summary>
     /// Opens one card's fold and measures each triage button brought into view: no box scrolled

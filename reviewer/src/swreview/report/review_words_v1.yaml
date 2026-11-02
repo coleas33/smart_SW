@@ -140,6 +140,17 @@ rerun:
   carried: "The checks ran again on the saved evidence and this verdict changed, so your {decision} was not carried over. Decide again."
   carried_with_triage: "The checks ran again on the saved evidence and this verdict changed, so your {decision} ({triage}) was not carried over. Decide again."
 
+# What a withdrawal took (feature 002 FR-031, roadmap hole H-g-010): when an answer graded the
+# checks again and a check no longer produces a finding that held a decision, the decision and its
+# triage go with the finding, and the Transcript's line saying it was withdrawn ends with this
+# clause, after its reason. `{decision}` and `{triage}` are filled as in `rerun`, a pass's miss as
+# its card words it; `took_with_triage` is for a disposition that holds a triage. The backend fills
+# it and sends it in `finding.withdrawn` as `taken`; the page prints it as sent, and `report.md`
+# names the finding among those withdrawn with a decision in the same line.
+withdrawn:
+  took: "your {decision} went with it"
+  took_with_triage: "your {decision} ({triage}) went with it"
+
 read_only_lead: "The backend restarted, so this review is shown from its run folder."
 read_only_off: "Follow-ups, decisions and answers are off."
 

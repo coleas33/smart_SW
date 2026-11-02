@@ -594,6 +594,66 @@ def test_withdraw_findings_needs_a_session() -> None:
         context.withdraw_findings(["F-001"], "a reason")
 
 
+def test_a_withdrawal_names_the_decision_and_triage_it_took() -> None:
+    """002 T358 (roadmap hole H-g-010): a finding withdrawn with a decision takes it with it, and
+    its `finding.withdrawn` body says so - the disposition it held, and the words file's clause
+    naming the decision and, when one was recorded, its triage, which the Transcript prints after
+    the reason - while an undecided finding's body is as before."""
+    from swreview.report.dispositions import set_disposition
+
+    context, events = context_with_findings(3)
+    session = context.require_session()
+    set_disposition(session, "F-001", "rejected", "FICT not a problem", "FICT-ENG", triage="wrong")
+    set_disposition(session, "F-002", "accepted", "FICT to fix", "FICT-ENG")
+    held = {
+        finding.id: finding.disposition.model_dump(mode="json")
+        for finding in session.findings
+        if finding.disposition is not None
+    }
+
+    context.withdraw_findings(["F-001", "F-002", "F-003"], "a reason")
+
+    assert events == [
+        (
+            "finding.withdrawn",
+            {
+                "finding_id": "F-001",
+                "reason": "a reason",
+                "disposition": held["F-001"],
+                "taken": "your Reject (wrong) went with it",
+            },
+        ),
+        (
+            "finding.withdrawn",
+            {
+                "finding_id": "F-002",
+                "reason": "a reason",
+                "disposition": held["F-002"],
+                "taken": "your Accept went with it",
+            },
+        ),
+        ("finding.withdrawn", {"finding_id": "F-003", "reason": "a reason"}),
+    ]
+
+
+def test_a_withdrawn_pass_names_its_miss_as_a_miss() -> None:
+    """Owner decision 187A: a pass's one triage, `wrong`, is a miss, so the clause names it as the
+    pass's card and the cleared line do."""
+    from swreview.report.dispositions import set_disposition
+
+    context, events = context_with_findings(1)
+    session = context.require_session()
+    session.findings[0] = session.findings[0].model_copy(
+        update={"status": "checked_within_scope", "severity": "info"}
+    )
+    set_disposition(session, "F-001", "accepted", "FICT checked", "FICT-ENG", triage="wrong")
+
+    context.withdraw_findings(["F-001"], "a reason")
+
+    [(_, body)] = events
+    assert body["taken"] == "your Accept (wrong: a miss) went with it"
+
+
 def test_a_look_alike_request_is_an_evidence_request_like_any_other() -> None:
     """The look-alike above is a plain model request: `source` model, no text box."""
     request = EvidenceRequest(
@@ -735,17 +795,26 @@ def test_the_restate_withdraws_each_id_it_folded(tmp_path: Path, scripted_regist
 def test_all_bought_withdraws_an_accepted_pin_finding_as_before(
     tmp_path: Path, scripted_registry: None
 ) -> None:
+    """*Changed 2026-11-02 on purpose (002 T358; roadmap hole H-g-010):* the accepted pin finding
+    is still withdrawn, and its withdrawal now names the Accept it took, with the disposition; the
+    undecided pin finding's is as before."""
     events: Events = []
     run = graded(tmp_path, events=events)
     pin_findings = ids_on(run, PIN_ID)
-    disposed(run, pin_decision="accepted")
+    recorded = dict(disposed(run, pin_decision="accepted"))
     mark = len(events)
 
     run.answer_evidence_batch([("ER-001", "All bought")])
 
     assert pin_findings[0] not in [finding.id for finding in run.session.findings]
     assert withdrawn(events[mark:]) == [
-        {"finding_id": finding_id, "reason": BOUGHT_REASON} for finding_id in pin_findings
+        {
+            "finding_id": pin_findings[0],
+            "reason": BOUGHT_REASON,
+            "disposition": recorded[pin_findings[0]],
+            "taken": "your Accept went with it",
+        },
+        {"finding_id": pin_findings[1], "reason": BOUGHT_REASON},
     ]
     [row] = [item for item in run.session.coverage.skipped
              if item.check == "coverage.prerun.bought_parts"]
@@ -804,3 +873,47 @@ def test_a_restated_finding_keeps_its_triage(tmp_path: Path, scripted_registry: 
         if kind == "finding" and body["id"] in triages
     }
     assert announced == triages
+
+
+# --- 8. report.md says what a withdrawal took (002 T358; roadmap hole H-g-010) ---------------
+
+
+def test_the_views_name_a_decided_withdrawal_from_the_sessions_own_stream(
+    tmp_path: Path, scripted_registry: None
+) -> None:
+    """002 T358 (roadmap hole H-g-010): `ReviewRun.write_views`, the report every live writer
+    renders - a turn's end, a decision, the minutes, Send's saves - names the finding the answer
+    withdrew with the Accept recorded on it, read from the stream the session wrote; and after a
+    re-run's rotation moved that stream aside and left another session's in its place, from the
+    rotated one (cycle 6's `_own_stream` rule)."""
+    from swreview.agent.providers import AgentEvent
+
+    run = graded(tmp_path)
+    pin = ids_on(run, PIN_ID)
+    disposed(run, pin_decision="accepted")
+    run.answer_evidence_batch([("ER-001", "All bought")])
+    named = f"- {pin[0]} withdrawn: {BOUGHT_REASON}; your Accept went with it"
+
+    run.write_views(save=False, best_effort=False)
+
+    assert named in report_lines(run)
+    assert not any(line.startswith(f"- {pin[1]} withdrawn:") for line in report_lines(run))
+
+    stream = run.events_path
+    stream.rename(stream.with_name("events.1.jsonl"))
+    another = AgentEvent(
+        seq=1,
+        at="2026-11-02T09:00:00+00:00",
+        type="session.started",
+        body={"session_id": "00000000-0000-4000-8000-000000000357"},
+    )
+    stream.write_text(another.model_dump_json() + "\n", encoding="utf-8")
+
+    run.write_views(save=False, best_effort=False)
+
+    assert named in report_lines(run)
+
+
+def report_lines(run: runner.ReviewRun) -> list[str]:
+    """The lines of the `report.md` the run last wrote."""
+    return (run.out_dir / "report.md").read_text(encoding="utf-8").splitlines()

@@ -25,6 +25,11 @@ decision and never inferred from it (002 research, 185A). What this pins:
 - **the tally** (002 T346, cycle 7): one function counts what `report.md`'s two lines print -
   `summary.triage_tally` - and the summary and a live decision's `disposition` event carry what it
   returns, only while some finding records a triage.
+- **what a clear or a withdrawal took** (002 T358, roadmap hole H-g-010): `report.md` prints an
+  undecided finding's cleared line under its disposition and names each finding withdrawn with a
+  decision after the summary, from the session's own stream alone, and with nothing to say keeps
+  its bytes; a withdrawal of a finding the session still holds, the stream having run ahead of
+  the record, is not named (cycle 10's Tier 2 review).
 
 Every fixture is fictional: FICT names, and an explicit `by` on every record.
 """
@@ -760,3 +765,173 @@ def test_a_live_decision_announces_the_tally(
         validator.validate(
             {"seq": seq, "at": "2026-11-01T09:00:00Z", "type": "disposition", "body": body}
         )
+
+
+# --- what a clear or a withdrawal took (002 T358; roadmap hole H-g-010) --------------------------
+
+WITHDRAWN_BECAUSE = "bought part (your answer to ER-001)"
+"""Why a restate withdrew a finding, as `runner.BOUGHT_WITHDRAWAL` words it."""
+
+RESTATE_CLEARED = (
+    "Your answer graded the checks again and this verdict changed, so your Accept (real but "
+    "already known) was cleared. Decide again."
+)
+"""The restate's line for an Accept recorded as `already_known` (owner decision 194A)."""
+
+FOLD = (
+    "finding.withdrawn",
+    {
+        "finding_id": "F-009",
+        "reason": "a second verdict on what F-001 judges, shown as F-001",
+        "folded_into": "F-001",
+    },
+)
+"""A fold's withdrawal of the id a restated finding was first announced under (002 cycle 6)."""
+
+ACCEPTED_KNOWN = {
+    "decision": "accepted",
+    "note": "FICT note",
+    "by": BY,
+    "at": "2026-11-01T09:00:00Z",
+    "triage": "already_known",
+}
+REJECTED_WRONG = {**ACCEPTED_KNOWN, "decision": "rejected", "triage": "wrong"}
+
+
+def stream_of(
+    session: ReviewSession, *events: tuple[str, dict[str, Any]], started: UUID | None = None
+) -> list[AgentEvent]:
+    """A run's stream: the `session.started` of `session` - or of `started`, another session -
+    then each `(type, body)` in order."""
+    first = ("session.started", {"session_id": str(started or session.session_id)})
+    return [
+        AgentEvent(seq=seq, at=FIRST_AT, type=kind, body=body)
+        for seq, (kind, body) in enumerate((first, *events), start=1)
+    ]
+
+
+def cleared(finding_id: str, reason: str = RESTATE_CLEARED) -> tuple[str, dict[str, Any]]:
+    """A `disposition.cleared` of `finding_id`'s Accept, as the runner writes it."""
+    body = {"finding_id": finding_id, "disposition": ACCEPTED_KNOWN, "reason": reason}
+    return ("disposition.cleared", body)
+
+
+def withdrawal(finding_id: str, **took: Any) -> tuple[str, dict[str, Any]]:
+    """A restate's `finding.withdrawn` of `finding_id`, naming what it `took`, if anything."""
+    return ("finding.withdrawn", {"finding_id": finding_id, "reason": WITHDRAWN_BECAUSE, **took})
+
+
+def disposition_lines(report: str, finding_id: str) -> list[str]:
+    """What `report.md` prints of `finding_id`'s disposition: from its "- Disposition" line to
+    the "- Exception:" line that follows."""
+    lines = report.splitlines()
+    heading = lines.index(next(line for line in lines if line.startswith(f"#### {finding_id}:")))
+    start = next(
+        index for index in range(heading, len(lines)) if lines[index].startswith("- Disposition")
+    )
+    end = next(
+        index for index in range(start, len(lines)) if lines[index].startswith("- Exception:")
+    )
+    return lines[start:end]
+
+
+def test_an_undecided_findings_cleared_line_is_printed_under_its_disposition() -> None:
+    """Under a finding still undecided, `report.md` prints the line of the last
+    `disposition.cleared` the session's own stream names it in, as both snapshots name it (owner
+    decision 193A); a finding decided since prints its decision and no line, and one never cleared
+    is as before."""
+    session = reported_session((("F-003", "rejected", "wrong"),))
+    events = stream_of(
+        session, cleared("F-001", "FICT an earlier line"), cleared("F-001"), cleared("F-003")
+    )
+
+    report = render_report(session, events=events)
+
+    assert disposition_lines(report, "F-001") == [
+        "- Disposition: not yet dispositioned",
+        f"  - cleared: {RESTATE_CLEARED}",
+    ]
+    assert disposition_lines(report, "F-002") == ["- Disposition: not yet dispositioned"]
+    decided = disposition_lines(report, "F-003")
+    assert decided[:3] == ["- Disposition:", "  - decision: rejected", "  - triage: wrong"]
+    assert not any(line.startswith("  - cleared:") for line in decided)
+
+
+def test_each_finding_withdrawn_with_a_decision_is_named_after_the_summary() -> None:
+    """Right after the summary, whose counts no longer hold them, `report.md` names each finding
+    the session's own stream says was withdrawn with a decision, in the order they went: the
+    Transcript's line - its id, why it went, and the decision and triage it took. An undecided
+    finding's withdrawal and a fold's are not named."""
+    session = triage_session(2)
+    rejected = "your Reject (wrong) went with it"
+    accepted = "your Accept (real but already known) went with it"
+    events = stream_of(
+        session,
+        withdrawal("F-007", disposition=REJECTED_WRONG, taken=rejected),
+        withdrawal("F-008"),
+        FOLD,
+        withdrawal("F-004", disposition=ACCEPTED_KNOWN, taken=accepted),
+    )
+
+    lines = render_report(session, events=events).splitlines()
+
+    start = lines.index("## Withdrawn with a decision")
+    assert lines[start - 2].startswith("- Coverage:")
+    assert lines[start : start + 6] == [
+        "## Withdrawn with a decision",
+        "",
+        f"- F-007 withdrawn: {WITHDRAWN_BECAUSE}; {rejected}",
+        f"- F-004 withdrawn: {WITHDRAWN_BECAUSE}; {accepted}",
+        "",
+        "## Findings",
+    ]
+
+
+def test_a_stream_another_session_wrote_lends_the_report_nothing() -> None:
+    """A stream whose first event starts another session - a re-run's, left beside the earlier
+    record - says nothing of this session's decisions, as it lends the snapshots no line (193A)."""
+    session = reported_session(())
+    events = stream_of(
+        session,
+        cleared("F-001"),
+        withdrawal("F-007", disposition=REJECTED_WRONG, taken="your Reject (wrong) went with it"),
+        started=UUID(int=357),
+    )
+
+    assert render_report(session, events=events) == render_report(session)
+
+
+def test_a_report_with_nothing_to_say_keeps_its_bytes() -> None:
+    """A stream whose withdrawals took no decision - an undecided finding's, a fold's - and whose
+    one clear is of a finding decided since renders `report.md` byte for byte as with no stream,
+    so every committed golden keeps its bytes. Before T359 it fails only for want of `events`."""
+    session = reported_session()
+    events = stream_of(session, withdrawal("F-008"), FOLD, cleared("F-001"))
+
+    assert render_report(session, events=events) == render_report(session)
+
+
+def test_a_withdrawal_of_a_finding_the_session_still_holds_is_not_named() -> None:
+    """Cycle 10's Tier 2 review (002 T362): the stream can run ahead of the record. On a sent
+    review, `answer_evidence_batch` writes a restate's withdrawal and then runs the whole resumed
+    turn, and `session.json` is saved only by `finalize`, so a backend killed in that turn leaves
+    the record holding the finding, decided, beside a stream that withdrew it - F-003 Accepted,
+    ER-001 answered "All bought". `report.md` rendered from that record (`swreview timing` after
+    the restart) names no withdrawal of a finding the session still holds: the same bytes as with
+    no stream, and beside the withdrawal of a finding it no longer holds, that one alone."""
+    session = reported_session((("F-003", "accepted", None),))
+    accepted = find_finding(session, "F-003").disposition
+    assert accepted is not None
+    ahead = withdrawal(
+        "F-003", disposition=accepted.model_dump(mode="json"), taken="your Accept went with it"
+    )
+    rejected = "your Reject (wrong) went with it"
+    gone = withdrawal("F-007", disposition=REJECTED_WRONG, taken=rejected)
+
+    assert render_report(session, events=stream_of(session, ahead)) == render_report(session)
+    lines = render_report(session, events=stream_of(session, ahead, gone)).splitlines()
+    start = lines.index("## Withdrawn with a decision")
+    assert lines[start + 2 : start + 4] == [
+        f"- F-007 withdrawn: {WITHDRAWN_BECAUSE}; {rejected}",
+        "",
+    ]

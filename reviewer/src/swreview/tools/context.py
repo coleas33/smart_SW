@@ -59,6 +59,7 @@ from swreview.report.session import (
     ReviewSession,
     Timing,
 )
+from swreview.report.summary import decision_words, load_words
 from swreview.report.titles import pane_finding
 
 if TYPE_CHECKING:
@@ -330,16 +331,24 @@ class ToolContext:
         `finding.withdrawn {finding_id, reason}` event, in session order, so the pane drops
         exactly what the session dropped. An id the session does not hold is ignored. Returns
         the ids withdrawn, in session order.
+
+        A finding that held a decision takes it with it, and its body says so (002 FR-031,
+        roadmap hole H-g-010): `disposition`, the one it held, and `taken`, the words file's clause
+        naming the decision and its triage (`withdrawn`), which the Transcript's line ends with.
         """
         session = self.require_session()
         wanted = set(finding_ids)
-        gone = [finding.id for finding in session.findings if finding.id in wanted]
+        gone = [finding for finding in session.findings if finding.id in wanted]
         if not gone:
             return []
         session.findings[:] = [finding for finding in session.findings if finding.id not in wanted]
-        for finding_id in gone:
-            self.emit_event("finding.withdrawn", {"finding_id": finding_id, "reason": reason})
-        return gone
+        for finding in gone:
+            body: dict[str, Any] = {"finding_id": finding.id, "reason": reason}
+            if finding.disposition is not None:
+                body["disposition"] = finding.disposition.model_dump(mode="json")
+                body["taken"] = load_words().withdrawn.of(*decision_words(finding))
+            self.emit_event("finding.withdrawn", body)
+        return [finding.id for finding in gone]
 
     def replace_coverage(
         self,

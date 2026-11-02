@@ -16,7 +16,9 @@ three callers:
 
 Pure: it reads its arguments (and, through the summary, the words file) and writes
 nothing. The run's events, which the two routes replay from its stream, are one of them: owner
-decision 193A works a cleared decision's line out from them (`cleared`).
+decision 193A works a cleared decision's line out from them (`cleared`). `report.md` prints the
+same lines, and names the findings withdrawn with a decision (`withdrawn_lines`; roadmap hole
+H-g-010).
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ __all__ = [
     "restored_snapshot",
     "review_snapshot",
     "root_document",
+    "withdrawn_lines",
 ]
 
 WAITING_STATES = frozenset({"not_sent", "send_failed"})
@@ -113,29 +116,59 @@ def cleared_lines(session: ReviewSession, events: Iterable[AgentEvent]) -> list[
 
     Worked out from the stream, so `Finding` gains no field and an older build still loads the
     session; a decision recorded since ends the line, as it does on the live card. A stream whose
-    first event does not start this session - a re-run that failed after its rotation leaves its
-    own stream beside the earlier record - lends none. The stream is read to its end either way,
-    so a file a caller replays is closed when this returns.
+    first event does not start this session lends none (`_own_events`).
     """
-    first: AgentEvent | None = None
     latest: dict[str, dict[str, Any]] = {}
-    for event in events:
-        first = first or event
+    for event in _own_events(session, events):
         if event.type == "disposition.cleared":
             latest[str(event.body.get("finding_id"))] = {
                 key: value for key, value in event.body.items() if key != "triage_tally"
             }
-    if (
-        first is None
-        or first.type != "session.started"
-        or first.body.get("session_id") != str(session.session_id)
-    ):
-        return []
     return [
         latest[finding.id]
         for finding in session.findings
         if finding.disposition is None and finding.id in latest
     ]
+
+
+def withdrawn_lines(session: ReviewSession, events: Iterable[AgentEvent]) -> list[dict[str, Any]]:
+    """Each `finding.withdrawn` body of the run's stream that names the decision it took
+    (`taken`), in the order the findings went: what `report.md` names under "Withdrawn with a
+    decision" (002 FR-031, roadmap hole H-g-010). An undecided finding's withdrawal and a fold's
+    name none. Worked out from the stream as `cleared_lines` is, since a withdrawal takes the
+    finding and its decision out of the session; a stream whose first event does not start this
+    session lends none.
+
+    The stream can run ahead of the record, though: an answer's `_restate` writes the withdrawal
+    before `session.json` is saved, so the session a report is rendered from can still hold the
+    finding, decided. A sent review's backend killed during the resumed turn leaves it so, since
+    `finalize` saves only after that turn; so does a waiting review whose `close_waiting` raised,
+    since `answer_evidence_batch` then reloads the record from disk and `_play` renders from it.
+    A body whose finding the session still holds is skipped, so the report names no withdrawal
+    its record has not caught up with (cycle 10's Tier 2 review, and a read-only check of its
+    fixes)."""
+    held = {finding.id for finding in session.findings}
+    return [
+        dict(event.body)
+        for event in _own_events(session, events)
+        if event.type == "finding.withdrawn"
+        and "taken" in event.body
+        and event.body.get("finding_id") not in held
+    ]
+
+
+def _own_events(session: ReviewSession, events: Iterable[AgentEvent]) -> list[AgentEvent]:
+    """`events` read to their end - so a file a caller replays is closed when this returns - or
+    none when the first does not start `session`: a re-run that failed after its rotation leaves
+    its own stream beside the earlier record (owner decision 193A)."""
+    read = list(events)
+    if (
+        not read
+        or read[0].type != "session.started"
+        or read[0].body.get("session_id") != str(session.session_id)
+    ):
+        return []
+    return read
 
 
 def restored_snapshot(

@@ -16,6 +16,8 @@ starts omit it and keep the previous body. Other new fields remain refused by th
 
 *Amended 2026-11-01 (the owner's request; cycle 7, T347):* `chat-events.schema.json` gains `$defs/TriageTally` - the flagged findings by outcome and with none, the passes judged wrong, and `report.md`'s By triage and misses lines for them, counted by `report/summary.triage_tally` - and an optional `triage_tally` of that shape on the `disposition` and `disposition.cleared` bodies, present only while some finding records a triage. The review summary and the disposition route's reply carry the same ([chat-api.md](chat-api.md); [data-model.md](../data-model.md) section 2). Each event's tally is the count when it is sent (settled 2026-11-02), so a Check again's carry counts decision by decision.
 
+*Amended 2026-11-02 (roadmap hole H-g-010; cycle 10, T359):* `chat-events.schema.json`: `finding.withdrawn` gains optional `disposition` and `taken`, both or neither, on the withdrawal of a finding that held a decision: the disposition that went with it, and the words file's clause naming the decision and its triage (`withdrawn`), which the Review page's Transcript ends the withdrawal's line with, as sent. A fold's withdrawal and an undecided finding's carry neither. `report.md` names each such withdrawal, and prints an undecided finding's last cleared line, from the stream the session wrote ([spec.md](../spec.md), FR-031). *Amended 2026-11-02 (cycle 10's Tier 2 review):* a withdrawal of a finding the record still holds is not named, because the stream can run ahead of the record.
+
 | Contract | File | Producer → Consumer |
 |----------|------|---------------------|
 | Chat backend HTTP + SSE | `chat-api.md` | Python `swreview chat serve` → add-in Review page |

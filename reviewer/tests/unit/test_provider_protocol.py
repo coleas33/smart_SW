@@ -286,6 +286,34 @@ def test_a_folds_withdrawal_names_the_id_it_folded_onto() -> None:
         validator().validate(event("finding.withdrawn", {**body, "folded_into": "ER-001"}))
 
 
+def test_a_withdrawal_that_took_a_decision_names_it() -> None:
+    """002 T358 (roadmap hole H-g-010): the withdrawal of a finding that held a decision carries
+    the disposition that went with it and the words file's clause naming it, `taken` - both or
+    neither; an older body with neither stays valid, and the disposition is a `Disposition`."""
+    disposition = {
+        "decision": "rejected",
+        "note": "not a problem here",
+        "by": "engineer",
+        "at": "2026-09-13T12:05:00Z",
+        "triage": "wrong",
+    }
+    body = {
+        "finding_id": "F-003",
+        "reason": "bought part (answered ER-001)",
+        "disposition": disposition,
+        "taken": "your Reject (wrong) went with it",
+    }
+    validator().validate(event("finding.withdrawn", body))
+    validator().validate(event("finding.withdrawn", valid_bodies()["finding.withdrawn"]))
+    for alone in ("disposition", "taken"):
+        half = {key: body[key] for key in ("finding_id", "reason", alone)}
+        with pytest.raises(SchemaValidationError):
+            validator().validate(event("finding.withdrawn", half))
+    maybe = {**body, "disposition": {**disposition, "decision": "maybe"}}
+    with pytest.raises(SchemaValidationError):
+        validator().validate(event("finding.withdrawn", maybe))
+
+
 def test_event_rejects_an_unknown_type() -> None:
     with pytest.raises(ValidationError):
         AgentEvent(seq=1, at=AT, type="text.streamed", body={"text": "x"})

@@ -80,7 +80,7 @@ from swreview.report.attention_record import (
     read_attention_record,
     write_attention_record,
 )
-from swreview.report.session import Timing, load_session, save_session
+from swreview.report.session import ReviewSession, Timing, load_session, save_session
 from swreview.tools.registry import ToolRegistry, session_tools
 from tests.support import roles_review
 from tests.support.attention import CHECK_FOLDER as ATTENTION_CHECK_FOLDER
@@ -3526,8 +3526,9 @@ def regrading_checks(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @dataclass(frozen=True)
 class Regraded:
-    """A review whose part-roles answer cleared the pin's Accept: its chat and folder, the pin's
-    and the plate's hygiene findings, and the disposition recorded on each before the answer."""
+    """A review whose part-roles answer cleared the pin's Accept - or withdrew it, "All bought" -
+    its chat and folder, the pin's and the plate's hygiene findings, and the disposition recorded
+    on each before the answer."""
 
     chat_id: str
     folder: Path
@@ -3542,10 +3543,23 @@ class Regraded:
         return {"finding_id": self.pin, "disposition": disposition, "reason": RESTATED_LINE}
 
 
-def regraded_review(client: TestClient, review_dir: Path, *, ticked: bool) -> Regraded:
+def regraded_review(
+    client: TestClient,
+    review_dir: Path,
+    *,
+    ticked: bool,
+    answer: str = "None bought",
+    settled: ChatState | None = None,
+) -> Regraded:
     """`tests/support/roles_review.py`'s package reviewed live (`ticked`: its opening turn played)
     or checks only, waiting for Send; the pin's and the plate's hygiene findings accepted as
-    `already_known`; then the part-roles question answered "None bought", which restates both."""
+    `already_known`; then the part-roles question answered `answer`, "None bought" unless named,
+    which restates both. *Changed 2026-11-02 on purpose (002 T358):* `answer` added, so "All
+    bought" withdraws the pin's findings instead; every earlier caller answers as before.
+    *Changed 2026-11-02 on purpose (002 T362; a read-only check of cycle 10's review fixes):*
+    `settled` added, the state the answer leaves the chat in - ended when `ticked`, waiting for
+    Send otherwise, unless named - so a waiting answer that cannot close settles `failed`; every
+    earlier caller settles as before."""
     roles_review.write_package(review_dir)
     profile = roles_review.write_profile(review_dir)
     chat_id = start_session(
@@ -3577,10 +3591,11 @@ def regraded_review(client: TestClient, review_dir: Path, *, ticked: bool) -> Re
     ]
     answered = client.post(
         f"/sessions/{chat_id}/evidence",
-        json={"answers": [{"request_id": question, "answer": "None bought"}]},
+        json={"answers": [{"request_id": question, "answer": answer}]},
     )
     assert answered.status_code == 202, answered.text
-    settled = ChatState.ENDED if ticked else ChatState.AWAITING_SEND
+    if settled is None:
+        settled = ChatState.ENDED if ticked else ChatState.AWAITING_SEND
     assert settle(client, chat_id) == settled.value
     return Regraded(chat_id, review_dir, pin, plate, decided)
 
@@ -3623,7 +3638,11 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
     *Changed 2026-11-01 on purpose (cycle 7's Tier 2 review):* written before cycle 7 put the
     review's triage tally on a cleared notice, so the stream's body now carries the one the
     restate leaves - the plate's `already_known` beside the findings not recorded - while both
-    snapshots' lines leave it out, a snapshot's one tally being its summary's."""
+    snapshots' lines leave it out, a snapshot's one tally being its summary's.
+
+    *Changed 2026-11-02 on purpose (002 T358; roadmap hole H-g-010):* written before `report.md`
+    printed a cleared line, so it read the pin's first line alone; it now reads the restate's line
+    printed under the pin's undecided disposition too."""
     review = regraded_review(client, run_root / "FICT-regrade", ticked=ticked)
 
     findings = load_session(review.folder / "session.json").findings
@@ -3636,7 +3655,10 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
         Disposition.model_validate(review.decided[review.plate]),
     )
     lines = (review.folder / "report.md").read_text(encoding="utf-8").splitlines()
-    assert reported_disposition(lines, review.pin, 1) == UNDECIDED_LINES
+    assert reported_disposition(lines, review.pin, 2) == [
+        *UNDECIDED_LINES,
+        f"  - cleared: {RESTATED_LINE}",
+    ]
     assert reported_disposition(lines, review.plate, 3) == ACCEPTED_LINES
     events = events_of(review.folder)
     cleared = [event["body"] for event in events if event["type"] == "disposition.cleared"]
@@ -3646,6 +3668,108 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
     assert client.get(f"/sessions/{review.chat_id}/snapshot").json().get("cleared") == [review.line]
     restored = restored_snapshot_of(run_root, provider_control, models, review.folder.name)
     assert restored.get("cleared") == [review.line]
+
+
+@pytest.mark.parametrize("ticked", [True, False], ids=["live", "waiting"])
+def test_a_regrade_that_withdraws_a_decided_finding_says_so_in_report_md(
+    client: TestClient, run_root: Path, regrading_checks: None, ticked: bool
+) -> None:
+    """002 T358 (roadmap hole H-g-010), through the routes and a real regrade, live and waiting:
+    the part-roles answer "All bought" withdraws the pin's findings, its hygiene finding with the
+    Accept and triage recorded on it, and that withdrawal says so - the disposition and the clause
+    naming them - while the plate's findings, restated as decided, fold, and their withdrawals name
+    nothing. The `report.md` the server rendered at the turn's end names the pin's finding among
+    those withdrawn with a decision, and so does the one a later decision renders."""
+    review = regraded_review(
+        client, run_root / "FICT-withdraw", ticked=ticked, answer="All bought"
+    )
+
+    session = load_session(review.folder / "session.json")
+    [question] = [
+        request.id
+        for request in session.evidence_requests
+        if roles_review.PIN_ID in request.entity_ids
+    ]
+    reason = f"bought part (your answer to {question})"
+    took = "your Accept (real but already known) went with it"
+    withdrawals = [
+        event["body"]
+        for event in events_of(review.folder)
+        if event["type"] == "finding.withdrawn"
+    ]
+    assert [body for body in withdrawals if "taken" in body] == [
+        {
+            "finding_id": review.pin,
+            "reason": reason,
+            "disposition": review.decided[review.pin],
+            "taken": took,
+        }
+    ]
+    folds = [body for body in withdrawals if "folded_into" in body]
+    assert folds
+    assert all(set(body) == {"finding_id", "reason", "folded_into"} for body in folds)
+    named = [f"- {review.pin} withdrawn: {reason}; {took}"]
+    assert withdrawn_part(review.folder) == named
+
+    later = next(finding.id for finding in session.findings if finding.disposition is None)
+    decided = client.post(
+        f"/sessions/{review.chat_id}/findings/{later}/disposition",
+        json={"decision": "rejected", "note": "FICT not here"},
+    )
+
+    assert decided.status_code == 200, decided.text
+    assert withdrawn_part(review.folder) == named
+
+
+def withdrawn_part(folder: Path) -> list[str]:
+    """The lines `report.md` prints under "Withdrawn with a decision", none without the part."""
+    lines = (folder / "report.md").read_text(encoding="utf-8").splitlines()
+    if "## Withdrawn with a decision" not in lines:
+        return []
+    start = lines.index("## Withdrawn with a decision") + 2
+    return lines[start : lines.index("", start)]
+
+
+def test_a_waiting_answer_that_cannot_close_names_no_withdrawal_its_record_still_holds(
+    client: TestClient,
+    run_root: Path,
+    regrading_checks: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A read-only check of cycle 10's Tier 2 review fixes (002 T362), a guard: a waiting
+    review's rollback reaches the state the review's killed backend left. The part-roles answer
+    "All bought" withdraws the pin's hygiene finding, its `finding.withdrawn` naming the Accept it
+    took, and then `close_waiting` raises - a Send cache or a save that cannot be written - so
+    `answer_evidence_batch` reloads the record from disk, which still holds the pin accepted, and
+    `_play` renders `report.md` from it beside a stream that withdrew it. That report names no
+    withdrawal, and the pin still shows its Accept."""
+    close_waiting = runner.ReviewRun.close_waiting
+
+    def refused_once_answered(run: runner.ReviewRun) -> ReviewSession:
+        """The opening's close as before; the answer's raises."""
+        if any(request.status == "answered" for request in run.session.evidence_requests):
+            raise OSError("FICT the run folder cannot be written")
+        return close_waiting(run)
+
+    monkeypatch.setattr(runner.ReviewRun, "close_waiting", refused_once_answered)
+    review = regraded_review(
+        client,
+        run_root / "FICT-withdraw-rollback",
+        ticked=False,
+        answer="All bought",
+        settled=ChatState.FAILED,
+    )
+
+    withdrawals = [
+        event["body"] for event in events_of(review.folder) if event["type"] == "finding.withdrawn"
+    ]
+    assert [body["finding_id"] for body in withdrawals if "taken" in body] == [review.pin]
+    findings = load_session(review.folder / "session.json").findings
+    saved = {finding.id: finding for finding in findings}
+    assert saved[review.pin].disposition == Disposition.model_validate(review.decided[review.pin])
+    assert withdrawn_part(review.folder) == []
+    lines = (review.folder / "report.md").read_text(encoding="utf-8").splitlines()
+    assert reported_disposition(lines, review.pin, 3) == ACCEPTED_LINES
 
 
 # --- the triage tally (002 T346; the owner's request, cycle 7) ------------------------------------
