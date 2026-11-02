@@ -163,8 +163,11 @@ public sealed class PageRuleScanTests
                 // - offers the one triage a pass takes, the miss, where a flagged finding's offers
                 // the four. A card state the backend's status decides, as `check-page.js`'s chip
                 // is; it puts no card before another, and the backend refuses any other triage.
+                // *Changed 2026-11-02 on purpose (002 T355; roadmap hole H-c-008):* the same one
+                // comparison, now `isPass`, also decides whether a card's head can say it has no
+                // triage yet: a pass takes none but the miss, so its head never says so.
                 "Review/ReviewPage/render.js|body.status === 'checked_within_scope'",
-                "which triage a finding card offers"
+                "which triage a finding card offers, and whether its head can say it has none"
             },
             {
                 // `changeRow` in Remodel/RemodelPage/remodel.js: a change record's own lifecycle -

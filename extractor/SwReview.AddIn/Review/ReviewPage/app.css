@@ -1191,6 +1191,14 @@ body.view-transcript #results {
   -webkit-line-clamp: none;
 }
 
+/* A flagged finding with no triage recorded says so under its title, in the hue of what only the
+   engineer can settle (H-c-008). */
+.card-no-triage {
+  margin: 2px 0 0;
+  color: var(--judge);
+  font-size: var(--text-small);
+}
+
 .finding-id {
   color: var(--ink-2);
 }
