@@ -6910,3 +6910,23 @@ the decision register now records 160A as done.
   cycle's nine changed Markdown files, 474 relative links, anchors included, none broken; every
   changed file LF in the index. Not run in this lane: the whole non-live suites, which run before
   the pull request and in its CI. No SOLIDWORKS process, seat task, or paid or live test ran.
+- **Review** (Tier 2, decision 180A; 2026-11-01): one Opus review, no must-fix. Fixed here, each
+  test first: a restate's cleared notice counted a finding the restate withdrew just after it - a
+  Reject as `wrong` on a part the answer had made bought - so the page showed that count until the
+  withdrawal's ranking read landed, and `events.jsonl` kept it; the restate now withdraws what it
+  no longer produces before it announces its folds, so each notice counts what the restate
+  leaves, and cycle 6's orders hold (a fold's withdrawal right before its `finding` event, every
+  notice after the last fold). The resumed turn's fold, however its turn ends, withdraws nothing
+  after its notices, and the carry sends a tally with each decision it carries, so neither was
+  changed. And a snapshot's `cleared` lines kept the tally each clear was written with (*Settled*
+  above), beside the summary's: they now leave it out, so a snapshot's one tally is its summary's.
+  A page fact the review asked for, a ranking read again with no tally hiding the one shown,
+  passed at once, as a guard; a mutant that showed a summary's tally only when it carried one
+  failed it alone. Tests changed on purpose, none loosened: the ticked-review golden
+  (`success.yml`), written again, its one change the restate's five bought withdrawals now before
+  its seven folds; and cycle 6's `test_chat_server.py`
+  `test_a_regrade_that_clears_a_decision_says_so_in_every_view`, red since the rebase onto cycle
+  6's fixed head, whose stream's body now carries the tally - cycle 6's three restore cases in
+  `test_recheck.py`, red with it, pass with the snapshot's fix. Left in
+  [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 7: a finding a resumed turn adds
+  is counted only when the turn ends and the summary is read again (*Left open* above).
