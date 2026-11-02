@@ -1075,6 +1075,39 @@ def test_a_restore_after_a_failed_re_run_still_shows_the_records_cleared_line(
     assert restored.json().get("cleared") == [review.line]
 
 
+def test_a_records_own_stream_is_the_canonical_one_or_its_latest_rotated_one(
+    tmp_path: Path,
+) -> None:
+    """Owner decision 193A: the restore reads the stream the record's own session wrote -
+    `events.jsonl` when its `session.started` names that session, otherwise the rotated
+    `events.N.jsonl` that does, the highest `N` of several - and none when no stream names it;
+    a stream of another session, an unreadable one and a name that is no index are passed over."""
+    own, other = UUID(int=1), UUID(int=2)
+
+    def stream(name: str, session_id: UUID | None) -> None:
+        first = (
+            "{FICT-not-an-event"
+            if session_id is None
+            else json.dumps({"type": "session.started", "body": {"session_id": str(session_id)}})
+        )
+        (tmp_path / name).write_text(first + "\n", encoding="utf-8")
+
+    for name, session_id in (
+        ("events.jsonl", other),
+        ("events.1.jsonl", own),
+        ("events.2.jsonl", other),
+        ("events.3.jsonl", own),
+        ("events.4.jsonl", None),
+        ("events.old.jsonl", own),
+    ):
+        stream(name, session_id)
+
+    assert server._own_stream(tmp_path, own) == tmp_path / "events.3.jsonl"
+    assert server._own_stream(tmp_path, UUID(int=3)) is None
+    stream("events.jsonl", own)
+    assert server._own_stream(tmp_path, own) == tmp_path / "events.jsonl"
+
+
 # --- after the commit point (owner decision 93A) --------------------------------------------
 #
 # The atomic replace of `session.json` is the re-run's commit point. Past it the re-run is
