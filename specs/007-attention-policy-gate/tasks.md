@@ -228,6 +228,21 @@ description: "Task list for the attention policy and the procedural gate"
 
 ---
 
+## Phase 11: Owner decision 195A - a timed review's run folder by its date and letter (2026-11-02)
+
+**Purpose**: Under 192A the findings document kept the net saved and A's run folder stamp, and a run folder's full stamp, `yyyyMMdd-HHmmss` (`extractor/SwReview.AddIn/Review/RunFolders.cs`), is the moment Review was pressed: the timed review's start, which 192A keeps in `notes\timing.txt`. Under 195A a timed review's run folder is written in the findings document by its date and letter only (`20261101-A`), and its full stamp goes in `notes\timing.txt` with the review's start and end times, so that no private figure can be worked out from the findings document; a review not timed (B's at a sitting, 190A) keeps its full stamp. [research.md](research.md) R9 records the decision. No code changes. Every example is fictional.
+
+- [x] T074 Records first, no code (decision 195A; research R9): R9 in [research.md](research.md), with a dated pointer at the end of R8; this phase and its line under Phase dependencies; dated notes on FR-036 and on the Assumptions' timing bullet in [spec.md](spec.md); 007's row in `specs/README.md` and this spec's Status line recounted, the row's literal in `test_the_specs_readme_counts_a_task_173a_closed_as_done` changed first, on purpose. Acceptance: that pin red against the old row, then green; the relative links added resolve; every changed file LF in the index *Done 2026-11-02: R9 opened with the decision, why, what it changes and what it does not; R8's pointer; this phase and its dependency line; FR-036's and the Assumptions' dated notes; 007's row 69 / 8 / 0 and the Status line recounted, the pin red against 68 / 5 / 0 first and green after; the links resolving.*
+- [ ] T075 Test first, a timed review's run folder by its date and letter (decision 195A). `reviewer/tests/unit/test_workstation_test_plan.py`: `test_a_timed_reviews_run_folder_is_written_by_its_date_and_letter`, new (rule 5 writes a timed review's run folder by its date and letter, `20261101-A`, and sends its full stamp to `notes\timing.txt`, a review not timed keeping its full stamp; step 4.1 notes the full stamp there; the Record lines of steps 4.1, 4.5, 4.10, 4.11 and 6.2, the rule for Observed in step 1.4 and the results sheet, the time "If SOLIDWORKS stops answering" records, the handover's steps 13, 22 and 23 and `CONTRIBUTING.md`'s rule say the same); and, changed on purpose with dated notes, `test_a_real_designs_timing_figures_stay_out_of_the_findings_document` (step 4.5's Record line names the folder's date and letter where it named `<stamp>-A`), `test_every_check_before_the_findings_document_is_committed_names_the_timing_figures` (its nine places and section 0.2 also name the full stamp, and the places the date and letter and 195A) and `test_no_line_sends_a_real_designs_timing_figure_to_the_findings_document` (the full stamp is a timing figure, and no line shows a full stamp or `<stamp>` with A's letter). Acceptance: each fails before T076 for want of the words it pins; the module's other cases pass
+- [ ] T076 The documents (decision 195A): `docs/test-plan-2026-09-27/workstation-test-plan.md` rule 5, "If SOLIDWORKS stops answering", section 0.2, step 1.4, step 4.1's opening and Record line, the Record lines of steps 4.5, 4.10, 4.11 and 6.2, and steps 6.4 and 6.5; `docs/test-plan-2026-09-27/workstation-results.md`'s header; `docs/test-plan-2026-09-27/workstation-handover.md`'s steps 13, 17, 22 and 23 and section 4; `docs/workstation-runbook.md` section 8; `CONTRIBUTING.md`'s public-repository rule; and T060's dated note. Acceptance: T075 green; every other case of `test_workstation_test_plan.py`, `test_workstation_handover.py` and `test_update_workstation_script.py` green with no edit
+- [ ] T077 Close: research R9 completed with what was built, the test-first evidence and the gates; register row 195A marked done in `docs/decisions.md`; 007's row in `specs/README.md` and this spec's Status line recounted once T075 and T076 are ticked, the row's literal changed first. Acceptance: the link check is clean; the gates pass - Python 3.12 with the tokenizer required, and 3.11 (95A), over the modules that read the changed files; `ruff check`; the identifier scan; every changed file LF in the index
+
+**Order**: T074 first; then T075 before T076; T077 last.
+
+**Checkpoint**: A timed review's run folder is written in the findings document by its date and letter only, and its full stamp, the moment Review was pressed, is in `notes\timing.txt` with the review's start and end times; a review not timed keeps its full stamp; every line that records the timed review's folder, and every check of what stays out of the findings document, says so, before M0-a.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies
@@ -242,6 +257,7 @@ description: "Task list for the attention policy and the procedural gate"
 - **Measurement (Phase 8)**: T059 after US3; T060 after US1; T061 to T063 after US4 and after T100 of feature 006
 - **Owner decisions 183A and 184A (Phase 9)**: after US1; T060's timed run records six inputs once T066 lands (*added 2026-11-01*)
 - **Owner decision 186A (Phase 10)**: after Phase 9; before M0-a, the first sitting that times a real design; T060's figures go in the private note once T072 lands (*added 2026-11-01*)
+- **Owner decision 195A (Phase 11)**: after Phase 10; before M0-a; T060's Done note writes the run folder by its date and letter once T076 lands (*added 2026-11-02*)
 
 ### Task-level dependencies
 

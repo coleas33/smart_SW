@@ -749,3 +749,34 @@ both fixed test first under T072.
   does. [`docs/roadmap/metrics.md`](../../docs/roadmap/metrics.md) keeps "Review wall time" as a
   guardrail, and its pages are its update runs' to change: under decision 192A a timed review's
   runtime stays in its run folder, so that row cannot take one.
+
+*Changed 2026-11-02 (owner decision 195A; R9):* where this section has the findings document
+record A's run folder stamp, it records the folder's date and letter (`20261101-A`), and the full
+stamp goes in `notes\timing.txt` with the review's start and end times.
+
+## R9. Owner decision 195A (2026-11-02): a timed review's run folder by its date and letter
+
+**Decision**: a timed real design's run folder is written in the findings document by its date
+and letter only (for example `20261101-A`). Its full stamp, `yyyyMMdd-HHmmss`
+(`extractor/SwReview.AddIn/Review/RunFolders.cs`), is the moment Review was pressed; it goes in
+the private note `notes\timing.txt` with the review's start and end times (192A), so that no
+private figure can be worked out from the findings document. It changes 192A's "the run folder's
+stamp"; a review not timed, B's at a sitting (190A), keeps its full stamp. Asked as 21A in
+roadmap update run 3's owner round; applied before M0-a, as cycle 8
+([`docs/roadmap/README.md`](../../docs/roadmap/README.md)).
+
+**Why**: R8 had the findings document record A's run folder stamp beside the net saved, and that
+stamp is the timed review's start, to the second, which 192A keeps in the note.
+
+**What it changes**: no code. The seat plan's rule 5 states it and step 4.1 notes the full stamp
+in `notes\timing.txt`; every line that records the timed review's folder - step 4.5's and step
+4.11's Record lines, step 4.10's for a review timed there (M0-a times one, the roadmap's M0),
+step 6.2's, and the rule for Observed of step 1.4 and the results sheet - writes it by its date
+and letter, and a clock time noted when SOLIDWORKS stops answering in a timed review goes in the
+note; every check of what stays out of the findings document, the handover, the runbook's
+section 8, `CONTRIBUTING.md`'s rule and T060's note name the full stamp. Tasks T074 to T077,
+Phase 11 of [tasks.md](tasks.md).
+
+**Not changed**: `RunFolders.cs` and the folders' names; the zips of step 6.3 and the exports of
+step 6.2, which carry whole names and travel only in the handover folder; an untimed review's
+stamp (steps 4.2, 4.8, 4.9 and 5.1).
