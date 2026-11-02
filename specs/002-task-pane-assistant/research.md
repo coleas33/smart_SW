@@ -6821,3 +6821,21 @@ the decision register now records 160A as done.
     broken. Every changed file LF in the index.
   - Not run in this lane: the whole non-live suites, which run before the pull request and in its
     CI. No SOLIDWORKS process, seat task, or paid or live test ran.
+- **Review** (Tier 1, decision 180A; 2026-11-01): one Opus and one Codex review of the branch, no
+  must-fix. Fixed under T344, each test first: a read-only restore after a re-run that failed
+  before its commit point lost an undecided finding's line, reading only `events.jsonl`, which the
+  failed attempt held or nobody did - it now reads the stream the record's own session wrote,
+  rotated or not (`_own_stream`), while the live snapshot already followed its chat's stream; a
+  resumed turn the provider failed or the engineer stopped never folded its re-runs (older than
+  this cycle), so it now folds them after the turn's end and before the finalization; the cleared
+  line names a pass's `wrong` as the pass's card does, "wrong: a miss", on the re-run, the restate
+  and the carry; and the benchmark report page's "Withdrawn findings" table, left open above,
+  passes over a fold's withdrawal, as every other reader of `finding.withdrawn` already does or
+  counts nothing. Two end-to-end tests the review asked for passed at once, as guards: Check again
+  whose carry clears a decision, read from the new chat's snapshot, and a real part-roles regrade
+  that clears one on a live and a waiting review, `session.json`, `report.md`, the stream and both
+  snapshots agreeing. Tests changed on purpose, none loosened: the two cases on `_reconcile_reruns`
+  whose cleared list names the finding as decided, the carry's pass-to-flagged case (F-009's line
+  names the miss), and the report page's r5 case (no fold in the table). Left in
+  [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 6: `_restated_targets`' exact
+  match, the two captured apply fixtures, and the line a successful Check again drops.
