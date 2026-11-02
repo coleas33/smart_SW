@@ -43,7 +43,7 @@ from swreview.agent import events
 from swreview.agent.events import EVENTS_FILE_NAME, PACKED_EVENTS_FILE_NAME
 from swreview.agent.providers import AgentEvent
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
-from swreview.agent.runner import REGRADED_LINE
+from swreview.agent.runner import FOLDED_INTO, REGRADED_LINE
 from swreview.benchmark import compare, recording, report_page, scorecard
 from swreview.benchmark.answers import ANSWER_LOG_FILE_NAME
 from swreview.benchmark.origins import MODEL_ORIGINS
@@ -877,9 +877,15 @@ def test_r5_the_final_state_grades_every_finding_from_the_scorecard_s_lists(
         ["D-1", "tuned_on", "model", "suspected", "credited"]
     ]
     assert page.table("Correct conditions").rows[1:] == [["C-1", "neither"]]
-    withdrawn = [
+    # *Changed 2026-11-01 on purpose (cycle 6's Tier 1 review):* a fold's withdrawal of the id a
+    # restated finding was first announced under names `folded_into`, and its verdict stands under
+    # that id, so it is no withdrawn finding - the scorer passes over it (014 `scoring.md` 3.3) -
+    # and the table no longer lists it. The regrade here folds, so the stream holds some.
+    bodies = [
         event.body for event in stream(report_runs.off, ROLES) if event.type == "finding.withdrawn"
     ]
+    assert any(FOLDED_INTO in body for body in bodies), "the regrade's restate folds findings"
+    withdrawn = [body for body in bodies if FOLDED_INTO not in body]
     hits = score.withdrawn_forbidden_hit_finding_ids
     assert hits, "the roles key's pin entry is hit by a withdrawn finding"
     assert page.table("Withdrawn findings").rows[1:] == [
