@@ -135,13 +135,18 @@ def withdrawn_lines(session: ReviewSession, events: Iterable[AgentEvent]) -> lis
     """Each `finding.withdrawn` body of the run's stream that names the decision it took
     (`taken`), in the order the findings went: what `report.md` names under "Withdrawn with a
     decision" (002 FR-031, roadmap hole H-g-010). An undecided finding's withdrawal and a fold's
-    name none. Worked out from the stream as `cleared_lines` is, the session holding no withdrawn
-    finding; a stream whose first event does not start this session lends none.
+    name none. Worked out from the stream as `cleared_lines` is, since a withdrawal takes the
+    finding and its decision out of the session; a stream whose first event does not start this
+    session lends none.
 
-    A body whose finding the session still holds is skipped: the stream can run ahead of the
-    record, since a sent review's `answer_evidence_batch` writes the withdrawal during `_restate`
-    and `session.json` is saved only by `finalize`, after the resumed turn (cycle 10's Tier 2
-    review)."""
+    The stream can run ahead of the record, though: an answer's `_restate` writes the withdrawal
+    before `session.json` is saved, so the session a report is rendered from can still hold the
+    finding, decided. A sent review's backend killed during the resumed turn leaves it so, since
+    `finalize` saves only after that turn; so does a waiting review whose `close_waiting` raised,
+    since `answer_evidence_batch` then reloads the record from disk and `_play` renders from it.
+    A body whose finding the session still holds is skipped, so the report names no withdrawal
+    its record has not caught up with (cycle 10's Tier 2 review, and a read-only check of its
+    fixes)."""
     held = {finding.id for finding in session.findings}
     return [
         dict(event.body)

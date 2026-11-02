@@ -7142,9 +7142,9 @@ the decision register now records 160A as done.
 - **Review** (Tier 2, decision 180A; 2026-11-02): two points, each taken test first, as T362's
   dated sub-items record. The stream can run ahead of the record - a sent review's answer writes
   the withdrawal during `_restate`, then runs the whole resumed turn, and `session.json` is saved
-  only by `finalize` - so a backend killed in that turn left a record still holding F-003
-  accepted beside a stream that withdrew it, and the sitting's `swreview timing` printed "F-003
-  withdrawn ... your Accept went with it" beside it. `withdrawn_lines` now names no withdrawal of
-  a finding the session still holds. And a folded family's member prints its cleared line inside
-  the family's `<details>` block, as `_render_family` already did, now pinned by a case proved by
-  a mutant.
+  only by `finalize` - so a backend killed in that turn would leave a record still holding F-003
+  accepted beside a stream that withdrew it, and the sitting's `swreview timing` would print
+  "F-003 withdrawn ... your Accept went with it" beside it. `withdrawn_lines` now names no
+  withdrawal of a finding the session still holds. And a folded family's member prints its
+  cleared line inside the family's `<details>` block, as `_render_family` already did, now pinned
+  by a case proved by a mutant.
