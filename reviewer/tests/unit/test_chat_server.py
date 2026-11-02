@@ -3526,8 +3526,9 @@ def regrading_checks(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @dataclass(frozen=True)
 class Regraded:
-    """A review whose part-roles answer cleared the pin's Accept: its chat and folder, the pin's
-    and the plate's hygiene findings, and the disposition recorded on each before the answer."""
+    """A review whose part-roles answer cleared the pin's Accept - or withdrew it, "All bought" -
+    its chat and folder, the pin's and the plate's hygiene findings, and the disposition recorded
+    on each before the answer."""
 
     chat_id: str
     folder: Path
@@ -3542,10 +3543,14 @@ class Regraded:
         return {"finding_id": self.pin, "disposition": disposition, "reason": RESTATED_LINE}
 
 
-def regraded_review(client: TestClient, review_dir: Path, *, ticked: bool) -> Regraded:
+def regraded_review(
+    client: TestClient, review_dir: Path, *, ticked: bool, answer: str = "None bought"
+) -> Regraded:
     """`tests/support/roles_review.py`'s package reviewed live (`ticked`: its opening turn played)
     or checks only, waiting for Send; the pin's and the plate's hygiene findings accepted as
-    `already_known`; then the part-roles question answered "None bought", which restates both."""
+    `already_known`; then the part-roles question answered `answer`, "None bought" unless named,
+    which restates both. *Changed 2026-11-02 on purpose (002 T358):* `answer` added, so "All
+    bought" withdraws the pin's findings instead; every earlier caller answers as before."""
     roles_review.write_package(review_dir)
     profile = roles_review.write_profile(review_dir)
     chat_id = start_session(
@@ -3577,7 +3582,7 @@ def regraded_review(client: TestClient, review_dir: Path, *, ticked: bool) -> Re
     ]
     answered = client.post(
         f"/sessions/{chat_id}/evidence",
-        json={"answers": [{"request_id": question, "answer": "None bought"}]},
+        json={"answers": [{"request_id": question, "answer": answer}]},
     )
     assert answered.status_code == 202, answered.text
     settled = ChatState.ENDED if ticked else ChatState.AWAITING_SEND
@@ -3623,7 +3628,11 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
     *Changed 2026-11-01 on purpose (cycle 7's Tier 2 review):* written before cycle 7 put the
     review's triage tally on a cleared notice, so the stream's body now carries the one the
     restate leaves - the plate's `already_known` beside the findings not recorded - while both
-    snapshots' lines leave it out, a snapshot's one tally being its summary's."""
+    snapshots' lines leave it out, a snapshot's one tally being its summary's.
+
+    *Changed 2026-11-02 on purpose (002 T358; roadmap hole H-g-010):* written before `report.md`
+    printed a cleared line, so it read the pin's first line alone; it now reads the restate's line
+    printed under the pin's undecided disposition too."""
     review = regraded_review(client, run_root / "FICT-regrade", ticked=ticked)
 
     findings = load_session(review.folder / "session.json").findings
@@ -3636,7 +3645,10 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
         Disposition.model_validate(review.decided[review.plate]),
     )
     lines = (review.folder / "report.md").read_text(encoding="utf-8").splitlines()
-    assert reported_disposition(lines, review.pin, 1) == UNDECIDED_LINES
+    assert reported_disposition(lines, review.pin, 2) == [
+        *UNDECIDED_LINES,
+        f"  - cleared: {RESTATED_LINE}",
+    ]
     assert reported_disposition(lines, review.plate, 3) == ACCEPTED_LINES
     events = events_of(review.folder)
     cleared = [event["body"] for event in events if event["type"] == "disposition.cleared"]
@@ -3646,6 +3658,66 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
     assert client.get(f"/sessions/{review.chat_id}/snapshot").json().get("cleared") == [review.line]
     restored = restored_snapshot_of(run_root, provider_control, models, review.folder.name)
     assert restored.get("cleared") == [review.line]
+
+
+@pytest.mark.parametrize("ticked", [True, False], ids=["live", "waiting"])
+def test_a_regrade_that_withdraws_a_decided_finding_says_so_in_report_md(
+    client: TestClient, run_root: Path, regrading_checks: None, ticked: bool
+) -> None:
+    """002 T358 (roadmap hole H-g-010), through the routes and a real regrade, live and waiting:
+    the part-roles answer "All bought" withdraws the pin's findings, its hygiene finding with the
+    Accept and triage recorded on it, and that withdrawal says so - the disposition and the clause
+    naming them - while the plate's findings, restated as decided, fold, and their withdrawals name
+    nothing. The `report.md` the server rendered at the turn's end names the pin's finding among
+    those withdrawn with a decision, and so does the one a later decision renders."""
+    review = regraded_review(
+        client, run_root / "FICT-withdraw", ticked=ticked, answer="All bought"
+    )
+
+    session = load_session(review.folder / "session.json")
+    [question] = [
+        request.id
+        for request in session.evidence_requests
+        if roles_review.PIN_ID in request.entity_ids
+    ]
+    reason = f"bought part (your answer to {question})"
+    took = "your Accept (real but already known) went with it"
+    withdrawals = [
+        event["body"]
+        for event in events_of(review.folder)
+        if event["type"] == "finding.withdrawn"
+    ]
+    assert [body for body in withdrawals if "taken" in body] == [
+        {
+            "finding_id": review.pin,
+            "reason": reason,
+            "disposition": review.decided[review.pin],
+            "taken": took,
+        }
+    ]
+    folds = [body for body in withdrawals if "folded_into" in body]
+    assert folds
+    assert all(set(body) == {"finding_id", "reason", "folded_into"} for body in folds)
+    named = [f"- {review.pin} withdrawn: {reason}; {took}"]
+    assert withdrawn_part(review.folder) == named
+
+    later = next(finding.id for finding in session.findings if finding.disposition is None)
+    decided = client.post(
+        f"/sessions/{review.chat_id}/findings/{later}/disposition",
+        json={"decision": "rejected", "note": "FICT not here"},
+    )
+
+    assert decided.status_code == 200, decided.text
+    assert withdrawn_part(review.folder) == named
+
+
+def withdrawn_part(folder: Path) -> list[str]:
+    """The lines `report.md` prints under "Withdrawn with a decision", none without the part."""
+    lines = (folder / "report.md").read_text(encoding="utf-8").splitlines()
+    if "## Withdrawn with a decision" not in lines:
+        return []
+    start = lines.index("## Withdrawn with a decision") + 2
+    return lines[start : lines.index("", start)]
 
 
 # --- the triage tally (002 T346; the owner's request, cycle 7) ------------------------------------

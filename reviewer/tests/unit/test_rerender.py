@@ -17,9 +17,11 @@ import json
 import re
 import shutil
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
+from swreview.agent.providers import AgentEvent
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.agent.runner import start_review
 from swreview.checks.standards.run import CHECK_FILE_NAME, run_standards_check
@@ -151,6 +153,72 @@ def test_a_review_folder_without_a_package_renders_the_placeholder(tmp_path: Pat
     assert NAMED_COMPONENT not in report
     session = load_session(run_dir / "session.json")
     assert report == render_report(session, ranking=rank(session))
+
+
+def test_the_re_render_says_what_the_sessions_own_stream_says_was_taken(tmp_path: Path) -> None:
+    """002 T358 (roadmap hole H-g-010): `swreview disposition`, `timing` and the rest re-render a
+    review's report from its folder, and the stream the session wrote says what its decisions
+    lost - the cleared line under the finding still undecided, and the finding withdrawn with a
+    decision. From `events.jsonl`, or from the rotated stream a re-run left when another session's
+    stands in its place (cycle 6's `_own_stream` rule); with no stream of its own, as before."""
+    run_dir = copied(REVIEW_FOLDER, tmp_path)
+    session = load_session(run_dir / "session.json")
+    plain, _ = render_folder_report(run_dir, session)
+    decided = {
+        "decision": "rejected",
+        "note": "FICT note",
+        "by": "FICT-ENG",
+        "at": "2026-11-02T09:00:00Z",
+        "triage": "wrong",
+    }
+    cleared = (
+        "Your answer graded the checks again and this verdict changed, so your Reject (wrong) "
+        "was cleared. Decide again."
+    )
+    write_stream(
+        run_dir / "events.jsonl",
+        ("session.started", {"session_id": str(session.session_id)}),
+        ("disposition.cleared", {"finding_id": "F-002", "disposition": decided, "reason": cleared}),
+        (
+            "finding.withdrawn",
+            {
+                "finding_id": "F-009",
+                "reason": "bought part (your answer to ER-001)",
+                "disposition": decided,
+                "taken": "your Reject (wrong) went with it",
+            },
+        ),
+    )
+
+    report = rerender_run_folder(run_dir).read_text(encoding="utf-8")
+
+    lines = report.splitlines()
+    heading = lines.index(next(line for line in lines if line.startswith("#### F-002:")))
+    undecided = lines.index("- Disposition: not yet dispositioned", heading)
+    assert lines[undecided + 1] == f"  - cleared: {cleared}"
+    assert (
+        "- F-009 withdrawn: bought part (your answer to ER-001); your Reject (wrong) went with it"
+    ) in lines
+
+    (run_dir / "events.jsonl").rename(run_dir / "events.2.jsonl")
+    write_stream(run_dir / "events.jsonl", ("session.started", {"session_id": str(UUID(int=357))}))
+    assert rerender_run_folder(run_dir).read_text(encoding="utf-8") == report
+
+    (run_dir / "events.2.jsonl").unlink()
+    assert rerender_run_folder(run_dir).read_text(encoding="utf-8") == plain
+
+
+def write_stream(path: Path, *events: tuple[str, dict[str, object]]) -> None:
+    """`path` as a run's `events.jsonl` holding each `(type, body)`, in order."""
+    path.write_text(
+        "".join(
+            AgentEvent(seq=seq, at="2026-11-02T09:00:00+00:00", type=kind, body=body)
+            .model_dump_json()
+            + "\n"
+            for seq, (kind, body) in enumerate(events, start=1)
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_it_writes_the_report_and_the_record_and_nothing_else(tmp_path: Path) -> None:

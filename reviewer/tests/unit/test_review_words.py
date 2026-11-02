@@ -87,6 +87,10 @@ PLACEHOLDERS: dict[str, set[str]] = {
     "triage_tally.by_triage": {"counts", "not_recorded"},
     "triage_tally.item": {"triage", "n"},
     "triage_tally.misses": {"n"},
+    # *Added 2026-11-02 on purpose (002 T358; roadmap hole H-g-010):* the clause a withdrawal's
+    # Transcript line ends with when the finding held a decision.
+    "withdrawn.took": {"decision"},
+    "withdrawn.took_with_triage": {"decision", "triage"},
     "resume.without": set(),
     "finding_group_text.one": set(),
     "finding_group_text.many": {"n"},
@@ -165,6 +169,8 @@ def test_the_words_are_loaded_once() -> None:
         ("answer_basis",),
         ("rerun",),
         ("triage_tally",),
+        # *Added 2026-11-02 on purpose (002 T358; roadmap hole H-g-010).*
+        ("withdrawn",),
     ],
 )
 def test_an_extra_key_anywhere_is_refused(path: tuple[object, ...]) -> None:
@@ -259,6 +265,20 @@ def test_the_restate_and_the_carry_name_themselves_in_the_cleared_line() -> None
         "was not carried over. Decide again."
     )
     assert rerun.of("Accept", None) == rerun.of("Accept", None, cause="rerun")
+
+
+def test_the_withdrawn_clause_names_the_decision_and_its_triage() -> None:
+    """002 T358 (roadmap hole H-g-010): the clause a withdrawal's Transcript line ends with when the
+    finding withdrawn held a decision, which went with it - the decision named by its noun and the
+    triage by its word when one was recorded, as the cleared line names them. The backend fills
+    it; the page prints it as sent, and `report.md` prints the same line."""
+    withdrawn = load_words().withdrawn
+
+    assert withdrawn.of("Reject", "wrong") == "your Reject (wrong) went with it"
+    assert withdrawn.of("Accept", "real but already known") == (
+        "your Accept (real but already known) went with it"
+    )
+    assert withdrawn.of("Defer", None) == "your Defer went with it"
 
 
 def test_the_three_owner_labels_are_decide_fix_verify() -> None:
