@@ -347,6 +347,28 @@ body.results-stale .card.evidence {
   font-weight: 600;
 }
 
+/*
+  How the triage stands (feature 002 FR-031, cycle 7): the backend's two lines, the summary's last
+  part, in its second tier of ink, wrapping rather than cut off at a docked pane's 300 px. Counted
+  by the backend; nothing here is a control. The grid is on the lines' box, so `hidden` hides the
+  part.
+*/
+.summary + .triage-tally {
+  margin-top: 4px;
+}
+
+.triage-tally-lines {
+  display: grid;
+  gap: 2px;
+}
+
+.triage-tally-lines p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  overflow-wrap: anywhere;
+}
+
 /* What the review did not reach, in the hue the goal lines give "not reached". */
 .summary-not-reached {
   margin: 0;

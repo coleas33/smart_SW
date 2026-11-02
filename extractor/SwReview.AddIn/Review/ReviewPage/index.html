@@ -213,8 +213,16 @@
   app.js prints it here, above everything else the review shows, and computes nothing
   (contracts/review-summary.md section 5). Hidden until a summary arrives, so a backend that sends
   none leaves the page exactly as it was (FR-030).
+
+  Its last part is how the triage stands (feature 002 FR-031, cycle 7): report.md's By triage and
+  misses lines, as the backend counts them once and sends them beside the summary, in a decision's
+  reply and in the `disposition` and `disposition.cleared` events. app.js prints the last it was
+  sent, as sent, and keeps it there when the summary is drawn again; it counts nothing, and nothing
+  in it is a control. Hidden while none was sent - no triage recorded, or a backend that sends none
+  (FR-030) - and shown with the summary, or alone while no summary has arrived. Send stays directly
+  after the summary (015 contracts/pane.md section 3).
 -->
-<section id="summary" class="panel summary-panel" aria-label="Review summary" hidden></section>
+<section id="summary" class="panel summary-panel" aria-label="Review summary" hidden><div id="triage-tally" class="triage-tally" hidden></div></section>
 <section id="send" class="send-panel" aria-label="Send to model" hidden></section>
 
 <!--

@@ -133,10 +133,12 @@ printed here - they are under their groups in `<section id="findings-by-type">` 
 `contracts/grouped-list.md` section 5) - and the modelling-practice group below is retired with its
 line. The text that follows describes the page before feature 013.
 
-*Amended 2026-11-01 (feature 002 FR-031, cycle 7):* the summary's `triage_tally` is printed under the
-block, in `<section id="triage-tally">`, its `text` and `misses_text` verbatim; the disposition
-route's reply and the `disposition` and `disposition.cleared` events carry the same object, and
-the page shows the last it was sent, none while it was sent none.
+*Amended 2026-11-01 (feature 002 FR-031, cycle 7):* the summary's `triage_tally` is printed as the
+section's last part, after the block, in `<div id="triage-tally">`, its `text` and `misses_text`
+verbatim; the disposition route's reply and the `disposition` and `disposition.cleared` events carry
+the same object, and the page shows the last it was sent, none while it was sent none - alone in the
+section while no summary has arrived - so Send stays directly after `#summary` (015
+`contracts/pane.md` section 3).
 
 `render.summaryBlock(summary)` builds `<section id="summary">` at the top of Results: the headline;
 one line per group (`label` in the lead face, `text`, then each `by_goal` as "title count"); the

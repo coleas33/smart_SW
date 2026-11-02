@@ -623,9 +623,11 @@
         return;
       case 'disposition':
         applyDisposition(body);
+        showTally(body.triage_tally);
         return;
       case 'disposition.cleared':
         clearedDisposition(body);
+        showTally(body.triage_tally);
         return;
       case 'coverage':
         recordCoverage(body);
@@ -1382,6 +1384,7 @@
     state.summary = ranking.summary || null;
     state.awaitingSend = !!(state.summary && state.summary.send);
     renderSummary();
+    showTally(state.summary ? state.summary.triage_tally : null);
     renderQuestions();
     renderGroups(ranking.groups || null);
     syncFindingExplanations(ranking.groups || null);
@@ -1401,8 +1404,27 @@
     if (state.summary) {
       ui.summary.appendChild(render.summaryBlock(state.summary));
     }
-    ui.summary.hidden = !state.summary;
+    // The triage tally stays the block's last part, as `showTally` last wrote it (002 cycle 7).
+    ui.summary.appendChild(ui.triageTally);
+    ui.summary.hidden = !state.summary && ui.triageTally.hidden;
     renderSend();
+  }
+
+  /**
+   * How the triage stands (feature 002 FR-031, cycle 7), rewritten whole from the last `triage_tally`
+   * the backend sent - a ranking's summary, a decision's reply, a live `disposition` or
+   * `disposition.cleared` - each the backend's one count at that moment; none sent hides it, since the
+   * backend sends one only while some finding records a triage. It is the summary's last part, so
+   * Send stays directly after the summary, and it shows alone while no summary has arrived. A
+   * snapshot's `cleared` lines are not read for it: its summary holds the review's tally as it stands.
+   */
+  function showTally(tally) {
+    render.clear(ui.triageTally);
+    if (tally) {
+      ui.triageTally.appendChild(render.triageTally(tally));
+    }
+    ui.triageTally.hidden = !tally;
+    ui.summary.hidden = !state.summary && !tally;
   }
 
   function waitingForSend() {
@@ -2378,6 +2400,7 @@
     state.restoreEpoch++;
     renderReadOnly();
     renderSummary();
+    showTally(null);
     renderQuestions();
     renderContacts();
     state.events = [];
@@ -2658,6 +2681,11 @@
       body
     ).then(function (finding) {
       showDisposition(card, finding && finding.disposition);
+      // The review's tally as this decision left it (002 cycle 7), only while the card pressed is the
+      // one the review on screen holds: a reply that lands after a switch is another review's.
+      if (entryOf(card)) {
+        showTally(finding && finding.triage_tally);
+      }
     }).catch(function (error) {
       // Refused, so the record is as it was (roadmap hole H-g-012): the card shows it again - its
       // triage pressed, or none, in place of the pick, and its sentence above the refusal. Which
@@ -3420,6 +3448,7 @@
     ui.usage = document.getElementById('usage-line');
     ui.groups = document.getElementById('findings-by-type');
     ui.summary = document.getElementById('summary');
+    ui.triageTally = document.getElementById('triage-tally');
     ui.send = document.getElementById('send');
     ui.questions = document.getElementById('questions');
     ui.contacts = document.getElementById('contacts');
