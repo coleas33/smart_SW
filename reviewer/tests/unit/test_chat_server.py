@@ -3573,10 +3573,16 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
     decided, keeps them. `session.json`, the `report.md` the server rendered, the stream, the live
     snapshot and a restarted backend's read-only restore all agree: the pin undecided with the
     restate's line, the plate's Accept standing, and no card left under a restated finding's own
-    id. Cycle 3's `test_the_saved_session_and_report_agree_with_the_fold` is its model."""
+    id. Cycle 3's `test_the_saved_session_and_report_agree_with_the_fold` is its model.
+
+    *Changed 2026-11-01 on purpose (cycle 7's Tier 2 review):* written before cycle 7 put the
+    review's triage tally on a cleared notice, so the stream's body now carries the one the
+    restate leaves - the plate's `already_known` beside the findings not recorded - while both
+    snapshots' lines leave it out, a snapshot's one tally being its summary's."""
     review = regraded_review(client, run_root / "FICT-regrade", ticked=ticked)
 
     findings = load_session(review.folder / "session.json").findings
+    flagged = [finding for finding in findings if finding.status != "checked_within_scope"]
     saved = {finding.id: finding for finding in findings}
     pin, plate = saved[review.pin], saved[review.plate]
     assert (pin.severity, pin.disposition) == ("medium", None)
@@ -3589,7 +3595,8 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
     assert reported_disposition(lines, review.plate, 3) == ACCEPTED_LINES
     events = events_of(review.folder)
     cleared = [event["body"] for event in events if event["type"] == "disposition.cleared"]
-    assert cleared == [review.line]
+    tally = tally_body(known=1, not_recorded=len(flagged) - 1)
+    assert cleared == [{**review.line, "triage_tally": tally}]
     assert standing(events) == set(saved)
     assert client.get(f"/sessions/{review.chat_id}/snapshot").json().get("cleared") == [review.line]
     restored = restored_snapshot_of(run_root, provider_control, models, review.folder.name)
