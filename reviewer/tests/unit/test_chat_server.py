@@ -447,7 +447,10 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
     the `triage` group, the words of a finding's four triage outcomes.
 
     *Changed 2026-11-01 on purpose (002 T332; owner decision 187A, FR-031):* and the
-    `pass_triage` group, the word of the one outcome a pass takes, the miss."""
+    `pass_triage` group, the word of the one outcome a pass takes, the miss.
+
+    *Changed 2026-11-02 on purpose (002 T352; roadmap hole H-c-008, FR-031):* and the
+    `no_triage` group, what a flagged finding's card head says until its triage is recorded."""
     from swreview.report.summary import load_words
 
     response = client.get("/labels")
@@ -466,6 +469,7 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
         "source",
         "triage",
         "pass_triage",
+        "no_triage",
         "errors",
     }
     assert body["source"] == {"code": "Checked by code", "model": "AI guidance"}, "feature 013"
