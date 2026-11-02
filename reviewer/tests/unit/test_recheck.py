@@ -1624,7 +1624,11 @@ def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare:
     F-008's Reject onto F-001 and F-002, passes now, and F-009's Reject onto F-003, flagged now,
     are each cleared on the card they would have landed on, the carry's line naming the decision
     and its triage, in the carry's order; and the `coverage.recheck` row names none of them, since
-    the card says it."""
+    the card says it.
+
+    *Changed 2026-11-01 on purpose (cycle 6's Tier 1 review; owner decision 187A):* F-009 was a
+    pass, so its `wrong` is a miss, and the line words it as the pass's card does, "wrong: a miss"
+    (`labels.pass_triage`), where it said "wrong", a flagged finding's false alarm."""
     run, earlier, events = bare
     run.session.findings[:] = [
         as_pass(coaxial("F-001", "hol:0001")),
@@ -1663,7 +1667,7 @@ def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare:
             ("F-001", "F-002", "F-003"),
             [disposition for disposition in left if disposition is not None],
             ("Accept", "Reject", "Reject"),
-            ("real but already known", "wrong", "wrong"),
+            ("real but already known", "wrong", "wrong: a miss"),
             strict=True,
         )
     ] + [

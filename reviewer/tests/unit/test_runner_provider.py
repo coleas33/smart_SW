@@ -1732,6 +1732,76 @@ def test_a_restate_keeps_or_clears_a_decision_as_a_rerun_does(
     )
 
 
+# --- a pass's miss in the cleared line: cycle 6's Tier 1 review --------------------------------
+
+MISSED = DECIDED.model_copy(update={"decision": "rejected", "note": "FICT a miss", "triage": "wrong"})
+"""A pass rejected and judged wrong: a miss (owner decision 187A)."""
+
+
+def test_a_rerun_that_clears_a_passs_miss_words_it_as_the_passs_card_does(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """Owner decision 187A: a pass's `wrong` is a miss, and the pass's card words it "wrong: a
+    miss" (`labels.pass_triage`), never the false alarm a flagged finding's "wrong" is. A pass
+    rejected as a miss is run again after the answer as a flagged finding, so its decision is
+    cleared, and the line names the miss as the pass's card does."""
+    run = review(
+        [
+            turn(
+                "blocked",
+                drawing_finding("suspected"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("re-run", drawing_finding("suspected")),
+        ]
+    )
+    run.session.findings[0] = run.session.findings[0].model_copy(
+        update={"status": "checked_within_scope", "severity": "info"}
+    )
+    recorded = record_disposition(
+        run, "F-001", decision="rejected", note="FICT a miss", by=ENGINEER, triage="wrong"
+    ).disposition
+    assert recorded is not None
+
+    run.answer_evidence("ER-001", "The usable thread depth is 12 mm.")
+
+    assert bodies_of(run, "disposition.cleared") == [
+        {
+            "finding_id": "F-001",
+            "disposition": recorded.model_dump(mode="json"),
+            "reason": (
+                "The check ran again after your answer and its verdict changed, so your Reject "
+                "(wrong: a miss) was cleared. Decide again."
+            ),
+        }
+    ]
+
+
+def test_a_restate_that_clears_a_passs_miss_words_it_as_the_passs_card_does(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """Owner decisions 187A and 194A: a pass rejected as a miss, restated as a flagged finding,
+    loses its decision, and the restate's line names the miss as the pass's card does."""
+    run = review([turn("nothing yet")])
+    run.session.findings[:] = [
+        judged("F-001", "checked_within_scope", "info", disposition=MISSED),
+        judged("F-002"),
+    ]
+
+    run._reconcile_restated(1, {}, [], {})
+
+    assert bodies_of(run, "disposition.cleared") == [
+        {
+            "finding_id": "F-001",
+            "disposition": MISSED.model_dump(mode="json"),
+            "reason": (
+                "Your answer graded the checks again and this verdict changed, so your Reject "
+                "(wrong: a miss) was cleared. Decide again."
+            ),
+        }
+    ]
+
+
 # --- resume rule (d): max_steps is a per-turn budget --------------------------------------------
 
 
