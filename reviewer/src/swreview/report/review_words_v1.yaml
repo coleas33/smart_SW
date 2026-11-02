@@ -301,6 +301,16 @@ labels:
   # `errors`.
   pass_triage:
     wrong: "wrong: a miss"
+  # What a flagged finding's card head says until its triage is recorded (roadmap hole H-c-008,
+  # feature 002 FR-031): one sentence for each state of its record - not yet decided, or the
+  # decision recorded without a triage - naming the repair. A Defer cannot follow a Defer, so a
+  # deferred finding takes its triage with Accept or Reject. The page prints the sentence for the
+  # recorded decision and compares nothing, and none on a pass, which takes no triage but the miss.
+  no_triage:
+    undecided: "No triage recorded yet: pick an outcome, then press Accept, Reject or Defer."
+    accepted: "No triage recorded yet: pick an outcome, then press Accept again."
+    rejected: "No triage recorded yet: pick an outcome, then press Reject again."
+    deferred: "No triage recorded yet: pick an outcome, then press Accept or Reject."
   # Who wrote a finding, a question or a coverage row (feature 013): the page prints the word
   # for a record's `source` token and compares nothing; `report.md` uses the same two.
   source:
