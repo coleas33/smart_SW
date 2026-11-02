@@ -85,6 +85,7 @@ app = chat.app
 client = chat.client
 models = chat.models
 provider_control = chat.provider_control
+regrading_checks = chat.regrading_checks
 run_root = chat.run_root
 run_dir = chat.run_dir
 
@@ -1020,6 +1021,58 @@ def test_a_re_run_cut_off_leaves_the_earlier_record_whole(
         if stray.exists():
             assert stream_owner(stray) != earlier.session_id
             assert not (cut / "session.2.json").exists()
+
+
+def _refused(*args: Any) -> Any:
+    raise RuntimeError("FICT the re-run cannot go on")
+
+
+@pytest.mark.parametrize("failure", ["package", "carry", "finalization"])
+def test_a_restore_after_a_failed_re_run_still_shows_the_records_cleared_line(
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    regrading_checks: None,
+    failure: str,
+) -> None:
+    """Cycle 6's Tier 1 review (owner decision 193A): a waiting review's apply restated the pin's
+    finding and cleared its Accept, so its card shows the restate's line; the engineer presses
+    Send, which checks again first (`recheckThenSend`). The re-run moves the record's stream
+    aside (`_rotate_kept`) and fails before its commit point - its package unreadable, before
+    any stream of its own; or its carry or its finalization raising, after it wrote one - so the
+    record stays canonical beside a stream that is not its own, or none. A restarted backend's
+    read-only restore still names the pin's line: the restore reads the stream the record's own
+    session wrote, wherever the re-run moved it."""
+    review = chat.regraded_review(client, run_root / "FICT-recheck-line", ticked=False)
+    folder = review.folder
+    record = (folder / "session.json").read_bytes()
+    package = folder / "package.json"
+    good = package.read_bytes()
+    settings = server_settings(provider_control, models, silent)
+    with pytest.MonkeyPatch.context() as patch:
+        if failure == "package":
+            package.write_text("{FICT", encoding="utf-8")
+        elif failure == "carry":
+            patch.setattr(runner.ReviewRun, "carry_from", _refused)
+        else:
+            patch.setattr(runner.ReviewRun, "close_waiting", _refused)
+        with restarted_app(run_root, settings, raise_server_exceptions=False) as fresh:
+            failed = recheck(fresh, folder)
+        assert failed.status_code == (400 if failure == "package" else 500), failed.text
+    package.write_bytes(good)
+    assert (folder / "session.json").read_bytes() == record
+    own = str(load_session(folder / "session.json").session_id)
+    assert stream_owner(folder / "events.1.jsonl") == own
+    left = folder / "events.jsonl"
+    assert (stream_owner(left) != own) if left.exists() else failure == "package"
+
+    with restarted_app(run_root, settings) as fresh:
+        restored = fresh.get(f"/reviews/{folder.name}")
+
+    assert restored.status_code == 200, restored.text
+    assert restored.json().get("cleared") == [review.line]
 
 
 # --- after the commit point (owner decision 93A) --------------------------------------------
