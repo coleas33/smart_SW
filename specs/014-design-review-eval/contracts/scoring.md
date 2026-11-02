@@ -175,7 +175,11 @@ goes.
   missing, or `replay_events` reports a line it cannot read (a withdrawal could lie after it), the
   reason in `not_assessed` (section 7), naming the line: unknown is never 0 (Principle I). The same
   pass gives time to first finding: the first computed finding before any unreadable line, else
-  `None`, as today.
+  `None`, as today. *Amended 2026-11-01 (feature 002 cycle 6; its FR-031):* a `finding.withdrawn`
+  that names `folded_into` is a fold's - the id a re-run or restated finding was first announced
+  under, withdrawn once it folded onto that id - and is passed over: its verdict stands in the
+  final state under `folded_into` and is scored there. Before cycle 6 a fold withdrew nothing, so
+  no earlier scorecard moves.
 - A false alarm is **tuned-on** when it matches any tuned-on forbidden entry or tuned-on correct
   condition: `tuned_on_false_alarm_finding_ids`, a subset of the false alarms. The verdict leaves
   them out of its deciding figure (D15); a false alarm that hits nothing, or only held-out items,

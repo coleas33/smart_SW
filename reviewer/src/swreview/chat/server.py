@@ -1459,6 +1459,7 @@ class ChatServer:
         live session, the run's package and ledger - plus the chat's state and the stream's
         last seq, so a page reloaded mid-turn reopens the stream where the snapshot ends.
         It computes and writes nothing, as `attention` does, and inline for the same reason.
+        The chat's stream gives each undecided finding's cleared line (owner decision 193A).
         """
         chat = self._chat(request)
         run = self._run_of(chat)
@@ -1471,6 +1472,7 @@ class ChatServer:
             chat_state=chat.state.value,
             send_in_flight=run._send_in_flight,
             last_seq=run.sink.seq,
+            events=replay_events(chat.events_path),
         )
         return JSONResponse(to_jsonable_python(body))
 
@@ -1886,7 +1888,12 @@ class ChatServer:
             package = load_package(review_dir).package
         except PACKAGE_ERRORS as exc:
             raise unknown from exc
-        return restored_snapshot(session, package, run_id=review_dir.name)
+        return restored_snapshot(
+            session,
+            package,
+            run_id=review_dir.name,
+            events=replay_events(review_dir / EVENTS_FILE_NAME),
+        )
 
     def _family_of(self, check_dir: Path) -> str:
         """The family whose check `check_dir` holds, from the record's own stamp.

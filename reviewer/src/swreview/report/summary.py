@@ -90,6 +90,7 @@ __all__ = [
     "MAYBE_BOUGHT_CHECK",
     "WORDS_FILE",
     "BoughtParts",
+    "ClearedBy",
     "ContactList",
     "ContactView",
     "DrawingsLine",
@@ -309,21 +310,37 @@ class SendWords(ReviewModel):
     rerun_failed: str
 
 
+ClearedBy = Literal["rerun", "restate", "carry"]
+"""What changed a decided finding's verdict and so cleared its decision (owner decisions 189A and
+194A): a check the model ran again after an answer, the checks graded again by code with an
+answer (58A's restate), or a re-run of a waiting review that did not carry it (015's carry)."""
+
+
 class RerunWords(ReviewModel):
-    """The line a finding's card shows when a check run again after the engineer's answer
-    changed its verdict - its status or its severity - and so cleared its decision and triage
-    (feature 002 FR-031; owner decisions 189A and 191A). The backend fills it, and the page
-    prints it as sent."""
+    """The line a finding's card shows when a check run again changed its verdict - its status
+    or its severity - and so cleared its decision and triage (feature 002 FR-031; owner decisions
+    189A, 191A and 194A): after the engineer's answer (`cleared`), when the answer graded the
+    checks again (`restated`), or when a re-run did not carry the decision (`carried`). The
+    backend fills it, and the page prints it as sent."""
 
     cleared: str
     cleared_with_triage: str
+    restated: str
+    restated_with_triage: str
+    carried: str
+    carried_with_triage: str
 
-    def of(self, decision: str, triage: str | None) -> str:
+    def of(self, decision: str, triage: str | None, *, cause: ClearedBy = "rerun") -> str:
         """The line for the cleared `decision`, its noun ("Accept"), naming `triage`, its word, when
-        the disposition held one."""
+        the disposition held one, in the words of what cleared it."""
+        plain, triaged = {
+            "rerun": (self.cleared, self.cleared_with_triage),
+            "restate": (self.restated, self.restated_with_triage),
+            "carry": (self.carried, self.carried_with_triage),
+        }[cause]
         if triage is None:
-            return self.cleared.format(decision=decision)
-        return self.cleared_with_triage.format(decision=decision, triage=triage)
+            return plain.format(decision=decision)
+        return triaged.format(decision=decision, triage=triage)
 
 
 class Labels(ReviewModel):

@@ -381,6 +381,13 @@ and `check_drawings` when a read reloaded the package. Each is a recorded step t
 registry's dispatch and `PrerunGuard.answer_repeats_with`, superseding the findings of the call it
 restates.
 
+*Amended 2026-11-01 by feature 002 (owner decision 194A; 002 T341):* the fold below keeps the
+engineer's disposition (58A) only while the restated finding's status and severity are the ones
+decided, and otherwise clears it and the card says so (`disposition.cleared`); and it first
+withdraws the id the restated finding was announced under (`finding.withdrawn` with
+`folded_into`), so the page keeps no card under it. See 002
+[data-model.md](../../002-task-pane-assistant/data-model.md) section 3, rule 3.
+
 **`_restate` reconciles its own restated calls** before it returns. It takes its own mark (the
 findings' count before its first call), runs the calls, and folds each finding they added onto the
 earlier finding with the same verdict key, which keeps its id, and the engineer's disposition on

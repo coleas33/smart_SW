@@ -761,6 +761,11 @@ recorded before their code):
   fold keeps the earlier finding's whole disposition when the re-run's status and severity are
   unchanged, and when either changed clears it and says so on the finding's card (002
   [research.md](../002-task-pane-assistant/research.md), H-d-008); 58A's restate is unchanged.
+  *Amended 2026-11-01 (owner decision 194A; 002 T341):* 191A's rule governs the restate too - a
+  restated finding keeps the earlier finding's disposition only while its status and severity
+  are the ones decided, and otherwise loses it and its card says so, its line naming the restate;
+  the restated finding's own id is withdrawn when it folds (002
+  [research.md](../002-task-pane-assistant/research.md), 193A and 194A).
 - **63A, the goal lines stay as they are.** The question (the third review, D25): with the
   Fasteners goal owning `thread.`, the `thread.pitch` rows reach its goal line - a coarse pass
   lifts it to "checked", and with none a skipped row turns "not applicable (out of scope)" into

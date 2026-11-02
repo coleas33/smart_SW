@@ -90,7 +90,7 @@ from pydantic import (
 from swreview.agent import events
 from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, ProviderName, TokenUsage
-from swreview.agent.runner import SESSION_FILE_NAME
+from swreview.agent.runner import FOLDED_INTO, SESSION_FILE_NAME
 from swreview.benchmark import answers, matching, questions, runner, sets
 from swreview.benchmark import prices as pricing
 from swreview.benchmark.answer_key import load_answer_key
@@ -691,7 +691,8 @@ class StreamRead:
     """The first computed finding's `at` less `session.started`'s, before any unreadable line."""
     withdrawn: dict[str, dict[str, Any]]
     """Each id a `finding.withdrawn` event names, in the order of its first withdrawal, with the
-    last `finding` body announced for it before its latest withdrawal."""
+    last `finding` body announced for it before its latest withdrawal; a fold's withdrawal is
+    not one (`read_stream`)."""
     unreadable_line: int | None
     """The 1-based line `replay_events` stopped at, or `None` when it read to the end."""
 
@@ -711,7 +712,10 @@ def read_stream(events_path: Path) -> StreamRead:
 
     **Withdrawn findings.** The session holds none (`tools/context.py:316-335`), so each
     `finding.withdrawn` is read here with the last `finding` body announced before it; whether
-    it is still withdrawn at the end, and what it hit, is `_score_package`'s.
+    it is still withdrawn at the end, and what it hit, is `_score_package`'s. A fold's
+    withdrawal of the id a re-run or restated finding was first announced under, which names
+    the id it took (`runner.FOLDED_INTO`; 002 FR-031), is passed over: its verdict stands in the
+    final state under that id and is scored there.
     """
     if not events_path.is_file():
         return StreamRead(
@@ -731,7 +735,7 @@ def read_stream(events_path: Path) -> StreamRead:
                 first = (event.at - started_at).total_seconds()
             if isinstance(body.get("id"), str):
                 announced[body["id"]] = body
-        elif event.type == "finding.withdrawn":
+        elif event.type == "finding.withdrawn" and FOLDED_INTO not in event.body:
             finding_id = event.body.get("finding_id")
             if isinstance(finding_id, str) and finding_id in announced:
                 withdrawn[finding_id] = announced[finding_id]
