@@ -7039,3 +7039,43 @@ the decision register now records 160A as done.
   two page paths gained a guard fact each, proved by a mutant: a reply with no triage that lands
   after a review switch draws no line on the shown review's card of the same id, and a reload and
   a switch bring the line back from the live snapshot.
+
+### H-g-010. A withdrawal or a clear says what it took (2026-11-02; cycle 10)
+
+- **Question**: a restate withdraws the findings an answer no longer produces, together with their
+  decision and triage, and none of the places an engineer looks says so: the Transcript says only
+  "<id> withdrawn: <reason>", and `report.md` shows a finding whose decision a re-run, a restate
+  or a carry cleared as simply undecided, with no word of the clear, so the owner's M0 counts lose
+  judgements with no line in `report.md` ([roadmap hole H-g-010](../../docs/roadmap/holes.md), its
+  code half).
+- **Settled**:
+  - **The withdrawal's words.** `ToolContext.withdraw_findings`, the one place a finding leaves
+    the session, adds two keys to the body of a finding that held a decision: `disposition`, the
+    one that went with it, and `taken`, the words file's clause naming the decision and its
+    triage (`withdrawn`: "your Reject (wrong) went with it"), worded as the cleared line words
+    them - a pass's `wrong` as a miss (187A) - by one helper the two now share. The Transcript
+    prints the clause after the reason, as sent. Options: A, two optional keys on
+    `finding.withdrawn`; B, a `disposition.cleared` for the withdrawn id, whose card is gone and
+    whose line says "Decide again." A. A fold's withdrawal is written by `_announce_folds`, not
+    here, and names none: its finding stands under the id it took, and the cleared line says what
+    the fold took.
+  - **`report.md`.** Under a finding still undecided, its cleared line (`  - cleared: <line>`):
+    the last `disposition.cleared` its stream holds, as both snapshots name it (193A's
+    `cleared_lines`). And right after the summary whose counts no longer hold them, "Withdrawn with
+    a decision": one line per finding withdrawn with a decision, the Transcript's own, in the order
+    they went. Each only when there is something to say, so every other report and every committed
+    golden keeps its bytes; from the stream alone, as 193A works the snapshots' lines out, so
+    `Finding` gains no field.
+  - **The writers.** `render_report` takes the run's events. `ReviewRun.write_views` - a turn's
+    end, a live decision, the minutes and Send's saves - and the console's re-render
+    (`render_folder_report`: `swreview disposition`, `timing`, `exceptions accept-*` and `report`)
+    read the stream the session wrote: `events.jsonl`, or the rotated one a re-run left
+    (`own_stream`, moved from `chat/server.py` beside `replay_events`, where the restore reads it
+    as before). The console is a writer too: the hole's sitting step runs `swreview timing` and
+    any console triage after the restart, and a re-render without the stream would drop both. The one-shot
+    `swreview review` renders a session no engineer has decided yet, so it has nothing to say and
+    is left as it is.
+  - **Not changed**, as the hole's brief leaves them: the console save-over (a held review saved
+    over a disk-only write, `chat/sessions.py`), and the seat steps' order, which M0's tables set.
+- **Tests**: T358 and T360 in [tasks.md](tasks.md), Phase 30, each written first; T359 and T361
+  make them green, and T362 closes the records.
