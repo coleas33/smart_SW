@@ -410,12 +410,15 @@ row per step and task id. The development machine moves each answer into the res
     its decision (002 FR-031, decision 185A), and a pass judged wrong its one outcome, "wrong:
     a miss" (decision 187A). *Since 2026-11-01* (decision 186A) the seat writes the
     six, and the sitting's update minutes, in `notes\timing.txt` in the handover folder, never
-    in the findings document, which records the net saved and the run folder's stamp only: a
-    real design's timing figures are company facts and stay in the private fork. The review's
-    start and end times go in `notes\timing.txt` too, since a review watched throughout has them
-    as its supervision (decision 192A (the owner's answer of 2026-11-01, 13A)), and so does a
-    timing failure's message, of which the findings document records the exit code, the error's
-    name and the field only.
+    in the findings document, which records the net saved and the run folder's date and letter
+    only: a real design's timing figures are company facts and stay in the private fork. The
+    review's start and end times go in `notes\timing.txt` too, since a review watched throughout
+    has them as its supervision (decision 192A (the owner's answer of 2026-11-01, 13A)), and so
+    does a timing failure's message, of which the findings document records the exit code, the
+    error's name and the field only. *Since 2026-11-02* (decision 195A) the run folder's full
+    stamp, the moment Review was pressed, goes in `notes\timing.txt` too, and the findings
+    document writes the folder by its date and letter (`20261101-A`), so that no private figure
+    can be worked out from it.
 
 14. **009 T081, 009 T083, 009 T084.** Configuration switch (T081), chips and restore (T083),
     three open questions answered in one send (T084), each as its task text says; T084's resumed
@@ -432,8 +435,9 @@ row per step and task id. The development machine moves each answer into the res
     `pass`, `fail` or `blocked`) and every step's record above, in order, with the commit and the
     versions at the top; no company value in it, a real design's timing figures among them: of a
     design's timing it holds the net saved only, the rest, the timed review's start and end times
-    among it, staying in `notes\timing.txt` (decision 186A; decision 192A (the owner's answer of
-    2026-11-01, 13A)). The key audit runs again after it is written.
+    among it, staying in `notes\timing.txt`, and of that review's run folder its date and letter
+    only, its full stamp staying there too (decision 186A; decision 192A (the owner's answer of
+    2026-11-01, 13A); decision 195A). The key audit runs again after it is written.
 18. **009 T082: after the FR-023 fix**, on the current build (decision 175A dropped the "before"
     half, a swap to an older build to show a bug already fixed): review A, Model check on part J,
     then Show in SOLIDWORKS on one of A's findings selects A's own entity (the test plan's step
@@ -497,8 +501,9 @@ row per step and task id. The development machine moves each answer into the res
     the re-run before the first request on the small assembly and the big assembly, against the
     bound research R2.17 records, with no second extraction. Record: each pass or fail, the
     question's absence or its withdrawn ids and any folded-family limit, the Send records, the
-    restored review and the four timings, in 015 T119's row and step 4.10's record; stamps and
-    letters only, no design name, number or path. Its run folders travel with step 16's evidence.
+    restored review and the four timings, in 015 T119's row and step 4.10's record; run folders
+    by stamp and letter (a timed review's by its date and letter only: the test plan's rule 5),
+    and no design name, number or path. Its run folders travel with step 16's evidence.
 
 23. **014 T221: A's smoke review for feature 014** (the test plan's step 4.11): do this immediately
     after step 13 (A's review), reading A's review and its folder with no extra paid review in a
@@ -515,16 +520,17 @@ row per step and task id. The development machine moves each answer into the res
     On a fail, stop: the fix is a task of its own on the development machine, failing test first,
     and this review runs again on its build. No paid benchmark run (014 T244 on) starts until
     this passes. Record: full sitting or alone, each pass or fail and the printed facts lines,
-    the on-screen checks, and the folder's stamp and letter, in 014 T221's Results row and step
-    4.11's record. Its folder travels with step 16's evidence, including an alone run's folder.
+    the on-screen checks, and the folder's date and letter, never its full stamp (A's review is
+    the one timed: the test plan's rule 5), in 014 T221's Results row and step 4.11's record. Its folder travels with step 16's evidence, including an alone run's folder.
     Nothing of the small assembly, its path or its numbers enters the repository.
 
 ## 4. After the sitting, on the development machine
 
 The findings document and the zipped folders arrive by hand; the owner reads the document and
 commits it, with no company value in it: of a real design's timing it holds the net saved only,
-not the timed review's start and end times, and `notes\timing.txt` stays in the private fork
-(decision 186A; decision 192A (the owner's answer of 2026-11-01, 13A)). Before 008 T101 is
+not the timed review's start and end times or its run folder's full stamp, only that folder's
+date and letter, and `notes\timing.txt` stays in the private fork (decision 186A; decision 192A
+(the owner's answer of 2026-11-01, 13A); decision 195A). Before 008 T101 is
 ticked, the returned run folders are scanned for the owner's profile
 values (006 T100's audit half); 010 T104's Hole Wizard fields and 010 T106's engagement are counted
 from the dump folder and the big assembly's run folder. 008 T105 replays each run folder;

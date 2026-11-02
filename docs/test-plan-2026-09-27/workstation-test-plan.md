@@ -216,7 +216,12 @@ SOLIDWORKS closes during step 5.3, follow its item C before anything else, and g
    does a timing failure's message (steps 4.1 and 4.5; decision 186A; decision 192A (the owner's
    answer of 2026-11-01, 13A)).
    A run folder is named after its document: write it as its time stamp and letter (for example
-   `20261001-101112-A`), never its name. Copy a log line only as far as the end of its `gated=`
+   `20261001-101112-B`), never its name. A timed review's run folder (A's at step 4.1) goes by its
+   date and letter only (for example `20261101-A`), and no clock time of that review goes in the
+   findings document: its full stamp, the moment you pressed Review, goes in `notes\timing.txt`
+   with its start and end times, so that no private figure can be worked out from the findings
+   document (decision 195A). A review not timed, B's among them, keeps its full stamp. Copy a log
+   line only as far as the end of its `gated=`
    list; if it has `target=`, write that it did and how many paths, never the paths; replace any
    name inside `error="..."` with its letter. From a D6 or D8 dimension line, never copy its
    `name "..."`, `view "..."` or `value`, nor a D6 face line's radius, which is half a hole's
@@ -267,7 +272,8 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
    anything.
 4. When SOLIDWORKS starts again and shows **Document Recovery**, close that pane without opening or
    saving the recovered files: they are older copies of real files.
-5. Record the step, the time, the last line printed, and whether a crash report appeared. Reopen
+5. Record the step, the time (during a timed review, in `notes\timing.txt` only: rule 5), the last
+   line printed, and whether a crash report appeared. Reopen
    the documents and go on with the next step. Run a crashed probe once more, at most.
 6. After a D14 run (step 3.9) that crashed or was stopped, restart SOLIDWORKS before any other step
    with J: a drawing opened hidden may still be loaded.
@@ -359,9 +365,9 @@ means, in `notes\documents.txt` in the handover folder (the setup block below ma
 `notepad "$H\notes\documents.txt"` opens the file). Also write `notes\paths.txt`: the full path of
 every lettered file, one per line (Copy as path; the quotes are fine). Both files stay in the
 handover folder and travel by hand; they are never pushed. The same holds for every file in
-`notes\`, `notes\timing.txt` among them, where step 4.1 writes a real design's minutes and its
+`notes\`, `notes\timing.txt` among them, where step 4.1 writes a real design's minutes, its
 timed review's start and end times (decision 186A; decision 192A (the owner's answer of
-2026-11-01, 13A)).
+2026-11-01, 13A)) and that review's full stamp (decision 195A).
 
 | Letter | What it must be | Used by |
 |---|---|---|
@@ -786,8 +792,9 @@ Each result is one word:
   `blocked: B ended without an error card`.
 
 A task spread over several rows passes only if every row passed, fails if any row failed, and
-otherwise is blocked. Observed holds a count, a report file name, a run folder's stamp and letter,
-or a quoted line: never a path or a name. What a step says to record in more detail goes under
+otherwise is blocked. Observed holds a count, a report file name, a run folder's stamp and letter
+(a timed review's by its date and letter only: rule 5), or a quoted line: never a path or a name.
+What a step says to record in more detail goes under
 that step's heading further down the document.
 
 ### 1.5 Registration, only when needed
@@ -1714,7 +1721,10 @@ itself, or press its chip. Pressing the chip of the review already on screen doe
 Open A resolved and make it active; press Review (the box above). Note the time it started and
 finished in `notes\timing.txt`, with A's minutes (the 007 T060 bullet below), never in the
 findings document: when you watch the whole review, the two times are its supervision (decision
-192A (the owner's answer of 2026-11-01, 13A)).
+192A (the owner's answer of 2026-11-01, 13A)). Its run folder's full stamp goes in
+`notes\timing.txt` too: the date and time its name begins with (`20261101-101112`), the moment
+you pressed Review; the findings document writes the folder by its date and letter only, as
+`20261101-A` (rule 5; decision 195A).
 
 - 008 T103, pass: the `tokens` line's `input` is **at most 300,000**. The last sitting's reviews of
   the small assembly took 1.47 million and 1.58 million. Fail: above 300,000. The task counts the
@@ -1790,7 +1800,8 @@ findings document: when you watch the whole review, the two times are its superv
 
 Record: the facts, the headline, the tally line, the not-reached line, the groups' goal lines,
 the drawings line (with letters in place of names) and the usage line; never the start and end
-times, which stay in `notes\timing.txt` (decision 192A (the owner's answer of 2026-11-01, 13A)).
+times or the run folder's full stamp, which stay in `notes\timing.txt` (decision 192A (the
+owner's answer of 2026-11-01, 13A); decision 195A).
 
 Do step 4.11 (014 T221) now on this review's folder, then step 4.2.
 
@@ -1953,10 +1964,11 @@ Record: each pass or fail. Save no configuration change.
    owner times each pilot run the same way; at this sitting, A's review is the one timed.
 
 Record: each pass or fail; for 007 T060 the net saved, as `swreview timing` printed it
-(`net saved: <n>`), and A's run folder stamp (`<stamp>-A`), never the six minutes, the update's,
-the review's start and end times or a timing failure's message, which stay in `notes\timing.txt`
-(decision 186A; decision 192A (the owner's answer of 2026-11-01, 13A)). From here on SOLIDWORKS
-may be closed and reopened.
+(`net saved: <n>`), and A's run folder by its date and letter (`<date>-A`, as `20261101-A`; rule
+5), never the six minutes, the update's, the review's start and end times, the folder's full
+stamp or a timing failure's message, which stay in `notes\timing.txt` (decision 186A; decision
+192A (the owner's answer of 2026-11-01, 13A); decision 195A). From here on SOLIDWORKS may be
+closed and reopened.
 
 ### 4.6 Drawing questions, three answers in one send, and a confirmed candidate left closed [011 T067; 009 T084; 011 T077]
 
@@ -2204,8 +2216,8 @@ before its restarts.
    report it to the owner: the bound is set again by R2.17's rule in a follow-up, recorded in
    R2.17 and RK-10.
 
-Record: each pass or fail, each run folder's stamp and letter, the records of items 3 and 5, the
-restored review and the four timings. No design name, number or path goes in the findings
+Record: each pass or fail, each run folder's stamp and letter (a timed review's by its date and
+letter only: rule 5), the records of items 3 and 5, the restored review and the four timings. No design name, number or path goes in the findings
 document.
 
 ### 4.11 A's smoke review for feature 014 [014 T221]
@@ -2256,8 +2268,8 @@ No paid benchmark run (014 T244 on) starts until this passes.
 
 Record: full sitting or alone; pass or fail for each check, each printed facts line (with letters
 in place of names), the on-screen summary, findings and questions, and the run
-folder's stamp and letter, in 014 T221's Results row and under step 4.11's record heading in the
-findings document. Keep the file contents in the run folder, which travels with step 6.3's
+folder's date and letter, never its full stamp (rule 5: A's review is the one timed), in
+014 T221's Results row and under step 4.11's record heading in the findings document. Keep the file contents in the run folder, which travels with step 6.3's
 evidence; the results sheet
 travels in the handover folder and is committed from the development machine (runbook section 8).
 Nothing of the small assembly, its path or its numbers enters the repository.
@@ -2861,7 +2873,8 @@ cd $R
 ```
 
 Pass: one `wrote <archive>` per review and no `Missing artifacts: ` line. Record: the stamp and
-letter of any review with a `Missing artifacts` line, and the files it names.
+letter of any review with a `Missing artifacts` line (a timed review's by its date and letter
+only: rule 5), and the files it names.
 
 ### 6.3 The whole run folders, the logs, the probe reports and the dumps
 
@@ -2893,9 +2906,10 @@ each `fail` quotes its line (a timing failure only its exit code, error's name a
 to record; last, "What to look at first next time".
 
 No vault path, folder name, property name or value, template or sheet format name, no timing
-figure of a real design but its net saved, and not its timed review's start and end times
-(`notes\timing.txt` holds them; decision 186A; decision 192A (the owner's answer of 2026-11-01,
-13A)), and no key (rule 5). The probe reports, dump folders, zips, screenshots and `notes\` sit
+figure of a real design but its net saved, and not its timed review's start and end times or
+its run folder's full stamp, the folder going by its date and letter (`notes\timing.txt` holds
+them; decision 186A; decision 192A (the owner's answer of 2026-11-01, 13A); decision 195A), and
+no key (rule 5). The probe reports, dump folders, zips, screenshots and `notes\` sit
 beside it in the handover folder.
 
 ### 6.5 Check again, then hand it over
@@ -2908,7 +2922,8 @@ else; tell the owner the folder is ready: it travels by hand, whole. The owner r
 and commits it from the development machine (the repository is public, and the owner is the one
 who can see a company value in it; a real design's timing figures are company values too: of a
 design's timing the document holds the net saved only, not even its timed review's start and end
-times, decision 186A; decision 192A (the owner's answer of 2026-11-01, 13A)). Like every file in
+times or its run folder's full stamp, only that folder's date and letter, decision 186A; decision
+192A (the owner's answer of 2026-11-01, 13A); decision 195A). Like every file in
 `notes\`, `notes\timing.txt` travels in the folder and is never committed: the owner keeps it in
 the private fork. If git ever asks who you are, or a GitHub sign-in window opens, you have run a
 command this plan does not give: close it and call the owner.

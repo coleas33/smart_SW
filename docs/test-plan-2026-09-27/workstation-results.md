@@ -12,7 +12,9 @@ timing, the net saved only: its baseline, its five assisted minutes, the update'
 timed review's start and end times stay in `notes\timing.txt`, and so does a timing failure's
 message (the plan's steps 4.1 and 4.5; decision 186A; decision 192A (the owner's answer of
 2026-11-01, 13A)). A run folder is
-written as its time stamp and letter (`20261001-101112-A`), never its name. From a D6 or D8 line of
+written as its time stamp and letter (`20261001-101112-B`), never its name, and a timed review's
+by its date and letter only (`20261101-A`), its full stamp staying in `notes\timing.txt`
+(decision 195A). From a D6 or D8 line of
 a probe report, its id only: never a dimension's name, view, value or radius. From a Standards
 probe report, a component's id only (`cmp:` and four digits), never its name, and no
 configuration's or view's name. From a re-modeler probe run, no line that holds a path (the
@@ -52,7 +54,8 @@ and the field, its line going in `notes\timing.txt`) or `blocked`
 (the step could not run, or the case it needs did not arise: name the step, letter or condition in
 Notes, for example `blocked by 2.3: profile version 1`). A task spread over several rows passes
 only if every row passed, fails if any row failed, and otherwise is blocked. Observed holds a count,
-a report file name, a run folder's stamp and letter, or a quoted line: never a path or a name.
+a report file name, a run folder's stamp and letter (a timed review's by its date and letter
+only), or a quoted line: never a path or a name.
 
 | Step | Task | Result | Observed | Notes |
 |---|---|---|---|---|
