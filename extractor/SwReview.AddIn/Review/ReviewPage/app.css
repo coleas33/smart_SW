@@ -585,8 +585,11 @@ body.results-stale .card.evidence {
   padding: 0 12px 6px;
 }
 
+/* One column no wider than the pane: an `auto` column would grow to its widest row's one-line title
+   and push every card past a docked pane's 300 px, where the title is meant to give way (193A). */
 .type-groups {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 
@@ -640,6 +643,7 @@ body.results-stale .card.evidence {
 
 .type-group-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 0 8px 8px;
 }
@@ -1324,6 +1328,13 @@ body.view-transcript #results {
 .card-status .card-record {
   display: block;
   color: var(--good);
+}
+
+/* A cleared decision's line stays above whatever a press or Show writes after it, in its own hue,
+   until the engineer decides again (193A). */
+.card-status .card-cleared {
+  display: block;
+  color: var(--judge);
 }
 
 #review-preparation {

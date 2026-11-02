@@ -691,7 +691,8 @@
    * An event replayed into the Transcript of a restored review (contracts/sessions.md section
    * 8). Results already hold the snapshot, so nothing here touches them: a finding adds its
    * marker and never a second card, a coverage, withdrawal or disposition event is already in
-   * the snapshot - a cleared disposition too, its finding there undecided - and the turn's and the
+   * the snapshot - a cleared disposition too, its finding there undecided and its line under
+   * `cleared` - and the turn's and the
    * session's end are lines in the chronology - neither closes the stream nor reads the ranking
    * again. The prose, the tool calls, the evidence records and the usage build the Transcript and
    * its head exactly as live.
@@ -853,6 +854,7 @@
     }
     status.className = 'card-status bad';
     errorInto(status, error, legacy);
+    keepCleared(card);
   }
 
   /**
@@ -1006,6 +1008,11 @@
       state.arrival.push(String(body.id));
     }
     state.findings[body.id] = { body: body, card: card };
+    // A card drawn again while its finding is undecided keeps the line a cleared decision left, as
+    // a snapshot taken now would show it (owner decision 193A).
+    if (existing && existing.cleared && !body.disposition) {
+      showCleared(card, existing.cleared);
+    }
   }
 
   /**
@@ -1019,6 +1026,11 @@
    * (`onReplayedEvent`: a snapshot is the session after every withdrawal); 013 T038 put the event
    * in chat-events.schema.json, and the page names no event type the contract does not carry
    * (ReviewPageContractTests).
+   *
+   * A fold's withdrawal names `folded_into` (002 cycle 6): the id a re-run was first announced under
+   * leaves, and its verdict is announced next under the id it took. Its card goes as any withdrawn
+   * one does, but no verdict left the review, so the ranking is not read for it: the session's end
+   * reads it once, where a restate may fold many findings in one answer.
    */
   function withdrawFinding(body) {
     var id = String((body && body.finding_id) || '');
@@ -1033,7 +1045,9 @@
       state.arrival.splice(arrived, 1);
     }
     appendCard(render.withdrawalMarker(body));
-    loadAttention();
+    if (!body.folded_into) {
+      loadAttention();
+    }
   }
 
   function showEvidence(body) {
@@ -1083,6 +1097,10 @@
     var entry = entryOf(card);
     if (entry) {
       entry.body.disposition = disposition;
+      // A decision recorded ends the line a cleared one left (owner decision 193A).
+      if (disposition) {
+        entry.cleared = null;
+      }
     }
     var status = card ? card.querySelector('.card-status') : null;
     if (!status) {
@@ -1101,16 +1119,44 @@
    * card with the new verdict and nothing decided; this writes the backend's line - naming the
    * decision and the triage cleared, and asking for a new decision - on the card's status line,
    * where the disposition's sentence stood, as sent. The engineer's next decision writes its own
-   * sentence there. An id this page holds no card for is ignored.
+   * sentence there. An id this page holds no card for is ignored. Owner decision 194A: a restate's
+   * and a re-run's carry come the same way, their lines naming them; and 193A: a snapshot's
+   * `cleared` holds the same bodies, read here after its cards are placed (`renderResults`).
    */
   function clearedDisposition(body) {
     var entry = state.findings[String((body && body.finding_id) || '')];
-    var status = entry ? entry.card.querySelector('.card-status') : null;
-    if (!status) {
+    if (entry) {
+      showCleared(entry.card, String(body.reason || ''));
+    }
+  }
+
+  /**
+   * The line on its own on one card's status line, in its class, and kept in the finding's entry
+   * beside the disposition (owner decision 193A) - written only through the card that entry holds
+   * (`entryOf`), so a card a switch or a fold left behind writes nobody's.
+   */
+  function showCleared(card, line) {
+    var entry = entryOf(card);
+    var status = card ? card.querySelector('.card-status') : null;
+    if (!entry || !status) {
       return;
     }
+    entry.cleared = line;
     status.className = 'card-status cleared';
-    status.textContent = String(body.reason || '');
+    status.textContent = line;
+  }
+
+  /**
+   * After any status a press or Show writes on a card (`cardStatus`, `cardError`): the line its
+   * entry keeps, above that status, while the finding is undecided (owner decision 193A), as a
+   * refused press shows the record above the refusal (roadmap hole H-g-012).
+   */
+  function keepCleared(card) {
+    var entry = entryOf(card);
+    var status = card ? card.querySelector('.card-status') : null;
+    if (entry && entry.cleared && status) {
+      status.insertBefore(render.el('span', 'card-cleared', entry.cleared), status.firstChild);
+    }
   }
 
   /**
@@ -1898,14 +1944,19 @@
 
   /**
    * One snapshot's results: every finding's card in session order (dispositions included), the
-   * coverage fold, the not-loaded warning, and the ranking with its summary - `placeFinding`,
-   * `renderCoverage`, `renderNotExamined` and `applyRanking`, the functions the live review
-   * renders through.
+   * line on each card whose decision a re-run cleared (`cleared`, owner decision 193A; none from an
+   * older backend), the coverage fold, the not-loaded warning, and the ranking with its summary -
+   * `placeFinding`, `clearedDisposition`, `renderCoverage`, `renderNotExamined` and
+   * `applyRanking`, the functions the live review renders through.
    */
   function renderResults(snapshot) {
     var findings = snapshot.findings || [];
     for (var index = 0; index < findings.length; index++) {
       placeFinding(findings[index] || {});
+    }
+    var cleared = snapshot.cleared || [];
+    for (var line = 0; line < cleared.length; line++) {
+      clearedDisposition(cleared[line] || {});
     }
     state.coverage = [];
     var coverage = snapshot.coverage || [];
@@ -2507,6 +2558,7 @@
     }
     status.className = bad ? 'card-status bad' : 'card-status';
     status.textContent = message;
+    keepCleared(card);
   }
 
   /**
