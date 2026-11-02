@@ -63,6 +63,7 @@ from swreview.agent.events import (
     emit_error,
     emit_turn_failed,
     no_redaction,
+    session_events,
     utc_now,
 )
 from swreview.agent.package_brief import package_brief
@@ -131,7 +132,7 @@ from swreview.prerun import (
 from swreview.prerun import (
     returned_finding_ids as _returned_finding_ids,
 )
-from swreview.report.attention import SUPPRESSED_STATUS, rank
+from swreview.report.attention import rank
 from swreview.report.attention_record import write_attention_record
 from swreview.report.dispositions import REPORT_FILE_NAME, set_disposition, takes_triage
 from swreview.report.explanations import (
@@ -165,7 +166,14 @@ from swreview.report.session import (
 )
 from swreview.report.snapshot import root_document
 from swreview.report.sources import answer_basis
-from swreview.report.summary import ClearedBy, SendInput, load_words, with_triage_tally
+from swreview.report.summary import (
+    DECISION_NOUNS,
+    ClearedBy,
+    SendInput,
+    decision_words,
+    load_words,
+    with_triage_tally,
+)
 from swreview.tools.checks_mechanical import (
     attach_part_roles,
     check_hygiene,
@@ -1187,10 +1195,6 @@ NOT_CARRIED_PROFILE = (
 an earlier id, never a path, and the items are joined with "; " in the carry's order."""
 
 
-DECISION_NOUNS = {"accepted": "Accept", "rejected": "Reject", "deferred": "Defer"}
-"""How a decision is named in a `coverage.recheck` item, "the Reject of F-007", and in the line
-a re-run that cleared one leaves on its card (owner decisions 189A and 191A)."""
-
 FOLDED_WITHDRAWAL = "a second verdict on what {id} judges, shown as {id}"
 """Why the id a re-run or restated finding was first announced under is withdrawn once it folds
 onto `{id}` (002 FR-031: the stream agrees with the fold)."""
@@ -1207,26 +1211,17 @@ def _cleared_body(
     """The `disposition.cleared` body (002 FR-031; owner decisions 189A, 191A and 194A): the
     finding the line lands on, the disposition `decided` held that a new verdict cleared - by a
     re-run after an answer, a restate or a re-run's carry, `cause` - and the words file's line the
-    page prints on the finding's card, naming the decision and, when one was recorded, its triage:
-    a pass's `wrong` in the pass's own word, "wrong: a miss" (`labels.pass_triage`, owner decision
-    187A), as its card says it, and any other triage in `labels.triage`'s; then the review's
-    triage tally, `findings`' as the clear left them, while one is recorded (002 cycle 7)."""
+    page prints on the finding's card, naming the decision and, when one was recorded, its triage
+    as its card says it (`decision_words`: a pass's `wrong` as a miss, owner decision 187A); then
+    the review's triage tally, `findings`' as the clear left them, while one is recorded (002 cycle
+    7)."""
     disposition = decided.disposition
     assert disposition is not None, "only a decided finding's decision is cleared"
-    words = load_words()
-    labels = words.labels
-    triage = disposition.triage
-    if triage is None:
-        word = None
-    elif decided.status == SUPPRESSED_STATUS and triage in labels.pass_triage:
-        word = labels.pass_triage[triage]
-    else:
-        word = labels.triage[triage]
     return with_triage_tally(
         {
             "finding_id": finding_id,
             "disposition": disposition.model_dump(mode="json"),
-            "reason": words.rerun.of(DECISION_NOUNS[disposition.decision], word, cause=cause),
+            "reason": load_words().rerun.of(*decision_words(decided), cause=cause),
         },
         findings,
     )
@@ -2211,7 +2206,8 @@ class ReviewRun:
         the pane's render after every turn, a shutdown and a re-run that raised past its commit
         point. Both views come from one `rank` call over the session just saved, so the report
         an engineer opens and the record beside it never name another session or another
-        order (research R2.7).
+        order (research R2.7). The report reads the stream the session wrote, rotated or not
+        (`session_events`), for what a clear or a withdrawal took (roadmap hole H-g-010).
 
         `save` raises whatever it meets: the record is the commitment. With `best_effort`, a
         ranking or a view that would not write is logged and never raised, because the record
@@ -2222,9 +2218,13 @@ class ReviewRun:
             save_session(self.session, self.session_path)
         try:
             ranking = rank(self.session)
-            (self.out_dir / REPORT_FILE_NAME).write_text(
-                render_report(self.session, self.context.ir, ranking=ranking), encoding="utf-8"
+            report = render_report(
+                self.session,
+                self.context.ir,
+                ranking=ranking,
+                events=session_events(self.out_dir, self.session.session_id),
             )
+            (self.out_dir / REPORT_FILE_NAME).write_text(report, encoding="utf-8")
             write_attention_record(self.out_dir, ranking, self.session.session_id)
         except Exception as exc:
             if not best_effort:

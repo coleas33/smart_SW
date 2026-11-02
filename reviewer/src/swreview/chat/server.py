@@ -73,6 +73,7 @@ from starlette.routing import Route
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from swreview import __version__
+from swreview.agent.events import session_events, stream_session_id
 from swreview.agent.providers import (
     AgentEvent,
     AgentProvider,
@@ -584,45 +585,6 @@ def _rotated(path: Path, index: int) -> Path:
     return path.with_name(f"{path.stem}.{index}{path.suffix}")
 
 
-def _stream_session_id(path: Path) -> str | None:
-    """The `session_id` the first event of a stream names, or `None` for any other stream.
-
-    Only the first line is read: a `session.started` is every stream's first event. An
-    absent, empty or unreadable file, or a first line that is something else, is `None`.
-    """
-    try:
-        with path.open(encoding="utf-8") as stream:
-            first = json.loads(stream.readline())
-    except (OSError, ValueError):
-        return None
-    if not isinstance(first, dict) or first.get("type") != "session.started":
-        return None
-    body = first.get("body")
-    session_id = body.get("session_id") if isinstance(body, dict) else None
-    return session_id if isinstance(session_id, str) else None
-
-
-def _own_stream(run_dir: Path, session_id: UUID) -> Path | None:
-    """The stream the session `session_id` wrote in `run_dir`: `events.jsonl` when its first event
-    starts that session, else the rotated `events.N.jsonl` that does - the highest `N` of several
-    - and `None` when none does.
-
-    A re-run moves a waiting record's stream aside before it runs and leaves the record canonical
-    until it commits (`_rotate_kept`), so one that failed or was cut off before its commit point
-    leaves the record beside a stream of its own, or none (owner decision 193A).
-    """
-    wanted = str(session_id)
-    canonical = run_dir / EVENTS_FILE_NAME
-    if _stream_session_id(canonical) == wanted:
-        return canonical
-    rotated: dict[int, Path] = {}
-    for path in run_dir.glob("events.*.jsonl"):
-        index = path.name.split(".")[1]
-        if index.isdigit() and _stream_session_id(path) == wanted:
-            rotated[int(index)] = path
-    return rotated[max(rotated)] if rotated else None
-
-
 def _record_id(path: Path) -> str | None:
     """The `session_id` a session or attention record holds, or `None` when it cannot be read."""
     try:
@@ -636,7 +598,7 @@ def _record_id(path: Path) -> str | None:
 def _session_in(path: Path) -> str | None:
     """The session one of `SESSION_FILES` belongs to: the one a stream's first event starts,
     or the one a record holds; `None` when the file cannot be read as either."""
-    return _stream_session_id(path) if path.name == EVENTS_FILE_NAME else _record_id(path)
+    return stream_session_id(path) if path.name == EVENTS_FILE_NAME else _record_id(path)
 
 
 def _next_free_index(run_dir: Path) -> int:
@@ -1900,7 +1862,7 @@ class ChatServer:
         `session.N.json`, is never read here. A record that cannot be read, or names no
         session, cannot show whose the session is, and nothing is guessed through
         (`session_replaced`). Every refusal is `UnknownReview`. The cleared lines come from the
-        stream the record's own session wrote (`_own_stream`), which a re-run that failed before
+        stream the record's own session wrote (`own_stream`), which a re-run that failed before
         its commit point leaves rotated aside (owner decision 193A).
         """
         unknown = UnknownReview(f"no review {review_dir.name!r} under the run root")
@@ -1914,12 +1876,11 @@ class ChatServer:
             package = load_package(review_dir).package
         except PACKAGE_ERRORS as exc:
             raise unknown from exc
-        stream = _own_stream(review_dir, session.session_id)
         return restored_snapshot(
             session,
             package,
             run_id=review_dir.name,
-            events=replay_events(stream) if stream is not None else (),
+            events=session_events(review_dir, session.session_id),
         )
 
     def _family_of(self, check_dir: Path) -> str:
@@ -2531,7 +2492,7 @@ class ChatServer:
         run_dir = chat.run_dir
         events = run_dir / EVENTS_FILE_NAME
         results = run_dir / TOOL_RESULTS_DIR_NAME
-        own = _stream_session_id(events) == str(record_id)
+        own = stream_session_id(events) == str(record_id)
         copied = own or not any(
             _record_id(path) == str(record_id) for path in run_dir.glob("session.*.json")
         )

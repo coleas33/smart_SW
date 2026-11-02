@@ -94,6 +94,7 @@ if TYPE_CHECKING:  # pragma: no cover - imported for annotations only, never at 
 __all__ = [
     "BOUGHT_PARTS_CHECK",
     "COVERAGE_BUCKETS",
+    "DECISION_NOUNS",
     "DRAWINGS_NAMED",
     "MAYBE_BOUGHT_CHECK",
     "WORDS_FILE",
@@ -122,6 +123,7 @@ __all__ = [
     "bought_parts_of",
     "bought_rows",
     "contacts_of",
+    "decision_words",
     "drawings_of",
     "goal_lines",
     "goal_of",
@@ -364,6 +366,47 @@ class RerunWords(ReviewModel):
         return triaged.format(decision=decision, triage=triage)
 
 
+class WithdrawnWords(ReviewModel):
+    """The clause a withdrawal's Transcript line ends with when the finding withdrawn held a
+    decision, which went with it (feature 002 FR-031, roadmap hole H-g-010): the decision and, when
+    one was recorded, its triage, named as `RerunWords` names them. The backend fills it, the page
+    prints it as sent, and `report.md` prints the same line."""
+
+    took: str
+    took_with_triage: str
+
+    def of(self, decision: str, triage: str | None) -> str:
+        """The clause for the withdrawn `decision`, its noun ("Reject"), naming `triage`, its word,
+        when the disposition held one."""
+        if triage is None:
+            return self.took.format(decision=decision)
+        return self.took_with_triage.format(decision=decision, triage=triage)
+
+
+DECISION_NOUNS = {"accepted": "Accept", "rejected": "Reject", "deferred": "Defer"}
+"""How a decision is named in a `coverage.recheck` item, "the Reject of F-007", and in the line a
+re-run that cleared one leaves on its card or a withdrawal that took one ends with (owner decisions
+189A and 191A; roadmap hole H-g-010). Moved here from `agent/runner.py` (002 T359)."""
+
+
+def decision_words(decided: Finding) -> tuple[str, str | None]:
+    """`decided`'s decision as its noun and its triage, when one is recorded, in the word its card
+    shows: a pass's `wrong` in the pass's own word, "wrong: a miss" (`labels.pass_triage`, owner
+    decision 187A), and any other in `labels.triage`'s. What the line naming a decision a clear
+    (`rerun`) or a withdrawal (`withdrawn`) took is filled with (002 FR-031)."""
+    disposition = decided.disposition
+    assert disposition is not None, "only a decided finding's decision is named"
+    labels = load_words().labels
+    triage = disposition.triage
+    if triage is None:
+        word = None
+    elif decided.status == SUPPRESSED_STATUS and triage in labels.pass_triage:
+        word = labels.pass_triage[triage]
+    else:
+        word = labels.triage[triage]
+    return DECISION_NOUNS[disposition.decision], word
+
+
 class Labels(ReviewModel):
     """The card vocabulary `GET /labels` serves, verbatim (data-model section 7)."""
 
@@ -411,6 +454,7 @@ class Words(ReviewModel):
     send: SendWords
     answer_basis: AnswerBasisWords
     rerun: RerunWords
+    withdrawn: WithdrawnWords
     read_only_lead: str
     read_only_off: str
     goal_states: dict[GoalState, str]

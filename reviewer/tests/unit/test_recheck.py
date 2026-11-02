@@ -35,7 +35,7 @@ from starlette.testclient import TestClient
 
 from swreview import atomic, tokens
 from swreview.agent import runner
-from swreview.agent.events import EventSink
+from swreview.agent.events import EventSink, own_stream
 from swreview.agent.providers import ProviderName
 from swreview.agent.providers.deferred import DeferredProvider
 from swreview.agent.runner import request_prefix
@@ -1082,7 +1082,11 @@ def test_a_records_own_stream_is_the_canonical_one_or_its_latest_rotated_one(
     """Owner decision 193A: the restore reads the stream the record's own session wrote -
     `events.jsonl` when its `session.started` names that session, otherwise the rotated
     `events.N.jsonl` that does, the highest `N` of several - and none when no stream names it;
-    a stream of another session, an unreadable one and a name that is no index are passed over."""
+    a stream of another session, an unreadable one and a name that is no index are passed over.
+
+    *Changed 2026-11-02 on purpose (002 T359; roadmap hole H-g-010):* the rule moved, unchanged,
+    from `chat/server.py` to `agent/events.py` as `own_stream`, so the writers of `report.md` read
+    it too; this reaches it there. Its cases are as they were."""
     own, other = UUID(int=1), UUID(int=2)
 
     def stream(name: str, session_id: UUID | None) -> None:
@@ -1103,10 +1107,10 @@ def test_a_records_own_stream_is_the_canonical_one_or_its_latest_rotated_one(
     ):
         stream(name, session_id)
 
-    assert server._own_stream(tmp_path, own) == tmp_path / "events.3.jsonl"
-    assert server._own_stream(tmp_path, UUID(int=3)) is None
+    assert own_stream(tmp_path, own) == tmp_path / "events.3.jsonl"
+    assert own_stream(tmp_path, UUID(int=3)) is None
     stream("events.jsonl", own)
-    assert server._own_stream(tmp_path, own) == tmp_path / "events.jsonl"
+    assert own_stream(tmp_path, own) == tmp_path / "events.jsonl"
 
 
 # --- after the commit point (owner decision 93A) --------------------------------------------

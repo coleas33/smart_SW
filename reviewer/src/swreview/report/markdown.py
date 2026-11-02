@@ -1,10 +1,13 @@
 """Render a `ReviewSession` to a Markdown report (research R10, FR-009 through FR-013).
 
-`session.json` is the only source of truth; this module never reads or writes it. The
+`session.json` is the only source of truth; this module never reads or writes it. What a
+clear or a withdrawal took from the engineer's decisions is the run's stream's, which the caller
+passes (roadmap hole H-g-010). The
 report is plain Markdown - headings and pipe tables, no HTML (constitution Principle VI):
 an engineer must be able to reproduce any finding from what is printed here.
 
-Section order: title, manifest discrepancies, summary counts, bought parts (only when the
+Section order: title, manifest discrepancies, summary counts, the findings withdrawn with a
+decision (only when the run's stream names one, roadmap hole H-g-010), bought parts (only when the
 session holds a part-roles row, feature 013), findings by type (only when
 the caller supplies a ranking; "Start here" before feature 013), findings grouped by severity
 (high to info), contacts (only when the session holds one, feature 010), evidence requests,
@@ -14,10 +17,11 @@ investigation trace (collapsed past 50 steps).
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
+from typing import Any
 
-from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
+from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, AgentEvent, TokenUsage
 from swreview.checks.interference import interference_outcomes
 from swreview.findings import Calculation, Disposition, Finding, carried_and_computed
 from swreview.ir.models import (
@@ -46,6 +50,7 @@ from swreview.report.session import (
     ReviewSession,
     SessionUsage,
 )
+from swreview.report.snapshot import cleared_lines, withdrawn_lines
 from swreview.report.summary import Words, bought_rows, load_words, triage_tally
 from swreview.report.text import markdown_text
 from swreview.report.titles import display_title
@@ -77,6 +82,7 @@ def render_report(
     *,
     ranking: Ranking | None = None,
     check_run: bool = False,
+    events: Iterable[AgentEvent] = (),
 ) -> str:
     """Render `session` (and optionally the `package` it reviewed) to Markdown text.
 
@@ -94,9 +100,18 @@ def render_report(
     model `new_session` stamps on every session, so the header says what a review that was
     not sent says instead, and names no provider (feature 015 `contracts/records.md`
     section 4, amended by owner decision 132A).
+
+    `events` is the stream the session wrote (`agent/events.session_events`), which says what a
+    clear or a withdrawal took from the engineer's decisions (002 FR-031, roadmap hole H-g-010):
+    each undecided finding's cleared line, as both snapshots name it (`cleared_lines`), and the
+    findings withdrawn with a decision (`withdrawn_lines`). With none of either, the report is
+    what it was without them, byte for byte.
     """
     components_by_id = _components_by_id(package)
     names = component_names(package) if package is not None else {}
+    stream = list(events)
+    cleared = {body["finding_id"]: body["reason"] for body in cleared_lines(session, stream)}
+    withdrawn = withdrawn_lines(session, stream)
     lines: list[str] = []
 
     lines.extend(_render_title(session, check_run=check_run))
@@ -105,6 +120,9 @@ def render_report(
     lines.append("")
     lines.extend(_render_summary(session, package))
     lines.append("")
+    if withdrawn:
+        lines.extend(_render_withdrawn(withdrawn))
+        lines.append("")
     rows = bought_rows(session)
     if rows:
         lines.extend(_render_bought_parts(rows))
@@ -122,7 +140,9 @@ def render_report(
         if ranking is not None
         else {}
     )
-    lines.extend(_render_findings(session, package, components_by_id, names, explanations))
+    lines.extend(
+        _render_findings(session, package, components_by_id, names, explanations, cleared)
+    )
     lines.append("")
     if session.contacts:
         lines.extend(_render_contacts(session, package))
@@ -297,6 +317,24 @@ def _by_triage(findings: Sequence[Finding]) -> list[str]:
     return [] if tally is None else [f"- {tally.text}", f"- {tally.misses_text}"]
 
 
+# --- withdrawn with a decision (roadmap hole H-g-010) ------------------------------------------
+
+
+def _render_withdrawn(withdrawn: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Each finding an answer withdrew with a decision, in the order they went, right after the
+    summary whose counts no longer hold them (002 FR-031, roadmap hole H-g-010): the Transcript's
+    line - its id, why it went, and the backend's clause naming the decision and triage it took.
+    Rendered only when one did, so every other report keeps its bytes."""
+    return [
+        "## Withdrawn with a decision",
+        "",
+        *(
+            f"- {body['finding_id']} withdrawn: {body['reason']}; {body['taken']}"
+            for body in withdrawn
+        ),
+    ]
+
+
 # --- bought parts (feature 013) ----------------------------------------------------------
 
 
@@ -462,9 +500,12 @@ def _fmt_calculation(calculation: Calculation | None) -> list[str]:
     return lines
 
 
-def _fmt_disposition(disposition: Disposition | None) -> list[str]:
+def _fmt_disposition(disposition: Disposition | None, cleared: str | None = None) -> list[str]:
     if disposition is None:
-        return ["- Disposition: not yet dispositioned"]
+        # The line a re-run, a restate or a carry left when it cleared the decision, from the
+        # run's stream (owner decision 193A; roadmap hole H-g-010).
+        undecided = ["- Disposition: not yet dispositioned"]
+        return undecided if cleared is None else [*undecided, f"  - cleared: {cleared}"]
     # The triage's words under the decision, only when one is recorded (owner decision 185A).
     triage = (
         []
@@ -503,6 +544,7 @@ def _render_finding(
     components_by_id: dict[str, ComponentInstance],
     names: Mapping[str, str],
     explanations: dict[str, str] | None = None,
+    cleared: Mapping[str, str] | None = None,
 ) -> list[str]:
     heading = f"#### {finding.id}: {display_title(finding, names)}"
     if finding.carried_over_from is not None:
@@ -566,7 +608,7 @@ def _render_finding(
     capture_ids = ", ".join(finding.capture_ids) or "none"
     lines.append(f"- Captures: {capture_ids}")
 
-    lines.extend(_fmt_disposition(finding.disposition))
+    lines.extend(_fmt_disposition(finding.disposition, (cleared or {}).get(finding.id)))
 
     lines.append(f"- Exception: {finding.exception_id or 'none'}")
     lines.append(f"- Navigation: {_navigation_link(finding, package, components_by_id)}")
@@ -580,6 +622,7 @@ def _render_findings(
     components_by_id: dict[str, ComponentInstance],
     names: Mapping[str, str],
     explanations: dict[str, str] | None = None,
+    cleared: Mapping[str, str] | None = None,
 ) -> list[str]:
     lines = ["## Findings", ""]
     if not session.findings:
@@ -603,13 +646,17 @@ def _render_findings(
         lines.append(f"### {_SEVERITY_HEADINGS[severity]}")
         lines.append("")
         for finding in findings:
-            lines.extend(_render_finding(finding, package, components_by_id, names, explanations))
+            lines.extend(
+                _render_finding(finding, package, components_by_id, names, explanations, cleared)
+            )
             lines.append("")
 
     for family, findings in by_family.items():
         if findings:
             lines.extend(
-                _render_family(family, findings, package, components_by_id, names, explanations)
+                _render_family(
+                    family, findings, package, components_by_id, names, explanations, cleared
+                )
             )
 
     return lines
@@ -622,6 +669,7 @@ def _render_family(
     components_by_id: dict[str, ComponentInstance],
     names: Mapping[str, str],
     explanations: dict[str, str] | None,
+    cleared: Mapping[str, str] | None,
 ) -> list[str]:
     """One folded family, collapsed, with every finding in full (feature 008, FR-014).
 
@@ -643,7 +691,9 @@ def _render_family(
         "",
     ]
     for finding in findings:
-        lines.extend(_render_finding(finding, package, components_by_id, names, explanations))
+        lines.extend(
+            _render_finding(finding, package, components_by_id, names, explanations, cleared)
+        )
         lines.append("")
     lines.extend(["</details>", ""])
     return lines

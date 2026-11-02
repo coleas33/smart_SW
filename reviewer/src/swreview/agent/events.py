@@ -14,7 +14,9 @@ same in both, and this module is that everything:
 - **`replay_events`**, the one reader of that file, beside its writer: the pane's reconnect
   and remodel replay through it, and the benchmark's readers move onto it in US3, US6 and
   US7 (feature 014 plan decision RF-29); **`event_stream`** finds a benchmark run's stream,
-  plain or packed (owner decision 28A, plan decision RF-83).
+  plain or packed (owner decision 28A, plan decision RF-83), and **`own_stream`** the one a
+  review's session wrote, rotated or not, which **`session_events`** replays (owner decision
+  193A).
 - **`UsageLedger`**, which rides on that stream as a listener and is therefore shared by
   construction: it reads `usage` and `turn.ended` events and knows nothing about what run
   produced them.
@@ -39,12 +41,14 @@ not review-shaped despite the module it lives in (`report/session.py`).
 from __future__ import annotations
 
 import gzip
+import json
 import re
 import zlib
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
+from uuid import UUID
 
 from pydantic import ValidationError
 
@@ -248,6 +252,55 @@ def event_stream(folder: Path | str) -> Path:
     if packed.is_file():
         return packed
     return plain
+
+
+def stream_session_id(path: Path) -> str | None:
+    """The `session_id` the first event of a stream names, or `None` for any other stream.
+
+    Only the first line is read: a `session.started` is every stream's first event. An
+    absent, empty or unreadable file, or a first line that is something else, is `None`.
+    """
+    try:
+        with path.open(encoding="utf-8") as stream:
+            first = json.loads(stream.readline())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(first, dict) or first.get("type") != "session.started":
+        return None
+    body = first.get("body")
+    session_id = body.get("session_id") if isinstance(body, dict) else None
+    return session_id if isinstance(session_id, str) else None
+
+
+def own_stream(run_dir: Path, session_id: UUID) -> Path | None:
+    """The stream the session `session_id` wrote in `run_dir`: `events.jsonl` when its first event
+    starts that session, else the rotated `events.N.jsonl` that does - the highest `N` of several
+    - and `None` when none does.
+
+    A re-run moves a waiting record's stream aside before it runs and leaves the record canonical
+    until it commits (`_rotate_kept`), so one that failed or was cut off before its commit point
+    leaves the record beside a stream of its own, or none (owner decision 193A). Moved here from
+    `chat/server.py` (002 T359), so the report's writers read it too.
+    """
+    wanted = str(session_id)
+    canonical = run_dir / EVENTS_FILE_NAME
+    if stream_session_id(canonical) == wanted:
+        return canonical
+    rotated: dict[int, Path] = {}
+    for path in run_dir.glob("events.*.jsonl"):
+        index = path.name.split(".")[1]
+        if index.isdigit() and stream_session_id(path) == wanted:
+            rotated[int(index)] = path
+    return rotated[max(rotated)] if rotated else None
+
+
+def session_events(run_dir: Path, session_id: UUID) -> Iterator[AgentEvent]:
+    """Every event of the stream the session `session_id` wrote in `run_dir` (`own_stream`), or
+    none when no stream there starts it: what a read-only restore and every writer of a review's
+    `report.md` work a cleared or a withdrawn decision's line out from (owner decision 193A;
+    roadmap hole H-g-010)."""
+    stream = own_stream(run_dir, session_id)
+    return replay_events(stream) if stream is not None else iter(())
 
 
 class UsageLedger:

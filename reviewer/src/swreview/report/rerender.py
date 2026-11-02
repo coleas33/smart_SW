@@ -32,6 +32,7 @@ import json
 from pathlib import Path
 from typing import Any, NoReturn
 
+from swreview.agent.events import session_events
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import Ranking, rank
@@ -124,7 +125,9 @@ def render_folder_report(
     `check.json` (whether `session` is the check's own, whose report names no model and, in a
     standards folder, opens with the verdict header), and writes nothing: the text and the
     ranking are the caller's to write, so the one command that must not write a record,
-    `swreview report`, renders exactly what `rerender_run_folder` writes as `report.md`.
+    `swreview report`, renders exactly what `rerender_run_folder` writes as `report.md`. It reads
+    the stream `session` wrote in the folder too, rotated or not (`session_events`), for what a
+    clear or a withdrawal took, as the live writers do (roadmap hole H-g-010).
 
     Raises:
         ValueError: a `check.json` whose verdict cannot be read when `session` is the check's
@@ -140,7 +143,13 @@ def render_folder_report(
     check_run = record is not None and str(record.get("session_id")) == str(session.session_id)
     header = _header_of(directory, record, session) if record is not None and check_run else ""
     ranking = rank(session)
-    report = render_report(session, package, ranking=ranking, check_run=check_run)
+    report = render_report(
+        session,
+        package,
+        ranking=ranking,
+        check_run=check_run,
+        events=session_events(directory, session.session_id),
+    )
     return header + report, ranking
 
 
