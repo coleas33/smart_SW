@@ -3298,9 +3298,10 @@ def assert_the_fold_is_what_was_saved(
 ) -> None:
     """The turn ended for `turn_ended`, as before, and `session.json`, the `report.md` the server
     rendered and the stream agree with the fold: one finding of the check, under the decided id,
-    its decision kept whole or cleared; the re-run's own id withdrawn with `folded_into`, and a
-    `disposition.cleared` only when it was cleared - each written before the finalization's
-    `session.ended`."""
+    its decision kept whole or cleared; the re-run's own id withdrawn with `folded_into`, the
+    finding announced again under the decided id, and a `disposition.cleared` only when it was
+    cleared - each written after the turn's end, so no reader of the stream files it under a call
+    the Stop cut short, and before the finalization's `session.ended`."""
     events = events_of(run_dir)
     assert [event["body"]["reason"] for event in events if event["type"] == "turn.ended"][-1] == (
         turn_ended
@@ -3336,8 +3337,13 @@ def assert_the_fold_is_what_was_saved(
             }
         ]
     )
-    ended = max(index for index, event in enumerate(events) if event["type"] == "session.ended")
-    assert all(index < ended for index in [*folded, *(index for index, _ in cleared)])
+    announced = folded[0] + 1
+    assert (events[announced]["type"], events[announced]["body"]["id"]) == ("finding", drawing)
+    kinds = [event["type"] for event in events]
+    turn_end = max(index for index, kind in enumerate(kinds) if kind == "turn.ended")
+    session_end = max(index for index, kind in enumerate(kinds) if kind == "session.ended")
+    folding = [*folded, announced, *(index for index, _ in cleared)]
+    assert all(turn_end < index < session_end for index in folding)
     assert standing(events) == {finding.id for finding in saved.findings}
     spent = events[folded[0]]["body"]["finding_id"]
     lines = (run_dir / "report.md").read_text(encoding="utf-8").splitlines()
