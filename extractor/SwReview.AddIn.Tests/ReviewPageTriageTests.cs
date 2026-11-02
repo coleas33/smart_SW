@@ -51,6 +51,12 @@ namespace SwReview.AddIn.Tests;
 /// in the `disposition` and `disposition.cleared` events. The page shows the last it was sent, none while it was sent none,
 /// counts nothing and offers no control; a reply that lands after a review switch writes nothing, and a snapshot's tally is
 /// its summary's, never a cleared line's.
+///
+/// Roadmap hole H-c-008 (002 T354): the card says it has no triage yet. Until a flagged finding's triage is recorded, its
+/// card's head says so under the title, read with the fold shut, in the backend's words for where its record stands
+/// (`labels.no_triage`, keyed by the decision recorded, `undecided` for none), each naming the repair. `showDisposition` draws
+/// it again from each recorded decision, so a pick alone leaves it; a pass takes no triage but the miss and says nothing; a
+/// cleared decision brings it back; and with no labels the head is its line and its title, as before (FR-030).
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -1286,6 +1292,219 @@ public sealed class ReviewPageTriageTests
         });
     }
 
+    // ---- the card says it has no triage yet (002 T354; roadmap hole H-c-008) ------------------
+
+    /// <summary>
+    /// A flagged finding not yet decided says on its card's head that it has no triage - one line under its title, read with
+    /// the fold shut, in the backend's words for a finding not yet decided. A pick is no record and leaves it; the Accept
+    /// whose reply records `new and real` takes it away, and the head is its line and its title again.
+    /// </summary>
+    [Fact]
+    public void ACardSaysItHasNoTriageUntilOneIsRecorded()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver, Finding("F-001"));
+            JsonElement undecided = await driver.Read(ReadNoTriage("F-001"));
+            Assert.Equal(1, undecided.GetProperty("count").GetInt32());
+            Assert.Equal(LabelsSample.NoTriageUndecided, undecided.GetProperty("text").GetString());
+            Assert.True(undecided.GetProperty("inHead").GetBoolean(), "the line is not in the card's head.");
+            Assert.True(undecided.GetProperty("afterTitle").GetBoolean(), "the line is not under the title.");
+            Assert.True(undecided.GetProperty("foldShut").GetBoolean(), "the finding's fold is open.");
+            Assert.True(undecided.GetProperty("shown").GetBoolean(), "the line does not read with the fold shut.");
+
+            await Press(driver, "F-001", "new_and_real");
+            Assert.Equal(new[] { "new_and_real" }, Pressed(await driver.Read(ReadCard("F-001"))));
+            Assert.Equal(LabelsSample.NoTriageUndecided, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("text").GetString());
+
+            await driver.Route("POST", DispositionPath("F-001"), 200, Finding("F-001", Disposition("accepted", string.Empty, "new_and_real")));
+            await Decide(driver, "F-001", "accept");
+            JsonElement recorded = await driver.Read(ReadNoTriage("F-001"));
+            Assert.Equal(0, recorded.GetProperty("count").GetInt32());
+            Assert.Equal(new[] { "card-line", "title" }, ReviewPageDriver.Strings(recorded, "headChildren"));
+        });
+    }
+
+    /// <summary>
+    /// 185A's late triage: each decision recorded without a triage has its own words, naming the repair, drawn from the reply.
+    /// F-001's Accept says to press Accept again, F-002's Reject to press Reject again, and F-003's Defer, which a Defer cannot
+    /// follow, to press Accept or Reject. A press refused while a turn runs leaves F-001's line as recorded, and the late triage
+    /// takes it away.
+    /// </summary>
+    [Fact]
+    public void ACardDecidedWithoutATriageSaysToPressTheSameDecisionAgain()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver, Finding("F-001"), Finding("F-002"), Finding("F-003"));
+            await driver.Route("POST", DispositionPath("F-001"), 200, Finding("F-001", Disposition("accepted", string.Empty, null)));
+            await driver.Route("POST", DispositionPath("F-002"), 200, Finding("F-002", Disposition("rejected", string.Empty, null)));
+            await driver.Route("POST", DispositionPath("F-003"), 200, Finding("F-003", Disposition("deferred", string.Empty, null)));
+            await Decide(driver, "F-001", "accept");
+            await Decide(driver, "F-002", "reject");
+            await Decide(driver, "F-003", "defer");
+
+            Assert.Equal(LabelsSample.NoTriageAccepted, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("text").GetString());
+            Assert.Equal(LabelsSample.NoTriageRejected, (await driver.Read(ReadNoTriage("F-002"))).GetProperty("text").GetString());
+            Assert.Equal(LabelsSample.NoTriageDeferred, (await driver.Read(ReadNoTriage("F-003"))).GetProperty("text").GetString());
+
+            await driver.Route("POST", DispositionPath("F-001"), 409, TurnRunning);
+            await Press(driver, "F-001", "already_known");
+            await Decide(driver, "F-001", "accept");
+            JsonElement refused = await driver.Read(ReadNoTriage("F-001"));
+            Assert.Equal(1, refused.GetProperty("count").GetInt32());
+            Assert.Equal(LabelsSample.NoTriageAccepted, refused.GetProperty("text").GetString());
+
+            await driver.Route("POST", DispositionPath("F-001"), 200, Finding("F-001", Disposition("accepted", string.Empty, "already_known")));
+            await Press(driver, "F-001", "already_known");
+            await Decide(driver, "F-001", "accept");
+            Assert.Equal(0, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("count").GetInt32());
+        });
+    }
+
+    /// <summary>
+    /// 187A: a pass takes no triage but the miss, so its card's head says nothing of a triage - not yet decided, nor rejected
+    /// without the miss - while a flagged finding beside it says it has none.
+    /// </summary>
+    [Fact]
+    public void APassSaysNothingOfATriage()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver, Pass("F-001"), Finding("F-002"));
+            Assert.Equal(0, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("count").GetInt32());
+            Assert.Equal(LabelsSample.NoTriageUndecided, (await driver.Read(ReadNoTriage("F-002"))).GetProperty("text").GetString());
+
+            await driver.Route("POST", DispositionPath("F-001"), 200, Pass("F-001", Disposition("rejected", string.Empty, null)));
+            await Decide(driver, "F-001", "reject");
+            JsonElement pass = await driver.Read(ReadNoTriage("F-001"));
+            Assert.Equal(0, pass.GetProperty("count").GetInt32());
+            Assert.Equal(new[] { "card-line", "title" }, ReviewPageDriver.Strings(pass, "headChildren"));
+        });
+    }
+
+    /// <summary>
+    /// H-d-008: the stream's decisions draw the line as a reply does - F-001's Accept with `already known` takes it away, and
+    /// F-002's Reject with none says to press Reject again. A re-run after an answer changes F-001's verdict, so the backend
+    /// clears its decision and triage: the card the fold draws again says it has no triage, and its status line carries the
+    /// backend's cleared line. F-002's re-run keeps its verdict and its Reject, and its words stay.
+    /// </summary>
+    [Fact]
+    public void ACardWhoseDecisionARerunClearedSaysAgainItHasNoTriage()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            Dictionary<string, object?> rejected = Disposition("rejected", "FICT not a clash", null);
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "finding", Finding("F-002"));
+            await driver.Push(Chat, 3, "disposition", DispositionEvent("F-001", AcceptedAlreadyKnown()));
+            await driver.Push(Chat, 4, "disposition", DispositionEvent("F-002", rejected));
+            await driver.Settle();
+            Assert.Equal(0, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("count").GetInt32());
+            Assert.Equal(LabelsSample.NoTriageRejected, (await driver.Read(ReadNoTriage("F-002"))).GetProperty("text").GetString());
+
+            await driver.Push(Chat, 5, "finding", Finding("F-001", null, "suspected", "low"));
+            await driver.Push(Chat, 6, "disposition.cleared", Cleared("F-001", AcceptedAlreadyKnown()));
+            await driver.Push(Chat, 7, "finding", Finding("F-002", rejected));
+            await driver.EndSession(Chat);
+
+            Assert.Equal(LabelsSample.NoTriageUndecided, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("text").GetString());
+            Assert.Equal(ClearedLine, (await driver.Read(ReadCard("F-001"))).GetProperty("status").GetString());
+            Assert.Equal(LabelsSample.NoTriageRejected, (await driver.Read(ReadNoTriage("F-002"))).GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// A review restored read-only from its run folder: each card's head says what its record says - F-100's Accept with
+    /// `already known` nothing, F-101, not yet decided, and F-102's Accept without a triage their words, and F-103, whose decision
+    /// a re-run cleared, the words of a finding not yet decided, its status line the cleared line - with every triage button off.
+    /// </summary>
+    [Fact]
+    public void ARestoredReviewSaysWhichCardsHaveNoTriage()
+    {
+        ReviewPageDriver.Run(
+            driver =>
+            {
+                Labelled(driver);
+                driver.Sessions.Add(ReviewPageSessionsTests.Item(RestoredChat, RestoredRun, ReviewPageDriver.ReviewedPath, 9, 0));
+                driver.InitialRoutes.Add(("GET", "/sessions/" + RestoredChat + "/snapshot", 404, ReviewPageRecheckTests.UnknownChat));
+                driver.InitialRoutes.Add(("GET", "/reviews/" + RestoredRun, 200, Snapshot(
+                    RestoredRun,
+                    true,
+                    new[] { Cleared("F-103", AcceptedAlreadyKnown()) },
+                    Finding("F-100", Disposition("accepted", "FICT intended", "already_known")),
+                    Finding("F-101"),
+                    Finding("F-102", Disposition("accepted", "FICT intended", null)),
+                    Finding("F-103", null, "suspected", "low"))));
+            },
+            async driver =>
+            {
+                await driver.Settle();
+
+                Assert.Equal(0, (await driver.Read(ReadNoTriage("F-100"))).GetProperty("count").GetInt32());
+                Assert.Equal(LabelsSample.NoTriageUndecided, (await driver.Read(ReadNoTriage("F-101"))).GetProperty("text").GetString());
+                Assert.Equal(LabelsSample.NoTriageAccepted, (await driver.Read(ReadNoTriage("F-102"))).GetProperty("text").GetString());
+                Assert.Equal(LabelsSample.NoTriageUndecided, (await driver.Read(ReadNoTriage("F-103"))).GetProperty("text").GetString());
+                Assert.Equal(ClearedLine, (await driver.Read(ReadCard("F-103"))).GetProperty("status").GetString());
+                foreach (string id in new[] { "F-100", "F-101", "F-102", "F-103" })
+                {
+                    Assert.All(Disabled(await driver.Read(ReadCard(id))), off => Assert.True(off, "a triage button is live on a read-only review."));
+                }
+            });
+    }
+
+    /// <summary>
+    /// At a docked pane's 300 px, the card where a real turn leaves it: the session's end reads the ranking, which puts F-007's
+    /// card in its grouped row, shut. With the row opened and the card's fold shut, the line - a finding not yet decided, the
+    /// longest of the words - is whole: inside the window and every box that clips it, its words inside it, with no sideways
+    /// page scroll.
+    /// </summary>
+    [Fact]
+    public void ANoTriageLineIsWhollyVisibleAtThreeHundredPixelsInItsRow()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
+            await driver.RouteAttention(Chat, SummarySample.Json());
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-007"));
+            await driver.EndSession(Chat);
+            JsonElement placed = await driver.Read(ReadRow("F-007"));
+            Assert.True(placed.GetProperty("inRow").GetBoolean(), "F-007's card is not in its grouped row.");
+            Assert.False(placed.GetProperty("rowOpen").GetBoolean(), "F-007's row is open before it is measured.");
+
+            JsonElement measured = await driver.Read(ReadNoTriageWhole("F-007"));
+            Assert.Equal(300, measured.GetProperty("width").GetInt32());
+            Assert.Equal(LabelsSample.NoTriageUndecided, measured.GetProperty("text").GetString());
+            Assert.True(measured.GetProperty("foldShut").GetBoolean(), "the finding's fold is open.");
+            Assert.Empty(ReviewPageDriver.Strings(measured, "clipped"));
+            Assert.True(measured.GetProperty("noHorizontalOverflow").GetBoolean(), measured.ToString());
+        });
+    }
+
+    /// <summary>
+    /// FR-030: an older backend sends no labels, so there are no words, and a card's head is its line and its title, as before -
+    /// not yet decided, and accepted without a triage. A guard: no line is drawn without the backend's words.
+    /// </summary>
+    [Fact]
+    public void WithNoLabelsACardsHeadIsAsBefore()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await Reviewed(driver, Finding("F-001"));
+            JsonElement undecided = await driver.Read(ReadNoTriage("F-001"));
+            Assert.Equal(0, undecided.GetProperty("count").GetInt32());
+            Assert.Equal(new[] { "card-line", "title" }, ReviewPageDriver.Strings(undecided, "headChildren"));
+
+            await driver.Route("POST", DispositionPath("F-001"), 200, Finding("F-001", Disposition("accepted", string.Empty, null)));
+            await Decide(driver, "F-001", "accept");
+            JsonElement accepted = await driver.Read(ReadNoTriage("F-001"));
+            Assert.Equal(0, accepted.GetProperty("count").GetInt32());
+            Assert.Equal(new[] { "card-line", "title" }, ReviewPageDriver.Strings(accepted, "headChildren"));
+        });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>
@@ -1609,6 +1828,49 @@ return JSON.stringify({
   recordFirst: !!status && h.before(status.querySelector('.card-record'), status.querySelector('.plain-error')),
   cleared: status ? h.text(status, '.card-cleared') : null,
   clearedFirst: !!status && h.before(status.querySelector('.card-cleared'), status.querySelector('.plain-error'))
+});";
+
+    /// <summary>
+    /// One card's no-triage line (roadmap hole H-c-008): how many the card holds, its words, whether it stands in the card's head
+    /// under the title, whether the fold is shut and whether the line reads all the same, and the head's children by class.
+    /// </summary>
+    private static string ReadNoTriage(string findingId) => @"
+var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
+if (!card) { return JSON.stringify({ ok: false, error: 'no card " + findingId + @"' }); }
+var head = card.querySelector('.card-head');
+var lines = card.querySelectorAll('.card-no-triage');
+var line = lines.length ? lines[0] : null;
+return JSON.stringify({
+  ok: true,
+  count: lines.length,
+  text: line ? line.textContent : null,
+  inHead: !!line && line.parentElement === head,
+  afterTitle: h.before(head.querySelector('.title'), line),
+  foldShut: card.querySelector('.details').hidden,
+  shown: h.rendered(line),
+  headChildren: h.children(head)
+});";
+
+    /// <summary>
+    /// Opens the grouped row one card stands in, leaves the card's fold shut, and measures its no-triage line brought into view
+    /// by <see cref="Whole"/>; a line that is missing counts as cut off.
+    /// </summary>
+    private static string ReadNoTriageWhole(string findingId) => @"
+var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
+var row = card.closest('details.type-row');
+if (row) { row.open = true; }
+" + Whole + @"
+var line = card.querySelector('.card-no-triage');
+var clipped = [];
+if (!line) { clipped.push('line missing'); }
+else if (!whole(line)) { clipped.push(JSON.stringify(line.getBoundingClientRect())); }
+return JSON.stringify({
+  ok: true,
+  width: window.innerWidth,
+  text: line ? line.textContent : null,
+  foldShut: card.querySelector('.details').hidden,
+  clipped: clipped,
+  noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth
 });";
 
     /// <summary>
