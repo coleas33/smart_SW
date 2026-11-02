@@ -1076,6 +1076,37 @@ public sealed class ReviewPageTriageTests
     }
 
     /// <summary>
+    /// A summary that carries no tally hides the one shown (cycle 7's Tier 2 review), with nothing else to hide it first - no
+    /// cleared notice, no review switch: F-001's Reject as `wrong` is the review's one triage, and its tally is shown; then an
+    /// answer's regrade withdraws F-001, a bought part, and the ranking the page reads again carries none, as the backend
+    /// sends none while no finding records a triage.
+    /// </summary>
+    [Fact]
+    public void ARankingReadAgainWithNoTallyHidesTheShownOne()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            JsonObject judged = Tally(0, 0, 1, 0, 1, 0);
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "finding", Finding("F-002"));
+            await driver.Push(Chat, 3, "disposition",
+                WithTally(DispositionEvent("F-001", Disposition("rejected", "FICT missed", "wrong")), judged));
+            await driver.Settle();
+            Assert.Equal(Lines(judged), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+
+            await driver.RouteAttention(Chat, SummarySample.Json());
+            await driver.Push(Chat, 4, "finding.withdrawn",
+                JsonSerializer.Serialize(new { finding_id = "F-001", reason = "bought part (your answer to ER-001)" }));
+            await driver.Settle();
+            JsonElement gone = await driver.Read(ReadTally);
+            Assert.False(gone.GetProperty("shown").GetBoolean(), "a tally is shown after a ranking that carries none: " + gone);
+            Assert.Empty(ReviewPageDriver.Strings(gone, "lines"));
+            Assert.DoesNotContain("F-001", ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
+        });
+    }
+
+    /// <summary>
     /// A review switch and a reload bring the tally back from the snapshot's summary. Chat-2's live snapshot shows its
     /// summary's tally. Back on chat-1, whose summary carries none, none is shown - nothing of chat-2's stays - though its
     /// snapshot's cleared lines hold one F-002's clear was written with, before F-001's cleared the last triage: a snapshot's

@@ -37,6 +37,7 @@ from swreview.report.titles import pane_finding
 from swreview.report.unexamined import not_examined
 from tests.support.attention import REVIEW_FOLDER
 from tests.support.contracts import contract_validator
+from tests.support.triage import tally_body
 
 KEYS = {
     "run_id",
@@ -379,6 +380,32 @@ def test_the_snapshot_names_each_undecided_findings_latest_cleared_line(
     for snapshot in (live, restored):
         assert snapshot["cleared"] == [stream[5].body, stream[1].body]
         assert snapshot["findings"] == review_snapshot(session, package, run_id=RUN_ID)["findings"]
+
+
+def test_a_cleared_line_leaves_the_tally_to_the_summary(
+    session: ReviewSession, package: EvidencePackage
+) -> None:
+    """The triage tally (cycle 7's Tier 2 review): a `disposition.cleared` body carries the
+    review's tally as its clear left it, and a later decision outdates it - F-002's decision was
+    cleared while F-005 held `already_known`, and F-001 has since been rejected as `wrong`. Both
+    snapshots name F-002's line without that tally, so the one a snapshot holds is its summary's,
+    the count `report.md` prints."""
+    known = DECIDED.model_copy(update={"triage": "already_known"})
+    wrong = DECIDED.model_copy(update={"decision": "rejected", "triage": "wrong"})
+    session.findings[4] = session.findings[4].model_copy(update={"disposition": known})
+    session.findings[0] = session.findings[0].model_copy(update={"disposition": wrong})
+    line = cleared(2, "F-002", "FICT F-002's line").body
+    written = {**line, "triage_tally": tally_body(known=1, not_recorded=7)}
+    stream = [started(session.session_id), event(2, "disposition.cleared", written)]
+
+    live = review_snapshot(session, package, run_id=RUN_ID, events=stream)
+    restored = restored_snapshot(session, package, run_id=RUN_ID, events=stream)
+
+    for snapshot in (live, restored):
+        assert snapshot["cleared"] == [line]
+        assert snapshot["ranking"]["summary"]["triage_tally"] == tally_body(
+            known=1, wrong=1, not_recorded=6
+        )
 
 
 @pytest.mark.parametrize("opening", ["another session", "no session.started"])

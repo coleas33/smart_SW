@@ -1783,6 +1783,61 @@ def test_a_restate_keeps_or_clears_a_decision_as_a_rerun_does(
     )
 
 
+def test_a_restates_cleared_notice_carries_the_tally_the_restate_leaves(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The triage tally (cycle 7's Tier 2 review): a restate's cleared notice tells the page how
+    the triage stands once the restate is done. The answer made F-003's part bought, so the
+    restated check no longer produces F-003, Rejected as `wrong`, and it is withdrawn; F-006,
+    restated, re-judges F-004, Accepted as `already_known`, with another severity, so F-004's
+    decision is cleared; F-005's Defer as `new_and_real` stands. F-003's withdrawal comes first,
+    so F-004's notice counts F-005's triage and F-004 not recorded - the count `report.md` prints
+    for the session as the restate leaves it - and never the withdrawn `wrong`; F-006's own id is
+    still withdrawn right before F-004's `finding` event, and the notice comes after the fold."""
+    bought = "bought part (your answer to ER-001)"
+    rejected = DECIDED.model_copy(update={"decision": "rejected", "triage": "wrong"})
+    deferred = DECIDED.model_copy(update={"decision": "deferred", "triage": "new_and_real"})
+    run = review([turn("nothing yet")])
+    run.session.findings[:] = [
+        on_the_pair("F-003", "hol:0017", "hol:0027").model_copy(
+            update={"disposition": rejected, "tool_result_ids": [0]}
+        ),
+        judged("F-004", disposition=DECIDED),
+        on_the_pair("F-005", "fst:0001", "hol:0004", check=CHECK_FINE_PITCH).model_copy(
+            update={"disposition": deferred}
+        ),
+        judged("F-006", "unresolved", "high"),
+    ]
+    mark = len(events_of(run))
+
+    stale = run._reconcile_restated(3, {0: "check_hygiene"}, [], {"check_hygiene": bought})
+
+    assert stale == [("F-003", bought)]
+    assert [(finding.id, finding.disposition) for finding in run.session.findings] == [
+        ("F-004", None),
+        ("F-005", deferred),
+    ]
+    after = [(event["type"], event["body"]) for event in events_of(run)[mark:]]
+    tally = tally_body(new=1, not_recorded=1)
+    assert [body for kind, body in after if kind == "disposition.cleared"] == [
+        {
+            "finding_id": "F-004",
+            "disposition": DECIDED.model_dump(mode="json"),
+            "reason": RESTATED_LINE,
+            "triage_tally": tally,
+        }
+    ]
+    assert [(kind, body.get("finding_id", body.get("id"))) for kind, body in after] == [
+        ("finding.withdrawn", "F-003"),
+        ("finding.withdrawn", "F-006"),
+        ("finding", "F-004"),
+        ("disposition.cleared", "F-004"),
+    ]
+    report = render_report(run.session).splitlines()
+    [at] = [index for index, line in enumerate(report) if line.startswith("- By triage:")]
+    assert report[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
+
+
 # --- a pass's miss in the cleared line: cycle 6's Tier 1 review --------------------------------
 
 MISSED = DECIDED.model_copy(
