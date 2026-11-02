@@ -53,8 +53,8 @@ body. Written to `events.jsonl` and streamed as server-sent events with `id = se
 | `finding` | the full `Finding` | check tools |
 | `evidence.requested` | `EvidenceRequest` | session tools |
 | `evidence.answered` | `request_id`, `answer` | server (engineer) |
-| `disposition` | `finding_id`, `Disposition` | server (engineer) |
-| `disposition.cleared` | `finding_id`, `disposition` (the one cleared), `reason` (the words file's line naming its decision and triage): a re-run after an answer changed a decided finding's status or severity (*added 2026-11-01, owner decisions 189A and 191A*; *amended the same day, owner decision 194A*: a restate's too, and a re-run's carry that left a decision behind) | runner, after the fold's `finding` event, or in the carry's order |
+| `disposition` | `finding_id`, `Disposition`; *amended 2026-11-01 (002 cycle 7):* and `triage_tally`, the review's triage tally as the decision left it, only while some finding records a triage | server (engineer) |
+| `disposition.cleared` | `finding_id`, `disposition` (the one cleared), `reason` (the words file's line naming its decision and triage): a re-run after an answer changed a decided finding's status or severity (*added 2026-11-01, owner decisions 189A and 191A*; *amended the same day, owner decision 194A*: a restate's too, and a re-run's carry that left a decision behind; *amended the same day, 002 cycle 7*: and `triage_tally`, the review's triage tally as the clear left it, only while some finding records a triage) | runner, after the fold's `finding` event, or in the carry's order |
 | `coverage` | `bucket`, `CoverageItem` | tools |
 | `coverage.withdrawn` | `checks`, `buckets` (each non-empty): every item of those checks left those buckets before the check restated them (feature 011 T092) | tools (`ToolContext.withdraw_coverage`) |
 | `turn.ended` | `reason: end \| max_steps \| error \| stopped \| truncated` | runner |

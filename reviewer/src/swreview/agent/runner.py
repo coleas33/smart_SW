@@ -165,7 +165,7 @@ from swreview.report.session import (
 )
 from swreview.report.snapshot import root_document
 from swreview.report.sources import answer_basis
-from swreview.report.summary import ClearedBy, SendInput, load_words
+from swreview.report.summary import ClearedBy, SendInput, load_words, with_triage_tally
 from swreview.tools.checks_mechanical import (
     attach_part_roles,
     check_hygiene,
@@ -1201,13 +1201,16 @@ there, so a reader that counts withdrawn verdicts passes over this withdrawal (0
 3.3)."""
 
 
-def _cleared_body(finding_id: str, decided: Finding, cause: ClearedBy) -> dict[str, Any]:
+def _cleared_body(
+    finding_id: str, decided: Finding, cause: ClearedBy, findings: Sequence[Finding]
+) -> dict[str, Any]:
     """The `disposition.cleared` body (002 FR-031; owner decisions 189A, 191A and 194A): the
     finding the line lands on, the disposition `decided` held that a new verdict cleared - by a
     re-run after an answer, a restate or a re-run's carry, `cause` - and the words file's line the
     page prints on the finding's card, naming the decision and, when one was recorded, its triage:
     a pass's `wrong` in the pass's own word, "wrong: a miss" (`labels.pass_triage`, owner decision
-    187A), as its card says it, and any other triage in `labels.triage`'s."""
+    187A), as its card says it, and any other triage in `labels.triage`'s; then the review's
+    triage tally, `findings`' as the clear left them, while one is recorded (002 cycle 7)."""
     disposition = decided.disposition
     assert disposition is not None, "only a decided finding's decision is cleared"
     words = load_words()
@@ -1219,11 +1222,14 @@ def _cleared_body(finding_id: str, decided: Finding, cause: ClearedBy) -> dict[s
         word = labels.pass_triage[triage]
     else:
         word = labels.triage[triage]
-    return {
-        "finding_id": finding_id,
-        "disposition": disposition.model_dump(mode="json"),
-        "reason": words.rerun.of(DECISION_NOUNS[disposition.decision], word, cause=cause),
-    }
+    return with_triage_tally(
+        {
+            "finding_id": finding_id,
+            "disposition": disposition.model_dump(mode="json"),
+            "reason": words.rerun.of(DECISION_NOUNS[disposition.decision], word, cause=cause),
+        },
+        findings,
+    )
 
 
 def _same_profile(
@@ -1557,7 +1563,10 @@ class ReviewRun:
             )
             self.sink.emit("finding", self.context.finding_body(finding))
         for decided in cleared:
-            self.sink.emit("disposition.cleared", _cleared_body(decided.id, decided, cause))
+            self.sink.emit(
+                "disposition.cleared",
+                _cleared_body(decided.id, decided, cause, self.session.findings),
+            )
 
     def _apply_answers(
         self, answers: Sequence[tuple[str, str]], *, read_drawings: bool = True
@@ -1630,14 +1639,19 @@ class ReviewRun:
 
         The one announcement both a live decision (`chat/sessions.record_disposition`) and a
         re-run's carried decision (`carry_from`) make, so no second writer of the event exists.
+        It carries the review's triage tally as the decision left it, while one is recorded (002
+        cycle 7).
         """
         disposition = finding.disposition
         self.sink.emit(
             "disposition",
-            {
-                "finding_id": finding.id,
-                "disposition": disposition.model_dump(mode="json") if disposition else None,
-            },
+            with_triage_tally(
+                {
+                    "finding_id": finding.id,
+                    "disposition": disposition.model_dump(mode="json") if disposition else None,
+                },
+                self.session.findings,
+            ),
         )
 
     def carry_from(self, earlier: ReviewSession) -> None:
@@ -1773,7 +1787,8 @@ class ReviewRun:
                 named.append(NOT_CARRIED_DECISION_SHARED.format(**words))
             elif (matches[0].status, matches[0].severity) != (finding.status, finding.severity):
                 self.sink.emit(
-                    "disposition.cleared", _cleared_body(matches[0].id, finding, "carry")
+                    "disposition.cleared",
+                    _cleared_body(matches[0].id, finding, "carry", session.findings),
                 )
             else:
                 # The status is the one decided, so a triage the finding does not take is a

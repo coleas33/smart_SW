@@ -53,6 +53,15 @@ groups:
 tally:
   item: "{label} {n}"
 
+# How the triage stands (owner decisions 185A and 187A; feature 002 FR-031, cycle 7): report.md's
+# two lines, which the Review tab prints as sent under the summary. `item` is one outcome, in
+# `labels.triage`'s word, and the four are joined by ", " into `by_triage`'s {counts}; `not
+# recorded` counts the flagged findings with none, and `misses` the passes judged wrong.
+triage_tally:
+  by_triage: "By triage: {counts}, not recorded: {not_recorded}"
+  item: "{triage}: {n}"
+  misses: "Passes judged wrong (misses): {n}"
+
 # The goals not reached, named in goal order as a sentence names them (feature 013): the goal
 # lines live under their groups, so this line keeps the coverage gaps on the first screen.
 not_reached: "Not reached: {titles}"

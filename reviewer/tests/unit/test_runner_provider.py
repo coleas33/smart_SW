@@ -46,6 +46,7 @@ from swreview.checks.provenance import PROVENANCE_CHECK
 from swreview.checks.thread_pitch import CHECK_FINE_PITCH
 from swreview.findings import Disposition, Finding, build_finding
 from swreview.ir.loader import save_package
+from swreview.report.markdown import render_report
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession
 from swreview.report.titles import display_title, pane_finding, title_from
@@ -1669,8 +1670,8 @@ def test_a_cleared_notice_carries_the_tally_its_clear_left(
     """The triage tally (002 T346, cycle 7): a cleared notice tells the page how the triage stands
     once its clear is done. Sheet1's Reject as `wrong` folds with the verdict decided and stands;
     Sheet2's Accept as `already_known` folds with another and is cleared, so its notice's tally
-    counts it not recorded beside the standing `wrong` - the one the report written at the turn's
-    end prints - and the stream stays valid against the events contract."""
+    counts it not recorded beside the standing `wrong` - the one `report.md` prints for the
+    session as it now stands - and the stream stays valid against the events contract."""
     run = review(
         [
             turn(
@@ -1694,7 +1695,7 @@ def test_a_cleared_notice_carries_the_tally_its_clear_left(
     [notice] = bodies_of(run, "disposition.cleared")
     tally = tally_body(wrong=1, not_recorded=1)
     assert (notice["finding_id"], notice["triage_tally"]) == ("F-002", tally)
-    report = run.out_dir.joinpath("report.md").read_text(encoding="utf-8").splitlines()
+    report = render_report(run.session).splitlines()
     [at] = [index for index, line in enumerate(report) if line.startswith("- By triage:")]
     assert report[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
     validator = contract_validator("chat-events.schema.json")

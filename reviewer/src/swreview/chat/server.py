@@ -158,7 +158,7 @@ from swreview.report.dispositions import (
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession, load_session
 from swreview.report.snapshot import WAITING_STATES, restored_snapshot, review_snapshot
-from swreview.report.summary import load_words, review_ranking
+from swreview.report.summary import load_words, review_ranking, with_triage_tally
 from swreview.report.titles import with_display_titles
 from swreview.report.unexamined import not_examined
 from swreview.tools.registry import TOOL_RESULTS_DIR_NAME
@@ -1675,7 +1675,10 @@ class ChatServer:
             raise InvalidTriage(str(exc)) from exc
         except ValueError as exc:
             raise IllegalTransition(str(exc)) from exc
-        return JSONResponse(finding.model_dump(mode="json"))
+        # The review's triage tally beside the finding, while one is recorded (002 cycle 7): after
+        # the session's end the page's stream is closed, so the reply is what tells it.
+        reply = with_triage_tally(finding.model_dump(mode="json"), run.session.findings)
+        return JSONResponse(reply)
 
     def _refuse_a_pass_triage(self, chat: ChatSession, finding_id: str, triage: Any) -> None:
         """Owner decision 187A: on a pass any triage but `wrong` is `400 InvalidTriage`, refused

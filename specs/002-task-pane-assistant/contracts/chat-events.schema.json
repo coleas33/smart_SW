@@ -45,11 +45,13 @@
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["request_id", "answer"], "properties": { "request_id": { "type": "string" }, "answer": { "type": "string" } } } } } },
     { "if": { "properties": { "type": { "const": "disposition" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["finding_id", "disposition"],
-        "properties": { "finding_id": { "type": "string" }, "disposition": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/Disposition" } } } } } },
+        "properties": { "finding_id": { "type": "string" }, "disposition": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/Disposition" },
+          "triage_tally": { "$ref": "#/$defs/TriageTally", "description": "Feature 002 cycle 7 (FR-031): the review's triage tally as this decision left it, present only while some finding records a triage. The disposition route's reply carries the same beside the finding." } } } } } },
     { "if": { "properties": { "type": { "const": "disposition.cleared" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["finding_id", "disposition", "reason"],
         "description": "Feature 002 (owner decisions 189A and 191A; FR-031): a check the model ran again after an answered evidence request resumed its turn folded onto a decided finding (rule 3) with another verdict - another status or severity - so the finding's disposition was cleared. Emitted by the runner after the fold's finding event for the same id, once per finding, in session order. disposition is the one cleared; reason is the words file's line naming its decision and triage, which the page prints on the finding's card. A re-run with the status and severity decided keeps the disposition, and nothing is emitted. Amended 2026-11-01 (owner decision 194A): the runner emits it too when a check restated after an answer (58A's restate) folds onto a decided finding with another status or severity, after that fold's finding event, and when a re-run of a waiting review does not carry a decision onto the finding with its subject key because that finding's status or severity changed (feature 015's carry), naming that finding; reason then names the restate or the carry. Owner decision 193A: both snapshots name, under cleared, each undecided finding's last such body.",
-        "properties": { "finding_id": { "type": "string", "pattern": "^F-[0-9]{3,}$" }, "disposition": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/Disposition" }, "reason": { "type": "string" } } } } } },
+        "properties": { "finding_id": { "type": "string", "pattern": "^F-[0-9]{3,}$" }, "disposition": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/Disposition" }, "reason": { "type": "string" },
+          "triage_tally": { "$ref": "#/$defs/TriageTally", "description": "Feature 002 cycle 7 (FR-031): the review's triage tally as the clear left it, present only while some finding records a triage. A snapshot's cleared lines keep the one they were written with; the page reads a snapshot's tally from its summary." } } } } } },
     { "if": { "properties": { "type": { "const": "coverage" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["bucket", "item"],
         "properties": { "bucket": { "enum": ["checked", "skipped", "unresolved", "failed", "out_of_scope"] }, "item": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/CoverageItem" } } } } } },
@@ -93,5 +95,17 @@
         "properties": { "error_class": { "type": "string" }, "message": { "type": "string" }, "retryable": { "type": "boolean" },
           "stop_reason": { "type": "string", "description": "Feature 014: a stop the provider itself reported, a Gemini finish reason, an OpenAI incomplete reason or failure code, context_length_exceeded or input_token_limit" },
           "retries": { "type": "integer", "minimum": 0, "description": "Feature 014: the tries made for the request that failed, written only under a retry policy" } } } } } }
-  ]
+  ],
+  "$defs": {
+    "TriageTally": {
+      "type": "object", "additionalProperties": false, "required": ["counts", "not_recorded", "misses", "text", "misses_text"],
+      "description": "Feature 002 cycle 7 (FR-031; owner decisions 185A and 187A): how the triage stands - the flagged findings, every status but checked_within_scope, by outcome (counts) and with none (not_recorded), and the passes judged wrong, the misses - with report.md's By triage and misses lines for them (text, misses_text), counted by report/summary.triage_tally, the one rule those lines come from. The review summary carries it as triage_tally too. The Review page prints the two lines as sent.",
+      "properties": {
+        "counts": { "type": "object", "additionalProperties": false, "required": ["new_and_real", "already_known", "wrong", "not_worth_flagging"],
+          "properties": { "new_and_real": { "type": "integer", "minimum": 0 }, "already_known": { "type": "integer", "minimum": 0 }, "wrong": { "type": "integer", "minimum": 0 }, "not_worth_flagging": { "type": "integer", "minimum": 0 } } },
+        "not_recorded": { "type": "integer", "minimum": 0 },
+        "misses": { "type": "integer", "minimum": 0 },
+        "text": { "type": "string" },
+        "misses_text": { "type": "string" } } }
+  }
 }

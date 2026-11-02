@@ -1665,7 +1665,10 @@ def test_two_coaxial_findings_on_one_pair_carry_the_reject_onto_its_own(bare: An
 
 def test_a_carried_decision_keeps_its_triage(bare: Any) -> None:
     """Owner decision 185A (002 T312): a re-run carries a decision whole, the triage beside it
-    included (72A), and the `disposition` event that announces the carry says so."""
+    included (72A), and the `disposition` event that announces the carry says so.
+
+    *Changed 2026-11-01 on purpose (002 T347; the triage tally in the pane):* that event carries
+    the review's tally too, F-002's `wrong` beside F-001 not recorded."""
     run, earlier, events = bare
     run.session.findings[:] = [coaxial("F-001", "hol:0001"), coaxial("F-002", "hol:0002")]
     triaged = Disposition(
@@ -1681,7 +1684,11 @@ def test_a_carried_decision_keeps_its_triage(bare: Any) -> None:
     assert run.session.findings[0].disposition is None
     assert run.session.findings[1].disposition == triaged
     assert [body for kind, body in events if kind == "disposition"] == [
-        {"finding_id": "F-002", "disposition": triaged.model_dump(mode="json")}
+        {
+            "finding_id": "F-002",
+            "disposition": triaged.model_dump(mode="json"),
+            "triage_tally": tally_body(wrong=1, not_recorded=1),
+        }
     ]
     assert triaged.model_dump(mode="json")["triage"] == "wrong"
 

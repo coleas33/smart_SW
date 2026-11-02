@@ -41,13 +41,21 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 import yaml
 from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from swreview.drawings.evidence import file_key, file_name, id_order
-from swreview.findings import Finding, FindingStatus, ReviewModel, Severity, Triage
+from swreview.findings import (
+    MISS,
+    TRIAGES,
+    Finding,
+    FindingStatus,
+    ReviewModel,
+    Severity,
+    Triage,
+)
 from swreview.ir.models import Document, EvidencePackage, omit_when_null
 from swreview.report.attention import (
     SUPPRESSED_STATUS,
@@ -109,6 +117,7 @@ __all__ = [
     "SendWords",
     "SummaryGroup",
     "Tally",
+    "TriageTally",
     "Words",
     "bought_parts_of",
     "bought_rows",
@@ -120,6 +129,8 @@ __all__ = [
     "review_ranking",
     "review_summary",
     "tokens_text",
+    "triage_tally",
+    "with_triage_tally",
 ]
 
 WORDS_FILE = Path(__file__).parent / "review_words_v1.yaml"
@@ -281,6 +292,16 @@ class TallyWords(ReviewModel):
     item: str
 
 
+class TriageTallyWords(ReviewModel):
+    """`report.md`'s By triage and misses lines (owner decisions 185A and 187A), which the Review
+    tab prints as sent (feature 002 FR-031, cycle 7): `by_triage` with the outcomes' `item`s joined
+    by ", ", and `misses`."""
+
+    by_triage: str
+    item: str
+    misses: str
+
+
 class ResumeWords(ReviewModel):
     with_tokens: str
     without: str
@@ -375,6 +396,7 @@ class Words(ReviewModel):
     separator: str
     groups: dict[GroupKind, GroupWords]
     tally: TallyWords
+    triage_tally: TriageTallyWords
     not_reached: str
     questions: QuestionWords
     not_loaded: NotLoadedWords
@@ -439,6 +461,19 @@ class Tally(ReviewModel):
     """"Decide {a} · Fix {b} · Verify {c}", then " · Decided {d}" when any (feature 013)."""
 
     text: str
+
+
+class TriageTally(ReviewModel):
+    """How the triage stands (feature 002 FR-031; owner decisions 185A and 187A; cycle 7): the
+    flagged findings - every status but a pass - by outcome (`counts`, in `TRIAGES` order) and
+    those with none (`not_recorded`), the passes judged wrong (`misses`), and `report.md`'s two
+    lines for them, which the Review tab prints as sent (`text`, `misses_text`)."""
+
+    counts: dict[Triage, int]
+    not_recorded: int
+    misses: int
+    text: str
+    misses_text: str
 
 
 class NotReached(ReviewModel):
@@ -549,6 +584,8 @@ class ReviewSummary(ReviewModel):
     issues: int
     groups: list[SummaryGroup]
     tally: Tally
+    triage_tally: TriageTally | None = None
+    """How the triage stands, while some finding records one (`triage_tally`; 002 cycle 7)."""
     questions: QuestionList
     not_loaded: NotLoaded | None
     drawings: DrawingsLine | None
@@ -561,8 +598,8 @@ class ReviewSummary(ReviewModel):
     send: SendBlock | None = None
 
     @model_serializer(mode="wrap")
-    def _omit_absent_send(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
-        return omit_when_null(handler, self, "send")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        return omit_when_null(handler, self, "send", "triage_tally")
 
 
 class ReviewRanking(Ranking):
@@ -644,6 +681,7 @@ def review_summary(
         issues=issues,
         groups=summary_groups,
         tally=_tally(summary_groups, words),
+        triage_tally=triage_tally(session.findings),
         questions=_questions(session.evidence_requests, words, names, package),
         not_loaded=_not_loaded(package, words),
         drawings=drawings_of(
@@ -770,6 +808,47 @@ def _tally(groups: Sequence[SummaryGroup], words: Words) -> Tally:
             if group.kind in TALLIED
         )
     )
+
+
+def triage_tally(findings: Sequence[Finding]) -> TriageTally | None:
+    """The one count of `report.md`'s By triage and misses lines and of the Review tab's tally
+    (feature 002 FR-031, cycle 7): the flagged findings - every status but `SUPPRESSED_STATUS`, a
+    pass - by outcome and those with none, decided or not (owner decision 185A), and the passes
+    marked `MISS`, apart, so a pass judged wrong is a miss and never a false alarm (187A).
+
+    Counted from the triage alone, never the decision. `None` while no finding records one, so
+    every report and payload without one keeps its bytes. A pass's triage other than `MISS`,
+    recorded before 187A, is counted in neither.
+    """
+    triages = [
+        (finding.status, finding.disposition.triage if finding.disposition is not None else None)
+        for finding in findings
+    ]
+    if all(triage is None for _, triage in triages):
+        return None
+    flagged = [triage for status, triage in triages if status != SUPPRESSED_STATUS]
+    misses = sum(1 for status, triage in triages if status == SUPPRESSED_STATUS and triage == MISS)
+    counts = {triage: flagged.count(triage) for triage in TRIAGES}
+    words = load_words()
+    items = ", ".join(
+        words.triage_tally.item.format(triage=words.labels.triage[triage], n=n)
+        for triage, n in counts.items()
+    )
+    return TriageTally(
+        counts=counts,
+        not_recorded=flagged.count(None),
+        misses=misses,
+        text=words.triage_tally.by_triage.format(counts=items, not_recorded=flagged.count(None)),
+        misses_text=words.triage_tally.misses.format(n=misses),
+    )
+
+
+def with_triage_tally(body: dict[str, Any], findings: Sequence[Finding]) -> dict[str, Any]:
+    """`body` with the review's tally under `triage_tally` while some finding records a triage,
+    and as it was otherwise: the disposition route's reply and the `disposition` and
+    `disposition.cleared` events, each as it is sent (feature 002 FR-031, cycle 7)."""
+    tally = triage_tally(findings)
+    return body if tally is None else {**body, "triage_tally": tally.model_dump(mode="json")}
 
 
 def _not_reached(lines: Sequence[GoalLine], words: Words) -> NotReached | None:
