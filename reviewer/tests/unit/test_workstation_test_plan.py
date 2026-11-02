@@ -3045,7 +3045,19 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
     recounted with cycle 7's tasks, T345 to T350, T345 ticked: 337 done, 9 open.
 
     *Changed 2026-11-01 on purpose (002 T350; the triage tally in the pane):* 002's row is
-    recounted with T346 to T350 ticked, the tally in the pane built: 342 done, 4 open."""
+    recounted with T346 to T350 ticked, the tally in the pane built: 342 done, 4 open.
+
+    *Changed 2026-11-02 on purpose (007 T074; decision 195A):* 007's row is pinned too, recounted
+    with cycle 8's tasks, T074 to T077, T074 ticked: 69 done, 8 open.
+
+    *Changed 2026-11-02 on purpose (007 T077; decision 195A):* 007's row is recounted with T075
+    to T077 ticked, a timed review's run folder by its date and letter: 72 done, 5 open.
+
+    *Changed 2026-11-02 on purpose (007 T078; decision 196A):* 007's row is recounted with cycle
+    8's tasks for 196A, T078 to T081, T078 ticked: 73 done, 8 open.
+
+    *Changed 2026-11-02 on purpose (007 T081; decision 196A):* 007's row is recounted with T079
+    to T081 ticked, a timed review's runtime and durations in the private note: 76 done, 5 open."""
     readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
     flat = re.sub(r"\s+", " ", readme)
     rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
@@ -3062,6 +3074,7 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
         assert "Closed on 2026-10-31 (decision 173A)" in rows[number], number
         assert closed in rows[number].split("Closed on 2026-10-31")[1], number
     assert "| 393 / 22 / 0 |" in rows["004"]
+    assert "| 76 / 5 / 0 |" in rows["007"]
     assert "T180" not in rows["004"]
     for task in ("T182", "T187", "T303a", "T303b", "T353"):
         assert re.search(rf"\b{task}\b", rows["004"]), task
@@ -3405,7 +3418,17 @@ def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
     lines step 4.5 prints only the net saved may be recorded, the stored baseline being checked,
     not printed. And under decision 192A (the owner's answer of 2026-11-01, 13A) the timed
     review's start and end times, which are its supervision when the engineer watched
-    throughout, go in the note with the six minutes and leave step 4.1's Record line."""
+    throughout, go in the note with the six minutes and leave step 4.1's Record line.
+
+    *Changed 2026-11-02 on purpose (007 T075; decision 195A):* step 4.5's Record line names A's
+    run folder by its date and letter (`<date>-A`) where it named its stamp (`<stamp>-A`): the
+    full stamp is the moment Review was pressed, the timed review's start, and goes in the note.
+
+    *Changed 2026-11-02 on purpose (007 T079; decision 196A):* step 4.1 notes the timed review's
+    runtime, from start to end, in the note with every other duration of it, and its Record line
+    sends there the durations the facts and the usage line show - the `drawing phase` line's
+    milliseconds, the seconds to the first `text.delta` and the last round's seconds; and
+    `CONTRIBUTING.md`'s rule names the runtime and its other durations."""
     flat = re.sub(r"\s+", " ", plan)
     review = re.sub(r"\s+", " ", step(plan, "4.1"))
     opening = review[: review.index("- 008 T103")]
@@ -3427,7 +3450,8 @@ def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
     assert "never its number" in item_4
     assert record.startswith(
         "Record: each pass or fail; for 007 T060 the net saved, as `swreview timing` printed it"
-        " (`net saved: <n>`), and A's run folder stamp (`<stamp>-A`), never the six minutes"
+        " (`net saved: <n>`), and A's run folder by its date and letter (`<date>-A`, as"
+        " `20261101-A`; rule 5), never the six minutes"
     )
     assert TIMING_NOTE in record and "for 007 T060 the six minutes" not in flat
     assert "Observed holds the net saved only, never the six minutes (decision 186A)" in row
@@ -3462,6 +3486,17 @@ def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
         f"{TIMING_NOTE} only"
     ) in minutes
     assert "the timed review's start and end times" in rule
+    # The timed review's runtime and its other durations (decision 196A).
+    assert (
+        f"Its runtime, the minutes from start to end, goes in {TIMING_NOTE} too, with every other"
+        " duration of that review, never in the findings document (decision 196A)"
+    ) in opening
+    assert (
+        "and the usage line, but no duration of the review: the `drawing phase` line's"
+        " milliseconds, the `seconds from session.started to the first text.delta` line and the"
+        f" usage line's `last round <n> s` go in {TIMING_NOTE} only (rule 5; decision 196A)"
+    ) in record_41
+    assert "its runtime and every other duration of it (decision 196A)" in rule
 
 
 def test_every_check_before_the_findings_document_is_committed_names_the_timing_figures(
@@ -3480,7 +3515,17 @@ def test_every_check_before_the_findings_document_is_committed_names_the_timing_
     *Changed 2026-11-01 on review (007 T072; Codex's Tier 2 review):* each place also names the
     timed review's start and end times, which decision 192A (the owner's answer of 2026-11-01,
     13A) keeps in the note with the six minutes, since a review watched throughout has them as
-    its supervision."""
+    its supervision.
+
+    *Changed 2026-11-02 on purpose (007 T075; decision 195A):* each place also names the timed
+    review's full stamp, the moment Review was pressed, which goes in the note with the start and
+    end times, and the date and letter the findings document writes in its place; section 0.2
+    names the full stamp among what the note holds.
+
+    *Changed 2026-11-02 on purpose (007 T079; decision 196A):* each place also names the timed
+    review's runtime and its other durations, which go in the note with its start and end times,
+    and decision 196A; section 0.2 names them among what the note holds; and the runbook's
+    section 8 lists durations other than a timed review's among a findings document's evidence."""
     rules = section(plan, "The rules for the whole sitting")
     handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
     runbook = RUNBOOK.read_text(encoding="utf-8")
@@ -3511,17 +3556,44 @@ def test_every_check_before_the_findings_document_is_committed_names_the_timing_
         assert TIMING_NOTE in flat, name
         assert "net saved" in flat, name
         assert "start and end times" in flat and DECISION_192A in flat, name
+        assert "full stamp" in flat and "date and letter" in flat, name
+        assert "decision 195A" in flat, name
+        assert "runtime" in flat and "duration" in flat, name
+        assert "decision 196A" in flat, name
     assert f"every file in `notes\\`, {TIMING_NOTE} among them" in documents
     assert "never pushed" in documents
+    assert "full stamp (decision 195A)" in documents
+    assert "its runtime and every other duration of it (decision 196A)" in documents
+    assert "run folder stamps and letters, durations other than a timed review's, sizes" in (
+        re.sub(r"\s+", " ", places["the runbook's section 8"])
+    )
 
 
 TIMING_FIGURE = re.compile(
     r"\b(?:six (?:minutes|numbers)|update'?s? minutes|baseline|supervision|setup minutes"
-    r"|start and end times|started and finished)\b"
+    r"|start and end times|started and finished|full stamp|runtime)\b"
 )
 """How the documents name one of a real design's timing figures (decisions 186A and 192A): the
 six minutes, the update's minutes, an input by its name, the timed review's start and end
-times."""
+times; and, since decision 195A, the timed review's full stamp, the moment Review was pressed
+(changed 2026-11-02 on purpose, 007 T075); and, since decision 196A, its runtime (changed
+2026-11-02 on purpose, 007 T079)."""
+A_STAMP = re.compile(r"(?:<stamp>|\b\d{8}-\d{6})-A(?![\w-])")
+"""A run folder's full stamp, or its `<stamp>` placeholder, with A's letter: A's review is the one
+timed, so its folder goes in the findings document by its date and letter only (decision
+195A)."""
+DURATION = re.compile(
+    r"\b(?:runtime|durations?|timings|seconds|milliseconds|last round|how long|start-to-end"
+    r"|setup time|usage lines?|facts(?: lines?)?)\b"
+)
+"""How a line asks for a duration of a review, or for a line that shows one: the usage line ends
+with its last round's seconds, and the facts `Show-ReviewFacts` prints hold the `drawing phase`
+line's milliseconds and the seconds from `session.started` to the first `text.delta` (decision
+196A; 007 T079)."""
+TIMED_STEPS = ("4.1", "4.5", "4.10", "4.11")
+"""The steps that record the timed review: A's at step 4.1, its timing at step 4.5 and its smoke
+review at step 4.11, and step 4.10's when a sitting times a review there (M0-a) (decision 196A;
+007 T079)."""
 
 
 def clauses(text: str) -> list[str]:
@@ -3541,7 +3613,17 @@ def test_no_line_sends_a_real_designs_timing_figure_to_the_findings_document(
     note or says never; and no clause of steps 4.1 and 4.5 copies or quotes a message or a line
     without sending it to the note or saying never, since `swreview timing`'s messages carry a
     refused input's value and a stored baseline's. Decision 192A is the owner's answer of
-    2026-11-01, 13A."""
+    2026-11-01, 13A.
+
+    *Changed 2026-11-02 on purpose (007 T075; decision 195A):* the timed review's full stamp is
+    one of the figures, the moment Review was pressed being its start, and no line of the four
+    documents shows a full stamp, or the `<stamp>` placeholder, with A's letter.
+
+    *Changed 2026-11-02 on purpose (007 T079; decision 196A):* the timed review's runtime is one of
+    the figures, and no Record line or Observed row of the steps that record the timed review
+    (4.1, 4.5, 4.10 and 4.11) asks for a duration, or for the facts or the usage line, which show
+    durations, unless it sends them to the note; a review not timed keeps its durations, so the
+    other steps' Record lines are not read for one."""
     documents = (
         plan, results, HANDOVER.read_text(encoding="utf-8"), RUNBOOK.read_text(encoding="utf-8")
     )
@@ -3566,10 +3648,175 @@ def test_no_line_sends_a_real_designs_timing_figure_to_the_findings_document(
         and TIMING_NOTE not in clause
         and "never" not in clause
     ]
+    timed = [
+        record.split("never")[0]
+        for number in TIMED_STEPS
+        for record in re.findall(r"\bRecord: .*?\.(?= |$)", re.sub(r"\s+", " ", step(plan, number)))
+    ]
+    timed += [
+        " | ".join(row).split("never")[0]
+        for row in result_rows(results)
+        if row[0] in TIMED_STEPS
+    ]
 
     assert [record for record in records if TIMING_FIGURE.search(record)] == []
     assert named == []
     assert copied == []
+    assert [text for text in timed if DURATION.search(text) and TIMING_NOTE not in text] == []
     assert TIMING_FIGURE.findall(
         "the six minutes, the update's minutes, the baseline, the start and end times"
     ) == ["six minutes", "update's minutes", "baseline", "start and end times"]
+    assert [A_STAMP.findall(text) for text in documents] == [[], [], [], []]
+    assert TIMING_FIGURE.findall("its full stamp") == ["full stamp"]
+    assert A_STAMP.findall(
+        "`20261001-101112-A`, `<stamp>-A`, `20261101-A`, `20261001-101112-A-pin`, `<stamp>-B`"
+    ) == ["20261001-101112-A", "<stamp>-A"]
+    assert TIMING_FIGURE.findall("its runtime") == ["runtime"]
+    assert DURATION.findall(
+        "the facts, the usage line, the four timings, its runtime and every other duration of it"
+    ) == ["facts", "usage line", "timings", "runtime", "duration"]
+    assert DURATION.search("as `swreview timing` printed it") is None
+
+
+TIMED_FOLDER = "a timed review's by its date and letter only"
+"""How a line that records run folders by stamp and letter names the one exception (decision
+195A; 007 T075)."""
+TIMED_DURATIONS = "a timed review's in `notes\\timing.txt` only"
+"""How a line that records timings names the one exception (decision 196A; 007 T079)."""
+
+
+def test_a_timed_reviews_run_folder_is_written_by_its_date_and_letter(
+    plan: str, results: str
+) -> None:
+    """Decision 195A (007 T075): a timed real design's run folder is written in the findings
+    document by its date and letter only (`20261101-A`). Its full stamp, `yyyyMMdd-HHmmss`
+    (`RunFolders.cs`), is the moment Review was pressed - the timed review's start, which decision
+    192A keeps in the private note - so it goes in `notes\\timing.txt` with the start and end
+    times, so that no private figure can be worked out from the findings document; a review not
+    timed, B's among them, keeps its full stamp. Rule 5 says so, and that no clock time of the
+    timed review goes in the document; step 4.1 notes the full stamp in the note and its Record
+    line keeps it out; every line that records the timed review's folder writes it by its date
+    and letter - step 4.5's Record line (pinned with the timing figures above), step 4.11's, step
+    4.10's for a review timed there, step 6.2's, the rule for Observed in step 1.4 and the
+    results sheet, and the handover's steps 13, 22 and 23; a time recorded when SOLIDWORKS stops
+    answering in a timed review goes in the note; and `CONTRIBUTING.md`'s rule keeps the full
+    stamp in the private fork and lets its date and letter be committed.
+
+    *Changed 2026-11-02 on purpose (007 T079; decision 196A):* the same lines keep the timed
+    review's runtime and its other durations out of the findings document too. Rule 5 sends them
+    to the note, a review not timed keeping its durations; a duration noted when SOLIDWORKS stops
+    answering in a timed review goes in the note; what the plan says of `Show-ReviewFacts` and
+    `Show-SetupTime` sends their timings of a timed review there, as step 4.5's item 1 does A's
+    last round; step 4.10's item 7 and Record line, the results sheet's 4.10 row and the
+    handover's step 22 send a timed review's timings there, and step 4.11's Record line and the
+    handover's step 23 the facts lines' durations; and the results sheet's header says so."""
+    rules = section(plan, "The rules for the whole sitting")
+    rule_5 = re.sub(r"\s+", " ", rules[rules.index("5. **In the findings document") :])
+    rule_5 = rule_5[: rule_5.index("6. **Do not")]
+    hangs = re.sub(r"\s+", " ", section(plan, "If SOLIDWORKS stops answering (steps 3 to 5)"))
+    steps = {
+        number: re.sub(r"\s+", " ", step(plan, number))
+        for number in ("1.4", "4.1", "4.5", "4.10", "4.11", "6.2")
+    }
+    opening = steps["4.1"][: steps["4.1"].index("- 008 T103")]
+    record_41 = steps["4.1"][steps["4.1"].index("Record: the facts") :]
+    record_45 = steps["4.5"][steps["4.5"].index("Record: each pass or fail; for 007 T060") :]
+    sheet = re.sub(r"\s+", " ", results)
+    handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
+    send = handover[handover.index("22. **015 T119") : handover.index("23. **014 T221")]
+    smoke = handover[handover.index("23. **014 T221") : handover.index("## 4. After the sitting")]
+    contributing = (REPO / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    rule = contributing[contributing.index("## The public-repository rule") :]
+    rule = re.sub(r"\s+", " ", rule[: rule.index("\n## ")])
+    commands = re.sub(r"\s+", " ", section(plan, "Every PowerShell window: paste this first"))
+
+    # Rule 5: the timed review's folder by its date and letter, its full stamp in the note.
+    assert "write it as its time stamp and letter (for example `20261001-101112-B`)" in rule_5
+    assert (
+        "A timed review's run folder (A's at step 4.1) goes by its date and letter only (for"
+        " example `20261101-A`), and no clock time of that review goes in the findings document"
+    ) in rule_5
+    assert (
+        f"its full stamp, the moment you pressed Review, goes in {TIMING_NOTE} with its start and"
+        " end times, so that no private figure can be worked out from the findings document"
+        " (decision 195A)"
+    ) in rule_5
+    assert "A review not timed, B's among them, keeps its full stamp" in rule_5
+    assert f"Record the step, the time (during a timed review, in {TIMING_NOTE} only: rule 5)" in (
+        hangs
+    )
+    # Step 4.1 notes the full stamp in the note; the Record lines write the date and letter.
+    assert f"Its run folder's full stamp goes in {TIMING_NOTE} too" in opening
+    assert "by its date and letter only, as `20261101-A` (rule 5; decision 195A)" in opening
+    assert "never the start and end times or the run folder's full stamp" in record_41
+    assert "the folder's full stamp or a timing failure's message" in record_45
+    assert "decision 195A" in record_45
+    assert f"each run folder's stamp and letter ({TIMED_FOLDER}: rule 5)" in steps["4.10"]
+    assert (
+        "the run folder's date and letter, never its full stamp (rule 5: A's review is the one"
+        " timed)"
+    ) in steps["4.11"]
+    assert "the run folder's stamp and letter" not in steps["4.11"]
+    assert f"any review with a `Missing artifacts` line ({TIMED_FOLDER}: rule 5)" in steps["6.2"]
+    # The rule for Observed, in the plan and on the sheet itself.
+    assert f"a run folder's stamp and letter ({TIMED_FOLDER}: rule 5)" in steps["1.4"]
+    assert f"a run folder's stamp and letter ({TIMED_FOLDER})" in sheet
+    assert (
+        "written as its time stamp and letter (`20261001-101112-B`), never its name, and a timed"
+        f" review's by its date and letter only (`20261101-A`), its full stamp staying in"
+        f" {TIMING_NOTE} (decision 195A)"
+    ) in sheet
+    # The handover: the timed run, step 4.10's send and step 4.11's smoke review.
+    assert "which records the net saved and the run folder's date and letter only" in handover
+    assert "the run folder's stamp only" not in handover
+    assert f"run folders by stamp and letter ({TIMED_FOLDER}: the test plan's rule 5)" in send
+    assert "the folder's date and letter, never its full stamp" in smoke
+    assert "the folder's stamp and letter" not in smoke
+    # The public-repository rule.
+    assert (
+        "its full run-folder stamp, the moment Review was pressed (decision 195A), which stay in"
+        " the private fork"
+    ) in rule
+    assert "and so may the timed review's run folder by its date and letter (decision 195A)" in (
+        rule
+    )
+    # Decision 196A: the timed review's runtime and its other durations, in the note too.
+    assert (
+        f"Its runtime, from start to end, and every other duration of it go in {TIMING_NOTE} too,"
+        " never in the findings document (decision 196A)"
+    ) in rule_5
+    assert "A review not timed, B's among them, keeps its full stamp and its durations" in rule_5
+    assert (
+        "during a timed review, any duration of it you note, such as how long it had run, goes in"
+        f" {TIMING_NOTE} too (decision 196A)"
+    ) in hangs
+    assert (
+        "On a timed review's folder, the `drawing phase` line's milliseconds and that timing,"
+        f" `seconds from session.started to the first text.delta`, go in {TIMING_NOTE} only"
+        " (rule 5)"
+    ) in commands
+    assert (
+        f"how long the review's setup took; on a timed review's folder, its line goes in"
+        f" {TIMING_NOTE} only (rule 5)"
+    ) in commands
+    assert (
+        f"note the usage lines of A, A-pin and A-plate (A's `last round <n> s` in {TIMING_NOTE}"
+        " only: rule 5)"
+    ) in steps["4.5"]
+    assert f"Record four timings ({TIMED_DURATIONS}: rule 5), each inside one host call" in (
+        steps["4.10"]
+    )
+    assert f"the restored review and the four timings ({TIMED_DURATIONS}: rule 5)" in steps["4.10"]
+    assert (
+        "each printed facts line (with letters in place of names, and its durations in"
+        f" {TIMING_NOTE} only: rule 5)"
+    ) in steps["4.11"]
+    assert (
+        f"The timed review's runtime and every other duration of it stay in {TIMING_NOTE} too"
+        " (decision 196A); a review not timed keeps its durations"
+    ) in sheet
+    assert f"and A's and B's timings ({TIMED_DURATIONS})" in sheet
+    assert f"the four timings ({TIMED_DURATIONS}: the test plan's rule 5)" in send
+    assert (
+        f"the printed facts lines (their durations in {TIMING_NOTE} only: the test plan's rule 5)"
+    ) in smoke

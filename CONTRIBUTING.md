@@ -125,10 +125,12 @@ in an issue, a pull request, a commit message, a log or a screenshot:
 - a SOLIDWORKS file, a drawing, or a screenshot of a real design;
 - a dump, recording, run folder or handover folder from real work;
 - a real design's review timing: the engineer's baseline, the assisted minutes (setup,
-  supervision, verification, false alarms and the review by hand), a sitting's update minutes and
+  supervision, verification, false alarms and the review by hand), a sitting's update minutes,
   the timed review's start and end times (decision 192A (the owner's answer of 2026-11-01, 13A)),
-  which stay in the private fork; a design's net minutes saved, and their median, may be
-  committed (decision 186A);
+  its runtime and every other duration of it (decision 196A) and its full run-folder stamp, the
+  moment Review was pressed (decision 195A), which stay in the private fork; a design's net
+  minutes saved, and their median, may be committed (decision 186A), and so may the timed
+  review's run folder by its date and letter (decision 195A);
 - a log that shows real paths, user names or machine names (replace them with placeholders
   such as `C:\Users\<you>` or `<part>` before pasting);
 - an API key, a token or any other credential;

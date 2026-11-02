@@ -749,3 +749,167 @@ both fixed test first under T072.
   does. [`docs/roadmap/metrics.md`](../../docs/roadmap/metrics.md) keeps "Review wall time" as a
   guardrail, and its pages are its update runs' to change: under decision 192A a timed review's
   runtime stays in its run folder, so that row cannot take one.
+
+*Changed 2026-11-02 (owner decision 195A; R9):* where this section has the findings document
+record A's run folder stamp, it records the folder's date and letter (`20261101-A`), and the full
+stamp goes in `notes\timing.txt` with the review's start and end times.
+
+*Changed 2026-11-02 (owner decision 196A; R10):* where this section leaves a timed review's
+runtime in its run folder, the runtime goes in `notes\timing.txt` too, with every other duration
+of that review and its start and end times, and never in the findings document.
+
+## R9. Owner decision 195A (2026-11-02): a timed review's run folder by its date and letter
+
+**Decision**: a timed real design's run folder is written in the findings document by its date
+and letter only (for example `20261101-A`). Its full stamp, `yyyyMMdd-HHmmss`
+(`extractor/SwReview.AddIn/Review/RunFolders.cs`), is the moment Review was pressed; it goes in
+the private note `notes\timing.txt` with the review's start and end times (192A), so that no
+private figure can be worked out from the findings document. It changes 192A's "the run folder's
+stamp"; a review not timed, B's at a sitting (190A), keeps its full stamp. Asked as 21A in
+roadmap update run 3's owner round; applied before M0-a, as cycle 8
+([`docs/roadmap/README.md`](../../docs/roadmap/README.md)).
+
+**Why**: R8 had the findings document record A's run folder stamp beside the net saved, and that
+stamp is the timed review's start, to the second, which 192A keeps in the note.
+
+**What it changes**: no code. The seat plan's rule 5 states it and step 4.1 notes the full stamp
+in `notes\timing.txt`; every line that records the timed review's folder - step 4.5's and step
+4.11's Record lines, step 4.10's for a review timed there (M0-a times one, the roadmap's M0),
+step 6.2's, and the rule for Observed of step 1.4 and the results sheet - writes it by its date
+and letter, and a clock time noted when SOLIDWORKS stops answering in a timed review goes in the
+note; every check of what stays out of the findings document, the handover, the runbook's
+section 8, `CONTRIBUTING.md`'s rule and T060's note name the full stamp. Tasks T074 to T077,
+Phase 11 of [tasks.md](tasks.md).
+
+**Not changed**: `RunFolders.cs` and the folders' names; the zips of step 6.3 and the exports of
+step 6.2, which carry whole names and travel only in the handover folder; an untimed review's
+stamp (steps 4.2, 4.8, 4.9 and 5.1).
+
+**Built** (2026-11-02, T076), as *What it changes* says. Rule 5's example of a full stamp, and
+the results sheet's, carry B's letter now (`20261001-101112-B`), A's review being the one timed;
+step 4.1's note takes the date and time the folder's name begins with (`20261101-101112`); step
+4.5's Record line reads `<date>-A` where it read `<stamp>-A`. The runbook's section 8 listed "run
+folder names" among a findings document's evidence, and a name begins with its stamp: it lists
+run folders by stamp and letter, as rule 5 does.
+
+**Tests changed on purpose**, each with a dated note, none loosened:
+`test_a_real_designs_timing_figures_stay_out_of_the_findings_document` (step 4.5's Record
+literal), `test_every_check_before_the_findings_document_is_committed_names_the_timing_figures`
+(each of its nine places also names the full stamp, the date and letter and 195A; section 0.2 the
+full stamp), `test_no_line_sends_a_real_designs_timing_figure_to_the_findings_document` (the
+full stamp is a timing figure, and no line shows a full stamp or `<stamp>` with A's letter) and
+`test_the_specs_readme_counts_a_task_173a_closed_as_done` (007's row, pinned since T074). New:
+`test_a_timed_reviews_run_folder_is_written_by_its_date_and_letter`.
+
+**Tests first**: T075's four pins failed before T076, each for want of the words it pins - the
+first at step 4.5's Record line, the places pin at rule 5, the guard at rule 5's example and step
+4.5's `<stamp>-A`, the new pin at rule 5. Read one by one, 45 of their 47 new or changed checks
+were red; the two that held are the guard's checks of its own patterns, which read no document.
+After T076 all 115 checks of the four pins hold. The README pin was red against 68 / 5 / 0 at
+T074 and against 69 / 8 / 0 at T077 before each recount.
+
+**Gates** (T077; 2026-11-02), on T077's tree:
+
+- Python 3.12.3, in the worktree's own environment, and 3.11.16 (`uv run --python 3.11
+  --isolated --all-extras`), the tokenizer required, over the seven modules that read the changed
+  files - `test_workstation_test_plan.py`, `test_workstation_handover.py`,
+  `test_update_workstation_script.py`, the three that read the task lists through
+  `tests/support/seat_tasks.py` (`test_seat_assumptions.py`, `test_seat_switch_evidence.py`,
+  `test_remodel_ledger.py`) and the identifier scan, `test_tracked_files_carry_no_recorded_number.py`,
+  which ran against the owner's lists: 488 passed on each, none skipped.
+- `ruff check src tests` clean.
+- The link check over the cycle's changed Markdown: 309 relative links, anchors included, none
+  broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate. Not run in this lane: the whole non-live suites,
+  which run before the pull request and in its CI. No SOLIDWORKS process, seat task, or paid or
+  live test ran.
+
+## R10. Owner decision 196A (2026-11-02): a timed review's runtime and durations in the private note
+
+**Decision**: a timed real design's review runtime, its start-to-end span, and every other
+duration of that review go in the private note `notes\timing.txt` with its start and end times,
+never in the findings document, so that no private figure can be worked out from it: when the
+engineer watched the whole review, its runtime is its supervision minutes, which decision 186A
+keeps private. A review not timed, B's at a sitting (190A), keeps its durations. It widens 192A
+(R8) and 195A (R9). Asked as 24A during cycle 8, and applied in that cycle, before M0-a
+([`docs/roadmap/README.md`](../../docs/roadmap/README.md)).
+
+**Why**: rule 5 kept the timed review's start and end times, its full stamp and every clock time
+of it out of the findings document, but no line of the seat plan, the results sheet, the handover
+or the runbook kept its runtime, or another duration of it, out. Step 4.1's Record line asks for
+the facts `Show-ReviewFacts` prints, which hold the drawing phase's milliseconds and the seconds
+from `session.started` to the first `text.delta`, and for the usage line, which ends with the last
+round's seconds; step 4.11 records the same facts lines on A's folder; step 4.10 records four
+timings, one of them a timed review's when a sitting times a review there (M0-a, the roadmap's
+M0); and the runbook's section 8 lists durations among the evidence a findings document carries.
+R8 left the runtime in the run folder, which is never committed, without saying that it stays out
+of the findings document.
+
+**What it changes**: no code. Rule 5 states it. Step 4.1 notes the runtime in `notes\timing.txt`,
+and its Record line sends the facts' and the usage line's durations there; step 4.11's Record line
+does the same for the facts lines, step 4.5's item 1 for A's usage line, and step 4.10's item 7
+and Record line, with the results sheet's 4.10 row, for a timed review's timings; what the plan
+says of `Show-ReviewFacts` and `Show-SetupTime` run on a timed review's folder, and of a duration
+noted when SOLIDWORKS stops answering in a timed review, says the same. Every check of what stays
+out of the findings document names the runtime and its other durations: rule 5, section 0.2,
+steps 6.4 and 6.5, the results sheet's header, the handover's timed run, its findings document
+and the owner's reading after the sitting, the runbook's section 8, whose durations leave a timed
+review's out, `CONTRIBUTING.md`'s rule and T060's note. Tasks T078 to T081, Phase 12 of
+[tasks.md](tasks.md).
+
+**Not changed**: every review not timed keeps its durations in the findings document - D's drawing
+phase at step 3.4, B's times at steps 4.2 and 4.3 and the handover's step 12, and the untimed
+reviews' timings at step 4.10; `report.md`'s Timing section and the rest of the run folder, which
+hold the runtime and travel only in the handover folder (step 6.3); `swreview timing`, the route,
+the report and the plan's commands, whose printed lines are routed, not changed.
+
+**Built** (2026-11-02, T080), as *What it changes* says. Rule 5 sends the runtime, from start to
+end, and every other duration of a timed review to `notes\timing.txt`, never the findings
+document, and a review not timed, B's among them, keeps its full stamp and its durations. Step
+4.1's Record line names what the facts and the usage line show that is a duration - the `drawing
+phase` line's milliseconds, the `seconds from session.started to the first text.delta` line and
+the usage line's `last round <n> s` - and sends them to the note. Step 4.10's item 7 and Record
+line, the results sheet's 4.10 row and the handover's step 22 name a timed review's timings in
+the words step 4.10's Record line already used for its run folders ("a timed review's ... only").
+What the plan says of `Show-SetupTime` holds for a sitting that runs it on a timed review's
+folder: this sitting runs it on B's alone (step 4.3). T060's note was written with the records,
+at T078.
+
+**Tests changed on purpose**, each with a dated note, none loosened:
+`test_a_real_designs_timing_figures_stay_out_of_the_findings_document` (step 4.1's opening and
+Record line; `CONTRIBUTING.md`'s rule),
+`test_every_check_before_the_findings_document_is_committed_names_the_timing_figures` (each of
+its nine places also names the runtime, a duration and 196A; section 0.2 the runtime and every
+other duration; the runbook's section 8 durations other than a timed review's),
+`test_no_line_sends_a_real_designs_timing_figure_to_the_findings_document` (the runtime is a
+timing figure; a new scan reads the Record lines of steps 4.1, 4.5, 4.10 and 4.11 and the
+results sheet's rows of those steps, and none asks for a duration, the facts or the usage line
+without sending it to `notes\timing.txt`; B's steps and every untimed review's are not read for
+one), `test_a_timed_reviews_run_folder_is_written_by_its_date_and_letter` (rule 5, the hang, the
+two commands, steps 4.5, 4.10 and 4.11, the results sheet's header and 4.10 row, the handover's
+steps 22 and 23) and `test_the_specs_readme_counts_a_task_173a_closed_as_done` (007's row). No
+new test: the pins and the guard that read these places were extended, not copied.
+
+**Tests first**: T079's four pins failed before T080, each for want of the words it pins - the
+first at step 4.1's opening, the places pin at rule 5, the guard at the Record lines of steps
+4.1, 4.10 and 4.11 and the results sheet's 4.10 row, cycle 8's pin at rule 5. Read one by one, 35
+of their 42 new or changed checks were red; the seven that held are T060's two, whose note T078
+wrote, the guard's Record and clause scans with the runtime added, which had nothing to find, and
+its three checks of its own patterns, which read no document. After T080 all 42 hold. The README
+pin was red against 72 / 5 / 0 at T078 and against 73 / 8 / 0 at T081 before each recount.
+
+**Gates** (T081; 2026-11-02), on T081's tree:
+
+- Python 3.12.3, in the worktree's own environment, and 3.11.16 (`uv run --python 3.11
+  --isolated --all-extras`), the tokenizer required, over the seven modules that read the changed
+  files - `test_workstation_test_plan.py`, `test_workstation_handover.py`,
+  `test_update_workstation_script.py`, the three that read the task lists through
+  `tests/support/seat_tasks.py` (`test_seat_assumptions.py`, `test_seat_switch_evidence.py`,
+  `test_remodel_ledger.py`) and the identifier scan, `test_tracked_files_carry_no_recorded_number.py`,
+  which ran against the owner's lists: 488 passed on each, none skipped.
+- `ruff check src tests` clean.
+- The link check over the Markdown changed for 196A: 314 relative links, anchors included, none
+  broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate. Not run in this lane: the whole non-live suites,
+  which run before the pull request and in its CI. No SOLIDWORKS process, seat task, or paid or
+  live test ran.
