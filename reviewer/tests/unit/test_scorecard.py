@@ -759,7 +759,10 @@ def all_bought(tmp_path: Path, checks: Sequence[str] = ("rms.*", "hygiene.*")) -
     """`roles_review`'s review, its first turn running the real part and hygiene checks,
     answered "All bought" through `ReviewRun.answer_evidence_batch` as
     `test_answer_batch_roles.py` plays it, and a key forbidding `checks` on the pin's first
-    instance. Returns the ids the regrade withdrew, in the order it withdrew them."""
+    instance. Returns the ids the regrade withdrew, in the order it withdrew them.
+
+    *Changed 2026-11-01 on purpose (002 T340):* a fold's withdrawal of a restated finding's own
+    id, which names the id it folded onto (`folded_into`), is not one: its verdict stands."""
     events: list[tuple[str, dict[str, Any]]] = []
     run = roles_review(
         tmp_path,
@@ -779,7 +782,11 @@ def all_bought(tmp_path: Path, checks: Sequence[str] = ("rms.*", "hygiene.*")) -
         RUN,
         forbidden=[{"checks": list(checks), "component_ids": [PIN]}],
     )
-    return [body["finding_id"] for kind, body in events if kind == "finding.withdrawn"]
+    return [
+        body["finding_id"]
+        for kind, body in events
+        if kind == "finding.withdrawn" and "folded_into" not in body
+    ]
 
 
 def scored_all_bought(tmp_path: Path) -> Scorecard:
@@ -944,6 +951,39 @@ def test_a_withdrawn_finding_is_judged_by_its_last_body_before_the_withdrawal(
 
     assert score.withdrawn_forbidden_hit_finding_ids == [second, third]
     assert first not in score.finding_origins
+
+
+def test_a_folds_withdrawal_is_no_withdrawn_finding(tmp_path: Path) -> None:
+    """002 T340 (the backlog's cycle 3 section; `scoring.md` 3.3): a fold withdraws the id a
+    re-run or restated finding was first announced under and names the id it folded onto
+    (`folded_into`), whose verdict stands in the final state and is scored there. A pin verdict
+    announced under its own id, F-090, and folded onto a final-state finding matches the
+    forbidden entry, and is still no withdrawn forbidden hit."""
+    first, second, third = all_bought(tmp_path)
+    session = json.loads((tmp_path / RUN / "session.json").read_text(encoding="utf-8"))
+    onto = session["findings"][0]["id"]
+
+    def fold_a_pin_verdict(events: list[dict[str, Any]]) -> None:
+        announced = json.loads(json.dumps(last_announced(events, first)))
+        announced["body"]["id"] = "F-090"
+        folded = {
+            **announced,
+            "type": "finding.withdrawn",
+            "body": {
+                "finding_id": "F-090",
+                "reason": f"a second verdict on what {onto} judges, shown as {onto}",
+                "folded_into": onto,
+            },
+        }
+        at = withdrawal(events, third) + 1
+        events[at:at] = [announced, folded]
+
+    edit_stream(tmp_path, fold_a_pin_verdict)
+
+    score = score_all_bought(tmp_path)
+
+    assert score.withdrawn_forbidden_hit_finding_ids == [first, second, third]
+    assert "F-090" not in score.finding_origins
 
 
 def test_a_withdrawn_finding_whose_last_body_is_no_finding_is_skipped_the_column_assessed(

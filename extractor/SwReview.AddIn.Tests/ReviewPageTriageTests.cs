@@ -39,6 +39,12 @@ namespace SwReview.AddIn.Tests;
 /// no triage but `wrong`, the miss. Its fold's row holds that one button, worded as the backend words a pass's miss
 /// (`labels.pass_triage`), or the token itself from a backend that sends no labels; picked, it travels with the
 /// decision as any outcome does. The rule is the backend's: the page draws the one button and refuses nothing.
+///
+/// Owner decision 193A (002 T342): the cleared line comes back. Both snapshots name each undecided finding's line under
+/// `cleared`, so a reload, a review switch and a read-only restore show it again; the page keeps it in the finding's
+/// entry beside the disposition, shows it above any status a press or Show writes, keeps it on a card drawn again while
+/// undecided, and drops it when a decision is recorded. A fold's withdrawal of the re-run's own id (`folded_into`) drops
+/// its card, so Results hold the cards the session holds.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -608,6 +614,273 @@ public sealed class ReviewPageTriageTests
     }
 
     /// <summary>
+    /// Owner decision 193A (002 T342): a reload brings the line back. F-001's decision was cleared live and the page is
+    /// loaded again; the backend still holds the chat, and its snapshot names the line under `cleared`, the
+    /// `disposition.cleared` body its stream holds. The restored card shows it on its status line, in its class, with the
+    /// triage row released.
+    /// </summary>
+    [Fact]
+    public void AClearedLineComesBackAfterAReload()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await DecidedThenFolded(driver, true);
+            driver.InitialRoutes.Add(("GET", "/sessions/" + Chat + "/snapshot", 200,
+                Snapshot("20260923-101500-bracket-1", false, new[] { Cleared("F-001", AcceptedAlreadyKnown()) }, Finding("F-001", null, "suspected", "low"))));
+
+            await driver.Reload();
+            await driver.Settle();
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Empty(Pressed(card));
+            Assert.Equal(ClearedLine, card.GetProperty("status").GetString());
+            Assert.Equal("card-status cleared", card.GetProperty("statusClass").GetString());
+        });
+    }
+
+    /// <summary>
+    /// 193A: a review switch brings the line back. The engineer leaves for review chat-1 and chooses chat-2's chip; its
+    /// live snapshot names F-001's line, and the card shows it, released, while chat-2's undecided F-002 shows none.
+    /// </summary>
+    [Fact]
+    public void AClearedLineComesBackAfterAReviewSwitch()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200,
+                Snapshot(OtherRun, false, new[] { Cleared("F-001", AcceptedAlreadyKnown()) }, Finding("F-001", null, "suspected", "low"), Finding("F-002")));
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Empty(Pressed(card));
+            Assert.Equal(ClearedLine, card.GetProperty("status").GetString());
+            Assert.Equal("card-status cleared", card.GetProperty("statusClass").GetString());
+            JsonElement other = await driver.Read(ReadCard("F-002"));
+            Assert.Equal(string.Empty, other.GetProperty("status").GetString());
+            Assert.Equal("card-status", other.GetProperty("statusClass").GetString());
+        });
+    }
+
+    /// <summary>
+    /// 193A: a backend restart and a read-only restore bring the line back. The backend no longer holds chat-2
+    /// (`404 UnknownChat`), so the page restores it from its run folder (`GET /reviews/{run_id}`), read-only; that
+    /// snapshot names F-001's line too, and the card shows it with its decision and triage controls off.
+    /// </summary>
+    [Fact]
+    public void AClearedLineComesBackInAReadOnlyRestore()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 404,
+                Refusal("UnknownChat", "no chat " + OtherChat, false));
+            await driver.Route("GET", "/reviews/" + OtherRun, 200,
+                Snapshot(OtherRun, true, new[] { Cleared("F-001", AcceptedAlreadyKnown()) }, Finding("F-001", null, "suspected", "low")));
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Empty(Pressed(card));
+            Assert.Equal(ClearedLine, card.GetProperty("status").GetString());
+            Assert.Equal("card-status cleared", card.GetProperty("statusClass").GetString());
+            Assert.All(Disabled(card), Assert.True);
+        });
+    }
+
+    /// <summary>
+    /// 193A and the backlog's cycle 3 section: a press refused while a turn still runs (`409 TurnRunning`, the explanation
+    /// pass) writes the refusal on the card's status line, and the cleared line stays above it - read from the finding's
+    /// entry, where the page keeps it beside the disposition - with the picked triage let go, since nothing is recorded.
+    /// </summary>
+    [Fact]
+    public void ARefusedPressShowsTheClearedLineAboveTheRefusal()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await DecidedThenFolded(driver, true);
+            await driver.Route("POST", DispositionPath("F-001"), 409, TurnRunning);
+            await Press(driver, "F-001", "new_and_real");
+
+            await Decide(driver, "F-001", "reject");
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Empty(Pressed(card));
+            Assert.Equal(ClearedLine, card.GetProperty("cleared").GetString());
+            Assert.Equal(JsonValueKind.Null, card.GetProperty("record").ValueKind);
+            Assert.Equal(LabelsSample.TurnRunning, card.GetProperty("refusal").GetString());
+            Assert.Equal("TurnRunning", card.GetProperty("refusalClass").GetString());
+            Assert.Equal("card-status bad", card.GetProperty("statusClass").GetString());
+            Assert.True(card.GetProperty("clearedFirst").GetBoolean(), "the cleared line is not above the refusal.");
+        });
+    }
+
+    /// <summary>
+    /// 193A and the backlog's cycle 3 section: Show in SOLIDWORKS writes its own status - "Selecting in SOLIDWORKS...",
+    /// then the host's answer - and the cleared line stays above each, so the engineer still reads that the decision is to
+    /// be made again.
+    /// </summary>
+    [Fact]
+    public void ShowInSolidWorksShowsTheClearedLineAboveItsStatus()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Referenced(Finding("F-001")));
+            await driver.Push(Chat, 2, "disposition", DispositionEvent("F-001", AcceptedAlreadyKnown()));
+            await driver.Push(Chat, 3, "finding", Referenced(Finding("F-001", null, "suspected", "low")));
+            await driver.Push(Chat, 4, "disposition.cleared", Cleared("F-001", AcceptedAlreadyKnown()));
+            await driver.EndSession(Chat);
+
+            await driver.Read(
+                "document.querySelector('.card.finding[data-finding-id=\"F-001\"] [data-action=\"show\"]').click();"
+                + "return JSON.stringify({ok: true});");
+            await driver.Settle();
+
+            JsonElement shown = Assert.Single(driver.Posted("entity.show"));
+            Assert.Equal("FICT-REF-0001", shown.GetProperty("persist_ref").GetString());
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(ClearedLine, card.GetProperty("cleared").GetString());
+            Assert.Equal(ClearedLine + "Selected Pin-A-1.", card.GetProperty("status").GetString());
+            Assert.Equal("card-status", card.GetProperty("statusClass").GetString());
+        });
+    }
+
+    /// <summary>
+    /// 193A: the line stands while the finding is undecided, as a snapshot taken then would show it. A later answer's
+    /// re-run draws the card again with no disposition, and the line is still there; then a decision arrives, and the card
+    /// shows its sentence alone; and a press refused after it shows the record above the refusal, with no line.
+    /// </summary>
+    [Fact]
+    public void ARedrawnCardKeepsItsClearedLineUntilADecision()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "disposition", DispositionEvent("F-001", AcceptedAlreadyKnown()));
+            await driver.Push(Chat, 3, "finding", Finding("F-001", null, "suspected", "low"));
+            await driver.Push(Chat, 4, "disposition.cleared", Cleared("F-001", AcceptedAlreadyKnown()));
+            await driver.Push(Chat, 5, "finding", Finding("F-001", null, "unresolved", "low"));
+            await driver.Settle();
+
+            JsonElement redrawn = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(ClearedLine, redrawn.GetProperty("status").GetString());
+            Assert.Equal("card-status cleared", redrawn.GetProperty("statusClass").GetString());
+
+            Dictionary<string, object?> decided = Disposition("rejected", "FICT decided again", null);
+            await driver.Push(Chat, 6, "disposition", DispositionEvent("F-001", decided));
+            await driver.EndSession(Chat);
+            await driver.Route("POST", DispositionPath("F-001"), 409, IllegalTransition);
+            await Decide(driver, "F-001", "accept");
+
+            string sentence = "Disposition: rejected by " + Engineer + " at " + RecordedAt + " - FICT decided again";
+            JsonElement refused = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(JsonValueKind.Null, refused.GetProperty("cleared").ValueKind);
+            Assert.Equal(sentence, refused.GetProperty("record").GetString());
+            Assert.Equal("IllegalTransition", refused.GetProperty("refusalClass").GetString());
+        });
+    }
+
+    /// <summary>
+    /// The backlog's cycle 3 section (FR-031, the stream agrees with the fold): the resumed turn's re-run is first
+    /// announced under its own id, F-002, and the fold withdraws it, naming F-001 as the id it took, before announcing F-001
+    /// again. Results then hold F-001's card alone, with the line; the Transcript says where F-002 went; and the page reads
+    /// no ranking for the fold's withdrawal, which moved no verdict out of the review - the session's end reads it once.
+    /// </summary>
+    [Fact]
+    public void AFoldLeavesNoStrayCardAndReadsNoRanking()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "disposition", DispositionEvent("F-001", AcceptedAlreadyKnown()));
+            await driver.Push(Chat, 3, "finding", Finding("F-002", null, "suspected", "low"));
+            await driver.Settle();
+            Assert.Equal(new[] { "F-001", "F-002" }, ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
+            await driver.ClearCalls();
+
+            await driver.Push(Chat, 4, "finding.withdrawn", Folded("F-002", "F-001"));
+            await driver.Push(Chat, 5, "finding", Finding("F-001", null, "suspected", "low"));
+            await driver.Push(Chat, 6, "disposition.cleared", Cleared("F-001", AcceptedAlreadyKnown()));
+            await driver.Settle();
+
+            Assert.Equal(new[] { "F-001" }, ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
+            Assert.DoesNotContain(await driver.Calls(), call => call.GetProperty("path").GetString()!.EndsWith("/attention", StringComparison.Ordinal));
+            Assert.Equal(ClearedLine, (await driver.Read(ReadCard("F-001"))).GetProperty("status").GetString());
+            Assert.Contains(
+                "F-002 withdrawn: a second verdict on what F-001 judges, shown as F-001",
+                ReviewPageDriver.Strings(await driver.Read(ReadTranscript), "markers"));
+        });
+    }
+
+    /// <summary>
+    /// 193A at a docked pane's 300 px, the card where a real turn leaves it: the session's end reads the ranking, which puts
+    /// F-007's card in its grouped row, shut. After a refused press, with the row and the fold opened, the cleared line,
+    /// the refusal's sentence, its Details fold and every triage button are whole - inside the window and every box that
+    /// clips them, their words inside them - with no sideways page scroll.
+    /// </summary>
+    [Fact]
+    public void AClearedLineAboveARefusalIsWhollyVisibleAtThreeHundredPixelsInItsRow()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
+            await driver.RouteAttention(Chat, SummarySample.Json());
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-007"));
+            await driver.Push(Chat, 2, "disposition", DispositionEvent("F-007", AcceptedAlreadyKnown()));
+            await driver.Push(Chat, 3, "finding", Finding("F-007", null, "suspected", "low"));
+            await driver.Push(Chat, 4, "disposition.cleared", Cleared("F-007", AcceptedAlreadyKnown()));
+            await driver.EndSession(Chat);
+            JsonElement placed = await driver.Read(ReadRow("F-007"));
+            Assert.True(placed.GetProperty("inRow").GetBoolean(), "F-007's card is not in its grouped row.");
+            Assert.False(placed.GetProperty("rowOpen").GetBoolean(), "F-007's row is open before the press.");
+            await driver.Route("POST", DispositionPath("F-007"), 409, TurnRunning);
+
+            await Decide(driver, "F-007", "accept");
+
+            JsonElement measured = await driver.Read(ReadClearedRefusalWhole("F-007"));
+            Assert.Equal(300, measured.GetProperty("width").GetInt32());
+            Assert.True(measured.GetProperty("foldOpen").GetBoolean(), "the finding's fold did not open.");
+            Assert.Equal(7, measured.GetProperty("count").GetInt32());
+            Assert.Empty(ReviewPageDriver.Strings(measured, "clipped"));
+            Assert.True(measured.GetProperty("noHorizontalOverflow").GetBoolean(), measured.ToString());
+        });
+    }
+
+    /// <summary>
+    /// FR-030 with 193A: with no labels a press refused on a cleared card prints the class and the message, as every card's
+    /// refusal does with no labels, after the backend's line, which needs none.
+    /// </summary>
+    [Fact]
+    public void WithNoLabelsARefusedPressShowsTheClearedLineAndTheClassAndMessage()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await DecidedThenFolded(driver, true);
+            await driver.Route("POST", DispositionPath("F-001"), 409, TurnRunning);
+
+            await Decide(driver, "F-001", "accept");
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Empty(Pressed(card));
+            Assert.Equal(ClearedLine, card.GetProperty("cleared").GetString());
+            Assert.Equal(ClearedLine + "TurnRunning: a turn is already running for chat-1", card.GetProperty("status").GetString());
+            Assert.Equal("card-status bad", card.GetProperty("statusClass").GetString());
+        });
+    }
+
+    /// <summary>
     /// Owner decision 187A: a pass's fold holds one triage button, `wrong`, worded as the backend words a pass's miss, in
     /// the one row a flagged finding's four stand in - before the tools row and outside the decisions - with none
     /// pressed; and a flagged finding beside it still offers the four.
@@ -892,20 +1165,56 @@ public sealed class ReviewPageTriageTests
     /// A review's snapshot with <paramref name="findings"/> and no ranking: read-only from its run folder, or the
     /// backend's live chat, its turn ended, whose findings take decisions.
     /// </summary>
-    private static string Snapshot(string runId, bool readOnly, params string[] findings) => new JsonObject
+    private static string Snapshot(string runId, bool readOnly, params string[] findings) =>
+        Snapshot(runId, readOnly, new string[0], findings);
+
+    /// <summary>
+    /// <see cref="Snapshot(string, bool, string[])"/> naming <paramref name="cleared"/> - `disposition.cleared` bodies - under
+    /// `cleared`, as the backend adds it when a cleared decision's line still stands (owner decision 193A); none, no key.
+    /// </summary>
+    private static string Snapshot(string runId, bool readOnly, string[] cleared, params string[] findings)
     {
-        ["run_id"] = runId,
-        ["read_only"] = readOnly,
-        ["read_only_reason"] = readOnly ? ReviewPageSessionsTests.ReadOnlyReason : null,
-        ["chat_state"] = readOnly ? null : "ended",
-        ["last_seq"] = readOnly ? null : JsonValue.Create(9),
-        ["document"] = JsonNode.Parse(JsonSerializer.Serialize(new { path = ReviewPageDriver.ReviewedPath, configuration = "Default" })),
-        ["findings"] = new JsonArray(findings.Select(finding => JsonNode.Parse(finding)).ToArray()),
-        ["evidence_requests"] = new JsonArray(),
-        ["coverage"] = new JsonArray(),
-        ["ranking"] = null,
-        ["not_examined"] = null,
-    }.ToJsonString();
+        var snapshot = new JsonObject
+        {
+            ["run_id"] = runId,
+            ["read_only"] = readOnly,
+            ["read_only_reason"] = readOnly ? ReviewPageSessionsTests.ReadOnlyReason : null,
+            ["chat_state"] = readOnly ? null : "ended",
+            ["last_seq"] = readOnly ? null : JsonValue.Create(9),
+            ["document"] = JsonNode.Parse(JsonSerializer.Serialize(new { path = ReviewPageDriver.ReviewedPath, configuration = "Default" })),
+            ["findings"] = new JsonArray(findings.Select(finding => JsonNode.Parse(finding)).ToArray()),
+            ["evidence_requests"] = new JsonArray(),
+            ["coverage"] = new JsonArray(),
+            ["ranking"] = null,
+            ["not_examined"] = null,
+        };
+        if (cleared.Length > 0)
+        {
+            snapshot["cleared"] = new JsonArray(cleared.Select(body => JsonNode.Parse(body)).ToArray());
+        }
+
+        return snapshot.ToJsonString();
+    }
+
+    /// <summary><paramref name="finding"/> citing a drawing place by its persistent reference, so Show sends it to the host.</summary>
+    private static string Referenced(string finding)
+    {
+        JsonObject body = JsonNode.Parse(finding)!.AsObject();
+        body["drawing_locations"] = JsonNode.Parse("[{\"document_id\":\"doc:2\",\"persist_ref\":\"FICT-REF-0001\"}]");
+        return body.ToJsonString();
+    }
+
+    /// <summary>
+    /// The `finding.withdrawn` body of a fold, as the runner writes it (the backlog's cycle 3 section): the id the re-run was
+    /// first announced under, why, and `folded_into`, the id it took.
+    /// </summary>
+    private static string Folded(string spent, string onto) =>
+        JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            { "finding_id", spent },
+            { "reason", "a second verdict on what " + onto + " judges, shown as " + onto },
+            { "folded_into", onto },
+        });
 
     // ---- reading the page ---------------------------------------------------------------------
 
@@ -936,8 +1245,34 @@ return JSON.stringify({
   refusalClass: status ? h.text(status, '.error-fold .error-class') : null,
   record: status ? h.text(status, '.card-record') : null,
   refusal: status ? h.text(status, '.plain-error-text') : null,
-  recordFirst: !!status && h.before(status.querySelector('.card-record'), status.querySelector('.plain-error'))
+  recordFirst: !!status && h.before(status.querySelector('.card-record'), status.querySelector('.plain-error')),
+  cleared: status ? h.text(status, '.card-cleared') : null,
+  clearedFirst: !!status && h.before(status.querySelector('.card-cleared'), status.querySelector('.plain-error'))
 });";
+
+    /// <summary>The finding cards Results hold, by id, wherever they stand.</summary>
+    private const string ReadCards = @"
+return JSON.stringify({ ok: true, ids: h.attrs(document.getElementById('results'), '.card.finding', 'data-finding-id') });";
+
+    /// <summary>Whether one card stands in a grouped row, and whether that row is open.</summary>
+    private static string ReadRow(string findingId) => @"
+var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
+var row = card ? card.closest('details.type-row') : null;
+return JSON.stringify({ ok: !!card, inRow: !!row, rowOpen: !!row && row.open });";
+
+    /// <summary>
+    /// After a press refused on a cleared card in its grouped row (193A): opens the row, then measures the cleared line,
+    /// the refusal's sentence, its Details summary and every triage button, as <see cref="ReadRefusalWhole"/> measures.
+    /// </summary>
+    private static string ReadClearedRefusalWhole(string findingId) => ReadPartsWhole(findingId, @"
+var row = card.closest('details.type-row');
+if (row) { row.open = true; }
+var status = card.querySelector('.card-status');
+var parts = [
+  ['cleared', status.querySelector('.card-cleared')],
+  ['refusal', status.querySelector('.plain-error-text')],
+  ['details', status.querySelector('.error-fold > summary')]
+];");
 
     /// <summary>Where the triage buttons stand in one card: one row in the fold, before the tools row, outside the decisions.</summary>
     private static string ReadFold(string findingId) => @"

@@ -602,6 +602,27 @@ def _stream_session_id(path: Path) -> str | None:
     return session_id if isinstance(session_id, str) else None
 
 
+def _own_stream(run_dir: Path, session_id: UUID) -> Path | None:
+    """The stream the session `session_id` wrote in `run_dir`: `events.jsonl` when its first event
+    starts that session, else the rotated `events.N.jsonl` that does - the highest `N` of several
+    - and `None` when none does.
+
+    A re-run moves a waiting record's stream aside before it runs and leaves the record canonical
+    until it commits (`_rotate_kept`), so one that failed or was cut off before its commit point
+    leaves the record beside a stream of its own, or none (owner decision 193A).
+    """
+    wanted = str(session_id)
+    canonical = run_dir / EVENTS_FILE_NAME
+    if _stream_session_id(canonical) == wanted:
+        return canonical
+    rotated: dict[int, Path] = {}
+    for path in run_dir.glob("events.*.jsonl"):
+        index = path.name.split(".")[1]
+        if index.isdigit() and _stream_session_id(path) == wanted:
+            rotated[int(index)] = path
+    return rotated[max(rotated)] if rotated else None
+
+
 def _record_id(path: Path) -> str | None:
     """The `session_id` a session or attention record holds, or `None` when it cannot be read."""
     try:
@@ -1459,6 +1480,7 @@ class ChatServer:
         live session, the run's package and ledger - plus the chat's state and the stream's
         last seq, so a page reloaded mid-turn reopens the stream where the snapshot ends.
         It computes and writes nothing, as `attention` does, and inline for the same reason.
+        The chat's stream gives each undecided finding's cleared line (owner decision 193A).
         """
         chat = self._chat(request)
         run = self._run_of(chat)
@@ -1471,6 +1493,7 @@ class ChatServer:
             chat_state=chat.state.value,
             send_in_flight=run._send_in_flight,
             last_seq=run.sink.seq,
+            events=replay_events(chat.events_path),
         )
         return JSONResponse(to_jsonable_python(body))
 
@@ -1873,7 +1896,9 @@ class ChatServer:
         session is the review's, which is restored (owner decision 146A); the check's, at
         `session.N.json`, is never read here. A record that cannot be read, or names no
         session, cannot show whose the session is, and nothing is guessed through
-        (`session_replaced`). Every refusal is `UnknownReview`.
+        (`session_replaced`). Every refusal is `UnknownReview`. The cleared lines come from the
+        stream the record's own session wrote (`_own_stream`), which a re-run that failed before
+        its commit point leaves rotated aside (owner decision 193A).
         """
         unknown = UnknownReview(f"no review {review_dir.name!r} under the run root")
         session_file = review_dir / SESSION_FILE_NAME
@@ -1886,7 +1911,13 @@ class ChatServer:
             package = load_package(review_dir).package
         except PACKAGE_ERRORS as exc:
             raise unknown from exc
-        return restored_snapshot(session, package, run_id=review_dir.name)
+        stream = _own_stream(review_dir, session.session_id)
+        return restored_snapshot(
+            session,
+            package,
+            run_id=review_dir.name,
+            events=replay_events(stream) if stream is not None else (),
+        )
 
     def _family_of(self, check_dir: Path) -> str:
         """The family whose check `check_dir` holds, from the record's own stamp.

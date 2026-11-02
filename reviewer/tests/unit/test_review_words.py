@@ -76,6 +76,11 @@ PLACEHOLDERS: dict[str, set[str]] = {
     "answer_basis.many": {"n"},
     "rerun.cleared": {"decision"},
     "rerun.cleared_with_triage": {"decision", "triage"},
+    # *Added 2026-11-01 on purpose (002 T340; owner decision 194A):* the restate's and the carry's.
+    "rerun.restated": {"decision"},
+    "rerun.restated_with_triage": {"decision", "triage"},
+    "rerun.carried": {"decision"},
+    "rerun.carried_with_triage": {"decision", "triage"},
     "resume.without": set(),
     "finding_group_text.one": set(),
     "finding_group_text.many": {"n"},
@@ -221,6 +226,32 @@ def test_the_rerun_line_names_the_decision_and_its_triage() -> None:
         "The check ran again after your answer and its verdict changed, so your Defer was "
         "cleared. Decide again."
     )
+
+
+def test_the_restate_and_the_carry_name_themselves_in_the_cleared_line() -> None:
+    """Owner decision 194A (002 T340): a restated or carried finding whose status or severity
+    changed loses its decision, and the card's line says which cleared it - the answer graded the
+    checks again (58A's restate), or the checks ran again on the saved evidence (015's carry) -
+    with the decision and, when one was recorded, its triage."""
+    rerun = load_words().rerun
+
+    assert rerun.of("Accept", "real but already known", cause="restate") == (
+        "Your answer graded the checks again and this verdict changed, so your Accept (real but "
+        "already known) was cleared. Decide again."
+    )
+    assert rerun.of("Reject", None, cause="restate") == (
+        "Your answer graded the checks again and this verdict changed, so your Reject was "
+        "cleared. Decide again."
+    )
+    assert rerun.of("Defer", "wrong", cause="carry") == (
+        "The checks ran again on the saved evidence and this verdict changed, so your Defer "
+        "(wrong) was not carried over. Decide again."
+    )
+    assert rerun.of("Accept", None, cause="carry") == (
+        "The checks ran again on the saved evidence and this verdict changed, so your Accept "
+        "was not carried over. Decide again."
+    )
+    assert rerun.of("Accept", None) == rerun.of("Accept", None, cause="rerun")
 
 
 def test_the_three_owner_labels_are_decide_fix_verify() -> None:

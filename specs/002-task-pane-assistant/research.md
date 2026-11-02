@@ -6382,7 +6382,10 @@ the decision register now records 160A as done.
   restated verdict; 015's re-run of a waiting review (`_carry_decisions`), which carries a
   decision onto the finding with its subject key and names in `coverage.recheck` what it cannot
   carry; a waiting review's answers, which fold nothing; and the fold itself - which findings
-  fold, onto which, their ids and places, and the re-announced `finding` events.
+  fold, onto which, their ids and places, and the re-announced `finding` events. *Changed
+  2026-11-01 by 194A and the backlog's cycle 3 section (193A and 194A below):* the restate and the
+  carry follow 191A's rule, each fold withdraws its finding's first id, and a key two earlier
+  findings share takes no re-run.
 - **Settled with it**:
   - **The verdict compared is the finding as decided.** Each re-run is compared with the earlier
     finding as it stood when the answer went in, never with an earlier re-run of the same turn:
@@ -6400,7 +6403,8 @@ the decision register now records 160A as done.
     "not yet dispositioned" and counts it "not recorded", and `events.jsonl` keeps the notice. A
     card drawn again from a snapshot - a review chosen again, a reload - is undecided and has no
     line; keeping the line there would need a field on `Finding`, which an older build refuses,
-    or a record elsewhere, and neither is part of 189A.
+    or a record elsewhere, and neither is part of 189A. *Changed 2026-11-01 by 193A (below):* the
+    snapshot works the line out from `events.jsonl`, so a restored card shows it.
   - **The words.** The line lives in the words file, in a block of its own, `rerun`, before
     `labels`: `cleared`, and `cleared_with_triage` for a disposition with a triage. The backend
     fills them - the decision named by `DECISION_NOUNS` ("Accept"), as 015's re-run names a
@@ -6652,7 +6656,8 @@ the decision register now records 160A as done.
     outcome on a pass is counted in neither line. It is the question cycle 3's Tier 1 review left
     for the owner (58A's restate and 015's carry keep a decision whatever the status and severity
     now are); 015's carry now stops a triage at the line, and the restate has no word of its own
-    with which to say it did, so it needs the owner's answer first.
+    with which to say it did, so it needs the owner's answer first. *Answered 2026-11-01 by 194A
+    (below):* a restate that changes the status clears the decision and its triage, and says so.
   - **The handover.** `workstation-handover.md`, item 13, said step 4.1 gives every finding one
     of the four outcomes. Cycle 4 rewrote that very sentence, so it waited for the rebase onto
     cycle 4; after it, the sentence names a pass's one outcome (187A), and so does the
@@ -6713,3 +6718,124 @@ the decision register now records 160A as done.
   answer, `report.md`'s non-`wrong` pass) have no test; the 300 px fact measures a pass's card
   outside the fold a ranking puts it in; and whether a finding is a pass is spelled in six places.
   The review found the unlocked read of `_refuse_a_pass_triage` sound.
+
+### 193A and 194A. The re-run fixes on the card (2026-11-01)
+
+- **Question**: what cycle 3's Tier 1 review left (H-d-008 above, *Review*): the cleared line
+  lived on the live card only; 58A's restate and 015's carry kept a decision whatever the status
+  and severity now were; and from the backlog's cycle 3 section, a later press or Show replaced
+  the line for good, a re-run's first card stayed on the page under its own id (404 on a press),
+  and two earlier findings with one verdict key folded a re-run onto the last.
+- **Decided**: 193A (2026-11-01, 15A of the round after cycle 3's review): the line comes back
+  after a reload, a review switch, a backend restart or a read-only restore, and after a later
+  press or Show on that card, worked out from the run's events with no new field on the finding.
+  194A (16A of the same round): 191A's rule governs 58A's restate and 015's carry too.
+- **Settled with it**:
+  - **Where the line comes from.** Each snapshot names, for each finding still undecided, the
+    last `disposition.cleared` body its run's stream holds, under `cleared`, in session order;
+    the key is added only when there is a line, as `send_in_flight` is, so every other snapshot
+    and the pane fixtures keep their bytes. A stream whose first event names another session - a
+    re-run that failed after its rotation, beside the earlier record - lends none. Options: A,
+    from the stream; B, a field on `Finding`, which 193A rules out; C, a file of its own beside
+    the session, a second record of one fact. A.
+  - **The page.** The finding's entry keeps the line beside the disposition, written through its
+    own card (`entryOf`); a decision drops it; a card drawn again while undecided keeps it, so the
+    live card agrees with a snapshot taken then; and a status a press or Show writes shows it
+    above itself, in the `--judge` hue, as H-g-012 shows the record above a refusal.
+  - **The restate and the carry.** One fold rule for the resumed turn's re-run and the restate.
+    The carry carries a decision only onto a finding with the status and severity decided, and
+    otherwise sends `disposition.cleared` for the finding it would have landed on. Its line names
+    the restate or the carry: two more pairs in the words file's `rerun` block. A cleared decision
+    has a card to say so, so the `coverage.recheck` row does not name it (015 `recheck.md`
+    section 5 names what has no card); 187A's triage rule then reduces to "the finding takes it"
+    (`takes_triage`), since a decision crosses no change of status, and its item for a finding no
+    longer a pass can no longer be reached and goes.
+  - **The stray card.** Options: A, `finding.withdrawn` for the re-run's own id, as the backlog's
+    fix says, with an optional `folded_into` naming the id it folded onto; B, a new event type.
+    A: a reader still drops the id it names, and the one that reads a withdrawal as a verdict
+    taken back - the scorer's withdrawn forbidden hits (014 `scoring.md` 3.3) - and the page's
+    ranking read, which the session's end makes once, pass over a fold's. It is emitted right
+    before the fold's `finding` event, for the resumed turn's folds and the restate's alike.
+  - **Two earlier findings with one key.** The re-run folds onto neither and stays a finding of
+    its own, both decisions standing, as `_restated_targets` takes neither when either could be
+    re-judged (008 T136).
+- **Tests**: T340 and T342 in [tasks.md](tasks.md), Phase 27, each written first; T341 and T343
+  make them green, and T344 closes the records.
+- **Built** (2026-11-01, T341 and T343):
+  - The runner (T341): `_folded`, the one fold rule; `_announce_folds`, each fold's spent id
+    withdrawn (`FOLDED_WITHDRAWAL`, `FOLDED_INTO`) before its `finding` event, then one
+    `disposition.cleared` per decision `_cleared` names, worded for its cause; `_reconcile_reruns`
+    returns its folds with their spent ids and takes no re-run whose key two earlier findings
+    share; `_reconcile_restated` folds by `_folded`; `_carry_decisions` clears instead of carrying
+    across a changed status or severity, and `_carries_triage` and
+    `NOT_CARRIED_TRIAGE_NOT_A_PASS` are gone - which, with T340's pass-to-pass guard, closes the
+    cycle 5 backlog's carry item.
+  - The words (T341): the `rerun` block's `restated` and `carried` pairs; `RerunWords.of(...,
+    cause=)` and `summary.ClearedBy`. The labels block is unchanged, so no pane fixture moved.
+  - The snapshot (T341): `review_snapshot` and `restored_snapshot` take `events`, and
+    `cleared_lines` reads them; the snapshot route replays the chat's stream and `GET /reviews` the
+    folder's. The pane fixtures' generators wrote every fixture byte-identical.
+  - The scorer and the contract (T341): `read_stream` passes over a fold's withdrawal;
+    `finding.withdrawn` gains the optional `folded_into`, and both events' descriptions say who
+    else writes them.
+  - The page (T343): `showCleared` and `keepCleared`, called by `cardStatus` and `cardError`;
+    `placeFinding` keeps the line on a redraw while undecided, `showDisposition` drops it on a
+    decision, `renderResults` reads `cleared`, and `withdrawFinding` reads no ranking for a fold.
+    `app.css`: `.card-cleared`, and the grouped list's two grids one column no wider than the pane
+    (`minmax(0, 1fr)`): measured in its row, as a real turn leaves it, every grouped card was cut
+    off sideways at a docked pane's 300 px, each group 399 px wide in a 261 px column, held open by
+    a row's one-line title, which its own rule says gives way first.
+- **Tests changed on purpose**, none loosened: the three cases on `_reconcile_reruns` itself
+  (`test_runner_provider.py`), whose folds name their spent ids; cycle 5's
+  `test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings` (`test_recheck.py`),
+  since nothing crosses a change of status; the `rerun` block's placeholders
+  (`test_review_words.py`); the helpers that read the regrade's withdrawals, which pass over a
+  fold's (`test_answer_batch_roles.py`, whose contract case now validates every withdrawal,
+  `test_tools_check_threads.py`, `test_benchmark_answers_roles.py`, `test_prompts_record.py`,
+  `test_waiting_answers.py` and `test_scorecard.py`); the ticked-review golden (`success.yml`),
+  written again, its one change the restate's seven fold withdrawals; `ReviewPageTriageTests`'
+  `ReadCard`, which reads the line and its place, and `Snapshot`, which takes `cleared` bodies; and
+  the 002 literal of `test_workstation_test_plan.py`'s specs-README pin (T339, T344).
+- **Tests first**: T340's twenty-three cases failed before T341, each for want of the fold's
+  withdrawal, the restate's or the carry's clear, the ambiguity's rule, the snapshot's events, the
+  scorer's reading, the words or the contract's `folded_into`, while the guard on a pass's earlier
+  triage and the twelve modules' other 778 cases passed. T342's nine facts failed before T343, each
+  for want of the line kept or read, or the fold told apart, while the class's 21 other facts
+  passed.
+- **Left open**, none changed here: the two captured apply fixtures, which have no generator, keep
+  the stream they were captured with, with no fold withdrawal; `_restated_targets`' exact match
+  still takes the last of two earlier findings with one key (only the resumed turn's was asked
+  for); and the benchmark report page's "Withdrawn findings" table lists a fold's withdrawal, with
+  its reason and "no" for a hit.
+- **Gates** (T344; 2026-11-01), on the cycle's final tree, rebased onto main (`1021cde`, cycle 5's
+  merge, whose one extra commit touched the backlog, the handover, the quickstart and this file):
+  - Python 3.12.3 (`uv sync --python 3.12 --all-extras`) and 3.11.16 (`uv run --python 3.11
+    --isolated --all-extras`), the tokenizer required, over the 214 test modules that pin the
+    runner, the restate, the carry, the snapshot, the events, the words, the scorer, the pane
+    fixtures, the seat plan or the specs' counts: 9,310 passed and 2 skipped on each.
+  - `ruff check src tests` clean.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then
+    `dotnet test extractor\SwReview.sln -c Release --no-build`: 10,274 extractor and 4,311
+    add-in tests passed.
+  - The link check over the cycle's changed Markdown: 466 relative links, anchors included, none
+    broken. Every changed file LF in the index.
+  - Not run in this lane: the whole non-live suites, which run before the pull request and in its
+    CI. No SOLIDWORKS process, seat task, or paid or live test ran.
+- **Review** (Tier 1, decision 180A; 2026-11-01): one Opus and one Codex review of the branch, no
+  must-fix. Fixed under T344, each test first: a read-only restore after a re-run that failed
+  before its commit point lost an undecided finding's line, reading only `events.jsonl`, which the
+  failed attempt held or nobody did - it now reads the stream the record's own session wrote,
+  rotated or not (`_own_stream`), while the live snapshot already followed its chat's stream; a
+  resumed turn the provider failed or the engineer stopped never folded its re-runs (older than
+  this cycle), so it now folds them after the turn's end and before the finalization; the cleared
+  line names a pass's `wrong` as the pass's card does, "wrong: a miss", on the re-run, the restate
+  and the carry; and the benchmark report page's "Withdrawn findings" table, left open above,
+  passes over a fold's withdrawal, as every other reader of `finding.withdrawn` already does or
+  counts nothing. Two end-to-end tests the review asked for passed at once, as guards: Check again
+  whose carry clears a decision, read from the new chat's snapshot, and a real part-roles regrade
+  that clears one on a live and a waiting review, `session.json`, `report.md`, the stream and both
+  snapshots agreeing. Tests changed on purpose, none loosened: the two cases on `_reconcile_reruns`
+  whose cleared list names the finding as decided, the carry's pass-to-flagged case (F-009's line
+  names the miss), and the report page's r5 case (no fold in the table). Left in
+  [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 6: `_restated_targets`' exact
+  match, the two captured apply fixtures, and the line a successful Check again drops.

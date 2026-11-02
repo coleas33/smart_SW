@@ -292,7 +292,13 @@ model's opening, and the id maps a page would need to re-key its own work are no
    finding's is a false alarm - and only when the finding it lands on takes it, a pass `wrong`
    alone (`runner._carries_triage`); otherwise the decision is carried without it and the triage is
    named (section 5). The decision itself is carried as before, whatever the two findings'
-   statuses.
+   statuses. *Amended 2026-11-01 (feature 002, owner decision 194A; its FR-031):* the decision is
+   carried only onto a finding whose status and severity are the earlier finding's; onto one with
+   another status or severity nothing is carried, and the carry sends `disposition.cleared` for
+   that finding - the disposition left behind and the words file's `rerun.carried` line - which the
+   re-run's snapshot names for its card (002 owner decision 193A). With the status unchanged a
+   triage stays behind only when the finding does not take it - a pass's recorded before 187A,
+   other than `wrong` (`takes_triage`) - and `runner._carries_triage` is gone.
 3. **outcome lines.** `earlier.drawing_outcomes`, verbatim, in order.
 4. **timing.** The four human inputs of `earlier.timing` (baseline, supervision, verification, false
    alarms) are carried whole; the running time is the re-run's own (`records.md` section 3).
@@ -371,6 +377,11 @@ other is an answer whose drawing read was partial, so its question is asked agai
 behind while carrying its decision (section 4, step 2), one item each way: one whose finding is a
 pass now, and one whose finding is no longer a pass. Each comes in the carry's order, among the
 decisions' items; their words are `words.md` section 4.
+
+*Amended 2026-11-01 (feature 002, owner decision 194A):* a decision whose finding's status or
+severity changed is not named here: it has a card, and the card says so (section 4, step 2). Of
+187A's two items only the first stays, for a pass's triage recorded before 187A; the second, a
+finding no longer a pass, is a changed status, whose decision is not carried at all.
 
 ## 6. Failure
 

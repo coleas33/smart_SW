@@ -6,6 +6,8 @@
 
 *Amended 2026-11-01 by feature 002 (roadmap hole H-d-008; owner decisions 189A and 191A; 002 T327):* step 3's one `_reconcile_reruns` keeps a decided finding's whole disposition when the re-run's status and severity are unchanged and clears it when either changed, and after the folds' `finding` events the runner writes one `disposition.cleared` per disposition cleared; see 002 [data-model.md](../../002-task-pane-assistant/data-model.md) section 3, rule 3.
 
+*Amended 2026-11-01 by feature 002 (owner decision 194A; 002 T341):* `_restate`'s fold below keeps the engineer's disposition (58A) only while the restated finding's status and severity are the ones decided, and otherwise clears it with a `disposition.cleared` of its own; every fold, the restate's and step 3's, first withdraws the id its finding was first announced under (`finding.withdrawn` with `folded_into`); and step 3 folds a re-run whose verdict key two earlier findings share onto neither. See 002 [data-model.md](../../002-task-pane-assistant/data-model.md) section 3, rule 3.
+
 Normative for answering several open evidence requests in one submission (FR-025, SC-005).
 
 ## 1. The runner

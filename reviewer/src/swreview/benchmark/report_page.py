@@ -48,7 +48,7 @@ from urllib.parse import quote
 from swreview import atomic
 from swreview.agent.events import event_stream, replay_events
 from swreview.agent.providers import AgentEvent, ProviderName, TokenUsage, usage_from_body
-from swreview.agent.runner import SESSION_FILE_NAME
+from swreview.agent.runner import FOLDED_INTO, SESSION_FILE_NAME
 from swreview.benchmark import runner
 from swreview.benchmark.answers import AnswerLog, AnswerPoint, read_answer_log
 from swreview.benchmark.compare import distinct_run_dirs, format_count
@@ -1895,7 +1895,13 @@ def _final_state(
         lines.append("</table>")
 
     lines.append("<h3>Withdrawn findings</h3>")
-    withdrawn = [event.body for event in events if event.type == "finding.withdrawn"]
+    # A fold's withdrawal names the id its finding took (`FOLDED_INTO`): its verdict stands there,
+    # so it is no withdrawn finding, as the scorer reads it (014 `scoring.md` 3.3).
+    withdrawn = [
+        event.body
+        for event in events
+        if event.type == "finding.withdrawn" and FOLDED_INTO not in event.body
+    ]
     if not withdrawn:
         lines.append(_note("none"))
         return lines

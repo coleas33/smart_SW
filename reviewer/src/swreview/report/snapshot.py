@@ -15,11 +15,13 @@ three callers:
 - the page fixture `tests/fixtures/pane/generate_pane_fixture.py` writes.
 
 Pure: it reads its arguments (and, through the summary, the words file) and writes
-nothing.
+nothing. The run's events, which the two routes replay from its stream, are one of them: owner
+decision 193A works a cleared decision's line out from them (`cleared`).
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from pydantic_core import to_jsonable_python
@@ -32,10 +34,17 @@ from swreview.report.unexamined import not_examined
 
 if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
     from swreview.agent.events import UsageLedger
+    from swreview.agent.providers import AgentEvent
     from swreview.report.session import ReviewSession
     from swreview.report.summary import SendInput
 
-__all__ = ["WAITING_STATES", "restored_snapshot", "review_snapshot", "root_document"]
+__all__ = [
+    "WAITING_STATES",
+    "cleared_lines",
+    "restored_snapshot",
+    "review_snapshot",
+    "root_document",
+]
 
 WAITING_STATES = frozenset({"not_sent", "send_failed"})
 """The `model_status` states of a record that waits for Send (feature 015)."""
@@ -55,6 +64,7 @@ def review_snapshot(
     chat_state: str | None = None,
     last_seq: int | None = None,
     read_only_reason: str | None = None,
+    events: Iterable[AgentEvent] = (),
 ) -> dict[str, Any]:
     """The body both restore routes answer (data-model section 8), as JSON-ready data.
 
@@ -63,7 +73,9 @@ def review_snapshot(
     with the functions that rendered it live - a finding's with its display title
     (`report/titles.pane_finding`, feature 009 decision 2A), as the ranking's rows are. A
     finding and a request state their source always, a coverage entry only when the model
-    wrote it (feature 013, `contracts/sources.md` section 1).
+    wrote it (feature 013, `contracts/sources.md` section 1). `cleared` is added only when
+    `events`, the run's stream, leaves a line to show (`cleared_lines`), as `send_in_flight`
+    is only when true, so every other snapshot keeps its bytes.
     """
     block = not_examined(package)
     names = component_names(package)
@@ -84,13 +96,50 @@ def review_snapshot(
         "ranking": to_jsonable_python(review_ranking(session, package, usage=usage, send=send)),
         "not_examined": None if block is None else block.model_dump(mode="json"),
     }
+    cleared = cleared_lines(session, events)
+    if cleared:
+        snapshot["cleared"] = cleared
     if send_in_flight:
         snapshot["send_in_flight"] = True
     return snapshot
 
 
+def cleared_lines(session: ReviewSession, events: Iterable[AgentEvent]) -> list[dict[str, Any]]:
+    """For each finding still undecided, in session order, the body of the last
+    `disposition.cleared` the run's stream names it in: the line its card shows again after a
+    reload, a review switch, a backend restart or a read-only restore (owner decision 193A).
+
+    Worked out from the stream, so `Finding` gains no field and an older build still loads the
+    session; a decision recorded since ends the line, as it does on the live card. A stream whose
+    first event does not start this session - a re-run that failed after its rotation leaves its
+    own stream beside the earlier record - lends none. The stream is read to its end either way,
+    so a file a caller replays is closed when this returns.
+    """
+    first: AgentEvent | None = None
+    latest: dict[str, dict[str, Any]] = {}
+    for event in events:
+        first = first or event
+        if event.type == "disposition.cleared":
+            latest[str(event.body.get("finding_id"))] = dict(event.body)
+    if (
+        first is None
+        or first.type != "session.started"
+        or first.body.get("session_id") != str(session.session_id)
+    ):
+        return []
+    return [
+        latest[finding.id]
+        for finding in session.findings
+        if finding.disposition is None and finding.id in latest
+    ]
+
+
 def restored_snapshot(
-    session: ReviewSession, package: EvidencePackage, *, run_id: str
+    session: ReviewSession,
+    package: EvidencePackage,
+    *,
+    run_id: str,
+    events: Iterable[AgentEvent] = (),
 ) -> dict[str, Any]:
     """`GET /reviews/{run_id}`'s body: the record read-only, as restored from its run folder.
 
@@ -99,12 +148,15 @@ def restored_snapshot(
     section 8, owner decisions 68A and 73A). Its reason is the words file's
     `read_only_lead`, a space, and `send.restored_line` dated with `checked_at`'s stored wall
     clock - 009's second sentence is not in it - and its summary carries the `restored` Send
-    block, with no count, from the persisted provider alone.
+    block, with no count, from the persisted provider alone. `events`, the folder's stream,
+    gives `cleared` as `review_snapshot`'s do.
     """
     words = load_words()
     status = session.model_status
     if status is None or status.state not in WAITING_STATES:
-        return review_snapshot(session, package, run_id=run_id, read_only_reason=words.read_only)
+        return review_snapshot(
+            session, package, run_id=run_id, read_only_reason=words.read_only, events=events
+        )
     send: SendInput = {
         "state": "restored",
         "input_tokens": None,
@@ -113,7 +165,9 @@ def restored_snapshot(
     }
     when = status.checked_at.strftime(WHEN_FORMAT)
     reason = f"{words.read_only_lead} {words.send.restored_line.format(when=when)}"
-    return review_snapshot(session, package, run_id=run_id, send=send, read_only_reason=reason)
+    return review_snapshot(
+        session, package, run_id=run_id, send=send, read_only_reason=reason, events=events
+    )
 
 
 def root_document(package: EvidencePackage) -> dict[str, str] | None:

@@ -271,6 +271,21 @@ def test_refd_bodies_are_really_resolved(event_type: str, broken: str) -> None:
         validator().validate(event(event_type, body))
 
 
+def test_a_folds_withdrawal_names_the_id_it_folded_onto() -> None:
+    """002 T340 (the backlog's cycle 3 section): a fold withdraws the id a re-run or restated
+    finding was first announced under, naming the finding id it folded onto, `folded_into`; an
+    older body without it stays valid, and a `folded_into` that is no finding id is refused."""
+    body = {
+        "finding_id": "F-009",
+        "reason": "a second verdict on what F-001 judges, shown as F-001",
+        "folded_into": "F-001",
+    }
+    validator().validate(event("finding.withdrawn", body))
+    validator().validate(event("finding.withdrawn", valid_bodies()["finding.withdrawn"]))
+    with pytest.raises(SchemaValidationError):
+        validator().validate(event("finding.withdrawn", {**body, "folded_into": "ER-001"}))
+
+
 def test_event_rejects_an_unknown_type() -> None:
     with pytest.raises(ValidationError):
         AgentEvent(seq=1, at=AT, type="text.streamed", body={"text": "x"})

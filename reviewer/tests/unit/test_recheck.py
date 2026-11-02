@@ -68,6 +68,7 @@ from swreview.report.session import (
     save_session,
 )
 from swreview.report.snapshot import restored_snapshot
+from tests.support.contracts import contract_validator
 from tests.support.prerun import LIVE_ROWS, live_prerun_package, prerun_package
 from tests.support.questions_package import build_questions_package
 from tests.support.recording_provider import RecordedRequest, RecordingProvider
@@ -84,6 +85,7 @@ app = chat.app
 client = chat.client
 models = chat.models
 provider_control = chat.provider_control
+regrading_checks = chat.regrading_checks
 run_root = chat.run_root
 run_dir = chat.run_dir
 
@@ -1021,6 +1023,91 @@ def test_a_re_run_cut_off_leaves_the_earlier_record_whole(
             assert not (cut / "session.2.json").exists()
 
 
+def _refused(*args: Any) -> Any:
+    raise RuntimeError("FICT the re-run cannot go on")
+
+
+@pytest.mark.parametrize("failure", ["package", "carry", "finalization"])
+def test_a_restore_after_a_failed_re_run_still_shows_the_records_cleared_line(
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    regrading_checks: None,
+    failure: str,
+) -> None:
+    """Cycle 6's Tier 1 review (owner decision 193A): a waiting review's apply restated the pin's
+    finding and cleared its Accept, so its card shows the restate's line; the engineer presses
+    Send, which checks again first (`recheckThenSend`). The re-run moves the record's stream
+    aside (`_rotate_kept`) and fails before its commit point - its package unreadable, before
+    any stream of its own; or its carry or its finalization raising, after it wrote one - so the
+    record stays canonical beside a stream that is not its own, or none. A restarted backend's
+    read-only restore still names the pin's line: the restore reads the stream the record's own
+    session wrote, wherever the re-run moved it."""
+    review = chat.regraded_review(client, run_root / "FICT-recheck-line", ticked=False)
+    folder = review.folder
+    record = (folder / "session.json").read_bytes()
+    package = folder / "package.json"
+    good = package.read_bytes()
+    settings = server_settings(provider_control, models, silent)
+    with pytest.MonkeyPatch.context() as patch:
+        if failure == "package":
+            package.write_text("{FICT", encoding="utf-8")
+        elif failure == "carry":
+            patch.setattr(runner.ReviewRun, "carry_from", _refused)
+        else:
+            patch.setattr(runner.ReviewRun, "close_waiting", _refused)
+        with restarted_app(run_root, settings, raise_server_exceptions=False) as fresh:
+            failed = recheck(fresh, folder)
+        assert failed.status_code == (400 if failure == "package" else 500), failed.text
+    package.write_bytes(good)
+    assert (folder / "session.json").read_bytes() == record
+    own = str(load_session(folder / "session.json").session_id)
+    assert stream_owner(folder / "events.1.jsonl") == own
+    left = folder / "events.jsonl"
+    assert (stream_owner(left) != own) if left.exists() else failure == "package"
+
+    with restarted_app(run_root, settings) as fresh:
+        restored = fresh.get(f"/reviews/{folder.name}")
+
+    assert restored.status_code == 200, restored.text
+    assert restored.json().get("cleared") == [review.line]
+
+
+def test_a_records_own_stream_is_the_canonical_one_or_its_latest_rotated_one(
+    tmp_path: Path,
+) -> None:
+    """Owner decision 193A: the restore reads the stream the record's own session wrote -
+    `events.jsonl` when its `session.started` names that session, otherwise the rotated
+    `events.N.jsonl` that does, the highest `N` of several - and none when no stream names it;
+    a stream of another session, an unreadable one and a name that is no index are passed over."""
+    own, other = UUID(int=1), UUID(int=2)
+
+    def stream(name: str, session_id: UUID | None) -> None:
+        first = (
+            "{FICT-not-an-event"
+            if session_id is None
+            else json.dumps({"type": "session.started", "body": {"session_id": str(session_id)}})
+        )
+        (tmp_path / name).write_text(first + "\n", encoding="utf-8")
+
+    for name, session_id in (
+        ("events.jsonl", other),
+        ("events.1.jsonl", own),
+        ("events.2.jsonl", other),
+        ("events.3.jsonl", own),
+        ("events.4.jsonl", None),
+        ("events.old.jsonl", own),
+    ):
+        stream(name, session_id)
+
+    assert server._own_stream(tmp_path, own) == tmp_path / "events.3.jsonl"
+    assert server._own_stream(tmp_path, UUID(int=3)) is None
+    stream("events.jsonl", own)
+    assert server._own_stream(tmp_path, own) == tmp_path / "events.jsonl"
+
+
 # --- after the commit point (owner decision 93A) --------------------------------------------
 #
 # The atomic replace of `session.json` is the re-run's commit point. Past it the re-run is
@@ -1615,11 +1702,19 @@ def decided_with(finding: Finding, decision: str, triage: str) -> Finding:
 def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare: Any) -> None:
     """Owner decision 187A (002 T332, FR-031): a pass takes no triage but `wrong`, a pass's `wrong`
     is a miss and a flagged finding's a false alarm, so a re-run carries a triage only between two
-    passes or two flagged findings. Across the line it carries the decision without its triage and
-    names the triage in `coverage.recheck`: F-007's `already_known` and F-008's `wrong`, a false
-    alarm, onto F-001 and F-002, passes now; F-009's `wrong`, a pass's miss, onto F-003, flagged
-    now. F-010's miss onto F-004, a pass still, is carried whole, as is F-011's Defer onto F-005,
-    flagged still. Each decision is announced as recorded."""
+    passes or two flagged findings. F-010's miss onto F-004, a pass still, is carried whole, as is
+    F-011's Defer onto F-005, flagged still. Each decision is announced as recorded.
+
+    *Changed 2026-11-01 on purpose (002 T340; owner decision 194A):* a decision crosses no change
+    of status or severity either, so across the line nothing is carried: F-007's Accept and
+    F-008's Reject onto F-001 and F-002, passes now, and F-009's Reject onto F-003, flagged now,
+    are each cleared on the card they would have landed on, the carry's line naming the decision
+    and its triage, in the carry's order; and the `coverage.recheck` row names none of them, since
+    the card says it.
+
+    *Changed 2026-11-01 on purpose (cycle 6's Tier 1 review; owner decision 187A):* F-009 was a
+    pass, so its `wrong` is a miss, and the line words it as the pass's card does, "wrong: a miss"
+    (`labels.pass_triage`), where it said "wrong", a flagged finding's false alarm."""
     run, earlier, events = bare
     run.session.findings[:] = [
         as_pass(coaxial("F-001", "hol:0001")),
@@ -1640,28 +1735,171 @@ def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare:
 
     carried = [finding.disposition for finding in run.session.findings]
     assert [
-        (disposition.decision, disposition.triage)
+        None if disposition is None else (disposition.decision, disposition.triage)
         for disposition in carried
-        if disposition is not None
-    ] == [
-        ("accepted", None),
-        ("rejected", None),
-        ("rejected", None),
-        ("rejected", "wrong"),
-        ("deferred", "new_and_real"),
-    ]
-    assert [body for kind, body in events if kind == "disposition"] == [
-        {"finding_id": finding.id, "disposition": disposition.model_dump(mode="json")}
+    ] == [None, None, None, ("rejected", "wrong"), ("deferred", "new_and_real")]
+    left = [finding.disposition for finding in earlier.findings[:3]]
+    said = [(kind, body) for kind, body in events if kind.startswith("disposition")]
+    assert said == [
+        (
+            "disposition.cleared",
+            {
+                "finding_id": target,
+                "disposition": disposition.model_dump(mode="json"),
+                "reason": carried_line(decision, triage),
+            },
+        )
+        for target, disposition, decision, triage in zip(
+            ("F-001", "F-002", "F-003"),
+            [disposition for disposition in left if disposition is not None],
+            ("Accept", "Reject", "Reject"),
+            ("real but already known", "wrong", "wrong: a miss"),
+            strict=True,
+        )
+    ] + [
+        (
+            "disposition",
+            {"finding_id": finding.id, "disposition": disposition.model_dump(mode="json")},
+        )
         for finding, disposition in zip(run.session.findings, carried, strict=True)
         if disposition is not None
     ]
+    assert recheck_row(run.session) == []
+
+
+def carried_line(decision: str, triage: str | None) -> str:
+    """The words file's line for a decision a re-run did not carry because its verdict changed
+    (owner decision 194A): the decision's noun and, when one was recorded, its triage's word."""
+    triaged = decision if triage is None else f"{decision} ({triage})"
+    return (
+        "The checks ran again on the saved evidence and this verdict changed, so your "
+        f"{triaged} was not carried over. Decide again."
+    )
+
+
+def test_a_carried_decision_whose_severity_changed_is_cleared_and_says_so(bare: Any) -> None:
+    """Owner decision 194A: the re-run's finding has the status decided and another severity, so
+    the Accept and its triage are not carried. The carry sends `disposition.cleared` for that
+    finding - the disposition left behind and the carry's line naming the decision and its triage,
+    valid against the events contract - and the `coverage.recheck` row names nothing, since the
+    card says it. A Defer recorded with no triage onto a finding with the verdict decided is
+    carried whole beside it."""
+    run, earlier, events = bare
+    run.session.findings[:] = [
+        coaxial("F-001", "hol:0001").model_copy(update={"severity": "high"}),
+        coaxial("F-002", "hol:0002").model_copy(update={"severity": "medium"}),
+    ]
+    earlier.findings[:] = [
+        decided_with(
+            coaxial("F-007", "hol:0001").model_copy(update={"severity": "medium"}),
+            "accepted",
+            "already_known",
+        ),
+        coaxial("F-008", "hol:0002", "deferred").model_copy(update={"severity": "medium"}),
+    ]
+    left, kept = (finding.disposition for finding in earlier.findings)
+    assert left is not None and kept is not None
+
+    run.carry_from(earlier)
+
+    assert [finding.disposition for finding in run.session.findings] == [None, kept]
+    said = [(kind, body) for kind, body in events if kind.startswith("disposition")]
+    assert said == [
+        (
+            "disposition.cleared",
+            {
+                "finding_id": "F-001",
+                "disposition": left.model_dump(mode="json"),
+                "reason": carried_line("Accept", "real but already known"),
+            },
+        ),
+        ("disposition", {"finding_id": "F-002", "disposition": kept.model_dump(mode="json")}),
+    ]
+    validator = contract_validator("chat-events.schema.json")
+    for seq, (kind, body) in enumerate(said, start=1):
+        validator.validate(
+            {"seq": seq, "at": "2026-11-01T09:00:00+00:00", "type": kind, "body": body}
+        )
+    assert recheck_row(run.session) == []
+
+
+def test_a_pass_triage_recorded_before_187a_stays_behind_its_carried_decision(bare: Any) -> None:
+    """Owner decisions 187A and 194A: a pass's triage other than `wrong`, recorded before 187A, is
+    one a pass does not take. Onto a pass with the status and severity decided the Accept is
+    carried without it, the triage is named in `coverage.recheck`, and nothing is cleared."""
+    run, earlier, events = bare
+    run.session.findings[:] = [as_pass(coaxial("F-001", "hol:0001"))]
+    earlier.findings[:] = [
+        decided_with(as_pass(coaxial("F-007", "hol:0001")), "accepted", "already_known")
+    ]
+
+    run.carry_from(earlier)
+
+    carried = run.session.findings[0].disposition
+    assert carried is not None and (carried.decision, carried.triage) == ("accepted", None)
+    assert [kind for kind, _ in events if kind.startswith("disposition")] == ["disposition"]
     assert recheck_row(run.session) == [
         "Not carried from the earlier check run: "
-        "the triage of F-007 (its finding is a pass, whose one triage, wrong, is a miss); "
-        "the triage of F-008 (its finding is a pass, whose one triage, wrong, is a miss); "
-        "the triage of F-009 (its finding is no longer a pass, and a pass's wrong is a miss, "
-        "not a false alarm)."
+        "the triage of F-007 (its finding is a pass, whose one triage, wrong, is a miss)."
     ]
+
+
+def test_check_again_whose_carry_clears_a_decision_shows_its_line_in_the_new_chats_snapshot(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+) -> None:
+    """Cycle 6's Tier 1 review (owner decision 194A), through the routes: the carry's line reaches
+    the page only through the re-run chat's `/snapshot` (`app.js`, `showRechecked`), since that
+    chat is registered after `carry_from` and its live event goes to no subscriber. A flagged
+    finding of a waiting review is accepted as `already_known`; its severity on disk is then one
+    the checks do not give it again - as a build that grades it otherwise would leave it - so
+    Check again does not carry the Accept. The new chat's snapshot names the carry's line on the
+    finding the Accept would have landed on, and so does a restarted backend's restore of the
+    committed re-run."""
+    waiting = waiting_answers.waiting_review(app, client, run_root / "FICT-recheck-carry-line")
+    folder = waiting.fixture.folder
+    flagged = next(
+        finding
+        for finding in load_session(folder / "session.json").findings
+        if finding.status != "checked_within_scope"
+    )
+    decided = client.post(
+        f"/sessions/{waiting.chat_id}/findings/{flagged.id}/disposition",
+        json={"decision": "accepted", "note": "FICT as modelled", "triage": "already_known"},
+    )
+    assert decided.status_code == 200, decided.text
+    record = load_session(folder / "session.json")
+    regraded = "high" if flagged.severity != "high" else "low"
+    record.findings[:] = [
+        finding.model_copy(update={"severity": regraded}) if finding.id == flagged.id else finding
+        for finding in record.findings
+    ]
+    save_session(record, folder / "session.json")
+    settings = server_settings(provider_control, models, silent)
+    with restarted_app(run_root, settings) as fresh:
+        rechecked = recheck(fresh, folder)
+        assert rechecked.status_code == 201, rechecked.text
+        [target] = [
+            finding.id
+            for finding in load_session(folder / "session.json").findings
+            if finding_subject_key(finding) == finding_subject_key(flagged)
+        ]
+        line = {
+            "finding_id": target,
+            "disposition": decided.json()["disposition"],
+            "reason": carried_line("Accept", "real but already known"),
+        }
+        snapshot = fresh.get(f"/sessions/{rechecked.json()['chat_id']}/snapshot")
+        assert snapshot.status_code == 200, snapshot.text
+        assert snapshot.json().get("cleared") == [line]
+    with restarted_app(run_root, settings) as again:
+        restored = again.get(f"/reviews/{folder.name}")
+    assert restored.status_code == 200, restored.text
+    assert restored.json().get("cleared") == [line]
 
 
 def test_two_earlier_decisions_meeting_one_finding_carry_neither_and_name_each(

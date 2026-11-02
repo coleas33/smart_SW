@@ -100,10 +100,12 @@ def test_a_scripted_all_bought_withdraws_the_pin_s_findings_before_the_resumed_t
     kinds = [event.type for event in driven.events]
     answered = kinds.index("evidence.answered")
     resumed_usage = kinds.index("usage", answered)
+    # *Changed 2026-11-01 on purpose (002 T340):* a fold's withdrawal of a restated finding's own
+    # id (`folded_into`) is not a finding the answer withdrew; its verdict stands.
     withdrawn = [
         (index, event.body["finding_id"])
         for index, event in enumerate(driven.events)
-        if event.type == "finding.withdrawn"
+        if event.type == "finding.withdrawn" and "folded_into" not in event.body
     ]
     assert sorted(finding_id for _, finding_id in withdrawn) == sorted(on_the_pin)
     assert all(answered < index < resumed_usage for index, _ in withdrawn)

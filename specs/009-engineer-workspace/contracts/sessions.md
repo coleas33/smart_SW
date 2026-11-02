@@ -42,6 +42,12 @@ request failure returns it to waiting. The flag clears before that `usage` or
 `error` event is emitted. The key is omitted otherwise, including idle waiting
 and ticked chats, disk restoration and `review_snapshot` at its default.
 
+*Amended 2026-11-01 (feature 002, owner decision 193A):* both this body and section 4's carry
+`cleared` when a decision a re-run, a restate or a carry cleared still stands undecided: the last
+`disposition.cleared` body the chat's stream (here) or the run folder's `events.jsonl` (section 4)
+names each such finding in ([data-model.md](../data-model.md) section 8). The page shows each line on
+its card, as the live event does.
+
 ## 4. The run folder
 
 `GET /reviews/{run_id}` → `200` with `review_snapshot(load_session(...), load_package(...).package,

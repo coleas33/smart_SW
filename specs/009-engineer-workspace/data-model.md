@@ -40,7 +40,7 @@ Loaded once per process by `summary.load_words() -> Words` (`functools.cache`, l
 | `goal_reasons` | map `unresolved \| skipped \| failed \| out_of_scope \| no_check` → str | "evidence missing", "skipped", "a check failed", "out of scope", "no check ran" |
 | `goals` | list of `{id, title, items: list[str], prefixes: list[str]}` | the eight goals of research R2.4, in the owner's order (*amended 2026-09-26, feature 013 T046:* ten goals with `standards` split from `hygiene`, each with `group`, a `finding_groups` id) |
 | `separator`, `finding_groups`, `finding_group_other`, `finding_group_checked`, `finding_group_text` | see feature 013 `contracts/grouped-list.md` section 2 | *added 2026-09-26 (feature 013 T046):* the seven groups `{id, title, open}` in their fixed order, "Other checks", the "Checked, no issue" fold with its exception tail, and a group's and a row's words; `separator` " · " joins two parts of one line |
-| `rerun` | `{cleared, cleared_with_triage}` | *added 2026-11-01 (feature 002, owner decisions 189A and 191A; 002 T327):* "The check ran again after your answer and its verdict changed, so your {decision} was cleared. Decide again.", and the same with "your {decision} ({triage})" for a disposition that holds a triage: the line a finding's card shows when a check run again after an answer changed its status or severity and so cleared its disposition. The backend fills `{decision}` with the decision's noun (`runner.DECISION_NOUNS`) and `{triage}` with the triage's word in `labels.triage` (`Words.rerun.of`), and the page prints the line as sent |
+| `rerun` | `{cleared, cleared_with_triage}` | *added 2026-11-01 (feature 002, owner decisions 189A and 191A; 002 T327):* "The check ran again after your answer and its verdict changed, so your {decision} was cleared. Decide again.", and the same with "your {decision} ({triage})" for a disposition that holds a triage: the line a finding's card shows when a check run again after an answer changed its status or severity and so cleared its disposition. The backend fills `{decision}` with the decision's noun (`runner.DECISION_NOUNS`) and `{triage}` with the triage's word in `labels.triage` (`Words.rerun.of`), and the page prints the line as sent. *Amended 2026-11-01 (feature 002, owner decision 194A; 002 T341):* `restated` and `restated_with_triage` ("Your answer graded the checks again and this verdict changed, so your {decision} was cleared. Decide again.") for a restate's clear, and `carried` and `carried_with_triage` ("The checks ran again on the saved evidence and this verdict changed, so your {decision} was not carried over. Decide again.") for a re-run's carry; `Words.rerun.of` takes the `cause` |
 | `labels` | see section 7 | the card vocabulary served by `GET /labels` |
 
 Rules a test asserts: every template's placeholders are exactly the ones the code fills; every goal
@@ -220,6 +220,12 @@ read_only_reason=None) -> dict`, the body of `GET /sessions/{chat_id}/snapshot` 
 | `coverage` | list[`{bucket, item}`] | every coverage item, bucket by bucket in the order `checked, skipped, unresolved, failed, out_of_scope`, the shape the `coverage` event carries |
 | `ranking` | `ReviewRanking` JSON | `rank(session)` plus its summary |
 | `not_examined` | NotExamined JSON \| None | `unexamined.not_examined(package)` |
+
+*Amended 2026-11-01 (feature 002, owner decision 193A):* `review_snapshot` takes `events`, the run's
+stream (`replay_events` of the chat's `events.jsonl`, or of the run folder's for `GET /reviews`),
+and adds `cleared`, a list of `disposition.cleared` bodies, only when there is one to show: for each
+finding still undecided, in session order, the last such body the stream names it in. A stream whose
+first event does not start this session lends none. Every other snapshot keeps its keys and bytes.
 
 The pane fixture `extractor/SwReview.AddIn.Tests/Fixtures/review-big-assembly.json` is this object
 for feature 008's `big-assembly` fixture, plus `labels` (section 7) so the page tests need no route.

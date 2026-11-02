@@ -31,6 +31,7 @@ held open at a gate, which is how a test observes a *running* turn at all.
 
 from __future__ import annotations
 
+import functools
 import json
 import shutil
 import threading
@@ -47,8 +48,14 @@ import pytest
 from starlette.requests import Request
 from starlette.testclient import TestClient
 
-from swreview.agent.providers import AgentEvent, AgentProvider, ProviderName
-from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.agent import runner
+from swreview.agent.providers import AgentEvent, AgentProvider, ProviderError, ProviderName
+from swreview.agent.providers.fake import (
+    FakeProvider,
+    ScriptedRound,
+    ScriptedToolCall,
+    ScriptedTurn,
+)
 from swreview.agent.runner import PROFILE_CHECK
 from swreview.agent.settings import (
     MASK,
@@ -62,8 +69,8 @@ from swreview.chat.sessions import ChatSession, ChatState
 from swreview.checks.rms.run import is_check_folder
 from swreview.checks.rules.run import session_replaced
 from swreview.checks.standards.run import run_standards_check
-from swreview.findings import MODEL_FINDING_CHECK, TRIAGES
-from swreview.ir.loader import save_package
+from swreview.findings import MODEL_FINDING_CHECK, TRIAGES, Disposition
+from swreview.ir.loader import load_package, save_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import DIGEST_HEADER, RMS_PRERUN_TOOLS
 from swreview.remodel.artifacts import GradedRun, grade_remodel_run, write_package
@@ -74,13 +81,17 @@ from swreview.report.attention_record import (
     write_attention_record,
 )
 from swreview.report.session import Timing, load_session, save_session
+from swreview.tools.registry import ToolRegistry, session_tools
+from tests.support import roles_review
 from tests.support.attention import CHECK_FOLDER as ATTENTION_CHECK_FOLDER
 from tests.support.contracts import contract_path, contract_validator
 from tests.support.features import feature, folder
 from tests.support.packages import build_package
 from tests.support.remodel import remodel_package
 from tests.support.replay import folder_hashes
+from tests.unit import test_answer_batch_roles as batch_roles
 from tests.unit import test_chat_standards_routes as standards
+from tests.unit.test_runner_provider import standing
 
 ORIGIN = "https://swreview.invalid"
 OTHER_ORIGIN = "https://evil.example"
@@ -3144,6 +3155,444 @@ def test_the_saved_session_and_report_agree_with_the_fold(
         line.format(others=len(saved) - 1) for line in by_triage
     ]
     assert types_of(run_dir).count("disposition.cleared") == (0 if kept else 1)
+
+
+def test_the_live_and_the_restored_snapshot_carry_a_cleared_line_until_a_decision(
+    client: TestClient,
+    run_root: Path,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    models: Models,
+) -> None:
+    """Owner decision 193A (002 T340), through the routes: a re-run after an answer cleared the
+    drawing finding's Accept. The live snapshot - what a reload or a review switch reads - and the
+    run folder's, read by a backend started again on the same run root - what a restart and a
+    read-only restore read - both name its line, the `disposition.cleared` body the stream holds.
+    Once the engineer decides again, neither does."""
+    provider_control.script = [
+        turn(
+            "I need the thread depth.",
+            call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS),
+            call("request_evidence", **EVIDENCE_ARGUMENTS),
+        ),
+        turn(
+            "Ran it again.",
+            call("record_drawing_finding", **{**DRAWING_FINDING_ARGUMENTS, "status": "unresolved"}),
+        ),
+    ]
+    chat_id = start_session(client, run_dir)["chat_id"]
+    assert settle(client, chat_id) == ChatState.WAITING_ENGINEER.value
+    [drawing] = [
+        finding.id
+        for finding in load_session(run_dir / "session.json").findings
+        if finding.check == MODEL_FINDING_CHECK
+    ]
+    decided = client.post(
+        f"/sessions/{chat_id}/findings/{drawing}/disposition",
+        json={"decision": "accepted", "note": "FICT intended", "triage": "already_known"},
+    )
+    assert decided.status_code == 200, decided.text
+    answered = client.post(f"/sessions/{chat_id}/evidence/ER-001", json={"answer": "12 mm."})
+    assert answered.status_code == 202, answered.text
+    assert settle(client, chat_id) == ChatState.ENDED.value
+    line = [
+        {
+            "finding_id": drawing,
+            "disposition": decided.json()["disposition"],
+            "reason": (
+                "The check ran again after your answer and its verdict changed, so your Accept "
+                "(real but already known) was cleared. Decide again."
+            ),
+        }
+    ]
+
+    def restored() -> dict[str, Any]:
+        """The run folder's snapshot, read by a backend started again on the same run root."""
+        again = create_app(
+            token=TOKEN,
+            allow_origin=ORIGIN,
+            run_root=run_root,
+            provider_factory=provider_control.factory,
+            list_models=models,
+        )
+        with TestClient(
+            again, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}
+        ) as fresh:
+            assert fresh.get(f"/sessions/{chat_id}/snapshot").status_code == 404
+            response = fresh.get(f"/reviews/{run_dir.name}")
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    assert client.get(f"/sessions/{chat_id}/snapshot").json().get("cleared") == line
+    assert restored().get("cleared") == line
+
+    again = client.post(
+        f"/sessions/{chat_id}/findings/{drawing}/disposition",
+        json={"decision": "rejected", "note": "FICT decided again"},
+    )
+
+    assert again.status_code == 200, again.text
+    assert "cleared" not in client.get(f"/sessions/{chat_id}/snapshot").json()
+    assert "cleared" not in restored()
+
+
+# --- a resumed turn that fails or is stopped still folds (cycle 6's Tier 1 review) ----------------
+
+RERUN_VERDICTS = pytest.mark.parametrize(
+    ("rerun_status", "kept"), [("suspected", True), ("unresolved", False)], ids=["kept", "cleared"]
+)
+"""The re-run's status: the one decided (`suspected`, medium), which keeps the decision, or
+another (`unresolved`, low), which clears it (owner decisions 189A and 191A)."""
+
+
+class PausedAfterACall(FakeProvider):
+    """A scripted adapter that pauses its `turn`-th turn right after the turn's first tool call:
+    it sets `paused` and waits for `resumed`, so a test can press Stop between two calls."""
+
+    def __init__(
+        self, *, turn: int, paused: threading.Event, resumed: threading.Event, **kwargs: Any
+    ) -> None:
+        super().__init__(**kwargs)
+        self._pause_in = turn
+        self._paused = paused
+        self._resumed = resumed
+
+    def _call(self, request: Any, tools: Any, on_event: Any) -> Any:
+        result = super()._call(request, tools, on_event)
+        if self._turn_index == self._pause_in and not self._paused.is_set():
+            self._paused.set()
+            if not self._resumed.wait(TIMEOUT_S):  # pragma: no cover - a hung test, not a path
+                raise AssertionError("the paused turn was never resumed")
+        return result
+
+
+def accepted_then_answered(client: TestClient, run_dir: Path) -> tuple[str, str, dict[str, Any]]:
+    """Cycle 3's review through the routes: the drawing finding accepted as `already_known` while
+    its question is open, then the question answered, resuming the turn. Returns the chat, the
+    drawing finding's id and the disposition recorded."""
+    chat_id = start_session(client, run_dir)["chat_id"]
+    assert settle(client, chat_id) == ChatState.WAITING_ENGINEER.value
+    [drawing] = [
+        finding.id
+        for finding in load_session(run_dir / "session.json").findings
+        if finding.check == MODEL_FINDING_CHECK
+    ]
+    decided = client.post(
+        f"/sessions/{chat_id}/findings/{drawing}/disposition",
+        json={"decision": "accepted", "note": "FICT intended", "triage": "already_known"},
+    )
+    assert decided.status_code == 200, decided.text
+    answered = client.post(f"/sessions/{chat_id}/evidence/ER-001", json={"answer": "12 mm."})
+    assert answered.status_code == 202, answered.text
+    return chat_id, drawing, decided.json()["disposition"]
+
+
+def assert_the_fold_is_what_was_saved(
+    run_dir: Path,
+    drawing: str,
+    rerun_status: str,
+    decided: dict[str, Any],
+    *,
+    kept: bool,
+    turn_ended: str,
+) -> None:
+    """The turn ended for `turn_ended`, as before, and `session.json`, the `report.md` the server
+    rendered and the stream agree with the fold: one finding of the check, under the decided id,
+    its decision kept whole or cleared; the re-run's own id withdrawn with `folded_into`, the
+    finding announced again under the decided id, and a `disposition.cleared` only when it was
+    cleared - each written after the turn's end, so no reader of the stream files it under a call
+    the Stop cut short, and before the finalization's `session.ended`."""
+    events = events_of(run_dir)
+    assert [event["body"]["reason"] for event in events if event["type"] == "turn.ended"][-1] == (
+        turn_ended
+    )
+    saved = load_session(run_dir / "session.json")
+    assert [
+        (finding.id, finding.status, finding.disposition)
+        for finding in saved.findings
+        if finding.check == MODEL_FINDING_CHECK
+    ] == [(drawing, rerun_status, Disposition.model_validate(decided) if kept else None)]
+    folded = [
+        index
+        for index, event in enumerate(events)
+        if event["type"] == "finding.withdrawn" and event["body"].get("folded_into") == drawing
+    ]
+    cleared = [
+        (index, event["body"])
+        for index, event in enumerate(events)
+        if event["type"] == "disposition.cleared"
+    ]
+    assert len(folded) == 1
+    assert [body for _, body in cleared] == (
+        []
+        if kept
+        else [
+            {
+                "finding_id": drawing,
+                "disposition": decided,
+                "reason": (
+                    "The check ran again after your answer and its verdict changed, so your "
+                    "Accept (real but already known) was cleared. Decide again."
+                ),
+            }
+        ]
+    )
+    announced = folded[0] + 1
+    assert (events[announced]["type"], events[announced]["body"]["id"]) == ("finding", drawing)
+    kinds = [event["type"] for event in events]
+    turn_end = max(index for index, kind in enumerate(kinds) if kind == "turn.ended")
+    session_end = max(index for index, kind in enumerate(kinds) if kind == "session.ended")
+    folding = [*folded, announced, *(index for index, _ in cleared)]
+    assert all(turn_end < index < session_end for index in folding)
+    assert standing(events) == {finding.id for finding in saved.findings}
+    spent = events[folded[0]]["body"]["finding_id"]
+    lines = (run_dir / "report.md").read_text(encoding="utf-8").splitlines()
+    assert not any(line.startswith(f"#### {spent}:") for line in lines)
+    expected = ACCEPTED_LINES if kept else UNDECIDED_LINES
+    assert reported_disposition(lines, drawing, len(expected)) == expected
+
+
+ACCEPTED_LINES = ["- Disposition:", "  - decision: accepted", "  - triage: real but already known"]
+"""`report.md`'s first lines for an Accept recorded as `already_known`."""
+
+UNDECIDED_LINES = ["- Disposition: not yet dispositioned"]
+"""`report.md`'s line for a finding with no decision."""
+
+
+def reported_disposition(lines: list[str], finding_id: str, count: int) -> list[str]:
+    """The first `count` lines of the disposition `report.md` prints under `finding_id`'s
+    heading, from its "- Disposition:" line."""
+    heading = lines.index(next(line for line in lines if line.startswith(f"#### {finding_id}:")))
+    start = next(
+        index for index in range(heading, len(lines)) if lines[index].startswith("- Disposition:")
+    )
+    return lines[start : start + count]
+
+
+@RERUN_VERDICTS
+def test_a_resumed_turn_the_provider_fails_still_folds_its_rerun(
+    client: TestClient,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    rerun_status: str,
+    kept: bool,
+) -> None:
+    """Cycle 6's Tier 1 review: the model runs the check again in the resumed turn, and then the
+    provider fails. The turn is reported failed and the session finalized, as any failed turn's
+    (FR-008), and the re-run still folds onto the decided finding before that finalization, so
+    `session.json`, `report.md` and the stream hold one verdict for the check: no second card
+    beside the decided one, and a decision kept or cleared as an ended turn's fold would."""
+    provider_control.script = [
+        turn(
+            "I need the thread depth.",
+            call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS),
+            call("request_evidence", **EVIDENCE_ARGUMENTS),
+        ),
+        ScriptedTurn(
+            text="",
+            rounds=(
+                ScriptedRound(
+                    calls=(
+                        call(
+                            "record_drawing_finding",
+                            **{**DRAWING_FINDING_ARGUMENTS, "status": rerun_status},
+                        ),
+                    )
+                ),
+            ),
+            fails=ProviderError("FICT the provider connection dropped"),
+        ),
+    ]
+    chat_id, drawing, decided = accepted_then_answered(client, run_dir)
+
+    assert settle(client, chat_id) == ChatState.FAILED.value
+    assert_the_fold_is_what_was_saved(
+        run_dir, drawing, rerun_status, decided, kept=kept, turn_ended="error"
+    )
+
+
+@RERUN_VERDICTS
+def test_a_resumed_turn_stopped_after_its_rerun_still_folds_it(
+    run_root: Path, run_dir: Path, models: Models, rerun_status: str, kept: bool
+) -> None:
+    """Cycle 6's Tier 1 review: the model runs the check again in the resumed turn, and the
+    engineer presses Stop before its next call. The turn ends `stopped` and the session with it
+    (FR-030), and the re-run still folds onto the decided finding before that finalization."""
+    paused, resumed = threading.Event(), threading.Event()
+    script = [
+        turn(
+            "I need the thread depth.",
+            call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS),
+            call("request_evidence", **EVIDENCE_ARGUMENTS),
+        ),
+        turn(
+            "Never reached.",
+            call("record_drawing_finding", **{**DRAWING_FINDING_ARGUMENTS, "status": rerun_status}),
+            call("get_package_summary"),
+        ),
+    ]
+    app = create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=lambda settings: PausedAfterACall(
+            turn=2, paused=paused, resumed=resumed, script=script, model=settings.model
+        ),
+        list_models=models,
+    )
+    with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as client:
+        chat_id, drawing, decided = accepted_then_answered(client, run_dir)
+        wait_until(paused.is_set, "the resumed turn to run its check again")
+        try:
+            stopped = client.post(f"/sessions/{chat_id}/stop")
+        finally:
+            resumed.set()
+
+        assert stopped.status_code == 202, stopped.text
+        assert settle(client, chat_id) == ChatState.ENDED.value
+    assert_the_fold_is_what_was_saved(
+        run_dir, drawing, rerun_status, decided, kept=kept, turn_ended="stopped"
+    )
+
+
+# --- a real regrade that clears a decision, end to end (cycle 6's Tier 1 review) ------------------
+
+RESTATED_LINE = (
+    "Your answer graded the checks again and this verdict changed, so your Accept (real but "
+    "already known) was cleared. Decide again."
+)
+"""The words file's line for an Accept recorded as `already_known` that a restate cleared."""
+
+
+@pytest.fixture
+def regrading_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The review's checks are `test_answer_batch_roles`' scripted stand-ins, which read the roles
+    the runner attached: each finds one thing on every graded part, low while the part may be
+    bought and medium once it is custom. So the part-roles answer "None bought", a real regrade,
+    restates the unclear pin's findings with another severity, and the custom plate's with
+    theirs."""
+    functions = (
+        *(batch_roles.scripted_check(name, custom="medium") for name in batch_roles.SCRIPTED_TOOLS),
+        *session_tools(),
+    )
+    monkeypatch.setattr(runner, "ToolRegistry", functools.partial(ToolRegistry, functions))
+
+
+@dataclass(frozen=True)
+class Regraded:
+    """A review whose part-roles answer cleared the pin's Accept: its chat and folder, the pin's
+    and the plate's hygiene findings, and the disposition recorded on each before the answer."""
+
+    chat_id: str
+    folder: Path
+    pin: str
+    plate: str
+    decided: dict[str, dict[str, Any]]
+
+    @property
+    def line(self) -> dict[str, Any]:
+        """The `disposition.cleared` body the restate leaves on the pin's card."""
+        disposition = self.decided[self.pin]
+        return {"finding_id": self.pin, "disposition": disposition, "reason": RESTATED_LINE}
+
+
+def regraded_review(client: TestClient, review_dir: Path, *, ticked: bool) -> Regraded:
+    """`tests/support/roles_review.py`'s package reviewed live (`ticked`: its opening turn played)
+    or checks only, waiting for Send; the pin's and the plate's hygiene findings accepted as
+    `already_known`; then the part-roles question answered "None bought", which restates both."""
+    roles_review.write_package(review_dir)
+    profile = roles_review.write_profile(review_dir)
+    chat_id = start_session(
+        client, review_dir, standards_profile=str(profile), send_when_checked=ticked
+    )["chat_id"]
+    asked = ChatState.WAITING_ENGINEER if ticked else ChatState.AWAITING_SEND
+    assert settle(client, chat_id) == asked.value
+    components = load_package(review_dir).package.components
+    document_of = {item.id: item.document_id for item in components}
+    session = load_session(review_dir / "session.json")
+    hygiene = {
+        document_of[finding.component_ids[0]]: finding.id
+        for finding in session.findings
+        if finding.check == "check_hygiene.scripted"
+    }
+    pin, plate = hygiene[roles_review.PIN_ID], hygiene[roles_review.PLATE_ID]
+    decided: dict[str, dict[str, Any]] = {}
+    for finding_id in (pin, plate):
+        response = client.post(
+            f"/sessions/{chat_id}/findings/{finding_id}/disposition",
+            json={"decision": "accepted", "note": "FICT as modelled", "triage": "already_known"},
+        )
+        assert response.status_code == 200, response.text
+        decided[finding_id] = response.json()["disposition"]
+    [question] = [
+        request.id
+        for request in session.evidence_requests
+        if roles_review.PIN_ID in request.entity_ids
+    ]
+    answered = client.post(
+        f"/sessions/{chat_id}/evidence",
+        json={"answers": [{"request_id": question, "answer": "None bought"}]},
+    )
+    assert answered.status_code == 202, answered.text
+    settled = ChatState.ENDED if ticked else ChatState.AWAITING_SEND
+    assert settle(client, chat_id) == settled.value
+    return Regraded(chat_id, review_dir, pin, plate, decided)
+
+
+def restored_snapshot_of(
+    run_root: Path, provider_control: ProviderControl, models: Models, run_id: str
+) -> dict[str, Any]:
+    """`GET /reviews/{run_id}` from a backend started again on the same run root: what a restart
+    and a read-only restore show."""
+    again = create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=provider_control.factory,
+        list_models=models,
+    )
+    with TestClient(again, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as fresh:
+        response = fresh.get(f"/reviews/{run_id}")
+    assert response.status_code == 200, response.text
+    return dict(response.json())
+
+
+@pytest.mark.parametrize("ticked", [True, False], ids=["live", "waiting"])
+def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
+    client: TestClient,
+    run_root: Path,
+    provider_control: ProviderControl,
+    models: Models,
+    regrading_checks: None,
+    ticked: bool,
+) -> None:
+    """Owner decision 194A, through the routes and a real regrade, on a live review and on a
+    waiting one: the part-roles answer "None bought" restates the pin's hygiene finding medium
+    where it was accepted low, so its Accept and triage are cleared, and the plate's, restated as
+    decided, keeps them. `session.json`, the `report.md` the server rendered, the stream, the live
+    snapshot and a restarted backend's read-only restore all agree: the pin undecided with the
+    restate's line, the plate's Accept standing, and no card left under a restated finding's own
+    id. Cycle 3's `test_the_saved_session_and_report_agree_with_the_fold` is its model."""
+    review = regraded_review(client, run_root / "FICT-regrade", ticked=ticked)
+
+    findings = load_session(review.folder / "session.json").findings
+    saved = {finding.id: finding for finding in findings}
+    pin, plate = saved[review.pin], saved[review.plate]
+    assert (pin.severity, pin.disposition) == ("medium", None)
+    assert (plate.severity, plate.disposition) == (
+        "medium",
+        Disposition.model_validate(review.decided[review.plate]),
+    )
+    lines = (review.folder / "report.md").read_text(encoding="utf-8").splitlines()
+    assert reported_disposition(lines, review.pin, 1) == UNDECIDED_LINES
+    assert reported_disposition(lines, review.plate, 3) == ACCEPTED_LINES
+    events = events_of(review.folder)
+    cleared = [event["body"] for event in events if event["type"] == "disposition.cleared"]
+    assert cleared == [review.line]
+    assert standing(events) == set(saved)
+    assert client.get(f"/sessions/{review.chat_id}/snapshot").json().get("cleared") == [review.line]
+    restored = restored_snapshot_of(run_root, provider_control, models, review.folder.name)
+    assert restored.get("cleared") == [review.line]
 
 
 def test_the_report_is_served_as_markdown(
