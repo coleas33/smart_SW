@@ -6865,7 +6865,9 @@ the decision register now records 160A as done.
     triage, as `report.md` prints its lines, so every payload, report and fixture without one
     keeps its bytes. A finding a turn adds is counted when the turn's end reads the summary. A
     snapshot's `cleared` lines keep the tally they were written with; the page reads a
-    snapshot's from its summary alone.
+    snapshot's from its summary alone. *Changed 2026-11-02 by cycle 7's Tier 2 review (below):*
+    a snapshot's `cleared` lines leave the tally out (`cleared_lines`), so a snapshot's one tally
+    is its summary's.
   - **The words.** The backend's: the words file's new `triage_tally` group, which takes
     `report.md`'s three literals, and `labels.triage`. The page prints the two lines as sent, as
     it prints every summary line, so with no labels they read the same (009 FR-030), and a
@@ -6874,6 +6876,14 @@ the decision register now records 160A as done.
     `contracts/pane.md` section 3), shown alone while no summary has arrived; rewritten by each
     carrier and cleared with the review; a decision's reply writes it only while its card is the
     one the review on screen holds (`entryOf`, H-g-012). It counts, and offers no control.
+  - **When a notice counts** (2026-11-02, after cycle 7's adversarial verification; no code
+    changed). Every notice's tally is the count when that notice is sent: after a restate
+    settles, after a fold, or after each decision Check again's carry carries or clears. So the
+    carry (`_carry_decisions`) sends each `disposition` and `disposition.cleared` with the tally
+    as it stands then, a decision carried later is not in it, and its last notice carries what
+    the carry leaves. No view shows those partial counts: the page shows a re-run from its
+    snapshot and opens the stream after it (`showRechecked`), a replay ignores the disposition
+    events, and a snapshot's `cleared` lines drop the key (`cleared_lines`).
 - **Tests**: T346 and T348 in [tasks.md](tasks.md), Phase 28, each written first; T347 and T349
   make them green, and T350 closes the records.
 - **Built** (2026-11-01, T347 and T349): `summary.TriageTally` and `triage_tally`, moved from
@@ -6910,6 +6920,8 @@ the decision register now records 160A as done.
   cycle's nine changed Markdown files, 474 relative links, anchors included, none broken; every
   changed file LF in the index. Not run in this lane: the whole non-live suites, which run before
   the pull request and in its CI. No SOLIDWORKS process, seat task, or paid or live test ran.
+  *Changed 2026-11-02:* that tree came before the rebase onto cycle 6's fixed head and the Tier 2
+  review's fixes; the final tree's gates are below ("Gates on the final tree").
 - **Review** (Tier 2, decision 180A; 2026-11-01): one Opus review, no must-fix. Fixed here, each
   test first: a restate's cleared notice counted a finding the restate withdrew just after it - a
   Reject as `wrong` on a part the answer had made bought - so the page showed that count until the
@@ -6930,3 +6942,22 @@ the decision register now records 160A as done.
   `test_recheck.py`, red with it, pass with the snapshot's fix. Left in
   [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 7: a finding a resumed turn adds
   is counted only when the turn ends and the summary is read again (*Left open* above).
+- **Gates on the final tree** (2026-11-02): the branch rebased onto cycle 6's fixed head
+  (`2766bbc8`, merged to main as `9e39e403`), with the Tier 2 review's fixes and what cycle 7's
+  adversarial verification (no must-fix) asked for: three guard tests, each passing at once and
+  proved by a mutant of the line it relies on - the tally of a stopped or failed turn's fold
+  beside another finding's triage, and of the carry's cleared notice after a carried triage,
+  and no tally on a restate's notice once it withdrew the only triage, as the page's
+  `TheTallyFollowsTheStreamsDispositionsAndClearedNotices` already expects - with the two fold
+  tests' `RERUN_VERDICTS` in `test_chat_server.py` changed on purpose for their third case, none
+  loosened; the rule *When a notice counts* above; and a page race left in
+  [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 7.
+  - The whole non-live suite, the tokenizer required: 18,829 passed and 5 skipped on Python
+    3.12.3, and the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`).
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed.
+  - C#: no C# or page file changed after `02638a81`, so its gates stand: the Release build of
+    the solution with zero warnings (`--no-incremental`), then 10,274 extractor and 4,320 add-in
+    tests passed.
+  - Every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
+    ran.
