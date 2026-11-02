@@ -26,10 +26,11 @@ record (none since 2026-10-13); re-read the holes they touch, lenses a, c and g.
 H-c-008 (PR #69), its tests in [`holes.md`](holes.md). **Opened**, verified: H-c-009, the repair
 press drops a note sent with it, such as 188A's date (12). **Restated**, scores kept: H-g-010 (14),
 its code half done by PR #70, its sitting step left; seven more rows take the batch's evidence.
-**Run 3's next cycles:** 8 to 10 done (PRs #68 to #70); the two backlog features stay proposed; M0's
-tables wait for M0-a's planning. **Measured:** nothing at a seat. **Decided:** 196A (24A, cycle 8);
-195A and 196A done (PR #68). One security item reported to the owner privately, 2026-11-02 (cycle 8).
-Run 3's entry: [`archive/2026-11-02.md`](archive/2026-11-02.md#run-3-2026-11-02-update-run).
+**Run 3's next cycles:** 8 to 10 done (PRs #68 to #70); its two backlog features picked now (29);
+M0's tables wait for M0-a's planning. **Measured:** nothing at a seat. **Decided:** 196A (24A,
+cycle 8), done with 195A (PR #68); in this run, 197A (28A) and 198A (29). One security item reported
+to the owner privately, 2026-11-02 (cycle 8). One security item reported to the owner privately,
+2026-11-02 (run 4). Run 3's entry: [`archive/2026-11-02.md`](archive/2026-11-02.md#run-3-2026-11-02-update-run).
 
 ## Value model
 
@@ -211,25 +212,24 @@ new check enters without a real instance and the owner's estimate of its frequen
 
 ## The next cycles' brief
 
-**Cycles 1 to 10: done** (PRs #59, #61 to #66, #68 to #70). **Proposed, not in any tasks.md**, for
-the owner to pick, each failing tests first at its 180A tier:
-- **The repair press keeps its note, and a Defer takes an outcome** (H-c-009, 12), once the owner
-  revisits 185A's note rule on PR #69 and 188A. Tier 2.
-- **Check again keeps what the earlier record said** (backlog, cycle 6; 002 research; H-g-013): the
-  cleared line on the card, and in `report.md` the earlier withdrawals and cleared lines. Tier 1.
-- **Four page fixes**, each Tier 2: the tally counts a resumed turn's finding at once (backlog,
-  cycle 7); after a reload every card gets its words, whenever the labels arrive (backlog, cycle 9);
-  a read-only restore's cleared line asks for no decision its buttons cannot take (backlog, cycle 9),
-  and after a backend restart its Transcript shows a withdrawal, as `report.md` does (002 research).
+**Cycles 1 to 10: done** (PRs #59, #61 to #66, #68 to #70). **Picked by the owner, 2026-11-02** (29),
+each failing tests first at its 180A tier, merged on the owner's word:
+- **Cycle 11** (H-c-009, 198A; Tier 2): the repair press keeps its note; a Defer takes an outcome.
+- **Cycle 12** (backlog, cycle 6; H-g-013; Tier 1): Check again keeps the earlier record's cleared
+  lines, on the card and in `report.md`, and its withdrawals in `report.md`.
+- **Cycle 13** (backlog, cycles 7 and 9; 002 research; Tier 2), four page fixes: the tally counts a
+  resumed turn's finding at once; cards get their words after any reload; a read-only restore's
+  cleared line asks for no decision, and its Transcript shows withdrawals after a restart.
+- **Cycle 14** (Tier 3): one seat command writes the timed review's stamp and durations to `notes\timing.txt`.
 - **Then M0's tables** (H-a-003, H-a-004, H-a-009, H-a-010 with 190A, H-a-013, H-a-014, H-g-010,
-  H-g-011, H-g-013), when M0-a is planned; then H-g-003's escape keys, the replay by hand till then.
+  H-g-011, H-g-013; 197A), when M0-a is planned; then H-g-003's escape keys, by hand till then.
 
 ## Questions for the owner, and defaults taken
 
 **Answered:** round 2 (2026-10-31), 179A to 182A; after cycle 1's review (2026-11-01), the order of
 work, with 183A kept, not numbered; in run 2, 186A to 190A; since, 191A to 194A and cycle 7's pick
-(185A's row), the merges of #61 to #66 not numbered; in run 3, 195A; in cycle 8, 196A; run 3's merge
-and next picks and the merges of #68 to #70 not numbered. All in [`docs/decisions.md`](../decisions.md).
+(185A's row); in run 3, 195A; in cycle 8, 196A; in run 4, 197A and 198A; the merges and the other
+next picks not numbered. All in [`docs/decisions.md`](../decisions.md).
 
 **Defaults taken, the owner may revise:** the escape set is a held-out evaluation set, split
 before the first replay; the precision floor's threshold ([`metrics.md`](metrics.md#the-precision-floor));
