@@ -6961,3 +6961,28 @@ the decision register now records 160A as done.
     tests passed.
   - Every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
     ran.
+
+### H-c-008. The card says it has no triage yet (2026-11-02; cycle 9)
+
+- **Question**: the tally counts the flagged findings with no triage, "not recorded", but marks
+  none of them: a group's count names decisions only, a row nothing, and a recorded or merely
+  picked outcome shows only inside each card's closed fold. During M0's every-finding triage the
+  engineer finds each one by opening groups, rows and cards one at a time, or leaves it
+  ([roadmap hole H-c-008](../../docs/roadmap/holes.md)).
+- **Settled**:
+  - **Where.** On the card's head, under its title, so it reads with the fold shut. Not a group
+    or row marker: a press's reply carries the finding and the tally alone, and cycle 7 rejected
+    reading the ranking after each press, so such a marker would be stale after every press,
+    while `showDisposition` draws the card's line again from the record each reply returns.
+  - **The words.** The backend's, `labels.no_triage`, one sentence per state of the record, each
+    naming the repair: `undecided` (pick an outcome, then press a decision), `accepted` and
+    `rejected` (pick one, then press the same decision again: 185A's late triage), and `deferred`
+    (pick one, then press Accept or Reject, since a Defer cannot follow a Defer: 001
+    [data-model.md](../001-agentic-design-review/data-model.md) section 5). Keyed by the
+    decision's token, so the page looks the sentence up and compares nothing; printed as sent.
+  - **When.** From the record alone: a pick sends nothing and leaves the line, and the decision
+    that records a triage takes it away. A pass takes no triage but the miss (187A) and has no
+    line. With no labels, or labels without the group, there are no words and the head is as it
+    was (009 FR-030), as a source chip is with none.
+- **Tests**: T352 and T354 in [tasks.md](tasks.md), Phase 29, each written first; T353 and T355
+  make them green, and T356 closes the records.
