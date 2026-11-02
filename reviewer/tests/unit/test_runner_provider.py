@@ -52,6 +52,7 @@ from swreview.report.titles import display_title, pane_finding, title_from
 from tests.support.contracts import contract_validator
 from tests.support.packages import build_package, persist_ref
 from tests.support.roles_review import review_brief
+from tests.support.triage import tally_body
 
 MODEL = "fake-1"
 EFFORT: EffortLevel = "high"
@@ -1611,7 +1612,10 @@ def test_several_folds_at_once_announce_every_finding_before_any_cleared_line(
     Sheet1's Accept with its triage, run again with the verdict decided, and Sheet2's Defer with
     no triage, run again with another verdict. The Accept stands whole; the Defer is cleared and
     its line names it with no triage, exactly; and every `finding` and `finding.withdrawn` the
-    folds write comes before every `disposition.cleared`."""
+    folds write comes before every `disposition.cleared`.
+
+    *Changed 2026-11-01 on purpose (002 T346; the triage tally in the pane):* the cleared body
+    carries the review's tally as the clear left it, the Accept's triage still recorded."""
     run = review(
         [
             turn(
@@ -1649,6 +1653,7 @@ def test_several_folds_at_once_announce_every_finding_before_any_cleared_line(
                 "The check ran again after your answer and its verdict changed, so your Defer "
                 "was cleared. Decide again."
             ),
+            "triage_tally": tally_body(known=1, not_recorded=1),
         }
     ]
     last_fold = max(
@@ -1656,6 +1661,45 @@ def test_several_folds_at_once_announce_every_finding_before_any_cleared_line(
     )
     assert last_fold < kinds.index("disposition.cleared")
     assert standing(events_of(run)) == {"F-001", "F-002"}
+
+
+def test_a_cleared_notice_carries_the_tally_its_clear_left(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The triage tally (002 T346, cycle 7): a cleared notice tells the page how the triage stands
+    once its clear is done. Sheet1's Reject as `wrong` folds with the verdict decided and stands;
+    Sheet2's Accept as `already_known` folds with another and is cleared, so its notice's tally
+    counts it not recorded beside the standing `wrong` - the one the report written at the turn's
+    end prints - and the stream stays valid against the events contract."""
+    run = review(
+        [
+            turn(
+                "blocked",
+                on_sheet("Sheet1", "suspected"),
+                on_sheet("Sheet2", "suspected"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("re-run", on_sheet("Sheet1", "suspected"), on_sheet("Sheet2", "unresolved")),
+        ]
+    )
+    record_disposition(
+        run, "F-001", decision="rejected", note="FICT missed", by=ENGINEER, triage="wrong"
+    )
+    record_disposition(
+        run, "F-002", decision="accepted", note="FICT intended", by=ENGINEER, triage="already_known"
+    )
+
+    run.answer_evidence("ER-001", "The usable thread depth is 12 mm.")
+
+    [notice] = bodies_of(run, "disposition.cleared")
+    tally = tally_body(wrong=1, not_recorded=1)
+    assert (notice["finding_id"], notice["triage_tally"]) == ("F-002", tally)
+    report = run.out_dir.joinpath("report.md").read_text(encoding="utf-8").splitlines()
+    [at] = [index for index, line in enumerate(report) if line.startswith("- By triage:")]
+    assert report[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
+    validator = contract_validator("chat-events.schema.json")
+    for event in events_of(run):
+        validator.validate(event)
 
 
 def test_two_earlier_findings_with_one_verdict_key_take_no_rerun(

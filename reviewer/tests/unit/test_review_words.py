@@ -81,6 +81,11 @@ PLACEHOLDERS: dict[str, set[str]] = {
     "rerun.restated_with_triage": {"decision", "triage"},
     "rerun.carried": {"decision"},
     "rerun.carried_with_triage": {"decision", "triage"},
+    # *Added 2026-11-01 on purpose (002 T346; the triage tally in the pane):* `report.md`'s two
+    # lines, which the Review tab prints as sent.
+    "triage_tally.by_triage": {"counts", "not_recorded"},
+    "triage_tally.item": {"triage", "n"},
+    "triage_tally.misses": {"n"},
     "resume.without": set(),
     "finding_group_text.one": set(),
     "finding_group_text.many": {"n"},
@@ -158,6 +163,7 @@ def test_the_words_are_loaded_once() -> None:
         ("bought_parts",),
         ("answer_basis",),
         ("rerun",),
+        ("triage_tally",),
     ],
 )
 def test_an_extra_key_anywhere_is_refused(path: tuple[object, ...]) -> None:

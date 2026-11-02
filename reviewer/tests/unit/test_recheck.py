@@ -76,6 +76,7 @@ from tests.support.restart import BEFORE_REPLACE, disk_at, restarted_app
 from tests.support.restored import assert_restored_as_waiting
 from tests.support.review_bridge import VOLUME_UNIT_GAP, ScriptedReviewBridge
 from tests.support.roles_review import PLATE_ID
+from tests.support.triage import tally_body
 from tests.unit import test_chat_server as chat
 from tests.unit import test_confirmed_drawing_read as confirmed
 from tests.unit import test_waiting_answers as waiting_answers
@@ -1714,7 +1715,13 @@ def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare:
 
     *Changed 2026-11-01 on purpose (cycle 6's Tier 1 review; owner decision 187A):* F-009 was a
     pass, so its `wrong` is a miss, and the line words it as the pass's card does, "wrong: a miss"
-    (`labels.pass_triage`), where it said "wrong", a flagged finding's false alarm."""
+    (`labels.pass_triage`), where it said "wrong", a flagged finding's false alarm.
+
+    *Changed 2026-11-01 on purpose (002 T346; the triage tally in the pane):* each carried
+    decision's `disposition` event carries the review's tally as it stands once that decision is
+    carried - F-004's miss counted apart from F-003 and F-005, flagged and not recorded, then
+    F-005's new and real with it; the cleared notices before them, with no triage carried yet,
+    carry none."""
     run, earlier, events = bare
     run.session.findings[:] = [
         as_pass(coaxial("F-001", "hol:0001")),
@@ -1759,9 +1766,21 @@ def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare:
     ] + [
         (
             "disposition",
-            {"finding_id": finding.id, "disposition": disposition.model_dump(mode="json")},
+            {
+                "finding_id": finding.id,
+                "disposition": disposition.model_dump(mode="json"),
+                "triage_tally": tally,
+            },
         )
-        for finding, disposition in zip(run.session.findings, carried, strict=True)
+        for finding, disposition, tally in zip(
+            run.session.findings[3:],
+            carried[3:],
+            (
+                tally_body(not_recorded=2, misses=1),
+                tally_body(new=1, not_recorded=1, misses=1),
+            ),
+            strict=True,
+        )
         if disposition is not None
     ]
     assert recheck_row(run.session) == []

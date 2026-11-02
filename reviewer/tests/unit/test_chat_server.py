@@ -89,6 +89,7 @@ from tests.support.features import feature, folder
 from tests.support.packages import build_package
 from tests.support.remodel import remodel_package
 from tests.support.replay import folder_hashes
+from tests.support.triage import tally_body
 from tests.unit import test_answer_batch_roles as batch_roles
 from tests.unit import test_chat_standards_routes as standards
 from tests.unit.test_runner_provider import standing
@@ -3593,6 +3594,69 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
     assert client.get(f"/sessions/{review.chat_id}/snapshot").json().get("cleared") == [review.line]
     restored = restored_snapshot_of(run_root, provider_control, models, review.folder.name)
     assert restored.get("cleared") == [review.line]
+
+
+# --- the triage tally (002 T346; the owner's request, cycle 7) ------------------------------------
+
+
+def test_the_reply_and_every_summary_carry_the_tally_report_md_prints(
+    client: TestClient,
+    run_root: Path,
+    run_dir: Path,
+    chat_with_a_finding: str,
+    provider_control: ProviderControl,
+    models: Models,
+) -> None:
+    """The one tally, through the routes: a decision's reply, the attention route's summary - what
+    a session's end reads - the live snapshot's - a reload or a review switch - and the run folder's
+    - a backend restart and a read-only restore - carry none while no finding records a triage, and
+    after a triaged decision all carry the same one, whose two lines are `report.md`'s."""
+    chat_id = chat_with_a_finding
+    findings = load_session(run_dir / "session.json").findings
+    flagged = [finding.id for finding in findings if finding.status != "checked_within_scope"]
+
+    def summaries() -> list[dict[str, Any]]:
+        """The attention route's, the live snapshot's and the run folder's summary, in order."""
+        again = create_app(
+            token=TOKEN,
+            allow_origin=ORIGIN,
+            run_root=run_root,
+            provider_factory=provider_control.factory,
+            list_models=models,
+        )
+        with TestClient(
+            again, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}
+        ) as fresh:
+            restored = fresh.get(f"/reviews/{run_dir.name}")
+        assert restored.status_code == 200, restored.text
+        return [
+            client.get(f"/sessions/{chat_id}/attention").json()["summary"],
+            client.get(f"/sessions/{chat_id}/snapshot").json()["ranking"]["summary"],
+            restored.json()["ranking"]["summary"],
+        ]
+
+    plain = client.post(
+        f"/sessions/{chat_id}/findings/{flagged[0]}/disposition",
+        json={"decision": "accepted", "note": "FICT note"},
+    )
+
+    assert plain.status_code == 200, plain.text
+    assert "triage_tally" not in plain.json()
+    assert ["triage_tally" in shown for shown in summaries()] == [False, False, False]
+
+    late = client.post(
+        f"/sessions/{chat_id}/findings/{flagged[0]}/disposition",
+        json={"decision": "accepted", "note": "FICT note", "triage": "already_known"},
+    )
+
+    assert late.status_code == 200, late.text
+    tally = tally_body(known=1, not_recorded=len(flagged) - 1)
+    assert late.json()["triage_tally"] == tally
+    assert late.json()["disposition"]["triage"] == "already_known"
+    assert [shown["triage_tally"] for shown in summaries()] == [tally, tally, tally]
+    lines = (run_dir / "report.md").read_text(encoding="utf-8").splitlines()
+    [at] = [index for index, line in enumerate(lines) if line.startswith("- By triage:")]
+    assert lines[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
 
 
 def test_the_report_is_served_as_markdown(
