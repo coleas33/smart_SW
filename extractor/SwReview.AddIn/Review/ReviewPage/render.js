@@ -458,10 +458,11 @@
    * Roadmap hole H-c-008 (002 FR-031): a flagged finding's head says it has no triage until one is
    * recorded, so the engineer finds each finding the tally counts "not recorded" with its fold shut. The
    * words are the backend's for where the record stands (`labels.no_triage`, keyed by the decision
-   * recorded, `undecided` for none), and name the repair. Read from the record alone, so a pick is no
-   * triage; nothing on a pass, and nothing with no labels, the head as before (009 FR-030). While the
-   * review is read-only (`readOnly`), its buttons are off, so every such card says `read_only`'s words,
-   * whatever its decision, and names no press (cycle 9's Tier 2 review).
+   * recorded, `undecided` for none): a decision's words name the repair, and `undecided`'s only say none
+   * is recorded. Read from the record alone, so a pick is no triage; nothing on a pass, and nothing with
+   * no labels, the head as before (009 FR-030). While the review is read-only (`readOnly`), its buttons
+   * are off, so every such card says `read_only`'s words, whatever its decision, which also only say
+   * none is recorded and name no press (cycle 9's Tier 2 review).
    */
   function noTriageLine(body, labels, readOnly) {
     var disposition = body.disposition;

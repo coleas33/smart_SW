@@ -302,12 +302,13 @@ labels:
   pass_triage:
     wrong: "wrong: a miss"
   # What a flagged finding's card head says until its triage is recorded (roadmap hole H-c-008,
-  # feature 002 FR-031): one sentence for each state of its record - not yet decided, or the
-  # decision recorded without a triage, naming the repair. A Defer cannot follow a Defer, so a
-  # deferred finding takes its triage with Accept or Reject. `read_only` is what such a card says
-  # while its review is read-only, whatever its decision: its buttons are off, so it names no
-  # press. The page prints the sentence for the recorded decision, or `read_only`'s, and compares
-  # nothing, and none on a pass, which takes no triage but the miss.
+  # feature 002 FR-031): one sentence for each state of its record. A decision recorded without a
+  # triage names the repair; a finding not yet decided (`undecided`) only says none is recorded. A
+  # Defer cannot follow a Defer, so a deferred finding takes its triage with Accept or Reject.
+  # `read_only` is what such a card says while its review is read-only, whatever its decision: its
+  # buttons are off, so it too only says none is recorded, and names no press. The page prints the
+  # sentence for the recorded decision, or `read_only`'s, and compares nothing, and none on a pass,
+  # which takes no triage but the miss.
   no_triage:
     undecided: "No triage recorded yet"
     accepted: "No triage recorded yet: pick one, then press Accept again"

@@ -6980,10 +6980,16 @@ the decision register now records 160A as done.
     (pick one, then press Accept or Reject, since a Defer cannot follow a Defer: 001
     [data-model.md](../001-agentic-design-review/data-model.md) section 5). Keyed by the
     decision's token, so the page looks the sentence up and compares nothing; printed as sent.
+    *Changed 2026-11-02 by cycle 9's Tier 2 review (Review, below):* the words are shorter, and
+    only a decision's words name the repair - "pick one, then press" the same decision, or Accept
+    or Reject after a Defer; `undecided` and a fifth key, `read_only` (When), only say that no
+    triage is recorded yet.
   - **When.** From the record alone: a pick sends nothing and leaves the line, and the decision
     that records a triage takes it away. A pass takes no triage but the miss (187A) and has no
     line. With no labels, or labels without the group, there are no words and the head is as it
-    was (009 FR-030), as a source chip is with none.
+    was (009 FR-030), as a source chip is with none. *Changed 2026-11-02 by the same review:*
+    while the review is read-only its buttons are off, so every flagged card with no triage says
+    `read_only`'s words, whatever its decision.
 - **Tests**: T352 and T354 in [tasks.md](tasks.md), Phase 29, each written first; T353 and T355
   make them green, and T356 closes the records.
 - **Built** (2026-11-02, T353 and T355): `labels.no_triage` in the words file and
