@@ -47,8 +47,13 @@ import pytest
 from starlette.requests import Request
 from starlette.testclient import TestClient
 
-from swreview.agent.providers import AgentEvent, AgentProvider, ProviderName
-from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.agent.providers import AgentEvent, AgentProvider, ProviderError, ProviderName
+from swreview.agent.providers.fake import (
+    FakeProvider,
+    ScriptedRound,
+    ScriptedToolCall,
+    ScriptedTurn,
+)
 from swreview.agent.runner import PROFILE_CHECK
 from swreview.agent.settings import (
     MASK,
@@ -62,7 +67,7 @@ from swreview.chat.sessions import ChatSession, ChatState
 from swreview.checks.rms.run import is_check_folder
 from swreview.checks.rules.run import session_replaced
 from swreview.checks.standards.run import run_standards_check
-from swreview.findings import MODEL_FINDING_CHECK, TRIAGES
+from swreview.findings import MODEL_FINDING_CHECK, TRIAGES, Disposition
 from swreview.ir.loader import save_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import DIGEST_HEADER, RMS_PRERUN_TOOLS
@@ -81,6 +86,7 @@ from tests.support.packages import build_package
 from tests.support.remodel import remodel_package
 from tests.support.replay import folder_hashes
 from tests.unit import test_chat_standards_routes as standards
+from tests.unit.test_runner_provider import standing
 
 ORIGIN = "https://swreview.invalid"
 OTHER_ORIGIN = "https://evil.example"
@@ -3223,6 +3229,210 @@ def test_the_live_and_the_restored_snapshot_carry_a_cleared_line_until_a_decisio
     assert again.status_code == 200, again.text
     assert "cleared" not in client.get(f"/sessions/{chat_id}/snapshot").json()
     assert "cleared" not in restored()
+
+
+# --- a resumed turn that fails or is stopped still folds (cycle 6's Tier 1 review) ----------------
+
+RERUN_VERDICTS = pytest.mark.parametrize(
+    ("rerun_status", "kept"), [("suspected", True), ("unresolved", False)], ids=["kept", "cleared"]
+)
+"""The re-run's status: the one decided (`suspected`, medium), which keeps the decision, or
+another (`unresolved`, low), which clears it (owner decisions 189A and 191A)."""
+
+
+class PausedAfterACall(FakeProvider):
+    """A scripted adapter that pauses its `turn`-th turn right after the turn's first tool call:
+    it sets `paused` and waits for `resumed`, so a test can press Stop between two calls."""
+
+    def __init__(
+        self, *, turn: int, paused: threading.Event, resumed: threading.Event, **kwargs: Any
+    ) -> None:
+        super().__init__(**kwargs)
+        self._pause_in = turn
+        self._paused = paused
+        self._resumed = resumed
+
+    def _call(self, request: Any, tools: Any, on_event: Any) -> Any:
+        result = super()._call(request, tools, on_event)
+        if self._turn_index == self._pause_in and not self._paused.is_set():
+            self._paused.set()
+            if not self._resumed.wait(TIMEOUT_S):  # pragma: no cover - a hung test, not a path
+                raise AssertionError("the paused turn was never resumed")
+        return result
+
+
+def accepted_then_answered(client: TestClient, run_dir: Path) -> tuple[str, str, dict[str, Any]]:
+    """Cycle 3's review through the routes: the drawing finding accepted as `already_known` while
+    its question is open, then the question answered, resuming the turn. Returns the chat, the
+    drawing finding's id and the disposition recorded."""
+    chat_id = start_session(client, run_dir)["chat_id"]
+    assert settle(client, chat_id) == ChatState.WAITING_ENGINEER.value
+    [drawing] = [
+        finding.id
+        for finding in load_session(run_dir / "session.json").findings
+        if finding.check == MODEL_FINDING_CHECK
+    ]
+    decided = client.post(
+        f"/sessions/{chat_id}/findings/{drawing}/disposition",
+        json={"decision": "accepted", "note": "FICT intended", "triage": "already_known"},
+    )
+    assert decided.status_code == 200, decided.text
+    answered = client.post(f"/sessions/{chat_id}/evidence/ER-001", json={"answer": "12 mm."})
+    assert answered.status_code == 202, answered.text
+    return chat_id, drawing, decided.json()["disposition"]
+
+
+def assert_the_fold_is_what_was_saved(
+    run_dir: Path,
+    drawing: str,
+    rerun_status: str,
+    decided: dict[str, Any],
+    *,
+    kept: bool,
+    turn_ended: str,
+) -> None:
+    """The turn ended for `turn_ended`, as before, and `session.json`, the `report.md` the server
+    rendered and the stream agree with the fold: one finding of the check, under the decided id,
+    its decision kept whole or cleared; the re-run's own id withdrawn with `folded_into`, and a
+    `disposition.cleared` only when it was cleared - each written before the finalization's
+    `session.ended`."""
+    events = events_of(run_dir)
+    assert [event["body"]["reason"] for event in events if event["type"] == "turn.ended"][-1] == (
+        turn_ended
+    )
+    saved = load_session(run_dir / "session.json")
+    assert [
+        (finding.id, finding.status, finding.disposition)
+        for finding in saved.findings
+        if finding.check == MODEL_FINDING_CHECK
+    ] == [(drawing, rerun_status, Disposition.model_validate(decided) if kept else None)]
+    folded = [
+        index
+        for index, event in enumerate(events)
+        if event["type"] == "finding.withdrawn" and event["body"].get("folded_into") == drawing
+    ]
+    cleared = [
+        (index, event["body"])
+        for index, event in enumerate(events)
+        if event["type"] == "disposition.cleared"
+    ]
+    assert len(folded) == 1
+    assert [body for _, body in cleared] == (
+        []
+        if kept
+        else [
+            {
+                "finding_id": drawing,
+                "disposition": decided,
+                "reason": (
+                    "The check ran again after your answer and its verdict changed, so your "
+                    "Accept (real but already known) was cleared. Decide again."
+                ),
+            }
+        ]
+    )
+    ended = max(index for index, event in enumerate(events) if event["type"] == "session.ended")
+    assert all(index < ended for index in [*folded, *(index for index, _ in cleared)])
+    assert standing(events) == {finding.id for finding in saved.findings}
+    spent = events[folded[0]]["body"]["finding_id"]
+    lines = (run_dir / "report.md").read_text(encoding="utf-8").splitlines()
+    assert not any(line.startswith(f"#### {spent}:") for line in lines)
+    heading = lines.index(next(line for line in lines if line.startswith(f"#### {drawing}:")))
+    disposition = next(
+        index for index in range(heading, len(lines)) if lines[index].startswith("- Disposition:")
+    )
+    recorded = (
+        ["- Disposition:", "  - decision: accepted", "  - triage: real but already known"]
+        if kept
+        else ["- Disposition: not yet dispositioned"]
+    )
+    assert lines[disposition : disposition + len(recorded)] == recorded
+
+
+@RERUN_VERDICTS
+def test_a_resumed_turn_the_provider_fails_still_folds_its_rerun(
+    client: TestClient,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    rerun_status: str,
+    kept: bool,
+) -> None:
+    """Cycle 6's Tier 1 review: the model runs the check again in the resumed turn, and then the
+    provider fails. The turn is reported failed and the session finalized, as any failed turn's
+    (FR-008), and the re-run still folds onto the decided finding before that finalization, so
+    `session.json`, `report.md` and the stream hold one verdict for the check: no second card
+    beside the decided one, and a decision kept or cleared as an ended turn's fold would."""
+    provider_control.script = [
+        turn(
+            "I need the thread depth.",
+            call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS),
+            call("request_evidence", **EVIDENCE_ARGUMENTS),
+        ),
+        ScriptedTurn(
+            text="",
+            rounds=(
+                ScriptedRound(
+                    calls=(
+                        call(
+                            "record_drawing_finding",
+                            **{**DRAWING_FINDING_ARGUMENTS, "status": rerun_status},
+                        ),
+                    )
+                ),
+            ),
+            fails=ProviderError("FICT the provider connection dropped"),
+        ),
+    ]
+    chat_id, drawing, decided = accepted_then_answered(client, run_dir)
+
+    assert settle(client, chat_id) == ChatState.FAILED.value
+    assert_the_fold_is_what_was_saved(
+        run_dir, drawing, rerun_status, decided, kept=kept, turn_ended="error"
+    )
+
+
+@RERUN_VERDICTS
+def test_a_resumed_turn_stopped_after_its_rerun_still_folds_it(
+    run_root: Path, run_dir: Path, models: Models, rerun_status: str, kept: bool
+) -> None:
+    """Cycle 6's Tier 1 review: the model runs the check again in the resumed turn, and the
+    engineer presses Stop before its next call. The turn ends `stopped` and the session with it
+    (FR-030), and the re-run still folds onto the decided finding before that finalization."""
+    paused, resumed = threading.Event(), threading.Event()
+    script = [
+        turn(
+            "I need the thread depth.",
+            call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS),
+            call("request_evidence", **EVIDENCE_ARGUMENTS),
+        ),
+        turn(
+            "Never reached.",
+            call("record_drawing_finding", **{**DRAWING_FINDING_ARGUMENTS, "status": rerun_status}),
+            call("get_package_summary"),
+        ),
+    ]
+    app = create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=lambda settings: PausedAfterACall(
+            turn=2, paused=paused, resumed=resumed, script=script, model=settings.model
+        ),
+        list_models=models,
+    )
+    with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as client:
+        chat_id, drawing, decided = accepted_then_answered(client, run_dir)
+        wait_until(paused.is_set, "the resumed turn to run its check again")
+        try:
+            stopped = client.post(f"/sessions/{chat_id}/stop")
+        finally:
+            resumed.set()
+
+        assert stopped.status_code == 202, stopped.text
+        assert settle(client, chat_id) == ChatState.ENDED.value
+    assert_the_fold_is_what_was_saved(
+        run_dir, drawing, rerun_status, decided, kept=kept, turn_ended="stopped"
+    )
 
 
 def test_the_report_is_served_as_markdown(
