@@ -780,3 +780,42 @@ Phase 11 of [tasks.md](tasks.md).
 **Not changed**: `RunFolders.cs` and the folders' names; the zips of step 6.3 and the exports of
 step 6.2, which carry whole names and travel only in the handover folder; an untimed review's
 stamp (steps 4.2, 4.8, 4.9 and 5.1).
+
+**Built** (2026-11-02, T076), as *What it changes* says. Rule 5's example of a full stamp, and
+the results sheet's, carry B's letter now (`20261001-101112-B`), A's review being the one timed;
+step 4.1's note takes the date and time the folder's name begins with (`20261101-101112`); step
+4.5's Record line reads `<date>-A` where it read `<stamp>-A`. The runbook's section 8 listed "run
+folder names" among a findings document's evidence, and a name begins with its stamp: it lists
+run folders by stamp and letter, as rule 5 does.
+
+**Tests changed on purpose**, each with a dated note, none loosened:
+`test_a_real_designs_timing_figures_stay_out_of_the_findings_document` (step 4.5's Record
+literal), `test_every_check_before_the_findings_document_is_committed_names_the_timing_figures`
+(each of its nine places also names the full stamp, the date and letter and 195A; section 0.2 the
+full stamp), `test_no_line_sends_a_real_designs_timing_figure_to_the_findings_document` (the
+full stamp is a timing figure, and no line shows a full stamp or `<stamp>` with A's letter) and
+`test_the_specs_readme_counts_a_task_173a_closed_as_done` (007's row, pinned since T074). New:
+`test_a_timed_reviews_run_folder_is_written_by_its_date_and_letter`.
+
+**Tests first**: T075's four pins failed before T076, each for want of the words it pins - the
+first at step 4.5's Record line, the places pin at rule 5, the guard at rule 5's example and step
+4.5's `<stamp>-A`, the new pin at rule 5. Read one by one, 45 of their 47 new or changed checks
+were red; the two that held are the guard's checks of its own patterns, which read no document.
+After T076 all 115 checks of the four pins hold. The README pin was red against 68 / 5 / 0 at
+T074 and against 69 / 8 / 0 at T077 before each recount.
+
+**Gates** (T077; 2026-11-02), on T077's tree:
+
+- Python 3.12.3, in the worktree's own environment, and 3.11.16 (`uv run --python 3.11
+  --isolated --all-extras`), the tokenizer required, over the seven modules that read the changed
+  files - `test_workstation_test_plan.py`, `test_workstation_handover.py`,
+  `test_update_workstation_script.py`, the three that read the task lists through
+  `tests/support/seat_tasks.py` (`test_seat_assumptions.py`, `test_seat_switch_evidence.py`,
+  `test_remodel_ledger.py`) and the identifier scan, `test_tracked_files_carry_no_recorded_number.py`,
+  which ran against the owner's lists: 488 passed on each, none skipped.
+- `ruff check src tests` clean.
+- The link check over the cycle's changed Markdown: 309 relative links, anchors included, none
+  broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate. Not run in this lane: the whole non-live suites,
+  which run before the pull request and in its CI. No SOLIDWORKS process, seat task, or paid or
+  live test ran.
