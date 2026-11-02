@@ -80,7 +80,7 @@ from swreview.report.attention_record import (
     read_attention_record,
     write_attention_record,
 )
-from swreview.report.session import Timing, load_session, save_session
+from swreview.report.session import ReviewSession, Timing, load_session, save_session
 from swreview.tools.registry import ToolRegistry, session_tools
 from tests.support import roles_review
 from tests.support.attention import CHECK_FOLDER as ATTENTION_CHECK_FOLDER
@@ -3544,13 +3544,22 @@ class Regraded:
 
 
 def regraded_review(
-    client: TestClient, review_dir: Path, *, ticked: bool, answer: str = "None bought"
+    client: TestClient,
+    review_dir: Path,
+    *,
+    ticked: bool,
+    answer: str = "None bought",
+    settled: ChatState | None = None,
 ) -> Regraded:
     """`tests/support/roles_review.py`'s package reviewed live (`ticked`: its opening turn played)
     or checks only, waiting for Send; the pin's and the plate's hygiene findings accepted as
     `already_known`; then the part-roles question answered `answer`, "None bought" unless named,
     which restates both. *Changed 2026-11-02 on purpose (002 T358):* `answer` added, so "All
-    bought" withdraws the pin's findings instead; every earlier caller answers as before."""
+    bought" withdraws the pin's findings instead; every earlier caller answers as before.
+    *Changed 2026-11-02 on purpose (002 T362; a read-only check of cycle 10's review fixes):*
+    `settled` added, the state the answer leaves the chat in - ended when `ticked`, waiting for
+    Send otherwise, unless named - so a waiting answer that cannot close settles `failed`; every
+    earlier caller settles as before."""
     roles_review.write_package(review_dir)
     profile = roles_review.write_profile(review_dir)
     chat_id = start_session(
@@ -3585,7 +3594,8 @@ def regraded_review(
         json={"answers": [{"request_id": question, "answer": answer}]},
     )
     assert answered.status_code == 202, answered.text
-    settled = ChatState.ENDED if ticked else ChatState.AWAITING_SEND
+    if settled is None:
+        settled = ChatState.ENDED if ticked else ChatState.AWAITING_SEND
     assert settle(client, chat_id) == settled.value
     return Regraded(chat_id, review_dir, pin, plate, decided)
 
@@ -3718,6 +3728,48 @@ def withdrawn_part(folder: Path) -> list[str]:
         return []
     start = lines.index("## Withdrawn with a decision") + 2
     return lines[start : lines.index("", start)]
+
+
+def test_a_waiting_answer_that_cannot_close_names_no_withdrawal_its_record_still_holds(
+    client: TestClient,
+    run_root: Path,
+    regrading_checks: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A read-only check of cycle 10's Tier 2 review fixes (002 T362), a guard: a waiting
+    review's rollback reaches the state the review's killed backend left. The part-roles answer
+    "All bought" withdraws the pin's hygiene finding, its `finding.withdrawn` naming the Accept it
+    took, and then `close_waiting` raises - a Send cache or a save that cannot be written - so
+    `answer_evidence_batch` reloads the record from disk, which still holds the pin accepted, and
+    `_play` renders `report.md` from it beside a stream that withdrew it. That report names no
+    withdrawal, and the pin still shows its Accept."""
+    close_waiting = runner.ReviewRun.close_waiting
+
+    def refused_once_answered(run: runner.ReviewRun) -> ReviewSession:
+        """The opening's close as before; the answer's raises."""
+        if any(request.status == "answered" for request in run.session.evidence_requests):
+            raise OSError("FICT the run folder cannot be written")
+        return close_waiting(run)
+
+    monkeypatch.setattr(runner.ReviewRun, "close_waiting", refused_once_answered)
+    review = regraded_review(
+        client,
+        run_root / "FICT-withdraw-rollback",
+        ticked=False,
+        answer="All bought",
+        settled=ChatState.FAILED,
+    )
+
+    withdrawals = [
+        event["body"] for event in events_of(review.folder) if event["type"] == "finding.withdrawn"
+    ]
+    assert [body["finding_id"] for body in withdrawals if "taken" in body] == [review.pin]
+    findings = load_session(review.folder / "session.json").findings
+    saved = {finding.id: finding for finding in findings}
+    assert saved[review.pin].disposition == Disposition.model_validate(review.decided[review.pin])
+    assert withdrawn_part(review.folder) == []
+    lines = (review.folder / "report.md").read_text(encoding="utf-8").splitlines()
+    assert reported_disposition(lines, review.pin, 3) == ACCEPTED_LINES
 
 
 # --- the triage tally (002 T346; the owner's request, cycle 7) ------------------------------------
