@@ -59,9 +59,11 @@ SCRIPTED_TOOLS: tuple[str, ...] = tuple(dict.fromkeys((*RMS_PRERUN_TOOLS, *CODE_
 Events = list[tuple[str, dict[str, Any]]]
 
 
-def scripted_check(name: str) -> Callable[[], dict[str, Any]]:
+def scripted_check(name: str, custom: str = "low") -> Callable[[], dict[str, Any]]:
     """A check tool named `name`: one finding per graded part document with an instance, and
-    the roles' note on each unclear one. Tools outside `ROLE_TOOLS` find nothing."""
+    the roles' note on each unclear one. Tools outside `ROLE_TOOLS` find nothing. Each finding is
+    low, or `custom` on a part with no note, so a regrade can change a severity (cycle 6's Tier 1
+    review)."""
 
     def check() -> dict[str, Any]:
         context = current_context()
@@ -83,7 +85,7 @@ def scripted_check(name: str) -> Callable[[], dict[str, Any]]:
                 check=f"{name}.scripted",
                 title=f"{document.file_name} is scripted",
                 status="suspected",
-                severity="low",
+                severity="low" if note is not None else custom,
                 package=context.ir,
                 configuration="Default",
                 observed=f"{document.file_name} is scripted",

@@ -1758,6 +1758,64 @@ def test_a_pass_triage_recorded_before_187a_stays_behind_its_carried_decision(ba
     ]
 
 
+def test_check_again_whose_carry_clears_a_decision_shows_its_line_in_the_new_chats_snapshot(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+) -> None:
+    """Cycle 6's Tier 1 review (owner decision 194A), through the routes: the carry's line reaches
+    the page only through the re-run chat's `/snapshot` (`app.js`, `showRechecked`), since that
+    chat is registered after `carry_from` and its live event goes to no subscriber. A flagged
+    finding of a waiting review is accepted as `already_known`; its severity on disk is then one
+    the checks do not give it again - as a build that grades it otherwise would leave it - so
+    Check again does not carry the Accept. The new chat's snapshot names the carry's line on the
+    finding the Accept would have landed on, and so does a restarted backend's restore of the
+    committed re-run."""
+    waiting = waiting_answers.waiting_review(app, client, run_root / "FICT-recheck-carry-line")
+    folder = waiting.fixture.folder
+    flagged = next(
+        finding
+        for finding in load_session(folder / "session.json").findings
+        if finding.status != "checked_within_scope"
+    )
+    decided = client.post(
+        f"/sessions/{waiting.chat_id}/findings/{flagged.id}/disposition",
+        json={"decision": "accepted", "note": "FICT as modelled", "triage": "already_known"},
+    )
+    assert decided.status_code == 200, decided.text
+    record = load_session(folder / "session.json")
+    regraded = "high" if flagged.severity != "high" else "low"
+    record.findings[:] = [
+        finding.model_copy(update={"severity": regraded}) if finding.id == flagged.id else finding
+        for finding in record.findings
+    ]
+    save_session(record, folder / "session.json")
+    settings = server_settings(provider_control, models, silent)
+    with restarted_app(run_root, settings) as fresh:
+        rechecked = recheck(fresh, folder)
+        assert rechecked.status_code == 201, rechecked.text
+        [target] = [
+            finding.id
+            for finding in load_session(folder / "session.json").findings
+            if finding_subject_key(finding) == finding_subject_key(flagged)
+        ]
+        line = {
+            "finding_id": target,
+            "disposition": decided.json()["disposition"],
+            "reason": carried_line("Accept", "real but already known"),
+        }
+        snapshot = fresh.get(f"/sessions/{rechecked.json()['chat_id']}/snapshot")
+        assert snapshot.status_code == 200, snapshot.text
+        assert snapshot.json().get("cleared") == [line]
+    with restarted_app(run_root, settings) as again:
+        restored = again.get(f"/reviews/{folder.name}")
+    assert restored.status_code == 200, restored.text
+    assert restored.json().get("cleared") == [line]
+
+
 def test_two_earlier_decisions_meeting_one_finding_carry_neither_and_name_each(
     bare: Any,
 ) -> None:

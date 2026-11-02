@@ -31,6 +31,7 @@ held open at a gate, which is how a test observes a *running* turn at all.
 
 from __future__ import annotations
 
+import functools
 import json
 import shutil
 import threading
@@ -47,6 +48,7 @@ import pytest
 from starlette.requests import Request
 from starlette.testclient import TestClient
 
+from swreview.agent import runner
 from swreview.agent.providers import AgentEvent, AgentProvider, ProviderError, ProviderName
 from swreview.agent.providers.fake import (
     FakeProvider,
@@ -68,7 +70,7 @@ from swreview.checks.rms.run import is_check_folder
 from swreview.checks.rules.run import session_replaced
 from swreview.checks.standards.run import run_standards_check
 from swreview.findings import MODEL_FINDING_CHECK, TRIAGES, Disposition
-from swreview.ir.loader import save_package
+from swreview.ir.loader import load_package, save_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import DIGEST_HEADER, RMS_PRERUN_TOOLS
 from swreview.remodel.artifacts import GradedRun, grade_remodel_run, write_package
@@ -79,12 +81,15 @@ from swreview.report.attention_record import (
     write_attention_record,
 )
 from swreview.report.session import Timing, load_session, save_session
+from swreview.tools.registry import ToolRegistry, session_tools
+from tests.support import roles_review
 from tests.support.attention import CHECK_FOLDER as ATTENTION_CHECK_FOLDER
 from tests.support.contracts import contract_path, contract_validator
 from tests.support.features import feature, folder
 from tests.support.packages import build_package
 from tests.support.remodel import remodel_package
 from tests.support.replay import folder_hashes
+from tests.unit import test_answer_batch_roles as batch_roles
 from tests.unit import test_chat_standards_routes as standards
 from tests.unit.test_runner_provider import standing
 
@@ -3337,16 +3342,25 @@ def assert_the_fold_is_what_was_saved(
     spent = events[folded[0]]["body"]["finding_id"]
     lines = (run_dir / "report.md").read_text(encoding="utf-8").splitlines()
     assert not any(line.startswith(f"#### {spent}:") for line in lines)
-    heading = lines.index(next(line for line in lines if line.startswith(f"#### {drawing}:")))
-    disposition = next(
+    expected = ACCEPTED_LINES if kept else UNDECIDED_LINES
+    assert reported_disposition(lines, drawing, len(expected)) == expected
+
+
+ACCEPTED_LINES = ["- Disposition:", "  - decision: accepted", "  - triage: real but already known"]
+"""`report.md`'s first lines for an Accept recorded as `already_known`."""
+
+UNDECIDED_LINES = ["- Disposition: not yet dispositioned"]
+"""`report.md`'s line for a finding with no decision."""
+
+
+def reported_disposition(lines: list[str], finding_id: str, count: int) -> list[str]:
+    """The first `count` lines of the disposition `report.md` prints under `finding_id`'s
+    heading, from its "- Disposition:" line."""
+    heading = lines.index(next(line for line in lines if line.startswith(f"#### {finding_id}:")))
+    start = next(
         index for index in range(heading, len(lines)) if lines[index].startswith("- Disposition:")
     )
-    recorded = (
-        ["- Disposition:", "  - decision: accepted", "  - triage: real but already known"]
-        if kept
-        else ["- Disposition: not yet dispositioned"]
-    )
-    assert lines[disposition : disposition + len(recorded)] == recorded
+    return lines[start : start + count]
 
 
 @RERUN_VERDICTS
@@ -3433,6 +3447,146 @@ def test_a_resumed_turn_stopped_after_its_rerun_still_folds_it(
     assert_the_fold_is_what_was_saved(
         run_dir, drawing, rerun_status, decided, kept=kept, turn_ended="stopped"
     )
+
+
+# --- a real regrade that clears a decision, end to end (cycle 6's Tier 1 review) ------------------
+
+RESTATED_LINE = (
+    "Your answer graded the checks again and this verdict changed, so your Accept (real but "
+    "already known) was cleared. Decide again."
+)
+"""The words file's line for an Accept recorded as `already_known` that a restate cleared."""
+
+
+@pytest.fixture
+def regrading_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The review's checks are `test_answer_batch_roles`' scripted stand-ins, which read the roles
+    the runner attached: each finds one thing on every graded part, low while the part may be
+    bought and medium once it is custom. So the part-roles answer "None bought", a real regrade,
+    restates the unclear pin's findings with another severity, and the custom plate's with
+    theirs."""
+    functions = (
+        *(batch_roles.scripted_check(name, custom="medium") for name in batch_roles.SCRIPTED_TOOLS),
+        *session_tools(),
+    )
+    monkeypatch.setattr(runner, "ToolRegistry", functools.partial(ToolRegistry, functions))
+
+
+@dataclass(frozen=True)
+class Regraded:
+    """A review whose part-roles answer cleared the pin's Accept: its chat and folder, the pin's
+    and the plate's hygiene findings, and the disposition recorded on each before the answer."""
+
+    chat_id: str
+    folder: Path
+    pin: str
+    plate: str
+    decided: dict[str, dict[str, Any]]
+
+    @property
+    def line(self) -> dict[str, Any]:
+        """The `disposition.cleared` body the restate leaves on the pin's card."""
+        disposition = self.decided[self.pin]
+        return {"finding_id": self.pin, "disposition": disposition, "reason": RESTATED_LINE}
+
+
+def regraded_review(client: TestClient, review_dir: Path, *, ticked: bool) -> Regraded:
+    """`tests/support/roles_review.py`'s package reviewed live (`ticked`: its opening turn played)
+    or checks only, waiting for Send; the pin's and the plate's hygiene findings accepted as
+    `already_known`; then the part-roles question answered "None bought", which restates both."""
+    roles_review.write_package(review_dir)
+    profile = roles_review.write_profile(review_dir)
+    chat_id = start_session(
+        client, review_dir, standards_profile=str(profile), send_when_checked=ticked
+    )["chat_id"]
+    asked = ChatState.WAITING_ENGINEER if ticked else ChatState.AWAITING_SEND
+    assert settle(client, chat_id) == asked.value
+    components = load_package(review_dir).package.components
+    document_of = {item.id: item.document_id for item in components}
+    session = load_session(review_dir / "session.json")
+    hygiene = {
+        document_of[finding.component_ids[0]]: finding.id
+        for finding in session.findings
+        if finding.check == "check_hygiene.scripted"
+    }
+    pin, plate = hygiene[roles_review.PIN_ID], hygiene[roles_review.PLATE_ID]
+    decided: dict[str, dict[str, Any]] = {}
+    for finding_id in (pin, plate):
+        response = client.post(
+            f"/sessions/{chat_id}/findings/{finding_id}/disposition",
+            json={"decision": "accepted", "note": "FICT as modelled", "triage": "already_known"},
+        )
+        assert response.status_code == 200, response.text
+        decided[finding_id] = response.json()["disposition"]
+    [question] = [
+        request.id
+        for request in session.evidence_requests
+        if roles_review.PIN_ID in request.entity_ids
+    ]
+    answered = client.post(
+        f"/sessions/{chat_id}/evidence",
+        json={"answers": [{"request_id": question, "answer": "None bought"}]},
+    )
+    assert answered.status_code == 202, answered.text
+    settled = ChatState.ENDED if ticked else ChatState.AWAITING_SEND
+    assert settle(client, chat_id) == settled.value
+    return Regraded(chat_id, review_dir, pin, plate, decided)
+
+
+def restored_snapshot_of(
+    run_root: Path, provider_control: ProviderControl, models: Models, run_id: str
+) -> dict[str, Any]:
+    """`GET /reviews/{run_id}` from a backend started again on the same run root: what a restart
+    and a read-only restore show."""
+    again = create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=provider_control.factory,
+        list_models=models,
+    )
+    with TestClient(again, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as fresh:
+        response = fresh.get(f"/reviews/{run_id}")
+    assert response.status_code == 200, response.text
+    return dict(response.json())
+
+
+@pytest.mark.parametrize("ticked", [True, False], ids=["live", "waiting"])
+def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
+    client: TestClient,
+    run_root: Path,
+    provider_control: ProviderControl,
+    models: Models,
+    regrading_checks: None,
+    ticked: bool,
+) -> None:
+    """Owner decision 194A, through the routes and a real regrade, on a live review and on a
+    waiting one: the part-roles answer "None bought" restates the pin's hygiene finding medium
+    where it was accepted low, so its Accept and triage are cleared, and the plate's, restated as
+    decided, keeps them. `session.json`, the `report.md` the server rendered, the stream, the live
+    snapshot and a restarted backend's read-only restore all agree: the pin undecided with the
+    restate's line, the plate's Accept standing, and no card left under a restated finding's own
+    id. Cycle 3's `test_the_saved_session_and_report_agree_with_the_fold` is its model."""
+    review = regraded_review(client, run_root / "FICT-regrade", ticked=ticked)
+
+    findings = load_session(review.folder / "session.json").findings
+    saved = {finding.id: finding for finding in findings}
+    pin, plate = saved[review.pin], saved[review.plate]
+    assert (pin.severity, pin.disposition) == ("medium", None)
+    assert (plate.severity, plate.disposition) == (
+        "medium",
+        Disposition.model_validate(review.decided[review.plate]),
+    )
+    lines = (review.folder / "report.md").read_text(encoding="utf-8").splitlines()
+    assert reported_disposition(lines, review.pin, 1) == UNDECIDED_LINES
+    assert reported_disposition(lines, review.plate, 3) == ACCEPTED_LINES
+    events = events_of(review.folder)
+    cleared = [event["body"] for event in events if event["type"] == "disposition.cleared"]
+    assert cleared == [review.line]
+    assert standing(events) == set(saved)
+    assert client.get(f"/sessions/{review.chat_id}/snapshot").json().get("cleared") == [review.line]
+    restored = restored_snapshot_of(run_root, provider_control, models, review.folder.name)
+    assert restored.get("cleared") == [review.line]
 
 
 def test_the_report_is_served_as_markdown(
