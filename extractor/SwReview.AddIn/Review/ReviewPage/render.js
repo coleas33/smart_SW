@@ -241,11 +241,14 @@
    * Where a finding left the session, as one line in the Transcript: "F-003 withdrawn: <reason>"
    * (feature 013, contracts/part-roles.md section 9). An answer regraded the review and no check
    * produces the finding any more; the line that recorded it stays, and this one says why it went,
-   * in the backend's words.
+   * in the backend's words. A finding that held a decision took it with it, and the line ends with
+   * the backend's clause naming it, "; your Reject (wrong) went with it", printed as sent (002
+   * FR-031, roadmap hole H-g-010); a fold's withdrawal and an undecided finding's carry none.
    */
   function withdrawalMarker(withdrawal) {
     var body = withdrawal || {};
-    return marker(String(body.finding_id || ''), ' withdrawn: ' + String(body.reason || ''));
+    var taken = typeof body.taken === 'string' ? '; ' + body.taken : '';
+    return marker(String(body.finding_id || ''), ' withdrawn: ' + String(body.reason || '') + taken);
   }
 
   /** One Transcript line about one finding: its id, then what happened to it. */
