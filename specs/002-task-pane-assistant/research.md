@@ -6870,8 +6870,43 @@ the decision register now records 160A as done.
     `report.md`'s three literals, and `labels.triage`. The page prints the two lines as sent, as
     it prints every summary line, so with no labels they read the same (009 FR-030), and a
     backend that sends none leaves the page as it was.
-  - **The page.** A section of its own under the summary, rewritten by each carrier and cleared
-    with the review; a decision's reply writes it only while its card is the one the review on
-    screen holds (`entryOf`, H-g-012). It counts, and offers no control.
+  - **The page.** The summary panel's last part, so Send stays directly after the summary (015
+    `contracts/pane.md` section 3), shown alone while no summary has arrived; rewritten by each
+    carrier and cleared with the review; a decision's reply writes it only while its card is the
+    one the review on screen holds (`entryOf`, H-g-012). It counts, and offers no control.
 - **Tests**: T346 and T348 in [tasks.md](tasks.md), Phase 28, each written first; T347 and T349
   make them green, and T350 closes the records.
+- **Built** (2026-11-01, T347 and T349): `summary.TriageTally` and `triage_tally`, moved from
+  `markdown._by_triage`, which prints its two lines; the words file's `triage_tally` group;
+  `ReviewSummary.triage_tally`; `with_triage_tally`, which the disposition route's reply and the
+  runner's `disposition` and `disposition.cleared` bodies pass through; `$defs/TriageTally` in
+  [contracts/chat-events.schema.json](contracts/chat-events.schema.json). The page:
+  `#triage-tally`, the summary panel's last part, which `renderSummary` keeps; `render.triageTally`;
+  and `showTally`, written by `applyRanking`, by a decision's reply while `entryOf` holds its card,
+  and by the live `disposition` and `disposition.cleared`, and cleared by `resetTranscript`.
+  Placed first as a section of its own after `#summary`, it broke 015's rule that Send sits
+  directly after the summary (`ReviewPageSendGateTests`), so it moved inside. Every pane fixture
+  byte-identical.
+- **Tests changed on purpose**, none loosened: the event bodies of
+  `test_runner_provider.py::test_several_folds_at_once_announce_every_finding_before_any_cleared_line`
+  and of `test_recheck.py`'s `test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings`
+  and `test_a_carried_decision_keeps_its_triage`, which now carry the tally; `test_review_words.py`'s
+  placeholders and extra-key cases; and the 002 literal of the specs-README pin (T345, T350).
+- **Tests first**: T346's thirteen cases failed before T347, each for want of the count, the key
+  or the words, while the five modules' other 533 cases passed; T348's eight facts failed before
+  T349, each for want of the tally's section, while the class's other 30 passed.
+- **Left open**: a finding a turn adds is counted when the turn's end reads the summary, not as it
+  arrives; a session's-end ranking read that lands after a press made at that moment would show
+  the tally before the press until the next decision or event (both read the live session; not
+  seen in tests); and roadmap holes H-c-007, H-g-004 and H-g-011 still cite 185A's "no tally in
+  the pane", for the roadmap's next update.
+- **Gates** (T350; 2026-11-01), on the cycle's final tree: the 151 test modules that pin the
+  summary, the report, the words, the route, the runner, the carry, the events, the snapshot, the
+  scorer, the handoff, the pane fixtures, the seat plan or the specs' counts, 6,766 passed and 2
+  skipped on each of Python 3.12.3 (`uv sync --python 3.12 --all-extras`) and 3.11.16 (`uv run
+  --python 3.11 --isolated --all-extras`), the tokenizer required; `ruff check src tests` clean; the
+  C# Release build with zero warnings (`--no-incremental`), then 10,274 extractor and 4,319 add-in
+  tests passed, on T349's tree, which T350 leaves as it was for C#; the link check over the
+  cycle's nine changed Markdown files, 474 relative links, anchors included, none broken; every
+  changed file LF in the index. Not run in this lane: the whole non-live suites, which run before
+  the pull request and in its CI. No SOLIDWORKS process, seat task, or paid or live test ran.
