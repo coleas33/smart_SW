@@ -6139,6 +6139,9 @@ the decision register now records 160A as done.
   test first as a task of its own. *Settled 2026-11-01 (roadmap hole H-d-008; owner decisions 189A
   and 191A; T327):* the fold keeps the whole disposition when the re-run's status and severity are
   unchanged, and clears it and says so on the card when either changed (H-d-008 below).
+  *Changed 2026-11-01 (the owner's request; cycle 7, T345 to T350):* the first of these: the
+  pane shows a triage tally, `report.md`'s two lines as the backend sends them ("The triage
+  tally in the pane" below).
 - **Tests**: T308, T310, T312, T314 and T316 in [tasks.md](tasks.md), Phase 23, each written
   first; T309, T311, T313, T315 and T317 make them green, and T318 closes the records.
 - **speckit-converge**, run once on 2026-11-01 (T307), bounded to FR-031, scenarios 7 and 8, the
@@ -6839,3 +6842,36 @@ the decision register now records 160A as done.
   names the miss), and the report page's r5 case (no fold in the table). Left in
   [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 6: `_restated_targets`' exact
   match, the two captured apply fixtures, and the line a successful Check again drops.
+
+### The triage tally in the pane (2026-11-01; the owner's request; cycle 7)
+
+- **Question**: how the triage stood was in `report.md` alone - its "By triage" and misses lines
+  (185A, 187A) - and 185A left the pane without a tally on purpose (185A, *Not changed*). The
+  owner's request of 2026-11-01: the Review page shows it - for the flagged findings each
+  outcome's count and those not triaged yet, and the passes judged wrong apart - as decisions,
+  cleared notices and re-runs arrive and on every restore, so the engineer knows when every
+  finding is judged without opening `report.md`; one counting rule, not a second copy in the page.
+- **Settled**:
+  - **One count, sent.** `summary.triage_tally(findings)` counts and words both lines;
+    `report.md` prints them (`markdown._by_triage`, its bytes unchanged) and every payload below
+    carries the same object. Options: A, the backend sends it in payloads it already sends; B,
+    the page counts its cards, a second rule that would compare statuses (`PageRuleScanTests`);
+    C, the page reads the ranking again after each press, a second request, and an accepted
+    finding sorts into the last bucket, so the cards would move under the engineer's hand. A.
+  - **Where it rides.** The summary (a session's end, a reload, a switch, a read-only restore);
+    the disposition route's reply (a press, which comes after the session's end, when the page's
+    stream is closed); and the `disposition` and `disposition.cleared` events (a carried decision
+    or a cleared notice, as it arrives). Each carries it only while some finding records a
+    triage, as `report.md` prints its lines, so every payload, report and fixture without one
+    keeps its bytes. A finding a turn adds is counted when the turn's end reads the summary. A
+    snapshot's `cleared` lines keep the tally they were written with; the page reads a
+    snapshot's from its summary alone.
+  - **The words.** The backend's: the words file's new `triage_tally` group, which takes
+    `report.md`'s three literals, and `labels.triage`. The page prints the two lines as sent, as
+    it prints every summary line, so with no labels they read the same (009 FR-030), and a
+    backend that sends none leaves the page as it was.
+  - **The page.** A section of its own under the summary, rewritten by each carrier and cleared
+    with the review; a decision's reply writes it only while its card is the one the review on
+    screen holds (`entryOf`, H-g-012). It counts, and offers no control.
+- **Tests**: T346 and T348 in [tasks.md](tasks.md), Phase 28, each written first; T347 and T349
+  make them green, and T350 closes the records.
