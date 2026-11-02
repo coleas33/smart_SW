@@ -447,7 +447,13 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
     the `triage` group, the words of a finding's four triage outcomes.
 
     *Changed 2026-11-01 on purpose (002 T332; owner decision 187A, FR-031):* and the
-    `pass_triage` group, the word of the one outcome a pass takes, the miss."""
+    `pass_triage` group, the word of the one outcome a pass takes, the miss.
+
+    *Changed 2026-11-02 on purpose (002 T352; roadmap hole H-c-008, FR-031):* and the
+    `no_triage` group, what a flagged finding's card head says until its triage is recorded.
+
+    *Changed 2026-11-02 on purpose (002 T356; cycle 9's Tier 2 review):* and that group's keys,
+    with `read_only`, the words such a card says while its review is read-only."""
     from swreview.report.summary import load_words
 
     response = client.get("/labels")
@@ -466,8 +472,10 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
         "source",
         "triage",
         "pass_triage",
+        "no_triage",
         "errors",
     }
+    assert set(body["no_triage"]) == {"undecided", "accepted", "rejected", "deferred", "read_only"}
     assert body["source"] == {"code": "Checked by code", "model": "AI guidance"}, "feature 013"
     assert body["status"]["checked_within_scope"] == "checked within scope"
     assert body["errors"]["TurnRunning"].startswith("A review turn is still running.")

@@ -78,6 +78,19 @@ Checked, no issue takes only wrong: a miss."
 |---|---|
 | a pass's one triage button | `pass_triage` |
 
+*Amended 2026-11-02 (feature 002, roadmap hole H-c-008; 002 T353 and T356):* the block gains
+`no_triage`, after `pass_triage` and before `source`: what a flagged finding's card head says until
+its triage is recorded, one sentence keyed `undecided`, one for each decision recorded without a
+triage (`accepted`, `rejected`, `deferred`), each of those naming the repair, and one keyed
+`read_only`, what such a card says while its review is read-only, whatever its decision, naming
+no press. The page prints `labelOf(labels, "no_triage", key, "")` under the title - the key
+`read_only` while the review is read-only, else the decision, `undecided` for none - and nothing
+on a pass; with no labels there are no words and the head is as before (FR-030), as with `source`.
+
+| Surface | Word from |
+|---|---|
+| a flagged finding's card head, until its triage is recorded | `no_triage` |
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and

@@ -377,6 +377,10 @@ class Labels(ReviewModel):
     pass_triage: dict[Triage, str]
     """The one triage a pass takes, `findings.MISS`, in its word on a pass's card (owner decision
     187A)."""
+    no_triage: dict[Literal["undecided", "accepted", "rejected", "deferred", "read_only"], str]
+    """What a flagged finding's card head says until its triage is recorded, keyed by the decision
+    recorded without one, or `undecided` (roadmap hole H-c-008); `read_only` while its review is
+    read-only, whatever its decision (cycle 9's Tier 2 review)."""
     source: dict[Source, str]
     errors: dict[str, str]
 

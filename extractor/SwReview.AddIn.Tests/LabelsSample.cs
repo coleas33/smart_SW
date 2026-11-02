@@ -21,7 +21,14 @@ namespace SwReview.AddIn.Tests;
 /// Owner decision 185A (002 T311) adds the `triage` group: the words of a finding's four triage outcomes,
 /// the words file's own. Roadmap hole H-g-012 (002 T321) adds `TriageAlreadyRecorded`'s sentence, the words
 /// file's own: a second triage refused, the one recorded standing. Owner decision 187A (002 T333) adds the
-/// `pass_triage` group, the words file's own: the word of the one outcome a pass takes, the miss.
+/// `pass_triage` group, the words file's own: the word of the one outcome a pass takes, the miss. Roadmap hole
+/// H-c-008 (002 T353) adds the `no_triage` group, the words file's own: what a flagged finding's card head says
+/// until its triage is recorded, for a finding not yet decided and for each decision recorded without one.
+///
+/// *Changed 2026-11-02 (002 T356; cycle 9's Tier 2 review):* the `no_triage` words are the words file's shorter ones, and
+/// the group gains `read_only`, what such a card says while its review is read-only, whatever its decision. That one word
+/// is deliberately not the words file's own, which is `undecided`'s: a page that looked up the decision, or `undecided`, on
+/// a read-only review would print the same, so the sample's own words tell them apart.
 /// </summary>
 internal static class LabelsSample
 {
@@ -51,6 +58,24 @@ internal static class LabelsSample
 
     /// <summary>The one outcome a pass takes, `wrong`, worded as the miss it is counted as (owner decision 187A).</summary>
     public const string Miss = "wrong: a miss";
+
+    /// <summary>A flagged finding's card head while it is not yet decided and has no triage (roadmap hole H-c-008).</summary>
+    public const string NoTriageUndecided = "No triage recorded yet";
+
+    /// <summary>An Accept recorded without a triage: owner decision 185A's late triage is the same decision again.</summary>
+    public const string NoTriageAccepted = "No triage recorded yet: pick one, then press Accept again";
+
+    /// <summary>A Reject recorded without a triage, as <see cref="NoTriageAccepted"/>.</summary>
+    public const string NoTriageRejected = "No triage recorded yet: pick one, then press Reject again";
+
+    /// <summary>A Defer recorded without a triage, which a Defer cannot follow: the triage comes with Accept or Reject.</summary>
+    public const string NoTriageDeferred = "No triage recorded yet: pick one, then press Accept or Reject";
+
+    /// <summary>
+    /// Any flagged card of a read-only review with no triage, whatever its decision: no press, since the review takes none
+    /// (cycle 9's Tier 2 review). Not the words file's own, which are <see cref="NoTriageUndecided"/>'s (see the summary).
+    /// </summary>
+    public const string NoTriageReadOnly = "No triage recorded yet (read-only review)";
 
     /// <summary>A second triage refused (roadmap hole H-g-012; owner decision 185A): the words file's sentence for it.</summary>
     public const string TriageAlreadyRecorded =
@@ -127,6 +152,17 @@ internal static class LabelsSample
             "pass_triage", new Dictionary<string, string>
             {
                 { "wrong", Miss },
+            }
+        },
+        {
+            // Roadmap hole H-c-008 (002 FR-031): a flagged finding's card head until its triage is recorded, in words.
+            "no_triage", new Dictionary<string, string>
+            {
+                { "undecided", NoTriageUndecided },
+                { "accepted", NoTriageAccepted },
+                { "rejected", NoTriageRejected },
+                { "deferred", NoTriageDeferred },
+                { "read_only", NoTriageReadOnly },
             }
         },
         {

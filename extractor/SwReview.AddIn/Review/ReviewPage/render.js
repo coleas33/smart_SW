@@ -345,14 +345,19 @@
    * Tier two. The head is the line that states which finding it is, what the backend concluded
    * and how hard, and which check said so, and the title under it - and nothing else, so a
    * review reads as a list of headlines (U10, docs/history/pane-findings-2026-09-20-review-gui.md
-   * section 3). Everything else - the observed evidence first, then every field feature 001
-   * defines, the triage, Show in SOLIDWORKS, and the three dispositions - is inside the fold.
+   * section 3) - but, until a flagged finding's triage is recorded, the backend's line saying so
+   * (`noTriageLine`, roadmap hole H-c-008). Everything else - the observed evidence first, then
+   * every field feature 001 defines, the triage, Show in SOLIDWORKS, and the three dispositions -
+   * is inside the fold.
    *
    * Nothing the card used to show has gone; what moved, moved inward. `observed` was the one
    * fact printed before the fold until U10, and its first sentence is the title itself, so a
    * narrow pane stacked the same words twice under every headline and hid the next finding.
+   *
+   * `readOnly` is whether the review on screen is read-only (`app.js`'s `state.readOnly`), which
+   * only the head's no-triage line reads.
    */
-  function findingCard(finding, labels) {
+  function findingCard(finding, labels, readOnly) {
     var body = finding || {};
     var severity = String(body.severity || 'info');
     var status = String(body.status || 'unresolved');
@@ -373,6 +378,7 @@
     // it is the fold's first labelled row, "Rule" - one press away, never gone.
     head.appendChild(line);
     head.appendChild(el('h3', 'title', body.title || '(untitled finding)'));
+    append(head, [noTriageLine(body, labels, readOnly)]);
     card.appendChild(head);
 
     var actions = el('div', 'row card-actions');
@@ -427,7 +433,7 @@
     row.setAttribute('aria-label', 'Triage');
     // Which row a card carries is a card state the backend's status decides, never a rank
     // (PageRuleScanTests); which triage a pass takes is the backend's rule, which refuses any other.
-    var pass = body.status === 'checked_within_scope';
+    var pass = isPass(body);
     var tokens = pass ? PASS_TRIAGES : TRIAGES;
     var group = pass ? 'pass_triage' : 'triage';
     for (var index = 0; index < tokens.length; index++) {
@@ -437,6 +443,45 @@
     }
     pressTriage(row, body.disposition ? body.disposition.triage : null);
     return row;
+  }
+
+  /**
+   * Whether `body` is a pass, 'Checked, no issue' - the backend's `checked_within_scope` - which takes no
+   * triage but the miss (owner decision 187A): which triage row its card offers, and whether its head can
+   * say it has none. A card state the backend's status decides, never a rank (PageRuleScanTests).
+   */
+  function isPass(body) {
+    return body.status === 'checked_within_scope';
+  }
+
+  /**
+   * Roadmap hole H-c-008 (002 FR-031): a flagged finding's head says it has no triage until one is
+   * recorded, so the engineer finds each finding the tally counts "not recorded" with its fold shut. The
+   * words are the backend's for where the record stands (`labels.no_triage`, keyed by the decision
+   * recorded, `undecided` for none): a decision's words name the repair, and `undecided`'s only say none
+   * is recorded. Read from the record alone, so a pick is no triage; nothing on a pass, and nothing with
+   * no labels, the head as before (009 FR-030). While the review is read-only (`readOnly`), its buttons
+   * are off, so every such card says `read_only`'s words, whatever its decision, which also only say
+   * none is recorded and name no press (cycle 9's Tier 2 review).
+   */
+  function noTriageLine(body, labels, readOnly) {
+    var disposition = body.disposition;
+    if (isPass(body) || (disposition && disposition.triage)) {
+      return null;
+    }
+    var key = (disposition && disposition.decision) ? disposition.decision : 'undecided';
+    var text = labelOf(labels, 'no_triage', readOnly ? 'read_only' : key, '');
+    return text ? el('p', 'card-no-triage', text) : null;
+  }
+
+  /** The head's line drawn again from `body`, the finding as now recorded (`app.js`, after each decision). */
+  function showNoTriage(card, body, labels, readOnly) {
+    var head = card.querySelector('.card-head');
+    var shown = head.querySelector('.card-no-triage');
+    if (shown) {
+      head.removeChild(shown);
+    }
+    append(head, [noTriageLine(body, labels, readOnly)]);
   }
 
   /** Presses the triage button whose token is `token` and lets the others go; none for none. */
@@ -1327,6 +1372,7 @@
     dispositionText: dispositionText,
     dispositionClass: dispositionClass,
     pressTriage: pressTriage,
+    showNoTriage: showNoTriage,
     evidenceCard: evidenceCard,
     questionsPanel: questionsPanel,
     errorCard: errorCard,

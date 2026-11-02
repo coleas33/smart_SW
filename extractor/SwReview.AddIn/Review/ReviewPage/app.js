@@ -1000,7 +1000,7 @@
    */
   function placeFinding(body) {
     var existing = state.findings[body.id];
-    var card = render.findingCard(body, state.labels);
+    var card = render.findingCard(body, state.labels, state.readOnly !== null);
     if (existing) {
       // A re-run replaces its verdict rather than showing two (data-model, resume semantics).
       existing.card.parentNode.replaceChild(card, existing.card);
@@ -1112,6 +1112,11 @@
     status.className = render.dispositionClass(text);
     status.textContent = text;
     render.pressTriage(card, disposition ? disposition.triage : null);
+    // The head says it has no triage until the record holds one (roadmap hole H-c-008); a card the
+    // review no longer holds has no record here to read.
+    if (entry) {
+      render.showNoTriage(card, entry.body, state.labels, state.readOnly !== null);
+    }
   }
 
   /**

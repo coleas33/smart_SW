@@ -31,6 +31,7 @@ from swreview.agent.checklist import CHECKLIST_FILE
 from swreview.chat.server import ChatError
 from swreview.findings import TRIAGES, FindingStatus, Severity
 from swreview.report.attention import CHECKLIST_ITEM_IDS, CLOSEOUT_ITEM_ID, load_policy
+from swreview.report.dispositions import DECISIONS
 from swreview.report.session import CoverageBucket
 from swreview.report.summary import WORDS_FILE, Words, goal_of, load_words
 
@@ -299,7 +300,10 @@ def test_every_label_is_a_plain_word_not_a_token() -> None:
 
     *Changed 2026-11-01 on purpose (002 T310; owner decision 185A):* the triage words too.
 
-    *Changed 2026-11-01 on purpose (002 T332; owner decision 187A):* and a pass's miss word."""
+    *Changed 2026-11-01 on purpose (002 T332; owner decision 187A):* and a pass's miss word.
+
+    *Changed 2026-11-02 on purpose (002 T352; roadmap hole H-c-008):* and the sentences a flagged
+    finding's card head says until its triage is recorded."""
     labels = load_words().labels
     for group in (
         labels.status,
@@ -308,6 +312,7 @@ def test_every_label_is_a_plain_word_not_a_token() -> None:
         labels.contact_kind,
         labels.triage,
         labels.pass_triage,
+        labels.no_triage,
     ):
         assert all("_" not in word for word in group.values())
 
@@ -359,6 +364,44 @@ def test_a_pass_offers_its_one_triage_worded_as_a_miss() -> None:
     assert findings.MISS == "wrong"
     assert labels.pass_triage == {findings.MISS: "wrong: a miss"}
     assert order.index("pass_triage") == order.index("triage") + 1
+
+
+NO_TRIAGE = {
+    "undecided": "No triage recorded yet",
+    "accepted": "No triage recorded yet: pick one, then press Accept again",
+    "rejected": "No triage recorded yet: pick one, then press Reject again",
+    "deferred": "No triage recorded yet: pick one, then press Accept or Reject",
+    "read_only": "No triage recorded yet",
+}
+"""Roadmap hole H-c-008 (002 FR-031): what a flagged finding's card head says until its triage is
+recorded, one sentence for each state of its record, each naming the repair - an outcome picked,
+then a decision; for an Accept or Reject recorded without one, the same decision again (owner
+decision 185A's late triage); and after a Defer, Accept or Reject, since a Defer cannot follow a
+Defer (`dispositions._ALLOWED_FROM_DEFERRED`).
+
+*Changed 2026-11-02 on purpose (002 T356; cycle 9's Tier 2 review, the default the owner left to
+it):* shorter, so a finding not yet decided reads one short line under its title at a docked
+pane's 300 px and names only the outcome row it already shows ("pick one"); and `read_only`, what
+such a card says while its review is read-only, whatever its decision, naming no press - a
+read-only review's buttons are off."""
+
+
+def test_a_card_with_no_triage_names_the_repair() -> None:
+    """Keyed by `undecided` and by each decision the record takes, so the page looks the sentence
+    up by the decision recorded and compares nothing; a group of its own after `pass_triage`, so
+    `source` stays just before `errors` (`test_sources_labels.py`). A pass takes no triage but the
+    miss and is given none (187A); with no labels the page shows none (009 FR-030).
+
+    *Changed 2026-11-02 on purpose (002 T356; cycle 9's Tier 2 review):* and keyed by
+    `read_only`, which the page looks up in place of the decision while the review is read-only,
+    so a restored review's card asks for no press its locked buttons cannot make."""
+    labels = load_words().labels
+    order = list(raw_words()["labels"])
+
+    assert labels.no_triage == NO_TRIAGE
+    assert set(NO_TRIAGE) - {"undecided", "read_only"} == DECISIONS
+    assert "press" not in labels.no_triage["read_only"].lower()
+    assert order.index("no_triage") == order.index("pass_triage") + 1
 
 
 def test_a_triage_a_finding_does_not_take_says_what_a_pass_takes() -> None:

@@ -16876,6 +16876,13 @@
     "pass_triage": {
       "wrong": "wrong: a miss"
     },
+    "no_triage": {
+      "undecided": "No triage recorded yet",
+      "accepted": "No triage recorded yet: pick one, then press Accept again",
+      "rejected": "No triage recorded yet: pick one, then press Reject again",
+      "deferred": "No triage recorded yet: pick one, then press Accept or Reject",
+      "read_only": "No triage recorded yet"
+    },
     "source": {
       "code": "Checked by code",
       "model": "AI guidance"
