@@ -247,7 +247,8 @@ numbered. The owner's 13A, asked during cycle 4's review, became 192A, and a rou
 The rounds that only merged #63 to #66 (17A to 20A), and the owner's pick of cycles 6 and 7, are
 not numbered; a round asked as 21A to 23A on 2026-11-02, in roadmap update run 3, became 195A:
 its 22A, merging run 3 once CI is green, and its 23, the next features picked, are not numbered.
-A question asked as 24A during cycle 8, on 2026-11-02, became 196A.
+A question asked as 24A during cycle 8, on 2026-11-02, became 196A. The rounds that only merged #68
+to #70 (25A to 27A) are not numbered.
 The first round's 2A, 3A and 4A were written into commit
 messages on `main` and into the documentation branch under those labels before decision 128A
 numbered them, and those messages are not rewritten for it: read "2A" in a commit of that day as
