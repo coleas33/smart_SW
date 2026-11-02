@@ -754,6 +754,10 @@ both fixed test first under T072.
 record A's run folder stamp, it records the folder's date and letter (`20261101-A`), and the full
 stamp goes in `notes\timing.txt` with the review's start and end times.
 
+*Changed 2026-11-02 (owner decision 196A; R10):* where this section leaves a timed review's
+runtime in its run folder, the runtime goes in `notes\timing.txt` too, with every other duration
+of that review and its start and end times, and never in the findings document.
+
 ## R9. Owner decision 195A (2026-11-02): a timed review's run folder by its date and letter
 
 **Decision**: a timed real design's run folder is written in the findings document by its date
@@ -819,3 +823,42 @@ T074 and against 69 / 8 / 0 at T077 before each recount.
 - No C# or page file changed, so no C# gate. Not run in this lane: the whole non-live suites,
   which run before the pull request and in its CI. No SOLIDWORKS process, seat task, or paid or
   live test ran.
+
+## R10. Owner decision 196A (2026-11-02): a timed review's runtime and durations in the private note
+
+**Decision**: a timed real design's review runtime, its start-to-end span, and every other
+duration of that review go in the private note `notes\timing.txt` with its start and end times,
+never in the findings document, so that no private figure can be worked out from it: when the
+engineer watched the whole review, its runtime is its supervision minutes, which decision 186A
+keeps private. A review not timed, B's at a sitting (190A), keeps its durations. It widens 192A
+(R8) and 195A (R9). Asked as 24A during cycle 8, and applied in that cycle, before M0-a
+([`docs/roadmap/README.md`](../../docs/roadmap/README.md)).
+
+**Why**: rule 5 kept the timed review's start and end times, its full stamp and every clock time
+of it out of the findings document, but no line of the seat plan, the results sheet, the handover
+or the runbook kept its runtime, or another duration of it, out. Step 4.1's Record line asks for
+the facts `Show-ReviewFacts` prints, which hold the drawing phase's milliseconds and the seconds
+from `session.started` to the first `text.delta`, and for the usage line, which ends with the last
+round's seconds; step 4.11 records the same facts lines on A's folder; step 4.10 records four
+timings, one of them a timed review's when a sitting times a review there (M0-a, the roadmap's
+M0); and the runbook's section 8 lists durations among the evidence a findings document carries.
+R8 left the runtime in the run folder, which is never committed, without saying that it stays out
+of the findings document.
+
+**What it changes**: no code. Rule 5 states it. Step 4.1 notes the runtime in `notes\timing.txt`,
+and its Record line sends the facts' and the usage line's durations there; step 4.11's Record line
+does the same for the facts lines, step 4.5's item 1 for A's usage line, and step 4.10's item 7
+and Record line, with the results sheet's 4.10 row, for a timed review's timings; what the plan
+says of `Show-ReviewFacts` and `Show-SetupTime` run on a timed review's folder, and of a duration
+noted when SOLIDWORKS stops answering in a timed review, says the same. Every check of what stays
+out of the findings document names the runtime and its other durations: rule 5, section 0.2,
+steps 6.4 and 6.5, the results sheet's header, the handover's timed run, its findings document
+and the owner's reading after the sitting, the runbook's section 8, whose durations leave a timed
+review's out, `CONTRIBUTING.md`'s rule and T060's note. Tasks T078 to T081, Phase 12 of
+[tasks.md](tasks.md).
+
+**Not changed**: every review not timed keeps its durations in the findings document - D's drawing
+phase at step 3.4, B's times at steps 4.2 and 4.3 and the handover's step 12, and the untimed
+reviews' timings at step 4.10; `report.md`'s Timing section and the rest of the run folder, which
+hold the runtime and travel only in the handover folder (step 6.3); `swreview timing`, the route,
+the report and the plan's commands, whose printed lines are routed, not changed.
