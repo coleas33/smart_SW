@@ -28,7 +28,8 @@ decision and never inferred from it (002 research, 185A). What this pins:
 - **what a clear or a withdrawal took** (002 T358, roadmap hole H-g-010): `report.md` prints an
   undecided finding's cleared line under its disposition and names each finding withdrawn with a
   decision after the summary, from the session's own stream alone, and with nothing to say keeps
-  its bytes.
+  its bytes; a withdrawal of a finding the session still holds, the stream having run ahead of
+  the record, is not named (cycle 10's Tier 2 review).
 
 Every fixture is fictional: FICT names, and an explicit `by` on every record.
 """
@@ -908,3 +909,29 @@ def test_a_report_with_nothing_to_say_keeps_its_bytes() -> None:
     events = stream_of(session, withdrawal("F-008"), FOLD, cleared("F-001"))
 
     assert render_report(session, events=events) == render_report(session)
+
+
+def test_a_withdrawal_of_a_finding_the_session_still_holds_is_not_named() -> None:
+    """Cycle 10's Tier 2 review (002 T362): the stream can run ahead of the record. On a sent
+    review, `answer_evidence_batch` writes a restate's withdrawal and then runs the whole resumed
+    turn, and `session.json` is saved only by `finalize`, so a backend killed in that turn leaves
+    the record holding the finding, decided, beside a stream that withdrew it - F-003 Accepted,
+    ER-001 answered "All bought". `report.md` rendered from that record (`swreview timing` after
+    the restart) names no withdrawal of a finding the session still holds: the same bytes as with
+    no stream, and beside the withdrawal of a finding it no longer holds, that one alone."""
+    session = reported_session((("F-003", "accepted", None),))
+    accepted = find_finding(session, "F-003").disposition
+    assert accepted is not None
+    ahead = withdrawal(
+        "F-003", disposition=accepted.model_dump(mode="json"), taken="your Accept went with it"
+    )
+    rejected = "your Reject (wrong) went with it"
+    gone = withdrawal("F-007", disposition=REJECTED_WRONG, taken=rejected)
+
+    assert render_report(session, events=stream_of(session, ahead)) == render_report(session)
+    lines = render_report(session, events=stream_of(session, ahead, gone)).splitlines()
+    start = lines.index("## Withdrawn with a decision")
+    assert lines[start + 2 : start + 4] == [
+        f"- F-007 withdrawn: {WITHDRAWN_BECAUSE}; {rejected}",
+        "",
+    ]

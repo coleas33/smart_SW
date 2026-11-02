@@ -14,10 +14,12 @@ from __future__ import annotations
 import re
 
 from swreview.report.attention import family_title, rank
+from swreview.report.dispositions import find_finding
 from swreview.report.markdown import render_report
 from swreview.report.session import ReviewSession, load_session
 from tests.support.attention import REVIEW_SESSION_FILE, attention_package
 from tests.unit.test_report_start_here import section_of
+from tests.unit.test_triage import RESTATE_CLEARED, cleared, disposition_lines, stream_of
 
 HEADING = "### Modelling practice: 6 findings across 6 rules"
 FINDING_HEADING = re.compile(r"^#### (F-\d+):")
@@ -99,6 +101,25 @@ def test_a_family_finding_renders_as_the_severity_sections_render_it() -> None:
     for finding in session.findings:
         heading = f"#### {finding.id}: {finding.title}"
         assert _finding_lines(folded_report, heading) == _finding_lines(unfolded_report, heading)
+
+
+def test_a_members_cleared_line_prints_inside_the_family() -> None:
+    """002 FR-031 (owner decision 193A; cycle 10's Tier 2 review): a part-roles answer's restate
+    graded F-003's RMS part rule again and cleared its Accept, so `report.md` prints the
+    restate's line under F-003's undecided disposition inside the family's `<details>` block,
+    where F-003 is rendered, as a severity section prints it (`_render_family` hands its members
+    the cleared lines)."""
+    session = folded()
+    assert find_finding(session, "F-003").check == "rms.sketches.fully_defined"
+    events = stream_of(session, cleared("F-003"))
+
+    report = render_report(session, attention_package(), ranking=rank(session), events=events)
+
+    block = family_block(findings_section(report))
+    assert disposition_lines("\n".join(block), "F-003") == [
+        "- Disposition: not yet dispositioned",
+        f"  - cleared: {RESTATE_CLEARED}",
+    ]
 
 
 def _finding_lines(report: str, heading: str) -> list[str]:
