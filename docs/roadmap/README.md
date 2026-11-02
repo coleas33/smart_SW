@@ -14,7 +14,7 @@ Nothing here is a task: proposed work says "proposed, not in any tasks.md" and r
 |---|---|---|---|---|---|---|
 | 1 (full) | 2026-10-31 | `a1ff6af6` | 178A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 27 of 30: Opus 17 (one stopped at its output limit), Sonnet 8, Haiku 1, Codex 1 |
 | 2 (update) | 2026-11-01 | `65bc3b21` | 185A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 6 of 8: Opus 6 (three hunters, lenses a, c and d, g; three skeptics) |
-| 3 (update) | 2026-11-02 | `821944de` | 194A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 5 of 8, the writer counted: Opus 5, among them one hunter, two skeptics and the writer |
+| 3 (update) | 2026-11-02 | `821944de` | 194A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 4 of 8: Opus 4 (one hunter, two skeptics, the writer) |
 
 ## Change log
 
@@ -29,8 +29,9 @@ opened; H-c-008, the pane marks no untriaged card (14 each). **Re-scored:** H-a-
 evidence updated. **Run 2's next cycles:** 2 to 5 done (PRs #61 to #64), then 6 and 7 on the
 owner's picks, done (#65, #66); M0's tables, then H-g-003's keys, wait for M0-a's planning. **The
 owner's direction** (2026-11-01): "Let's focus less on regulations and rules and more on features
-if possible". **Measured:** nothing at a seat. **Decided:** 191A to 194A. No security item. Run 2's
-entry: [`archive/2026-11-02.md`](archive/2026-11-02.md).
+if possible". **Measured:** nothing at a seat. **Decided:** 191A to 194A; in this run, 195A (21A: a
+timed design's run folder by date and letter only). One security item was reported to the owner
+privately, 2026-11-02. Run 2's entry: [`archive/2026-11-02.md`](archive/2026-11-02.md).
 
 ## Value model
 
@@ -212,17 +213,16 @@ new check enters without a real instance and the owner's estimate of its frequen
 
 ## The next cycles' brief
 
-**Cycles 1 to 7: done** (PRs #59, #61 to #66). The holes scored 15 to 18 route to sittings or owner
-decisions, H-g-003 apart, so the next features, each proposed, not in any tasks.md, failing tests
-first, at its 180A tier and on the owner's pick, come from the 14s and the review backlog:
-- **The card says it has no triage yet** (H-c-008), before M0-a: the backend's words on a flagged
-  finding's card until its triage is recorded; `ACardSaysItHasNoTriageUntilOneIsRecorded`. Tier 2.
-- **A withdrawal or a clear says what it took** (H-g-010), before M0-b: the Transcript and
-  `report.md` name the decision lost; `test_report_md_says_a_cleared_decision`. Tier 2.
-- **The tally counts a resumed turn's finding at once** (backlog, cycle 7), before M0-b: the
-  `finding` event carries it; `test_a_finding_a_resumed_turn_adds_carries_the_tally`. Tier 2.
-- **Check again keeps a cleared line** (backlog, cycle 6), before M0-b: the carry reads it from the
-  earlier record's own stream; `test_a_successful_check_again_keeps_the_cleared_line`. Tier 1.
+**Cycles 1 to 7: done** (PRs #59, #61 to #66). **Picked by the owner, 2026-11-02** (21A, 23), each
+failing tests first, at its 180A tier, merged on the owner's word:
+- **Cycle 8, a timed design's run folder by date and letter** (195A), before M0-a: the seat plan's
+  Record lines and their pins, in 007's tasks. Tier 3.
+- **Cycle 9, the card says it has no triage yet** (H-c-008), before M0-a: the backend's words on a
+  flagged finding's card until its triage is recorded. Tier 2.
+- **Cycle 10, a withdrawal or a clear says what it took** (H-g-010), before M0-b: the Transcript
+  and `report.md` name the decision lost. Tier 2.
+- **Proposed, not in any tasks.md:** the tally counts a resumed turn's finding at once (backlog,
+  cycle 7; Tier 2); Check again keeps a cleared line (backlog, cycle 6; Tier 1).
 - **Then M0's tables** (H-a-003, H-a-004, H-a-009, H-a-010 with 190A, H-a-013, H-a-014, H-g-010,
   H-g-011, H-g-013), when M0-a is planned; then H-g-003's escape keys, the replay by hand till then.
 
@@ -230,7 +230,8 @@ first, at its 180A tier and on the owner's pick, come from the 14s and the revie
 
 **Answered:** round 2 (2026-10-31), 179A to 182A; after cycle 1's review (2026-11-01), the order of
 work, with 183A kept, not numbered; in run 2, 186A to 190A; since, 191A to 194A and cycle 7's pick
-(185A's row), the merges of #61 to #66 not numbered. All in [`docs/decisions.md`](../decisions.md).
+(185A's row), the merges of #61 to #66 not numbered; in run 3, 195A, its merge and the next picks
+not numbered. All in [`docs/decisions.md`](../decisions.md).
 
 **Defaults taken, the owner may revise:** the escape set is a held-out evaluation set, split
 before the first replay; the precision floor's threshold ([`metrics.md`](metrics.md#the-precision-floor));
