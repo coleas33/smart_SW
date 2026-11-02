@@ -14,7 +14,9 @@ message (the plan's steps 4.1 and 4.5; decision 186A; decision 192A (the owner's
 2026-11-01, 13A)). A run folder is
 written as its time stamp and letter (`20261001-101112-B`), never its name, and a timed review's
 by its date and letter only (`20261101-A`), its full stamp staying in `notes\timing.txt`
-(decision 195A). From a D6 or D8 line of
+(decision 195A). The timed review's runtime and every other duration of it stay in
+`notes\timing.txt` too (decision 196A); a review not timed keeps its durations.
+From a D6 or D8 line of
 a probe report, its id only: never a dimension's name, view, value or radius. From a Standards
 probe report, a component's id only (`cmp:` and four digits), never its name, and no
 configuration's or view's name. From a re-modeler probe run, no line that holds a path (the
@@ -128,7 +130,7 @@ only), or a quoted line: never a path or a name.
 | 4.9 | 011 T110: J's drawing after J's review: whose review it is and the drawing's line, no Review invitation, Retry starts nothing | | | |
 | 4.9 | 011 T110: back on J, its review shown again | | | |
 | 4.9 | 011 T110: C on its own: its model named, or one named and the others counted; no `could not be read` line today | | | |
-| 4.10 | 015 T119: A unticked, Send, the waiting review restored, and A's and B's timings | | | |
+| 4.10 | 015 T119: A unticked, Send, the waiting review restored, and A's and B's timings (a timed review's in `notes\timing.txt` only) | | | |
 | 4.11 | 014 T221: A's smoke review: the served model on every usage, no retries field, origin marks 1, the profile stamps, attention.json's line endings and that it reads as the run's record, no prompts.json | | | |
 | 5.1 | Model check on J | | | |
 | 5.1 | 007 T059: Start here above the chips on Model check, against `report.md`'s | | | |

@@ -260,8 +260,9 @@ checks and `MANUAL` for the rest; read each `FAIL` against section 7.
 The owner's development machine cannot see this workstation. Everything learned here travels
 as a document, in the shape the earlier handovers used (`docs/history/pane-findings-2026-09-16.md`,
 `docs/history/pane-findings-2026-09-18.md`): a dated Markdown file, `pane-findings-<date>.md`, that says
-what works, what is a bug with the evidence (log lines, run folder stamps and letters, durations,
-sizes), what is setup rather than a bug, and a suggested order for the next session. Write it in
+what works, what is a bug with the evidence (log lines, run folder stamps and letters, durations
+other than a timed review's, sizes), what is setup rather than a bug, and a suggested order for
+the next session. Write it in
 `%LOCALAPPDATA%\SwReview\handover\<date>\`, not in the checkout: an untracked file in `docs\`
 makes the next `update-workstation.ps1` refuse the tree.
 
@@ -277,10 +278,10 @@ makes the next `update-workstation.ps1` refuse the tree.
   out by design. Run folders hold vault paths and must never be committed.
 - **No company value in the document**: no vault path, no library folder name, no property
   name, no export-control phrase, and of a real design's timing only the net saved, its minutes,
-  its timed review's start and end times and that review's full stamp staying in the handover
-  folder's `notes\timing.txt`, and that review's run folder written by its date and letter
-  (decision 186A; decision 192A (the owner's answer of 2026-11-01, 13A); decision 195A). Name the
-  profile by its path only.
+  its timed review's start and end times, its runtime and its other durations and that review's
+  full stamp staying in the handover folder's `notes\timing.txt`, and that review's run folder
+  written by its date and letter (decision 186A; decision 192A (the owner's answer of 2026-11-01,
+  13A); decision 195A; decision 196A). Name the profile by its path only.
 - **If `git push` works from this machine**, copy the document into `docs\` on a branch
   `workstation/<date>`, commit it alone, push that branch and `git checkout main` again, so the
   next update finds `main` clean. Never push `main`; never commit anything under the run root,
