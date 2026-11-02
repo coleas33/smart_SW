@@ -353,8 +353,11 @@
    * Nothing the card used to show has gone; what moved, moved inward. `observed` was the one
    * fact printed before the fold until U10, and its first sentence is the title itself, so a
    * narrow pane stacked the same words twice under every headline and hid the next finding.
+   *
+   * `readOnly` is whether the review on screen is read-only (`app.js`'s `state.readOnly`), which
+   * only the head's no-triage line reads.
    */
-  function findingCard(finding, labels) {
+  function findingCard(finding, labels, readOnly) {
     var body = finding || {};
     var severity = String(body.severity || 'info');
     var status = String(body.status || 'unresolved');
@@ -375,7 +378,7 @@
     // it is the fold's first labelled row, "Rule" - one press away, never gone.
     head.appendChild(line);
     head.appendChild(el('h3', 'title', body.title || '(untitled finding)'));
-    append(head, [noTriageLine(body, labels)]);
+    append(head, [noTriageLine(body, labels, readOnly)]);
     card.appendChild(head);
 
     var actions = el('div', 'row card-actions');
@@ -456,26 +459,28 @@
    * recorded, so the engineer finds each finding the tally counts "not recorded" with its fold shut. The
    * words are the backend's for where the record stands (`labels.no_triage`, keyed by the decision
    * recorded, `undecided` for none), and name the repair. Read from the record alone, so a pick is no
-   * triage; nothing on a pass, and nothing with no labels, the head as before (009 FR-030).
+   * triage; nothing on a pass, and nothing with no labels, the head as before (009 FR-030). While the
+   * review is read-only (`readOnly`), its buttons are off, so every such card says `read_only`'s words,
+   * whatever its decision, and names no press (cycle 9's Tier 2 review).
    */
-  function noTriageLine(body, labels) {
+  function noTriageLine(body, labels, readOnly) {
     var disposition = body.disposition;
     if (isPass(body) || (disposition && disposition.triage)) {
       return null;
     }
     var key = (disposition && disposition.decision) ? disposition.decision : 'undecided';
-    var text = labelOf(labels, 'no_triage', key, '');
+    var text = labelOf(labels, 'no_triage', readOnly ? 'read_only' : key, '');
     return text ? el('p', 'card-no-triage', text) : null;
   }
 
   /** The head's line drawn again from `body`, the finding as now recorded (`app.js`, after each decision). */
-  function showNoTriage(card, body, labels) {
+  function showNoTriage(card, body, labels, readOnly) {
     var head = card.querySelector('.card-head');
     var shown = head.querySelector('.card-no-triage');
     if (shown) {
       head.removeChild(shown);
     }
-    append(head, [noTriageLine(body, labels)]);
+    append(head, [noTriageLine(body, labels, readOnly)]);
   }
 
   /** Presses the triage button whose token is `token` and lets the others go; none for none. */

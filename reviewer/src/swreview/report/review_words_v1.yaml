@@ -303,14 +303,17 @@ labels:
     wrong: "wrong: a miss"
   # What a flagged finding's card head says until its triage is recorded (roadmap hole H-c-008,
   # feature 002 FR-031): one sentence for each state of its record - not yet decided, or the
-  # decision recorded without a triage - naming the repair. A Defer cannot follow a Defer, so a
-  # deferred finding takes its triage with Accept or Reject. The page prints the sentence for the
-  # recorded decision and compares nothing, and none on a pass, which takes no triage but the miss.
+  # decision recorded without a triage, naming the repair. A Defer cannot follow a Defer, so a
+  # deferred finding takes its triage with Accept or Reject. `read_only` is what such a card says
+  # while its review is read-only, whatever its decision: its buttons are off, so it names no
+  # press. The page prints the sentence for the recorded decision, or `read_only`'s, and compares
+  # nothing, and none on a pass, which takes no triage but the miss.
   no_triage:
-    undecided: "No triage recorded yet: pick an outcome, then press Accept, Reject or Defer."
-    accepted: "No triage recorded yet: pick an outcome, then press Accept again."
-    rejected: "No triage recorded yet: pick an outcome, then press Reject again."
-    deferred: "No triage recorded yet: pick an outcome, then press Accept or Reject."
+    undecided: "No triage recorded yet"
+    accepted: "No triage recorded yet: pick one, then press Accept again"
+    rejected: "No triage recorded yet: pick one, then press Reject again"
+    deferred: "No triage recorded yet: pick one, then press Accept or Reject"
+    read_only: "No triage recorded yet"
   # Who wrote a finding, a question or a coverage row (feature 013): the page prints the word
   # for a record's `source` token and compares nothing; `report.md` uses the same two.
   source:

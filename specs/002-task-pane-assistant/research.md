@@ -7020,3 +7020,16 @@ the decision register now records 160A as done.
   - The link check over the cycle's six changed Markdown files, anchors included, none broken;
     every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
     ran.
+  - *Changed 2026-11-02:* that tree came before the Tier 2 review's fixes; the final tree's gates
+    are T356's last sub-item in [tasks.md](tasks.md).
+- **Review** (Tier 2, decision 180A; 2026-11-02): one review, no must-fix. Fixed, each test first,
+  as T356's dated sub-items record. The words (*Settled* above) are shorter, a default taken on
+  the owner's word to take sensible ones: a finding not yet decided says only "No triage recorded
+  yet", and a decision recorded without one adds the repair, "pick one, then press" the same
+  decision, or Accept or Reject after a Defer - "pick one" names the row of outcomes the card
+  shows, where "pick an outcome" named nothing it shows. A read-only review takes no press, so
+  while it is read-only every flagged card with no triage says the group's `read_only` words,
+  whatever its decision, where the restore fact had pinned a press sentence on a locked card. And
+  two page paths gained a guard fact each, proved by a mutant: a reply with no triage that lands
+  after a review switch draws no line on the shown review's card of the same id, and a reload and
+  a switch bring the line back from the live snapshot.
