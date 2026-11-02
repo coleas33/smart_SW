@@ -367,28 +367,40 @@ def test_a_pass_offers_its_one_triage_worded_as_a_miss() -> None:
 
 
 NO_TRIAGE = {
-    "undecided": "No triage recorded yet: pick an outcome, then press Accept, Reject or Defer.",
-    "accepted": "No triage recorded yet: pick an outcome, then press Accept again.",
-    "rejected": "No triage recorded yet: pick an outcome, then press Reject again.",
-    "deferred": "No triage recorded yet: pick an outcome, then press Accept or Reject.",
+    "undecided": "No triage recorded yet",
+    "accepted": "No triage recorded yet: pick one, then press Accept again",
+    "rejected": "No triage recorded yet: pick one, then press Reject again",
+    "deferred": "No triage recorded yet: pick one, then press Accept or Reject",
+    "read_only": "No triage recorded yet",
 }
 """Roadmap hole H-c-008 (002 FR-031): what a flagged finding's card head says until its triage is
 recorded, one sentence for each state of its record, each naming the repair - an outcome picked,
 then a decision; for an Accept or Reject recorded without one, the same decision again (owner
 decision 185A's late triage); and after a Defer, Accept or Reject, since a Defer cannot follow a
-Defer (`dispositions._ALLOWED_FROM_DEFERRED`)."""
+Defer (`dispositions._ALLOWED_FROM_DEFERRED`).
+
+*Changed 2026-11-02 on purpose (002 T356; cycle 9's Tier 2 review, the default the owner left to
+it):* shorter, so a finding not yet decided reads one short line under its title at a docked
+pane's 300 px and names only the outcome row it already shows ("pick one"); and `read_only`, what
+such a card says while its review is read-only, whatever its decision, naming no press - a
+read-only review's buttons are off."""
 
 
 def test_a_card_with_no_triage_names_the_repair() -> None:
     """Keyed by `undecided` and by each decision the record takes, so the page looks the sentence
     up by the decision recorded and compares nothing; a group of its own after `pass_triage`, so
     `source` stays just before `errors` (`test_sources_labels.py`). A pass takes no triage but the
-    miss and is given none (187A); with no labels the page shows none (009 FR-030)."""
+    miss and is given none (187A); with no labels the page shows none (009 FR-030).
+
+    *Changed 2026-11-02 on purpose (002 T356; cycle 9's Tier 2 review):* and keyed by
+    `read_only`, which the page looks up in place of the decision while the review is read-only,
+    so a restored review's card asks for no press its locked buttons cannot make."""
     labels = load_words().labels
     order = list(raw_words()["labels"])
 
     assert labels.no_triage == NO_TRIAGE
-    assert set(NO_TRIAGE) - {"undecided"} == DECISIONS
+    assert set(NO_TRIAGE) - {"undecided", "read_only"} == DECISIONS
+    assert "press" not in labels.no_triage["read_only"].lower()
     assert order.index("no_triage") == order.index("pass_triage") + 1
 
 

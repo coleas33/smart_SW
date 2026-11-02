@@ -57,6 +57,10 @@ namespace SwReview.AddIn.Tests;
 /// (`labels.no_triage`, keyed by the decision recorded, `undecided` for none), each naming the repair. `showDisposition` draws
 /// it again from each recorded decision, so a pick alone leaves it; a pass takes no triage but the miss and says nothing; a
 /// cleared decision brings it back; and with no labels the head is its line and its title, as before (FR-030).
+/// *Changed 2026-11-02 (002 T356; cycle 9's Tier 2 review):* the words are shorter - a finding not yet decided says only that
+/// it has none - and while the review is read-only every such card says `read_only`'s words, whatever its decision, and
+/// names no press its locked buttons cannot make. A reply that lands after a review switch draws no line on the shown
+/// review's card of the same id, and a reload and a switch bring the line back from the live snapshot.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -1419,6 +1423,10 @@ public sealed class ReviewPageTriageTests
     /// A review restored read-only from its run folder: each card's head says what its record says - F-100's Accept with
     /// `already known` nothing, F-101, not yet decided, and F-102's Accept without a triage their words, and F-103, whose decision
     /// a re-run cleared, the words of a finding not yet decided, its status line the cleared line - with every triage button off.
+    /// *Changed 2026-11-02 on purpose (002 T356; cycle 9's Tier 2 review):* it asserted F-102's sentence to press Accept again,
+    /// on a card whose buttons are off. A read-only review takes no press, so every flagged card with no triage says the
+    /// backend's read-only words, whatever its decision, and asks for none: F-101 not yet decided, F-102's Accept, F-104's
+    /// Reject and F-105's Defer without one, and the cleared F-103; F-100, with its triage, and the pass F-106 say nothing.
     /// </summary>
     [Fact]
     public void ARestoredReviewSaysWhichCardsHaveNoTriage()
@@ -1436,18 +1444,26 @@ public sealed class ReviewPageTriageTests
                     Finding("F-100", Disposition("accepted", "FICT intended", "already_known")),
                     Finding("F-101"),
                     Finding("F-102", Disposition("accepted", "FICT intended", null)),
-                    Finding("F-103", null, "suspected", "low"))));
+                    Finding("F-103", null, "suspected", "low"),
+                    Finding("F-104", Disposition("rejected", "FICT not a clash", null)),
+                    Finding("F-105", Disposition("deferred", string.Empty, null)),
+                    Pass("F-106"))));
             },
             async driver =>
             {
                 await driver.Settle();
 
                 Assert.Equal(0, (await driver.Read(ReadNoTriage("F-100"))).GetProperty("count").GetInt32());
-                Assert.Equal(LabelsSample.NoTriageUndecided, (await driver.Read(ReadNoTriage("F-101"))).GetProperty("text").GetString());
-                Assert.Equal(LabelsSample.NoTriageAccepted, (await driver.Read(ReadNoTriage("F-102"))).GetProperty("text").GetString());
-                Assert.Equal(LabelsSample.NoTriageUndecided, (await driver.Read(ReadNoTriage("F-103"))).GetProperty("text").GetString());
+                foreach (string id in new[] { "F-101", "F-102", "F-103", "F-104", "F-105" })
+                {
+                    JsonElement line = await driver.Read(ReadNoTriage(id));
+                    Assert.Equal(1, line.GetProperty("count").GetInt32());
+                    Assert.Equal(LabelsSample.NoTriageReadOnly, line.GetProperty("text").GetString());
+                }
+
+                Assert.Equal(0, (await driver.Read(ReadNoTriage("F-106"))).GetProperty("count").GetInt32());
                 Assert.Equal(ClearedLine, (await driver.Read(ReadCard("F-103"))).GetProperty("status").GetString());
-                foreach (string id in new[] { "F-100", "F-101", "F-102", "F-103" })
+                foreach (string id in new[] { "F-100", "F-101", "F-102", "F-103", "F-104", "F-105", "F-106" })
                 {
                     Assert.All(Disabled(await driver.Read(ReadCard(id))), off => Assert.True(off, "a triage button is live on a read-only review."));
                 }
@@ -1458,7 +1474,8 @@ public sealed class ReviewPageTriageTests
     /// At a docked pane's 300 px, the card where a real turn leaves it: the session's end reads the ranking, which puts F-007's
     /// card in its grouped row, shut. With the row opened and the card's fold shut, the line - a finding not yet decided, the
     /// longest of the words - is whole: inside the window and every box that clips it, its words inside it, with no sideways
-    /// page scroll.
+    /// page scroll. *Changed 2026-11-02 on purpose (002 T356; cycle 9's Tier 2 review):* the words for a finding not yet
+    /// decided are now the shortest, so F-007 is sent deferred without a triage, whose words are now the longest.
     /// </summary>
     [Fact]
     public void ANoTriageLineIsWhollyVisibleAtThreeHundredPixelsInItsRow()
@@ -1468,7 +1485,7 @@ public sealed class ReviewPageTriageTests
             await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
             await driver.RouteAttention(Chat, SummarySample.Json());
             await driver.StartReview();
-            await driver.Push(Chat, 1, "finding", Finding("F-007"));
+            await driver.Push(Chat, 1, "finding", Finding("F-007", Disposition("deferred", string.Empty, null)));
             await driver.EndSession(Chat);
             JsonElement placed = await driver.Read(ReadRow("F-007"));
             Assert.True(placed.GetProperty("inRow").GetBoolean(), "F-007's card is not in its grouped row.");
@@ -1476,7 +1493,7 @@ public sealed class ReviewPageTriageTests
 
             JsonElement measured = await driver.Read(ReadNoTriageWhole("F-007"));
             Assert.Equal(300, measured.GetProperty("width").GetInt32());
-            Assert.Equal(LabelsSample.NoTriageUndecided, measured.GetProperty("text").GetString());
+            Assert.Equal(LabelsSample.NoTriageDeferred, measured.GetProperty("text").GetString());
             Assert.True(measured.GetProperty("foldShut").GetBoolean(), "the finding's fold is open.");
             Assert.Empty(ReviewPageDriver.Strings(measured, "clipped"));
             Assert.True(measured.GetProperty("noHorizontalOverflow").GetBoolean(), measured.ToString());
@@ -1502,6 +1519,78 @@ public sealed class ReviewPageTriageTests
             JsonElement accepted = await driver.Read(ReadNoTriage("F-001"));
             Assert.Equal(0, accepted.GetProperty("count").GetInt32());
             Assert.Equal(new[] { "card-line", "title" }, ReviewPageDriver.Strings(accepted, "headChildren"));
+        });
+    }
+
+    /// <summary>
+    /// Cycle 9's Tier 2 review, a guard: a decision's reply that lands after the engineer switched reviews draws no line on
+    /// the shown review's card of the same id (`showDisposition` draws only through the card its own entry holds,
+    /// `entryOf`). Chat-1's F-001 is accepted with no outcome picked and its reply held; the engineer chooses chat-2, whose
+    /// F-001 is rejected as `wrong` and says nothing of a triage; the held reply then lands, an Accept with no triage - and
+    /// chat-2's F-001 still says nothing, its head its line and its title.
+    /// </summary>
+    [Fact]
+    public void AReplyWithNoTriageThatLandsAfterAReviewSwitchDrawsNoLineOnTheShownCard()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-001"));
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200,
+                Snapshot(OtherRun, false, Finding("F-001", Disposition("rejected", "FICT missed", "wrong"))));
+            await driver.HoldRoute("POST", DispositionPath("F-001"), 200, Finding("F-001", Disposition("accepted", string.Empty, null)));
+            await Decide(driver, "F-001", "accept");
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            Assert.Equal(0, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("count").GetInt32());
+
+            await driver.ReleaseRoute("POST", DispositionPath("F-001"));
+            JsonElement shown = await driver.Read(ReadNoTriage("F-001"));
+            Assert.Equal(0, shown.GetProperty("count").GetInt32());
+            Assert.Equal(new[] { "card-line", "title" }, ReviewPageDriver.Strings(shown, "headChildren"));
+        });
+    }
+
+    /// <summary>
+    /// Cycle 9's Tier 2 review, a guard: a review switch and a reload bring the line back through
+    /// `GET /sessions/{chat}/snapshot`, as they bring the cleared line and the tally back. Chat-2's live snapshot holds F-001
+    /// not yet decided, F-002's Accept without a triage and F-003's Reject as `wrong`: their cards say they have none, to
+    /// press Accept again, and nothing. After a reload the page shows chat-1, the newest review of the document, from its live
+    /// snapshot: F-001's Defer and F-002's Reject without a triage, whose cards say to press Accept or Reject, and Reject again.
+    /// </summary>
+    [Fact]
+    public void ANoTriageLineComesBackAfterAReloadAndAReviewSwitch()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string ChatRun = "20260923-101500-bracket-1";
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, ChatRun, ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200, Snapshot(
+                OtherRun,
+                false,
+                Finding("F-001"),
+                Finding("F-002", Disposition("accepted", string.Empty, null)),
+                Finding("F-003", Disposition("rejected", "FICT missed", "wrong"))));
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            Assert.Equal(LabelsSample.NoTriageUndecided, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("text").GetString());
+            Assert.Equal(LabelsSample.NoTriageAccepted, (await driver.Read(ReadNoTriage("F-002"))).GetProperty("text").GetString());
+            Assert.Equal(0, (await driver.Read(ReadNoTriage("F-003"))).GetProperty("count").GetInt32());
+
+            driver.InitialRoutes.Add(("GET", "/sessions/" + Chat + "/snapshot", 200, Snapshot(
+                ChatRun,
+                false,
+                Finding("F-001", Disposition("deferred", string.Empty, null)),
+                Finding("F-002", Disposition("rejected", string.Empty, null)))));
+            await driver.Reload();
+            await driver.Settle();
+            Assert.Equal(LabelsSample.NoTriageDeferred, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("text").GetString());
+            Assert.Equal(LabelsSample.NoTriageRejected, (await driver.Read(ReadNoTriage("F-002"))).GetProperty("text").GetString());
         });
     }
 
