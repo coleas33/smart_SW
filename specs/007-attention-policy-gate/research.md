@@ -862,3 +862,54 @@ phase at step 3.4, B's times at steps 4.2 and 4.3 and the handover's step 12, an
 reviews' timings at step 4.10; `report.md`'s Timing section and the rest of the run folder, which
 hold the runtime and travel only in the handover folder (step 6.3); `swreview timing`, the route,
 the report and the plan's commands, whose printed lines are routed, not changed.
+
+**Built** (2026-11-02, T080), as *What it changes* says. Rule 5 sends the runtime, from start to
+end, and every other duration of a timed review to `notes\timing.txt`, never the findings
+document, and a review not timed, B's among them, keeps its full stamp and its durations. Step
+4.1's Record line names what the facts and the usage line show that is a duration - the `drawing
+phase` line's milliseconds, the `seconds from session.started to the first text.delta` line and
+the usage line's `last round <n> s` - and sends them to the note. Step 4.10's item 7 and Record
+line, the results sheet's 4.10 row and the handover's step 22 name a timed review's timings in
+the words step 4.10's Record line already used for its run folders ("a timed review's ... only").
+What the plan says of `Show-SetupTime` holds for a sitting that runs it on a timed review's
+folder: this sitting runs it on B's alone (step 4.3). T060's note was written with the records,
+at T078.
+
+**Tests changed on purpose**, each with a dated note, none loosened:
+`test_a_real_designs_timing_figures_stay_out_of_the_findings_document` (step 4.1's opening and
+Record line; `CONTRIBUTING.md`'s rule),
+`test_every_check_before_the_findings_document_is_committed_names_the_timing_figures` (each of
+its nine places also names the runtime, a duration and 196A; section 0.2 the runtime and every
+other duration; the runbook's section 8 durations other than a timed review's),
+`test_no_line_sends_a_real_designs_timing_figure_to_the_findings_document` (the runtime is a
+timing figure; a new scan reads the Record lines of steps 4.1, 4.5, 4.10 and 4.11 and the
+results sheet's rows of those steps, and none asks for a duration, the facts or the usage line
+without sending it to `notes\timing.txt`; B's steps and every untimed review's are not read for
+one), `test_a_timed_reviews_run_folder_is_written_by_its_date_and_letter` (rule 5, the hang, the
+two commands, steps 4.5, 4.10 and 4.11, the results sheet's header and 4.10 row, the handover's
+steps 22 and 23) and `test_the_specs_readme_counts_a_task_173a_closed_as_done` (007's row). No
+new test: the pins and the guard that read these places were extended, not copied.
+
+**Tests first**: T079's four pins failed before T080, each for want of the words it pins - the
+first at step 4.1's opening, the places pin at rule 5, the guard at the Record lines of steps
+4.1, 4.10 and 4.11 and the results sheet's 4.10 row, cycle 8's pin at rule 5. Read one by one, 35
+of their 42 new or changed checks were red; the seven that held are T060's two, whose note T078
+wrote, the guard's Record and clause scans with the runtime added, which had nothing to find, and
+its three checks of its own patterns, which read no document. After T080 all 42 hold. The README
+pin was red against 72 / 5 / 0 at T078 and against 73 / 8 / 0 at T081 before each recount.
+
+**Gates** (T081; 2026-11-02), on T081's tree:
+
+- Python 3.12.3, in the worktree's own environment, and 3.11.16 (`uv run --python 3.11
+  --isolated --all-extras`), the tokenizer required, over the seven modules that read the changed
+  files - `test_workstation_test_plan.py`, `test_workstation_handover.py`,
+  `test_update_workstation_script.py`, the three that read the task lists through
+  `tests/support/seat_tasks.py` (`test_seat_assumptions.py`, `test_seat_switch_evidence.py`,
+  `test_remodel_ledger.py`) and the identifier scan, `test_tracked_files_carry_no_recorded_number.py`,
+  which ran against the owner's lists: 488 passed on each, none skipped.
+- `ruff check src tests` clean.
+- The link check over the Markdown changed for 196A: 314 relative links, anchors included, none
+  broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate. Not run in this lane: the whole non-live suites,
+  which run before the pull request and in its CI. No SOLIDWORKS process, seat task, or paid or
+  live test ran.
