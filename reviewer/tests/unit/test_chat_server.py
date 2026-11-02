@@ -89,6 +89,7 @@ from tests.support.features import feature, folder
 from tests.support.packages import build_package
 from tests.support.remodel import remodel_package
 from tests.support.replay import folder_hashes
+from tests.support.triage import tally_body
 from tests.unit import test_answer_batch_roles as batch_roles
 from tests.unit import test_chat_standards_routes as standards
 from tests.unit.test_runner_provider import standing
@@ -3239,10 +3240,14 @@ def test_the_live_and_the_restored_snapshot_carry_a_cleared_line_until_a_decisio
 # --- a resumed turn that fails or is stopped still folds (cycle 6's Tier 1 review) ----------------
 
 RERUN_VERDICTS = pytest.mark.parametrize(
-    ("rerun_status", "kept"), [("suspected", True), ("unresolved", False)], ids=["kept", "cleared"]
+    ("rerun_status", "kept", "beside"),
+    [("suspected", True, False), ("unresolved", False, False), ("unresolved", False, True)],
+    ids=["kept", "cleared", "cleared-beside-a-triage"],
 )
 """The re-run's status: the one decided (`suspected`, medium), which keeps the decision, or
-another (`unresolved`, low), which clears it (owner decisions 189A and 191A)."""
+another (`unresolved`, low), which clears it (owner decisions 189A and 191A). *Changed
+2026-11-02 on purpose (cycle 7's adversarial verification):* and whether another finding keeps a
+triage beside the cleared one (`beside`), so the notice of the clear carries a tally."""
 
 
 class PausedAfterACall(FakeProvider):
@@ -3266,10 +3271,14 @@ class PausedAfterACall(FakeProvider):
         return result
 
 
-def accepted_then_answered(client: TestClient, run_dir: Path) -> tuple[str, str, dict[str, Any]]:
+def accepted_then_answered(
+    client: TestClient, run_dir: Path, *, beside: bool = False
+) -> tuple[str, str, dict[str, Any]]:
     """Cycle 3's review through the routes: the drawing finding accepted as `already_known` while
     its question is open, then the question answered, resuming the turn. Returns the chat, the
-    drawing finding's id and the disposition recorded."""
+    drawing finding's id and the disposition recorded. With `beside`, the first flagged finding
+    the checks recorded is accepted as `new_and_real` first, a triage the resumed turn leaves
+    alone (cycle 7)."""
     chat_id = start_session(client, run_dir)["chat_id"]
     assert settle(client, chat_id) == ChatState.WAITING_ENGINEER.value
     [drawing] = [
@@ -3277,6 +3286,17 @@ def accepted_then_answered(client: TestClient, run_dir: Path) -> tuple[str, str,
         for finding in load_session(run_dir / "session.json").findings
         if finding.check == MODEL_FINDING_CHECK
     ]
+    if beside:
+        other = next(
+            finding.id
+            for finding in load_session(run_dir / "session.json").findings
+            if finding.check != MODEL_FINDING_CHECK and finding.status != "checked_within_scope"
+        )
+        triaged = client.post(
+            f"/sessions/{chat_id}/findings/{other}/disposition",
+            json={"decision": "accepted", "note": "FICT a real one", "triage": "new_and_real"},
+        )
+        assert triaged.status_code == 200, triaged.text
     decided = client.post(
         f"/sessions/{chat_id}/findings/{drawing}/disposition",
         json={"decision": "accepted", "note": "FICT intended", "triage": "already_known"},
@@ -3295,13 +3315,16 @@ def assert_the_fold_is_what_was_saved(
     *,
     kept: bool,
     turn_ended: str,
+    beside: bool = False,
 ) -> None:
     """The turn ended for `turn_ended`, as before, and `session.json`, the `report.md` the server
     rendered and the stream agree with the fold: one finding of the check, under the decided id,
     its decision kept whole or cleared; the re-run's own id withdrawn with `folded_into`, the
     finding announced again under the decided id, and a `disposition.cleared` only when it was
     cleared - each written after the turn's end, so no reader of the stream files it under a call
-    the Stop cut short, and before the finalization's `session.ended`."""
+    the Stop cut short, and before the finalization's `session.ended`. With `beside` - another
+    finding keeps its `new_and_real` (`accepted_then_answered`) - the notice carries the tally the
+    fold leaves, `report.md`'s By triage and misses lines for the session as finalized (cycle 7)."""
     events = events_of(run_dir)
     assert [event["body"]["reason"] for event in events if event["type"] == "turn.ended"][-1] == (
         turn_ended
@@ -3312,6 +3335,8 @@ def assert_the_fold_is_what_was_saved(
         for finding in saved.findings
         if finding.check == MODEL_FINDING_CHECK
     ] == [(drawing, rerun_status, Disposition.model_validate(decided) if kept else None)]
+    flagged = [finding for finding in saved.findings if finding.status != "checked_within_scope"]
+    tally = tally_body(new=1, not_recorded=len(flagged) - 1) if beside else None
     folded = [
         index
         for index, event in enumerate(events)
@@ -3334,6 +3359,7 @@ def assert_the_fold_is_what_was_saved(
                     "The check ran again after your answer and its verdict changed, so your "
                     "Accept (real but already known) was cleared. Decide again."
                 ),
+                **({} if tally is None else {"triage_tally": tally}),
             }
         ]
     )
@@ -3350,6 +3376,9 @@ def assert_the_fold_is_what_was_saved(
     assert not any(line.startswith(f"#### {spent}:") for line in lines)
     expected = ACCEPTED_LINES if kept else UNDECIDED_LINES
     assert reported_disposition(lines, drawing, len(expected)) == expected
+    if tally is not None:
+        [at] = [index for index, line in enumerate(lines) if line.startswith("- By triage:")]
+        assert lines[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
 
 
 ACCEPTED_LINES = ["- Disposition:", "  - decision: accepted", "  - triage: real but already known"]
@@ -3376,12 +3405,18 @@ def test_a_resumed_turn_the_provider_fails_still_folds_its_rerun(
     provider_control: ProviderControl,
     rerun_status: str,
     kept: bool,
+    beside: bool,
 ) -> None:
     """Cycle 6's Tier 1 review: the model runs the check again in the resumed turn, and then the
     provider fails. The turn is reported failed and the session finalized, as any failed turn's
     (FR-008), and the re-run still folds onto the decided finding before that finalization, so
     `session.json`, `report.md` and the stream hold one verdict for the check: no second card
-    beside the decided one, and a decision kept or cleared as an ended turn's fold would."""
+    beside the decided one, and a decision kept or cleared as an ended turn's fold would.
+
+    *Changed 2026-11-02 on purpose (cycle 7's adversarial verification):* a third case clears the
+    Accept beside another finding's triage, so the notice carries the tally the fold leaves,
+    pinned with `report.md`'s two lines; the `cleared` case, whose Accept was the review's one
+    triage, still pins a notice with none."""
     provider_control.script = [
         turn(
             "I need the thread depth.",
@@ -3403,21 +3438,24 @@ def test_a_resumed_turn_the_provider_fails_still_folds_its_rerun(
             fails=ProviderError("FICT the provider connection dropped"),
         ),
     ]
-    chat_id, drawing, decided = accepted_then_answered(client, run_dir)
+    chat_id, drawing, decided = accepted_then_answered(client, run_dir, beside=beside)
 
     assert settle(client, chat_id) == ChatState.FAILED.value
     assert_the_fold_is_what_was_saved(
-        run_dir, drawing, rerun_status, decided, kept=kept, turn_ended="error"
+        run_dir, drawing, rerun_status, decided, kept=kept, turn_ended="error", beside=beside
     )
 
 
 @RERUN_VERDICTS
 def test_a_resumed_turn_stopped_after_its_rerun_still_folds_it(
-    run_root: Path, run_dir: Path, models: Models, rerun_status: str, kept: bool
+    run_root: Path, run_dir: Path, models: Models, rerun_status: str, kept: bool, beside: bool
 ) -> None:
     """Cycle 6's Tier 1 review: the model runs the check again in the resumed turn, and the
     engineer presses Stop before its next call. The turn ends `stopped` and the session with it
-    (FR-030), and the re-run still folds onto the decided finding before that finalization."""
+    (FR-030), and the re-run still folds onto the decided finding before that finalization.
+
+    *Changed 2026-11-02 on purpose (cycle 7's adversarial verification):* a third case clears the
+    Accept beside another finding's triage, as the failed turn's does."""
     paused, resumed = threading.Event(), threading.Event()
     script = [
         turn(
@@ -3441,7 +3479,7 @@ def test_a_resumed_turn_stopped_after_its_rerun_still_folds_it(
         list_models=models,
     )
     with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as client:
-        chat_id, drawing, decided = accepted_then_answered(client, run_dir)
+        chat_id, drawing, decided = accepted_then_answered(client, run_dir, beside=beside)
         wait_until(paused.is_set, "the resumed turn to run its check again")
         try:
             stopped = client.post(f"/sessions/{chat_id}/stop")
@@ -3451,7 +3489,7 @@ def test_a_resumed_turn_stopped_after_its_rerun_still_folds_it(
         assert stopped.status_code == 202, stopped.text
         assert settle(client, chat_id) == ChatState.ENDED.value
     assert_the_fold_is_what_was_saved(
-        run_dir, drawing, rerun_status, decided, kept=kept, turn_ended="stopped"
+        run_dir, drawing, rerun_status, decided, kept=kept, turn_ended="stopped", beside=beside
     )
 
 
@@ -3572,10 +3610,16 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
     decided, keeps them. `session.json`, the `report.md` the server rendered, the stream, the live
     snapshot and a restarted backend's read-only restore all agree: the pin undecided with the
     restate's line, the plate's Accept standing, and no card left under a restated finding's own
-    id. Cycle 3's `test_the_saved_session_and_report_agree_with_the_fold` is its model."""
+    id. Cycle 3's `test_the_saved_session_and_report_agree_with_the_fold` is its model.
+
+    *Changed 2026-11-01 on purpose (cycle 7's Tier 2 review):* written before cycle 7 put the
+    review's triage tally on a cleared notice, so the stream's body now carries the one the
+    restate leaves - the plate's `already_known` beside the findings not recorded - while both
+    snapshots' lines leave it out, a snapshot's one tally being its summary's."""
     review = regraded_review(client, run_root / "FICT-regrade", ticked=ticked)
 
     findings = load_session(review.folder / "session.json").findings
+    flagged = [finding for finding in findings if finding.status != "checked_within_scope"]
     saved = {finding.id: finding for finding in findings}
     pin, plate = saved[review.pin], saved[review.plate]
     assert (pin.severity, pin.disposition) == ("medium", None)
@@ -3588,11 +3632,75 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
     assert reported_disposition(lines, review.plate, 3) == ACCEPTED_LINES
     events = events_of(review.folder)
     cleared = [event["body"] for event in events if event["type"] == "disposition.cleared"]
-    assert cleared == [review.line]
+    tally = tally_body(known=1, not_recorded=len(flagged) - 1)
+    assert cleared == [{**review.line, "triage_tally": tally}]
     assert standing(events) == set(saved)
     assert client.get(f"/sessions/{review.chat_id}/snapshot").json().get("cleared") == [review.line]
     restored = restored_snapshot_of(run_root, provider_control, models, review.folder.name)
     assert restored.get("cleared") == [review.line]
+
+
+# --- the triage tally (002 T346; the owner's request, cycle 7) ------------------------------------
+
+
+def test_the_reply_and_every_summary_carry_the_tally_report_md_prints(
+    client: TestClient,
+    run_root: Path,
+    run_dir: Path,
+    chat_with_a_finding: str,
+    provider_control: ProviderControl,
+    models: Models,
+) -> None:
+    """The one tally, through the routes: a decision's reply, the attention route's summary - what
+    a session's end reads - the live snapshot's - a reload or a review switch - and the run folder's
+    - a backend restart and a read-only restore - carry none while no finding records a triage, and
+    after a triaged decision all carry the same one, whose two lines are `report.md`'s."""
+    chat_id = chat_with_a_finding
+    findings = load_session(run_dir / "session.json").findings
+    flagged = [finding.id for finding in findings if finding.status != "checked_within_scope"]
+
+    def summaries() -> list[dict[str, Any]]:
+        """The attention route's, the live snapshot's and the run folder's summary, in order."""
+        again = create_app(
+            token=TOKEN,
+            allow_origin=ORIGIN,
+            run_root=run_root,
+            provider_factory=provider_control.factory,
+            list_models=models,
+        )
+        with TestClient(
+            again, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}
+        ) as fresh:
+            restored = fresh.get(f"/reviews/{run_dir.name}")
+        assert restored.status_code == 200, restored.text
+        return [
+            client.get(f"/sessions/{chat_id}/attention").json()["summary"],
+            client.get(f"/sessions/{chat_id}/snapshot").json()["ranking"]["summary"],
+            restored.json()["ranking"]["summary"],
+        ]
+
+    plain = client.post(
+        f"/sessions/{chat_id}/findings/{flagged[0]}/disposition",
+        json={"decision": "accepted", "note": "FICT note"},
+    )
+
+    assert plain.status_code == 200, plain.text
+    assert "triage_tally" not in plain.json()
+    assert ["triage_tally" in shown for shown in summaries()] == [False, False, False]
+
+    late = client.post(
+        f"/sessions/{chat_id}/findings/{flagged[0]}/disposition",
+        json={"decision": "accepted", "note": "FICT note", "triage": "already_known"},
+    )
+
+    assert late.status_code == 200, late.text
+    tally = tally_body(known=1, not_recorded=len(flagged) - 1)
+    assert late.json()["triage_tally"] == tally
+    assert late.json()["disposition"]["triage"] == "already_known"
+    assert [shown["triage_tally"] for shown in summaries()] == [tally, tally, tally]
+    lines = (run_dir / "report.md").read_text(encoding="utf-8").splitlines()
+    [at] = [index for index, line in enumerate(lines) if line.startswith("- By triage:")]
+    assert lines[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
 
 
 def test_the_report_is_served_as_markdown(

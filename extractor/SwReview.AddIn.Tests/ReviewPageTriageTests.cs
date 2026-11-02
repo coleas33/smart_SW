@@ -45,6 +45,12 @@ namespace SwReview.AddIn.Tests;
 /// entry beside the disposition, shows it above any status a press or Show writes, keeps it on a card drawn again while
 /// undecided, and drops it when a decision is recorded. A fold's withdrawal of the re-run's own id (`folded_into`) drops
 /// its card, so Results hold the cards the session holds.
+///
+/// The triage tally (002 T348; the owner's request, cycle 7): how the triage stands - `report.md`'s By triage and misses
+/// lines - in a section of its own under the summary, as the backend sends it beside the summary, in a decision's reply and
+/// in the `disposition` and `disposition.cleared` events. The page shows the last it was sent, none while it was sent none,
+/// counts nothing and offers no control; a reply that lands after a review switch writes nothing, and a snapshot's tally is
+/// its summary's, never a cleared line's.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -975,6 +981,311 @@ public sealed class ReviewPageTriageTests
         });
     }
 
+    // ---- the triage tally (002 T348; the owner's request, cycle 7) ----------------------------
+
+    /// <summary>
+    /// A review a re-run carried F-001's Accept as `already known` into ends, and its summary's tally is shown under the
+    /// summary, its two lines as sent. Each press's reply carries the review's tally and the page shows it as sent: a refused
+    /// press leaves it as it was, F-002's `wrong` brings "not recorded" to 0, and the pass's miss is counted apart. Nothing in
+    /// it is a control.
+    /// </summary>
+    [Fact]
+    public void TheTallyFollowsEachPressUntilNoneIsLeftNotRecorded()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            JsonObject carried = Tally(0, 1, 0, 0, 1, 0);
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001", AcceptedAlreadyKnown()));
+            await driver.Push(Chat, 2, "finding", Finding("F-002"));
+            await driver.Push(Chat, 3, "finding", Pass("F-003"));
+            await driver.RouteAttention(Chat, SummarySample.Json(summary => summary["triage_tally"] = carried.DeepClone()));
+            await driver.EndSession(Chat);
+            JsonElement ended = await driver.Read(ReadTally);
+            Assert.True(ended.GetProperty("shown").GetBoolean(), "the summary's tally is not shown at the session's end.");
+            Assert.Equal(Lines(carried), ReviewPageDriver.Strings(ended, "lines"));
+
+            await driver.Route("POST", DispositionPath("F-002"), 409, TurnRunning);
+            await Press(driver, "F-002", "wrong");
+            await Decide(driver, "F-002", "reject");
+            Assert.Equal(Lines(carried), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+
+            JsonObject judged = Tally(0, 1, 1, 0, 0, 0);
+            await driver.Route("POST", DispositionPath("F-002"), 200,
+                WithTally(Finding("F-002", Disposition("rejected", string.Empty, "wrong")), judged));
+            await Press(driver, "F-002", "wrong");
+            await Decide(driver, "F-002", "reject");
+            string[] none = ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines");
+            Assert.Equal(Lines(judged), none);
+            Assert.EndsWith("not recorded: 0", none[0], StringComparison.Ordinal);
+
+            JsonObject missed = Tally(0, 1, 1, 0, 0, 1);
+            await driver.Route("POST", DispositionPath("F-003"), 200,
+                WithTally(Pass("F-003", Disposition("rejected", string.Empty, "wrong")), missed));
+            await Press(driver, "F-003", "wrong");
+            await Decide(driver, "F-003", "reject");
+            JsonElement last = await driver.Read(ReadTally);
+            Assert.Equal(Lines(missed), ReviewPageDriver.Strings(last, "lines"));
+            Assert.Equal(0, last.GetProperty("controls").GetInt32());
+        });
+    }
+
+    /// <summary>
+    /// The stream's decisions and cleared notices carry the review's tally, and the page shows the last it was sent as it
+    /// arrives: F-001's Accept, F-002's Reject, then F-001's decision cleared by a re-run, its notice carrying the tally the
+    /// clear left; then F-002's cleared too, the last triage, its notice carrying none, and the tally goes - and the
+    /// session's end, whose summary carries none, leaves it gone.
+    /// </summary>
+    [Fact]
+    public void TheTallyFollowsTheStreamsDispositionsAndClearedNotices()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            JsonObject accepted = Tally(0, 1, 0, 0, 1, 0);
+            JsonObject rejected = Tally(0, 1, 1, 0, 0, 0);
+            JsonObject cleared = Tally(0, 0, 1, 0, 1, 0);
+            Dictionary<string, object?> missed = Disposition("rejected", "FICT missed", "wrong");
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "finding", Finding("F-002"));
+            await driver.Push(Chat, 3, "disposition", WithTally(DispositionEvent("F-001", AcceptedAlreadyKnown()), accepted));
+            await driver.Settle();
+            Assert.Equal(Lines(accepted), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+
+            await driver.Push(Chat, 4, "disposition", WithTally(DispositionEvent("F-002", missed), rejected));
+            await driver.Settle();
+            Assert.Equal(Lines(rejected), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+
+            await driver.Push(Chat, 5, "finding", Finding("F-001", null, "suspected", "low"));
+            await driver.Push(Chat, 6, "disposition.cleared", WithTally(Cleared("F-001", AcceptedAlreadyKnown()), cleared));
+            await driver.Settle();
+            Assert.Equal(Lines(cleared), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+            Assert.Equal(ClearedLine, (await driver.Read(ReadCard("F-001"))).GetProperty("status").GetString());
+
+            await driver.Push(Chat, 7, "finding", Finding("F-002", null, "suspected", "low"));
+            await driver.Push(Chat, 8, "disposition.cleared", Cleared("F-002", missed));
+            await driver.Settle();
+            JsonElement gone = await driver.Read(ReadTally);
+            Assert.False(gone.GetProperty("shown").GetBoolean(), "a tally is shown after the last triage was cleared.");
+            Assert.Empty(ReviewPageDriver.Strings(gone, "lines"));
+
+            await driver.RouteAttention(Chat, SummarySample.Json());
+            await driver.EndSession(Chat);
+            Assert.False((await driver.Read(ReadTally)).GetProperty("shown").GetBoolean(), "a summary with no tally showed one.");
+        });
+    }
+
+    /// <summary>
+    /// A summary that carries no tally hides the one shown (cycle 7's Tier 2 review), with nothing else to hide it first - no
+    /// cleared notice, no review switch: F-001's Reject as `wrong` is the review's one triage, and its tally is shown; then an
+    /// answer's regrade withdraws F-001, a bought part, and the ranking the page reads again carries none, as the backend
+    /// sends none while no finding records a triage.
+    /// </summary>
+    [Fact]
+    public void ARankingReadAgainWithNoTallyHidesTheShownOne()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            JsonObject judged = Tally(0, 0, 1, 0, 1, 0);
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "finding", Finding("F-002"));
+            await driver.Push(Chat, 3, "disposition",
+                WithTally(DispositionEvent("F-001", Disposition("rejected", "FICT missed", "wrong")), judged));
+            await driver.Settle();
+            Assert.Equal(Lines(judged), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+
+            await driver.RouteAttention(Chat, SummarySample.Json());
+            await driver.Push(Chat, 4, "finding.withdrawn",
+                JsonSerializer.Serialize(new { finding_id = "F-001", reason = "bought part (your answer to ER-001)" }));
+            await driver.Settle();
+            JsonElement gone = await driver.Read(ReadTally);
+            Assert.False(gone.GetProperty("shown").GetBoolean(), "a tally is shown after a ranking that carries none: " + gone);
+            Assert.Empty(ReviewPageDriver.Strings(gone, "lines"));
+            Assert.DoesNotContain("F-001", ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
+        });
+    }
+
+    /// <summary>
+    /// A review switch and a reload bring the tally back from the snapshot's summary. Chat-2's live snapshot shows its
+    /// summary's tally. Back on chat-1, whose summary carries none, none is shown - nothing of chat-2's stays - though its
+    /// snapshot's cleared lines hold one F-002's clear was written with, before F-001's cleared the last triage: a snapshot's
+    /// tally is its summary's, never a cleared line's. After a reload chat-1's snapshot, now carrying one, shows it.
+    /// </summary>
+    [Fact]
+    public void TheTallyComesBackAfterAReloadAndAReviewSwitch()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string ChatRun = "20260923-101500-bracket-1";
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, ChatRun, ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            JsonObject other = Tally(0, 0, 1, 0, 1, 0);
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200, Ranked(
+                Snapshot(OtherRun, false, Finding("F-001"), Finding("F-002", Disposition("rejected", "FICT missed", "wrong"))), other));
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            JsonElement switched = await driver.Read(ReadTally);
+            Assert.True(switched.GetProperty("shown").GetBoolean(), "a switched-to review's tally is not shown.");
+            Assert.Equal(Lines(other), ReviewPageDriver.Strings(switched, "lines"));
+
+            string[] clearedLines =
+            {
+                Cleared("F-001", AcceptedAlreadyKnown()),
+                WithTally(Cleared("F-002", Disposition("rejected", "FICT missed", "wrong")), Tally(0, 1, 0, 0, 1, 0)),
+            };
+            await driver.Route("GET", "/sessions/" + Chat + "/snapshot", 200, Ranked(
+                Snapshot(ChatRun, false, clearedLines, Finding("F-001", null, "suspected", "low"), Finding("F-002", null, "suspected", "low")),
+                null));
+            await driver.Read(ReviewPageSessionsTests.Chip(Chat));
+            await driver.Settle();
+            JsonElement back = await driver.Read(ReadTally);
+            Assert.False(back.GetProperty("shown").GetBoolean(), "a tally is shown from a summary that carries none: " + back);
+            Assert.Equal(ClearedLine, (await driver.Read(ReadCard("F-001"))).GetProperty("status").GetString());
+
+            JsonObject reloaded = Tally(1, 0, 0, 0, 1, 0);
+            driver.InitialRoutes.Add(("GET", "/sessions/" + Chat + "/snapshot", 200, Ranked(
+                Snapshot(ChatRun, false, Finding("F-001", Disposition("accepted", string.Empty, "new_and_real")), Finding("F-002")),
+                reloaded)));
+            await driver.Reload();
+            await driver.Settle();
+            Assert.Equal(Lines(reloaded), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+        });
+    }
+
+    /// <summary>
+    /// A backend restart and a read-only restore: the backend no longer holds chat-2, so the page restores it from its run
+    /// folder, read-only, and shows that snapshot's summary's tally with every decision and triage control off and none in it.
+    /// </summary>
+    [Fact]
+    public void AReadOnlyRestoredReviewShowsItsTally()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            JsonObject restored = Tally(0, 1, 0, 0, 1, 0);
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 404, Refusal("UnknownChat", "no chat " + OtherChat, false));
+            await driver.Route("GET", "/reviews/" + OtherRun, 200, Ranked(
+                Snapshot(OtherRun, true, Finding("F-100", Disposition("accepted", "FICT intended", "already_known")), Finding("F-101")),
+                restored));
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+
+            JsonElement tally = await driver.Read(ReadTally);
+            Assert.True(tally.GetProperty("shown").GetBoolean(), "a read-only review's tally is not shown.");
+            Assert.Equal(Lines(restored), ReviewPageDriver.Strings(tally, "lines"));
+            Assert.Equal(0, tally.GetProperty("controls").GetInt32());
+            Assert.All(Disabled(await driver.Read(ReadCard("F-101"))), Assert.True);
+        });
+    }
+
+    /// <summary>
+    /// A decision's reply that lands after the engineer switched reviews writes nothing: F-001's Accept on chat-1 is held, the
+    /// engineer chooses chat-2 - which holds an F-001 of its own - and its summary's tally stays when the reply, carrying
+    /// chat-1's, lands (the card it was pressed on is detached; `entryOf`, H-g-012).
+    /// </summary>
+    [Fact]
+    public void AReplyThatLandsAfterAReviewSwitchLeavesTheTallyAlone()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-001"));
+            JsonObject other = Tally(0, 0, 1, 0, 0, 0);
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200, Ranked(
+                Snapshot(OtherRun, false, Finding("F-001", Disposition("rejected", "FICT missed", "wrong"))), other));
+            await driver.HoldRoute("POST", DispositionPath("F-001"), 200,
+                WithTally(Finding("F-001", Disposition("accepted", string.Empty, "new_and_real")), Tally(1, 0, 0, 0, 0, 0)));
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "accept");
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            Assert.Equal(Lines(other), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+
+            await driver.ReleaseRoute("POST", DispositionPath("F-001"));
+            Assert.Equal(Lines(other), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+        });
+    }
+
+    /// <summary>FR-030: the tally is the backend's words, so with no labels its two lines print as sent.</summary>
+    [Fact]
+    public void WithNoLabelsTheTallyPrintsTheBackendsLines()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await Reviewed(driver, Finding("F-001"), Finding("F-002"));
+            JsonObject tally = Tally(0, 0, 0, 1, 1, 0);
+            await driver.Route("POST", DispositionPath("F-001"), 200,
+                WithTally(Finding("F-001", Disposition("deferred", string.Empty, "not_worth_flagging")), tally));
+            await Press(driver, "F-001", "not_worth_flagging");
+            await Decide(driver, "F-001", "defer");
+
+            JsonElement shown = await driver.Read(ReadTally);
+            Assert.True(shown.GetProperty("shown").GetBoolean(), "the tally is not shown with no labels.");
+            Assert.Equal(Lines(tally), ReviewPageDriver.Strings(shown, "lines"));
+        });
+    }
+
+    /// <summary>
+    /// FR-030: a backend that sends no tally - not in the summary, the stream or a reply - leaves the page as it was: the
+    /// tally's section is there, hidden, empty and taking no room, and the card shows the reply as before.
+    /// </summary>
+    [Fact]
+    public void ABackendThatSendsNoTallyShowsNone()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "finding", Finding("F-002"));
+            await driver.Push(Chat, 3, "disposition", DispositionEvent("F-001", AcceptedAlreadyKnown()));
+            await driver.RouteAttention(Chat, SummarySample.Json());
+            await driver.EndSession(Chat);
+            await driver.Route("POST", DispositionPath("F-002"), 200, Finding("F-002", Disposition("rejected", string.Empty, "wrong")));
+            await Press(driver, "F-002", "wrong");
+            await Decide(driver, "F-002", "reject");
+
+            JsonElement none = await driver.Read(ReadTally);
+            Assert.True(none.GetProperty("present").GetBoolean(), "the page has no section for the tally.");
+            Assert.True(none.GetProperty("hidden").GetBoolean(), "the tally's section is shown with nothing sent.");
+            Assert.Empty(ReviewPageDriver.Strings(none, "lines"));
+            Assert.Equal(0, none.GetProperty("height").GetInt32());
+            Assert.Equal(new[] { "wrong" }, Pressed(await driver.Read(ReadCard("F-002"))));
+        });
+    }
+
+    /// <summary>
+    /// At a docked pane's 300 px the tally's two lines are whole - inside the window and every box that clips them, their
+    /// words wrapping rather than cut off - with no sideways page scroll, at counts of four figures.
+    /// </summary>
+    [Fact]
+    public void TheTallyIsWhollyVisibleAtThreeHundredPixels()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
+            await Reviewed(driver, Finding("F-001"));
+            JsonObject tally = Tally(1234, 5678, 9012, 3456, 7890, 1234);
+            await driver.Route("POST", DispositionPath("F-001"), 200,
+                WithTally(Finding("F-001", Disposition("accepted", string.Empty, "new_and_real")), tally));
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "accept");
+
+            JsonElement measured = await driver.Read(ReadTallyWhole);
+            Assert.Equal(300, measured.GetProperty("width").GetInt32());
+            Assert.Equal(2, measured.GetProperty("count").GetInt32());
+            Assert.Empty(ReviewPageDriver.Strings(measured, "clipped"));
+            Assert.True(measured.GetProperty("noHorizontalOverflow").GetBoolean(), measured.ToString());
+        });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>
@@ -1150,6 +1461,56 @@ public sealed class ReviewPageTriageTests
             { "reason", ClearedLine },
         });
 
+    /// <summary>
+    /// The review's triage tally as the backend sends it (002 cycle 7): the flagged findings by outcome, those not recorded and
+    /// the misses, with `report.md`'s two lines for them - words no page composes, printed as sent.
+    /// </summary>
+    private static JsonObject Tally(int newAndReal, int alreadyKnown, int wrong, int notWorth, int notRecorded, int misses) =>
+        new JsonObject
+        {
+            ["counts"] = new JsonObject
+            {
+                ["new_and_real"] = newAndReal,
+                ["already_known"] = alreadyKnown,
+                ["wrong"] = wrong,
+                ["not_worth_flagging"] = notWorth,
+            },
+            ["not_recorded"] = notRecorded,
+            ["misses"] = misses,
+            ["text"] = "By triage: new and real: " + newAndReal + ", real but already known: " + alreadyKnown + ", wrong: " + wrong
+                + ", true but not worth flagging: " + notWorth + ", not recorded: " + notRecorded,
+            ["misses_text"] = "Passes judged wrong (misses): " + misses,
+        };
+
+    /// <summary>The two lines a tally carries, in the order the page prints them.</summary>
+    private static string[] Lines(JsonObject tally) =>
+        new[] { tally["text"]!.GetValue<string>(), tally["misses_text"]!.GetValue<string>() };
+
+    /// <summary><paramref name="body"/> - a reply or an event body - carrying <paramref name="tally"/>, as the backend adds it.</summary>
+    private static string WithTally(string body, JsonObject tally)
+    {
+        JsonObject node = JsonNode.Parse(body)!.AsObject();
+        node["triage_tally"] = tally.DeepClone();
+        return node.ToJsonString();
+    }
+
+    /// <summary>
+    /// <paramref name="snapshot"/> with the ranking and summary a backend sends (<see cref="SummarySample"/>), its summary
+    /// carrying <paramref name="tally"/>, or no tally when none.
+    /// </summary>
+    private static string Ranked(string snapshot, JsonObject? tally)
+    {
+        JsonObject node = JsonNode.Parse(snapshot)!.AsObject();
+        node["ranking"] = SummarySample.Ranking(summary =>
+        {
+            if (tally != null)
+            {
+                summary["triage_tally"] = tally.DeepClone();
+            }
+        });
+        return node.ToJsonString();
+    }
+
     /// <summary>A refusal's body, as the route sends one.</summary>
     private static string Refusal(string errorClass, string message, bool retryable) =>
         JsonSerializer.Serialize(new { error_class = errorClass, message, retryable });
@@ -1248,6 +1609,48 @@ return JSON.stringify({
   recordFirst: !!status && h.before(status.querySelector('.card-record'), status.querySelector('.plain-error')),
   cleared: status ? h.text(status, '.card-cleared') : null,
   clearedFirst: !!status && h.before(status.querySelector('.card-cleared'), status.querySelector('.plain-error'))
+});";
+
+    /// <summary>
+    /// The triage tally's section (002 cycle 7): whether the page has one, whether it is hidden or shown, its lines in order,
+    /// how many controls it holds and how tall it stands.
+    /// </summary>
+    private const string ReadTally = @"
+var section = document.getElementById('triage-tally');
+if (!section) { return JSON.stringify({ ok: true, present: false, hidden: true, shown: false, lines: [], controls: 0, height: 0 }); }
+var lines = [];
+var paragraphs = section.querySelectorAll('p');
+for (var i = 0; i < paragraphs.length; i++) { lines.push(paragraphs[i].textContent); }
+var box = section.getBoundingClientRect();
+return JSON.stringify({
+  ok: true,
+  present: true,
+  hidden: section.hidden,
+  shown: !section.hidden && box.height > 0,
+  lines: lines,
+  controls: section.querySelectorAll('button, input, select, textarea, a, [tabindex], [data-action]').length,
+  height: Math.round(box.height)
+});";
+
+    /// <summary>
+    /// Measures each of the tally's lines brought into view, as <see cref="ReadWhole"/> measures the triage buttons; a section
+    /// that is missing or hidden counts as cut off.
+    /// </summary>
+    private const string ReadTallyWhole = @"
+var section = document.getElementById('triage-tally');
+var lines = section ? section.querySelectorAll('p') : [];
+" + Whole + @"
+var clipped = [];
+if (!section || section.hidden) { clipped.push('the section is missing or hidden'); }
+for (var i = 0; i < lines.length; i++) {
+  if (!whole(lines[i])) { clipped.push(lines[i].textContent + ' ' + JSON.stringify(lines[i].getBoundingClientRect())); }
+}
+return JSON.stringify({
+  ok: true,
+  width: window.innerWidth,
+  count: lines.length,
+  clipped: clipped,
+  noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth
 });";
 
     /// <summary>The finding cards Results hold, by id, wherever they stand.</summary>

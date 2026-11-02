@@ -113,6 +113,7 @@ nothing (no standards profile, every part lightweight) reads `not_reached` by ro
 |---|---|
 | `headline` | "{n} findings in {m} issues" from `findings_*` and `issues_*`; "No findings were recorded" at zero. *Amended 2026-09-26 (feature 013 T050):* "{n} findings in {m} issues · {k} checked, no issue" - `n` the findings outside the checked fold, `m` the rows of the type groups (the grouped view's rows, a folded family unfolded), `k` the passes (`headline.checked`, joined by `separator`); each part only when it counts something, so a review of passes only reads "{k} checked, no issue"; "No findings were recorded" at zero. `findings` stays every finding and `issues` is `m` |
 | `tally` | *Added 2026-09-26 (feature 013 T050):* section 2's one line |
+| `triage_tally` | *Added 2026-11-01 (feature 002 FR-031, cycle 7):* how the triage stands - `{counts, not_recorded, misses, text, misses_text}`, the flagged findings by outcome, those with none and the passes judged wrong, with `report.md`'s By triage and misses lines for them - from `triage_tally(session.findings)`, the one count `report.md`'s lines come from (002 [chat-events.schema.json](../../002-task-pane-assistant/contracts/chat-events.schema.json) `$defs/TriageTally`). Left out while no finding records a triage, as `send` is, so every other summary keeps its bytes |
 | `not_reached` | *Added 2026-09-26 (feature 013 T050):* `{titles, text}` - the titles of the goals whose line reads `not_reached`, in goal order, and "Not reached: {titles}" naming them as a sentence does; `None` when every goal was reached. It replaces the top-level goal list on the first screen: the goal lines themselves are under their finding groups (`ReviewRanking.groups`) |
 | `questions` | open evidence requests in session order (`questions.md` section 3); `text` `None` at zero. *Amended 2026-09-26 (feature 013 T034):* each item gains `allow_text` (the request's, false when absent) and the list gains `text_placeholder`, the words file's `questions.text_placeholder`, which the page prints in the text box of a question that allows text |
 | `not_loaded` | `not_examined(package)`: `{count, total, text}`; `None` when every instance was read or no package |
@@ -131,6 +132,13 @@ line and the not-reached line, each verbatim; no group line carries goal counts 
 printed here - they are under their groups in `<section id="findings-by-type">` (013
 `contracts/grouped-list.md` section 5) - and the modelling-practice group below is retired with its
 line. The text that follows describes the page before feature 013.
+
+*Amended 2026-11-01 (feature 002 FR-031, cycle 7):* the summary's `triage_tally` is printed as the
+section's last part, after the block, in `<div id="triage-tally">`, its `text` and `misses_text`
+verbatim; the disposition route's reply and the `disposition` and `disposition.cleared` events carry
+the same object, and the page shows the last it was sent, none while it was sent none - alone in the
+section while no summary has arrived - so Send stays directly after `#summary` (015
+`contracts/pane.md` section 3).
 
 `render.summaryBlock(summary)` builds `<section id="summary">` at the top of Results: the headline;
 one line per group (`label` in the lead face, `text`, then each `by_goal` as "title count"); the

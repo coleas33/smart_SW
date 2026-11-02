@@ -46,12 +46,14 @@ from swreview.checks.provenance import PROVENANCE_CHECK
 from swreview.checks.thread_pitch import CHECK_FINE_PITCH
 from swreview.findings import Disposition, Finding, build_finding
 from swreview.ir.loader import save_package
+from swreview.report.markdown import render_report
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession
 from swreview.report.titles import display_title, pane_finding, title_from
 from tests.support.contracts import contract_validator
 from tests.support.packages import build_package, persist_ref
 from tests.support.roles_review import review_brief
+from tests.support.triage import tally_body
 
 MODEL = "fake-1"
 EFFORT: EffortLevel = "high"
@@ -1611,7 +1613,10 @@ def test_several_folds_at_once_announce_every_finding_before_any_cleared_line(
     Sheet1's Accept with its triage, run again with the verdict decided, and Sheet2's Defer with
     no triage, run again with another verdict. The Accept stands whole; the Defer is cleared and
     its line names it with no triage, exactly; and every `finding` and `finding.withdrawn` the
-    folds write comes before every `disposition.cleared`."""
+    folds write comes before every `disposition.cleared`.
+
+    *Changed 2026-11-01 on purpose (002 T346; the triage tally in the pane):* the cleared body
+    carries the review's tally as the clear left it, the Accept's triage still recorded."""
     run = review(
         [
             turn(
@@ -1649,6 +1654,7 @@ def test_several_folds_at_once_announce_every_finding_before_any_cleared_line(
                 "The check ran again after your answer and its verdict changed, so your Defer "
                 "was cleared. Decide again."
             ),
+            "triage_tally": tally_body(known=1, not_recorded=1),
         }
     ]
     last_fold = max(
@@ -1656,6 +1662,45 @@ def test_several_folds_at_once_announce_every_finding_before_any_cleared_line(
     )
     assert last_fold < kinds.index("disposition.cleared")
     assert standing(events_of(run)) == {"F-001", "F-002"}
+
+
+def test_a_cleared_notice_carries_the_tally_its_clear_left(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The triage tally (002 T346, cycle 7): a cleared notice tells the page how the triage stands
+    once its clear is done. Sheet1's Reject as `wrong` folds with the verdict decided and stands;
+    Sheet2's Accept as `already_known` folds with another and is cleared, so its notice's tally
+    counts it not recorded beside the standing `wrong` - the one `report.md` prints for the
+    session as it now stands - and the stream stays valid against the events contract."""
+    run = review(
+        [
+            turn(
+                "blocked",
+                on_sheet("Sheet1", "suspected"),
+                on_sheet("Sheet2", "suspected"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("re-run", on_sheet("Sheet1", "suspected"), on_sheet("Sheet2", "unresolved")),
+        ]
+    )
+    record_disposition(
+        run, "F-001", decision="rejected", note="FICT missed", by=ENGINEER, triage="wrong"
+    )
+    record_disposition(
+        run, "F-002", decision="accepted", note="FICT intended", by=ENGINEER, triage="already_known"
+    )
+
+    run.answer_evidence("ER-001", "The usable thread depth is 12 mm.")
+
+    [notice] = bodies_of(run, "disposition.cleared")
+    tally = tally_body(wrong=1, not_recorded=1)
+    assert (notice["finding_id"], notice["triage_tally"]) == ("F-002", tally)
+    report = render_report(run.session).splitlines()
+    [at] = [index for index, line in enumerate(report) if line.startswith("- By triage:")]
+    assert report[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
+    validator = contract_validator("chat-events.schema.json")
+    for event in events_of(run):
+        validator.validate(event)
 
 
 def test_two_earlier_findings_with_one_verdict_key_take_no_rerun(
@@ -1735,6 +1780,112 @@ def test_a_restate_keeps_or_clears_a_decision_as_a_rerun_does(
                 },
             )
         ]
+    )
+
+
+def test_a_restates_cleared_notice_carries_the_tally_the_restate_leaves(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The triage tally (cycle 7's Tier 2 review): a restate's cleared notice tells the page how
+    the triage stands once the restate is done. The answer made F-003's part bought, so the
+    restated check no longer produces F-003, Rejected as `wrong`, and it is withdrawn; F-006,
+    restated, re-judges F-004, Accepted as `already_known`, with another severity, so F-004's
+    decision is cleared; F-005's Defer as `new_and_real` stands. F-003's withdrawal comes first,
+    so F-004's notice counts F-005's triage and F-004 not recorded - the count `report.md` prints
+    for the session as the restate leaves it - and never the withdrawn `wrong`; F-006's own id is
+    still withdrawn right before F-004's `finding` event, and the notice comes after the fold."""
+    bought = "bought part (your answer to ER-001)"
+    rejected = DECIDED.model_copy(update={"decision": "rejected", "triage": "wrong"})
+    deferred = DECIDED.model_copy(update={"decision": "deferred", "triage": "new_and_real"})
+    run = review([turn("nothing yet")])
+    run.session.findings[:] = [
+        on_the_pair("F-003", "hol:0017", "hol:0027").model_copy(
+            update={"disposition": rejected, "tool_result_ids": [0]}
+        ),
+        judged("F-004", disposition=DECIDED),
+        on_the_pair("F-005", "fst:0001", "hol:0004", check=CHECK_FINE_PITCH).model_copy(
+            update={"disposition": deferred}
+        ),
+        judged("F-006", "unresolved", "high"),
+    ]
+    mark = len(events_of(run))
+
+    stale = run._reconcile_restated(3, {0: "check_hygiene"}, [], {"check_hygiene": bought})
+
+    assert stale == [("F-003", bought)]
+    assert [(finding.id, finding.disposition) for finding in run.session.findings] == [
+        ("F-004", None),
+        ("F-005", deferred),
+    ]
+    after = [(event["type"], event["body"]) for event in events_of(run)[mark:]]
+    tally = tally_body(new=1, not_recorded=1)
+    assert [body for kind, body in after if kind == "disposition.cleared"] == [
+        {
+            "finding_id": "F-004",
+            "disposition": DECIDED.model_dump(mode="json"),
+            "reason": RESTATED_LINE,
+            "triage_tally": tally,
+        }
+    ]
+    assert [(kind, body.get("finding_id", body.get("id"))) for kind, body in after] == [
+        ("finding.withdrawn", "F-003"),
+        ("finding.withdrawn", "F-006"),
+        ("finding", "F-004"),
+        ("disposition.cleared", "F-004"),
+    ]
+    report = render_report(run.session).splitlines()
+    [at] = [index for index, line in enumerate(report) if line.startswith("- By triage:")]
+    assert report[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
+
+
+def test_a_restates_cleared_notice_carries_no_tally_once_it_withdrew_the_only_triage(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The triage tally (002 cycle 7's adversarial verification), the restate's edge: F-003,
+    Rejected as `wrong` on a part the answer made bought, holds the review's only triage, and the
+    restated check no longer produces it, so it is withdrawn; F-006, restated, re-judges F-004,
+    Accepted with no triage, with another severity, so F-004's decision is cleared. F-003's
+    withdrawal comes first, so when F-004's notice is sent no finding records a triage, and the
+    notice carries no `triage_tally`, as the backend sends none then and `report.md` prints no By
+    triage line."""
+    bought = "bought part (your answer to ER-001)"
+    rejected = DECIDED.model_copy(update={"decision": "rejected", "triage": "wrong"})
+    untriaged = DECIDED.model_copy(update={"triage": None})
+    run = review([turn("nothing yet")])
+    run.session.findings[:] = [
+        on_the_pair("F-003", "hol:0017", "hol:0027").model_copy(
+            update={"disposition": rejected, "tool_result_ids": [0]}
+        ),
+        judged("F-004", disposition=untriaged),
+        judged("F-006", "unresolved", "high"),
+    ]
+    mark = len(events_of(run))
+
+    stale = run._reconcile_restated(2, {0: "check_hygiene"}, [], {"check_hygiene": bought})
+
+    assert stale == [("F-003", bought)]
+    assert [(finding.id, finding.disposition) for finding in run.session.findings] == [
+        ("F-004", None)
+    ]
+    after = [(event["type"], event["body"]) for event in events_of(run)[mark:]]
+    assert [body for kind, body in after if kind == "disposition.cleared"] == [
+        {
+            "finding_id": "F-004",
+            "disposition": untriaged.model_dump(mode="json"),
+            "reason": (
+                "Your answer graded the checks again and this verdict changed, so your Accept "
+                "was cleared. Decide again."
+            ),
+        }
+    ]
+    assert [(kind, body.get("finding_id", body.get("id"))) for kind, body in after] == [
+        ("finding.withdrawn", "F-003"),
+        ("finding.withdrawn", "F-006"),
+        ("finding", "F-004"),
+        ("disposition.cleared", "F-004"),
+    ]
+    assert not any(
+        line.startswith("- By triage:") for line in render_report(run.session).splitlines()
     )
 
 

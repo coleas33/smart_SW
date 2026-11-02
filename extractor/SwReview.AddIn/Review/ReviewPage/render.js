@@ -1040,6 +1040,19 @@
   }
 
   /**
+   * How the triage stands (feature 002 FR-031, cycle 7): the backend's two lines - the flagged
+   * findings by outcome with those not recorded, and the passes judged wrong - as sent, the lines
+   * report.md prints. The page counts nothing here and offers no control.
+   */
+  function triageTally(tally) {
+    var body = tally || {};
+    return append(el('div', 'triage-tally-lines'), [
+      el('p', 'triage-tally-flagged', body.text),
+      el('p', 'triage-tally-misses', body.misses_text)
+    ]);
+  }
+
+  /**
    * One check goal: its title, its state in words and the few words of its reason. The
    * sentence the run recorded behind that reason - a close-out row's reason can run to four
    * hundred characters, and is never cut (FR-027's own principle) - is behind a shut fold whose
@@ -1322,6 +1335,7 @@
     typeGroups: typeGroups,
     findingExplanation: findingExplanation,
     summaryBlock: summaryBlock,
+    triageTally: triageTally,
     sendBlock: sendBlock,
     contactList: contactList,
     notExaminedHeadline: notExaminedHeadline,

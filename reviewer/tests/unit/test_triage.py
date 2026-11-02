@@ -22,6 +22,9 @@ decision and never inferred from it (002 research, 185A). What this pins:
   `ValueError` of its own class, whatever the decision, a late triage included, and writes
   nothing; and `report.md` counts the flagged findings by triage and the passes judged wrong apart,
   as misses, while a report with no triage keeps its bytes.
+- **the tally** (002 T346, cycle 7): one function counts what `report.md`'s two lines print -
+  `summary.triage_tally` - and the summary and a live decision's `disposition` event carry what it
+  returns, only while some finding records a triage.
 
 Every fixture is fictional: FICT names, and an explicit `by` on every record.
 """
@@ -42,7 +45,7 @@ from swreview.agent.providers import AgentEvent
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.chat.sessions import record_disposition
 from swreview.findings import TRIAGES, Disposition
-from swreview.report import dispositions
+from swreview.report import dispositions, summary
 from swreview.report.attention import rank
 from swreview.report.dispositions import apply_disposition, find_finding, set_disposition
 from swreview.report.markdown import render_report
@@ -50,6 +53,7 @@ from swreview.report.session import ReviewSession, Timing, load_session, save_se
 from swreview.report.summary import load_words
 from tests.support.contracts import contract_validator
 from tests.support.findings import PACKAGE, make_finding
+from tests.support.triage import tally_body
 from tests.unit.test_chat_sessions import DRAWING_FINDING_ARGUMENTS
 
 BY = "FICT-ENG"
@@ -643,3 +647,116 @@ def test_a_report_with_passes_and_no_triage_keeps_its_bytes() -> None:
         "- Coverage: Checked: 0, Skipped: 0, Unresolved: 0, Failed: 0, Out of Scope: 0",
     ]
     assert "- triage:" not in report
+
+
+# --- the tally (002 T346; the owner's request, cycle 7) ------------------------------------------
+
+TALLIED: dict[str, tuple[tuple[tuple[str, str, str | None], ...], dict[str, int]]] = {
+    "every-outcome-and-a-miss": (
+        (
+            ("F-001", "accepted", "new_and_real"),
+            ("F-002", "rejected", "already_known"),
+            ("F-003", "rejected", "wrong"),
+            ("F-004", "deferred", "not_worth_flagging"),
+            ("F-005", "rejected", "wrong"),
+            ("F-006", "accepted", None),
+        ),
+        {"new": 1, "known": 1, "wrong": 1, "not_worth": 1, "misses": 1},
+    ),
+    "flagged-findings-only": (
+        (("F-001", "accepted", "new_and_real"), ("F-006", "accepted", None)),
+        {"new": 1, "not_recorded": 3},
+    ),
+    "a-miss-only": ((("F-005", "rejected", "wrong"),), {"not_recorded": 4, "misses": 1}),
+    "decided-with-none-is-not-recorded": (
+        (("F-001", "deferred", "already_known"), ("F-002", "accepted", None)),
+        {"known": 1, "not_recorded": 3},
+    ),
+}
+"""Each case's records on `tallied_session` - F-001 to F-004 flagged, F-005 and F-006 passes - and
+the tally they leave: F-006, a pass with no triage, counts in neither line, and an Accept with none
+is not recorded, as an undecided finding is."""
+
+
+def tallied_session(records: tuple[tuple[str, str, str | None], ...]) -> ReviewSession:
+    """`triage_session(6)` with F-005 and F-006 passes and `records` set on it."""
+    session = with_passes(triage_session(6), "F-005", "F-006")
+    for finding_id, decision, triage in records:
+        set_disposition(session, finding_id, decision, "FICT note", BY, at=FIRST_AT, triage=triage)
+    return session
+
+
+@pytest.mark.parametrize("case", list(TALLIED))
+def test_the_tally_counts_what_report_md_prints(case: str) -> None:
+    """`summary.triage_tally` is the one count: the flagged findings by outcome - every status but
+    a pass - those with none, decided or not, and the passes judged wrong, apart. Its two lines are
+    `report.md`'s own, and the review summary carries the same object, so the pane and the report
+    cannot disagree."""
+    records, counted = TALLIED[case]
+    session = tallied_session(records)
+
+    tally = summary.triage_tally(session.findings)
+
+    assert tally is not None
+    assert tally.model_dump(mode="json") == tally_body(**counted)
+    lines = render_report(session).splitlines()
+    [at] = [index for index, line in enumerate(lines) if line.startswith("- By triage:")]
+    assert lines[at : at + 2] == [f"- {tally.text}", f"- {tally.misses_text}"]
+    shown = summary.review_ranking(session, None).summary.model_dump(mode="json")
+    assert shown["triage_tally"] == tally_body(**counted)
+
+
+def test_a_pass_triage_recorded_before_187a_is_in_neither_count() -> None:
+    """A pass's triage other than the miss, recorded before 187A refused it, is counted in neither
+    line, as `report.md` counts it."""
+    session = tallied_session((("F-001", "accepted", "new_and_real"),))
+    session.findings[4] = session.findings[4].model_copy(
+        update={
+            "disposition": Disposition(
+                decision="accepted", note="FICT note", by=BY, at=FIRST_AT, triage="already_known"
+            )
+        }
+    )
+
+    tally = summary.triage_tally(session.findings)
+
+    assert tally is not None
+    assert tally.model_dump(mode="json") == tally_body(new=1, not_recorded=3)
+
+
+def test_a_review_with_no_triage_has_no_tally() -> None:
+    """While no finding records a triage there is no tally - decided or not - and the summary
+    leaves the key out, so its bytes, the pane fixtures' and every payload's are as they were."""
+    session = tallied_session((("F-001", "accepted", None), ("F-005", "rejected", None)))
+
+    assert summary.triage_tally(session.findings) is None
+    assert summary.triage_tally([]) is None
+    assert "triage_tally" not in summary.review_ranking(session, None).summary.model_dump(
+        mode="json"
+    )
+
+
+def test_a_live_decision_announces_the_tally(
+    live_run: tuple[runner.ReviewRun, list[dict[str, Any]]],
+) -> None:
+    """The `disposition` event carries the review's tally once a triage is recorded, valid against
+    the events contract, and none before: an Accept with none on a review with no triage, then the
+    same Accept's late triage."""
+    run, bodies = live_run
+    flagged = [
+        finding.id for finding in run.session.findings if finding.status != "checked_within_scope"
+    ]
+    finding_id = flagged[0]
+
+    record_disposition(run, finding_id, decision="accepted", note="FICT note", by=BY)
+    record_disposition(
+        run, finding_id, decision="accepted", note="FICT note", by=BY, triage="already_known"
+    )
+
+    assert ["triage_tally" in body for body in bodies] == [False, True]
+    assert bodies[1]["triage_tally"] == tally_body(known=1, not_recorded=len(flagged) - 1)
+    validator = contract_validator("chat-events.schema.json")
+    for seq, body in enumerate(bodies, start=1):
+        validator.validate(
+            {"seq": seq, "at": "2026-11-01T09:00:00Z", "type": "disposition", "body": body}
+        )

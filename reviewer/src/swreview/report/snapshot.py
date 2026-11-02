@@ -107,7 +107,9 @@ def review_snapshot(
 def cleared_lines(session: ReviewSession, events: Iterable[AgentEvent]) -> list[dict[str, Any]]:
     """For each finding still undecided, in session order, the body of the last
     `disposition.cleared` the run's stream names it in: the line its card shows again after a
-    reload, a review switch, a backend restart or a read-only restore (owner decision 193A).
+    reload, a review switch, a backend restart or a read-only restore (owner decision 193A). The
+    body leaves out the `triage_tally` its clear was written with, which a later decision may have
+    outdated: a snapshot's one tally is its summary's (002 cycle 7's Tier 2 review).
 
     Worked out from the stream, so `Finding` gains no field and an older build still loads the
     session; a decision recorded since ends the line, as it does on the live card. A stream whose
@@ -120,7 +122,9 @@ def cleared_lines(session: ReviewSession, events: Iterable[AgentEvent]) -> list[
     for event in events:
         first = first or event
         if event.type == "disposition.cleared":
-            latest[str(event.body.get("finding_id"))] = dict(event.body)
+            latest[str(event.body.get("finding_id"))] = {
+                key: value for key, value in event.body.items() if key != "triage_tally"
+            }
     if (
         first is None
         or first.type != "session.started"

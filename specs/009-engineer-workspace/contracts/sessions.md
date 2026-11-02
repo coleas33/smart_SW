@@ -48,6 +48,10 @@ and ticked chats, disk restoration and `review_snapshot` at its default.
 names each such finding in ([data-model.md](../data-model.md) section 8). The page shows each line on
 its card, as the live event does.
 
+*Amended 2026-11-01 (feature 002, cycle 7's Tier 2 review):* each such body leaves out its
+`triage_tally`, so the snapshot's one tally is its summary's ([data-model.md](../data-model.md)
+section 8).
+
 ## 4. The run folder
 
 `GET /reviews/{run_id}` → `200` with `review_snapshot(load_session(...), load_package(...).package,

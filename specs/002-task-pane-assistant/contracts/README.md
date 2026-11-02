@@ -14,6 +14,8 @@ starts omit it and keep the previous body. Other new fields remain refused by th
 
 *Amended 2026-11-01 (owner decisions 193A and 194A; T341):* `chat-events.schema.json`: `finding.withdrawn` gains an optional `folded_into`, on the withdrawal of the id a re-run or restated finding was first announced under once it folds onto that id; and `disposition.cleared` is also written by the restate and by a re-run's carry, its `reason` naming which ([data-model.md](../data-model.md) section 3, rule 3).
 
+*Amended 2026-11-01 (the owner's request; cycle 7, T347):* `chat-events.schema.json` gains `$defs/TriageTally` - the flagged findings by outcome and with none, the passes judged wrong, and `report.md`'s By triage and misses lines for them, counted by `report/summary.triage_tally` - and an optional `triage_tally` of that shape on the `disposition` and `disposition.cleared` bodies, present only while some finding records a triage. The review summary and the disposition route's reply carry the same ([chat-api.md](chat-api.md); [data-model.md](../data-model.md) section 2). Each event's tally is the count when it is sent (settled 2026-11-02), so a Check again's carry counts decision by decision.
+
 | Contract | File | Producer → Consumer |
 |----------|------|---------------------|
 | Chat backend HTTP + SSE | `chat-api.md` | Python `swreview chat serve` → add-in Review page |

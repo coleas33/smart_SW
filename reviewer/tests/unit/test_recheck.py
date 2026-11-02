@@ -76,6 +76,7 @@ from tests.support.restart import BEFORE_REPLACE, disk_at, restarted_app
 from tests.support.restored import assert_restored_as_waiting
 from tests.support.review_bridge import VOLUME_UNIT_GAP, ScriptedReviewBridge
 from tests.support.roles_review import PLATE_ID
+from tests.support.triage import tally_body
 from tests.unit import test_chat_server as chat
 from tests.unit import test_confirmed_drawing_read as confirmed
 from tests.unit import test_waiting_answers as waiting_answers
@@ -1664,7 +1665,10 @@ def test_two_coaxial_findings_on_one_pair_carry_the_reject_onto_its_own(bare: An
 
 def test_a_carried_decision_keeps_its_triage(bare: Any) -> None:
     """Owner decision 185A (002 T312): a re-run carries a decision whole, the triage beside it
-    included (72A), and the `disposition` event that announces the carry says so."""
+    included (72A), and the `disposition` event that announces the carry says so.
+
+    *Changed 2026-11-01 on purpose (002 T347; the triage tally in the pane):* that event carries
+    the review's tally too, F-002's `wrong` beside F-001 not recorded."""
     run, earlier, events = bare
     run.session.findings[:] = [coaxial("F-001", "hol:0001"), coaxial("F-002", "hol:0002")]
     triaged = Disposition(
@@ -1680,7 +1684,11 @@ def test_a_carried_decision_keeps_its_triage(bare: Any) -> None:
     assert run.session.findings[0].disposition is None
     assert run.session.findings[1].disposition == triaged
     assert [body for kind, body in events if kind == "disposition"] == [
-        {"finding_id": "F-002", "disposition": triaged.model_dump(mode="json")}
+        {
+            "finding_id": "F-002",
+            "disposition": triaged.model_dump(mode="json"),
+            "triage_tally": tally_body(wrong=1, not_recorded=1),
+        }
     ]
     assert triaged.model_dump(mode="json")["triage"] == "wrong"
 
@@ -1714,7 +1722,13 @@ def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare:
 
     *Changed 2026-11-01 on purpose (cycle 6's Tier 1 review; owner decision 187A):* F-009 was a
     pass, so its `wrong` is a miss, and the line words it as the pass's card does, "wrong: a miss"
-    (`labels.pass_triage`), where it said "wrong", a flagged finding's false alarm."""
+    (`labels.pass_triage`), where it said "wrong", a flagged finding's false alarm.
+
+    *Changed 2026-11-01 on purpose (002 T346; the triage tally in the pane):* each carried
+    decision's `disposition` event carries the review's tally as it stands once that decision is
+    carried - F-004's miss counted apart from F-003 and F-005, flagged and not recorded, then
+    F-005's new and real with it; the cleared notices before them, with no triage carried yet,
+    carry none."""
     run, earlier, events = bare
     run.session.findings[:] = [
         as_pass(coaxial("F-001", "hol:0001")),
@@ -1759,9 +1773,21 @@ def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare:
     ] + [
         (
             "disposition",
-            {"finding_id": finding.id, "disposition": disposition.model_dump(mode="json")},
+            {
+                "finding_id": finding.id,
+                "disposition": disposition.model_dump(mode="json"),
+                "triage_tally": tally,
+            },
         )
-        for finding, disposition in zip(run.session.findings, carried, strict=True)
+        for finding, disposition, tally in zip(
+            run.session.findings[3:],
+            carried[3:],
+            (
+                tally_body(not_recorded=2, misses=1),
+                tally_body(new=1, not_recorded=1, misses=1),
+            ),
+            strict=True,
+        )
         if disposition is not None
     ]
     assert recheck_row(run.session) == []
@@ -1821,6 +1847,63 @@ def test_a_carried_decision_whose_severity_changed_is_cleared_and_says_so(bare: 
             {"seq": seq, "at": "2026-11-01T09:00:00+00:00", "type": kind, "body": body}
         )
     assert recheck_row(run.session) == []
+
+
+def test_the_carrys_cleared_notice_counts_the_triage_carried_before_it(bare: Any) -> None:
+    """The triage tally (002 cycle 7's adversarial verification): each notice the carry sends
+    counts the triage as it stands when it is sent. F-007's Reject as `wrong` is carried onto
+    F-001, the verdict decided; then F-008's Accept as `already_known` meets F-002 with another
+    severity, so it is not carried and F-002's card says so. That notice's tally counts F-001's
+    `wrong`, carried before it, beside F-002 not recorded, and never F-008's `already_known`, left
+    behind: the last notice, so the count `report.md` prints for the re-run as the carry leaves
+    it."""
+    run, earlier, events = bare
+    run.session.findings[:] = [
+        coaxial("F-001", "hol:0001").model_copy(update={"severity": "medium"}),
+        coaxial("F-002", "hol:0002").model_copy(update={"severity": "high"}),
+    ]
+    earlier.findings[:] = [
+        decided_with(
+            coaxial("F-007", "hol:0001").model_copy(update={"severity": "medium"}),
+            "rejected",
+            "wrong",
+        ),
+        decided_with(
+            coaxial("F-008", "hol:0002").model_copy(update={"severity": "medium"}),
+            "accepted",
+            "already_known",
+        ),
+    ]
+    carried, left = (finding.disposition for finding in earlier.findings)
+    assert carried is not None and left is not None
+
+    run.carry_from(earlier)
+
+    assert [finding.disposition for finding in run.session.findings] == [carried, None]
+    tally = tally_body(wrong=1, not_recorded=1)
+    said = [(kind, body) for kind, body in events if kind.startswith("disposition")]
+    assert said == [
+        (
+            "disposition",
+            {
+                "finding_id": "F-001",
+                "disposition": carried.model_dump(mode="json"),
+                "triage_tally": tally,
+            },
+        ),
+        (
+            "disposition.cleared",
+            {
+                "finding_id": "F-002",
+                "disposition": left.model_dump(mode="json"),
+                "reason": carried_line("Accept", "real but already known"),
+                "triage_tally": tally,
+            },
+        ),
+    ]
+    report = render_report(run.session).splitlines()
+    [at] = [index for index, line in enumerate(report) if line.startswith("- By triage:")]
+    assert report[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
 
 
 def test_a_pass_triage_recorded_before_187a_stays_behind_its_carried_decision(bare: Any) -> None:
