@@ -106,7 +106,6 @@ from swreview.engineering_context.brief import build_summary, compact_json
 from swreview.engineering_context.models import ContextArtifact, canonical_bytes, context_digest
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.findings import (
-    Disposition,
     Finding,
     SubjectKey,
     finding_subject_key,
@@ -132,7 +131,7 @@ from swreview.prerun import (
 from swreview.prerun import (
     returned_finding_ids as _returned_finding_ids,
 )
-from swreview.report.attention import rank
+from swreview.report.attention import SUPPRESSED_STATUS, rank
 from swreview.report.attention_record import write_attention_record
 from swreview.report.dispositions import REPORT_FILE_NAME, set_disposition, takes_triage
 from swreview.report.explanations import (
@@ -1006,14 +1005,13 @@ def _folded(finding: Finding, earlier: Finding) -> Finding:
     )
 
 
-def _cleared(
-    before: Sequence[Finding], after: Sequence[Finding]
-) -> list[tuple[str, Disposition]]:
-    """The id and disposition of each finding decided in `before` and undecided in its place in
-    `after`: the decisions folds cleared, read from their final state, so of two re-runs of one
-    finding the last alone says whether its decision stands, and a decision is named once."""
+def _cleared(before: Sequence[Finding], after: Sequence[Finding]) -> list[Finding]:
+    """Each finding decided in `before`, as decided, whose place in `after` is undecided: the
+    decisions folds cleared, read from their final state, so of two re-runs of one finding the
+    last alone says whether its decision stands, and a decision is named once. The finding as
+    decided, whose status words a pass's triage in the line (`_cleared_body`)."""
     return [
-        (earlier.id, earlier.disposition)
+        earlier
         for earlier, now in zip(before, after, strict=True)
         if earlier.disposition is not None and now.disposition is None
     ]
@@ -1021,7 +1019,7 @@ def _cleared(
 
 def _reconcile_reruns(
     session: ReviewSession, before: int
-) -> tuple[list[tuple[str, Finding]], list[tuple[str, Disposition]]]:
+) -> tuple[list[tuple[str, Finding]], list[Finding]]:
     """Fold a re-run check's new finding onto the one it re-judges (rule 3).
 
     `before` is how many findings the session held when the answer went in; everything
@@ -1042,8 +1040,8 @@ def _reconcile_reruns(
     are left exactly as it recorded them.
 
     Returns each fold, as the id its re-run was allocated and the finding in its final form,
-    and the id and the disposition of each earlier finding whose decision the folds cleared,
-    in session order. The tool layer already announced each folded finding under the id it
+    and each earlier finding, as decided, whose decision the folds cleared (`_cleared`), in
+    session order. The tool layer already announced each folded finding under the id it
     was allocated, so the caller withdraws that id and re-announces the finding under the id
     it was folded onto (`ReviewRun._announce_folds`) - the stream's last word on a finding id
     is then the verdict `session.json` holds - and then says which decisions it cleared.
@@ -1203,17 +1201,28 @@ there, so a reader that counts withdrawn verdicts passes over this withdrawal (0
 3.3)."""
 
 
-def _cleared_body(finding_id: str, disposition: Disposition, cause: ClearedBy) -> dict[str, Any]:
+def _cleared_body(finding_id: str, decided: Finding, cause: ClearedBy) -> dict[str, Any]:
     """The `disposition.cleared` body (002 FR-031; owner decisions 189A, 191A and 194A): the
-    finding, the disposition its new verdict cleared - by a re-run after an answer, a restate or
-    a re-run's carry, `cause` - and the words file's line the page prints on the finding's card,
-    naming the decision and, when one was recorded, its triage."""
+    finding the line lands on, the disposition `decided` held that a new verdict cleared - by a
+    re-run after an answer, a restate or a re-run's carry, `cause` - and the words file's line the
+    page prints on the finding's card, naming the decision and, when one was recorded, its triage:
+    a pass's `wrong` in the pass's own word, "wrong: a miss" (`labels.pass_triage`, owner decision
+    187A), as its card says it, and any other triage in `labels.triage`'s."""
+    disposition = decided.disposition
+    assert disposition is not None, "only a decided finding's decision is cleared"
     words = load_words()
-    triage = None if disposition.triage is None else words.labels.triage[disposition.triage]
+    labels = words.labels
+    triage = disposition.triage
+    if triage is None:
+        word = None
+    elif decided.status == SUPPRESSED_STATUS and triage in labels.pass_triage:
+        word = labels.pass_triage[triage]
+    else:
+        word = labels.triage[triage]
     return {
         "finding_id": finding_id,
         "disposition": disposition.model_dump(mode="json"),
-        "reason": words.rerun.of(DECISION_NOUNS[disposition.decision], triage, cause=cause),
+        "reason": words.rerun.of(DECISION_NOUNS[disposition.decision], word, cause=cause),
     }
 
 
@@ -1523,15 +1532,16 @@ class ReviewRun:
     def _announce_folds(
         self,
         folds: Sequence[tuple[str, Finding]],
-        cleared: Sequence[tuple[str, Disposition]],
+        cleared: Sequence[Finding],
         *,
         cause: ClearedBy,
     ) -> None:
         """Say what folds did, so the stream agrees with them (002 FR-031): for each fold, the id
         its finding was first announced under is withdrawn, naming the id it took
         (`FOLDED_INTO`), and the finding is announced under that id; then one
-        `disposition.cleared` per decision the folds cleared, after the last `finding` event of
-        its id, so the line lands on the card the fold drew, worded for its `cause`."""
+        `disposition.cleared` per decision the folds cleared - each finding as decided, from
+        `_cleared` - after the last `finding` event of its id, so the line lands on the card the
+        fold drew, worded for its `cause`."""
         for spent, finding in folds:
             self.sink.emit(
                 "finding.withdrawn",
@@ -1542,8 +1552,8 @@ class ReviewRun:
                 },
             )
             self.sink.emit("finding", self.context.finding_body(finding))
-        for finding_id, disposition in cleared:
-            self.sink.emit("disposition.cleared", _cleared_body(finding_id, disposition, cause))
+        for decided in cleared:
+            self.sink.emit("disposition.cleared", _cleared_body(decided.id, decided, cause))
 
     def _apply_answers(
         self, answers: Sequence[tuple[str, str]], *, read_drawings: bool = True
@@ -1759,7 +1769,7 @@ class ReviewRun:
                 named.append(NOT_CARRIED_DECISION_SHARED.format(**words))
             elif (matches[0].status, matches[0].severity) != (finding.status, finding.severity):
                 self.sink.emit(
-                    "disposition.cleared", _cleared_body(matches[0].id, disposition, "carry")
+                    "disposition.cleared", _cleared_body(matches[0].id, finding, "carry")
                 )
             else:
                 # The status is the one decided, so a triage the finding does not take is a

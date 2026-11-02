@@ -1413,10 +1413,15 @@ def test_a_rerun_that_changes_only_the_status_or_only_the_severity_clears_the_de
     clears the decision and its triage, and the fold names the disposition it cleared.
 
     *Changed 2026-11-01 on purpose (002 T340; the backlog's cycle 3 section):* each fold names
-    the id its re-run was first announced under, F-002, which the stream withdraws."""
+    the id its re-run was first announced under, F-002, which the stream withdraws.
+
+    *Changed again 2026-11-01 on purpose (cycle 6's Tier 1 review):* the decision cleared is named
+    by the finding as decided, F-001 whole, not its id and disposition alone, since its status
+    words a pass's triage in the line."""
     run = review([turn("nothing yet")])
     session = run.session
-    session.findings[:] = [judged("F-001", disposition=DECIDED), judged("F-002", status, severity)]
+    decided = judged("F-001", disposition=DECIDED)
+    session.findings[:] = [decided, judged("F-002", status, severity)]
 
     returned = runner._reconcile_reruns(session, 1)
 
@@ -1424,7 +1429,7 @@ def test_a_rerun_that_changes_only_the_status_or_only_the_severity_clears_the_de
         (finding.id, finding.status, finding.severity, finding.disposition)
         for finding in session.findings
     ] == [("F-001", status, severity, None)]
-    assert returned == ([("F-002", session.findings[0])], [("F-001", DECIDED)])
+    assert returned == ([("F-002", session.findings[0])], [decided])
 
 
 def test_a_rerun_that_changes_neither_keeps_the_whole_disposition(
@@ -1466,14 +1471,15 @@ def test_two_reruns_of_one_finding_are_judged_against_the_finding_as_decided(
     changed last clears it, named once.
 
     *Changed 2026-11-01 on purpose (002 T340; the backlog's cycle 3 section):* each fold names
-    the id its re-run was first announced under, which the stream withdraws."""
+    the id its re-run was first announced under, which the stream withdraws.
+
+    *Changed again 2026-11-01 on purpose (cycle 6's Tier 1 review):* the decision cleared is named
+    by the finding as decided, F-001 whole, not its id and disposition alone, since its status
+    words a pass's triage in the line."""
     run = review([turn("nothing yet")])
     session = run.session
-    session.findings[:] = [
-        judged("F-001", disposition=DECIDED),
-        judged("F-002", first),
-        judged("F-003", last),
-    ]
+    decided = judged("F-001", disposition=DECIDED)
+    session.findings[:] = [decided, judged("F-002", first), judged("F-003", last)]
 
     folded, cleared = runner._reconcile_reruns(session, 1)
 
@@ -1485,7 +1491,7 @@ def test_two_reruns_of_one_finding_are_judged_against_the_finding_as_decided(
         ("F-003", "F-001"),
     ]
     assert folded[-1][1] == final
-    assert cleared == ([] if kept else [("F-001", DECIDED)])
+    assert cleared == ([] if kept else [decided])
 
 
 @pytest.mark.parametrize(
@@ -1734,7 +1740,9 @@ def test_a_restate_keeps_or_clears_a_decision_as_a_rerun_does(
 
 # --- a pass's miss in the cleared line: cycle 6's Tier 1 review --------------------------------
 
-MISSED = DECIDED.model_copy(update={"decision": "rejected", "note": "FICT a miss", "triage": "wrong"})
+MISSED = DECIDED.model_copy(
+    update={"decision": "rejected", "note": "FICT a miss", "triage": "wrong"}
+)
 """A pass rejected and judged wrong: a miss (owner decision 187A)."""
 
 
