@@ -61,6 +61,8 @@ namespace SwReview.AddIn.Tests;
 /// it has none - and while the review is read-only every such card says `read_only`'s words, whatever its decision, and
 /// names no press its locked buttons cannot make. A reply that lands after a review switch draws no line on the shown
 /// review's card of the same id, and a reload and a switch bring the line back from the live snapshot.
+/// *Added 2026-11-02 (002 T356; a read-only check of those fixes):* a switch between a live review and a read-only restore
+/// draws every card's line again for the review shown - the read-only words, or, once it is live again, the repair.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -1594,6 +1596,65 @@ public sealed class ReviewPageTriageTests
         });
     }
 
+    /// <summary>
+    /// A read-only check of cycle 9's Tier 2 fixes, a guard: a switch from a live review to a read-only restore draws every
+    /// card's line again in the read-only words, since the page reads `state.readOnly` when it draws a card and sets it before
+    /// a restore draws them. Chat-1 is live: its F-001 Accept, F-002 Reject and F-003 Defer, each recorded without a triage,
+    /// say to press, and F-004, not yet decided, that it has none, every triage button on. The engineer chooses chat-2, which
+    /// the backend no longer holds (`404 UnknownChat`), so the page restores it read-only from its run folder, holding the
+    /// same four records: each card says the read-only words, naming no press, its buttons off.
+    /// </summary>
+    [Fact]
+    public void ASwitchFromALiveReviewToAReadOnlyRestoreNamesNoPress()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Untriaged());
+            await AssertNoTriageLines(driver, false);
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 404,
+                Refusal("UnknownChat", "no chat " + OtherChat, false));
+            await driver.Route("GET", "/reviews/" + OtherRun, 200, Snapshot(OtherRun, true, Untriaged()));
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+
+            await AssertNoTriageLines(driver, true);
+        });
+    }
+
+    /// <summary>
+    /// The same check, a guard: a switch from a read-only restore to a live review draws every card's line again in the words
+    /// for where its record stands, since the switch resets `state.readOnly` before the live snapshot's cards are drawn. The
+    /// engineer chooses chat-2, restored read-only as above, whose four cards say the read-only words; then chat-1 again,
+    /// which the backend holds, and whose live snapshot holds the same four records: F-001, F-002 and F-003 say to press again,
+    /// and F-004 that it has none, every triage button on.
+    /// </summary>
+    [Fact]
+    public void ASwitchFromAReadOnlyRestoreToALiveReviewNamesTheRepairAgain()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string ChatRun = "20260923-101500-bracket-1";
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, ChatRun, ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 404,
+                Refusal("UnknownChat", "no chat " + OtherChat, false));
+            await driver.Route("GET", "/reviews/" + OtherRun, 200, Snapshot(OtherRun, true, Untriaged()));
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            await AssertNoTriageLines(driver, true);
+
+            await driver.Route("GET", "/sessions/" + Chat + "/snapshot", 200, Snapshot(ChatRun, false, Untriaged()));
+            await driver.Read(ReviewPageSessionsTests.Chip(Chat));
+            await driver.Settle();
+
+            await AssertNoTriageLines(driver, false);
+        });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>
@@ -1688,6 +1749,21 @@ public sealed class ReviewPageTriageTests
     private static bool[] Disabled(JsonElement card) =>
         card.GetProperty("disabled").EnumerateArray().Select(value => value.GetBoolean()).ToArray();
 
+    /// <summary>
+    /// Each of <see cref="UntriagedCards"/>' cards holds one no-triage line: on a live review its own words, with its triage
+    /// buttons on; on a read-only review the read-only words, whatever its decision, with its buttons off.
+    /// </summary>
+    private static async Task AssertNoTriageLines(ReviewPageDriver driver, bool readOnly)
+    {
+        foreach (var card in UntriagedCards)
+        {
+            JsonElement line = await driver.Read(ReadNoTriage(card.Id));
+            Assert.Equal(1, line.GetProperty("count").GetInt32());
+            Assert.Equal(readOnly ? LabelsSample.NoTriageReadOnly : card.Words, line.GetProperty("text").GetString());
+            Assert.All(Disabled(await driver.Read(ReadCard(card.Id))), off => Assert.Equal(readOnly, off));
+        }
+    }
+
     // ---- the contract and the words -------------------------------------------------------------
 
     /// <summary>review-session.schema.json's `Disposition.triage` enum: the four tokens, in their order.</summary>
@@ -1759,6 +1835,24 @@ public sealed class ReviewPageTriageTests
 
     /// <summary>F-001's Accept with `already known`, recorded before an answer resumed the turn (roadmap hole H-d-008).</summary>
     private static Dictionary<string, object?> AcceptedAlreadyKnown() => Disposition("accepted", "FICT intended", "already_known");
+
+    /// <summary>
+    /// One flagged finding in each state `labels.no_triage` words, none with a triage - an Accept, a Reject and a Defer
+    /// recorded without one, and a finding not yet decided - with its card's words on a live review (roadmap hole H-c-008).
+    /// </summary>
+    private static readonly (string Id, string? Decision, string Words)[] UntriagedCards =
+    {
+        ("F-001", "accepted", LabelsSample.NoTriageAccepted),
+        ("F-002", "rejected", LabelsSample.NoTriageRejected),
+        ("F-003", "deferred", LabelsSample.NoTriageDeferred),
+        ("F-004", null, LabelsSample.NoTriageUndecided),
+    };
+
+    /// <summary><see cref="UntriagedCards"/> as findings, each disposition recorded without a triage.</summary>
+    private static string[] Untriaged() =>
+        UntriagedCards
+            .Select(card => Finding(card.Id, card.Decision == null ? null : Disposition(card.Decision, string.Empty, null)))
+            .ToArray();
 
     /// <summary>A `disposition.cleared` body as the runner writes it: the finding, the disposition cleared and the line.</summary>
     private static string Cleared(string findingId, Dictionary<string, object?> disposition) =>
