@@ -1849,6 +1849,63 @@ def test_a_carried_decision_whose_severity_changed_is_cleared_and_says_so(bare: 
     assert recheck_row(run.session) == []
 
 
+def test_the_carrys_cleared_notice_counts_the_triage_carried_before_it(bare: Any) -> None:
+    """The triage tally (002 cycle 7's adversarial verification): each notice the carry sends
+    counts the triage as it stands when it is sent. F-007's Reject as `wrong` is carried onto
+    F-001, the verdict decided; then F-008's Accept as `already_known` meets F-002 with another
+    severity, so it is not carried and F-002's card says so. That notice's tally counts F-001's
+    `wrong`, carried before it, beside F-002 not recorded, and never F-008's `already_known`, left
+    behind: the last notice, so the count `report.md` prints for the re-run as the carry leaves
+    it."""
+    run, earlier, events = bare
+    run.session.findings[:] = [
+        coaxial("F-001", "hol:0001").model_copy(update={"severity": "medium"}),
+        coaxial("F-002", "hol:0002").model_copy(update={"severity": "high"}),
+    ]
+    earlier.findings[:] = [
+        decided_with(
+            coaxial("F-007", "hol:0001").model_copy(update={"severity": "medium"}),
+            "rejected",
+            "wrong",
+        ),
+        decided_with(
+            coaxial("F-008", "hol:0002").model_copy(update={"severity": "medium"}),
+            "accepted",
+            "already_known",
+        ),
+    ]
+    carried, left = (finding.disposition for finding in earlier.findings)
+    assert carried is not None and left is not None
+
+    run.carry_from(earlier)
+
+    assert [finding.disposition for finding in run.session.findings] == [carried, None]
+    tally = tally_body(wrong=1, not_recorded=1)
+    said = [(kind, body) for kind, body in events if kind.startswith("disposition")]
+    assert said == [
+        (
+            "disposition",
+            {
+                "finding_id": "F-001",
+                "disposition": carried.model_dump(mode="json"),
+                "triage_tally": tally,
+            },
+        ),
+        (
+            "disposition.cleared",
+            {
+                "finding_id": "F-002",
+                "disposition": left.model_dump(mode="json"),
+                "reason": carried_line("Accept", "real but already known"),
+                "triage_tally": tally,
+            },
+        ),
+    ]
+    report = render_report(run.session).splitlines()
+    [at] = [index for index, line in enumerate(report) if line.startswith("- By triage:")]
+    assert report[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
+
+
 def test_a_pass_triage_recorded_before_187a_stays_behind_its_carried_decision(bare: Any) -> None:
     """Owner decisions 187A and 194A: a pass's triage other than `wrong`, recorded before 187A, is
     one a pass does not take. Onto a pass with the status and severity decided the Accept is

@@ -1838,6 +1838,57 @@ def test_a_restates_cleared_notice_carries_the_tally_the_restate_leaves(
     assert report[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
 
 
+def test_a_restates_cleared_notice_carries_no_tally_once_it_withdrew_the_only_triage(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The triage tally (002 cycle 7's adversarial verification), the restate's edge: F-003,
+    Rejected as `wrong` on a part the answer made bought, holds the review's only triage, and the
+    restated check no longer produces it, so it is withdrawn; F-006, restated, re-judges F-004,
+    Accepted with no triage, with another severity, so F-004's decision is cleared. F-003's
+    withdrawal comes first, so when F-004's notice is sent no finding records a triage, and the
+    notice carries no `triage_tally`, as the backend sends none then and `report.md` prints no By
+    triage line."""
+    bought = "bought part (your answer to ER-001)"
+    rejected = DECIDED.model_copy(update={"decision": "rejected", "triage": "wrong"})
+    untriaged = DECIDED.model_copy(update={"triage": None})
+    run = review([turn("nothing yet")])
+    run.session.findings[:] = [
+        on_the_pair("F-003", "hol:0017", "hol:0027").model_copy(
+            update={"disposition": rejected, "tool_result_ids": [0]}
+        ),
+        judged("F-004", disposition=untriaged),
+        judged("F-006", "unresolved", "high"),
+    ]
+    mark = len(events_of(run))
+
+    stale = run._reconcile_restated(2, {0: "check_hygiene"}, [], {"check_hygiene": bought})
+
+    assert stale == [("F-003", bought)]
+    assert [(finding.id, finding.disposition) for finding in run.session.findings] == [
+        ("F-004", None)
+    ]
+    after = [(event["type"], event["body"]) for event in events_of(run)[mark:]]
+    assert [body for kind, body in after if kind == "disposition.cleared"] == [
+        {
+            "finding_id": "F-004",
+            "disposition": untriaged.model_dump(mode="json"),
+            "reason": (
+                "Your answer graded the checks again and this verdict changed, so your Accept "
+                "was cleared. Decide again."
+            ),
+        }
+    ]
+    assert [(kind, body.get("finding_id", body.get("id"))) for kind, body in after] == [
+        ("finding.withdrawn", "F-003"),
+        ("finding.withdrawn", "F-006"),
+        ("finding", "F-004"),
+        ("disposition.cleared", "F-004"),
+    ]
+    assert not any(
+        line.startswith("- By triage:") for line in render_report(run.session).splitlines()
+    )
+
+
 # --- a pass's miss in the cleared line: cycle 6's Tier 1 review --------------------------------
 
 MISSED = DECIDED.model_copy(
