@@ -29,6 +29,10 @@ namespace SwReview.AddIn.Tests;
 /// more, the start's answer replacing the review as any start's does and the Send's dropped; and a review stays as it was
 /// when its turn failed, its error card offering Retry (FR-028), when a save moved the run root, under which the new
 /// backend reads no folder of the old one, or when the host lists no record of it.
+///
+/// *Changed 2026-11-03 (the read-only check of those fixes, T400):* a waiting review left so has its Send off, saying why;
+/// a start refused before the `init` keeps its card across the restore; and a run root retyped in another letter case is
+/// the same run root.
 /// </summary>
 public sealed class ReviewPageRestartReadOnlyTests
 {
@@ -489,6 +493,162 @@ public sealed class ReviewPageRestartReadOnlyTests
                 Assert.Equal(0, after.GetProperty("cards").GetInt32());
                 Assert.False(after.GetProperty("stopOff").GetBoolean(), "Stop is off while the started review runs.");
             }
+        });
+    }
+
+    // ---- the read-only check of cycle 22's fixes (T400) -------------------------------------------
+
+    /// <summary>
+    /// *Added 2026-11-03 (the read-only check of cycle 22's fixes):* a live review waiting for Send that a restart leaves as it
+    /// was - a save moved the run root, and the new backend reads no folder of the old one; or the host lists no record of
+    /// it, and the page has no folder to ask for - has its Send off, never refused as a chat the backend does not know (015
+    /// FR-042), and the line beside it says why, in the words file's sentence: a run root no longer in force, or a backend that
+    /// holds the review no more. The Settings line no longer says that its Send checks its saved evidence again, its chip never
+    /// says it can no longer be restored, no folder is read, and pressing Send posts nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AWaitingReviewARestartLeavesAsItWasHasItsSendOffSayingWhy(bool movedRoot)
+    {
+        RestoredReviewFixture fixture = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(driver => fixture.Configure(driver, refuseSend: true), async driver =>
+        {
+            // The re-run, its Send refused: a live waiting review, its Send offered again.
+            await ReviewPageRecheckTests.PressSend(driver);
+            JsonElement live = await driver.Read(ReviewPageRecheckTests.ReadState);
+            Assert.False(live.GetProperty("readOnly").GetBoolean(), live.GetRawText());
+            Assert.False(live.GetProperty("sendOff").GetBoolean(), "the live waiting review's Send is off before the restart.");
+
+            await driver.Route("GET", "/sessions/" + fixture.RecheckedChat + "/snapshot", 404, ReviewPageRecheckTests.UnknownChat);
+            await driver.Route("GET", fixture.ReviewPath, 404, UnknownReview);
+            if (movedRoot)
+            {
+                driver.RunRoot = @"C:\FICT-other-runs";
+            }
+            else
+            {
+                // The page asks for the host's list again when told of the document.
+                driver.Sessions.Clear();
+                await driver.DocumentChanged(fixture.ActiveDocument);
+            }
+
+            await driver.ClearCalls();
+            int rechecks = driver.Posted("review.recheck").Length;
+            await Restart(driver);
+
+            JsonElement state = await driver.Read(ReviewPageRecheckTests.ReadState);
+            string why = movedRoot ? "RunRootChanged" : "UnknownChat";
+            Assert.False(state.GetProperty("readOnly").GetBoolean(), state.GetRawText());
+            Assert.True(state.GetProperty("sendShown").GetBoolean(), state.GetRawText());
+            Assert.True(state.GetProperty("sendOff").GetBoolean(), "Send is on for a waiting review the backend does not hold: " + state.GetRawText());
+            Assert.Equal(fixture.Label(why), state.GetProperty("failure").GetString());
+            Assert.Equal(why, state.GetProperty("foldClass").GetString());
+            Assert.Equal(string.Empty, state.GetProperty("settingsNote").GetString());
+            Assert.DoesNotContain("This review can no longer be restored.", state.GetProperty("chips").GetString());
+
+            await ReviewPageRecheckTests.PressSend(driver);
+            Assert.DoesNotContain(await driver.Calls(), call => call.GetProperty("method").GetString() == "POST"
+                || (call.GetProperty("path").GetString() ?? string.Empty).StartsWith("/reviews/", StringComparison.Ordinal));
+            Assert.Equal(rechecks, driver.Posted("review.recheck").Length);
+        });
+    }
+
+    /// <summary>
+    /// *Added 2026-11-03 (the read-only check of cycle 22's fixes), a guard:* a waiting review already shown from its folder keeps
+    /// its Send across another restart, with no line beside it and the Settings line that says Send checks its saved evidence
+    /// again first: the host re-runs it from its folder, whichever backend is up (015 FR-031). Only a live review the backend
+    /// takes no more has its Send off.
+    /// </summary>
+    [Fact]
+    public void ARestoredWaitingReviewKeepsItsSendAcrossAnotherRestart()
+    {
+        RestoredReviewFixture fixture = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(driver => fixture.Configure(driver, refuseSend: true), async driver =>
+        {
+            JsonElement restored = await driver.Read(ReviewPageRecheckTests.ReadState);
+            Assert.True(restored.GetProperty("readOnly").GetBoolean(), restored.GetRawText());
+            Assert.False(restored.GetProperty("sendOff").GetBoolean(), restored.GetRawText());
+
+            await Restart(driver);
+
+            JsonElement state = await driver.Read(ReviewPageRecheckTests.ReadState);
+            Assert.True(state.GetProperty("readOnly").GetBoolean(), state.GetRawText());
+            Assert.False(state.GetProperty("sendOff").GetBoolean(), "a restored waiting review's Send went off at another restart.");
+            Assert.Equal(JsonValueKind.Null, state.GetProperty("failure").ValueKind);
+            Assert.Equal(ReviewPageRecheckTests.WaitingNote, state.GetProperty("settingsNote").GetString());
+
+            int rechecks = driver.Posted("review.recheck").Length;
+            await ReviewPageRecheckTests.PressSend(driver);
+            Assert.Equal(rechecks + 1, driver.Posted("review.recheck").Length);
+        });
+    }
+
+    /// <summary>
+    /// *Added 2026-11-03 (the read-only check of cycle 22's fixes):* a start that makes a restart waiting since a save - during
+    /// a check, say - and is then refused, the host answering it before the `init` the page asked for when told of the restart,
+    /// keeps its card in Results: the review on screen is shown from its folder at once, and the refusal stays with its Retry,
+    /// whose `review.start` names the review on screen, as before the restart.
+    /// </summary>
+    [Fact]
+    public void AStartRefusedBeforeTheInitKeepsItsCardAcrossTheRestore()
+    {
+        ReviewPageDriver.Run(Kept, async driver =>
+        {
+            await Finished(driver);
+            await driver.Route("GET", SnapshotPath, 404, ReviewPageRecheckTests.UnknownChat);
+            await driver.Route("GET", FolderPath, 200, Folder(true));
+            driver.HoldReviewStart = true;
+            await driver.StartReview();
+
+            driver.HoldReady = true;
+            int readies = driver.Posted("ready").Length;
+            driver.BackendToken = RestartedToken;
+            await driver.Post("backend.restarted", new { sentences = Array.Empty<string>() });
+            await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init after the restart");
+            await driver.ReleaseReviewStart(StartRefused);
+            Assert.True((await driver.Read(ReadPage)).GetProperty("retry").GetBoolean(), "the refused start shows no card.");
+
+            await driver.ClearCalls();
+            await driver.ReleaseReady();
+            await driver.Settle();
+
+            JsonElement after = await driver.Read(ReadPage);
+            Assert.Equal(MissingReason, after.GetProperty("readOnly").GetString());
+            Assert.Equal(new[] { "GET " + SnapshotPath, "GET " + FolderPath }, await RestoreReads(driver));
+            Assert.True(after.GetProperty("retry").GetBoolean(), "the restore took the refused start's card down, and Retry with it.");
+
+            int starts = driver.Posted("review.start").Length;
+            await driver.Read("document.querySelector('#errors [data-action=\"retry\"]').click(); return JSON.stringify({ok: true});");
+            await driver.Settle();
+            Assert.Equal(Chat, Assert.Single(driver.Posted("review.start").Skip(starts)).GetProperty("retry_of").GetString());
+        });
+    }
+
+    /// <summary>
+    /// *Added 2026-11-03 (the read-only check of cycle 22's fixes):* a run root retyped in another letter case is the same folder,
+    /// as the host's one rule for run roots reads it (owner decision 154A, `RunRootRule.SameRunRoot`): the backend that restarts
+    /// under it reads the review's folder, so the finished review on screen is shown from it at once, read-only, as after any
+    /// other restart.
+    /// </summary>
+    [Fact]
+    public void ASaveThatRetypesTheRunRootInAnotherLetterCaseShowsTheReviewFromItsFolder()
+    {
+        ReviewPageDriver.Run(Kept, async driver =>
+        {
+            await Finished(driver);
+            await driver.Route("GET", SnapshotPath, 404, ReviewPageRecheckTests.UnknownChat);
+            await driver.Route("GET", FolderPath, 200, Folder(true));
+            await driver.ClearCalls();
+            string root = driver.RunRoot;
+            driver.RunRoot = root.ToLowerInvariant();
+            Assert.NotEqual(root, driver.RunRoot);
+            await Restart(driver);
+
+            JsonElement after = await driver.Read(ReadPage);
+            Assert.Equal(MissingReason, after.GetProperty("readOnly").GetString());
+            AssertEveryControlOff(after);
+            Assert.Equal(new[] { "GET " + SnapshotPath, "GET " + FolderPath }, await RestoreReads(driver));
         });
     }
 

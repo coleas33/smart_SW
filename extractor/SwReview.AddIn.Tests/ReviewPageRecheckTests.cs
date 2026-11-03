@@ -17,7 +17,7 @@ namespace SwReview.AddIn.Tests;
 public sealed class ReviewPageRecheckTests
 {
     private const string Waiting = "Checked by code. Not sent to the model.";
-    private const string WaitingNote = "Saving restarts the backend. The waiting review stays, and its Send checks its saved evidence again first.";
+    internal const string WaitingNote = "Saving restarts the backend. The waiting review stays, and its Send checks its saved evidence again first.";
     private const string Rechecking = "Checking the saved evidence again.";
     private const string RecheckingNote = "Checking the saved evidence again; save when it is done.";
 
