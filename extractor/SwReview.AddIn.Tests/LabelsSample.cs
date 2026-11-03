@@ -55,6 +55,9 @@ namespace SwReview.AddIn.Tests;
 ///
 /// *Changed 2026-11-03 (007 T097; cycle 20, roadmap hole H-a-015):* `timing_form` gains `all_six`, the words file's own line
 /// under the form's heading that says to type all six, zero for none.
+///
+/// *Changed 2026-11-03 (007 T099; cycle 20's Tier 2 review):* `all_six` is the words file's new line, which says to type
+/// them once known, and that each replaces what is recorded.
 /// </summary>
 internal static class LabelsSample
 {
@@ -143,7 +146,7 @@ internal static class LabelsSample
     public const string TimingHeading = "Minutes for this review";
 
     /// <summary>The line under the heading that says to type all six (feature 007, cycle 20).</summary>
-    public const string TimingAllSix = "Type all six, zero for none.";
+    public const string TimingAllSix = "Type all six once you know them, zero for none. Each replaces what is recorded.";
 
     /// <summary>The minutes form's button.</summary>
     public const string TimingSave = "Save minutes";

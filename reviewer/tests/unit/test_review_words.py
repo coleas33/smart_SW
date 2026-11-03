@@ -547,7 +547,7 @@ and 184A)."""
 
 TIMING_FORM = {
     "heading": "Minutes for this review",
-    "all_six": "Type all six, zero for none.",
+    "all_six": "Type all six once you know them, zero for none. Each replaces what is recorded.",
     "save": "Save minutes",
     "saved": "The minutes are recorded.",
 }
@@ -578,7 +578,13 @@ def test_the_minutes_forms_words_name_no_figure() -> None:
     *Changed 2026-11-03 on purpose (007 T097; cycle 20, roadmap hole H-a-015):* the group gains
     `all_six`, the line under the heading that says to type all six, zero for none, since Save
     stays off while any field is blank. It says zero in a word: the rule that no word holds a
-    digit stands."""
+    digit stands.
+
+    *Changed 2026-11-03 on purpose (007 T099; cycle 20's Tier 2 review):* the line says to type
+    them once known, and that each replaces what is recorded. The form is blank over minutes
+    already recorded - after a switch back, a reload or a re-run, which carries all six - so a 0
+    typed there for none replaced a recorded figure, and a 0 for a figure not known yet counted
+    in the net."""
     labels = load_words().labels
     order = list(raw_words()["labels"])
     words = [*labels.timing.values(), *labels.timing_form.values()]

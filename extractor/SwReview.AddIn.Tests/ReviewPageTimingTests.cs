@@ -34,6 +34,9 @@ namespace SwReview.AddIn.Tests;
 /// spaces only - so every save posts all six, 0 typed for none, and no field posts null; one line from the words file, under
 /// the heading, says to type all six. The page still holds no rule about what a figure may be: text that is no number is
 /// posted as typed, for the route to refuse.
+/// *Added 2026-11-03 (007 T099; cycle 20's Tier 2 review):* Save stays off on a review shown again with a field left blank,
+/// after all six were typed on another; and a failed apply's review, waiting for the host's list before it is shown from its
+/// folder, has no form, where Save stayed on over six blank fields and a press posted six nulls.
 /// </summary>
 public sealed class ReviewPageTimingTests
 {
@@ -890,6 +893,86 @@ public sealed class ReviewPageTimingTests
                 Assert.Equal(JsonValueKind.Null, form.GetProperty("allSix").ValueKind);
                 Assert.DoesNotContain(LabelsSample.TimingAllSix, form.GetProperty("bodyText").GetString());
                 Assert.True(form.GetProperty("saveDisabled").GetBoolean(), "Save is on with a field blank.");
+            });
+    }
+
+    // ---- cycle 20's Tier 2 review (007 T099) ----------------------------------------------------
+
+    /// <summary>
+    /// A review shown again with a field left blank has Save off, whatever the review left before it allowed: five typed on
+    /// the first review and not saved, all six on another, which turns Save on there, and back on the first the five come
+    /// back with Save off, and a press posts nothing - never the other review's Save over a blank field, which would post
+    /// null.
+    /// </summary>
+    [Fact]
+    public void SaveStaysOffOnAReviewShownAgainWithAFieldLeftBlank()
+    {
+        string[] five = { "417", "23.75", "331", string.Empty, "57", "86" };
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver);
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200, Snapshot(OtherRun, false));
+            await driver.Route("GET", "/sessions/" + Chat + "/snapshot", 200, Snapshot("20260923-101500-bracket-1", false));
+            await driver.Route("POST", TimingPath, 200, Recorded);
+            await Type(driver, five);
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            await Type(driver, Typed);
+            Assert.False((await driver.Read(ReadForm)).GetProperty("saveDisabled").GetBoolean(), "Save is off with all six typed on the other review.");
+
+            await driver.Read(ReviewPageSessionsTests.Chip(Chat));
+            await driver.Settle();
+            JsonElement back = await driver.Read(ReadForm);
+            Assert.True(back.GetProperty("shown").GetBoolean(), "the first review shows no form after the switch back.");
+            Assert.Equal(five, Values(back));
+            Assert.True(back.GetProperty("saveDisabled").GetBoolean(), "Save is on with a field blank on the review shown again.");
+
+            await driver.ClearCalls();
+            await Save(driver);
+            Assert.Empty(await TimingCalls(driver));
+        });
+    }
+
+    /// <summary>
+    /// An apply of answers that fails on a review waiting for Send - its six typed, Save on - shows that review from its folder,
+    /// read-only, where there is no form. A review started on this page may wait for the host's list to name it first, and
+    /// meanwhile the form is gone already, Save off, and a press posts nothing, where the form stayed with Save on over six
+    /// fields made blank, and a press posted six nulls.
+    /// </summary>
+    [Fact]
+    public void TheFormGoesWhileAFailedApplyWaitsForItsReview()
+    {
+        WaitingReviewFixture fixture = WaitingReviewFixture.Read();
+        ReviewPageDriver.Run(
+            driver =>
+            {
+                fixture.Configure(driver);
+                driver.Sessions.Clear();
+            },
+            async driver =>
+            {
+                await fixture.Start(driver);
+                await Type(driver, Typed);
+                Assert.False((await driver.Read(ReadForm)).GetProperty("saveDisabled").GetBoolean(), "Save is off with all six typed.");
+                await driver.Route("POST", "/sessions/" + Chat + "/evidence", 202, "{\"state\":\"running\"}");
+                await driver.Read("document.querySelector('#questions [data-action=question-option]').click(); return JSON.stringify({ ok: true });");
+                await driver.Settle();
+                await driver.Read("document.querySelector('#questions [data-action=question-send]').click(); return JSON.stringify({ ok: true });");
+                await driver.Settle();
+
+                driver.HoldSessions = true;
+                await driver.Push(Chat, 3, "error", "{\"error_class\":\"OSError\",\"message\":\"FICT apply failed\",\"retryable\":true}");
+                await driver.Settle();
+                JsonElement failed = await driver.Read(ReadForm);
+                Assert.False(failed.GetProperty("shown").GetBoolean(), "the form shows while the failed apply's review waits for the host's list.");
+                Assert.True(failed.GetProperty("saveDisabled").GetBoolean(), "Save is on over blank fields.");
+                await driver.ClearCalls();
+                await Save(driver);
+                Assert.Empty(await TimingCalls(driver));
+                await driver.ReleaseSessions();
             });
     }
 

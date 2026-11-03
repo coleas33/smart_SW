@@ -2070,7 +2070,13 @@ def test_the_minutes_are_typed_on_the_review_page_and_the_console_is_the_fallbac
     *Changed 2026-11-03 on purpose (007 T097; cycle 20, roadmap hole H-a-015):* the bullet says
     all six are typed, 0 for none, as the line under the form's heading says, in the words file's
     words, and that Save stays off until they are, where a blank supervision, verification or
-    false-alarms field was saved as its starting 0, unseen."""
+    false-alarms field was saved as its starting 0, unseen.
+
+    *Changed 2026-11-03 on purpose (007 T099; cycle 20's Tier 2 review):* the bullet says never
+    to type 0 for a figure not known yet, and that once saved the form is blank again over the
+    six - back on the review, after a reload or a re-run, which carries them - while each save
+    replaces all six recorded, so a correction retypes all six from the note: a 0 typed there
+    for none replaced a recorded figure."""
     chips = step(plan, "4.5")
     restart = chips.index("The backend restarted, so this review is shown from its run folder.")
     review = re.sub(r"\s+", " ", step(plan, "4.1"))
@@ -2105,7 +2111,14 @@ def test_the_minutes_are_typed_on_the_review_page_and_the_console_is_the_fallbac
     assert "Type all six, 0 for none, as the line under the heading says" in form
     assert (
         f"(`{labels.timing_form['all_six']}`): **{labels.timing_form['save']}** stays off until"
-        " all six are typed, so no field counts as 0 unless you typed 0. Then press"
+        " all six are typed, so no field counts as 0 unless you typed 0. Never type 0 for a"
+        " figure you do not know yet: save once you know all six. Then press"
+    ) in form
+    # Since cycle 20's Tier 2 review: each save replaces the six, over a form blank again.
+    assert (
+        "Once saved, the form is blank again when you come back to the review, after a reload,"
+        " or after a re-run, which carries the six; each save replaces all six recorded, so to"
+        " correct one, type all six again from `notes\\timing.txt`."
     ) in form
     assert f"Pass: the line `{labels.timing_form['saved']}` shows under the button" in form
     assert (
