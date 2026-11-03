@@ -87,7 +87,12 @@ review's own. The folders are read oldest first, so a finding only a review past
 names no date; but each record is dated by its own clock, so one read within the budget can name a
 later day than a review past it showed - a review sent after a restart days after its folder was
 named, say. The match took about 10 ms a record of the big-assembly replay fixture (002
-research.md, cycle 17)."""
+research.md, cycle 17).
+
+*Changed 2026-11-03 (002 cycle 21's Tier 2 review):* an earlier review's package, read for its
+records of another dump (`_dump`), is opened only within the budget too: past it, their findings
+needing a stable name name no date, as when the package is gone. The budget is looked at before
+each read, so a read begun within it - a folder's records, or one package - can end past it."""
 
 PATH_HASHES = ("doc:", "dsn:")
 """The ids made from a path (`DocumentIds.For` and `DesignId`), the same in every dump of a
@@ -340,7 +345,8 @@ def first_shown_dates(
     a Send's - keeps its keys. A record of another dump has each key renumbered by its ids' stable
     names (`_renumbered`), its own dump's read from the package in its folder (`_dump`) once, and
     only when that package is the record's dump; an id with no stable name on either side, or a
-    folder whose package is gone, unreadable or another dump's, gives that finding none.
+    folder whose package is gone, unreadable or another dump's, gives that finding none. *Changed
+    2026-11-03 (its Tier 2 review):* that package is opened only within `READ_BUDGET_S`.
     """
     document = root_document(package)
     if document is None:
@@ -375,7 +381,8 @@ def first_shown_dates(
             then: Mapping[str, Name] | None = None
             if record.package_id != package.package_id:
                 if dump is None:
-                    dump = _dump(folder)
+                    within = monotonic() - started <= READ_BUDGET_S
+                    dump = _dump(folder) if within else (None, {})
                 then = dump[1] if dump[0] == record.package_id else {}
             prerun = {step.index for step in record.steps if step.origin_mark == "prerun"}
             for finding in record.findings:
