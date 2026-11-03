@@ -117,32 +117,32 @@ files:
     :[],\"calculation\":null,\"tool_result_ids\":[1],\"coverage_limits\":[],\"recommended_action\"\
     :\"Add the missing group folders and move the features that belong in them.\"\
     ,\"group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\":null,\"\
-    source\":\"code\"}}\r\n{\"seq\":8,\"at\":\"<TIME_8>\",\"type\":\"finding\",\"\
-    body\":{\"id\":\"F-002\",\"check\":\"rms.folders.present\",\"title\":\"missing\
-    \ group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine\"\
-    ,\"status\":\"suspected\",\"severity\":\"low\",\"component_ids\":[\"cmp:0002\"\
-    ,\"cmp:0003\"],\"drawing_locations\":[],\"provenance\":[{\"document_id\":\"doc:0003\"\
-    ,\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-KALO-PIN.SLDPRT\",\"vault_version\"\
-    :1,\"revision\":null,\"configuration\":\"Default\",\"local_modified\":false,\"\
-    export_method\":\"native\"}],\"configuration\":\"Default\",\"observed\":\"missing\
-    \ group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine\"\
-    ,\"requirement\":\"Every one of the six groups exists as a folder.\",\"inputs\"\
-    :[],\"calculation\":null,\"tool_result_ids\":[1],\"coverage_limits\":[\"may be\
-    \ a bought part: neither the part-number convention nor a bought-part rule decides\
-    \ it; asked in ER-001\"],\"recommended_action\":\"Add the missing group folders\
-    \ and move the features that belong in them.\",\"group\":null,\"capture_ids\"\
-    :[],\"disposition\":null,\"exception_id\":null,\"source\":\"code\"}}\r\n{\"seq\"\
-    :9,\"at\":\"<TIME_9>\",\"type\":\"coverage\",\"body\":{\"bucket\":\"skipped\"\
-    ,\"item\":{\"check\":\"rms.folders.ordered\",\"scope\":{\"component_ids\":[],\"\
-    pairs\":[],\"configuration\":\"Default\",\"positions\":[],\"document_ids\":[\"\
-    doc:0002\",\"doc:0003\"]},\"reason\":\"2 document(s): doc:0002: fewer than two\
-    \ groups; doc:0003: fewer than two groups\",\"error\":null}}}\r\n{\"seq\":10,\"\
-    at\":\"<TIME_10>\",\"type\":\"coverage\",\"body\":{\"bucket\":\"checked\",\"item\"\
-    :{\"check\":\"rms.grouping.all_features_in_a_group\",\"scope\":{\"component_ids\"\
-    :[],\"pairs\":[],\"configuration\":\"Default\",\"positions\":[],\"document_ids\"\
-    :[\"doc:0002\",\"doc:0003\"]},\"reason\":\"2 document(s)\",\"error\":null}}}\r\
-    \n{\"seq\":11,\"at\":\"<TIME_11>\",\"type\":\"coverage\",\"body\":{\"bucket\"\
-    :\"skipped\",\"item\":{\"check\":\"rms.groups.no_solids_in_ref_or_construction\"\
+    source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":8,\"at\":\"<TIME_8>\",\"\
+    type\":\"finding\",\"body\":{\"id\":\"F-002\",\"check\":\"rms.folders.present\"\
+    ,\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail,\
+    \ 5-Modify, 6-Quarantine\",\"status\":\"suspected\",\"severity\":\"low\",\"component_ids\"\
+    :[\"cmp:0002\",\"cmp:0003\"],\"drawing_locations\":[],\"provenance\":[{\"document_id\"\
+    :\"doc:0003\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-KALO-PIN.SLDPRT\"\
+    ,\"vault_version\":1,\"revision\":null,\"configuration\":\"Default\",\"local_modified\"\
+    :false,\"export_method\":\"native\"}],\"configuration\":\"Default\",\"observed\"\
+    :\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify,\
+    \ 6-Quarantine\",\"requirement\":\"Every one of the six groups exists as a folder.\"\
+    ,\"inputs\":[],\"calculation\":null,\"tool_result_ids\":[1],\"coverage_limits\"\
+    :[\"may be a bought part: neither the part-number convention nor a bought-part\
+    \ rule decides it; asked in ER-001\"],\"recommended_action\":\"Add the missing\
+    \ group folders and move the features that belong in them.\",\"group\":null,\"\
+    capture_ids\":[],\"disposition\":null,\"exception_id\":null,\"source\":\"code\"\
+    ,\"triage_tally\":null}}\r\n{\"seq\":9,\"at\":\"<TIME_9>\",\"type\":\"coverage\"\
+    ,\"body\":{\"bucket\":\"skipped\",\"item\":{\"check\":\"rms.folders.ordered\"\
+    ,\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":\"Default\",\"\
+    positions\":[],\"document_ids\":[\"doc:0002\",\"doc:0003\"]},\"reason\":\"2 document(s):\
+    \ doc:0002: fewer than two groups; doc:0003: fewer than two groups\",\"error\"\
+    :null}}}\r\n{\"seq\":10,\"at\":\"<TIME_10>\",\"type\":\"coverage\",\"body\":{\"\
+    bucket\":\"checked\",\"item\":{\"check\":\"rms.grouping.all_features_in_a_group\"\
+    ,\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":\"Default\",\"\
+    positions\":[],\"document_ids\":[\"doc:0002\",\"doc:0003\"]},\"reason\":\"2 document(s)\"\
+    ,\"error\":null}}}\r\n{\"seq\":11,\"at\":\"<TIME_11>\",\"type\":\"coverage\",\"\
+    body\":{\"bucket\":\"skipped\",\"item\":{\"check\":\"rms.groups.no_solids_in_ref_or_construction\"\
     ,\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":\"Default\",\"\
     positions\":[],\"document_ids\":[\"doc:0002\",\"doc:0003\"]},\"reason\":\"2 document(s):\
     \ doc:0002: no Reference or Construction group; doc:0003: no Reference or Construction\
@@ -277,22 +277,23 @@ files:
     tool_result_ids\":[2],\"coverage_limits\":[],\"recommended_action\":\"Name the\
     \ part's driving values as global variables in the equation manager, and drive\
     \ the dimensions from them.\",\"group\":null,\"capture_ids\":[],\"disposition\"\
-    :null,\"exception_id\":null,\"source\":\"code\"}}\r\n{\"seq\":40,\"at\":\"<TIME_40>\"\
-    ,\"type\":\"finding\",\"body\":{\"id\":\"F-004\",\"check\":\"rms.params.dimensions_driven_by_equations\"\
-    ,\"title\":\"the equation manager holds no equations\",\"status\":\"suspected\"\
-    ,\"severity\":\"low\",\"component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"\
-    provenance\":[{\"document_id\":\"doc:0002\",\"vault_path\":\"C:\\\\Fictional\\\
-    \\Vault\\\\FICT-7001.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\"\
-    :\"Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
-    :\"Default\",\"observed\":\"the equation manager holds no equations\",\"requirement\"\
-    :\"At least one dimension is driven by an equation.\",\"inputs\":[],\"calculation\"\
-    :null,\"tool_result_ids\":[2],\"coverage_limits\":[],\"recommended_action\":\"\
-    Drive the dimensions that carry the design intent from the global variables.\"\
-    ,\"group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\":null,\"\
-    source\":\"code\"}}\r\n{\"seq\":41,\"at\":\"<TIME_41>\",\"type\":\"finding\",\"\
-    body\":{\"id\":\"F-005\",\"check\":\"rms.params.global_variables_present\",\"\
-    title\":\"the equation manager holds no equations\",\"status\":\"demonstrated\"\
-    ,\"severity\":\"medium\",\"component_ids\":[\"cmp:0002\",\"cmp:0003\"],\"drawing_locations\"\
+    :null,\"exception_id\":null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"\
+    seq\":40,\"at\":\"<TIME_40>\",\"type\":\"finding\",\"body\":{\"id\":\"F-004\"\
+    ,\"check\":\"rms.params.dimensions_driven_by_equations\",\"title\":\"the equation\
+    \ manager holds no equations\",\"status\":\"suspected\",\"severity\":\"low\",\"\
+    component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"provenance\":[{\"document_id\"\
+    :\"doc:0002\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-7001.SLDPRT\"\
+    ,\"vault_version\":1,\"revision\":null,\"configuration\":\"Default\",\"local_modified\"\
+    :false,\"export_method\":\"native\"}],\"configuration\":\"Default\",\"observed\"\
+    :\"the equation manager holds no equations\",\"requirement\":\"At least one dimension\
+    \ is driven by an equation.\",\"inputs\":[],\"calculation\":null,\"tool_result_ids\"\
+    :[2],\"coverage_limits\":[],\"recommended_action\":\"Drive the dimensions that\
+    \ carry the design intent from the global variables.\",\"group\":null,\"capture_ids\"\
+    :[],\"disposition\":null,\"exception_id\":null,\"source\":\"code\",\"triage_tally\"\
+    :null}}\r\n{\"seq\":41,\"at\":\"<TIME_41>\",\"type\":\"finding\",\"body\":{\"\
+    id\":\"F-005\",\"check\":\"rms.params.global_variables_present\",\"title\":\"\
+    the equation manager holds no equations\",\"status\":\"demonstrated\",\"severity\"\
+    :\"medium\",\"component_ids\":[\"cmp:0002\",\"cmp:0003\"],\"drawing_locations\"\
     :[],\"provenance\":[{\"document_id\":\"doc:0003\",\"vault_path\":\"C:\\\\Fictional\\\
     \\Vault\\\\FICT-KALO-PIN.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\"\
     :\"Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
@@ -303,11 +304,11 @@ files:
     ],\"recommended_action\":\"Name the part's driving values as global variables\
     \ in the equation manager, and drive the dimensions from them.\",\"group\":null,\"\
     capture_ids\":[],\"disposition\":null,\"exception_id\":null,\"source\":\"code\"\
-    }}\r\n{\"seq\":42,\"at\":\"<TIME_42>\",\"type\":\"finding\",\"body\":{\"id\":\"\
-    F-006\",\"check\":\"rms.params.dimensions_driven_by_equations\",\"title\":\"the\
-    \ equation manager holds no equations\",\"status\":\"suspected\",\"severity\"\
-    :\"low\",\"component_ids\":[\"cmp:0002\",\"cmp:0003\"],\"drawing_locations\":[],\"\
-    provenance\":[{\"document_id\":\"doc:0003\",\"vault_path\":\"C:\\\\Fictional\\\
+    ,\"triage_tally\":null}}\r\n{\"seq\":42,\"at\":\"<TIME_42>\",\"type\":\"finding\"\
+    ,\"body\":{\"id\":\"F-006\",\"check\":\"rms.params.dimensions_driven_by_equations\"\
+    ,\"title\":\"the equation manager holds no equations\",\"status\":\"suspected\"\
+    ,\"severity\":\"low\",\"component_ids\":[\"cmp:0002\",\"cmp:0003\"],\"drawing_locations\"\
+    :[],\"provenance\":[{\"document_id\":\"doc:0003\",\"vault_path\":\"C:\\\\Fictional\\\
     \\Vault\\\\FICT-KALO-PIN.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\"\
     :\"Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
     :\"Default\",\"observed\":\"the equation manager holds no equations\",\"requirement\"\
@@ -316,8 +317,8 @@ files:
     \ the part-number convention nor a bought-part rule decides it; asked in ER-001\"\
     ],\"recommended_action\":\"Drive the dimensions that carry the design intent from\
     \ the global variables.\",\"group\":null,\"capture_ids\":[],\"disposition\":null,\"\
-    exception_id\":null,\"source\":\"code\"}}\r\n{\"seq\":43,\"at\":\"<TIME_43>\"\
-    ,\"type\":\"coverage.withdrawn\",\"body\":{\"checks\":[\"modeling.resilience\"\
+    exception_id\":null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":43,\"\
+    at\":\"<TIME_43>\",\"type\":\"coverage.withdrawn\",\"body\":{\"checks\":[\"modeling.resilience\"\
     ],\"buckets\":[\"checked\"]}}\r\n{\"seq\":44,\"at\":\"<TIME_44>\",\"type\":\"\
     coverage\",\"body\":{\"bucket\":\"checked\",\"item\":{\"check\":\"modeling.resilience\"\
     ,\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":\"Default\",\"\
@@ -393,27 +394,28 @@ files:
     \ IMassProperty.OverrideMass could not be read) is unknown\"],\"recommended_action\"\
     :\"Assign a material to FICT-7001.SLDPRT, or override its mass deliberately, then\
     \ re-run the review.\",\"group\":null,\"capture_ids\":[],\"disposition\":null,\"\
-    exception_id\":null,\"source\":\"code\"}}\r\n{\"seq\":59,\"at\":\"<TIME_59>\"\
-    ,\"type\":\"finding\",\"body\":{\"id\":\"F-008\",\"check\":\"mass.material_assigned\"\
-    ,\"title\":\"whether the mass of FICT-KALO-PIN.SLDPRT is overridden (it has no\
-    \ material, and the override read left a mass_override gap: IMassProperty.OverrideMass\
-    \ could not be read) is unknown; the check did not run\",\"status\":\"unresolved\"\
-    ,\"severity\":\"medium\",\"component_ids\":[\"cmp:0002\",\"cmp:0003\"],\"drawing_locations\"\
-    :[],\"provenance\":[{\"document_id\":\"doc:0003\",\"vault_path\":\"C:\\\\Fictional\\\
-    \\Vault\\\\FICT-KALO-PIN.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\"\
-    :\"Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
-    :\"Default\",\"observed\":\"whether the mass of FICT-KALO-PIN.SLDPRT is overridden\
-    \ (it has no material, and the override read left a mass_override gap: IMassProperty.OverrideMass\
-    \ could not be read) is unknown; the check did not run\",\"requirement\":\"every\
-    \ part carries a material, or its mass is deliberately overridden, so its mass\
-    \ and centre of mass are not SOLIDWORKS' no-material default\",\"inputs\":[\"\
-    doc:0003\"],\"calculation\":null,\"tool_result_ids\":[5],\"coverage_limits\":[\"\
-    mass.material_assigned not evaluated: whether the mass of FICT-KALO-PIN.SLDPRT\
+    exception_id\":null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":59,\"\
+    at\":\"<TIME_59>\",\"type\":\"finding\",\"body\":{\"id\":\"F-008\",\"check\":\"\
+    mass.material_assigned\",\"title\":\"whether the mass of FICT-KALO-PIN.SLDPRT\
     \ is overridden (it has no material, and the override read left a mass_override\
-    \ gap: IMassProperty.OverrideMass could not be read) is unknown\"],\"recommended_action\"\
-    :\"Assign a material to FICT-KALO-PIN.SLDPRT, or override its mass deliberately,\
-    \ then re-run the review.\",\"group\":null,\"capture_ids\":[],\"disposition\"\
-    :null,\"exception_id\":null,\"source\":\"code\"}}\r\n{\"seq\":60,\"at\":\"<TIME_60>\"\
+    \ gap: IMassProperty.OverrideMass could not be read) is unknown; the check did\
+    \ not run\",\"status\":\"unresolved\",\"severity\":\"medium\",\"component_ids\"\
+    :[\"cmp:0002\",\"cmp:0003\"],\"drawing_locations\":[],\"provenance\":[{\"document_id\"\
+    :\"doc:0003\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-KALO-PIN.SLDPRT\"\
+    ,\"vault_version\":1,\"revision\":null,\"configuration\":\"Default\",\"local_modified\"\
+    :false,\"export_method\":\"native\"}],\"configuration\":\"Default\",\"observed\"\
+    :\"whether the mass of FICT-KALO-PIN.SLDPRT is overridden (it has no material,\
+    \ and the override read left a mass_override gap: IMassProperty.OverrideMass could\
+    \ not be read) is unknown; the check did not run\",\"requirement\":\"every part\
+    \ carries a material, or its mass is deliberately overridden, so its mass and\
+    \ centre of mass are not SOLIDWORKS' no-material default\",\"inputs\":[\"doc:0003\"\
+    ],\"calculation\":null,\"tool_result_ids\":[5],\"coverage_limits\":[\"mass.material_assigned\
+    \ not evaluated: whether the mass of FICT-KALO-PIN.SLDPRT is overridden (it has\
+    \ no material, and the override read left a mass_override gap: IMassProperty.OverrideMass\
+    \ could not be read) is unknown\"],\"recommended_action\":\"Assign a material\
+    \ to FICT-KALO-PIN.SLDPRT, or override its mass deliberately, then re-run the\
+    \ review.\",\"group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\"\
+    :null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":60,\"at\":\"<TIME_60>\"\
     ,\"type\":\"coverage\",\"body\":{\"bucket\":\"skipped\",\"item\":{\"check\":\"\
     mass.coverage\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\"\
     ],\"pairs\":[],\"configuration\":null,\"positions\":[],\"document_ids\":[]},\"\
@@ -442,9 +444,9 @@ files:
     ],\"calculation\":null,\"tool_result_ids\":[6],\"coverage_limits\":[],\"recommended_action\"\
     :\"Set the Meridian Part Ref of FICT-7000.SLDASM to its file name, or rename the\
     \ file.\",\"group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\"\
-    :null,\"source\":\"code\"}}\r\n{\"seq\":65,\"at\":\"<TIME_65>\",\"type\":\"finding\"\
-    ,\"body\":{\"id\":\"F-010\",\"check\":\"hygiene.part_number_matches_file\",\"\
-    title\":\"FICT-7001.SLDPRT has no Meridian Part Ref\",\"status\":\"demonstrated\"\
+    :null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":65,\"at\":\"<TIME_65>\"\
+    ,\"type\":\"finding\",\"body\":{\"id\":\"F-010\",\"check\":\"hygiene.part_number_matches_file\"\
+    ,\"title\":\"FICT-7001.SLDPRT has no Meridian Part Ref\",\"status\":\"demonstrated\"\
     ,\"severity\":\"low\",\"component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"\
     provenance\":[{\"document_id\":\"doc:0002\",\"vault_path\":\"C:\\\\Fictional\\\
     \\Vault\\\\FICT-7001.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\"\
@@ -454,9 +456,9 @@ files:
     ],\"calculation\":null,\"tool_result_ids\":[6],\"coverage_limits\":[],\"recommended_action\"\
     :\"Set the Meridian Part Ref of FICT-7001.SLDPRT to its file name, or rename the\
     \ file.\",\"group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\"\
-    :null,\"source\":\"code\"}}\r\n{\"seq\":66,\"at\":\"<TIME_66>\",\"type\":\"finding\"\
-    ,\"body\":{\"id\":\"F-011\",\"check\":\"hygiene.part_number_matches_file\",\"\
-    title\":\"FICT-KALO-PIN.SLDPRT has no Meridian Part Ref\",\"status\":\"demonstrated\"\
+    :null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":66,\"at\":\"<TIME_66>\"\
+    ,\"type\":\"finding\",\"body\":{\"id\":\"F-011\",\"check\":\"hygiene.part_number_matches_file\"\
+    ,\"title\":\"FICT-KALO-PIN.SLDPRT has no Meridian Part Ref\",\"status\":\"demonstrated\"\
     ,\"severity\":\"low\",\"component_ids\":[\"cmp:0002\",\"cmp:0003\"],\"drawing_locations\"\
     :[],\"provenance\":[{\"document_id\":\"doc:0003\",\"vault_path\":\"C:\\\\Fictional\\\
     \\Vault\\\\FICT-KALO-PIN.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\"\
@@ -468,29 +470,30 @@ files:
     \ rule decides it; asked in ER-001\"],\"recommended_action\":\"Set the Meridian\
     \ Part Ref of FICT-KALO-PIN.SLDPRT to its file name, or rename the file.\",\"\
     group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\":null,\"\
-    source\":\"code\"}}\r\n{\"seq\":67,\"at\":\"<TIME_67>\",\"type\":\"finding\",\"\
-    body\":{\"id\":\"F-012\",\"check\":\"hygiene.revision_present\",\"title\":\"FICT-7000.SLDASM\
-    \ carries no MeridianRev\",\"status\":\"demonstrated\",\"severity\":\"low\",\"\
-    component_ids\":[],\"drawing_locations\":[],\"provenance\":[{\"document_id\":\"\
-    doc:0001\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-7000.SLDASM\",\"\
-    vault_version\":1,\"revision\":null,\"configuration\":\"Default\",\"local_modified\"\
-    :false,\"export_method\":\"native\"}],\"configuration\":\"Default\",\"observed\"\
-    :\"FICT-7000.SLDASM carries no MeridianRev\",\"requirement\":\"every part and\
-    \ assembly carries its revision\",\"inputs\":[\"doc:0001\"],\"calculation\":null,\"\
-    tool_result_ids\":[6],\"coverage_limits\":[],\"recommended_action\":\"Give FICT-7000.SLDASM\
-    \ its MeridianRev.\",\"group\":null,\"capture_ids\":[],\"disposition\":null,\"\
-    exception_id\":null,\"source\":\"code\"}}\r\n{\"seq\":68,\"at\":\"<TIME_68>\"\
-    ,\"type\":\"finding\",\"body\":{\"id\":\"F-013\",\"check\":\"hygiene.revision_present\"\
-    ,\"title\":\"FICT-7001.SLDPRT carries no MeridianRev\",\"status\":\"demonstrated\"\
-    ,\"severity\":\"low\",\"component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"\
-    provenance\":[{\"document_id\":\"doc:0002\",\"vault_path\":\"C:\\\\Fictional\\\
-    \\Vault\\\\FICT-7001.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\"\
-    :\"Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
-    :\"Default\",\"observed\":\"FICT-7001.SLDPRT carries no MeridianRev\",\"requirement\"\
-    :\"every part and assembly carries its revision\",\"inputs\":[\"doc:0002\"],\"\
+    source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":67,\"at\":\"<TIME_67>\"\
+    ,\"type\":\"finding\",\"body\":{\"id\":\"F-012\",\"check\":\"hygiene.revision_present\"\
+    ,\"title\":\"FICT-7000.SLDASM carries no MeridianRev\",\"status\":\"demonstrated\"\
+    ,\"severity\":\"low\",\"component_ids\":[],\"drawing_locations\":[],\"provenance\"\
+    :[{\"document_id\":\"doc:0001\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\\
+    FICT-7000.SLDASM\",\"vault_version\":1,\"revision\":null,\"configuration\":\"\
+    Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
+    :\"Default\",\"observed\":\"FICT-7000.SLDASM carries no MeridianRev\",\"requirement\"\
+    :\"every part and assembly carries its revision\",\"inputs\":[\"doc:0001\"],\"\
     calculation\":null,\"tool_result_ids\":[6],\"coverage_limits\":[],\"recommended_action\"\
-    :\"Give FICT-7001.SLDPRT its MeridianRev.\",\"group\":null,\"capture_ids\":[],\"\
-    disposition\":null,\"exception_id\":null,\"source\":\"code\"}}\r\n{\"seq\":69,\"\
+    :\"Give FICT-7000.SLDASM its MeridianRev.\",\"group\":null,\"capture_ids\":[],\"\
+    disposition\":null,\"exception_id\":null,\"source\":\"code\",\"triage_tally\"\
+    :null}}\r\n{\"seq\":68,\"at\":\"<TIME_68>\",\"type\":\"finding\",\"body\":{\"\
+    id\":\"F-013\",\"check\":\"hygiene.revision_present\",\"title\":\"FICT-7001.SLDPRT\
+    \ carries no MeridianRev\",\"status\":\"demonstrated\",\"severity\":\"low\",\"\
+    component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"provenance\":[{\"document_id\"\
+    :\"doc:0002\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-7001.SLDPRT\"\
+    ,\"vault_version\":1,\"revision\":null,\"configuration\":\"Default\",\"local_modified\"\
+    :false,\"export_method\":\"native\"}],\"configuration\":\"Default\",\"observed\"\
+    :\"FICT-7001.SLDPRT carries no MeridianRev\",\"requirement\":\"every part and\
+    \ assembly carries its revision\",\"inputs\":[\"doc:0002\"],\"calculation\":null,\"\
+    tool_result_ids\":[6],\"coverage_limits\":[],\"recommended_action\":\"Give FICT-7001.SLDPRT\
+    \ its MeridianRev.\",\"group\":null,\"capture_ids\":[],\"disposition\":null,\"\
+    exception_id\":null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":69,\"\
     at\":\"<TIME_69>\",\"type\":\"finding\",\"body\":{\"id\":\"F-014\",\"check\":\"\
     hygiene.revision_present\",\"title\":\"FICT-KALO-PIN.SLDPRT carries no MeridianRev\"\
     ,\"status\":\"demonstrated\",\"severity\":\"low\",\"component_ids\":[\"cmp:0002\"\
@@ -503,41 +506,41 @@ files:
     :[6],\"coverage_limits\":[\"may be a bought part: neither the part-number convention\
     \ nor a bought-part rule decides it; asked in ER-001\"],\"recommended_action\"\
     :\"Give FICT-KALO-PIN.SLDPRT its MeridianRev.\",\"group\":null,\"capture_ids\"\
-    :[],\"disposition\":null,\"exception_id\":null,\"source\":\"code\"}}\r\n{\"seq\"\
-    :70,\"at\":\"<TIME_70>\",\"type\":\"coverage\",\"body\":{\"bucket\":\"checked\"\
-    ,\"item\":{\"check\":\"hygiene.duplicate_part_number\",\"scope\":{\"component_ids\"\
-    :[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\"],\"pairs\":[],\"configuration\":null,\"\
-    positions\":[],\"document_ids\":[]},\"reason\":\"3 documents: the part number\
-    \ is theirs alone\",\"error\":null}}}\r\n{\"seq\":71,\"at\":\"<TIME_71>\",\"type\"\
-    :\"coverage\",\"body\":{\"bucket\":\"checked\",\"item\":{\"check\":\"hygiene.duplicate_description\"\
-    ,\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\"],\"pairs\"\
+    :[],\"disposition\":null,\"exception_id\":null,\"source\":\"code\",\"triage_tally\"\
+    :null}}\r\n{\"seq\":70,\"at\":\"<TIME_70>\",\"type\":\"coverage\",\"body\":{\"\
+    bucket\":\"checked\",\"item\":{\"check\":\"hygiene.duplicate_part_number\",\"\
+    scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\"],\"pairs\"\
     :[],\"configuration\":null,\"positions\":[],\"document_ids\":[]},\"reason\":\"\
-    3 documents: the description is theirs alone\",\"error\":null}}}\r\n{\"seq\":72,\"\
-    at\":\"<TIME_72>\",\"type\":\"coverage\",\"body\":{\"bucket\":\"checked\",\"item\"\
-    :{\"check\":\"hygiene\",\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\"\
-    :\"Default\",\"positions\":[],\"document_ids\":[]},\"reason\":\"2 checked, 0 skipped\
-    \ coverage item(s) over 3 document(s); 6 finding(s)\",\"error\":null}}}\r\n{\"\
-    seq\":73,\"at\":\"<TIME_73>\",\"type\":\"tool.finished\",\"body\":{\"step_index\"\
-    :6,\"status\":\"ok\",\"result_summary\":\"{\\\"status\\\":\\\"recorded\\\",\\\"\
-    findings\\\":6,\\\"by_status\\\":{\\\"demonstrated\\\":6},\\\"finding_ids\\\"\
-    :[\\\"F-009\\\",\\\"F-010\\\",\\\"F-011\\\",\\\"F-012\\\",\\\"F-013\\\",\\\"F-014\\\
-    \"],\\\"coverage\\\":{\\\"checked\\\":2,\\\"skipped\\\":0,\\\"unresolved\\\":0},\\\
-    \"documents\\\":3,\\\"pro…\",\"elapsed_s\":<DURATION_7>,\"error\":null}}\r\n{\"\
-    seq\":74,\"at\":\"<TIME_74>\",\"type\":\"tool.started\",\"body\":{\"step_index\"\
-    :7,\"tool\":\"check_threads\",\"arguments\":{}}}\r\n{\"seq\":75,\"at\":\"<TIME_75>\"\
-    ,\"type\":\"coverage\",\"body\":{\"bucket\":\"skipped\",\"item\":{\"check\":\"\
-    thread.pitch\",\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\"\
-    :null,\"positions\":[],\"document_ids\":[]},\"reason\":\"no tapped hole, cosmetic\
-    \ thread or fastener in the package states a thread\",\"error\":null}}}\r\n{\"\
-    seq\":76,\"at\":\"<TIME_76>\",\"type\":\"tool.finished\",\"body\":{\"step_index\"\
-    :7,\"status\":\"ok\",\"result_summary\":\"{\\\"status\\\":\\\"recorded\\\",\\\"\
-    findings\\\":0,\\\"by_status\\\":{},\\\"finding_ids\\\":[],\\\"coverage\\\":{\\\
-    \"checked\\\":0,\\\"skipped\\\":1,\\\"unresolved\\\":0},\\\"threads\\\":0,\\\"\
-    coarse\\\":0}\",\"elapsed_s\":<DURATION_8>,\"error\":null}}\r\n{\"seq\":77,\"\
-    at\":\"<TIME_77>\",\"type\":\"tool.started\",\"body\":{\"step_index\":8,\"tool\"\
-    :\"check_drawings\",\"arguments\":{}}}\r\n{\"seq\":78,\"at\":\"<TIME_78>\",\"\
-    type\":\"coverage\",\"body\":{\"bucket\":\"unresolved\",\"item\":{\"check\":\"\
-    drawing.context\",\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\"\
+    3 documents: the part number is theirs alone\",\"error\":null}}}\r\n{\"seq\":71,\"\
+    at\":\"<TIME_71>\",\"type\":\"coverage\",\"body\":{\"bucket\":\"checked\",\"item\"\
+    :{\"check\":\"hygiene.duplicate_description\",\"scope\":{\"component_ids\":[\"\
+    cmp:0001\",\"cmp:0002\",\"cmp:0003\"],\"pairs\":[],\"configuration\":null,\"positions\"\
+    :[],\"document_ids\":[]},\"reason\":\"3 documents: the description is theirs alone\"\
+    ,\"error\":null}}}\r\n{\"seq\":72,\"at\":\"<TIME_72>\",\"type\":\"coverage\",\"\
+    body\":{\"bucket\":\"checked\",\"item\":{\"check\":\"hygiene\",\"scope\":{\"component_ids\"\
+    :[],\"pairs\":[],\"configuration\":\"Default\",\"positions\":[],\"document_ids\"\
+    :[]},\"reason\":\"2 checked, 0 skipped coverage item(s) over 3 document(s); 6\
+    \ finding(s)\",\"error\":null}}}\r\n{\"seq\":73,\"at\":\"<TIME_73>\",\"type\"\
+    :\"tool.finished\",\"body\":{\"step_index\":6,\"status\":\"ok\",\"result_summary\"\
+    :\"{\\\"status\\\":\\\"recorded\\\",\\\"findings\\\":6,\\\"by_status\\\":{\\\"\
+    demonstrated\\\":6},\\\"finding_ids\\\":[\\\"F-009\\\",\\\"F-010\\\",\\\"F-011\\\
+    \",\\\"F-012\\\",\\\"F-013\\\",\\\"F-014\\\"],\\\"coverage\\\":{\\\"checked\\\"\
+    :2,\\\"skipped\\\":0,\\\"unresolved\\\":0},\\\"documents\\\":3,\\\"pro…\",\"elapsed_s\"\
+    :<DURATION_7>,\"error\":null}}\r\n{\"seq\":74,\"at\":\"<TIME_74>\",\"type\":\"\
+    tool.started\",\"body\":{\"step_index\":7,\"tool\":\"check_threads\",\"arguments\"\
+    :{}}}\r\n{\"seq\":75,\"at\":\"<TIME_75>\",\"type\":\"coverage\",\"body\":{\"bucket\"\
+    :\"skipped\",\"item\":{\"check\":\"thread.pitch\",\"scope\":{\"component_ids\"\
+    :[],\"pairs\":[],\"configuration\":null,\"positions\":[],\"document_ids\":[]},\"\
+    reason\":\"no tapped hole, cosmetic thread or fastener in the package states a\
+    \ thread\",\"error\":null}}}\r\n{\"seq\":76,\"at\":\"<TIME_76>\",\"type\":\"tool.finished\"\
+    ,\"body\":{\"step_index\":7,\"status\":\"ok\",\"result_summary\":\"{\\\"status\\\
+    \":\\\"recorded\\\",\\\"findings\\\":0,\\\"by_status\\\":{},\\\"finding_ids\\\"\
+    :[],\\\"coverage\\\":{\\\"checked\\\":0,\\\"skipped\\\":1,\\\"unresolved\\\":0},\\\
+    \"threads\\\":0,\\\"coarse\\\":0}\",\"elapsed_s\":<DURATION_8>,\"error\":null}}\r\
+    \n{\"seq\":77,\"at\":\"<TIME_77>\",\"type\":\"tool.started\",\"body\":{\"step_index\"\
+    :8,\"tool\":\"check_drawings\",\"arguments\":{}}}\r\n{\"seq\":78,\"at\":\"<TIME_78>\"\
+    ,\"type\":\"coverage\",\"body\":{\"bucket\":\"unresolved\",\"item\":{\"check\"\
+    :\"drawing.context\",\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\"\
     :null,\"positions\":[],\"document_ids\":[\"doc:0001\"]},\"reason\":\"no drawing\
     \ named FICT-7000.SLDDRW sits beside it\",\"error\":null}}}\r\n{\"seq\":79,\"\
     at\":\"<TIME_79>\",\"type\":\"coverage\",\"body\":{\"bucket\":\"unresolved\",\"\
@@ -597,11 +600,11 @@ files:
     ,\"configuration Default\"],\"recommended_action\":\"Fill the data-card fields\
     \ the release checklist requires, in the document's configuration-independent\
     \ custom properties.\",\"group\":null,\"capture_ids\":[],\"disposition\":null,\"\
-    exception_id\":null,\"source\":\"code\"}}\r\n{\"seq\":86,\"at\":\"<TIME_86>\"\
-    ,\"type\":\"coverage\",\"body\":{\"bucket\":\"unresolved\",\"item\":{\"check\"\
-    :\"standards.assembly.not_exploded\",\"scope\":{\"component_ids\":[],\"pairs\"\
-    :[],\"configuration\":\"Default\",\"positions\":[],\"document_ids\":[\"doc:0001\"\
-    ]},\"reason\":\"1 document(s): doc:0001: the exploded state of FICT-7000.SLDASM\
+    exception_id\":null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":86,\"\
+    at\":\"<TIME_86>\",\"type\":\"coverage\",\"body\":{\"bucket\":\"unresolved\",\"\
+    item\":{\"check\":\"standards.assembly.not_exploded\",\"scope\":{\"component_ids\"\
+    :[],\"pairs\":[],\"configuration\":\"Default\",\"positions\":[],\"document_ids\"\
+    :[\"doc:0001\"]},\"reason\":\"1 document(s): doc:0001: the exploded state of FICT-7000.SLDASM\
     \ was not read; the dump recorded no gap for it\",\"error\":null}}}\r\n{\"seq\"\
     :87,\"at\":\"<TIME_87>\",\"type\":\"coverage\",\"body\":{\"bucket\":\"unresolved\"\
     ,\"item\":{\"check\":\"standards.assembly.rebuild_errors\",\"scope\":{\"component_ids\"\

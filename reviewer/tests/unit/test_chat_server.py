@@ -3222,7 +3222,11 @@ def test_the_live_and_the_restored_snapshot_carry_a_cleared_line_until_a_decisio
     drawing finding's Accept. The live snapshot - what a reload or a review switch reads - and the
     run folder's, read by a backend started again on the same run root - what a restart and a
     read-only restore read - both name its line, the `disposition.cleared` body the stream holds.
-    Once the engineer decides again, neither does."""
+    Once the engineer decides again, neither does.
+
+    *Changed 2026-11-02 on purpose (002 T370; cycle 13):* the read-only restore's buttons are off,
+    so the run folder's snapshot names the line without the call to decide again, where it named
+    the stream's words; the live snapshot names them as written."""
     provider_control.script = [
         turn(
             "I need the thread depth.",
@@ -3277,8 +3281,17 @@ def test_the_live_and_the_restored_snapshot_carry_a_cleared_line_until_a_decisio
         assert response.status_code == 200, response.text
         return response.json()
 
+    read_only = [
+        {
+            **line[0],
+            "reason": (
+                "The check ran again after your answer and its verdict changed, so your Accept "
+                "(real but already known) was cleared."
+            ),
+        }
+    ]
     assert client.get(f"/sessions/{chat_id}/snapshot").json().get("cleared") == line
-    assert restored().get("cleared") == line
+    assert restored().get("cleared") == read_only
 
     again = client.post(
         f"/sessions/{chat_id}/findings/{drawing}/disposition",
@@ -3554,6 +3567,13 @@ RESTATED_LINE = (
 )
 """The words file's line for an Accept recorded as `already_known` that a restate cleared."""
 
+RESTATED_READ_ONLY_LINE = (
+    "Your answer graded the checks again and this verdict changed, so your Accept (real but "
+    "already known) was cleared."
+)
+"""`RESTATED_LINE` as a read-only restore names it, without the call to decide again (002 cycle
+13): its decision buttons are off."""
+
 
 @pytest.fixture
 def regrading_checks(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -3586,6 +3606,12 @@ class Regraded:
         """The `disposition.cleared` body the restate leaves on the pin's card."""
         disposition = self.decided[self.pin]
         return {"finding_id": self.pin, "disposition": disposition, "reason": RESTATED_LINE}
+
+    @property
+    def read_only_line(self) -> dict[str, Any]:
+        """`line` as a read-only restore names it, its words without the call to decide again
+        (002 cycle 13)."""
+        return {**self.line, "reason": RESTATED_READ_ONLY_LINE}
 
 
 def regraded_review(
@@ -3687,7 +3713,11 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
 
     *Changed 2026-11-02 on purpose (002 T358; roadmap hole H-g-010):* written before `report.md`
     printed a cleared line, so it read the pin's first line alone; it now reads the restate's line
-    printed under the pin's undecided disposition too."""
+    printed under the pin's undecided disposition too.
+
+    *Changed 2026-11-02 on purpose (002 T370; cycle 13):* the read-only restore's buttons are off,
+    so it names the pin's line without the call to decide again (`read_only_line`), where it named
+    the live snapshot's words; the stream and the live snapshot keep the line as written."""
     review = regraded_review(client, run_root / "FICT-regrade", ticked=ticked)
 
     findings = load_session(review.folder / "session.json").findings
@@ -3712,7 +3742,7 @@ def test_a_regrade_that_clears_a_decision_says_so_in_every_view(
     assert standing(events) == set(saved)
     assert client.get(f"/sessions/{review.chat_id}/snapshot").json().get("cleared") == [review.line]
     restored = restored_snapshot_of(run_root, provider_control, models, review.folder.name)
-    assert restored.get("cleared") == [review.line]
+    assert restored.get("cleared") == [review.read_only_line]
 
 
 @pytest.mark.parametrize("ticked", [True, False], ids=["live", "waiting"])
@@ -3773,6 +3803,36 @@ def withdrawn_part(folder: Path) -> list[str]:
         return []
     start = lines.index("## Withdrawn with a decision") + 2
     return lines[start : lines.index("", start)]
+
+
+@pytest.mark.parametrize("ticked", [True, False], ids=["live", "waiting"])
+def test_a_read_only_restore_names_each_withdrawal_with_a_decision(
+    client: TestClient,
+    run_root: Path,
+    provider_control: ProviderControl,
+    models: Models,
+    regrading_checks: None,
+    ticked: bool,
+) -> None:
+    """002 cycle 13 (FR-031; H-g-010's *Left open*), through the routes and a real regrade, live and
+    waiting: the part-roles answer "All bought" withdraws the pin's hygiene finding with the Accept
+    and triage recorded on it. A restarted backend's read-only restore replays no Transcript, so its
+    snapshot names that withdrawal, the body the record's own stream holds, for the page to print
+    as the live line does - and not the plate's folds, which took no decision. The live snapshot,
+    whose Transcript is replayed from the stream, names none."""
+    review = regraded_review(
+        client, run_root / "FICT-withdraw-restore", ticked=ticked, answer="All bought"
+    )
+
+    taken = [
+        event["body"]
+        for event in events_of(review.folder)
+        if event["type"] == "finding.withdrawn" and "taken" in event["body"]
+    ]
+    assert [body["finding_id"] for body in taken] == [review.pin]
+    assert "withdrawn" not in client.get(f"/sessions/{review.chat_id}/snapshot").json()
+    restored = restored_snapshot_of(run_root, provider_control, models, review.folder.name)
+    assert restored["withdrawn"] == taken
 
 
 def test_a_waiting_answer_that_cannot_close_names_no_withdrawal_its_record_still_holds(

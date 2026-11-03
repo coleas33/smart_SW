@@ -267,6 +267,28 @@ def test_the_restate_and_the_carry_name_themselves_in_the_cleared_line() -> None
     assert rerun.of("Accept", None) == rerun.of("Accept", None, cause="rerun")
 
 
+def test_a_cleared_lines_read_only_form_asks_for_no_decision() -> None:
+    """002 cycle 13 (FR-031): a read-only review's buttons are off, so the cleared line it shows
+    leaves out the call to decide again that ends each line the backend writes, and keeps the rest
+    - what cleared which decision and triage (193A) - for each of the three causes. A line that
+    does not end with the call, written with other words, is shown as written."""
+    rerun = load_words().rerun
+
+    assert rerun.read_only(rerun.of("Accept", "real but already known")) == (
+        "The check ran again after your answer and its verdict changed, so your Accept (real but "
+        "already known) was cleared."
+    )
+    assert rerun.read_only(rerun.of("Reject", None, cause="restate")) == (
+        "Your answer graded the checks again and this verdict changed, so your Reject was cleared."
+    )
+    assert rerun.read_only(rerun.of("Defer", "wrong", cause="carry")) == (
+        "The checks ran again on the saved evidence and this verdict changed, so your Defer "
+        "(wrong) was not carried over."
+    )
+    written = "FICT a cleared line written with other words."
+    assert rerun.read_only(written) == written
+
+
 def test_the_withdrawn_clause_names_the_decision_and_its_triage() -> None:
     """002 T358 (roadmap hole H-g-010): the clause a withdrawal's Transcript line ends with when the
     finding withdrawn held a decision, which went with it - the decision named by its noun and the

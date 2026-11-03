@@ -34,6 +34,9 @@ namespace SwReview.AddIn.Tests;
 ///
 /// *Changed 2026-11-02 (002 T368; cycle 11's Tier 2 review):* the `note` group, the words file's own: what a card says when a
 /// late triage keeps the note recorded first in place of another one the press sent.
+///
+/// *Changed 2026-11-02 (002 T374; cycle 13's Tier 2 review):* `errors` gains `HttpError`, the words file's own sentence, so a
+/// page fact can check that a failed restore read's card says its next step.
 /// </summary>
 internal static class LabelsSample
 {
@@ -102,6 +105,12 @@ internal static class LabelsSample
     /// </summary>
     public const string RunRootRefused =
         "Runs are made only in a local folder reached by its own path - not on a network share, not through a link, and with folder names Windows can use: none longer than 255 characters, none with \\ / : * ? \" < > | or a control character, none ending in a space or a period - and the add-in must be able to check that it is one. Choose a local folder for runs in Settings.";
+
+    /// <summary>
+    /// A failed read the page names by its status alone, a 500 with no error body among them (002 cycle 13's Tier 2 review):
+    /// the words file's sentence for it.
+    /// </summary>
+    public const string HttpError = "The review backend answered with an error. Try again; if it keeps happening, open the log.";
 
     public static string Json() => JsonSerializer.Serialize(Value());
 
@@ -206,6 +215,7 @@ internal static class LabelsSample
                 { "AddInStopping", AddInStopping },
                 { "RunRootRefused", RunRootRefused },
                 { "TriageAlreadyRecorded", TriageAlreadyRecorded },
+                { "HttpError", HttpError },
             }
         },
     };

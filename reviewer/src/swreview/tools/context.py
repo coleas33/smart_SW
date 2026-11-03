@@ -59,7 +59,7 @@ from swreview.report.session import (
     ReviewSession,
     Timing,
 )
-from swreview.report.summary import decision_words, load_words
+from swreview.report.summary import decision_words, load_words, triage_tally
 from swreview.report.titles import pane_finding
 
 if TYPE_CHECKING:
@@ -273,8 +273,19 @@ class ToolContext:
         prints, so its title is the display title, named from this context's package
         (`report/titles.pane_finding`). The runner's re-announcement of a folded re-run goes
         through here too, so the two announcements cannot word a title differently.
+
+        Beside it, while some finding records a triage, the review's triage tally as the session
+        now stands - the finding in it, or the fold done - as the disposition events carry it,
+        so the page counts a finding a resumed turn adds as it arrives (002 FR-031, cycle 13).
+        The key is on every body, null while no finding records a triage, so the page tells such
+        a body from an older backend's, which names none and leaves the tally shown (cycle 13's
+        Tier 2 review).
         """
-        return pane_finding(finding, component_names(self.ir))
+        tally = triage_tally(self.require_session().findings)
+        return {
+            **pane_finding(finding, component_names(self.ir)),
+            "triage_tally": None if tally is None else tally.model_dump(mode="json"),
+        }
 
     def record_coverage(self, bucket: CoverageBucket, item: CoverageItem) -> None:
         """Append a coverage item to `bucket` and announce which bucket it went into.

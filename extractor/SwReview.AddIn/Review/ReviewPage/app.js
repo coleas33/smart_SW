@@ -184,6 +184,9 @@
     // `init` that names a backend, or null: an older backend, or before the first read. Handed to
     // the renderers as an argument; null prints the tokens exactly as before (FR-030).
     labels: null,
+    // The last labels read, answered or not: a restored snapshot is drawn once it has answered
+    // (`afterLabels`, 002 cycle 13).
+    labelsRead: Promise.resolve(),
 
     // Questions for you (feature 009 User Story 4): what the engineer has typed, chosen and
     // skipped, per chat id - `{answers: {request id: text}, skipped: {request id: true}}` - kept in
@@ -611,6 +614,10 @@
         return;
       case 'finding':
         showFinding(body);
+        // An older backend's finding names no tally and leaves the one shown (009 FR-030); null hides it.
+        if (Object.prototype.hasOwnProperty.call(body, 'triage_tally')) {
+          showTally(body.triage_tally);
+        }
         return;
       case 'finding.withdrawn':
         withdrawFinding(body);
@@ -1419,11 +1426,13 @@
 
   /**
    * How the triage stands (feature 002 FR-031, cycle 7), rewritten whole from the last `triage_tally`
-   * the backend sent - a ranking's summary, a decision's reply, a live `disposition` or
-   * `disposition.cleared` - each the backend's one count at that moment; none sent hides it, since the
-   * backend sends one only while some finding records a triage. It is the summary's last part, so
-   * Send stays directly after the summary, and it shows alone while no summary has arrived. A
-   * snapshot's `cleared` lines are not read for it: its summary holds the review's tally as it stands.
+   * the backend sent - a ranking's summary, a decision's reply, a live `finding` (cycle 13),
+   * `disposition` or `disposition.cleared` - each the backend's one count at that moment; none sent
+   * hides it, since the backend sends one only while some finding records a triage. It is the
+   * summary's last part, so Send stays directly after the summary, and it shows alone while no
+   * summary has arrived. A snapshot's `cleared` lines are not read for it: its summary holds the
+   * review's tally as it stands. A `finding` names it on every body, null while none is recorded,
+   * and one with no key at all - an older backend's - leaves it (cycle 13's Tier 2 review).
    */
   function showTally(tally) {
     render.clear(ui.triageTally);
@@ -1670,13 +1679,39 @@
    * (contracts/plain-words.md section 1). Read after every `init` that names a backend - a
    * settings save restarts the backend and re-inits the page - and kept only when the answer is
    * an object; anything else, a 404 from an older backend included, leaves the page on its raw
-   * tokens (FR-030).
+   * tokens (FR-030). The read is kept too, so a restore waits for it (`afterLabels`).
    */
   function loadLabels() {
-    call('/labels', 'GET').then(function (labels) {
+    state.labelsRead = call('/labels', 'GET').then(function (labels) {
       state.labels = (labels && typeof labels === 'object') ? labels : null;
     }, function () {
       state.labels = null;
+    });
+  }
+
+  /**
+   * `value` once the labels read in flight has answered (002 cycle 13). After a reload the page
+   * reads `/labels` and a snapshot at once, and a snapshot drawn first would leave its cards
+   * without the backend's words, with nothing to draw them again; so each restore read passes its
+   * snapshot through here, and its failure's error card (`restoreFailed`). A labels read that
+   * failed lets it through, on the tokens (FR-030).
+   */
+  function afterLabels(value) {
+    return state.labelsRead.then(function () {
+      return value;
+    });
+  }
+
+  /**
+   * A restore read's failure, its error card drawn through `afterLabels` as a snapshot is (002
+   * cycle 13's Tier 2 review): drawn before the labels answer, the card would say no next step,
+   * and nothing would draw it again. A review switched to meanwhile draws none.
+   */
+  function restoreFailed(error, epoch) {
+    afterLabels(errorBody(error)).then(function (body) {
+      if (epoch === state.restoreEpoch) {
+        showError(body);
+      }
     });
   }
 
@@ -1854,7 +1889,7 @@
       restoreFromFolder(item, epoch);
       return;
     }
-    call(sessionPath('/snapshot'), 'GET').then(function (snapshot) {
+    call(sessionPath('/snapshot'), 'GET').then(afterLabels).then(function (snapshot) {
       if (epoch === state.restoreEpoch) {
         // A fresh page can arrive after the apply's sole error, with no local memory of it.
         // The failed waiting cache is still unusable; the saved record is authoritative.
@@ -1872,7 +1907,7 @@
         return;
       }
       if (error.errorClass !== 'UnknownChat') {
-        showError(errorBody(error));
+        restoreFailed(error, epoch);
         return;
       }
       restoreFromFolder(item, epoch);
@@ -1888,7 +1923,7 @@
       renderStartReview();
       renderResultsState();
     }
-    call('/reviews/' + encodeURIComponent(String(item.run_id || '')), 'GET').then(function (snapshot) {
+    call('/reviews/' + encodeURIComponent(String(item.run_id || '')), 'GET').then(afterLabels).then(function (snapshot) {
       if (epoch === state.restoreEpoch) {
         var failed = state.failedApplies[chatId];
         state.sendError = failed ? failed.error : null;
@@ -1902,7 +1937,7 @@
         cannotRestore(chatId);
         return;
       }
-      showError(errorBody(failure));
+      restoreFailed(failure, epoch);
     });
   }
 
@@ -1962,6 +1997,12 @@
     if (fromFolder) {
       state.transcriptLoaded = true;
       appendCard(render.restoredTranscript());
+      // No Transcript is replayed from a run folder, so each withdrawal that took a decision, which
+      // the snapshot names from the record's own stream, is printed as its live line (002 cycle 13).
+      var withdrawn = body.withdrawn || [];
+      for (var index = 0; index < withdrawn.length; index++) {
+        appendCard(render.withdrawalMarker(withdrawn[index] || {}));
+      }
     } else if (body.chat_state === 'running') {
       state.transcriptLoaded = true;
       setTurnRunning(true);

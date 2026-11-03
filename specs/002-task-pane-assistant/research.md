@@ -6906,7 +6906,8 @@ the decision register now records 160A as done.
   or the words, while the five modules' other 533 cases passed; T348's eight facts failed before
   T349, each for want of the tally's section, while the class's other 30 passed.
 - **Left open**: a finding a turn adds is counted when the turn's end reads the summary, not as it
-  arrives; a session's-end ranking read that lands after a press made at that moment would show
+  arrives (*since 2026-11-02, cycle 13 below: as it arrives*); a session's-end ranking read that
+  lands after a press made at that moment would show
   the tally before the press until the next decision or event (both read the live session; not
   seen in tests); and roadmap holes H-c-007, H-g-004 and H-g-011 still cite 185A's "no tally in
   the pane", for the roadmap's next update.
@@ -7120,7 +7121,8 @@ the decision register now records 160A as done.
     undecided, is named in neither place: its cleared line goes with it, and its withdrawal took
     no decision.
   - The Transcript's line is the live chat's: a read-only restore after a restart replays no
-    Transcript, and `report.md` carries the part there.
+    Transcript, and `report.md` carries the part there. *Since 2026-11-02 (cycle 13, below):* the
+    read-only snapshot names each such withdrawal, and its Transcript prints it as the live line.
   - Older records name the rule by its old place, `server._own_stream` (the backlog's cycle 6 item,
     193A above); they are history and left as they are. The hole's row in
     [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the roadmap's next update run.
@@ -7260,3 +7262,137 @@ the decision register now records 160A as done.
   console" is dropped, as *Left open* says the console's `--note` defaults to none. And two
   guards read the box after a `disposition` event and on a read-only restore, each proved by a
   mutant.
+
+### Cycle 13. Four Review page fixes (2026-11-02; the owner's pick)
+
+- **Question**: four fixes the reviews of cycles 7, 9 and 10 left for later, which the owner picked
+  on 2026-11-02 ([`docs/review-backlog.md`](../../docs/review-backlog.md), cycles 7 and 9; H-g-010's
+  *Left open*, above). No `finding` event carried the triage tally, so while a resumed turn ran the
+  tally shown left a new flagged finding out of "not recorded" until the turn ended. After a reload
+  the `/labels` read and the snapshot read raced, and a snapshot drawn first left its cards without
+  the backend's words, with nothing to draw them again. A read-only restore's cleared line ended
+  "Decide again." where the decision buttons are off. And a read-only restore after a backend
+  restart replays no Transcript, so a withdrawal that took a decision was in `report.md` alone.
+- **Settled**, with the defaults taken inside the feature:
+  - **The finding's tally.** `ToolContext.finding_body`, the one `finding` body, which the tool
+    layer and the runner's fold announcement share, carries the tally as the disposition events do
+    (`with_triage_tally`): the count once the finding is in the session, and none while no finding
+    records a triage. The page shows it as it shows theirs, so a body with none hides a shown one: a
+    fold that cleared the review's last triage says so with its `finding` event, before its cleared
+    notice. The events contract takes the key on the `finding` body; 001's `Finding`, still one list
+    of the model's fields, is closed where it is used rather than where it is defined
+    (`unevaluatedProperties: false` beside each `$ref`), so a session's finding still takes no other
+    key. The scorer reads a withdrawn finding's body without it. *Since 2026-11-02 (the review,
+    below):* the key is on every `finding` body, null while no finding records a triage, and the
+    page changes the tally on a `finding` event only when the body names it, so an older
+    backend's finding, which never does, leaves the tally shown (009 FR-030).
+  - **The labels race.** The page waits for the labels before the first draw: `loadLabels` keeps its
+    read, and the two restore reads, the live snapshot's and the run folder's, draw their snapshot
+    once it has answered, a failed read included (009 FR-030). Drawing the cards again when the
+    labels land was the other way; it would have to redraw every part the words reach, and a
+    re-init's read would redraw a card under a note being typed. *Since 2026-11-02 (the review,
+    below):* a restore read that fails otherwise than `UnknownChat` or `UnknownReview` draws its
+    error card through the same wait (`restoreFailed`), so the card says its next step.
+  - **The read-only line.** The backend's words: the call to decide again, which ends each of the six
+    cleared lines, is one key, `rerun.decide_again`; `RerunWords.of` appends it, so every line keeps
+    its bytes, and `RerunWords.read_only` leaves it out. A read-only snapshot names each cleared line
+    so; the stream, a live snapshot and `report.md` keep the line as written. 193A's line stays: what
+    cleared which decision and triage.
+  - **The restore's withdrawals.** A read-only snapshot names, under `withdrawn`, the
+    `finding.withdrawn` bodies `report.md` names under "Withdrawn with a decision" (`withdrawn_lines`:
+    the record's own stream, a finding the record still holds skipped), only when there is one; the
+    page prints each after the restored Transcript's note, through `render.withdrawalMarker`, so it
+    reads as the live line. The smallest default for the rest: a fold's withdrawal and an undecided
+    finding's took no decision and are left out, as `report.md` leaves them out.
+- **Tests**: T370 and T372 in [tasks.md](tasks.md), Phase 32, each written first; T371 and T373 make
+  them green, and T374 closes the records.
+- **Built** (2026-11-02, T371 and T373):
+  - The backend (T371): `ToolContext.finding_body` carries the tally (`with_triage_tally`), which
+    the tool layer's `record_finding` and the runner's fold announcement share; the `finding`
+    body's optional `triage_tally` in [contracts/chat-events.schema.json](contracts/chat-events.schema.json),
+    closed in the event's branch, with 001
+    [review-session.schema.json](../001-agentic-design-review/contracts/review-session.schema.json)'s
+    `Finding` closed where the session lists it; `benchmark/scorecard.read_stream`, which keeps a
+    withdrawn finding's body without the tally, so a forbidden hit announced with one still counts;
+    the words file's `rerun.decide_again` and `RerunWords.read_only`; and `review_snapshot`, whose
+    read-only snapshot names each cleared line in that form and adds `withdrawn`.
+  - The page (T373): `app.js`'s live `finding` case shows its tally (`showTally`); `loadLabels`
+    keeps its read, and `afterLabels` holds each restore read's snapshot until it has answered; and
+    `restore` prints a read-only snapshot's `withdrawn` after the restored Transcript's note
+    (`render.withdrawalMarker`). `ReviewPageDriver` gains `HeldInitialRoutes`.
+- **Tests changed on purpose**, none loosened, each restored line now in its read-only form:
+  `test_chat_server.py`'s `test_the_live_and_the_restored_snapshot_carry_a_cleared_line_until_a_decision`
+  and `test_a_regrade_that_clears_a_decision_says_so_in_every_view`; `test_recheck.py`'s
+  `test_a_restore_after_a_failed_re_run_still_shows_the_records_cleared_line` and
+  `test_check_again_whose_carry_clears_a_decision_shows_its_line_in_the_new_chats_snapshot`, a case
+  T370 missed, with `Regraded.read_only_line` and `carried_line(read_only=)` beside the live lines;
+  `ReviewPageTriageTests`' `AClearedLineComesBackInAReadOnlyRestore` and
+  `ARestoredReviewSaysWhichCardsHaveNoTriage`, whose read-only snapshots named the live line; and
+  the 002 literal of the specs-README pin (T369, T374).
+- **Tests first**: T370's 15 cases failed before T371, and T372's three facts before T373, each for
+  want of its change ([tasks.md](tasks.md), T370 and T372); a mutant that drew the run folder's
+  snapshot without waiting for the labels failed the labels fact's read-only half (T373).
+- **Left open**:
+  - A labels read that never answers holds a restore with it, and since the review a failed
+    restore read's error card too; both reads go to the one loopback backend, and a read that
+    fails lets the snapshot through.
+  - Only the two restore reads wait: a Review pressed before a reload's labels read answers, and a
+    Check again's snapshot (`showRechecked`), which Send reaches from a review already drawn, do not.
+  - A re-run announced under its own id is counted beside the finding it re-judges until its fold,
+    as both cards are shown until then; the fold makes them one, and its announcement counts what
+    it left. So mid-turn, while some finding records a triage, the tally counts one too many for
+    each re-run: the re-run's card, when the fold keeps the earlier decision, and the earlier
+    finding, when the fold clears its decision or it had none - each where it stands, a flagged
+    finding in its triage's count or "not recorded", a pass only as a miss. In T370's case
+    Sheet2's `already_known`, which the fold clears, is the one too many. The owner's call; the
+    review left it for later ([`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 13).
+  - The three replay fixtures (`reviewer/tests/fixtures/replay/`) were not regenerated with the
+    review's first fix. Their generator plays its scripts through `finding_body`, so the next
+    regeneration will end each `finding` event's body in each `events.jsonl` with
+    `"triage_tally":null` - 96 lines in `big-assembly`, 11 in `small-assembly-a` and 7 in
+    `small-assembly-b`, where the committed fixtures have the key nowhere - and 008
+    [contracts/replay.md](../008-checks-first-review/contracts/replay.md) section 8's
+    `git diff --exit-code` gate will show exactly that difference, which this cycle caused. The
+    generator reads the owner's recordings through the mapping outside the repository, which this
+    cycle's work did not read (the backlog's cycle 13 section).
+  - A read-only restore's withdrawal line names a finding the page never shows: no
+    "F-007 recorded: <title>" line precedes it, and `report.md`'s "Withdrawn with a decision" has
+    the same gap. Left for later by the review (the backlog's cycle 13 section).
+  - `report.md`'s cleared line keeps the call to decide again: it is the run's record, not a view
+    with locked buttons. H-g-010's row in [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is
+    for the roadmap's next update run.
+- **Gates** (T374; 2026-11-02), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required: 18,874 passed and 5 skipped on Python
+    3.12.3, and the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), cycle 11's
+    18,865 and T370's nine. Its two warnings are neither of this cycle: the test client's
+    deprecation, and a serializer warning from `test_ir_loader_append.py`'s invalid row.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,339 add-in tests passed.
+  - The link check over the cycle's ten changed Markdown files, anchors included, none broken;
+    every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
+    ran.
+  - *Changed 2026-11-02:* this tree came before the Tier 2 review's fixes (below), whose own
+    gates T374's dated sub-item records.
+- **Review** (Tier 2, decision 180A; 2026-11-02): one review, no must-fix; two should-fix, each
+  taken test first with the default stated, as T374's dated sub-item records. The page showed a
+  `finding` event's tally on every `finding` event, so with a backend of cycles 7 to 12, which never
+  puts a tally there, a resumed or follow-up turn's findings hid the tally until `session.ended`:
+  every `finding` body now names the key, null while no finding records a triage, and the page
+  changes the tally only when a body names it (*Settled*, the finding's tally). And a restore read
+  that failed otherwise than `UnknownChat` or `UnknownReview` before the labels answered drew its
+  error card with no next step, never drawn again: it now waits for the labels as a snapshot does
+  (*Settled*, the labels race). Two points are left for later in the backlog's cycle 13 section,
+  each under *Left open* above: the restored withdrawal line's unnamed finding, and the mid-turn
+  overcount, which is the owner's call. *Added 2026-11-03:* a read-only check of the fixes, no
+  must-fix and five should-fix, as T374's second dated sub-item records. The first fix left the
+  replay fixtures stale until their next regeneration, and the mid-turn overcount was misstated
+  here, in the backlog and in T374; *Left open* now names the first and states the second. A
+  fact proved by three mutants pins that a review the engineer left before the labels answered
+  draws nothing once they have, not even a failure's error card; and 009
+  [contracts/review-summary.md](../009-engineer-workspace/contracts/review-summary.md) section 5
+  names the `finding` event's tally. The whole suites ran on the tree after these fixes
+  (`1530105f`): 18,876 passed and 5 skipped on Python 3.12.3 and the same on 3.11; ruff clean;
+  the identifier scan, 58 passed; C# with zero warnings, then 10,274 extractor and 4,348 add-in
+  tests passed (T374's last sub-item).

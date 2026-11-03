@@ -50,7 +50,7 @@ body. Written to `events.jsonl` and streamed as server-sent events with `id = se
 | `text.done` | `text` (full turn text) | adapter |
 | `tool.started` | `step_index`, `tool`, `arguments` | registry |
 | `tool.finished` | `step_index`, `status: ok \| error`, `result_summary`, `elapsed_s`, `error` | registry |
-| `finding` | the full `Finding` | check tools |
+| `finding` | the full `Finding`; *amended 2026-11-02 (002 cycle 13):* and `triage_tally`, the review's triage tally once the finding is in the session, or once the fold that announces it is done, only while some finding records a triage; *amended 2026-11-02 (cycle 13's Tier 2 review):* on every body, null while no finding records a triage, so the page tells it from an older backend's body, which has no key | check tools |
 | `evidence.requested` | `EvidenceRequest` | session tools |
 | `evidence.answered` | `request_id`, `answer` | server (engineer) |
 | `disposition` | `finding_id`, `Disposition`; *amended 2026-11-01 (002 cycle 7):* and `triage_tally`, the review's triage tally as the decision left it, only while some finding records a triage | server (engineer) |

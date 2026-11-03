@@ -410,10 +410,12 @@ def turn_coverage(run: runner.ReviewRun) -> list[dict[str, Any]]:
 def test_a_finding_the_model_records_is_announced_as_it_is_written(
     review: Callable[..., runner.ReviewRun],
 ) -> None:
+    """*Changed 2026-11-02 (002 cycle 13's Tier 2 review):* the body names the triage tally beside
+    the finding, null here, as no finding records a triage."""
     run = review([turn("done", drawing_finding("suspected"))])
 
     announced = bodies_of(run, "finding")
-    assert announced == [run.session.findings[0].model_dump(mode="json")]
+    assert announced == [{**run.session.findings[0].model_dump(mode="json"), "triage_tally": None}]
     assert announced[0]["id"] == "F-001"
 
 
@@ -475,6 +477,9 @@ def test_a_rerun_folded_onto_an_earlier_finding_is_reannounced_under_that_id(
     announced again under the id it was folded onto - a client keyed by finding id then
     ends on the same verdict `session.json` holds, titled as the pane shows it
     (`pane_finding`, decision 2A; the next test is the case where the two titles differ).
+
+    *Changed 2026-11-02 (002 cycle 13's Tier 2 review):* the body names the triage tally beside
+    the finding, null here, as no finding records a triage.
     """
     run = review(
         [
@@ -492,7 +497,10 @@ def test_a_rerun_folded_onto_an_earlier_finding_is_reannounced_under_that_id(
     announced = bodies_of(run, "finding")
     assert [body["id"] for body in announced] == ["F-001", "F-002", "F-001"]
     assert [body["status"] for body in announced] == ["unresolved", "suspected", "suspected"]
-    assert announced[-1] == pane_finding(run.session.findings[0], component_names(run.context.ir))
+    assert announced[-1] == {
+        **pane_finding(run.session.findings[0], component_names(run.context.ir)),
+        "triage_tally": None,
+    }
 
 
 LONG_DRAWING_OBSERVED = (
@@ -512,7 +520,10 @@ def test_every_finding_announcement_carries_the_title_a_person_reads(
 ) -> None:
     """Decision 2A (feature 009 research R2.28): the stream is what the pane prints, so both
     announcements - the tool's and the runner's re-announcement of a fold - carry the whole,
-    named title, while `session.json` keeps the recorded one the model read."""
+    named title, while `session.json` keeps the recorded one the model read.
+
+    *Changed 2026-11-02 (002 cycle 13's Tier 2 review):* the body names the triage tally beside
+    the finding, null here, as no finding records a triage."""
     run = review(
         [
             turn(
@@ -531,7 +542,7 @@ def test_every_finding_announcement_carries_the_title_a_person_reads(
     [recorded] = run.session.findings
     assert [body["id"] for body in announced] == ["F-001", "F-002", "F-001"]
     assert {body["title"] for body in announced} == {display_title(recorded, names)}
-    assert announced[-1] == pane_finding(recorded, names)
+    assert announced[-1] == {**pane_finding(recorded, names), "triage_tally": None}
     assert recorded.title == title_from(LONG_DRAWING_OBSERVED)
     assert written_session(run)["findings"][0]["title"] == title_from(LONG_DRAWING_OBSERVED)
     assert "housing-1" in announced[-1]["title"] and "…" not in announced[-1]["title"]
@@ -782,7 +793,10 @@ def test_a_batch_folds_each_rerun_onto_the_verdict_it_rejudges(
     review: Callable[..., runner.ReviewRun],
 ) -> None:
     """Resume rule (c) holds for a batch: the re-run replaces its earlier verdict in place,
-    and the fold is announced again under the earlier id."""
+    and the fold is announced again under the earlier id.
+
+    *Changed 2026-11-02 (002 cycle 13's Tier 2 review):* the body names the triage tally beside
+    the finding, null here, as no finding records a triage."""
     provider = SpyProvider(
         script=[
             turn("blocked", drawing_finding("unresolved"), *THREE_ASKS),
@@ -798,7 +812,7 @@ def test_a_batch_folds_each_rerun_onto_the_verdict_it_rejudges(
     assert session.findings[0].status == "suspected"
     announced = bodies_of(run, "finding")
     assert [body["id"] for body in announced] == ["F-001", "F-002", "F-001"]
-    assert announced[-1] == session.findings[0].model_dump(mode="json")
+    assert announced[-1] == {**session.findings[0].model_dump(mode="json"), "triage_tally": None}
 
 
 def test_answering_every_request_leaves_no_evidence_item_unresolved(
@@ -1698,6 +1712,65 @@ def test_a_cleared_notice_carries_the_tally_its_clear_left(
     report = render_report(run.session).splitlines()
     [at] = [index for index, line in enumerate(report) if line.startswith("- By triage:")]
     assert report[at : at + 2] == [f"- {tally['text']}", f"- {tally['misses_text']}"]
+    validator = contract_validator("chat-events.schema.json")
+    for event in events_of(run):
+        validator.validate(event)
+
+
+def test_a_resumed_turns_findings_carry_the_tally_as_each_leaves_it(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """002 cycle 13 (the backlog's cycle 7 section; FR-031): a `finding` event carries the review's
+    triage tally, as the disposition events do, so the page counts a finding a resumed turn adds as
+    it arrives, not when the turn ends. Sheet1's Reject as `wrong` and Sheet2's Accept as
+    `already_known` are recorded while the question is open, and the opening turn's announcements,
+    made while no finding recorded a triage, carry none: their tally is null. The resumed turn
+    records Sheet3, a new finding, and runs Sheet2's check again with another verdict: Sheet3's
+    announcement counts it not recorded; the re-run's own, under its new id, counts that card too,
+    as the page then shows it; and the fold's announcement of Sheet2's finding, its Accept cleared,
+    counts what the fold left, as its cleared notice does. Every event stays valid against the
+    events contract.
+
+    *Corrected 2026-11-02 (cycle 13's Tier 2 review):* the opening announcements named no tally.
+    Every `finding` body now names it, null while no finding records a triage, so the page tells
+    such a body from an older backend's, which names none and leaves the tally shown."""
+    run = review(
+        [
+            turn(
+                "blocked",
+                on_sheet("Sheet1", "suspected"),
+                on_sheet("Sheet2", "suspected"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("re-run", on_sheet("Sheet3", "suspected"), on_sheet("Sheet2", "unresolved")),
+        ]
+    )
+    opening = bodies_of(run, "finding")
+    record_disposition(
+        run, "F-001", decision="rejected", note="FICT missed", by=ENGINEER, triage="wrong"
+    )
+    record_disposition(
+        run, "F-002", decision="accepted", note="FICT intended", by=ENGINEER, triage="already_known"
+    )
+    mark = len(events_of(run))
+
+    run.answer_evidence("ER-001", "The usable thread depth is 12 mm.")
+
+    assert [body["id"] for body in opening] == ["F-001", "F-002"]
+    assert all("triage_tally" in body and body["triage_tally"] is None for body in opening)
+    after = events_of(run)[mark:]
+    announced = [
+        (event["body"]["id"], event["body"].get("triage_tally"))
+        for event in after
+        if event["type"] == "finding"
+    ]
+    assert announced == [
+        ("F-003", tally_body(wrong=1, known=1, not_recorded=1)),
+        ("F-004", tally_body(wrong=1, known=1, not_recorded=2)),
+        ("F-002", tally_body(wrong=1, not_recorded=2)),
+    ]
+    [notice] = [event["body"] for event in after if event["type"] == "disposition.cleared"]
+    assert (notice["finding_id"], notice["triage_tally"]) == announced[-1]
     validator = contract_validator("chat-events.schema.json")
     for event in events_of(run):
         validator.validate(event)

@@ -75,6 +75,7 @@ from tests.support.packages import build_package, persist_ref
 from tests.support.roles_review import PIN_ID, roles_review, write_profile
 from tests.support.roles_review import write_package as write_roles_package
 from tests.support.scoring_probes import NOT_ASSESSED_WITHOUT_EXTENSIONS, assert_oracle_and_null
+from tests.support.triage import finding_alone, tally_body
 from tests.unit.test_benchmark_attempts import driver_sleeps as driver_sleeps
 from tests.unit.test_checks_fastener import layer, mm, screw, tapped_hole
 from tests.unit.test_drawing_finding_number_guard import (
@@ -882,7 +883,10 @@ def test_a_withdrawn_finding_last_announced_unresolved_or_within_scope_is_no_wit
     tmp_path: Path,
 ) -> None:
     """`scoring.md` 3.3: a withdrawn finding counts only when its last body is demonstrated or
-    suspected. Each recast body still validates as a finding, so its status alone rules it out."""
+    suspected. Each recast body still validates as a finding, so its status alone rules it out.
+
+    *Changed 2026-11-02 (002 cycle 13's Tier 2 review):* a body names the triage tally beside the
+    finding, null here, so the finding validated is the body's finding, as the scorer reads it."""
     first, second, third = all_bought(tmp_path)
     recast: list[dict[str, Any]] = []
 
@@ -893,7 +897,7 @@ def test_a_withdrawn_finding_last_announced_unresolved_or_within_scope_is_no_wit
             recast.append(body)
 
     edit_stream(tmp_path, recast_two)
-    assert [Finding.model_validate(body).status for body in recast] == [
+    assert [Finding.model_validate(finding_alone(body)).status for body in recast] == [
         "unresolved",
         "checked_within_scope",
     ]
@@ -909,7 +913,10 @@ def test_an_id_withdrawn_then_announced_into_the_final_state_is_no_withdrawn_hit
 ) -> None:
     """`scoring.md` 3.3: a withdrawn hit is an id absent from the final state. One announced again
     after its withdrawal and held by the final session is a final-state finding, so a forbidden
-    hit and a false alarm, never a withdrawn hit too."""
+    hit and a false alarm, never a withdrawn hit too.
+
+    *Changed 2026-11-02 (002 cycle 13's Tier 2 review):* a body names the triage tally beside the
+    finding, null here, so the session takes the body's finding."""
     first, second, third = all_bought(tmp_path)
     again: list[dict[str, Any]] = []
 
@@ -921,7 +928,7 @@ def test_an_id_withdrawn_then_announced_into_the_final_state_is_no_withdrawn_hit
     edit_stream(tmp_path, announce_again)
     session_file = tmp_path / RUN / "session.json"
     session = json.loads(session_file.read_text(encoding="utf-8"))
-    session["findings"].append(again[0])
+    session["findings"].append(finding_alone(again[0]))
     session_file.write_text(json.dumps(session, indent=2), encoding="utf-8")
 
     score = score_all_bought(tmp_path)
@@ -1004,6 +1011,34 @@ def test_a_withdrawn_finding_whose_last_body_is_no_finding_is_skipped_the_column
 
     assert score.withdrawn_forbidden_hit_finding_ids == [first, second]
     assert "withdrawn_forbidden_hit_finding_ids" not in score.not_assessed
+
+
+@pytest.mark.parametrize(
+    "tally", [tally_body(known=1, not_recorded=4), None], ids=["a tally", "null"]
+)
+def test_a_withdrawn_hit_announced_with_the_tally_is_still_a_withdrawn_hit(
+    tmp_path: Path, tally: dict[str, Any] | None
+) -> None:
+    """002 cycle 13 (FR-031): a `finding` body carries the review's triage tally beside the finding
+    while some finding records a triage, so the last body announced before a withdrawal can carry
+    one - a finding a resumed turn added after a decision was triaged. The scorer reads the finding
+    without it, so the hit is still counted (`scoring.md` 3.3).
+
+    *Changed 2026-11-02 (cycle 13's Tier 2 review):* and with null, which every `finding` body now
+    names while no finding records a triage."""
+    first, second, third = all_bought(tmp_path)
+
+    def tally_on_the_first(events: list[dict[str, Any]]) -> None:
+        last_announced(events, first)["body"]["triage_tally"] = tally
+
+    edit_stream(tmp_path, tally_on_the_first)
+
+    score = score_all_bought(tmp_path)
+
+    assert score.withdrawn_forbidden_hit_finding_ids == [first, second, third]
+    assert {score.finding_origins[finding_id] for finding_id in (first, second, third)} == {
+        "code_only_call"
+    }
 
 
 def test_with_the_stream_deleted_the_withdrawn_column_is_not_assessed(tmp_path: Path) -> None:

@@ -344,7 +344,9 @@ class RerunWords(ReviewModel):
     or its severity - and so cleared its decision and triage (feature 002 FR-031; owner decisions
     189A, 191A and 194A): after the engineer's answer (`cleared`), when the answer graded the
     checks again (`restated`), or when a re-run did not carry the decision (`carried`). The
-    backend fills it, and the page prints it as sent."""
+    backend fills it, and the page prints it as sent. Each line ends with the call to decide
+    again (`decide_again`), which a read-only review's line leaves out (`read_only`; 002 cycle
+    13)."""
 
     cleared: str
     cleared_with_triage: str
@@ -352,18 +354,27 @@ class RerunWords(ReviewModel):
     restated_with_triage: str
     carried: str
     carried_with_triage: str
+    decide_again: str
 
     def of(self, decision: str, triage: str | None, *, cause: ClearedBy = "rerun") -> str:
         """The line for the cleared `decision`, its noun ("Accept"), naming `triage`, its word, when
-        the disposition held one, in the words of what cleared it."""
+        the disposition held one, in the words of what cleared it, then the call to decide again."""
         plain, triaged = {
             "rerun": (self.cleared, self.cleared_with_triage),
             "restate": (self.restated, self.restated_with_triage),
             "carry": (self.carried, self.carried_with_triage),
         }[cause]
         if triage is None:
-            return plain.format(decision=decision)
-        return triaged.format(decision=decision, triage=triage)
+            line = plain.format(decision=decision)
+        else:
+            line = triaged.format(decision=decision, triage=triage)
+        return f"{line} {self.decide_again}"
+
+    def read_only(self, line: str) -> str:
+        """`line`, a cleared line as the stream holds it, as a read-only review shows it: without
+        the call to decide again, which its locked buttons cannot answer (002 FR-031, cycle 13). A
+        line that does not end with the call, written with other words, is as written."""
+        return line.removesuffix(f" {self.decide_again}")
 
 
 class WithdrawnWords(ReviewModel):
@@ -898,7 +909,9 @@ def triage_tally(findings: Sequence[Finding]) -> TriageTally | None:
 def with_triage_tally(body: dict[str, Any], findings: Sequence[Finding]) -> dict[str, Any]:
     """`body` with the review's tally under `triage_tally` while some finding records a triage,
     and as it was otherwise: the disposition route's reply and the `disposition` and
-    `disposition.cleared` events, each as it is sent (feature 002 FR-031, cycle 7)."""
+    `disposition.cleared` events, each as it is sent (feature 002 FR-031, cycle 7). The `finding`
+    event names the key on every body instead, null while none is recorded
+    (`ToolContext.finding_body`; cycle 13's Tier 2 review)."""
     tally = triage_tally(findings)
     return body if tally is None else {**body, "triage_tally": tally.model_dump(mode="json")}
 
