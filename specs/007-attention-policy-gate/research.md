@@ -1113,3 +1113,6 @@ note.
   included, none broken. Every changed file LF in the index.
 - No C# or page file changed, so no C# gate. No SOLIDWORKS process, seat task, or paid or live
   test ran.
+- *Changed 2026-11-03:* the whole suites ran on the final tree, cycle 14 stacked on cycles 12, 13
+  and 11 (`13611b22`): 18,914 passed and 5 skipped on Python 3.12.3 and the same on 3.11; ruff
+  clean; the identifier scan, 58 passed (T085's last sub-item).
