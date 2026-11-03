@@ -327,7 +327,7 @@ def test_a_folds_finding_body_keeps_the_date(tmp_package_dir: Path, tmp_path: Pa
     run = runner.start_review(
         tmp_package_dir,
         root / f"20261103-090000-{LABEL}",
-        provider=FakeProvider(script=[runner_turn()], model=chat.MODEL),
+        provider=FakeProvider(script=[chat.turn("FICT nothing yet")], model=chat.MODEL),
         run_root=root,
     )
     run.start()
@@ -343,10 +343,6 @@ def test_a_folds_finding_body_keeps_the_date(tmp_package_dir: Path, tmp_path: Pa
     ]
 
 
-def runner_turn() -> Any:
-    return chat.turn("FICT nothing yet")
-
-
 def stream_of(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
@@ -360,9 +356,10 @@ def event(seq: int, kind: str, body: dict[str, Any]) -> AgentEvent:
 
 def test_the_snapshot_and_report_md_read_the_date_back_from_the_stream() -> None:
     """Both snapshots and `report.md` name the date the last `finding` body of each finding the
-    session holds names: none where that body names none - here F-002's fold onto a pass - and
-    none from a stream that does not start this session; `report.md` as the first line under the
-    finding's heading, in the words file's words. A record with no date keeps its bytes."""
+    session holds names: none where that body names none - here F-002's later body, as a fold onto
+    a pass sends one - nor for a finding the session no longer holds (F-003), and none from a
+    stream that does not start this session; `report.md` as the first line under the finding's
+    heading, in the words file's words. A record with no date keeps its bytes."""
     on_two = ON_TWO.model_copy(update={"id": "F-002"})
     session = record(ON_ONE, on_two)
     names = component_names(PACKAGE)

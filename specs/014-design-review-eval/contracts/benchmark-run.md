@@ -198,6 +198,11 @@ which keywords a function receives behind their values.
 | `package_dir`, `out_dir` (positional) | `chat.run_dir` for both (`:2121-2123`): the pane reviews in place | the package folder and `attempts/<package>/<n>/` | transport: reviewing in place and reviewing into another folder behave the same offline, with no bridge and so no live-row write-back into the package |
 | `key_source`, `retry_of`, `bridge`, `pipe_name`, `bridge_secret`, `bridge_factory`, `callbacks`, `redact` | the pane's | the benchmark's; `bridge=False` always; `redact` the key redactor composed with `without_local_paths` (section 10) | transport; `bridge` is recorded as `live_tools` and shown, never must-match (PP-9) |
 
+*Amended 2026-11-03 (feature 002 cycle 17; roadmap hole H-a-009):* `start_review` gains `run_root`,
+a transport row: the pane passes its run root, from whose earlier reviews a `finding` body names the
+date one first showed it (`first_shown`), and a benchmark attempt passes none. It changes nothing a
+model is sent (002 `research.md`, cycle 17).
+
 Then, as the pane does after its call (`chat/server.py:2145-2151`): `run.tools =
 StoppableTools(run.tools, attempt.stop)`, and `run.check_presentation_cancelled` raises
 `TurnStopped` when the stop is set. `TurnStopped` and `StoppableTools` move from

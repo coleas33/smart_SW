@@ -7680,3 +7680,72 @@ earlier review showed, so the date rested on recall.
     `note` and before `source`: the card's head prints it under the title, `{date}` replaced as
     text, and `report.md` as the first line under the finding's heading. With no labels, or a body
     without the key, the card prints nothing (009 FR-030).
+- **Built** (2026-11-03; T388 to T391 in [tasks.md](tasks.md), Phase 35, each test written first):
+  - The backend (T389): `reviewer/src/swreview/report/first_shown.py`, the match; the context's
+    `first_shown` map, which `ToolContext.finding_body` reads; `start_review`'s `run_root`, which the
+    chat server passes; `report/snapshot.shown_dates`, which both snapshots and `report.md` read;
+    the words key; the contract's optional `first_shown`, a date, with dated notes in
+    [contracts/README.md](contracts/README.md), [data-model.md](data-model.md) section 2,
+    [contracts/chat-api.md](contracts/chat-api.md) and 009's plain words and data model; a dated
+    note on `findings.finding_subject_key`, which the match uses across two dumps. The pane
+    fixtures' generators moved the four that embed the labels by the new group alone.
+  - The page (T391): `render.js`'s `firstShownLine`, under the title, through the one text writer.
+  - The time (T389): on a fictional run root of thirty earlier reviews of the big-assembly replay
+    fixture (each record 0.66 MB, 96 findings), a Model check folder beside each, the match took
+    0.29 to 0.33 s in three runs on the development machine
+    (`reviewer/tests/perf/test_first_shown_perf.py`, `-m perf`, budget 2 s): about 10 ms a record,
+    read and validated once, and nothing for a folder the names rule out.
+  - Tests first: T388's new module failed for want of the module and then of the wiring, and six
+    cases of three other modules for want of the contract's key, the words key or the labels
+    group; T390's four facts for want of the line. Ten mutants, each file restored byte for byte,
+    proved the guards ([tasks.md](tasks.md), T388 to T391). Changed on purpose, none loosened,
+    each with a dated note: `test_review_words.py`'s plain-word test over the new group,
+    `test_chat_server.py`'s labels route test naming it, the 002 literal of the specs-README pin
+    (T387, T392), and, found by the whole suite at the close, `test_benchmark_pane_parity.py`'s
+    transport rows, which every `start_review` argument must be classified among: `run_root` is
+    one, the pane's run root and none for a benchmark attempt, changing nothing the model is sent,
+    with a dated note in 014 [contracts/benchmark-run.md](../014-design-review-eval/contracts/benchmark-run.md)
+    section 5.1.
+- **Left open**:
+  - The match joins two dumps by a key whose component and entity ids are each dump's numbering,
+    as the route asks: an unchanged design keeps them (lever 9 even reuses its package), but after
+    an edit to the tree a renumbered part can carry a date onto another part's finding of the same
+    check, or lose its own, and a persistent reference a re-dump re-encodes loses one. A guard by
+    the findings' documents (`provenance`) would narrow it; for the owner.
+  - Each earlier folder's `session.json` alone is read: a retry's or a Check again's rotated
+    records (`session.N.json`) are not, so a finding only an earlier attempt in that folder raised
+    gives no date, and its date is the folder's, the review it re-ran. A folder whose review was
+    deleted from the seat gives none, and a date an earlier review's own stream named is not
+    carried on (the route's "still on the seat").
+  - A record sent at once names no configuration, so its findings match by their own: a part's
+    finding of the standards checks, raised in the part's configuration, can take the date of a
+    review of the same assembly in another configuration, where it was shown.
+  - The CLI's `swreview review` names no run root and so no date; a record written before this
+    cycle has no date in its stream, so its restore and its `report.md` name none.
+  - The time grows with the earlier reviews of the document on the seat, about 10 ms for each
+    record of the size measured; none is read for another document.
+  - A save of an earlier record in the instant the match reads it - a live review of the same
+    document deciding just then - fails on Windows: Python's `os.replace` (`MoveFileExW`), which
+    `write_atomic` uses, cannot replace a file another handle holds, whatever its share mode. The
+    match holds each record for one read, about a millisecond. The add-in's session-head read has
+    the same window: its `FileShare.Delete` lets `File.Replace` (`ReplaceFileW`), which its test
+    uses, through, but not `os.replace`, as a probe on the development machine showed. The cure
+    for every reader is in `write_atomic`; for the owner.
+- **Gates** (T392; 2026-11-03), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required, on Python 3.12.3: 18,970 passed and 5
+    skipped, 27 of them this cycle's new cases. Its two warnings are neither of this cycle: the
+    test client's deprecation, and a serializer warning from `test_ir_loader_append.py`'s invalid
+    row. Its first run found the one failure the cycle caused, the parity test's unclassified
+    `run_root`, changed on purpose above.
+  - On Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the modules the change
+    touches and those that read the files it changed: 25 modules, 1,494 passed; then the two that
+    pin `start_review`'s signature, `test_benchmark_pane_parity.py` and `test_runner_send.py`, 61
+    passed, and the new module again after its last edit, 24 passed.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed; `-m perf`, the match's time
+    above.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,356 add-in tests passed.
+  - The link check over the cycle's ten changed Markdown files, anchors included, 462 links and
+    none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or
+    live test ran.
