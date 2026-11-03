@@ -16880,7 +16880,7 @@
       "undecided": "No triage recorded yet",
       "accepted": "No triage recorded yet: pick one, then press Accept again",
       "rejected": "No triage recorded yet: pick one, then press Reject again",
-      "deferred": "No triage recorded yet: pick one, then press Accept or Reject",
+      "deferred": "No triage recorded yet: pick one, then press Defer again",
       "read_only": "No triage recorded yet"
     },
     "source": {

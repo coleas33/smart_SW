@@ -7,8 +7,10 @@ from the updated session so the two never drift.
 State machine (data-model.md section 5): `none -> accepted | rejected | deferred`;
 `deferred -> accepted | rejected`; `accepted` and `rejected` are terminal, with one exception
 (owner decision 185A): one recorded without a triage takes one once, sent again with the same
-decision, and nothing else changes. A second triage is refused with a class of its own,
-`TriageAlreadyRecordedError` (roadmap hole H-g-012).
+decision, its decision, `by` and `at` unchanged. A second triage is refused with a class of its
+own, `TriageAlreadyRecordedError` (roadmap hole H-g-012). Owner decision 198A: that late triage
+keeps a note sent with it when none is recorded, and a Defer recorded without a triage takes one
+the same way, sent again with Defer, and stays deferred.
 
 A triage, one of `findings.TRIAGES`, may go with any decision and is never required (002
 FR-031). A deferred finding keeps its triage when the later Accept or Reject names none.
@@ -120,14 +122,18 @@ def _validate_transition(finding: Finding, decision: str, triage: str | None) ->
 
 def _takes_a_late_triage(current: Disposition, decision: str, triage: str | None) -> bool:
     """Owner decision 185A: an Accept or Reject recorded without a triage, sent again with the
-    same decision and a triage, takes the triage once. A Defer is not settled and is not covered:
-    its triage comes with the later Accept or Reject."""
-    return (
-        current.decision != "deferred"
-        and current.triage is None
-        and triage is not None
-        and decision == current.decision
-    )
+    same decision and a triage, takes the triage once. Owner decision 198A: so does a Defer, Defer
+    sent again with one, which stays deferred; sent again with none, it is refused as before."""
+    return current.triage is None and triage is not None and decision == current.decision
+
+
+def _late_note(recorded: str, sent: str) -> str:
+    """The note a late triage leaves (owner decision 198A): the one recorded, or, when none is,
+    the one sent with it, such as the date 188A asks for. A blank note is none, so a blank one
+    recorded gives way to the note sent, and a blank one sent changes nothing."""
+    if recorded.strip() or not sent.strip():
+        return recorded
+    return sent
 
 
 def set_disposition(
@@ -147,9 +153,11 @@ def set_disposition(
     overwritten by the next finalization (`chat/sessions.py`, `record_disposition`).
 
     `triage` is one of `TRIAGES`, or `None` for none (owner decision 185A). A deferred finding
-    keeps its triage when the later decision names none, and takes the one it names. An Accept
-    or Reject recorded without one takes one once, sent with the same decision: only the triage
-    is recorded, and the decision, note, `by` and `at` stay as first recorded.
+    keeps its triage when the later decision names none, and takes the one it names. A decision
+    recorded without one takes one once, sent again with the same decision - an Accept, a Reject,
+    or a Defer, which stays deferred (owner decision 198A): the triage is recorded, the decision,
+    `by` and `at` stay as first recorded, and so does the note, unless none is recorded, when
+    the note sent with the triage is kept (198A, `_late_note`).
 
     A pass takes no triage but `MISS` (owner decision 187A): any other is refused before the
     state machine is read, a late triage included.
@@ -170,7 +178,9 @@ def set_disposition(
     refuse_a_triage_a_pass_does_not_take(finding, triage)
     current = finding.disposition
     if current is not None and _takes_a_late_triage(current, decision, triage):
-        finding.disposition = current.model_copy(update={"triage": triage})
+        finding.disposition = current.model_copy(
+            update={"triage": triage, "note": _late_note(current.note, note)}
+        )
         return finding
     _validate_transition(finding, decision, triage)
 

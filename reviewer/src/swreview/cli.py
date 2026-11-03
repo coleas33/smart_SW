@@ -990,8 +990,9 @@ def disposition(
     """Record an engineer's decision on a finding and re-render the report.
 
     A decision recorded without `--triage` may take one once, sent again with the same decision
-    (owner decision 185A); the payload and the line name the disposition as recorded, which
-    then keeps the first note, `by` and time.
+    (owner decision 185A), a Defer too, which stays deferred (198A); the payload and the line name
+    the disposition as recorded, which then keeps the first `by` and time, and the first note, or
+    the `--note` sent with the triage when none was recorded (198A).
     """
     decided_by = by if by else _default_user()
     with _errors_as_exit_1():
