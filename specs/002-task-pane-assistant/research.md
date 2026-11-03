@@ -8315,7 +8315,9 @@ note box from the record, losing a note typed for the press.
   - The link check over the cycle's seven changed Markdown files, anchors included, none broken;
     every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
     ran.
-  - The whole suites on the final tree: recorded once they run.
+  - The whole suites on the final tree (`fc2ce6c9`, 2026-11-03): 19,043 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; C# with zero
+    warnings, then 10,274 extractor and 4,411 add-in tests passed (T404's line).
   - *Added 2026-11-03 (the Tier 2 review):* the review's fixes came after that tree; their gates
     are T404's sub-item in [tasks.md](tasks.md).
   - *Added 2026-11-03 (the read-only check):* its fixes came after that tree too; their gates are
