@@ -22,7 +22,7 @@ pane sees them while the turn is still running (FR-013) and nothing has to diff
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -195,7 +195,15 @@ class ToolContext:
     the read budget and the check of the parts can leave a later one or none; 002 FR-031's T392
     note gives the rule. *Changed 2026-11-03 (cycle 21):* keyed as this review numbers its
     subjects, an earlier dump's keys renumbered by their ids' stable names; FR-031's cycle 21 note
-    gives the rule."""
+    gives the rule. *Changed 2026-11-03 (cycle 21's Tier 2 review):* and read again when a
+    confirmed drawing reloads the package (`read_first_shown`)."""
+    read_first_shown: Callable[[EvidencePackage], dict[SubjectKey, str]] | None = field(
+        default=None, repr=False
+    )
+    """How `start_review` read `first_shown` - its run root, its folder, its start and a re-run's
+    earlier record bound - so that `reload_package` reads it again for the package reloaded (002
+    cycle 21's Tier 2 review). `None` for every other context, whose `first_shown` a reload
+    leaves as it is."""
     _drawing_read: str | None = field(default=None, init=False, repr=False)
     """What `drawing_read_mode` answered, once asked (feature 013)."""
 
@@ -217,9 +225,16 @@ class ToolContext:
         host appends the drawing it read to the run folder's `package.json`, and the review
         resumes over that package, so the resumed turn and every tool see the new records.
         Nothing in the session changes.
+
+        *Changed 2026-11-03 (002 cycle 21's Tier 2 review):* the first-shown dates are read again
+        for the package reloaded (`read_first_shown`), so a finding on the drawing read is
+        matched by the stable names only that package holds, and dated as an earlier review that
+        read the same drawing showed it.
         """
         self.package = package
         self._index_package()
+        if self.read_first_shown is not None:
+            self.first_shown = self.read_first_shown(package.package)
 
     @property
     def ir(self) -> EvidencePackage:
