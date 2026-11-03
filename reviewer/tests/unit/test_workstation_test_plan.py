@@ -3096,7 +3096,14 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
 
     *Changed 2026-11-03 on purpose (002 T380; roadmap hole H-c-010):* 002's row is recounted with
     T376 to T380 ticked, a press repeated without an outcome saying to pick one and the console
-    keeping the note built: 372 done, 4 open."""
+    keeping the note built: 372 done, 4 open.
+
+    *Changed 2026-11-03 on purpose (002 T381; cycle 16, a withdrawal names its finding's title):*
+    002's row is recounted with cycle 16's tasks, T381 to T386, T381 ticked: 373 done, 9 open.
+
+    *Changed 2026-11-03 on purpose (002 T386; cycle 16, a withdrawal names its finding's title):*
+    002's row is recounted with T382 to T386 ticked, a withdrawal naming its finding's title
+    built: 378 done, 4 open."""
     readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
     flat = re.sub(r"\s+", " ", readme)
     rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
@@ -3105,7 +3112,7 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
     assert "decision 173A" in flat
     for number, counts, closed in (
         ("001", "107 / 3 / 0", "T098"),
-        ("002", "372 / 4 / 0", "T055a"),
+        ("002", "378 / 4 / 0", "T055a"),
         ("005", "90 / 27 / 0", "T073"),
         ("008", "132 / 5 / 0", "T106"),
     ):

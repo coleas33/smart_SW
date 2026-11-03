@@ -197,4 +197,7 @@ After that the stream behaves as live.
 Restored from `/reviews/{run_id}`: Transcript reads "This review was restored from its run folder;
 its transcript is in events.jsonl there." with an Open run folder button. *Amended 2026-11-02
 (feature 002 cycle 13):* after it, one line for each body of the snapshot's `withdrawn`, as the
-live Transcript prints the withdrawal: "<id> withdrawn: <reason>; <taken>".
+live Transcript prints the withdrawal: "<id> withdrawn: <reason>; <taken>". *Amended 2026-11-03
+(feature 002 cycle 16):* a body that names the finding's `title` has it in parentheses right after
+the id, "<id> (<title>) withdrawn: <reason>; <taken>", as the live line has; one without is
+printed as above.

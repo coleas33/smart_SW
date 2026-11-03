@@ -9,6 +9,9 @@ building its own would be three chances to disagree about a blank name:
 - `report/titles.display_title`, which names the parts in the title a person reads while
   `observed`, and the recorded title the model reads, keep their ids (decision 2A).
 
+`component_files` is each component's document's file name, by which a title can name a part as
+well (`report/titles.withdrawal_title`, 002 cycle 16).
+
 `and_list` writes several names the way a sentence does; the not-loaded headline, the
 contacts list and the drawing check all use it. `plural` counts one noun the one way every
 digest line does (the pre-run's digest, the joint coverage, the drawing check).
@@ -23,7 +26,7 @@ from collections.abc import Mapping, Sequence
 
 from swreview.ir.models import EvidencePackage
 
-__all__ = ["and_list", "component_names", "plural", "with_component_names"]
+__all__ = ["and_list", "component_files", "component_names", "plural", "with_component_names"]
 
 COMPONENT_ID = re.compile(r"(?<![A-Za-z0-9_])cmp:[0-9]{4,}(?![A-Za-z0-9_])")
 """A whole component id token, the IR's `^cmp:[0-9]{4,}$`, never part of a longer token:
@@ -33,6 +36,17 @@ COMPONENT_ID = re.compile(r"(?<![A-Za-z0-9_])cmp:[0-9]{4,}(?![A-Za-z0-9_])")
 def component_names(package: EvidencePackage) -> dict[str, str]:
     """`{component id: name}` for every component of `package`, blank names included."""
     return {component.id: component.name for component in package.components}
+
+
+def component_files(package: EvidencePackage) -> dict[str, str]:
+    """`{component id: file name}`, its document's, for every component of `package` whose
+    document the package holds."""
+    files = {document.document_id: document.file_name for document in package.documents}
+    return {
+        component.id: files[component.document_id]
+        for component in package.components
+        if component.document_id in files
+    }
 
 
 def with_component_names(text: str, names: Mapping[str, str]) -> str:

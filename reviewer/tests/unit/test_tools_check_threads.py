@@ -392,12 +392,15 @@ def test_the_review_starts_with_one_pin_finding_listing_both_designations(
 
 
 def test_all_bought_withdraws_the_pins_finding_and_keeps_the_fasteners(tmp_path: Path) -> None:
+    """*Changed 2026-11-03 on purpose (002 T382; cycle 16):* the pin's withdrawal also names its
+    finding's title, as its `finding` event announced it."""
     events: Events = []
     run = threads_review(tmp_path, events)
     [pin] = fine_on(run, PIN_STEM)
     [fastener] = fine_on(run, FASTENER_STEM)
     before = len(run.session.steps)
     mark = len(events)
+    title = {body["id"]: body["title"] for kind, body in events if kind == "finding"}[pin.id]
 
     run.answer_evidence_batch([("ER-001", "All bought")])
 
@@ -406,7 +409,8 @@ def test_all_bought_withdraws_the_pins_finding_and_keeps_the_fasteners(tmp_path:
     assert fine_on(run, PIN_STEM) == []
     # The other restated checks withdraw the pin's own findings beside it; this one's once.
     reason = runner.BOUGHT_WITHDRAWAL.format(request_id="ER-001")
-    assert withdrawn(events[mark:]).count({"finding_id": pin.id, "reason": reason}) == 1
+    body = {"finding_id": pin.id, "title": title, "reason": reason}
+    assert withdrawn(events[mark:]).count(body) == 1
     assert fastener.id not in [body["finding_id"] for body in withdrawn(events[mark:])]
     [row] = [
         item

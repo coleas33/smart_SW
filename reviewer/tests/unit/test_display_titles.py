@@ -193,6 +193,60 @@ def test_an_empty_observed_has_an_empty_title_both_ways() -> None:
     assert display_title(finding("", title=""), NAMES) == ""
 
 
+# --- a withdrawal's title (002 T386; cycle 16's Tier 2 review) ----------------------------------
+
+FILES = {"cmp:0001": "housing.SLDPRT", "cmp:0002": "housing.SLDPRT", "cmp:0003": "pin.SLDPRT"}
+"""Each part's document's file name, as `component_files` reads it: the housings share one."""
+
+
+def on(component_ids: list[str], observed: str) -> Finding:
+    """`finding(observed)` on `component_ids`."""
+    return finding(observed).model_copy(update={"component_ids": component_ids})
+
+
+@pytest.mark.parametrize(
+    ("component_ids", "observed", "shown"),
+    [
+        (
+            ["cmp:0001", "cmp:0002", "cmp:0003", "cmp:0009"],
+            "The equation manager holds no equations. More.",
+            "The equation manager holds no equations; housing-1, housing-2, cmp:0003 and cmp:0009",
+        ),
+        (["cmp:0001", "cmp:0001"], "No equations. More.", "No equations; housing-1"),
+        (["cmp:0001"], "", "housing-1"),
+        (["cmp:0001", "cmp:0002"], "A clash with cmp:0002. More.", "A clash with housing-2"),
+        (["cmp:0003"], "A clash with cmp:0003. More.", "A clash with cmp:0003"),
+        (["cmp:0001"], "housing.SLDPRT has no number. More.", "housing.SLDPRT has no number"),
+        ([], "The drawing omits its finish note. More.", "The drawing omits its finish note"),
+    ],
+    ids=["names-none", "once", "blank-title", "names-one", "names-an-id", "names-file", "no-part"],
+)
+def test_a_withdrawal_title_names_the_parts_its_display_title_names_none_of(
+    component_ids: list[str], observed: str, shown: str
+) -> None:
+    """A check's title can name no part, so findings on two parts share it (002 FR-031, cycle 16's
+    Tier 2 review): a withdrawal's title is the display title and, when that names none of the
+    finding's parts - by its name, by its id where the name is blank or unknown, or by its
+    document's file name - their names after "; ", each once, or alone after a blank title. A
+    title that names one of them, or a finding with no part, keeps the display title."""
+    assert titles.withdrawal_title(on(component_ids, observed), NAMES, FILES) == shown
+
+
+def test_a_withdrawal_title_counts_a_part_named_only_where_its_name_stands_whole() -> None:
+    """A name inside a longer one names nothing, as `COMPONENT_ID` reads an id: "pin-10" is not
+    "pin-1", "spindle" is not "pin", nor "spin.SLDPRT" "pin.SLDPRT"; "pin-1's" names pin-1."""
+    names = {"cmp:0001": "pin-1", "cmp:0002": "pin"}
+    files = {"cmp:0001": "pin.SLDPRT", "cmp:0002": "pin.SLDPRT"}
+
+    def shown(component_id: str, observed: str) -> str:
+        return titles.withdrawal_title(on([component_id], observed), names, files)
+
+    assert shown("cmp:0001", "pin-10 is loose. More.") == "pin-10 is loose; pin-1"
+    assert shown("cmp:0002", "The spindle is loose. More.") == "The spindle is loose; pin"
+    assert shown("cmp:0002", "spin.SLDPRT is loose. More.") == "spin.SLDPRT is loose; pin"
+    assert shown("cmp:0001", "pin-1's bore is short. More.") == "pin-1's bore is short"
+
+
 # --- one finding's body, as the pane receives it ----------------------------------------------
 
 

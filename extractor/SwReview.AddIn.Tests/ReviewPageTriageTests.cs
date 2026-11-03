@@ -94,6 +94,11 @@ namespace SwReview.AddIn.Tests;
 /// Roadmap hole H-c-010 (002 T378): the decision recorded without a triage, pressed again with no outcome picked, is refused with a
 /// class of its own, `OutcomeNeeded`, whose sentence names the repair where `IllegalTransition`'s said to reload the review; the
 /// card shows the record above it, as after any refusal, and the note box keeps what was typed, so the retry posts it.
+///
+/// A withdrawal names its finding's title (002 T384; cycle 16): the backend names the finding's display title in each
+/// `finding.withdrawn` body, and the Transcript's withdrawal line - live, replayed or a read-only restore's - names it in
+/// parentheses right after the id, printed as sent, so a line with no "recorded" line before it still says which finding
+/// went; a body without a title, an older backend's, or with a blank one reads as before.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -2149,6 +2154,9 @@ public sealed class ReviewPageTriageTests
     /// The line comes back with the Transcript (002 T360): a review switch restores chat-2 from its snapshot, the session after
     /// the withdrawal, and replays its stream from the start into the Transcript, where the withdrawal's line ends with the
     /// backend's clause, as it did live.
+    /// *Changed 2026-11-03 on purpose (002 T386; cycle 16's Tier 2 review):* F-001's body names the finding's title, as the
+    /// backend's has since cycle 16, and its replayed line names it right after the id, as the live line does; F-003 goes too,
+    /// its body an older backend's, which names none, and its line reads as F-001's did here before.
     /// </summary>
     [Fact]
     public void AReplayedWithdrawalSaysWhatItTook()
@@ -2165,13 +2173,16 @@ public sealed class ReviewPageTriageTests
             await driver.Click("view-transcript");
             await driver.Push(OtherChat, 1, "finding", Finding("F-001"));
             await driver.Push(OtherChat, 2, "finding", Finding("F-002"));
-            await driver.Push(OtherChat, 3, "disposition", DispositionEvent("F-001", RejectedWrong()));
-            await driver.Push(OtherChat, 4, "finding.withdrawn", Took("F-001", RejectedWrong(), TookRejectedWrong));
+            await driver.Push(OtherChat, 3, "finding", Finding("F-003"));
+            await driver.Push(OtherChat, 4, "disposition", DispositionEvent("F-001", RejectedWrong()));
+            await driver.Push(OtherChat, 5, "disposition", DispositionEvent("F-003", RejectedWrong()));
+            await driver.Push(OtherChat, 6, "finding.withdrawn", Titled(Took("F-001", RejectedWrong(), TookRejectedWrong), WithdrawnTitle));
+            await driver.Push(OtherChat, 7, "finding.withdrawn", Took("F-003", RejectedWrong(), TookRejectedWrong));
             await driver.Settle();
 
-            Assert.Contains(
-                "F-001 withdrawn: " + BoughtReason + "; " + TookRejectedWrong,
-                ReviewPageDriver.Strings(await driver.Read(ReadTranscript), "markers"));
+            string[] markers = ReviewPageDriver.Strings(await driver.Read(ReadTranscript), "markers");
+            Assert.Contains("F-001 (" + WithdrawnTitle + ") withdrawn: " + BoughtReason + "; " + TookRejectedWrong, markers);
+            Assert.Contains("F-003 withdrawn: " + BoughtReason + "; " + TookRejectedWrong, markers);
         });
     }
 
@@ -2423,6 +2434,84 @@ public sealed class ReviewPageTriageTests
             Assert.True(transcript.GetProperty("noteFirst").GetBoolean(), "a withdrawal is not after the restored Transcript's note.");
             Assert.Equal(0, (await driver.Read(ReadInjected)).GetProperty("injected").GetInt32());
             Assert.Equal(new[] { "F-002" }, ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
+        });
+    }
+
+    // ---- a withdrawal names its finding's title (002 T384; cycle 16) ----------------------------
+
+    /// <summary>
+    /// The live line (002 T384): F-001 goes with the Reject recorded on it, its body naming the finding's title, and its
+    /// Transcript line names the title in parentheses right after the id, then the reason and the clause, as sent; F-002 goes
+    /// undecided with a hostile title, which reaches the Transcript as characters and never markup (FR-029); F-003's body, an
+    /// older backend's, names no title and F-004's a blank one, and each of those lines reads as before. Every card leaves
+    /// Results.
+    /// </summary>
+    [Fact]
+    public void AWithdrawalNamesItsFindingsTitleAfterItsId()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await driver.StartReview();
+            int seq = 0;
+            foreach (string id in new[] { "F-001", "F-002", "F-003", "F-004" })
+            {
+                await driver.Push(Chat, ++seq, "finding", Finding(id));
+            }
+
+            await driver.Push(Chat, ++seq, "disposition", DispositionEvent("F-001", RejectedWrong()));
+            await driver.Push(Chat, ++seq, "finding.withdrawn", Titled(Took("F-001", RejectedWrong(), TookRejectedWrong), WithdrawnTitle));
+            await driver.Push(Chat, ++seq, "finding.withdrawn", Titled(Undecided("F-002"), HostileTitle));
+            await driver.Push(Chat, ++seq, "finding.withdrawn", Undecided("F-003"));
+            await driver.Push(Chat, ++seq, "finding.withdrawn", Titled(Undecided("F-004"), " "));
+            await driver.Settle();
+
+            string[] markers = ReviewPageDriver.Strings(await driver.Read(ReadTranscript), "markers");
+            Assert.Contains("F-001 (" + WithdrawnTitle + ") withdrawn: " + BoughtReason + "; " + TookRejectedWrong, markers);
+            Assert.Contains("F-002 (" + HostileTitle + ") withdrawn: " + BoughtReason, markers);
+            Assert.Contains("F-003 withdrawn: " + BoughtReason, markers);
+            Assert.Contains("F-004 withdrawn: " + BoughtReason, markers);
+            Assert.Equal(0, (await driver.Read(ReadInjected)).GetProperty("injected").GetInt32());
+            Assert.Empty(ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
+        });
+    }
+
+    /// <summary>
+    /// The restored lines (002 T384): a read-only restore replays no Transcript, so no "recorded" line comes before its
+    /// withdrawals, and each line the snapshot's `withdrawn` names carries the finding's title right after the id, as the live
+    /// line does - F-001's, F-003's hostile one as characters - after the restored Transcript's note; F-004's body, written
+    /// before titles, names none and reads as before.
+    /// </summary>
+    [Fact]
+    public void AReadOnlyRestoreNamesEachWithdrawalsTitleAfterItsId()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 404,
+                Refusal("UnknownChat", "no chat " + OtherChat, false));
+            await driver.Route("GET", "/reviews/" + OtherRun, 200, WithWithdrawn(
+                Snapshot(OtherRun, true, Finding("F-002")),
+                Titled(Took("F-001", RejectedWrong(), TookRejectedWrong), WithdrawnTitle),
+                Titled(Took("F-003", RejectedWrong(), TookRejectedWrong), HostileTitle),
+                Took("F-004", RejectedWrong(), TookRejectedWrong)));
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            await driver.Click("view-transcript");
+
+            JsonElement transcript = await driver.Read(ReadRestoredTranscript);
+            Assert.Equal(
+                new[]
+                {
+                    "F-001 (" + WithdrawnTitle + ") withdrawn: " + BoughtReason + "; " + TookRejectedWrong,
+                    "F-003 (" + HostileTitle + ") withdrawn: " + BoughtReason + "; " + TookRejectedWrong,
+                    "F-004 withdrawn: " + BoughtReason + "; " + TookRejectedWrong,
+                },
+                ReviewPageDriver.Strings(transcript, "markers"));
+            Assert.True(transcript.GetProperty("noteFirst").GetBoolean(), "a withdrawal is not after the restored Transcript's note.");
+            Assert.Equal(0, (await driver.Read(ReadInjected)).GetProperty("injected").GetInt32());
         });
     }
 
@@ -2824,6 +2913,27 @@ public sealed class ReviewPageTriageTests
             { "disposition", disposition },
             { "taken", clause },
         });
+
+    /// <summary>The `finding.withdrawn` body of an undecided finding an answer's restate withdrew, as an older backend wrote it.</summary>
+    private static string Undecided(string findingId) =>
+        JsonSerializer.Serialize(new Dictionary<string, object?> { { "finding_id", findingId }, { "reason", BoughtReason } });
+
+    /// <summary>
+    /// <paramref name="withdrawal"/>, a `finding.withdrawn` body, naming <paramref name="title"/>: the finding's display title,
+    /// as the backend names it since 002 cycle 16.
+    /// </summary>
+    private static string Titled(string withdrawal, string title)
+    {
+        JsonObject body = JsonNode.Parse(withdrawal)!.AsObject();
+        body["title"] = title;
+        return body.ToJsonString();
+    }
+
+    /// <summary>A finding's display title as a withdrawal names it (002 cycle 16): whole, its part named.</summary>
+    private const string WithdrawnTitle = "FICT M8x1 is fine pitch on FICT-pin-1 (M8's coarse pitch is 1.25)";
+
+    /// <summary>A title no page could compose, markup that must reach the Transcript as characters (FR-029).</summary>
+    private const string HostileTitle = "<img src=x onerror=alert(6)></p><script>alert(7)</script>";
 
     /// <summary>
     /// <paramref name="snapshot"/> naming <paramref name="withdrawals"/> - `finding.withdrawn` bodies that took a decision -

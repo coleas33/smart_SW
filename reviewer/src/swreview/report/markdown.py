@@ -327,7 +327,8 @@ def _render_withdrawn(
 ) -> list[str]:
     """Each finding an answer withdrew with a decision, in the order they went, right after the
     summary whose counts no longer hold them (002 FR-031, roadmap hole H-g-010): the Transcript's
-    line - its id, why it went, and the backend's clause naming the decision and triage it took.
+    line - its id, its title when the body names one (`_titled`, cycle 16), why it went, and the
+    backend's clause naming the decision and triage it took.
     A re-run's (Check again, feature 015) earlier records' come first, each ending with the words
     file's `withdrawn.earlier` naming the session that withdrew it, since its id is that
     session's and may name another finding here (015 cycle 12's Tier 1 and Codex reviews).
@@ -337,12 +338,20 @@ def _render_withdrawn(
         "## Withdrawn with a decision",
         "",
         *(
-            f"- {body['finding_id']} withdrawn: {body['reason']}; {body['taken']}"
+            f"- {body['finding_id']}{_titled(body)} withdrawn: {body['reason']}; {body['taken']}"
             + (mark.format(session_id=body["session_id"]) if carried else "")
             for bodies, carried in ((earlier, True), (withdrawn, False))
             for body in bodies
         ),
     ]
+
+
+def _titled(body: Mapping[str, Any]) -> str:
+    """What a withdrawal's line names right after its id: " (<title>)", the finding's display
+    title as `body` names it (002 FR-031, cycle 16); nothing for a body without one, an older
+    stream's, or with a blank one, whose line is as before."""
+    title = body.get("title")
+    return f" ({title})" if isinstance(title, str) and title.strip() else ""
 
 
 # --- bought parts (feature 013) ----------------------------------------------------------

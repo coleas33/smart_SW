@@ -9,14 +9,16 @@ brief and the explanation pass's prompt. It must not move, and nothing here chan
 **The display title** is what a person reads, and the owner's decision 2A of 2026-09-23 (feature
 009 research R2.28) is that it is built only where a person reads it: whole - never cut - with
 every part named where the part has a name. `display_title` is the one function that builds it,
-and every surface a person reads calls it, directly or through the two helpers below:
+and every surface a person reads calls it, directly or through the helpers below:
 
 - `pane_finding` - one finding as the pane receives it: the `finding` event
   (`ToolContext.finding_body`, used by the tool layer and by the runner's re-announcement) and
   the snapshot's findings (`report/snapshot.py`);
 - `with_display_titles` - the ranking rows the pane prints (`report/summary.review_ranking`, and
   both check bodies' `attention` in `chat/server.py`) and `report.md`'s Start here;
-- `report/markdown.py` - each finding's heading.
+- `report/markdown.py` - each finding's heading;
+- `withdrawal_title` - the title a `finding.withdrawn` body names (`ToolContext.withdraw_findings`
+  and the runner's folds), its parts' names after it when it names none of them (002 cycle 16).
 
 The page prints `title` verbatim wherever it arrives; it builds no title (contracts/plain-words.md
 section 2).
@@ -31,12 +33,13 @@ Pure: it reads its arguments and writes nothing.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 from swreview.findings import Finding
 from swreview.report.attention import AttentionRow, Ranking
-from swreview.report.names import with_component_names
+from swreview.report.names import and_list, with_component_names
 
 __all__ = [
     "TITLE_LENGTH",
@@ -46,6 +49,7 @@ __all__ = [
     "title_from",
     "titled_rows",
     "with_display_titles",
+    "withdrawal_title",
 ]
 
 TITLE_LENGTH = 80
@@ -79,6 +83,34 @@ def display_title(finding: Finding, names: Mapping[str, str]) -> str:
     recorded = finding.title == title_from(finding.observed)
     whole = first_sentence(finding.observed) if recorded else finding.title
     return with_component_names(whole, names)
+
+
+def withdrawal_title(finding: Finding, names: Mapping[str, str], files: Mapping[str, str]) -> str:
+    """The title a `finding.withdrawn` body names (002 FR-031, cycle 16): the display title, and,
+    when it names none of the finding's parts, their names after "; ", so a line printed from the
+    body alone says which part went though findings on two parts share a display title (cycle
+    16's Tier 2 review).
+
+    A part is named as the display title names it, by its name in `names` or by its id when the
+    name is blank or unknown, and each is named once. A title names a part when it holds that, or
+    the file name of the part's document in `files` (`component_files`), whole: no letter, digit
+    or underscore either side, as `report/names.COMPONENT_ID` reads an id, so "pin-10" does not
+    name "pin-1". A finding with no part keeps its display title, and a blank display title gives
+    the names alone.
+    """
+    title = display_title(finding, names)
+    parts = list(dict.fromkeys(with_component_names(part, names) for part in finding.component_ids))
+    named = [*parts, *(files[part] for part in finding.component_ids if part in files)]
+    if not parts or any(_holds(title, name) for name in named):
+        return title
+    return f"{title}; {and_list(parts)}" if title.strip() else and_list(parts)
+
+
+def _holds(text: str, name: str) -> bool:
+    """Whether `text` holds `name`, a non-blank one, whole: no letter, digit or underscore either
+    side of it."""
+    whole = rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])"
+    return bool(name.strip()) and re.search(whole, text) is not None
 
 
 def pane_finding(finding: Finding, names: Mapping[str, str]) -> dict[str, Any]:

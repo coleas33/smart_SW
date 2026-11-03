@@ -164,6 +164,17 @@ def withdrawn(events: Events) -> list[dict[str, Any]]:
     ]
 
 
+def announced(events: Events) -> dict[str, str]:
+    """Each finding id's title as its last `finding` event named it, the display title: what a
+    withdrawal of it names (002 T382; cycle 16).
+
+    *Changed 2026-11-03 (002 T386; cycle 16's read-only check):* a withdrawal names that title
+    with the finding's parts' names after it when it names none of them
+    (`report/titles.withdrawal_title`); `scripted_check`'s titles, "<file name> is scripted",
+    name the part's file, so here a withdrawal names just the title this reads."""
+    return {body["id"]: body["title"] for kind, body in events if kind == "finding"}
+
+
 def resumed_message(run: runner.ReviewRun) -> str:
     return str([message for message in run.messages if message["role"] == "user"][1]["content"])
 
@@ -174,18 +185,22 @@ def resumed_message(run: runner.ReviewRun) -> str:
 def test_all_bought_withdraws_the_unclear_parts_findings_with_an_event_each(
     tmp_path: Path, scripted_registry: None
 ) -> None:
+    """*Changed 2026-11-03 on purpose (002 T382; cycle 16):* each withdrawal also names its
+    finding's title, as its `finding` event announced it."""
     events: Events = []
     run = graded(tmp_path, events=events)
     pin_findings = ids_on(run, PIN_ID)
     plate_findings = ids_on(run, PLATE_ID)
     assert len(pin_findings) == 2 and len(plate_findings) == 2
+    titles = announced(events)
 
     run.answer_evidence_batch([("ER-001", "All bought")])
 
     assert ids_on(run, PIN_ID) == []
     assert ids_on(run, PLATE_ID) == plate_findings
     assert withdrawn(events) == [
-        {"finding_id": finding_id, "reason": BOUGHT_REASON} for finding_id in pin_findings
+        {"finding_id": finding_id, "title": titles[finding_id], "reason": BOUGHT_REASON}
+        for finding_id in pin_findings
     ]
 
 
@@ -565,6 +580,10 @@ def context_with_findings(count: int) -> tuple[Any, Events]:
 
 
 def test_withdraw_findings_removes_them_in_session_order_and_announces_each() -> None:
+    """*Changed 2026-11-03 on purpose (002 T382; cycle 16):* each body also names its finding's
+    display title, here the title "t" as written, since it is not the one `title_from` records.
+    *Changed 2026-11-03 on purpose (002 T386; cycle 16's Tier 2 review):* "t" names none of the
+    finding's parts, so the name of its part, housing-1, follows it."""
     context, events = context_with_findings(3)
 
     gone = context.withdraw_findings(["F-003", "F-001"], "a reason")
@@ -572,8 +591,14 @@ def test_withdraw_findings_removes_them_in_session_order_and_announces_each() ->
     assert gone == ["F-001", "F-003"]
     assert [finding.id for finding in context.require_session().findings] == ["F-002"]
     assert events == [
-        ("finding.withdrawn", {"finding_id": "F-001", "reason": "a reason"}),
-        ("finding.withdrawn", {"finding_id": "F-003", "reason": "a reason"}),
+        (
+            "finding.withdrawn",
+            {"finding_id": "F-001", "title": "t; housing-1", "reason": "a reason"},
+        ),
+        (
+            "finding.withdrawn",
+            {"finding_id": "F-003", "title": "t; housing-1", "reason": "a reason"},
+        ),
     ]
 
 
@@ -598,7 +623,12 @@ def test_a_withdrawal_names_the_decision_and_triage_it_took() -> None:
     """002 T358 (roadmap hole H-g-010): a finding withdrawn with a decision takes it with it, and
     its `finding.withdrawn` body says so - the disposition it held, and the words file's clause
     naming the decision and, when one was recorded, its triage, which the Transcript prints after
-    the reason - while an undecided finding's body is as before."""
+    the reason - while an undecided finding's body is as before.
+
+    *Changed 2026-11-03 on purpose (002 T382; cycle 16):* each body also names its finding's
+    display title, here the title "t" as written, decided or not. *Changed 2026-11-03 on purpose
+    (002 T386; cycle 16's Tier 2 review):* "t" names none of the finding's parts, so the name of
+    its part, housing-1, follows it."""
     from swreview.report.dispositions import set_disposition
 
     context, events = context_with_findings(3)
@@ -618,6 +648,7 @@ def test_a_withdrawal_names_the_decision_and_triage_it_took() -> None:
             "finding.withdrawn",
             {
                 "finding_id": "F-001",
+                "title": "t; housing-1",
                 "reason": "a reason",
                 "disposition": held["F-001"],
                 "taken": "your Reject (wrong) went with it",
@@ -627,12 +658,16 @@ def test_a_withdrawal_names_the_decision_and_triage_it_took() -> None:
             "finding.withdrawn",
             {
                 "finding_id": "F-002",
+                "title": "t; housing-1",
                 "reason": "a reason",
                 "disposition": held["F-002"],
                 "taken": "your Accept went with it",
             },
         ),
-        ("finding.withdrawn", {"finding_id": "F-003", "reason": "a reason"}),
+        (
+            "finding.withdrawn",
+            {"finding_id": "F-003", "title": "t; housing-1", "reason": "a reason"},
+        ),
     ]
 
 
@@ -652,6 +687,68 @@ def test_a_withdrawn_pass_names_its_miss_as_a_miss() -> None:
 
     [(_, body)] = events
     assert body["taken"] == "your Accept (wrong: a miss) went with it"
+
+
+def test_a_withdrawal_names_its_findings_display_title() -> None:
+    """002 T382 (cycle 16; FR-031): each `finding.withdrawn` body names its finding's display title,
+    `title`, decided or not - the title its `finding` event names: the whole first sentence of what
+    it observed, its part named, where the recorded title is cut and names the part by its id. A
+    line printed from the body alone, `report.md`'s or a read-only restore's, then says which
+    finding went."""
+    from swreview.report.dispositions import set_disposition
+    from swreview.report.titles import title_from
+
+    context, events = context_with_findings(2)
+    session = context.require_session()
+    observed = (
+        "cmp:0001 holds a fine-pitch thread that is not in the standard list for its nominal "
+        "size, so the drawing must call it out. FICT a second sentence."
+    )
+    session.findings[:] = [
+        finding.model_copy(update={"title": title_from(observed), "observed": observed})
+        for finding in session.findings
+    ]
+    assert session.findings[0].title.startswith("cmp:0001 holds")
+    assert session.findings[0].title.endswith("…")
+    set_disposition(session, "F-001", "accepted", "FICT to fix", "FICT-ENG")
+
+    context.withdraw_findings(["F-001", "F-002"], "a reason")
+
+    whole = (
+        "housing-1 holds a fine-pitch thread that is not in the standard list for its nominal "
+        "size, so the drawing must call it out"
+    )
+    assert [(body["finding_id"], body.get("title"), "taken" in body) for _, body in events] == [
+        ("F-001", whole, True),
+        ("F-002", whole, False),
+    ]
+
+
+def test_a_withdrawal_names_its_findings_parts_where_its_title_names_none() -> None:
+    """002 T386 (cycle 16's Tier 2 review; FR-031): a check's title can name no part - "the
+    equation manager holds no equations" - so findings on two parts share it, and a withdrawal whose
+    title names none of its finding's parts names them after it: a line printed from the body alone
+    then says which part went, decided or not. A title that names its part, here by its document's
+    file name, is the display title alone."""
+    from swreview.report.dispositions import set_disposition
+
+    context, events = context_with_findings(3)
+    session = context.require_session()
+    shared = "the equation manager holds no equations"
+    session.findings[:] = [
+        session.findings[0].model_copy(update={"title": shared}),
+        session.findings[1].model_copy(update={"title": shared, "component_ids": ["cmp:0002"]}),
+        session.findings[2].model_copy(update={"title": "housing.SLDPRT has no part number"}),
+    ]
+    set_disposition(session, "F-002", "accepted", "FICT to fix", "FICT-ENG")
+
+    context.withdraw_findings(["F-001", "F-002", "F-003"], "a reason")
+
+    assert [(body["finding_id"], body.get("title"), "taken" in body) for _, body in events] == [
+        ("F-001", f"{shared}; housing-1", False),
+        ("F-002", f"{shared}; housing-2", True),
+        ("F-003", "housing.SLDPRT has no part number", False),
+    ]
 
 
 def test_a_look_alike_request_is_an_evidence_request_like_any_other() -> None:
@@ -797,11 +894,15 @@ def test_all_bought_withdraws_an_accepted_pin_finding_as_before(
 ) -> None:
     """*Changed 2026-11-02 on purpose (002 T358; roadmap hole H-g-010):* the accepted pin finding
     is still withdrawn, and its withdrawal now names the Accept it took, with the disposition; the
-    undecided pin finding's is as before."""
+    undecided pin finding's is as before.
+
+    *Changed 2026-11-03 on purpose (002 T382; cycle 16):* each withdrawal also names its finding's
+    title, as its `finding` event announced it."""
     events: Events = []
     run = graded(tmp_path, events=events)
     pin_findings = ids_on(run, PIN_ID)
     recorded = dict(disposed(run, pin_decision="accepted"))
+    titles = announced(events)
     mark = len(events)
 
     run.answer_evidence_batch([("ER-001", "All bought")])
@@ -810,11 +911,16 @@ def test_all_bought_withdraws_an_accepted_pin_finding_as_before(
     assert withdrawn(events[mark:]) == [
         {
             "finding_id": pin_findings[0],
+            "title": titles[pin_findings[0]],
             "reason": BOUGHT_REASON,
             "disposition": recorded[pin_findings[0]],
             "taken": "your Accept went with it",
         },
-        {"finding_id": pin_findings[1], "reason": BOUGHT_REASON},
+        {
+            "finding_id": pin_findings[1],
+            "title": titles[pin_findings[1]],
+            "reason": BOUGHT_REASON,
+        },
     ]
     [row] = [item for item in run.session.coverage.skipped
              if item.check == "coverage.prerun.bought_parts"]
@@ -885,19 +991,25 @@ def test_the_views_name_a_decided_withdrawal_from_the_sessions_own_stream(
     renders - a turn's end, a decision, the minutes, Send's saves - names the finding the answer
     withdrew with the Accept recorded on it, read from the stream the session wrote; and after a
     re-run's rotation moved that stream aside and left another session's in its place, from the
-    rotated one (cycle 6's `_own_stream` rule)."""
+    rotated one (cycle 6's `_own_stream` rule).
+
+    *Changed 2026-11-03 on purpose (002 T382; cycle 16):* the line names the finding's title, as
+    its `finding` event announced it, right after the id; and the undecided pin finding's id now
+    starts no line at all, where "- <id> withdrawn:" alone would let a titled line of it pass."""
     from swreview.agent.providers import AgentEvent
 
-    run = graded(tmp_path)
+    events: Events = []
+    run = graded(tmp_path, events=events)
     pin = ids_on(run, PIN_ID)
+    titles = announced(events)
     disposed(run, pin_decision="accepted")
     run.answer_evidence_batch([("ER-001", "All bought")])
-    named = f"- {pin[0]} withdrawn: {BOUGHT_REASON}; your Accept went with it"
+    named = f"- {pin[0]} ({titles[pin[0]]}) withdrawn: {BOUGHT_REASON}; your Accept went with it"
 
     run.write_views(save=False, best_effort=False)
 
     assert named in report_lines(run)
-    assert not any(line.startswith(f"- {pin[1]} withdrawn:") for line in report_lines(run))
+    assert not any(line.startswith(f"- {pin[1]} ") for line in report_lines(run))
 
     stream = run.events_path
     stream.rename(stream.with_name("events.1.jsonl"))

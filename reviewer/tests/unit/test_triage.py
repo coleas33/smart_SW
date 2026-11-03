@@ -1151,3 +1151,55 @@ def test_a_withdrawal_of_a_finding_the_session_still_holds_is_not_named() -> Non
         f"- F-007 withdrawn: {WITHDRAWN_BECAUSE}; {rejected}",
         "",
     ]
+
+
+def test_a_withdrawn_line_names_its_findings_title_after_its_id() -> None:
+    """002 T382 (cycle 16; FR-031): each line under "Withdrawn with a decision" names the finding's
+    title, as its body names it, in parentheses right after its id, so `report.md` says which
+    finding went - a re-run's carried withdrawal too, whose id is an earlier session's (015 cycle
+    12). A body without a title, an older stream's, or with a blank one, is printed as before."""
+    session = triage_session(2)
+    rejected = "your Reject (wrong) went with it"
+    accepted = "your Accept (real but already known) went with it"
+    earlier = "00000000-0000-4000-8000-000000000016"
+    carried = [
+        {
+            "finding_id": "F-003",
+            "title": "FICT the pin's thread is fine pitch",
+            "reason": WITHDRAWN_BECAUSE,
+            "disposition": REJECTED_WRONG,
+            "taken": rejected,
+            "session_id": earlier,
+        },
+        {
+            "finding_id": "F-005",
+            "reason": WITHDRAWN_BECAUSE,
+            "disposition": ACCEPTED_KNOWN,
+            "taken": accepted,
+            "session_id": earlier,
+        },
+    ]
+    started, *own = stream_of(
+        session,
+        withdrawal(
+            "F-007", title="FICT housing-1 has no part number", disposition=REJECTED_WRONG,
+            taken=rejected,
+        ),
+        withdrawal("F-008", disposition=ACCEPTED_KNOWN, taken=accepted),
+        withdrawal("F-009", title=" ", disposition=ACCEPTED_KNOWN, taken=accepted),
+    )
+    first = started.model_copy(update={"body": {**started.body, "carried_withdrawals": carried}})
+
+    lines = render_report(session, events=[first, *own]).splitlines()
+
+    start = lines.index("## Withdrawn with a decision")
+    mark = f" (earlier check run, session {earlier})"
+    assert lines[start + 2 : start + 8] == [
+        f"- F-003 (FICT the pin's thread is fine pitch) withdrawn: {WITHDRAWN_BECAUSE}; "
+        f"{rejected}{mark}",
+        f"- F-005 withdrawn: {WITHDRAWN_BECAUSE}; {accepted}{mark}",
+        f"- F-007 (FICT housing-1 has no part number) withdrawn: {WITHDRAWN_BECAUSE}; {rejected}",
+        f"- F-008 withdrawn: {WITHDRAWN_BECAUSE}; {accepted}",
+        f"- F-009 withdrawn: {WITHDRAWN_BECAUSE}; {accepted}",
+        "",
+    ]

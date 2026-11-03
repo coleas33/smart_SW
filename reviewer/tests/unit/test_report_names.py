@@ -20,6 +20,7 @@ import hashlib
 import pytest
 
 from swreview.ir.loader import load_package
+from swreview.report import names as report_names
 from swreview.report.attention import rank
 from swreview.report.explanations import REQUESTED_CHARS, _prompt
 from swreview.report.names import and_list, component_names, plural, with_component_names
@@ -48,6 +49,25 @@ def test_component_names_of_the_fixture_package() -> None:
         "cmp:0002": "dowel-pin-1",
         "cmp:0003": "housing-1",
         "cmp:0004": "dowel-pin-2",
+    }
+
+
+# --- component_files (002 T386; cycle 16's Tier 2 review) ------------------------------
+
+
+def test_component_files_is_each_components_document_file_name() -> None:
+    """A title can name a part by its document's file name as well as by its name
+    (`report/titles.withdrawal_title`): `{component id: file name}`, the instances of one document
+    sharing it, and none for a component whose document the package does not hold."""
+    package = attention_package()
+    stray = package.components[1].model_copy(update={"id": "cmp:0005", "document_id": "doc:9"})
+    package = package.model_copy(update={"components": [*package.components, stray]})
+
+    assert report_names.component_files(package) == {
+        "cmp:0001": "cover-assy.SLDASM",
+        "cmp:0002": "dowel-pin.SLDPRT",
+        "cmp:0003": "housing.SLDPRT",
+        "cmp:0004": "dowel-pin.SLDPRT",
     }
 
 

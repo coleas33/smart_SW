@@ -244,11 +244,16 @@
    * in the backend's words. A finding that held a decision took it with it, and the line ends with
    * the backend's clause naming it, "; your Reject (wrong) went with it", printed as sent (002
    * FR-031, roadmap hole H-g-010); a fold's withdrawal and an undecided finding's carry none.
+   * A body that names the finding's title, its display title as the backend names it, has it in
+   * parentheses right after the id, "F-003 (<title>) withdrawn: <reason>", so a line no
+   * "recorded" line precedes - a read-only restore's - still says which finding went (002 cycle
+   * 16); a body with none, an older backend's, or with a blank one, reads as before.
    */
   function withdrawalMarker(withdrawal) {
     var body = withdrawal || {};
+    var title = typeof body.title === 'string' && body.title.trim() ? ' (' + body.title + ')' : '';
     var taken = typeof body.taken === 'string' ? '; ' + body.taken : '';
-    return marker(String(body.finding_id || ''), ' withdrawn: ' + String(body.reason || '') + taken);
+    return marker(String(body.finding_id || ''), title + ' withdrawn: ' + String(body.reason || '') + taken);
   }
 
   /** One Transcript line about one finding: its id, then what happened to it. */

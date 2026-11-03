@@ -1596,7 +1596,10 @@ def test_a_folded_reruns_own_id_is_withdrawn_before_the_fold_is_announced(
     announced the re-run under its own id, F-002, and the fold put it under F-001, so F-002 is
     withdrawn - naming F-001, the id it folded onto - right before F-001's `finding` event. A
     reader of the stream then holds exactly the ids the session holds, and every event validates
-    against the contract."""
+    against the contract.
+
+    *Changed 2026-11-03 on purpose (002 T382; cycle 16):* the withdrawal also names the title the
+    fold's `finding` event announces next, the display title F-002 was first announced with."""
     run, _ = decided_before_the_answer(review, "unresolved")
 
     events = events_of(run)
@@ -1605,11 +1608,18 @@ def test_a_folded_reruns_own_id_is_withdrawn_before_the_fold_is_announced(
         for index, event in enumerate(events)
         if event["type"] == "finding" and event["body"]["id"] == "F-001"
     )
+    [first] = [
+        event["body"]["title"]
+        for event in events
+        if event["type"] == "finding" and event["body"]["id"] == "F-002"
+    ]
     withdrawal = events[refolded - 1]
+    assert first == events[refolded]["body"]["title"]
     assert (withdrawal["type"], withdrawal["body"]) == (
         "finding.withdrawn",
         {
             "finding_id": "F-002",
+            "title": first,
             "reason": FOLDED_REASON.format(id="F-001"),
             "folded_into": "F-001",
         },
@@ -1816,7 +1826,12 @@ def test_a_restate_keeps_or_clears_a_decision_as_a_rerun_does(
     decided F-001 (`_restated_targets`, its verdict key): with the status and severity decided the
     fold keeps the whole disposition, and with either changed it clears it and the card says so,
     the line naming the restate. Either way F-002, which the restated call announced under its own
-    id, is withdrawn with `folded_into` right before F-001's `finding` event."""
+    id, is withdrawn with `folded_into` right before F-001's `finding` event.
+
+    *Changed 2026-11-03 on purpose (002 T382; cycle 16):* the withdrawal also names the title
+    F-001's `finding` event announces next, the restated finding's display title. *Changed
+    2026-11-03 on purpose (002 T386; cycle 16's Tier 2 review):* that title, "Holes on the pair",
+    names neither part of the pair, so their names follow it."""
     run = review([turn("nothing yet")])
     run.session.findings[:] = [
         judged("F-001", disposition=DECIDED),
@@ -1833,7 +1848,12 @@ def test_a_restate_keeps_or_clears_a_decision_as_a_rerun_does(
     after = [(event["type"], event["body"]) for event in events_of(run)[mark:]]
     assert after[0] == (
         "finding.withdrawn",
-        {"finding_id": "F-002", "reason": FOLDED_REASON.format(id="F-001"), "folded_into": "F-001"},
+        {
+            "finding_id": "F-002",
+            "title": f"{after[1][1]['title']}; housing-1 and housing-2",
+            "reason": FOLDED_REASON.format(id="F-001"),
+            "folded_into": "F-001",
+        },
     )
     assert (after[1][0], after[1][1]["id"], after[1][1]["disposition"]) == (
         "finding",
@@ -1854,6 +1874,29 @@ def test_a_restate_keeps_or_clears_a_decision_as_a_rerun_does(
             )
         ]
     )
+
+
+def test_a_folds_withdrawal_names_the_display_title_its_finding_is_announced_with(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """002 T382 (cycle 16; FR-031): a fold's withdrawal names its finding's display title, the
+    title of the `finding` event it announces next - each part named, where the recorded title
+    names it by its id - so the Transcript's line for the id that went says which finding it was."""
+    run = review([turn("nothing yet")])
+    recorded = "cmp:0001 and cmp:0002: holes on the pair"
+    run.session.findings[:] = [
+        judged("F-001", disposition=DECIDED, title=recorded),
+        judged("F-002", title=recorded),
+    ]
+    mark = len(events_of(run))
+
+    run._reconcile_restated(1, {}, [], {})
+
+    after = [(event["type"], event["body"]) for event in events_of(run)[mark:]]
+    assert [(kind, body.get("title")) for kind, body in after[:2]] == [
+        ("finding.withdrawn", "housing-1 and housing-2: holes on the pair"),
+        ("finding", "housing-1 and housing-2: holes on the pair"),
+    ]
 
 
 def test_a_restates_cleared_notice_carries_the_tally_the_restate_leaves(
