@@ -8155,3 +8155,8 @@ ticked.
   - The whole suites on the final tree: recorded once they run.
   - *Changed 2026-11-03:* the tree above came before the Tier 2 review's fixes and the read-only
     check's, whose gates are T400's two sub-items in [tasks.md](tasks.md).
+  - *Done 2026-11-03, cycle 22 stacked on cycle 21:* the gates above ran on cycle 22 before it was
+    stacked on cycle 21 (Phase 36, T393 to T396, itself on feature 007's cycle 20). The two met in
+    twelve files, and each kept both cycles' text, the lower cycle's first; 002's row is 389 / 7 / 0
+    at T397 and 392 / 4 / 0 at the close, and the pane fixtures regenerate byte-identical, so the
+    sha256 pin stands. T400's sub-item of the stacking in [tasks.md](tasks.md) names each meeting.
