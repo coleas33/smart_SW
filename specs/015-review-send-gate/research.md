@@ -2467,6 +2467,15 @@ each is noted on the task lines it touches, no task box is ticked for it, and
   2026-11-02 on cycle 12's read-only check:* one more of before it, `test_chat_server.py`'s
   helper `withdrawn_part` (002 T362), which reads `report.md` through the new line-based
   `withdrawn_of` that `test_recheck.py` now shares, its lines as before, with a dated note.
+  *Changed 2026-11-02 on stacking cycle 12 onto 002 cycle 13 (T123):* two of this cycle's own,
+  each with a dated note, neither loosened. Cycle 13's read-only restore names a cleared line
+  without the call to decide again (`RerunWords.read_only`), so T121's
+  `test_check_again_keeps_the_line_a_restate_left_in_every_view_until_a_decision`, the module's
+  only failure on the stacked tree, now expects its restarted backend's restore in those words
+  (`Regraded.read_only_line`), as exactly; the new chats' live snapshots and `report.md` keep the
+  stream's. And `test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_report_md`
+  gains a restore of the first re-run naming no `withdrawn` (*Left open*), a guard that passed at
+  once and failed on a mutant that named the start's `carried_withdrawals` there.
 - **Tests first**: T121's five cases failed before T122, each for want of the feature - the
   carry's two, no line written onto F-001; the routes' two, the new chat's snapshot naming no
   `cleared` and the re-run's `report.md` no withdrawal; and the contract's, `carried_withdrawals`
@@ -2492,7 +2501,17 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     already named in its session is told by its trailing words too - *since cycle 12's read-only
     check*, by `NOT_CARRIED_IN_SESSION`'s own words, read when called.
   - A Check again's replayed Transcript does not show the earlier withdrawals; `report.md` names
-    them (the Transcript after a restart is cycle 13's).
+    them (the Transcript after a restart is cycle 13's). *Settled 2026-11-02 on stacking cycle 12
+    onto 002 cycle 13 (T123):* a restarted backend's read-only restore does not show them either.
+    Cycle 13 gives a read-only snapshot `withdrawn`, which the restored Transcript prints, from
+    `withdrawn_lines`, the session's own withdrawals with a decision alone; the earlier ones stay
+    in the start's `carried_withdrawals` (`snapshot.carried_withdrawals`), which the live
+    Transcript does not replay either, the page ignoring the key. So the two views match, and
+    `report.md`, naming each with the session that withdrew it, is where they show. A Transcript
+    line for one would have to name that session too, as `report.md`'s does, since its id may name
+    another finding of the re-run (backlog, cycle 12). A guard pins it: the restore of the first
+    re-run in `test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_report_md`
+    names no `withdrawn`.
   - A Check again reads the earlier record's stream twice, at `session.started` and in the carry.
     A waiting record's stream is its checks' and any failed Send's, small beside the re-run's
     checks; the two reads were not measured against R2.17's bound.
