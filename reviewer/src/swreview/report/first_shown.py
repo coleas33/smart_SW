@@ -64,11 +64,15 @@ SET_UP = f"{PROVENANCE_CHECK}."
 (`benchmark/origins.SETUP_CHECK_PREFIXES`)."""
 
 READ_BUDGET_S = 2.0
-"""How long the match may spend opening earlier records, so a review's start, which also runs the
-checks first inside the add-in's 30 s call, never waits on it longer however many reviews of the
-document the seat keeps. The folders are read oldest first, so a finding only a review past the
-budget showed names no date rather than a later one. The match took about 10 ms a record of the
-big-assembly replay fixture (002 research.md, cycle 17)."""
+"""How long the match may spend opening the other reviews' records, so a review's start, which
+also runs the checks first inside the add-in's 30 s call, never waits on them longer however many
+reviews of the document the seat keeps. The review's own folder is read whatever the time: a
+re-run's earlier record is already held, and the few records its folder moved aside are this
+review's own. The folders are read oldest first, so a finding only a review past the budget showed
+names no date; but each record is dated by its own clock, so one read within the budget can name a
+later day than a review past it showed - a review sent after a restart days after its folder was
+named, say. The match took about 10 ms a record of the big-assembly replay fixture (002
+research.md, cycle 17)."""
 
 
 def document_name(path: str) -> str:
@@ -162,7 +166,9 @@ def _day(finding: Finding, record: ReviewSession, prerun: set[int]) -> str:
     clock the add-in names folders by: the day the review started, or, for a finding a turn raised
     after a review started unticked was sent (`model_status.sent_at`), the day it was sent. A
     record's own clock and not its folder's name, since Send - live, or after a restart, whose
-    re-run replaces the folder's `session.json` - can come days after the folder was named."""
+    re-run replaces the folder's `session.json` - can come days after the folder was named. A
+    re-grade from an answer given while the review waited (`regrade`) takes the Send's day too,
+    though it was shown before the Send: the record names no step's time."""
     status = record.model_status
     sent = status.sent_at if status is not None else None
     shown = record.started_at if sent is None or _before_any_turn(finding, prerun) else sent
@@ -174,7 +180,8 @@ def _same_parts(finding: Finding, parts: Mapping[str, str]) -> bool:
     to document id), an instance of a document the finding drew on (its `provenance`). A
     component's id is its place in each dump's numbering, so after an edit to the tree an earlier
     finding of another part can hold this review's number for a part; it gives no date. A finding
-    naming no component, or an entity renumbered within one document, is not told apart."""
+    naming no component, a component renumbered onto another instance of the same document, or an
+    entity renumbered within one document, is not told apart."""
     drew_on = {entry.document_id for entry in finding.provenance}
     return all(parts.get(component) in drew_on for component in finding.component_ids)
 
@@ -195,9 +202,9 @@ def first_shown_dates(
     first until `READ_BUDGET_S` is spent; their records (`_records`) that are of the document
     (`_names`). Each is read once; one that cannot be read, is cut off or is no review is skipped,
     and so is a run root that cannot be listed, so the review is never failed over an earlier one.
-    In the review's own folder, `run_dir`, the record is `earlier`, a Check again's, beside the
-    records the folder moved aside; with none, a first review's or a Retry's, nothing there is
-    read. Each record is dated by its own clock (`_day`).
+    In the review's own folder, `run_dir`, read whatever the time, the record is `earlier`, a
+    Check again's, beside the records the folder moved aside; with none, a first review's or a
+    Retry's, nothing there is read. Each record is dated by its own clock (`_day`).
 
     A pass gives none (owner decision 187A), and a finding the record no longer holds - one its
     review withdrew - gives none: the record is what the review raised. Nor does a finding on a
@@ -219,13 +226,13 @@ def first_shown_dates(
         stamp = _stamp(name, label)
         if stamp is None or stamp > before:
             continue
-        if monotonic() - started > READ_BUDGET_S:
-            break
         folder = root / name
         if folder == own:
             if earlier is None:
                 continue
             records = [earlier, *_records(folder, own=True)]
+        elif monotonic() - started > READ_BUDGET_S:
+            continue
         else:
             records = _records(folder, own=False)
         for record in records:
