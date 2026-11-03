@@ -190,7 +190,10 @@ class ToolContext:
     first_shown: dict[SubjectKey, str] = field(default_factory=dict)
     """For each subject key an earlier review of this document raised flagged, the earliest such
     review's date, `YYYY-MM-DD` (`report/first_shown.first_shown_dates`; 002 FR-031, cycle 17).
-    Set only by `start_review`, before any finding is recorded; empty for every other context."""
+    Set only by `start_review`, before any finding is recorded; empty for every other context.
+    *Changed 2026-11-03 (T392):* the day such a review showed it, by its record's own clock, and
+    the read budget and the check of the parts can leave a later one or none; 002 FR-031's T392
+    note gives the rule."""
     _drawing_read: str | None = field(default=None, init=False, repr=False)
     """What `drawing_read_mode` answered, once asked (feature 013)."""
 

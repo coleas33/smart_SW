@@ -7724,8 +7724,9 @@ earlier review showed, so the date rested on recall.
     (T392):* that guard is the default taken for components: a part renumbered onto another's
     number gives no date. Every id allocator numbers in sequence, so any edit that adds or removes
     a component, hole, feature, view or dimension shifts the ids after it, and an edit is usually
-    why a second review happens: an entity renumbered within one document can still move a date,
-    or lose one; for the owner (`docs/review-backlog.md`, cycle 17).
+    why a second review happens: a component renumbered onto another instance of the same
+    document, or an entity renumbered within one document, can still move a date, or lose one;
+    for the owner (`docs/review-backlog.md`, cycle 17).
   - Each earlier folder's `session.json` alone is read: a retry's or a Check again's rotated
     records (`session.N.json`) are not, so a finding only an earlier attempt in that folder raised
     gives no date, and its date is the folder's, the review it re-ran. A folder whose review was
@@ -7743,7 +7744,11 @@ earlier review showed, so the date rested on recall.
   - The time grows with the earlier reviews of the document on the seat, about 10 ms for each
     record of the size measured; none is read for another document. *Changed 2026-11-03 (T392):*
     the match stops after 2 s, oldest first, so a finding only a review past that showed names no
-    date; a narrower read of each record would fit more inside it (backlog, cycle 17).
+    date; a narrower read of each record would fit more inside it (backlog, cycle 17). *Changed
+    2026-11-03 (the read-only check):* each record being dated by its own clock, one read within
+    the budget can also name a later day than a review past it showed - a review sent after a
+    restart days after its folder was named, say; the review's own folder is read whatever the
+    time.
   - *Added 2026-11-03 (T392):* a follow-up turn or an answer on a later day than its review's
     start or Send dates what it raised by that start or Send: the record names no turn's time,
     though its stream's `finding` events do (backlog, cycle 17).
@@ -7763,7 +7768,8 @@ earlier review showed, so the date rested on recall.
     a finding a turn raised after a Send (`model_status.sent_at`), the day it was sent; a finding
     the checks raised before any turn - carried, the pre-run's or a set-up record, the origins
     `benchmark/origins.finding_origin` reads, read again in the match since that module's imports
-    reach the runner - keeps the start's.
+    reach the runner - keeps the start's. A re-grade from an answer given while the review waited
+    takes the Send's day too, though shown before it: the record names no step's time.
     The records moved aside (`session.<n>.json`) are read too, so what a waiting record showed
     keeps its day though the re-run raised it again. The review's smallest fix, `source ==
     "model"`, would have missed its own example: a check the model runs records `code`.
@@ -7777,6 +7783,15 @@ earlier review showed, so the date rested on recall.
     rules the match copies are pinned to `RunFolders.cs`, and `DocumentName`'s cases are one
     table both sides read, `reviewer/tests/fixtures/run-folders/document-names.json` (should-fix
     4).
+- **Read-only check** of those fixes (T392; 2026-11-03): no must-fix and six should-fix, all done
+  ([tasks.md](tasks.md), T392's second sub-item). The budget cut the review's own folder too,
+  the document's newest, dropping a re-run's earlier record though it was already held: the
+  budget now bounds the other reviews alone, and the own folder, with the records it moved aside,
+  is read whatever the time. `_same_parts`'s edges are pinned: a finding naming no component
+  keeps its date, and one on two parts gives none once either is another part's. The rest were
+  records: a component renumbered onto another instance of the same document, the budget's
+  later day and the re-grade while a review waited, above; FR-031's note on the budget, with
+  pointers to it in the contracts and `ToolContext.first_shown`; and one mutant's record.
 - **Gates** (T392; 2026-11-03), on the cycle's final tree:
   - The whole non-live suite, the tokenizer required, on Python 3.12.3: 18,970 passed and 5
     skipped, 27 of them this cycle's new cases. Its two warnings are neither of this cycle: the

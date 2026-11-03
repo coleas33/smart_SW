@@ -336,9 +336,10 @@ def finding_subject_key(finding: Finding) -> SubjectKey:
     (`report/first_shown`) matches its findings by this key, as Check again's carry does. There
     a re-encoded reference only loses a date. A component an edit to the tree renumbered onto
     another part's number gives none, since the match also asks that each component be an
-    instance of a document the earlier finding drew on; but an entity renumbered within one
-    document - a hole, a feature, a drawing's view or dimension - can move one onto another's
-    finding of the same check (002 research.md, cycle 17, and its Tier 2 review).
+    instance of a document the earlier finding drew on; but a component renumbered onto another
+    instance of the same document, or an entity renumbered within one document - a hole, a
+    feature, a drawing's view or dimension - can move one onto another's finding of the same
+    check (002 research.md, cycle 17, and its Tier 2 review).
     """
     locations = subject_locations(
         (ref.document_id, ref.sheet, ref.view, ref.annotation, ref.page, ref.persist_ref)
