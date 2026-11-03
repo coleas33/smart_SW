@@ -61,6 +61,7 @@
     },
     "timing_form": {
       "heading": "Minutes for this review",
+      "all_six": "Type all six, zero for none.",
       "save": "Save minutes",
       "saved": "The minutes are recorded."
     },

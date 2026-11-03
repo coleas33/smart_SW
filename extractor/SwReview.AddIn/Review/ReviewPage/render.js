@@ -1337,7 +1337,9 @@
    * labelled with its word and carrying its key, then Save, the line a save leaves and the place for a refusal,
    * both hidden, in `labels.timing_form`'s words. Text boxes, blank, so what is typed is what is posted and what
    * stays. Null with no labels, or a backend that names neither group: no words, no form (009 FR-030). `app.js`
-   * shows it, posts it and writes its line.
+   * shows it, posts it and writes its line. Since cycle 20 (roadmap hole H-a-015) a line under the heading,
+   * `labels.timing_form.all_six`, says to type all six, since Save stays off while any box is blank; labels that
+   * name no such line draw none.
    */
   function timingForm(labels) {
     var own = Object.prototype.hasOwnProperty;
@@ -1349,6 +1351,10 @@
     var heading = el('h2', null, labelOf(labels, 'timing_form', 'heading', ''));
     heading.id = 'timing-heading';
     form.appendChild(heading);
+    var allSix = labelOf(labels, 'timing_form', 'all_six', '');
+    if (allSix) {
+      form.appendChild(el('p', 'note timing-all-six', allSix));
+    }
     var keys = Object.keys(inputs);
     for (var index = 0; index < keys.length; index++) {
       var row = el('div', 'field');

@@ -868,6 +868,31 @@ public sealed class ReviewPageTimingTests
         });
     }
 
+    /// <summary>
+    /// Labels that name the form's words but no line to type all six - a backend from before cycle 20 - draw the form
+    /// without the line, and the page prints no words of its own in its place (009 FR-030); Save still waits for all six.
+    /// </summary>
+    [Fact]
+    public void LabelsThatNameNoLineDrawTheFormWithoutIt()
+    {
+        JsonObject labels = JsonNode.Parse(LabelsSample.Json())!.AsObject();
+        labels["timing_form"]!.AsObject().Remove("all_six");
+
+        ReviewPageDriver.Run(
+            driver => driver.InitialRoutes.Add(("GET", "/labels", 200, labels.ToJsonString())),
+            async driver =>
+            {
+                await Reviewed(driver);
+                await Type(driver, "417", "23.75", "331", string.Empty, "57", "86");
+                JsonElement form = await driver.Read(ReadForm);
+
+                Assert.True(form.GetProperty("shown").GetBoolean(), "labels without the line show no form.");
+                Assert.Equal(JsonValueKind.Null, form.GetProperty("allSix").ValueKind);
+                Assert.DoesNotContain(LabelsSample.TimingAllSix, form.GetProperty("bodyText").GetString());
+                Assert.True(form.GetProperty("saveDisabled").GetBoolean(), "Save is on with a field blank.");
+            });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>

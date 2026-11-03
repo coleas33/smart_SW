@@ -108,6 +108,11 @@ this route answers for a moment after the turn's `session.ended` while the backe
 report, is tried once more a second later; and what was typed on a review and not saved stays in
 page memory, as the questions' drafts do, and comes back when that review is shown again.
 
+*Amended 2026-11-03 (cycle 20; research R14):* Save is off while any field is blank, empty or
+spaces only, so the page posts all six, 0 typed for none, and never `null`; a line from the words
+file under the form's heading, `labels.timing_form.all_six`, says to type all six. This route's
+rules are unchanged: `null` still keeps what is recorded.
+
 ## 4. The ledger column
 
 `adoption.METRICS["median_net_saved_minutes"]` reads `scorecard.aggregate.median_net_saved_minutes`

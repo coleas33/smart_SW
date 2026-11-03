@@ -454,9 +454,9 @@ class Labels(ReviewModel):
     timing: dict[TimingInput, str]
     """The Review page's minutes form: the word for each human timing input, keyed by
     `TIMING_INPUTS` in their order, one field per key, posted under it (feature 007, cycle 18)."""
-    timing_form: dict[Literal["heading", "save", "saved"], str]
+    timing_form: dict[Literal["heading", "all_six", "save", "saved"], str]
     """The minutes form's heading, its button and the one line a save leaves (feature 007, cycle
-    18)."""
+    18); and the line under the heading that says to type all six (cycle 20)."""
     source: dict[Source, str]
     errors: dict[str, str]
 

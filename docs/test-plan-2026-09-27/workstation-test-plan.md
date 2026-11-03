@@ -1868,7 +1868,9 @@ none of them by hand: the timing bullet below writes them all once the review ha
   ended (after the answers' turn, if it asked questions) and every finding is judged, scroll to
   the end of Results, to **Minutes for this review**. Type each of the six from `notes\timing.txt`
   in the field that begins with its name: **Baseline**, **Supervision**, **Verification**, **False
-  alarms**, **Setup** and **By hand**; then press **Save minutes**. Pass: the line `The minutes are
+  alarms**, **Setup** and **By hand**. Type all six, 0 for none, as the line under the heading says
+  (`Type all six, zero for none.`): **Save minutes** stays off until all six are typed, so no field
+  counts as 0 unless you typed 0. Then press **Save minutes**. Pass: the line `The minutes are
   recorded.` shows under the button, and your numbers stay in their fields. The form is off while
   a turn runs: wait for it to end. If a sentence shows in place of that line, nothing was
   recorded: put right what it says (`Enter each as a number of minutes, 0 or more, then save
