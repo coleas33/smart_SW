@@ -1246,6 +1246,88 @@ def test_disposition_adds_a_late_triage_once(run_dir: Path, tmp_path: Path) -> N
     assert run_files(run_dir) == before
 
 
+def test_disposition_keeps_a_late_triages_note_and_takes_a_defers_triage(
+    run_dir: Path, tmp_path: Path
+) -> None:
+    """Owner decision 198A, from the console as from the pane (002 T364): an Accept recorded with
+    no note takes a late triage and keeps the note sent with it, its `by` and time as first
+    recorded; and a Defer recorded without a triage takes one when Defer is sent again with it,
+    and stays deferred, keeping its first note, `by` and time. The payload and the printed line
+    name the disposition as recorded. A Defer again with no triage is still refused, and writes
+    nothing."""
+    deferred_dir = tmp_path / "FICT-deferred"
+    shutil.copytree(run_dir, deferred_dir)
+    accepted = ("--decision", "accepted", "--by", "FICT-ENG", "--json")
+    payload(invoke("disposition", str(run_dir), "F-001", *accepted))
+    first_at = saved_disposition(run_dir)["at"]
+
+    body = payload(
+        invoke(
+            "disposition",
+            str(run_dir),
+            "F-001",
+            "--decision",
+            "accepted",
+            "--triage",
+            "new_and_real",
+            "--note",
+            "FICT first shown at an earlier sitting",
+            "--by",
+            "FICT-ENG-2",
+            "--json",
+        )
+    )
+
+    assert saved_disposition(run_dir) == {
+        "decision": "accepted",
+        "note": "FICT first shown at an earlier sitting",
+        "by": "FICT-ENG",
+        "at": first_at,
+        "triage": "new_and_real",
+    }
+    assert (body["decision"], body["note"], body["by"], body["triage"]) == (
+        "accepted",
+        "FICT first shown at an earlier sitting",
+        "FICT-ENG",
+        "new_and_real",
+    )
+
+    deferred = ("--decision", "deferred", "--note", "FICT first note", "--by", "FICT-ENG")
+    payload(invoke("disposition", str(deferred_dir), "F-001", *deferred, "--json"))
+    deferred_at = saved_disposition(deferred_dir)["at"]
+    before = run_files(deferred_dir)
+    again = invoke(
+        "disposition", str(deferred_dir), "F-001", "--decision", "deferred", "--by", "FICT-ENG-2"
+    )
+    assert again.exit_code == 1
+    assert "is deferred" in again.stderr
+    assert run_files(deferred_dir) == before
+
+    printed = invoke(
+        "disposition",
+        str(deferred_dir),
+        "F-001",
+        "--decision",
+        "deferred",
+        "--triage",
+        "wrong",
+        "--note",
+        "FICT later note",
+        "--by",
+        "FICT-ENG-2",
+    )
+
+    assert printed.exit_code == 0, printed.stdout + printed.stderr
+    assert printed.stdout.splitlines()[0] == "F-001: deferred (wrong) by FICT-ENG"
+    assert saved_disposition(deferred_dir) == {
+        "decision": "deferred",
+        "note": "FICT first note",
+        "by": "FICT-ENG",
+        "at": deferred_at,
+        "triage": "wrong",
+    }
+
+
 def test_disposition_reports_a_second_triage_as_its_own_refusal(run_dir: Path) -> None:
     """Roadmap hole H-g-012 (185A unchanged): a second triage on a finding accepted with one is
     reported as any refusal is - exit 1 and one line on stderr - its line naming its own class,

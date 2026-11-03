@@ -390,7 +390,7 @@ NO_TRIAGE = {
     "undecided": "No triage recorded yet",
     "accepted": "No triage recorded yet: pick one, then press Accept again",
     "rejected": "No triage recorded yet: pick one, then press Reject again",
-    "deferred": "No triage recorded yet: pick one, then press Accept or Reject",
+    "deferred": "No triage recorded yet: pick one, then press Defer again",
     "read_only": "No triage recorded yet",
 }
 """Roadmap hole H-c-008 (002 FR-031): what a flagged finding's card head says until its triage is
@@ -403,7 +403,12 @@ Defer (`dispositions._ALLOWED_FROM_DEFERRED`).
 it):* shorter, so a finding not yet decided reads one short line under its title at a docked
 pane's 300 px and names only the outcome row it already shows ("pick one"); and `read_only`, what
 such a card says while its review is read-only, whatever its decision, naming no press - a
-read-only review's buttons are off."""
+read-only review's buttons are off.
+
+*Changed 2026-11-02 on purpose (002 T364; owner decision 198A):* a Defer recorded without one
+says to press Defer again, which records the outcome and keeps the deferral, where it said to
+press Accept or Reject because a Defer could not follow a Defer. Every decision's words now name
+the same decision again."""
 
 
 def test_a_card_with_no_triage_names_the_repair() -> None:
