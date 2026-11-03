@@ -2282,7 +2282,12 @@ def test_check_again_keeps_the_line_a_restate_left_in_every_view_until_a_decisio
     restart re-raises the pin's finding and keeps the line on it: the new chat's snapshot, the
     `report.md` the re-run wrote and a restarted backend's restore each name the restate's line,
     as the earlier record did. A second Check again keeps it once more, from the first re-run's own
-    stream, and a decision on that chat then ends it, in its snapshot and in `report.md`."""
+    stream, and a decision on that chat then ends it, in its snapshot and in `report.md`.
+
+    *Changed 2026-11-02 on purpose (015 T123; cycle 12 stacked on 002 cycle 13):* that restore is
+    read-only, its decision buttons off, so it names the restate's line without the call to decide
+    again (002 T370, `read_only_line`), where it named the stream's words; the new chats' live
+    snapshots and `report.md` name them as written."""
     review = chat.regraded_review(client, run_root / "FICT-recheck-keeps-line", ticked=False)
     folder = review.folder
     [pin] = [
@@ -2307,7 +2312,9 @@ def test_check_again_keeps_the_line_a_restate_left_in_every_view_until_a_decisio
     with restarted_app(run_root, settings) as again:
         restored = again.get(f"/reviews/{folder.name}")
         assert restored.status_code == 200, restored.text
-        assert restored.json().get("cleared") == [line]
+        assert restored.json().get("cleared") == [
+            {**review.read_only_line, "finding_id": line["finding_id"]}
+        ]
         twice = recheck(again, folder)
         assert twice.status_code == 201, twice.text
         target = finding_on(folder, pin)
