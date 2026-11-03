@@ -2085,13 +2085,6 @@ def rejected_by_an_answer(finding_id: str) -> dict[str, Any]:
     }
 
 
-def withdrawn_of(report: list[str]) -> list[str]:
-    """The lines a rendered `report.md`, split into `report`, prints under "Withdrawn with a
-    decision" (015 T123, cycle 12's Codex review)."""
-    start = report.index("## Withdrawn with a decision") + 2
-    return report[start : report.index("", start)]
-
-
 def test_the_carry_keeps_an_undecided_findings_cleared_line_on_the_finding_it_lands_on(
     bare: Any,
 ) -> None:
@@ -2232,7 +2225,9 @@ def test_a_re_run_names_the_earlier_withdrawals_first_under_an_id_it_numbers_aga
     here names an undecided finding of the re-run; the re-run's own is as before. *Changed
     2026-11-02 on purpose (015 T123; cycle 12's Codex review):* the start's body names the session
     that withdrew it, the earlier record's, and the mark names that session in full; the body is
-    built, and the part read, by the helpers the review's two new cases share."""
+    built, and the part read, by the helpers the review's two new cases share. *Changed 2026-11-02
+    (015 T123; cycle 12's read-only check):* the part is read by `test_chat_server.py`'s
+    `withdrawn_of`, one helper for both modules."""
     folder = package_folder(tmp_path, live_prerun_package())
     earlier = waited(checks_only(folder, None))
     set_aside(folder)
@@ -2254,7 +2249,7 @@ def test_a_re_run_names_the_earlier_withdrawals_first_under_an_id_it_numbers_aga
 
         assert gone.id in {finding.id for finding in rerun.session.findings}
         assert stream[0].body["carried_withdrawals"] == [{**took, "session_id": str(EARLIER_ID)}]
-        assert withdrawn_of(render_report(rerun.session, events=stream).splitlines()) == [
+        assert chat.withdrawn_of(render_report(rerun.session, events=stream).splitlines()) == [
             f"- {gone.id} withdrawn: bought part (your answer to ER-001); "
             f"your Reject (wrong) went with it (earlier check run, session {EARLIER_ID})",
             f"- {own} withdrawn: FICT a later answer; your Accept went with it",
@@ -2544,7 +2539,14 @@ def test_a_chain_of_check_agains_names_what_an_earlier_one_did_not_carry_once(ba
     Standards profile it was graded with. Neither reached that record, so its re-run names both
     again, first and in that row's order - the profile's item one item, its own "; " inside its
     parentheses - and then its own: the Reject of F-008, whose finding it no longer raises, and the
-    profile, changed again, which is named once."""
+    profile, changed again, which is named once.
+
+    *Changed 2026-11-02 (015 T123; cycle 12's read-only check):* this earlier record names no
+    `rechecked_from`, which a real re-run always does, so since the Codex review's fix the case
+    pins the fallback for a record without one - the earlier items named again as they were, in no
+    session - beside the split and the profile named once. A real chain names each item with an
+    id in its session, as
+    `test_a_chain_of_check_agains_names_the_session_of_each_earlier_item_with_an_id` pins."""
     run, earlier, _ = bare
     earlier.findings[:] = [coaxial("F-008", "hol:0002", "rejected")]
     gone = runner.NOT_CARRIED_DECISION_GONE.format(decision="Reject", id="F-007")
@@ -2656,7 +2658,10 @@ def test_an_earlier_withdrawal_names_its_session_beside_another_finding_with_its
     another finding, the earlier F-002's, and the engineer accepts it. `report.md`'s line for the
     earlier withdrawal names the session that withdrew it in full, as that record's own report
     heads itself, so it cannot be read as the accepted F-001's, which the report names under the
-    re-run's own session."""
+    re-run's own session.
+
+    *Changed 2026-11-02 (015 T123; cycle 12's read-only check):* the part is read by
+    `test_chat_server.py`'s `withdrawn_of`, one helper for both modules."""
     folder = package_folder(tmp_path, live_prerun_package())
     earlier = waited(checks_only(folder, None))
     set_aside(folder)
@@ -2675,7 +2680,7 @@ def test_an_earlier_withdrawal_names_its_session_beside_another_finding_with_its
         ).splitlines()
 
         assert f"- Session: {EARLIER_ID}" in render_report(earlier).splitlines()
-        assert withdrawn_of(report) == [
+        assert chat.withdrawn_of(report) == [
             "- F-001 withdrawn: bought part (your answer to ER-001); your Reject (wrong) went with "
             f"it (earlier check run, session {EARLIER_ID})"
         ]
@@ -2697,7 +2702,10 @@ def test_a_chain_of_check_agains_names_each_withdrawal_with_the_session_that_wit
     carried that withdrawal and lost a finding of its own with an Accept. C's start names both,
     A's with A's session, as B's start carried it, then B's with B's, and C's `report.md` names
     each withdrawal with the session that withdrew it, so neither id is read as another record's,
-    nor as C's own."""
+    nor as C's own.
+
+    *Changed 2026-11-02 (015 T123; cycle 12's read-only check):* the part is read by
+    `test_chat_server.py`'s `withdrawn_of`, one helper for both modules."""
     folder = package_folder(tmp_path, live_prerun_package())
     first = waited(checks_only(folder, None))
     set_aside(folder)
@@ -2724,7 +2732,7 @@ def test_a_chain_of_check_agains_names_each_withdrawal_with_the_session_that_wit
             {**took, "session_id": str(EARLIER_ID)},
             {**its_own, "session_id": str(second.session_id)},
         ]
-        assert withdrawn_of(render_report(last.session, events=stream).splitlines()) == [
+        assert chat.withdrawn_of(render_report(last.session, events=stream).splitlines()) == [
             f"- {gone.id} withdrawn: bought part (your answer to ER-001); "
             f"your Reject (wrong) went with it (earlier check run, session {EARLIER_ID})",
             f"- {own} withdrawn: FICT a later answer; "
