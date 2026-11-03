@@ -2359,7 +2359,11 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
     `carried_withdrawals`, so a chain of Check agains keeps it. *Changed 2026-11-02 on purpose
     (015 T123; cycle 12's Codex review):* the start's body and the mark name the session that
     withdrew the pin's finding, the waiting review's, in full as its own `report.md` heads itself,
-    and the second Check again keeps that session, not the first re-run's."""
+    and the second Check again keeps that session, not the first re-run's. *Changed 2026-11-02 on
+    purpose (015 T123; cycle 12 stacked on 002 cycle 13), a guard:* a restarted backend's
+    read-only restore of the first re-run has no `withdrawn`, cycle 13's list of the session's own
+    withdrawals with a decision: the earlier one is in the start's `carried_withdrawals` alone,
+    which the live Transcript does not replay either, and `report.md` names it."""
     review = chat.regraded_review(
         client, run_root / "FICT-recheck-withdrawn", ticked=False, answer="All bought"
     )
@@ -2402,6 +2406,9 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
         assert chat.withdrawn_part(folder) == earlier
 
     with restarted_app(run_root, settings) as again:
+        restored = again.get(f"/reviews/{folder.name}")
+        assert restored.status_code == 200, restored.text
+        assert "withdrawn" not in restored.json()
         twice = recheck(again, folder)
         assert twice.status_code == 201, twice.text
 
