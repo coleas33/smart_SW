@@ -258,6 +258,21 @@ description: "Task list for the attention policy and the procedural gate"
 
 ---
 
+## Phase 13: The timing note's seat command (cycle 14, 2026-11-02)
+
+**Purpose**: At a timed review the engineer copied into `notes\timing.txt` by hand its run folder's full stamp, its start and end times and every duration the seat plan's commands print for it. One function in the plan's setup block, `Save-TimingNote`, appends them in one block headed by the folder's date and letter, reads only the run folder and the backend log, and prints only where it wrote; step 4.1 runs it and rule 5 names it. The engineer still types the six minutes. Picked by the owner on 2026-11-02 (roadmap update run 4's round, 29; review Tier 3); it serves decisions 186A, 192A, 195A, 196A and 197A and carries none of its own. [research.md](research.md) R11. Every example is fictional.
+
+- [x] T082 Records first, no code: this phase and its line under Phase dependencies; FR-036's dated note and the Status line in [spec.md](spec.md); R11 opened in [research.md](research.md); 007's row in `specs/README.md` recounted, the row's literal in `test_the_specs_readme_counts_a_task_173a_closed_as_done` changed first, on purpose. Acceptance: that pin red against the old row, then green; the links added resolve; every changed file LF in the index *Done 2026-11-02: the records written; 007's row 77 / 8 / 0, the pin red against 76 / 5 / 0 first and green after.*
+- [ ] T083 Test first, `Save-TimingNote` and the steps that call it. `reviewer/tests/unit/test_workstation_test_plan.py`, new: `test_save_timing_note_appends_a_timed_reviews_figures_and_prints_only_where_it_wrote` (in Windows PowerShell, on a fictional copy of the replay `Show-ReviewFacts` reads, a fictional backend log and a note already holding typed minutes: each call appends one block, its facts and setup lines as the two commands print them, each round's time; the console shows the note's path alone; the run folder and the log keep their bytes, and the note is the one file written), `test_save_timing_note_writes_nothing_for_a_folder_it_cannot_time`, `test_save_timing_note_reads_the_run_folder_and_the_backend_log_and_writes_only_the_note` (the definition, read on every platform) and `test_step_4_1_writes_the_timed_reviews_figures_with_save_timing_note` (step 4.1's call and when, rule 5, what the commands do, step 4.11's Record line); changed on purpose, `test_a_real_designs_timing_figures_stay_out_of_the_findings_document` (the command writes the start and end that step 4.1 had the engineer note). Acceptance: each fails before T084 for want of the function or its words; the module's other cases pass
+- [ ] T084 The function and the documents: `docs/test-plan-2026-09-27/workstation-test-plan.md`'s setup block (`Save-TimingNote`, after `Show-SetupTime`), what the commands do, rule 5, step 4.1's opening, its call and its Record line, and step 4.11's Record line. Acceptance: T083 green; every other case of the modules that read the plan green with no other edit
+- [ ] T085 Close: R11 completed; 007's row in `specs/README.md` and the Status line recounted, the pin's literal changed first. Acceptance: the gates pass - Python 3.12, and 3.11 (95A), with the tokenizer required over the modules that read the changed files, the identifier scan among them; `ruff check`; the link check; every changed file LF in the index
+
+**Order**: T082 first; then T083 before T084; T085 last.
+
+**Checkpoint**: One command writes a timed review's full stamp, start and end, runtime and every duration the plan's commands print for it in `notes\timing.txt`, and none of them on the console; the engineer types only the six minutes and the update's minutes, before M0-a.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies
@@ -274,6 +289,7 @@ description: "Task list for the attention policy and the procedural gate"
 - **Owner decision 186A (Phase 10)**: after Phase 9; before M0-a, the first sitting that times a real design; T060's figures go in the private note once T072 lands (*added 2026-11-01*)
 - **Owner decision 195A (Phase 11)**: after Phase 10; before M0-a; T060's Done note writes the run folder by its date and letter once T076 lands (*added 2026-11-02*)
 - **Owner decision 196A (Phase 12)**: after Phase 11; before M0-a; T060's Done note leaves the timed review's runtime and its other durations in the private note, as T078's note says (*added 2026-11-02*)
+- **The timing note's seat command (Phase 13)**: after Phase 12; before M0-a, whose timed review it writes (*added 2026-11-02*)
 
 ### Task-level dependencies
 

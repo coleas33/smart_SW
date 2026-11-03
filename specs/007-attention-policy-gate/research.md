@@ -913,3 +913,38 @@ pin was red against 72 / 5 / 0 at T078 and against 73 / 8 / 0 at T081 before eac
 - No C# or page file changed, so no C# gate. Not run in this lane: the whole non-live suites,
   which run before the pull request and in its CI. No SOLIDWORKS process, seat task, or paid or
   live test ran.
+
+## R11. The timing note's seat command (cycle 14, 2026-11-02)
+
+**What**: one function in the seat plan's setup block, `Save-TimingNote '<run folder>'
+'<letter>'`, appends a timed review's figures to `notes\timing.txt` in one block headed by the
+run folder's date and letter (`20261101-A`). The owner picked it on 2026-11-02 (roadmap update
+run 4's round, 29; cycle 14, review Tier 3). It carries no decision of its own: it serves 186A,
+192A, 195A, 196A and 197A.
+
+**Why**: at a timed review the engineer copied into the note by hand the run folder's full
+stamp, the start and end times, and every duration the plan's commands print for that review:
+`Show-ReviewFacts`' drawing-phase milliseconds and its seconds to the first `text.delta`, the
+usage line's round times and `Show-SetupTime`'s time. Each copy is a chance to get a figure wrong,
+or to carry one off the console into the findings document.
+
+**What stays where**: the block goes in `notes\timing.txt`, beside the six minutes and the
+update's minutes, which the engineer still types; the findings document keeps the net saved and
+the folder's date and letter, as before; the run folder is only read; the console shows the
+note's path and nothing else.
+
+**Defaults taken**:
+
+1. The start is the run folder's full stamp, the moment Review was pressed (195A); the end is
+   `session.json`'s `ended_at`, the end of the review's last turn, in the seat's local time; the
+   runtime is the end less the start, in minutes to one decimal.
+2. The durations are the `drawing phase` and `text.delta` lines `Show-ReviewFacts` prints and the
+   line `Show-SetupTime` prints, word for word, and each `usage` event's `latency_s` as
+   `round <n>: <s> s`, to two decimals as the usage line shows its last round.
+3. The letter is given, never guessed: the folder's name holds the document's real name, not its
+   letter.
+4. It writes nothing, and says so, for a folder whose name does not begin with a stamp, that
+   holds no `session.json` and `events.jsonl`, or whose review has not ended.
+5. Step 4.1 runs it once the review has ended, after the answers' turn if it asked questions, and
+   before step 4.4 can send it anything; after a Retry, on the stopped run's folder too, so the
+   note holds both runs of the timed review.
