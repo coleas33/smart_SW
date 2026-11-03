@@ -592,6 +592,18 @@ def test_a_key_the_minutes_form_does_not_name_is_refused(group: str) -> None:
         Words.model_validate(data)
 
 
+INVALID_TIMING = {"InvalidTiming": "Enter each as a number of minutes, 0 or more, then save again."}
+"""The class the timing route refuses a saved minute with (007 `contracts/timing.md` section 3),
+which the minutes form says after a refused save (cycle 18's Tier 2 review): the page posts no key
+the route does not take, so the class answers a field that holds no number or a negative one, and
+the sentence names both - "Enter the minutes as numbers" was untrue of a negative figure."""
+
+
+def test_a_refused_save_of_the_minutes_says_what_each_field_takes() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in INVALID_TIMING} == INVALID_TIMING
+
+
 def test_a_triage_a_finding_does_not_take_says_what_a_pass_takes() -> None:
     """`InvalidTriage` answers both triages a finding does not take - one outside the four, and on
     a pass any but `wrong` (owner decision 187A) - so its sentence is true of both, and names a

@@ -20,6 +20,13 @@ namespace SwReview.AddIn.Tests;
 /// reply's nor a refusal's. The form starts blank on every review it shows, and with no labels there is none (009 FR-030).
 /// Every figure is fictional, and each one no other text of the page holds, so finding it in the page's text means the page
 /// printed it.
+///
+/// *Changed 2026-11-03 (007 T091; cycle 18's Tier 2 review):* the form goes once the backend no longer holds the review - another
+/// backend replaced the one that held it - or its turn failed, since its save could only be refused then; minutes typed and
+/// not saved come back when their review is shown again, as the questions panel's drafts do; a save the backend refuses as
+/// running a turn, as it does for a moment after the turn's end, is tried once more a second later; and facts of their own
+/// pin a review waiting for Send (M0-a's path), another document active, and the form off while a review starts, a Send is
+/// on its way or a save is.
 /// </summary>
 public sealed class ReviewPageTimingTests
 {
@@ -133,6 +140,10 @@ public sealed class ReviewPageTimingTests
     /// A refused save says its class's sentence from the words file's `errors`, its class behind the Details fold, and
     /// never the backend's message, which names the refused figure; the line that the minutes are recorded is not shown;
     /// and the typed figures stay in their fields for the retry. Each class says its own sentence.
+    ///
+    /// *Changed 2026-11-03 (007 T091; cycle 18's Tier 2 review):* the page tries a save refused as `TurnRunning` once more,
+    /// a second later, so the page's timers are held before that save and run after it, and the sentence is read once the
+    /// second try is refused too; what the fact checks is unchanged.
     /// </summary>
     [Fact]
     public void ARefusalSaysItsSentenceAndKeepsTheFigures()
@@ -156,7 +167,9 @@ public sealed class ReviewPageTimingTests
             AssertNoFigureInThePagesText(refused);
 
             await driver.Route("POST", TimingPath, 409, TurnRunning);
+            await driver.HoldTimers();
             await Save(driver);
+            await driver.RunHeldTimers();
             JsonElement busy = await driver.Read(ReadForm);
             Assert.Equal(LabelsSample.TurnRunning, busy.GetProperty("refusalText").GetString());
             Assert.Equal("TurnRunning", busy.GetProperty("refusalClass").GetString());
@@ -406,6 +419,310 @@ public sealed class ReviewPageTimingTests
         });
     }
 
+    // ---- cycle 18's Tier 2 review (007 T091) ----------------------------------------------------
+
+    /// <summary>
+    /// Once another backend replaces the one that held the review on screen - a settings save restarted it - the new one
+    /// does not hold it, and a save could only be refused, with a sentence that sends the engineer to Review: the form goes,
+    /// figures and all, and a press posts nothing; the console records the minutes then (the seat plan's step 4.5, item 4).
+    /// A review started on the new backend takes its minutes on the page again.
+    /// </summary>
+    [Fact]
+    public void TheFormGoesOnceAnotherBackendReplacesTheOneThatHeldTheReview()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver);
+            await driver.Route("POST", TimingPath, 200, Recorded);
+            await Type(driver, Typed);
+            Assert.True((await driver.Read(ReadForm)).GetProperty("shown").GetBoolean(), "the form is not shown before the restart.");
+
+            int readies = driver.Posted("ready").Length;
+            driver.BackendToken = "FICT-restarted-backend-token";
+            await driver.Click("save-settings");
+            await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init after the save");
+            await driver.Settle();
+            await driver.ClearCalls();
+
+            Assert.False((await driver.Read(ReadForm)).GetProperty("shown").GetBoolean(), "the form stays on a review the backend no longer holds.");
+            await Save(driver);
+            Assert.Empty(await TimingCalls(driver));
+
+            await driver.StartReview();
+            await driver.EndSession("chat-2");
+            JsonElement next = await driver.Read(ReadForm);
+            Assert.True(next.GetProperty("shown").GetBoolean(), "a review started on the new backend shows no form.");
+            Assert.All(Values(next), value => Assert.Equal(string.Empty, value));
+        });
+    }
+
+    /// <summary>
+    /// A turn that fails leaves the review failed in the backend, which refuses every save of it: an `error` on the stream,
+    /// then `turn.ended {reason: error}` and `session.ended`, takes the form away, the figures typed before the follow-up
+    /// with it, and a press posts nothing.
+    /// </summary>
+    [Fact]
+    public void TheFormGoesOnceTheReviewsTurnFails()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await driver.Route("POST", "/sessions/" + Chat + "/messages", 200, "{}");
+            await driver.Route("POST", TimingPath, 200, Recorded);
+            await Reviewed(driver);
+            await Type(driver, Typed);
+            await driver.Read(
+                "var input = document.getElementById('followup-text'); input.value = 'Why F-007?';"
+                + "document.getElementById('followup').dispatchEvent(new Event('submit', {cancelable: true}));"
+                + "return JSON.stringify({ok: true});");
+            await driver.Settle();
+
+            await driver.Push(Chat, 21, "error", "{\"error_class\":\"FICTProviderError\",\"message\":\"FICT the provider failed\",\"retryable\":true}");
+            await driver.Push(Chat, 22, "turn.ended", "{\"reason\":\"error\"}");
+            await driver.Push(Chat, 23, "session.ended", "{\"ended_at\":\"2026-09-16T10:30:00+00:00\"}");
+            await driver.Settle();
+            await driver.ClearCalls();
+
+            Assert.False((await driver.Read(ReadForm)).GetProperty("shown").GetBoolean(), "the form stays on a review whose turn failed.");
+            await Save(driver);
+            Assert.Empty(await TimingCalls(driver));
+        });
+    }
+
+    /// <summary>
+    /// A live review the backend holds failed - its snapshot's `failed` - has no form either; and the next review shown, one
+    /// whose turn has ended, has it again.
+    /// </summary>
+    [Fact]
+    public void AFailedReviewShownAgainHasNoForm()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver);
+
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200, Snapshot(OtherRun, false, "failed"));
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            Assert.False((await driver.Read(ReadForm)).GetProperty("shown").GetBoolean(), "a failed review shows the minutes form.");
+
+            await driver.Route("GET", "/sessions/" + Chat + "/snapshot", 200, Snapshot("20260923-101500-bracket-1", false));
+            await driver.Read(ReviewPageSessionsTests.Chip(Chat));
+            await driver.Settle();
+            Assert.True((await driver.Read(ReadForm)).GetProperty("shown").GetBoolean(), "a finished review shows no form after a failed one.");
+        });
+    }
+
+    /// <summary>
+    /// M0-a's path: a review waiting for Send - the send box unticked - ends its checks with `session.ended` alone, no turn
+    /// having run, and the form shows then; its save posts to the route as on any review, which records the minutes on the
+    /// review the backend holds, waiting. A Send on its way turns every field and Save off, so a press posts nothing.
+    /// </summary>
+    [Fact]
+    public void AReviewWaitingForSendTakesItsMinutesOnceItsChecksEnd()
+    {
+        WaitingReviewFixture fixture = WaitingReviewFixture.Read();
+        ReviewPageDriver.Run(fixture.Configure, async driver =>
+        {
+            await fixture.Start(driver);
+            await driver.Route("POST", TimingPath, 200, Recorded);
+            Assert.True((await driver.Read(ReadForm)).GetProperty("shown").GetBoolean(), "the form is not shown once a waiting review's checks ended.");
+
+            await driver.ClearCalls();
+            await Type(driver, Typed);
+            await Save(driver);
+            Assert.Equal(Posted, Assert.Single(await TimingCalls(driver)).GetProperty("body").GetString());
+            Assert.True((await driver.Read(ReadForm)).GetProperty("savedShown").GetBoolean(), "the line after Save is not shown.");
+
+            await driver.HoldRoute("POST", "/sessions/" + Chat + "/send", 202, "{}");
+            await ReviewPageRecheckTests.PressSend(driver);
+            await driver.ClearCalls();
+            JsonElement sending = await driver.Read(ReadForm);
+            Assert.All(Disabled(sending), off => Assert.True(off, "a field is on while a Send is on its way."));
+            Assert.True(sending.GetProperty("saveDisabled").GetBoolean(), "Save is on while a Send is on its way.");
+            await Save(driver);
+            Assert.Empty(await TimingCalls(driver));
+            await driver.ReleaseRoute("POST", "/sessions/" + Chat + "/send");
+        });
+    }
+
+    /// <summary>
+    /// The form is hidden with the rest of the review while another document is active, and comes back with what was typed
+    /// when the reviewed document does.
+    /// </summary>
+    [Fact]
+    public void TheFormIsHiddenWhileAnotherDocumentIsActive()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver);
+            await Type(driver, Typed);
+
+            await driver.DocumentChanged(new { path = @"C:\parts\other.SLDPRT", configuration = "Default" });
+            Assert.False((await driver.Read(ReadForm)).GetProperty("shown").GetBoolean(), "the form shows while another document is active.");
+
+            await driver.DocumentChanged(new { path = ReviewPageDriver.ReviewedPath, configuration = "Default" });
+            JsonElement back = await driver.Read(ReadForm);
+            Assert.True(back.GetProperty("shown").GetBoolean(), "the form did not come back with the reviewed document.");
+            Assert.Equal(Typed, Values(back));
+        });
+    }
+
+    /// <summary>
+    /// Review pressed again on a finished review: while the new one starts, the form stays, every field and Save off, and a
+    /// press posts nothing; once it has started, the new review's form is blank and hidden while its turn runs.
+    /// </summary>
+    [Fact]
+    public void TheFormIsOffWhileAReviewStarts()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver);
+            await driver.Route("POST", TimingPath, 200, Recorded);
+            await Type(driver, Typed);
+
+            driver.HoldReviewStart = true;
+            await driver.StartReview();
+            await driver.ClearCalls();
+            JsonElement starting = await driver.Read(ReadForm);
+            Assert.True(starting.GetProperty("shown").GetBoolean(), "the form went before the new review started.");
+            Assert.All(Disabled(starting), off => Assert.True(off, "a field is on while a review starts."));
+            Assert.True(starting.GetProperty("saveDisabled").GetBoolean(), "Save is on while a review starts.");
+            await Save(driver);
+            Assert.Empty(await TimingCalls(driver));
+
+            await driver.ReleaseReviewStart();
+            JsonElement started = await driver.Read(ReadForm);
+            Assert.False(started.GetProperty("shown").GetBoolean(), "the form shows while the new review's turn runs.");
+            Assert.All(Values(started), value => Assert.Equal(string.Empty, value));
+        });
+    }
+
+    /// <summary>
+    /// While a save is on its way every field and Save are off, so a second press posts the minutes no second time; its
+    /// answer turns them on again.
+    /// </summary>
+    [Fact]
+    public void TheFormIsOffWhileASaveIsOnItsWay()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver);
+            await driver.HoldRoute("POST", TimingPath, 200, Recorded);
+            await Type(driver, Typed);
+            await driver.ClearCalls();
+            await Save(driver);
+
+            JsonElement saving = await driver.Read(ReadForm);
+            Assert.All(Disabled(saving), off => Assert.True(off, "a field is on while a save is on its way."));
+            Assert.True(saving.GetProperty("saveDisabled").GetBoolean(), "Save is on while a save is on its way.");
+            await Save(driver);
+            Assert.Single(await TimingCalls(driver));
+
+            await driver.ReleaseRoute("POST", TimingPath);
+            JsonElement saved = await driver.Read(ReadForm);
+            Assert.True(saved.GetProperty("savedShown").GetBoolean(), "the line after Save is not shown.");
+            Assert.All(Disabled(saved), off => Assert.False(off, "a field stayed off after the save was answered."));
+            Assert.False(saved.GetProperty("saveDisabled").GetBoolean(), "Save stayed off after the save was answered.");
+        });
+    }
+
+    /// <summary>The form shows on a turn's `turn.ended` alone, before its `session.ended`: the turn has ended.</summary>
+    [Fact]
+    public void TheFormShowsOnceATurnHasEnded()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await driver.StartReview();
+            await driver.Push(Chat, 19, "turn.ended", "{\"reason\":\"end\"}");
+            await driver.Settle();
+            Assert.True((await driver.Read(ReadForm)).GetProperty("shown").GetBoolean(), "the form is not shown once the turn has ended.");
+        });
+    }
+
+    /// <summary>
+    /// Minutes typed and not saved stay with their review, as the questions panel's drafts do: the page follows the engineer
+    /// to another document's kept review, whose form is blank, and back on the first document its review shows them again,
+    /// with no line saying they are recorded, and Save posts them to its own route.
+    /// </summary>
+    [Fact]
+    public void MinutesTypedAndNotSavedComeBackWithTheirReview()
+    {
+        const string OtherPath = @"C:\parts\other.sldasm";
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, OtherPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver);
+            await Type(driver, Typed);
+
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200, Snapshot(OtherRun, false));
+            await driver.DocumentChanged(new { path = OtherPath, configuration = "Default" });
+            await driver.Settle();
+            JsonElement other = await driver.Read(ReadForm);
+            Assert.True(other.GetProperty("shown").GetBoolean(), "the other document's review shows no form.");
+            Assert.All(Values(other), value => Assert.Equal(string.Empty, value));
+
+            await driver.Route("GET", "/sessions/" + Chat + "/snapshot", 200, Snapshot("20260923-101500-bracket-1", false));
+            await driver.Route("POST", TimingPath, 200, Recorded);
+            await driver.DocumentChanged(new { path = ReviewPageDriver.ReviewedPath, configuration = "Default" });
+            await driver.Settle();
+            JsonElement back = await driver.Read(ReadForm);
+            Assert.True(back.GetProperty("shown").GetBoolean(), "the first review shows no form after the switch back.");
+            Assert.Equal(Typed, Values(back));
+            Assert.False(back.GetProperty("savedShown").GetBoolean(), "minutes never saved are said to be recorded.");
+            Assert.False(back.GetProperty("saveDisabled").GetBoolean(), "Save is off with the minutes typed.");
+
+            await driver.ClearCalls();
+            await Save(driver);
+            JsonElement call = Assert.Single(await TimingCalls(driver));
+            Assert.Equal(TimingPath, call.GetProperty("path").GetString());
+            Assert.Equal(Posted, call.GetProperty("body").GetString());
+        });
+    }
+
+    /// <summary>
+    /// For a moment after a turn's end the backend still answers a save `409 TurnRunning`, while it writes the report: the
+    /// page tries once more a second later, the form off meanwhile and no sentence said, and the second answer is the one
+    /// shown - the line after a save, or, refused again, the class's sentence.
+    /// </summary>
+    [Fact]
+    public void ASaveRefusedAsRunningIsTriedOnceMoreASecondLater()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver);
+            await driver.HoldTimers();
+            await driver.Route("POST", TimingPath, 409, TurnRunning);
+            await Type(driver, Typed);
+            await driver.ClearCalls();
+            await Save(driver);
+
+            JsonElement waiting = await driver.Read(ReadForm);
+            Assert.Single(await TimingCalls(driver));
+            Assert.False(waiting.GetProperty("refusalShown").GetBoolean(), "the refusal shows before the save is tried again.");
+            Assert.True(waiting.GetProperty("saveDisabled").GetBoolean(), "Save is on while the save waits to be tried again.");
+
+            await driver.Route("POST", TimingPath, 200, Recorded);
+            await driver.RunHeldTimers();
+            JsonElement[] calls = await TimingCalls(driver);
+            Assert.Equal(2, calls.Length);
+            Assert.Equal(Posted, calls[1].GetProperty("body").GetString());
+            JsonElement saved = await driver.Read(ReadForm);
+            Assert.True(saved.GetProperty("savedShown").GetBoolean(), "the line after the second try is not shown.");
+            Assert.False(saved.GetProperty("refusalShown").GetBoolean(), "a refusal shows after the second try was recorded.");
+
+            await driver.Route("POST", TimingPath, 409, TurnRunning);
+            await driver.ClearCalls();
+            await Save(driver);
+            await driver.RunHeldTimers();
+            JsonElement busy = await driver.Read(ReadForm);
+            Assert.Equal(2, (await TimingCalls(driver)).Length);
+            Assert.Equal(LabelsSample.TurnRunning, busy.GetProperty("refusalText").GetString());
+            Assert.Equal(Typed, Values(busy));
+        });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>
@@ -479,14 +796,14 @@ public sealed class ReviewPageTimingTests
 
     /// <summary>
     /// A review's snapshot with no finding and no ranking: read-only from its run folder, or the backend's live chat, its
-    /// turn ended.
+    /// turn ended - or in <paramref name="chatState"/>, a failed one's `failed` (cycle 18's Tier 2 review).
     /// </summary>
-    private static string Snapshot(string runId, bool readOnly) => new JsonObject
+    private static string Snapshot(string runId, bool readOnly, string chatState = "ended") => new JsonObject
     {
         ["run_id"] = runId,
         ["read_only"] = readOnly,
         ["read_only_reason"] = readOnly ? ReviewPageSessionsTests.ReadOnlyReason : null,
-        ["chat_state"] = readOnly ? null : "ended",
+        ["chat_state"] = readOnly ? null : chatState,
         ["last_seq"] = readOnly ? null : JsonValue.Create(9),
         ["document"] = JsonNode.Parse(JsonSerializer.Serialize(new { path = ReviewPageDriver.ReviewedPath, configuration = "Default" })),
         ["findings"] = new JsonArray(),

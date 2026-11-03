@@ -2045,7 +2045,13 @@ def test_the_minutes_are_typed_on_the_review_page_and_the_console_is_the_fallbac
     the words file - and sends minutes the backend restarted before to step 4.5's item 4. That
     item checks what the page wrote and keeps the command only as the fallback after its
     restart; and the handover's timed run says so. The command still runs in step 4.5 after the
-    restart, and only there."""
+    restart, and only there.
+
+    *Changed 2026-11-03 on purpose (007 T091; cycle 18's Tier 2 review):* the bullet says what
+    `InvalidTiming`'s sentence means as the route refuses it - a field that holds no number, or a
+    number below 0, where "something other than a number" was untrue of a negative figure - and
+    sends the engineer to the console once the form is gone, as it goes when the backend
+    restarted or the review failed, where it said the form names the review no longer held."""
     chips = step(plan, "4.5")
     restart = chips.index("The backend restarted, so this review is shown from its run folder.")
     review = re.sub(r"\s+", " ", step(plan, "4.1"))
@@ -2077,9 +2083,16 @@ def test_the_minutes_are_typed_on_the_review_page_and_the_console_is_the_fallbac
     )[:6]
     assert f"press **{labels.timing_form['save']}**" in form
     assert f"Pass: the line `{labels.timing_form['saved']}` shows under the button" in form
-    assert f"(`{labels.errors['InvalidTiming']}` means a field holds" in form
+    assert (
+        f"(`{labels.errors['InvalidTiming']}` means a field holds something other than a number,"
+        " or a number below 0)"
+    ) in form
     assert "The form is off while a turn runs: wait for it to end." in form
-    assert "step 4.5, item 4, records them at the console" in form
+    assert (
+        "If the form is gone before you saved them - the backend restarted, or the review failed"
+        " - step 4.5, item 4, records them at the console."
+    ) in form
+    assert "the form says the review is no longer held by the backend" not in form
     # Step 4.5: the check, and the command only as the fallback after the restart.
     assert "You saved them on the Review page at step 4.1, so here you check what it wrote" in (
         item_4
