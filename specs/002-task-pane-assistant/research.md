@@ -7624,11 +7624,15 @@ restart, or in a Check again's `report.md`, whose carried withdrawals name an ea
     every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
     ran.
   - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes; their gates are T386's
-    sub-item in [tasks.md](tasks.md), and the whole suites run on the final tree next.
+    sub-item in [tasks.md](tasks.md), and the whole suites ran on the stacked tree (below).
   - *Done 2026-11-03, cycle 16 stacked on cycle 15:* the gates above ran on cycle 16 before it was
     stacked on cycle 15 (H-c-010, above). The two met in the records, the specs-README pin and one
     class summary, and each kept both cycles' text, cycle 15's first; 002 is recounted on the
     stacked tasks, 378 / 4 / 0. The pane fixtures' three generators wrote every fixture
     byte-identical, and the goldens did not move. T386's sub-item of the stacking in
-    [tasks.md](tasks.md) names each meeting; the whole suites on the stacked tree run next, and
+    [tasks.md](tasks.md) names each meeting; the whole suites on the stacked tree ran, and
     T386's last sub-item records them.
+  - *Done 2026-11-03:* the whole suites on the stacked tree (`a8421990`): 18,943 passed and 5
+    skipped on Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed;
+    C# with zero warnings, then 10,274 extractor and 4,351 add-in tests passed (T386's last
+    sub-item).
