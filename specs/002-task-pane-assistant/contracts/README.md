@@ -13,6 +13,10 @@ Their ids are the earlier record's, so no reader drops a finding for them. And a
 writes each undecided earlier finding's last `disposition.cleared` again, onto the one finding with
 its subject key, before any decision it carries ([015 `recheck.md`](../../015-review-send-gate/contracts/recheck.md)
 section 4, step 8).
+*Amended 2026-11-02 (feature 015 cycle 12's Tier 1 review, T123; recorded on its read-only
+check):* the carry writes that `disposition.cleared` only onto a finding at the status and
+severity of the earlier finding it was written on, where its words, that this verdict changed,
+still hold; elsewhere it writes none.
 *Amended 2026-11-02 (feature 015 cycle 12's Codex review, T123):* each `carried_withdrawals` item
 also names `session_id`, required: the session that withdrew it - the earlier record's for its own
 withdrawals, kept as it was for one that record carried itself - since finding ids restart in each

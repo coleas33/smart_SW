@@ -2409,6 +2409,11 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     yet, in the session the earlier record was checked again from (`rechecked_from`), with the new
     `runner.NOT_CARRIED_IN_SESSION`, whose row is in [contracts/words.md](contracts/words.md)
     section 4.
+  - *Changed 2026-11-02 on cycle 12's read-only check (T123):* `runner._not_carried_before` tells
+    an item already named in its session by a pattern it builds, when called, from
+    `NOT_CARRIED_IN_SESSION` itself, and `runner._IN_SESSION`, which spelled its words out, is
+    gone; 002's events schema and its README say the carry's line goes only onto a finding at
+    the verdict it was written on.
 - **Defaults taken**, which the owner may revise:
   - A line goes only onto the one re-run finding with its subject key, as a decision does (72A);
     one with no such finding, or more than one, goes nowhere and is not named in
@@ -2447,12 +2452,21 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     are not so named: the row's sentence names their record, "the earlier check run", which the
     report's header names ("- Checked again from session: <uuid>"), so the row of every re-run
     whose earlier record was not itself a re-run keeps its words.
+  - *Added 2026-11-02 on cycle 12's read-only check:* an item already named in its session is
+    told by `NOT_CARRIED_IN_SESSION`'s words wherever they put the item and the session - the
+    whole item matched, the item any text and the session a uuid in full - read when called, as
+    `NOT_CARRIED`'s head and tail are, so an owner's one-line edit of the words needs nothing
+    else. The check's suggested form, the words between the item and the session alone, would
+    miss words after the id, a closing parenthesis as `withdrawn.earlier` has, say.
 - **Tests changed on purpose**: none of before this cycle. T121's own helper `earlier_stream`
   takes the folder and writes the stream afresh (T122), for the case T122 added. *Changed
   2026-11-02 on cycle 12's Codex review:* two of before it, each extended with a dated note and
   nothing else of it changed - `test_review_words.py`'s `PLACEHOLDERS` table gains
   `withdrawn.earlier`'s `{session_id}`, and `test_recheck.py`'s helper `set_aside` takes the
-  index to set aside at, 1 unless named, so a chain's second rotation lands at 2.
+  index to set aside at, 1 unless named, so a chain's second rotation lands at 2. *Changed
+  2026-11-02 on cycle 12's read-only check:* one more of before it, `test_chat_server.py`'s
+  helper `withdrawn_part` (002 T362), which reads `report.md` through the new line-based
+  `withdrawn_of` that `test_recheck.py` now shares, its lines as before, with a dated note.
 - **Tests first**: T121's five cases failed before T122, each for want of the feature - the
   carry's two, no line written onto F-001; the routes' two, the new chat's snapshot naming no
   `cleared` and the re-run's `report.md` no withdrawal; and the contract's, `carried_withdrawals`
@@ -2475,7 +2489,8 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     named a chain's mark and row saying "earlier check run" of every earlier record, though each
     names its own record's ids, and two records' items with the same words named once; each now
     names the session its ids are from (*Defaults taken*), so that part is closed, and an item
-    already named in its session is told by its trailing words too.
+    already named in its session is told by its trailing words too - *since cycle 12's read-only
+    check*, by `NOT_CARRIED_IN_SESSION`'s own words, read when called.
   - A Check again's replayed Transcript does not show the earlier withdrawals; `report.md` names
     them (the Transcript after a restart is cycle 13's).
   - A Check again reads the earlier record's stream twice, at `session.started` and in the carry.
@@ -2493,7 +2508,10 @@ each is noted on the task lines it touches, no task box is ticked for it, and
   - The link check over the cycle's seven changed Markdown files, anchors included, none broken;
     every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test ran.
   - *Changed 2026-11-02:* these gates came before the Tier 1 review's fixes (*Review* below), and
-    before the Codex review's.
+    before the Codex review's. *Changed 2026-11-02 on cycle 12's read-only check (its fourth
+    point):* and before the check's own fixes, whose sub-items under T123 record module subsets
+    alone; the whole non-live suites on 3.12 and 3.11 with the tokenizer required, `ruff check`
+    and the identifier scan, on the final tree, are T123's last step before the PR.
 - **Review** (Tier 1, decision 180A; 2026-11-02): one Opus review, no must-fix, and five should-fix
   points, each taken as T123's dated sub-items in [tasks.md](tasks.md) record; the Codex review
   runs on its own. Test first: a chain of Check agains lost the earlier record's "Not carried"
@@ -2528,3 +2546,17 @@ each is noted on the task lines it touches, no task box is ticked for it, and
   and `test_provider_protocol.py::test_a_re_runs_start_names_the_earlier_records_withdrawals_with_a_decision`;
   and two of before it, extended (*Tests changed on purpose* above). It closes one of the Tier 1
   review's items left for later: which earlier record a chain's mark and row mean.
+- **Read-only check** (2026-11-02; of both reviews' fixes, `01047a71` to `57cadd19`): no
+  must-fix, and five should-fix points, recorded in T123's dated sub-item in [tasks.md](tasks.md).
+  Four are done. 002's events schema and its README said a re-run's carry writes each undecided
+  earlier finding's last `disposition.cleared` with no verdict condition, so both gain a dated
+  sentence, as does 193A's pointer in [`docs/decisions.md`](../../docs/decisions.md) (point 1).
+  `runner._IN_SESSION` spelled `NOT_CARRIED_IN_SESSION`'s words out by hand, so an owner's edit of
+  the constant would have a chain name an item again in the wrong session; fixed test first, the
+  pattern built from the constant (point 2; *Defaults taken*). The chain case of the Tier 1
+  review pins the fallback for a record with no `rechecked_from`, and its docstring now says so
+  (point 3). And `test_recheck.py`'s `withdrawn_of` repeated `test_chat_server.py`'s slicing, so
+  the two modules share one helper (point 5). Point 4, the whole suites on the final tree, is
+  T123's last step before the PR (*Gates*). Nothing is left for later in
+  [`docs/review-backlog.md`](../../docs/review-backlog.md); its cycle 12 items cite `runner.py`'s
+  lines as they now stand, and the row's item the constant's own words.
