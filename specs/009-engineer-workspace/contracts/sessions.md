@@ -100,7 +100,9 @@ shown one `aria-current="true"`. The page asks `sessions.list` after `init` and 
    that sends `session.forget`, and the pane shows no review. *Amended 2026-11-02 (feature 002
    cycle 13):* either snapshot is drawn once the `GET /labels` read in flight has answered, a
    failed one included, so after a reload its cards carry the backend's words whichever read
-   answers first.
+   answers first. *Amended 2026-11-02 (feature 002 cycle 13's Tier 2 review):* so is the error
+   card of a read that fails otherwise than `UnknownChat` or `UnknownReview`, so it says its next
+   step.
 4. Renders the snapshot into Results: the findings' cards in order, the coverage fold from
    `coverage`, the not-loaded warning, the ranking and its summary through the same functions the
    end of a turn uses, the pins and drafts kept for that chat. No `POST` is made and no `review.start`

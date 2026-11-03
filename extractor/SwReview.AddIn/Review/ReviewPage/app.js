@@ -1693,11 +1693,25 @@
    * `value` once the labels read in flight has answered (002 cycle 13). After a reload the page
    * reads `/labels` and a snapshot at once, and a snapshot drawn first would leave its cards
    * without the backend's words, with nothing to draw them again; so each restore read passes its
-   * snapshot through here. A labels read that failed lets it through, on the tokens (FR-030).
+   * snapshot through here, and its failure's error card (`restoreFailed`). A labels read that
+   * failed lets it through, on the tokens (FR-030).
    */
   function afterLabels(value) {
     return state.labelsRead.then(function () {
       return value;
+    });
+  }
+
+  /**
+   * A restore read's failure, its error card drawn through `afterLabels` as a snapshot is (002
+   * cycle 13's Tier 2 review): drawn before the labels answer, the card would say no next step,
+   * and nothing would draw it again. A review switched to meanwhile draws none.
+   */
+  function restoreFailed(error, epoch) {
+    afterLabels(errorBody(error)).then(function (body) {
+      if (epoch === state.restoreEpoch) {
+        showError(body);
+      }
     });
   }
 
@@ -1893,7 +1907,7 @@
         return;
       }
       if (error.errorClass !== 'UnknownChat') {
-        showError(errorBody(error));
+        restoreFailed(error, epoch);
         return;
       }
       restoreFromFolder(item, epoch);
@@ -1923,7 +1937,7 @@
         cannotRestore(chatId);
         return;
       }
-      showError(errorBody(failure));
+      restoreFailed(failure, epoch);
     });
   }
 
