@@ -170,10 +170,14 @@ def _validate_transition(finding: Finding, decision: str, triage: str | None) ->
             "changed"
         )
     # The same decision with no triage, past the repair and the late triage above: a pass's, or
-    # one whose triage the press let go.
+    # one whose triage the press let go. A Defer, a pass's here, says what can still follow it, as
+    # the page's sentence does (cycle 23's read-only check).
+    follows = (
+        "; it can still move to accepted or rejected" if current.decision == "deferred" else ""
+    )
     raise DecisionAlreadyRecordedError(
         f"finding {finding.id} is already {current.decision}{held}; {decision!r} again with no "
-        "triage changes nothing"
+        f"triage changes nothing{follows}"
     )
 
 

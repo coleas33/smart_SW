@@ -2818,8 +2818,8 @@
       // refusal of the record names it as it stands, which a decision another client recorded may
       // have changed since this page drew the card, so that is the record shown (002 cycle 23), with
       // the review's tally, as a reply's (cycle 23's Tier 2 review) - but only over the record the
-      // card held at the press: each reply comes back on a task of its own and the events on the
-      // stream, so a record drawn since came from a later write, which the refusal may predate.
+      // card held at the press: each reply or refusal comes back on a task of its own and each event
+      // on the stream, so a record drawn since is kept: no body says which of the two is the newer.
       var entry = entryOf(card);
       if (error.recorded !== undefined && entry && entry.body.disposition === held) {
         showDisposition(card, error.recorded, true);
