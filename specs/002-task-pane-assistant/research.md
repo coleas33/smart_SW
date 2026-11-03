@@ -8573,15 +8573,25 @@ command - and a save in that instant failed.
     outside it, so no save waits on a model call. A folder's lock is made the first time an
     accept reaches the folder and kept for the backend's life. A check run (`POST /checks/rms` or
     `/checks/standards`) takes none: the host makes each check its own folder
-    (`RunFolders.CreateForCheck`). A target no wait lets through, a folder at its name or a file
-    marked read-only, raises at once (should-fix 2); an absent one, a first write whose temporary
-    is held, is waited for as before.
+    (`RunFolders.CreateForCheck`, and `RunFolders.CreateForStandards` for a Standards check). A
+    target no wait lets through, a folder at its name or a file marked read-only, raises at once
+    (should-fix 2); an absent one, a first write whose temporary is held, is waited for as before.
   - What the engineer sees: a decision, minutes or Stop pressed while an earlier save of the same
-    review waits out a reader waits for it, up to 1.88 s, before its own; a record that can never
-    be replaced fails at once, as before cycle 25.
+    review waits out a reader waits for it, up to 1.88 s, before its own; a read-only record, or a
+    folder at its name, fails at once, as before cycle 25; one an access list denies still fails
+    1.88 s later. *Added 2026-11-03 (the read-only check):* a second Accept on the same check
+    folder waits for the first one's re-run, its wait for a reader included, before its own.
   - **The rest fixed.** `test_atomic.py` records the writer's waits through its own `time`, so
     another thread's sleep is neither recorded nor cut short, and its real reader test proves the
     wait (should-fix 1); the callers' paragraph above is corrected (should-fix 3).
+  - *Added 2026-11-03:* a read-only check of these fixes, no must-fix and four should-fix, all four
+    taken, as T412's second dated sub-item records: the two lines above corrected - an access list
+    that denies the write still waits, and a Standards check's folder is
+    `RunFolders.CreateForStandards`'s - and the Accept's wait added; `test_chat_sessions.py`'s two
+    saves of a run now hold `attention.json` as well as `session.json`, and
+    `test_chat_checks_routes.py`'s two accepts the store's save as well as the re-run's, each
+    failing a mutant that takes the lock around the save alone or around the re-run alone; and
+    the refusals the tests build are in `tests/support/held_record.py` once.
 - **Gates** (T412; 2026-11-03), on the cycle's final tree:
   - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,005 passed and 5
     skipped, 9 of them this cycle's new cases; its two warnings are neither of this cycle's, and
@@ -8596,6 +8606,6 @@ command - and a save in that instant failed.
   - The link check over the cycle's four changed Markdown files, anchors included, 444 links and
     none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or
     live test ran.
-  - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes; their gates are T412's
-    sub-item in [tasks.md](tasks.md).
+  - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes and the read-only
+    check's; their gates are T412's sub-items in [tasks.md](tasks.md).
   - The whole suites on the final tree: recorded once they run.
