@@ -8608,7 +8608,9 @@ command - and a save in that instant failed.
     live test ran.
   - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes and the read-only
     check's; their gates are T412's sub-items in [tasks.md](tasks.md).
-  - The whole suites on the final tree: recorded once they run.
+  - The whole suites on the final tree (`4358a7cc`, 2026-11-03): 19,081 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; no C# or page
+    file changed (T412's line).
   - *Done 2026-11-03, cycle 25 stacked on cycle 24:* the gates above ran on cycle 25 before it was
     stacked on cycle 24 (Phase 39, T405 to T408, itself on cycles 23, 22 and 21 and feature 007's
     cycle 20). The two met in eight files, none of them a words, C#, page or fixture file, and each
