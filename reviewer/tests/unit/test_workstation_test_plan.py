@@ -2026,18 +2026,71 @@ def test_step_3_1_finds_each_component_by_the_path_the_probe_prints(plan: str) -
     )
 
 
-def test_the_timing_is_recorded_once_the_backend_no_longer_holds_the_review(plan: str) -> None:
+def test_the_minutes_are_typed_on_the_review_page_and_the_console_is_the_fallback(
+    plan: str,
+) -> None:
     """007 T060. A live review's session is saved again at the end of every turn
     (`chat.sessions.record_timing_live`), so minutes written to its folder while the backend
     holds it can be lost to a later turn - step 4.4 sends one. Step 4.1 takes the minutes; the
     command runs in step 4.5 after the restart that leaves A's review read-only, and only
-    there."""
+    there.
+
+    *Changed 2026-11-03 on purpose (007 T089; cycle 18, minutes typed on the Review page):*
+    renamed from `test_the_timing_is_recorded_once_the_backend_no_longer_holds_the_review`. The
+    Review page's minutes form records the minutes on the review the backend holds, which
+    nothing saves over, so the engineer types them there: step 4.1's minutes bullet says so,
+    and a bullet of its own after it, before the Record line, has the six typed on the page
+    before the engineer leaves A's review, in the words the form prints - its heading, each
+    field's name, its button, the line a save leaves and `InvalidTiming`'s sentence, read from
+    the words file - and sends minutes the backend restarted before to step 4.5's item 4. That
+    item checks what the page wrote and keeps the command only as the fallback after its
+    restart; and the handover's timed run says so. The command still runs in step 4.5 after the
+    restart, and only there."""
     chips = step(plan, "4.5")
     restart = chips.index("The backend restarted, so this review is shown from its run folder.")
+    review = re.sub(r"\s+", " ", step(plan, "4.1"))
+    start = review.index("- 007 T060, the minutes on the Review page")
+    form = review[start : review.index("Record: the facts")]
+    item_4 = re.sub(r"\s+", " ", chips[chips.index("4. **007 T060") : chips.index("Record: ")])
+    labels = load_words().labels
+    handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
 
     assert plan.count("uv run swreview timing") == 1
     assert restart < chips.index("uv run swreview timing")
     assert "baseline" in step(plan, "4.1") and "uv run swreview timing" not in step(plan, "4.1")
+    # Step 4.1: the minutes bullet, then the page's, after the triage, before the Record line.
+    assert "the command that records them runs at step 4.5" not in review
+    assert (
+        "- 007 T060, the minutes (you type them on the Review page before you leave A's review,"
+        " the next bullet, and step 4.5, item 4, checks them)."
+    ) in review
+    assert review.index("- 002 FR-031 ") < review.index("- 007 T060, the minutes (") < (
+        review.index("- 007 T060, the minutes on the Review page")
+    )
+    assert form.startswith(
+        "- 007 T060, the minutes on the Review page, before you leave A's review: once the review"
+        " has ended (after the answers' turn, if it asked questions) and every finding is judged,"
+    )
+    assert f"**{labels.timing_form['heading']}**" in form
+    assert [f"**{word.split(':')[0]}**" for word in labels.timing.values()] == re.findall(
+        r"\*\*[^*]+\*\*", form[form.index("in the field that begins with its name:") :]
+    )[:6]
+    assert f"press **{labels.timing_form['save']}**" in form
+    assert f"Pass: the line `{labels.timing_form['saved']}` shows under the button" in form
+    assert f"(`{labels.errors['InvalidTiming']}` means a field holds" in form
+    assert "The form is off while a turn runs: wait for it to end." in form
+    assert "step 4.5, item 4, records them at the console" in form
+    # Step 4.5: the check, and the command only as the fallback after the restart.
+    assert "You saved them on the Review page at step 4.1, so here you check what it wrote" in (
+        item_4
+    )
+    assert "the fallback" in item_4
+    assert "Only if you did not save them on the Review page at step 4.1" in item_4
+    # The handover's timed run.
+    assert (
+        "*Since 2026-11-03* (007 cycle 18) the seat types the six on the Review page before"
+        " leaving the review"
+    ) in handover
     sessions = (REVIEWER / "src" / "swreview" / "chat" / "sessions.py").read_text(encoding="utf-8")
     assert "minutes written only to disk would be gone" in re.sub(r"\s+", " ", sessions)
 
@@ -3316,7 +3369,12 @@ def test_after_s1_come_m0s_two_sittings_then_s2(plan: str) -> None:
 
     *Changed 2026-11-01 on review (004 T393; research R29.13, findings R2 and R7):* M0-a's row
     names no paid step and no step of step 4 but 4.10, as S1's pin reads S1's rows, where it read
-    only four of step 4's reviews; and it says the escape replay has no step yet."""
+    only four of step 4's reviews; and it says the escape replay has no step yet.
+
+    *Changed 2026-11-03 on purpose (007 T089; cycle 18, minutes typed on the Review page):*
+    M0-a's minutes are typed on the Review page before the engineer leaves the review, which
+    records them on the review the backend holds, and `swreview timing` is the fallback after a
+    restart."""
     sittings = section(plan, "Sittings")
     lines = sittings.splitlines()
     [m0a] = [line for line in lines if line.startswith("| M0-a |")]
@@ -3329,6 +3387,10 @@ def test_after_s1_come_m0s_two_sittings_then_s2(plan: str) -> None:
     assert "](../roadmap/README.md)" in sittings
     assert "no key" in m0a and "step 4.10, items 1 and 2" in m0a
     assert "`swreview timing`" in m0a and "escape replay" in m0a and "read-only" in m0a
+    assert (
+        "every finding judged and the minutes typed on the Review page before leaving the review,"
+        " with `swreview timing` the fallback after a restart"
+    ) in m0a
     assert "no step yet" in m0a
     assert OWNERS_PARTS in m0a
     assert sorted(
@@ -3490,7 +3552,13 @@ def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
     *Changed 2026-11-02 on purpose (007 T083; cycle 14):* step 4.1's opening has `Save-TimingNote`
     write the timed review's start and end in `notes\\timing.txt`, where it had the engineer note
     them there by hand; the pin reads the new words, which send the same two times to the same
-    note."""
+    note.
+
+    *Changed 2026-11-03 on purpose (007 T089; cycle 18, minutes typed on the Review page):* step
+    4.5's Record line names the net saved as item 4's report line prints it (`- Net saved
+    minutes: <n>`), where it named it as `swreview timing` printed it: the engineer saves the
+    minutes on the Review page, and the command runs only as the fallback, while item 4's check
+    of `report.md` runs either way."""
     flat = re.sub(r"\s+", " ", plan)
     review = re.sub(r"\s+", " ", step(plan, "4.1"))
     opening = review[: review.index("- 008 T103")]
@@ -3511,8 +3579,8 @@ def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
     assert f"the six minutes you wrote in {TIMING_NOTE} at step 4.1" in item_4
     assert "never its number" in item_4
     assert record.startswith(
-        "Record: each pass or fail; for 007 T060 the net saved, as `swreview timing` printed it"
-        " (`net saved: <n>`), and A's run folder by its date and letter (`<date>-A`, as"
+        "Record: each pass or fail; for 007 T060 the net saved, as item 4's report line printed it"
+        " (`- Net saved minutes: <n>`), and A's run folder by its date and letter (`<date>-A`, as"
         " `20261101-A`; rule 5), never the six minutes"
     )
     assert TIMING_NOTE in record and "for 007 T060 the six minutes" not in flat

@@ -3440,8 +3440,10 @@ return JSON.stringify({
     /// <summary>
     /// `whole(node)`: the node, brought into view, is whole - no box scrolled sideways to show it, inside the window
     /// and every ancestor that clips, on both axes, with its words inside it.
+    /// *Changed 2026-11-03 (007 T089; cycle 18):* internal, so <see cref="ReviewPageTimingTests"/> measures the minutes form
+    /// by the same rule; nothing it checks changed.
     /// </summary>
-    private const string Whole = @"
+    internal const string Whole = @"
 var whole = function (node) {
   node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   var rect = node.getBoundingClientRect();
