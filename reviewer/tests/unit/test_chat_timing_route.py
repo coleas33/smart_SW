@@ -35,29 +35,29 @@ from tests.unit.test_chat_server import (
 
 # The application, its door and its scripted provider are `test_chat_server`'s, so this
 # module drives the same real app rather than standing up a second one. pytest resolves a
-# fixture by the name bound in the module using it, which is what these six lines do.
+# fixture by the name bound in the module using it, which is what these eight lines do
+# (*changed 2026-11-03, 002 T406:* the last two, a review held at its final render).
 app = chat.app
 client = chat.client
 models = chat.models
 provider_control = chat.provider_control
 run_root = chat.run_root
 run_dir = chat.run_dir
+final_render = chat.final_render
+review_ending = chat.review_ending
 
 PLACEHOLDER = "_The evidence package was not supplied to the renderer._"
 
-FOUR: dict[str, Any] = {
-    "baseline": 45,
-    "supervision": 6,
-    "verification": 9,
-    "false_alarms": 2,
-    "setup": 0,
-    "by_hand": 0,
-}
+FOUR: dict[str, Any] = chat.MINUTES
 """Quickstart scenario 1's recording; the derived net is 28.0.
 
 *Changed 2026-11-01 on purpose (owner decision 183A; 007 T065):* with setup and the review by
 hand recorded as 0, since the net is unknown without them; every figure read from it, here and
-in `test_waiting_answers.py`, keeps its value."""
+in `test_waiting_answers.py`, keeps its value.
+
+*Changed 2026-11-03 on purpose (002 cycle 24's read-only check):* bound to
+`test_chat_server.MINUTES`, its one copy, which that module keeps because it cannot import this
+one; every value is the same, so the next change to the inputs is made once."""
 
 
 @pytest.fixture
@@ -253,6 +253,25 @@ def test_a_running_turn_is_refused(
     assert response.status_code == 409
     assert response.json()["error_class"] == "TurnRunning"
     provider_control.release()
+
+
+def test_a_save_sent_as_the_review_ends_waits_for_the_settle_and_is_recorded(
+    client: TestClient, run_dir: Path, review_ending: tuple[str, chat.FinalRender]
+) -> None:
+    """002 cycle 24: minutes saved between the runner's `session.ended` and the chat leaving
+    `running` met `409 TurnRunning`, which the minutes form tried once more a second later. The
+    save waits for the settle and is recorded as a save a moment later is, `report.md` written
+    after the turn's own render."""
+    chat_id, held = review_ending
+
+    response = chat.sent_as_the_review_ends(held, lambda: post(client, chat_id, FOUR))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["net_saved_minutes"] == 28.0
+    assert load_session(run_dir / "session.json").timing.net_saved_minutes == 28.0
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "- Net saved minutes: 28.0" in report
+    assert PLACEHOLDER not in report
 
 
 def test_an_unknown_chat_is_a_404(client: TestClient) -> None:

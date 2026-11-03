@@ -8332,3 +8332,162 @@ note box from the record, losing a note typed for the press.
     lower cycle's first; 002's row is 393 / 7 / 0 at T401 and 396 / 4 / 0 at the close, the pane
     fixtures regenerate as git merged them, and the sha256 pin moved with them. T404's sub-item of
     the stacking in [tasks.md](tasks.md) names each meeting.
+
+### Cycle 24. A decision pressed as a review ends is not refused `TurnRunning` (2026-11-03)
+
+The owner's pick on 2026-11-03 from roadmap run 6's brief: the cycle 18 item of
+[`docs/review-backlog.md`](../../docs/review-backlog.md) at `server.py:2714`. Tier 2, no decision
+id. The runner sends `session.ended` from `finalize`; the chat server's worker then writes
+`report.md` and the attention record, and only afterwards moves the chat out of `running`
+(`_play`). So for that moment every write the page made on a review it showed finished met
+`409 TurnRunning`, "Wait for it to finish, or press Stop", while Results said the review had
+finished and Stop was off. The order is deliberate, and it stays: the folder stays claimed until
+both files are written, so a Retry that starts after `ended` cannot rotate the session under them.
+
+- **Settled**, the defaults taken inside the feature:
+  - **Which writes.** Every route that refuses a running turn, through the one check they share,
+    `ChatServer._require_idle`: a decision with its triage and note (`disposition`), the minutes
+    (`timing`), a follow-up (`messages`), answers (`evidence` and `evidence/{request_id}`) and
+    Send (`send`). The page can press each on a review it shows finished, and a follow-up,
+    answers or Send that waits starts its turn only once the chat has settled, so no new turn
+    starts before the two files are written. A Retry (`POST /sessions` naming `retry_of`) is not a
+    write on the review: it is still `409 RunDirInUse` until the folder is released. *Changed
+    2026-11-03 (the Tier 2 review, below):* the live snapshot waits too.
+  - **When a write waits.** From the moment the turn's action has returned until the chat has
+    settled: `ChatSession.settling`, which `_play` sets before it writes the two files and clears
+    once it has moved the chat. The session's `ended_at` is not the sign: a turn just started still
+    holds the last turn's until the runner clears it, and Send writes the views before that, so a
+    write then would wait out the bound before meeting the refusal it is owed at once.
+  - **How long.** `SETTLE_WAIT_S`, 5 s, named in [contracts/chat-api.md](contracts/chat-api.md):
+    the route looks at the chat at the event stream's rate (`POLL_S`) until it leaves `running` or
+    the bound passes. The final render of feature 008's big-assembly replay review, 96 findings,
+    took 31 ms cold and 8 ms warm on the development machine, so the bound is a slow seat's margin,
+    and well inside the 120 s the pane's proxy gives a call.
+  - **Then.** The route goes on as it would a moment later, asking the chat's state again: a turn
+    that failed is `409 SessionFailed`, and a write on a review that now waits for Send goes to the
+    chat's worker, as before. Past the bound, and while a turn still runs, the refusal is today's
+    `409 TurnRunning`, its message and sentence unchanged, so no words change. *Changed 2026-11-03
+    (the Tier 2 review, below):* the requests that waited go on one at a time in the order they
+    came, and a decision or minutes among them goes to the chat's worker whatever the chat settled
+    in.
+  - **`report.md`.** A write that waited re-renders `report.md` and the attention record as it
+    does today (`record_disposition`, `record_timing_live`), after the turn's own render, so both
+    show it.
+  - **The page.** No change. The minutes form's one retry of a refused save stays: past the bound
+    it can still be reached.
+- **Built** (2026-11-03; T406 and T407 in [tasks.md](tasks.md), Phase 39, the tests written first):
+  - The backend (T407): `ChatSession.settling` (`reviewer/src/swreview/chat/sessions.py`), set at
+    the top of `_play`'s `finally`, once the turn's action has returned, and cleared after its
+    settle; `SETTLE_WAIT_S` beside `POLL_S` in `reviewer/src/swreview/chat/server.py`; and
+    `_require_idle`, now async and awaited by its six callers, which waits within
+    `anyio.move_on_after(SETTLE_WAIT_S)` while the chat is `running` and settling, then refuses as
+    before. Dated notes in [contracts/chat-api.md](contracts/chat-api.md), beside its concurrency
+    rule, and in 007 [contracts/timing.md](../007-attention-policy-gate/contracts/timing.md)
+    section 3, whose page caller's retry named the moment.
+  - Tests (T406), in `reviewer/tests/unit/test_chat_server.py` unless named, the final render held
+    by the fixture `final_render` as the Retry case holds it, and each write checked still waiting
+    half a second into the hold before it is let go:
+    `test_a_decision_sent_as_the_review_ends_waits_for_the_settle_and_is_recorded` (a decision; a
+    decision with its triage and note),
+    `test_a_follow_up_sent_as_the_review_ends_runs_its_turn_once_the_chat_has_settled`,
+    `test_a_decision_sent_as_a_failing_turn_ends_meets_the_failure_not_a_running_turn`,
+    `test_past_the_bound_a_decision_sent_as_the_review_ends_is_turn_running_and_writes_nothing`,
+    `reviewer/tests/unit/test_chat_timing_route.py::test_a_save_sent_as_the_review_ends_waits_for_the_settle_and_is_recorded`,
+    and the guard `test_a_decision_while_a_turn_still_runs_is_turn_running_at_once`.
+  - Tests first: the six that are not the guard failed before T407, each answered at once
+    `409 TurnRunning`, the bound's case after 0.000 s. The guard passed before and after, and two
+    mutants of the lines it relies on turned it red, `server.py` restored byte for byte each time
+    with its sha256 checked: the wait without its `settling` condition, and `settling` never
+    cleared, each refused after 2.0 s, the bound as the case sets it.
+  - Changed on purpose, none loosened: the comment above `test_chat_timing_route.py`'s fixture
+    bindings, which binds two more, with a dated note; and the 002 literal of the specs-README pin
+    (T405, T408).
+- **Left open**:
+  - The page's comments on the minutes form's retry (`app.js`'s `TIMING_RETRY` and `postTiming`)
+    and `ReviewPageTimingTests`' summary still say the backend refuses a save for a moment after a
+    turn's end; since this cycle that is only a settle past the bound. Left with the page
+    unchanged, as the cycle's default asks; 007's timing contract says it.
+  - A Stop in that moment, older than the cycle
+    ([`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 24): `POST /stop` sets a
+    running chat's stop flag, and `_play` clears the flag before it writes the two files, so a
+    flag a Stop sets after the clear and before the settle stays set, and the next turn stops at
+    its first tool boundary. *Corrected 2026-11-03 (the Tier 2 review):* this said only a press
+    within the stream's lag reaches the moment, since the page's Stop goes off once it reads
+    `session.ended`; but a follow-up or answers sent in the moment wait in the backend while the
+    page shows Stop on for them (`sendFollowUp`, `sendAnswers`), so a Stop can be pressed for the
+    whole wait, and the flag it sets stops that turn at its first tool boundary, as the engineer
+    asked. Only a flag set with no such turn waiting stops a turn nobody stopped, and a later fix
+    must keep the Stop a waiting turn takes.
+  - The few statements between the runner's `session.ended` and the action's return are not
+    covered: a write there is still refused at once. The page reads the event through the
+    stream, which is polled every 20 ms, after them. *Changed 2026-11-03 (the Tier 2 review):*
+    a snapshot asked for there still says `running`, which a switch or a reload would have to land
+    in those statements to meet.
+  - *Added 2026-11-03 (the Tier 2 review):* a decision or minutes that did not wait still takes the
+    thread pool, owner decision 69A's path for a review not waiting for Send, so one pressed while
+    a write a settle released still runs on the worker can run beside it, as two writes pressed
+    within one write's time always could (backlog, cycle 24).
+  - *Added 2026-11-03 (the Tier 2 review):* `_play`'s `release_bridge()` for a chat settling back
+    to `awaiting_send` is not guarded as the failed chat's is: if it raises, the chat stays
+    `running` and settling, so each write and snapshot waits out the bound first (backlog, cycle
+    24).
+- **Tier 2 review** (T408; 2026-11-03): no must-fix and five should-fix, all fixed test first
+  ([tasks.md](tasks.md), T408's first sub-item); what the fixes leave is under *Left open* and in
+  `docs/review-backlog.md`'s cycle 24 section:
+  - **The snapshot waits** (should-fix 1, older than the cycle but in its moment). A review
+    switched to, or the pane reloaded, as a turn settled was restored `running` while its
+    `last_seq` already counted `session.ended`, so the page held its turn running on a stream
+    opened past the one event that ends it, with Review, the minutes and the follow-up locked and
+    no switch away until a reload. The wait comes out of `_require_idle` into
+    `ChatServer._settled`, which `snapshot` awaits too.
+  - **One line** (should-fix 2, new with the cycle; the default taken). The settle released every
+    request that had waited at once: each write ran in the thread pool beside the others, so
+    `session.json` could be replaced last by an older copy, or two `os.replace` calls onto one file
+    collide on Windows, as the failing test met; and a follow-up that saw the settle first refused
+    the decision pressed before it. The requests that wait now go on one at a time in the order
+    they came (`ChatSession.settle_line`), one that arrives while an earlier one still waits goes
+    behind it, and a decision or minutes that waited is written on the chat's worker, where the
+    next turn runs: a decision pressed before a follow-up is written before its turn, and one
+    pressed after it meets that turn, `409 TurnRunning`, as a moment later.
+  - **Stop** (should-fix 3): the claim corrected under *Left open*, and the backlog's fix, which
+    would have dropped the Stop a waiting turn takes, replaced by one that keeps it.
+  - **The branches the contract names** (should-fix 4): cases for `send`, both `evidence` routes,
+    and a decision or minutes waiting into `awaiting_send`, each a guard proved by a mutant. The
+    review's other mutant, `run.awaiting_send` read before the wait, is equivalent: the flag does
+    not change while a chat settles.
+  - **`raising=False`** dropped from both `SETTLE_WAIT_S` monkeypatches (should-fix 5), so a
+    renamed constant fails them rather than leaving the real 5 s in force.
+  - *Added 2026-11-03:* the read-only check of these fixes, no must-fix and five should-fix, all
+    in the cycle's change and all done ([tasks.md](tasks.md), T408's second sub-item): guards
+    that a request takes its place out of the line, a cancelled one too; the cases' order taken
+    from the line rather than from half a second between two sends; 009's snapshot note naming
+    its two exceptions; the minutes written once; and `settling`'s docstring naming every request
+    that waits.
+- **Gates** (T408; 2026-11-03), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,003 passed and
+    5 skipped, seven of them this cycle's new cases. Its two warnings are neither of this cycle:
+    the test client's deprecation, and a serializer warning from `test_ir_loader_append.py`'s
+    invalid row.
+  - On Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required,
+    the modules the change touches and those that read the files it changed: 54 modules,
+    2,537 passed and 1 skipped.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed. The seven modules that read
+    the records, the scan among them, run again once these counts were written: 510 passed on
+    each version.
+  - The link check over the cycle's seven changed Markdown files, anchors included, 463
+    relative links and none broken; every changed file LF in the index.
+  - No C# or page file changed, so no C# gate, and no words changed. No SOLIDWORKS process, seat
+    task, or paid or live test ran.
+  - The whole suites on the final tree (`69a7a743`, 2026-11-03): 19,060 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; no C# or page
+    file changed (T408's line).
+  - *Changed 2026-11-03:* the counts above came before the Tier 2 review's fixes and the read-only
+    check's; their gates are T408's two sub-items in [tasks.md](tasks.md).
+  - *Done 2026-11-03, cycle 24 stacked on cycle 23:* the gates above ran on cycle 24 before it was
+    stacked on cycle 23 (Phase 38, T401 to T404, itself on cycles 22 and 21 and feature 007's cycle
+    20). The two met in twelve files, none of them a words, C#, page or fixture file, and each kept
+    both cycles' text, the lower cycle's first: 002's row is 397 / 7 / 0 at T405 and 400 / 4 / 0
+    at the close, `server.py` and the two test modules are git's three-way merge of both cycles,
+    and the backlog's line references follow the stacked tree. T408's sub-item of the stacking in
+    [tasks.md](tasks.md) names each meeting.
