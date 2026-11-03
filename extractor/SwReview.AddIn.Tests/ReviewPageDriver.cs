@@ -247,14 +247,24 @@ internal sealed class ReviewPageDriver
 
     private string? _heldStart;
 
-    /// <summary>Answers a held `review.start` and lets the page react.</summary>
-    public async Task ReleaseReviewStart()
+    /// <summary>
+    /// Answers a held `review.start` - or, with <paramref name="error"/>, an `error` payload, refuses it - and lets the page
+    /// react.
+    /// </summary>
+    public async Task ReleaseReviewStart(object? error = null)
     {
         Assert.True(_heldStart != null, "no review.start was held.");
         HoldReviewStart = false;
         string id = _heldStart!;
         _heldStart = null;
-        Reply("review.started", id, ReviewStarted?.Invoke(_starts) ?? DefaultStarted(_starts));
+        if (error != null)
+        {
+            Reply("error", id, error);
+        }
+        else
+        {
+            Reply("review.started", id, ReviewStarted?.Invoke(_starts) ?? DefaultStarted(_starts));
+        }
         while (_heldMessages.Count > 0)
         {
             var held = _heldMessages.Dequeue();

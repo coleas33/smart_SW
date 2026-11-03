@@ -23,6 +23,12 @@ namespace SwReview.AddIn.Tests;
 /// the review can no longer be restored. The reason is the backend's, printed as sent: for a record whose flagged findings
 /// do not all record an outcome it ends with the console's sentence, which records the rest (`swreview disposition`). A
 /// waiting review is restored as before, with Send offered. Every id and path is fictional.
+///
+/// *Changed 2026-11-03 (cycle 22's Tier 2 review, T400):* the review restored is the one on screen as the page asked for the
+/// `init`, so a review the new backend started is left as it is; a start or a Send on its way holds the restore back no
+/// more, the start's answer replacing the review as any start's does and the Send's dropped; and a review stays as it was
+/// when its turn failed, its error card offering Retry (FR-028), when a save moved the run root, under which the new
+/// backend reads no folder of the old one, or when the host lists no record of it.
 /// </summary>
 public sealed class ReviewPageRestartReadOnlyTests
 {
@@ -47,6 +53,19 @@ public sealed class ReviewPageRestartReadOnlyTests
     private const string MissingReason = ReviewPageSessionsTests.ReadOnlyReason + " " + ConsoleLine;
 
     private const string UnknownReview = "{\"error_class\":\"UnknownReview\",\"message\":\"no review FICT\",\"retryable\":false}";
+
+    /// <summary>The review a second press of Review starts, as the driver's `review.started` and the host's item name it.</summary>
+    private const string NewChat = "chat-2";
+
+    private const string NewRun = "20260923-101500-bracket-2";
+
+    /// <summary>An `error` on the stream that fails the review's turn: the provider refused the model.</summary>
+    private const string ProviderRefused =
+        "{\"error_class\":\"UnknownModel\",\"message\":\"FICT the provider does not offer this model\",\"retryable\":true}";
+
+    /// <summary>The host's refusal of a start.</summary>
+    private static readonly object StartRefused =
+        new { error_class = "ExtractionFailed", message = "FICT the model could not be read", retryable = true };
 
     /// <summary>
     /// A finished review on screen when the backend restarts is shown from its folder at once: the page asks the new backend
@@ -102,6 +121,8 @@ public sealed class ReviewPageRestartReadOnlyTests
     /// rule refused, until a reload. Now the turn is over - its follow-up says it had no answer - and the review is shown
     /// from its folder as any other: read-only when the folder holds a record; when it holds none, its chip says it can no
     /// longer be restored, the pane shows no review and Review is on.
+    /// *Changed 2026-11-03 (cycle 22's Tier 2 review):* and either way the page asks the backend that does not hold the chat
+    /// for no stream of it.
     /// </summary>
     [Theory]
     [InlineData(true)]
@@ -125,12 +146,14 @@ public sealed class ReviewPageRestartReadOnlyTests
             await driver.Route("GET", FolderPath, recorded ? 200 : 404, recorded ? Folder(true) : UnknownReview);
             await driver.ClearCalls();
             int readies = driver.Posted("ready").Length;
+            int opens = driver.Posted("events.open").Length;
             driver.BackendToken = RestartedToken;
             await driver.Post("backend.restarted", new { sentences = Array.Empty<string>() });
             await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init after the restart");
             await driver.Settle();
 
             JsonElement after = await driver.Read(ReadPage);
+            Assert.Equal(opens, driver.Posted("events.open").Length);
             Assert.True(after.GetProperty("stopOff").GetBoolean(), "Stop is on for a turn that ended with its backend.");
             Assert.False(after.GetProperty("reviewOff").GetBoolean(), "Review is off after the turn ended with its backend.");
             Assert.Equal(new[] { "GET " + SnapshotPath, "GET " + FolderPath }, await RestoreReads(driver));
@@ -236,6 +259,236 @@ public sealed class ReviewPageRestartReadOnlyTests
             Assert.Equal(MissingReason, measured.GetProperty("text").GetString());
             Assert.True(measured.GetProperty("whole").GetBoolean(), measured.GetRawText());
             Assert.True(measured.GetProperty("noHorizontalOverflow").GetBoolean(), measured.GetRawText());
+        });
+    }
+
+    // ---- cycle 22's Tier 2 review (T400) --------------------------------------------------------
+
+    /// <summary>
+    /// *Added 2026-11-03 (cycle 22's Tier 2 review):* a review whose turn failed keeps its error card at a restart, and with
+    /// it Retry, which starts a review naming the failed one (FR-028). The card's Open Settings is the way on from a provider
+    /// that refused the key or the model, and a save made there restarts the backend; the failed review is not shown from its
+    /// folder then - neither its chat nor its folder is read - but stays as it was, a failed chat's follow-ups, answers and
+    /// decisions refused as they were before the restart.
+    /// </summary>
+    [Fact]
+    public void AFailedReviewKeepsItsErrorCardAndRetryAfterARestart()
+    {
+        ReviewPageDriver.Run(Kept, async driver =>
+        {
+            await driver.RouteAttention(Chat, SummarySample.Json());
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001", null));
+            await driver.Push(Chat, 2, "error", ProviderRefused);
+            await driver.Push(Chat, 3, "turn.ended", "{\"reason\":\"error\"}");
+            await driver.Push(Chat, 4, "session.ended", "{\"ended_at\":\"2026-11-03T10:30:00+00:00\"}");
+            await driver.Settle();
+            Assert.True((await driver.Read(ReadPage)).GetProperty("retry").GetBoolean(), "the failed review offers no Retry before the restart.");
+
+            await driver.Route("GET", SnapshotPath, 404, ReviewPageRecheckTests.UnknownChat);
+            await driver.Route("GET", FolderPath, 200, Folder(true));
+            await driver.ClearCalls();
+            await Restart(driver);
+
+            JsonElement after = await driver.Read(ReadPage);
+            Assert.True(after.GetProperty("retry").GetBoolean(), "the restart took the failed review's error card down, and Retry with it.");
+            Assert.Null(after.GetProperty("readOnly").GetString());
+            Assert.Equal(1, after.GetProperty("cards").GetInt32());
+            Assert.Empty(await RestoreReads(driver));
+
+            int starts = driver.Posted("review.start").Length;
+            await driver.Read("document.querySelector('#errors [data-action=\"retry\"]').click(); return JSON.stringify({ok: true});");
+            await driver.Settle();
+            Assert.Equal(Chat, Assert.Single(driver.Posted("review.start").Skip(starts)).GetProperty("retry_of").GetString());
+        });
+    }
+
+    /// <summary>
+    /// *Added 2026-11-03 (cycle 22's Tier 2 review):* a save that moves the folder for runs restarts the backend under the new
+    /// run root, and that backend reads no run folder outside it - `GET /reviews/{run_id}` answers `UnknownReview` - though the
+    /// review's record is where it was. The finished review on screen stays as it was before this cycle: its cards, and Open
+    /// report and Open run folder on, which the host opens wherever the record is (owner decision 154A); its chip never says
+    /// it can no longer be restored, with the Remove that would forget it. Neither its chat nor its folder is read, and the
+    /// minutes form goes.
+    /// </summary>
+    [Fact]
+    public void ASaveThatMovesTheRunRootLeavesTheFinishedReviewOnScreen()
+    {
+        ReviewPageDriver.Run(Kept, async driver =>
+        {
+            await Finished(driver);
+            await driver.Route("GET", SnapshotPath, 404, ReviewPageRecheckTests.UnknownChat);
+            await driver.Route("GET", FolderPath, 404, UnknownReview);
+            await driver.ClearCalls();
+            driver.RunRoot = @"C:\FICT-other-runs";
+            await Restart(driver);
+
+            JsonElement after = await driver.Read(ReadPage);
+            Assert.Equal(2, after.GetProperty("cards").GetInt32());
+            Assert.DoesNotContain("This review can no longer be restored.", after.GetProperty("chips").GetString());
+            Assert.False(after.GetProperty("reportOff").GetBoolean(), "Open report is off for a review whose record is intact.");
+            Assert.False(after.GetProperty("folderOff").GetBoolean(), "Open run folder is off for a review whose record is intact.");
+            Assert.False(after.GetProperty("timingShown").GetBoolean(), "the minutes form stays on a review the backend no longer holds.");
+            Assert.Empty(await RestoreReads(driver));
+
+            await driver.Click("open-report");
+            Assert.Equal(Chat, driver.Posted("report.open").Last().GetProperty("chat_id").GetString());
+        });
+    }
+
+    /// <summary>
+    /// *Added 2026-11-03 (cycle 22's Tier 2 review):* a review the host's list does not name - an older host lists none - has
+    /// no folder the page can ask for, so at a restart it stays as it was before this cycle: its chat, its cards and Open
+    /// report, the minutes form gone and nothing read; never a pane whose cards answer no press.
+    /// </summary>
+    [Fact]
+    public void AReviewTheHostKeepsNoRecordOfStaysAsItWasAfterARestart()
+    {
+        ReviewPageDriver.Run(driver => driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json())), async driver =>
+        {
+            await Finished(driver);
+            await driver.ClearCalls();
+            await Restart(driver);
+
+            JsonElement after = await driver.Read(ReadPage);
+            Assert.Equal(2, after.GetProperty("cards").GetInt32());
+            Assert.False(after.GetProperty("reportOff").GetBoolean(), "Open report is off: the page let go of the review's chat.");
+            Assert.False(after.GetProperty("timingShown").GetBoolean(), "the minutes form stays on a review the backend no longer holds.");
+            Assert.Empty(await RestoreReads(driver));
+
+            await driver.Click("open-report");
+            Assert.Equal(Chat, driver.Posted("report.open").Last().GetProperty("chat_id").GetString());
+        });
+    }
+
+    /// <summary>
+    /// *Added 2026-11-03 (cycle 22's Tier 2 review):* a start that makes a restart waiting since a save - during a check,
+    /// say - runs on the new backend, and the host answers the page's messages one at a time, so the `init` the page asked for
+    /// when told of the restart comes after `review.started`. The review on screen then is the new backend's, and is left as
+    /// it is - its stream asked for again, its turn running with Stop on and Review off, a finding on its stream shown - never
+    /// taken for one of the backend that went: neither its chat nor any folder is read.
+    /// </summary>
+    [Fact]
+    public void AReviewTheNewBackendStartedIsNotTakenForOneOfTheOldBackend()
+    {
+        ReviewPageDriver.Run(Kept, async driver =>
+        {
+            await Finished(driver);
+            driver.HoldReviewStart = true;
+            await driver.StartReview();
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(NewChat, NewRun, ReviewPageDriver.ReviewedPath, 10, 30));
+            await driver.ClearCalls();
+
+            int readies = driver.Posted("ready").Length;
+            driver.BackendToken = RestartedToken;
+            await driver.Post("backend.restarted", new { sentences = Array.Empty<string>() });
+            await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init after the restart");
+            await driver.ReleaseReviewStart();
+            await driver.Settle();
+
+            JsonElement after = await driver.Read(ReadPage);
+            Assert.False(after.GetProperty("stopOff").GetBoolean(), "Stop is off while the new backend's review runs.");
+            Assert.True(after.GetProperty("reviewOff").GetBoolean(), "Review is on while the new backend's review runs.");
+            Assert.DoesNotContain(await driver.Calls(), call => call.GetProperty("path").GetString() == "/sessions/" + NewChat + "/snapshot"
+                || (call.GetProperty("path").GetString() ?? string.Empty).StartsWith("/reviews/", StringComparison.Ordinal));
+            Assert.Equal(NewChat, driver.Posted("events.open").Last().GetProperty("chat_id").GetString());
+
+            await driver.Push(NewChat, 1, "finding", Finding("F-003", null));
+            await driver.Settle();
+            Assert.Equal(1, (await driver.Read(ReadPage)).GetProperty("cards").GetInt32());
+        });
+    }
+
+    /// <summary>
+    /// *Added 2026-11-03 (cycle 22's Tier 2 review):* a Send on its way at the restart - the proxy makes a restart that waits
+    /// before it sends a Send on, and answers the Send `UnknownChat`, its chat having ended with the backend - may hear its
+    /// answer after the `init` that names the new backend. The waiting review is shown from its folder at once all the same,
+    /// read-only with Send offered, and the Send's late answer is dropped: no refusal under Send, and no stream asked of the
+    /// backend that does not hold the chat. So is an acceptance, which only the backend that went can have given.
+    /// </summary>
+    [Theory]
+    [InlineData(404)]
+    [InlineData(202)]
+    public void ASendOnItsWayAtARestartLeavesTheWaitingReviewShownFromItsFolder(int answer)
+    {
+        RestoredReviewFixture fixture = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(driver => fixture.Configure(driver, refuseSend: true), async driver =>
+        {
+            // The re-run, its Send refused: a live waiting review, its Send offered again.
+            await ReviewPageRecheckTests.PressSend(driver);
+            string send = "/sessions/" + fixture.RecheckedChat + "/send";
+            await driver.HoldRoute("POST", send, answer, answer == 404 ? ReviewPageRecheckTests.UnknownChat : "{}");
+            await driver.Route("GET", "/sessions/" + fixture.RecheckedChat + "/snapshot", 404, ReviewPageRecheckTests.UnknownChat);
+            await ReviewPageRecheckTests.PressSend(driver);
+            int reviews = (await driver.Calls()).Count(call => call.GetProperty("path").GetString() == fixture.ReviewPath);
+            int opens = driver.Posted("events.open").Length;
+
+            int readies = driver.Posted("ready").Length;
+            driver.BackendToken = RestartedToken;
+            await driver.Post("backend.restarted", new { sentences = Array.Empty<string>() });
+            await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init after the restart");
+            await driver.Settle();
+            await driver.ReleaseRoute("POST", send);
+            await driver.Settle();
+
+            JsonElement state = await driver.Read(ReviewPageRecheckTests.ReadState);
+            Assert.True(state.GetProperty("readOnly").GetBoolean(), state.GetRawText());
+            Assert.Equal(fixture.Restored.GetProperty("read_only_reason").GetString(), state.GetProperty("reason").GetString());
+            Assert.False(state.GetProperty("sendOff").GetBoolean(), "Send is the one control a restored waiting review offers.");
+            Assert.Equal(JsonValueKind.Null, state.GetProperty("failure").ValueKind);
+            Assert.Equal(reviews + 1, (await driver.Calls()).Count(call => call.GetProperty("path").GetString() == fixture.ReviewPath));
+            Assert.Equal(opens, driver.Posted("events.open").Length);
+        });
+    }
+
+    /// <summary>
+    /// *Added 2026-11-03 (cycle 22's Tier 2 review):* a start on its way when the `init` naming the new backend lands - one
+    /// pressed after the page asked for it, which the host answers after that `init` - holds the review's restore back no
+    /// more than a Send does: the review on screen is shown from its folder at once, and the start's answer then replaces it,
+    /// as any start's does, or, refused, leaves it shown read-only with the refusal's card.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AStartOnItsWayAtARestartLeavesTheReviewShownFromItsFolderUntilItsAnswer(bool refused)
+    {
+        ReviewPageDriver.Run(Kept, async driver =>
+        {
+            await Finished(driver);
+            await driver.Route("GET", SnapshotPath, 404, ReviewPageRecheckTests.UnknownChat);
+            await driver.Route("GET", FolderPath, 200, Folder(true));
+            driver.HoldReady = true;
+            int readies = driver.Posted("ready").Length;
+            driver.BackendToken = RestartedToken;
+            await driver.Click("save-settings");
+            await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init after the save");
+            driver.HoldReviewStart = true;
+            await driver.StartReview();
+            await driver.ClearCalls();
+            await driver.ReleaseReady();
+            await driver.Settle();
+
+            JsonElement shown = await driver.Read(ReadPage);
+            Assert.Equal(MissingReason, shown.GetProperty("readOnly").GetString());
+            Assert.True(shown.GetProperty("decisionsOff").GetBoolean(), shown.GetRawText());
+            Assert.Equal(new[] { "GET " + SnapshotPath, "GET " + FolderPath }, await RestoreReads(driver));
+
+            await driver.ReleaseReviewStart(refused ? StartRefused : null);
+            await driver.Settle();
+
+            JsonElement after = await driver.Read(ReadPage);
+            if (refused)
+            {
+                Assert.Equal(MissingReason, after.GetProperty("readOnly").GetString());
+                Assert.Equal(2, after.GetProperty("cards").GetInt32());
+                Assert.True(after.GetProperty("retry").GetBoolean(), "the refused start shows no card.");
+            }
+            else
+            {
+                Assert.Null(after.GetProperty("readOnly").GetString());
+                Assert.Equal(0, after.GetProperty("cards").GetInt32());
+                Assert.False(after.GetProperty("stopOff").GetBoolean(), "Stop is off while the started review runs.");
+            }
         });
     }
 
@@ -372,6 +625,8 @@ return JSON.stringify({ ok: true });");
     /// The page as a restart leaves it: the read-only line when shown, the cards, every decision, triage and note control and
     /// every question control with whether all are off, the follow-up box, Stop, Review, the status line, whether the minutes
     /// form shows, the chips' text, the pins' answers and the Transcript's text.
+    /// *Changed 2026-11-03 (cycle 22's Tier 2 review):* and whether Open report and Open run folder are off, and whether an
+    /// error card offers Retry.
     /// </summary>
     private const string ReadPage = @"
 var reason = document.getElementById('read-only');
@@ -397,6 +652,9 @@ return JSON.stringify({
   followupOff: document.getElementById('followup-text').disabled && document.getElementById('followup-send').disabled,
   stopOff: document.getElementById('stop-turn').disabled,
   reviewOff: document.getElementById('start-review').disabled,
+  reportOff: document.getElementById('open-report').disabled,
+  folderOff: document.getElementById('open-folder').disabled,
+  retry: !!document.querySelector('#errors .card.error [data-action=""retry""]'),
   status: document.getElementById('results-state').textContent,
   timingShown: !!timing && h.rendered(timing),
   chips: document.getElementById('review-chips').textContent,
