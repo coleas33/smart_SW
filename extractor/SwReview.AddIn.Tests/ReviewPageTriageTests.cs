@@ -88,6 +88,8 @@ namespace SwReview.AddIn.Tests;
 /// a triage, and the page changes the tally only when the event names it, so an older backend's finding, which never does,
 /// leaves it as it was (009 FR-030). And a restore read that fails before the labels answer draws its error card once they
 /// have, so the card says its next step.
+/// *Added 2026-11-03 (002 T374; a read-only check of those fixes):* a restore read for a review the engineer left before the
+/// labels answered draws nothing once they have, neither its snapshot nor its error card.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -2275,6 +2277,49 @@ public sealed class ReviewPageTriageTests
     }
 
     /// <summary>
+    /// A restore read for a review the engineer left before the labels answered draws nothing once they have (cycle 13's
+    /// read-only check of its Tier 2 review's fixes): after the wait each restore read checks again that its review is the one
+    /// shown, for a failure's error card (`restoreFailed`) as for the live snapshot and the run folder's. After a reload with
+    /// the labels held the page restores chat-1, the newest review of the document, and the engineer chooses chat-2, whose live
+    /// snapshot holds F-001 and F-002, before the labels answer. Chat-1's live snapshot read answers 500; reloaded, 200 with
+    /// F-007; reloaded again, `UnknownChat`, its run folder's read answering 200 with F-007 read-only. Each time, once the
+    /// labels answer, Results hold chat-2's two cards alone, in the backend's words, and no error card.
+    /// </summary>
+    [Fact]
+    public void AReviewLeftBeforeTheLabelsAnswerDrawsNothingIntoTheNext()
+    {
+        const string ChatRun = "20260923-101500-bracket-1";
+        string livePath = "/sessions/" + Chat + "/snapshot";
+        string folderPath = "/reviews/" + ChatRun;
+        ReviewPageDriver.Run(
+            driver =>
+            {
+                driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+                driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, ChatRun, ReviewPageDriver.ReviewedPath, 10, 15));
+                driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json()));
+                driver.HeldInitialRoutes.Add(("GET", "/labels"));
+                driver.InitialRoutes.Add(("GET", "/sessions/" + OtherChat + "/snapshot", 200,
+                    Snapshot(OtherRun, false, Finding("F-001"), Finding("F-002"))));
+                driver.InitialRoutes.Add(("GET", livePath, 500, "null"));
+            },
+            async driver =>
+            {
+                await LeftBeforeTheLabels(driver, livePath);
+
+                driver.InitialRoutes.RemoveAll(route => route.Path == livePath);
+                driver.InitialRoutes.Add(("GET", livePath, 200, Snapshot(ChatRun, false, Finding("F-007"))));
+                await driver.Reload();
+                await LeftBeforeTheLabels(driver, livePath);
+
+                driver.InitialRoutes.RemoveAll(route => route.Path == livePath);
+                driver.InitialRoutes.Add(("GET", livePath, 404, ReviewPageRecheckTests.UnknownChat));
+                driver.InitialRoutes.Add(("GET", folderPath, 200, Snapshot(ChatRun, true, Finding("F-007"))));
+                await driver.Reload();
+                await LeftBeforeTheLabels(driver, folderPath);
+            });
+    }
+
+    /// <summary>
     /// A read-only restore after a backend restart replays no Transcript (H-g-010's *Left open*), so its snapshot names, under
     /// `withdrawn`, each withdrawal that took a decision, from the record's own stream, and the Transcript prints each after its
     /// note that the transcript is in the run folder, worded as the live line: the reason, then the backend's clause, as sent -
@@ -2371,6 +2416,24 @@ public sealed class ReviewPageTriageTests
         Assert.Contains("GET " + snapshotPath, asked);
         Assert.Contains("GET /labels", asked);
         await driver.ReleaseRoute("GET", "/labels");
+    }
+
+    /// <summary>
+    /// After a boot or a reload whose labels are held, with chat-1 being restored (002 cycle 13's read-only check): once the page
+    /// has read <paramref name="readPath"/> for it, the engineer chooses chat-2, and then the labels answer. Results hold chat-2's
+    /// two cards alone, the first saying in the backend's words that it has no triage, and no error card.
+    /// </summary>
+    private static async Task LeftBeforeTheLabels(ReviewPageDriver driver, string readPath)
+    {
+        await driver.Settle();
+        Assert.Contains(
+            "GET " + readPath,
+            (await driver.Calls()).Select(call => call.GetProperty("method").GetString() + " " + call.GetProperty("path").GetString()));
+        await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+        await LabelsAnswerAfter(driver, "/sessions/" + OtherChat + "/snapshot");
+        Assert.Equal(0, (await driver.Read(ReadErrorCards)).GetProperty("cards").GetInt32());
+        Assert.Equal(new[] { "F-001", "F-002" }, ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
+        Assert.Equal(LabelsSample.NoTriageUndecided, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("text").GetString());
     }
 
     /// <summary>Presses one triage button of one card, as the engineer does.</summary>
