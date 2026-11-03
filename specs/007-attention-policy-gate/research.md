@@ -948,3 +948,51 @@ note's path and nothing else.
 5. Step 4.1 runs it once the review has ended, after the answers' turn if it asked questions, and
    before step 4.4 can send it anything; after a Retry, on the stopped run's folder too, so the
    note holds both runs of the timed review.
+
+**Built** (2026-11-02, T084), in the seat plan: the function, after `Show-SetupTime`, takes the
+durations from what the two commands print, kept in the block and never printed, and reads the
+rounds from `events.jsonl`; what the commands do gives it a bullet, and `Show-ReviewFacts`' and
+`Show-SetupTime`'s bullets say it writes their timings; rule 5 names it; step 4.1's opening says
+it writes the start and end, the full stamp and the runtime, and a timing bullet runs it, with a
+warning that a Notepad left open on the note would save over the block; step 4.1's and step
+4.11's Record lines say it wrote the durations. It appends a blank line first, so a last line
+Notepad left unended stays whole.
+
+**Not changed**: step 4.5's item 1 still has the engineer note A's `last round <n> s` in the
+note: it is 009 T083's reading before and after a restore, taken after step 4.4 may have sent
+A's review a turn, which the block written at step 4.1 does not hold. Step 4.10's four timings
+are read by hand from the backend log or the host's statuses, as that step says, so a timed
+review's stay typed, as does a time noted when SOLIDWORKS stops answering. At M0-a rule 5
+names the command for the review its table times; that table is 197A's, written when M0-a is
+planned. The handover, the results sheet, the runbook and `CONTRIBUTING.md` say what stays where,
+not how it is copied, and are unchanged.
+
+**Tests changed on purpose**, with a dated note, none loosened:
+`test_a_real_designs_timing_figures_stay_out_of_the_findings_document` (step 4.1's opening: the
+command writes the start and end the engineer noted) and
+`test_the_specs_readme_counts_a_task_173a_closed_as_done` (007's row). New:
+`test_save_timing_note_appends_a_timed_reviews_figures_and_prints_only_where_it_wrote`,
+`test_save_timing_note_writes_nothing_for_a_folder_it_cannot_time`,
+`test_save_timing_note_reads_the_run_folder_and_the_backend_log_and_writes_only_the_note` and
+`test_step_4_1_writes_the_timed_reviews_figures_with_save_timing_note`. The two that run the
+function in Windows PowerShell point `%LOCALAPPDATA%` at a fictional backend log, so the
+machine's own logs are never read, and stand this interpreter in for `uv`.
+
+**Tests first**: T083's eight cases failed before T084, each for want of the function or its
+words. After T084 they pass, and four mutations of the function - an overwrite for the append, a
+printed figure, a misnumbered round, a write in the run folder - each turned them red. The README
+pin was red against 76 / 5 / 0 at T082 and against 77 / 8 / 0 at T085 before each recount.
+
+**Gates** (T085; 2026-11-02), on T085's tree:
+
+- Python 3.12.3, in the worktree's own environment, and 3.11.16 (`uv run --python 3.11
+  --isolated --all-extras`), the tokenizer required, over the seven modules that read the changed
+  files - `test_workstation_test_plan.py`, `test_workstation_handover.py`,
+  `test_update_workstation_script.py`, `test_seat_assumptions.py`, `test_seat_switch_evidence.py`,
+  `test_remodel_ledger.py` and the identifier scan, `test_tracked_files_carry_no_recorded_number.py`:
+  495 passed on each, none skipped.
+- `ruff check src tests` clean.
+- The link check over the cycle's five changed Markdown files: 114 relative links, anchors
+  included, none broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate. No SOLIDWORKS process, seat task, or paid or live
+  test ran.
