@@ -132,13 +132,16 @@ answer_basis:
 # both and the page prints the line as sent. Owner decision 194A: `restated` when the answer
 # graded the checks again by code (58A's restate), and `carried` when a re-run of a waiting
 # review did not carry the decision (feature 015's carry), each with its `_with_triage`.
+# `decide_again` ends each line, after a space, on a review that takes decisions; a read-only
+# restore's buttons are off, so the line it shows leaves it out (feature 002 cycle 13).
 rerun:
-  cleared: "The check ran again after your answer and its verdict changed, so your {decision} was cleared. Decide again."
-  cleared_with_triage: "The check ran again after your answer and its verdict changed, so your {decision} ({triage}) was cleared. Decide again."
-  restated: "Your answer graded the checks again and this verdict changed, so your {decision} was cleared. Decide again."
-  restated_with_triage: "Your answer graded the checks again and this verdict changed, so your {decision} ({triage}) was cleared. Decide again."
-  carried: "The checks ran again on the saved evidence and this verdict changed, so your {decision} was not carried over. Decide again."
-  carried_with_triage: "The checks ran again on the saved evidence and this verdict changed, so your {decision} ({triage}) was not carried over. Decide again."
+  cleared: "The check ran again after your answer and its verdict changed, so your {decision} was cleared."
+  cleared_with_triage: "The check ran again after your answer and its verdict changed, so your {decision} ({triage}) was cleared."
+  restated: "Your answer graded the checks again and this verdict changed, so your {decision} was cleared."
+  restated_with_triage: "Your answer graded the checks again and this verdict changed, so your {decision} ({triage}) was cleared."
+  carried: "The checks ran again on the saved evidence and this verdict changed, so your {decision} was not carried over."
+  carried_with_triage: "The checks ran again on the saved evidence and this verdict changed, so your {decision} ({triage}) was not carried over."
+  decide_again: "Decide again."
 
 # What a withdrawal took (feature 002 FR-031, roadmap hole H-g-010): when an answer graded the
 # checks again and a check no longer produces a finding that held a decision, the decision and its

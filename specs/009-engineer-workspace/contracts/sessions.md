@@ -76,6 +76,12 @@ record names another session holds a review that claimed the folder and moved th
 aside (feature 003 User Story 6 scenario 11), and that review is restored, from its
 `session.json` and never from the check's session.
 
+*Amended 2026-11-02 (feature 002 cycle 13; its FR-031):* this body is read-only, so its `cleared`
+lines leave out the call to decide again (`RerunWords.read_only`), and it adds `withdrawn`, only
+when there is one: each `finding.withdrawn` body of the record's own stream that names the
+decision it took, in the order they went - those `report.md` names under "Withdrawn with a
+decision" ([data-model.md](../data-model.md) section 8).
+
 ## 5. The chips and choosing one
 
 `<nav id="review-chips">` under the header: one chip per `sessions` item in the host's order, reading
@@ -91,7 +97,10 @@ shown one `aria-current="true"`. The page asks `sessions.list` after `init` and 
    `configuration`) and `readOnly = null`.
 3. `GET /sessions/{chat_id}/snapshot`; on `404 UnknownChat`, `GET /reviews/{run_id}`; on
    `404 UnknownReview`, the chip reads "This review can no longer be restored." with a Remove button
-   that sends `session.forget`, and the pane shows no review.
+   that sends `session.forget`, and the pane shows no review. *Amended 2026-11-02 (feature 002
+   cycle 13):* either snapshot is drawn once the `GET /labels` read in flight has answered, a
+   failed one included, so after a reload its cards carry the backend's words whichever read
+   answers first.
 4. Renders the snapshot into Results: the findings' cards in order, the coverage fold from
    `coverage`, the not-loaded warning, the ranking and its summary through the same functions the
    end of a turn uses, the pins and drafts kept for that chat. No `POST` is made and no `review.start`
@@ -184,4 +193,6 @@ closes the stream nor reloads the ranking; Transcript scrolls to its end once, w
 After that the stream behaves as live.
 
 Restored from `/reviews/{run_id}`: Transcript reads "This review was restored from its run folder;
-its transcript is in events.jsonl there." with an Open run folder button.
+its transcript is in events.jsonl there." with an Open run folder button. *Amended 2026-11-02
+(feature 002 cycle 13):* after it, one line for each body of the snapshot's `withdrawn`, as the
+live Transcript prints the withdrawal: "<id> withdrawn: <reason>; <taken>".

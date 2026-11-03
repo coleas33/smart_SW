@@ -18,7 +18,7 @@ Pure: it reads its arguments (and, through the summary, the words file) and writ
 nothing. The run's events, which the two routes replay from its stream, are one of them: owner
 decision 193A works a cleared decision's line out from them (`cleared`). `report.md` prints the
 same lines, and names the findings withdrawn with a decision (`withdrawn_lines`; roadmap hole
-H-g-010).
+H-g-010), which a read-only snapshot names too (`withdrawn`; 002 cycle 13).
 """
 
 from __future__ import annotations
@@ -79,6 +79,11 @@ def review_snapshot(
     wrote it (feature 013, `contracts/sources.md` section 1). `cleared` is added only when
     `events`, the run's stream, leaves a line to show (`cleared_lines`), as `send_in_flight`
     is only when true, so every other snapshot keeps its bytes.
+
+    A read-only snapshot - a `read_only_reason` given - takes no decision and replays no
+    Transcript (002 FR-031, cycle 13): its cleared lines leave out the call to decide again
+    (`RerunWords.read_only`), and it adds `withdrawn`, the withdrawals that took a decision
+    (`withdrawn_lines`), only when there is one, for the page to print as the live Transcript does.
     """
     block = not_examined(package)
     names = component_names(package)
@@ -99,9 +104,22 @@ def review_snapshot(
         "ranking": to_jsonable_python(review_ranking(session, package, usage=usage, send=send)),
         "not_examined": None if block is None else block.model_dump(mode="json"),
     }
-    cleared = cleared_lines(session, events)
+    own = _own_events(session, events)
+    cleared = cleared_lines(session, own)
+    withdrawn: list[dict[str, Any]] = []
+    if read_only_reason is not None:
+        rerun = load_words().rerun
+        cleared = [
+            {**line, "reason": rerun.read_only(line["reason"])}
+            if isinstance(line.get("reason"), str)
+            else line
+            for line in cleared
+        ]
+        withdrawn = withdrawn_lines(session, own)
     if cleared:
         snapshot["cleared"] = cleared
+    if withdrawn:
+        snapshot["withdrawn"] = withdrawn
     if send_in_flight:
         snapshot["send_in_flight"] = True
     return snapshot
@@ -186,7 +204,8 @@ def restored_snapshot(
     `read_only_lead`, a space, and `send.restored_line` dated with `checked_at`'s stored wall
     clock - 009's second sentence is not in it - and its summary carries the `restored` Send
     block, with no count, from the persisted provider alone. `events`, the folder's stream,
-    gives `cleared` as `review_snapshot`'s do.
+    gives `cleared` as `review_snapshot`'s do, in their read-only form, and `withdrawn` (002 cycle
+    13).
     """
     words = load_words()
     status = session.model_status

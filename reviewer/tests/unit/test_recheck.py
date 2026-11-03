@@ -1801,14 +1801,18 @@ def test_a_carried_triage_stays_between_two_passes_or_two_flagged_findings(bare:
     assert recheck_row(run.session) == []
 
 
-def carried_line(decision: str, triage: str | None) -> str:
+def carried_line(decision: str, triage: str | None, *, read_only: bool = False) -> str:
     """The words file's line for a decision a re-run did not carry because its verdict changed
-    (owner decision 194A): the decision's noun and, when one was recorded, its triage's word."""
+    (owner decision 194A): the decision's noun and, when one was recorded, its triage's word.
+    *Changed 2026-11-02 on purpose (002 T371; cycle 13):* `read_only` writes the line as a
+    read-only restore names it, without the call to decide again; every earlier caller is as
+    before."""
     triaged = decision if triage is None else f"{decision} ({triage})"
-    return (
+    line = (
         "The checks ran again on the saved evidence and this verdict changed, so your "
-        f"{triaged} was not carried over. Decide again."
+        f"{triaged} was not carried over."
     )
+    return line if read_only else f"{line} Decide again."
 
 
 def test_a_carried_decision_whose_severity_changed_is_cleared_and_says_so(bare: Any) -> None:
@@ -1950,7 +1954,11 @@ def test_check_again_whose_carry_clears_a_decision_shows_its_line_in_the_new_cha
     the checks do not give it again - as a build that grades it otherwise would leave it - so
     Check again does not carry the Accept. The new chat's snapshot names the carry's line on the
     finding the Accept would have landed on, and so does a restarted backend's restore of the
-    committed re-run."""
+    committed re-run.
+
+    *Changed 2026-11-02 on purpose (002 T371; cycle 13; a case T370 missed):* that restore is
+    read-only, its decision buttons off, so it names the line without the call to decide again,
+    where it named the stream's words; the new chat's live snapshot names them as written."""
     waiting = waiting_answers.waiting_review(app, client, run_root / "FICT-recheck-carry-line")
     folder = waiting.fixture.folder
     flagged = next(
@@ -1990,7 +1998,8 @@ def test_check_again_whose_carry_clears_a_decision_shows_its_line_in_the_new_cha
     with restarted_app(run_root, settings) as again:
         restored = again.get(f"/reviews/{folder.name}")
     assert restored.status_code == 200, restored.text
-    assert restored.json().get("cleared") == [line]
+    read_only = carried_line("Accept", "real but already known", read_only=True)
+    assert restored.json().get("cleared") == [{**line, "reason": read_only}]
 
 
 def test_two_earlier_decisions_meeting_one_finding_carry_neither_and_name_each(
