@@ -7445,10 +7445,11 @@ the decision register now records 160A as done.
   T380).
 - **Left open**: `IllegalTransition`'s sentence still says to reload the review, which draws the
   note box from the record, for every refusal it answers - a different decision on a settled
-  finding, or Defer again on a Defer that holds a triage; the live route still records the note
-  its body sends, so a client other than the page that sends none after a Defer records none;
-  and the hole's row in [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the
-  roadmap's next update run.
+  finding, a pass pressed again, or Defer again with no triage on a Defer that holds one (the
+  *Review* below); the live route still records the note its body sends, so a client other than
+  the page that sends none after a Defer records none, though the record now takes a note of
+  `None` as the one recorded; and the hole's row in
+  [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the roadmap's next update run.
 - **Gates** (T380; 2026-11-03), on the cycle's final tree:
   - The whole non-live suite, the tokenizer required: 18,921 passed and 5 skipped on Python
     3.12.3, and the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`). Its two
@@ -7461,3 +7462,36 @@ the decision register now records 160A as done.
   - The link check over the cycle's eight changed Markdown files, anchors included, none broken;
     every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
     ran.
+- **Review** (cycle 15's Tier 2 review, 2026-11-03; one must-fix, two should-fix, each fixed
+  test first under T380; no decision id):
+  - *A pass pressed again* (must-fix). `OutcomeNeeded` reached a pass too, whose card has no
+    no-triage line and offers one outcome, "wrong: a miss", so a second press of Accept - a note
+    typed, or a double click - told the engineer to record a miss on a pass judged fine.
+    `OutcomeNeededError` is now a flagged finding's alone (`finding.status !=
+    SUPPRESSED_STATUS`, the rule `isPass` and the no-triage line use); a pass is refused as
+    before, a plain `ValueError`, `409 IllegalTransition`, and its Defer's message names no
+    triage.
+  - *A Defer's second triage* (should-fix). A deferred card that holds a triage shows it pressed,
+    so Defer pressed again sent it and met `409 IllegalTransition`, whose sentence says to
+    reload, losing the typed note. It is now `TriageAlreadyRecordedError`,
+    `409 TriageAlreadyRecorded`, as on an Accept or Reject, with the same message; with no triage
+    it is `IllegalTransition` as before.
+  - *The console's note* (should-fix). The rule for `--note` left out lived in `cli.py`, which
+    read `session.json` twice; `set_disposition` and `apply_disposition` now take a note of
+    `None` as the note recorded (none before a first decision), and `cli.py` sends `--note` as
+    given. Default: the live route still records the note its body sends, the page always
+    sending its box.
+  - Tests: `test_triage.py`'s
+    `test_a_pass_decided_without_a_triage_is_refused_the_same_decision_as_before` and
+    `test_a_decision_sent_with_no_note_keeps_the_note_recorded`, and `test_chat_server.py`'s
+    `test_a_pass_accepted_again_without_an_outcome_is_still_an_illegal_transition` and
+    `test_a_defer_again_with_a_triage_on_one_that_holds_one_is_a_second_triage`. Changed on
+    purpose, each with a dated note, none loosened:
+    `test_a_defer_holding_a_triage_is_refused_another_defer_naming_it` (a case added; with a
+    triage, the class above) and `test_a_second_triage_or_another_decision_is_still_refused`'s
+    `a-defer-again-holding-a-triage`. Red first, 9 cases, each for want of its change, while the
+    three modules' other 474 passed. This cycle's amendments say so: FR-031's,
+    [contracts/chat-api.md](contracts/chat-api.md) (the disposition route), 001
+    [contracts/cli.md](../001-agentic-design-review/contracts/cli.md) and 009
+    [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md) section 1. No
+    words, page or fixture changed; nothing left for later.
