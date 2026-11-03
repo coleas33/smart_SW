@@ -8038,7 +8038,58 @@ ticked.
     drafts and the pins stay in page memory per chat, where the page already keeps them.
     Decisions on a restored review stay off: allowing them would amend 009 FR-021 and wait on the
     owner.
-- **Built**: at the close (T398 to T400 in [tasks.md](tasks.md), Phase 37).
-- **Left open**: at the close.
-- **Gates** (T400), on the cycle's final tree:
+- **Built** (2026-11-03; T397 to T400 in [tasks.md](tasks.md), Phase 37, each test written first):
+  - The backend (T399): the words file's `read_only_console`, after `read_only_off`, and its
+    `Words` field; `report/snapshot.restored_snapshot` ends 009's sentence with it, after a space,
+    for a record that waits for no Send while `_outcomes_missing` holds - a flagged finding with
+    no triage, decided or not; dated notes in [contracts/chat-api.md](contracts/chat-api.md)
+    (`GET /reviews/{run_id}`), 009 [contracts/sessions.md](../009-engineer-workspace/contracts/sessions.md)
+    sections 4 and 6 and 009 [data-model.md](../009-engineer-workspace/data-model.md) sections 1
+    and 8. The pane fixtures' three generators wrote every fixture byte for byte as committed, so
+    the sha256 pin of `review-send-failure-events.json` stands; `LabelsSample.cs` mirrors the
+    `labels` group alone, which the new key is not in.
+  - The page (T399): `app.js`'s `requestInit`, when `init` names another backend, closes the
+    stream of the live review on screen, says a follow-up still waiting had no answer, ends a turn
+    on screen and shows the review again through `showReview`, the waiting one's path; the minutes
+    form's `chatGone` stays for a start, a Send or a re-run on its way.
+  - Tests first: T398's 11 Python cases failed for want of `Words.read_only_console`, and 8 of
+    them, with the words alone written, for want of the line's end; its six page facts failed for
+    want of the restore - no read-only line, no read of the folder, Stop left on for a turn that
+    ended with its backend. The guards that passed at once - the four Python cases whose line is
+    009's alone, and the waiting review's page fact - were proved by mutants, each file restored
+    byte for byte and its sha256 checked ([tasks.md](tasks.md), T399). Changed on purpose, none
+    loosened, each with a dated note: the three tests that pinned the line of a finished record
+    whose flagged findings record no outcome (`test_review_snapshot.py`,
+    `test_chat_review_routes.py` and `test_waiting_answers.py`), and the 002 literal of the
+    specs-README pin (T397, T400).
+- **Left open**:
+  - A card's note typed before a restart goes with the live card, as on a review switch: the
+    console records that finding's outcome now, and its note is typed again there (`--note`).
+  - The console line names the command alone, not its run folder, finding and decision; and the
+    seat plan has no step that records the rest of a triage at the console after a restart, its
+    step 4.5 recording only the minutes there. For the owner, with M0-a's records.
+  - A follow-up's pin says "No answer: the turn ended (restarted)." in the page's own words, as
+    the other ends of a turn do, not the words file's; a turn that did end with an answer the page
+    had not read yet has it in `events.jsonl`, where the restored Transcript points.
+  - A start, a Send or a re-run on its way at the restart keeps cycle 18's rule - the form goes
+    and nothing else changes - until its answer lands.
+  - The captured page fixture `review-waiting-apply-failure.json` has no generator and keeps its
+    capture's 009 sentence on its two restored records, whose flagged findings record no outcome,
+    though the backend now ends that line with the console's for them.
+  - Decisions on a restored review stay off (009 FR-021); allowing them would amend FR-021, and is
+    the owner's.
+- **Gates** (T400; 2026-11-03), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,006 passed and 5
+    skipped, ten of them this cycle's new cases. Its two warnings are neither of this cycle: the
+    test client's deprecation, and a serializer warning from `test_ir_loader_append.py`'s invalid
+    row.
+  - On Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the modules the change
+    touches and those that read the files it changed: 27 modules, 1,691 passed.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,385 add-in tests passed, seven of them this cycle's new facts.
+  - The link check over the cycle's eight changed Markdown files, anchors included, 469 links and
+    none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or
+    live test ran.
   - The whole suites on the final tree: recorded once they run.
