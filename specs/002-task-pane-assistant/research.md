@@ -8189,7 +8189,11 @@ note box from the record, losing a note typed for the press.
     has a decision, and an Accept or a Reject is final. The one recorded stands and is shown again;
     the card cannot change it."; `DecisionAlreadyRecorded`, "That decision is already recorded, so
     nothing changed."; `AlreadyDeferred`, "That finding is already deferred, with its triage. When
-    you decide, Accept or Reject keeps that triage, or takes the one you pick."
+    you decide, Accept or Reject keeps that triage, or takes the one you pick." *Changed 2026-11-03
+    (the Tier 2 review):* `DecisionAlreadyRecorded`'s is "That decision is already recorded, so
+    nothing changed. An Accept or a Reject is final; a Defer still needs one of them when you
+    decide.": a pass's Defer recorded without a triage and pressed again with none meets it, and a
+    pass's card has no no-triage line to say what follows.
   - **The console.** `swreview disposition` prints its one line, the record's class and message,
     which say what the page's sentence says in the record's terms, naming the finding and the
     decision recorded, since the page's words name the card and its buttons. A different
@@ -8204,6 +8208,9 @@ note box from the record, losing a note typed for the press.
     and keeps it as the finding's, so a decision another client recorded after the card was drawn,
     unseen once the stream closed at the session's end, is the one shown. A refusal without the
     key - `TurnRunning`, or an older backend's - shows the record the page holds, as before.
+    *Changed 2026-11-03 (the Tier 2 review):* each also carries the review's tally, `triage_tally`,
+    while some finding records a triage, as a reply does, and the page shows it with the record;
+    and the page draws both only while the card holds the record it held when that press was made.
   - **The note box.** A refused press leaves it as typed, whatever the refusal (cycle 11's Tier 2
     review), and the record drawn from a refusal never touches it.
 - **Built** (2026-11-03; T402 and T403 in [tasks.md](tasks.md), Phase 38, the tests written
@@ -8235,7 +8242,15 @@ note box from the record, losing a note typed for the press.
 - **Left open**:
   - A refusal names the record, but not the triage tally, which stays as the page last had it
     until the next reply or event names it; and a decision another client records after the
-    stream closed is seen only when the engineer presses on that card.
+    stream closed is seen only when the engineer presses on that card. *Changed 2026-11-03 (the
+    Tier 2 review):* a refusal names the tally too; the rest stands.
+  - *Added 2026-11-03 (the Tier 2 review):* the page orders no reply, refusal or event against
+    another, so a refusal draws its record and tally only while the card holds the record it held
+    at its press. After the session's end, a decision another client records between two presses
+    on one card, the first press's reply landing after the second was made, is then not shown
+    until the next press; and a refusal on one card that lands after another card's later reply
+    shows the older tally, as two replies on two cards have since cycle 7 (`docs/review-backlog.md`,
+    cycle 23).
   - Other refusals still say to reload where a reload is what shows the truth: `UnknownFinding`
     (a finding the review no longer holds), `AlreadyAnswered`, `UnknownEvidenceRequest` and
     `NotWaiting`. None is a decision the record refused.
@@ -8246,6 +8261,32 @@ note box from the record, losing a note typed for the press.
     cycle 15.
   - The hole's row in [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the roadmap's
     next update run.
+- **Tier 2 review** (T404; 2026-11-03): no must-fix and four should-fix, all fixed, test first
+  where behaviour changed ([tasks.md](tasks.md), T404's sub-item); the rest of the second is in
+  `docs/review-backlog.md`'s cycle 23 section.
+  - **The tally with the record** (should-fix 1). A refusal of the record redrew the card but not
+    the tally: after the session's end, an Accept recorded though its reply came back as the
+    proxy's `502 BackendUnavailable`, pressed again and refused, showed that Accept with the tally
+    still counting it not recorded. Each refusal of the record now carries `triage_tally` while
+    some finding records a triage, the reply's `with_triage_tally`, read with the disposition, and
+    the page shows it with the record.
+  - **Only over the record held at the press** (should-fix 2; the default taken). Each reply comes
+    back on a task of its own (`TaskPaneControl.ServePageResource`) and the events through the
+    `EventStreamPump`, so a later press's reply and event can land before an earlier press's
+    refusal, whose record, read before that later press was recorded, is then the older: a
+    `wrong` recorded went back to no triage on the card. A refusal now draws its record and tally
+    only while the card holds the record it held when that press was made; otherwise the card
+    keeps what it holds, its sentence above the refusal, as before this cycle. The review found
+    accepting the race reasonable if said; the guard costs a few lines, and its rest is *Left
+    open*.
+  - **What a Defer still needs** (should-fix 3; the default taken). `DecisionAlreadyRecorded`'s
+    sentence gained what can follow (*The words*): one sentence that serves every decision, as
+    `IllegalTransition`'s does, rather than a class of its own for a pass's Defer.
+  - **The claim narrowed** (should-fix 4). The disposition route's amendment in
+    [contracts/chat-api.md](contracts/chat-api.md), FR-031's in [spec.md](spec.md) and this
+    phase's *Checkpoint* in [tasks.md](tasks.md) said no refusal, or no refused decision, says to
+    reload; `404 UnknownFinding` still does (*Left open*). Each now says it of a refusal of the
+    record.
 - **Gates** (T404; 2026-11-03), on the cycle's own tree:
   - The whole non-live suite, the tokenizer required: 19,006 passed and 5 skipped on Python
     3.12.3, its two warnings neither of this cycle: the test client's deprecation, and a
@@ -8260,3 +8301,5 @@ note box from the record, losing a note typed for the press.
     every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
     ran.
   - The whole suites on the final tree: recorded once they run.
+  - *Added 2026-11-03 (the Tier 2 review):* the review's fixes came after that tree; their gates
+    are T404's sub-item in [tasks.md](tasks.md).

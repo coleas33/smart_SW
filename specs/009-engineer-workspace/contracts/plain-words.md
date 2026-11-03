@@ -152,9 +152,11 @@ of the two groups holds a digit. Labels that name no such line draw the form wit
 | the line under the minutes form's heading | `timing_form` |
 
 *Amended 2026-11-03 (feature 002, cycle 23):* `errors` gains `DecisionAlreadyRecorded`'s sentence,
-"That decision is already recorded, so nothing changed.", and `AlreadyDeferred`'s, "That finding is
-already deferred, with its triage. When you decide, Accept or Reject keeps that triage, or takes the
-one you pick.", for the classes the disposition route answers when the decision recorded is sent
+"That decision is already recorded, so nothing changed. An Accept or a Reject is final; a Defer
+still needs one of them when you decide." (since cycle 23's Tier 2 review, naming what a Defer
+still needs: a pass's card says nothing of it), and `AlreadyDeferred`'s, "That finding is already
+deferred, with its triage. When you decide, Accept or Reject keeps that triage, or takes the one you
+pick.", for the classes the disposition route answers when the decision recorded is sent
 again with nothing new to record, a pass pressed again among them, and when Defer is sent again on a
 Defer that holds a triage (002 `contracts/chat-api.md`, the disposition route); and
 `IllegalTransition`'s, now a different decision's on an Accept or a Reject, says "That finding
