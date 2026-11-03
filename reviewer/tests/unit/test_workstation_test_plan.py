@@ -3457,7 +3457,12 @@ def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
     runtime, from start to end, in the note with every other duration of it, and its Record line
     sends there the durations the facts and the usage line show - the `drawing phase` line's
     milliseconds, the seconds to the first `text.delta` and the last round's seconds; and
-    `CONTRIBUTING.md`'s rule names the runtime and its other durations."""
+    `CONTRIBUTING.md`'s rule names the runtime and its other durations.
+
+    *Changed 2026-11-02 on purpose (007 T083; cycle 14):* step 4.1's opening has `Save-TimingNote`
+    write the timed review's start and end in `notes\\timing.txt`, where it had the engineer note
+    them there by hand; the pin reads the new words, which send the same two times to the same
+    note."""
     flat = re.sub(r"\s+", " ", plan)
     review = re.sub(r"\s+", " ", step(plan, "4.1"))
     opening = review[: review.index("- 008 T103")]
@@ -3506,7 +3511,9 @@ def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
     assert "`session.json carries a baseline: True`" in item_4
     assert re.search(r"(?m)\.timing\.baseline_minutes\s*$", step(plan, "4.5")) is None
     # The timed review's start and end times (decision 192A).
-    assert f"Note the time it started and finished in {TIMING_NOTE}" in opening
+    assert f"`Save-TimingNote` writes its start and end in {TIMING_NOTE}, beside A's minutes" in (
+        opening
+    )
     assert DECISION_192A in opening
     assert "never the start and end times" in record_41
     assert "the usage line, and the start and end times" not in flat
@@ -3849,3 +3856,326 @@ def test_a_timed_reviews_run_folder_is_written_by_its_date_and_letter(
     assert (
         f"the printed facts lines (their durations in {TIMING_NOTE} only: the test plan's rule 5)"
     ) in smoke
+
+
+# --- the timing note's seat command (007 T083; cycle 14) -----------------------------------------
+
+
+TIMED_RUN = "20261101-101112-fictional plate"
+"""A timed review's run folder as the add-in names it (`RunFolders.cs`): its full stamp, the
+moment Review was pressed, then its document's name, a fictional one with a space."""
+NOT_TIMED = "not the run folder of a review that has ended: nothing written"
+NO_LETTER = "give the review's letter too, as in Save-TimingNote $run 'A': nothing written"
+TYPED = b"A\r\nbaseline 120"
+"""What the engineer typed in the note before the command runs, its last line left unended, as
+Notepad leaves it."""
+
+
+def timed_run(tmp_path: Path) -> Path:
+    """A fictional timed review's run folder, copied from the replay `Show-ReviewFacts` reads: its
+    drawing phase took 1,234 ms, and it ended 14 min 18.4 s after Review was pressed."""
+    run = tmp_path / TIMED_RUN
+    shutil.copytree(REVIEW_RUN, run)
+    package = json.loads((run / "package.json").read_text(encoding="utf-8"))
+    [drawing] = [phase for phase in package["extractor"]["phases"] if phase["name"] == "drawing"]
+    drawing.update(status="ok", elapsed_ms=1234)
+    (run / "package.json").write_text(json.dumps(package), encoding="utf-8")
+    session = json.loads((run / "session.json").read_text(encoding="utf-8"))
+    pressed = datetime(2026, 11, 1, 10, 11, 12).astimezone()
+    ended = pressed + timedelta(minutes=14, seconds=18.4)
+    session["ended_at"] = ended.astimezone(UTC).isoformat()
+    (run / "session.json").write_text(json.dumps(session), encoding="utf-8")
+    return run
+
+
+def typed_note(tmp_path: Path) -> Path:
+    """`notes\\timing.txt` in a fictional handover folder, holding `TYPED`."""
+    note = tmp_path / "handover" / "notes" / "timing.txt"
+    note.parent.mkdir(parents=True)
+    note.write_bytes(TYPED)
+    return note
+
+
+def files_of(folder: Path) -> dict[str, bytes]:
+    """Every file under `folder`, by its path relative to it, with its bytes."""
+    return {
+        path.relative_to(folder).as_posix(): path.read_bytes()
+        for path in sorted(folder.rglob("*"))
+        if path.is_file()
+    }
+
+
+def with_save_timing_note(
+    plan: str, lines: list[str], handover: Path, local: Path, folder: Path
+) -> list[str]:
+    """What `lines` print in Windows PowerShell after the setup block's `Show-ReviewFacts`,
+    `Show-SetupTime` and `Save-TimingNote`, with `$R` this checkout, `$H` the handover folder
+    `handover` and `local` as `%LOCALAPPDATA%`, where the backend logs are read: never the
+    machine's own. `uv` stands for this interpreter, as `uv run python` does at the seat."""
+    quoted = {
+        name: str(path).replace("'", "''")
+        for name, path in (
+            ("R", REPO), ("H", handover), ("local", local), ("python", sys.executable)
+        )
+    }
+    script = "\n".join([
+        f"$R = '{quoted['R']}'",
+        f"$H = '{quoted['H']}'",
+        f"$env:LOCALAPPDATA = '{quoted['local']}'",
+        f"function uv {{ $rest = @($args | Select-Object -Skip 2); & '{quoted['python']}' @rest }}",
+        plan_function(plan, "Show-ReviewFacts"),
+        plan_function(plan, "Show-SetupTime"),
+        plan_function(plan, "Save-TimingNote"),
+        *lines,
+        "",
+    ])
+    return run_powershell(script, folder)
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_save_timing_note_appends_a_timed_reviews_figures_and_prints_only_where_it_wrote(
+    plan: str, tmp_path: Path
+) -> None:
+    """007 T083 (cycle 14): at a timed review the engineer copied into `notes\\timing.txt` by hand
+    its run folder's full stamp, its start and end times and every duration the plan's commands
+    print for it. `Save-TimingNote` appends them in one block headed by the folder's date and
+    letter: the full stamp; the start, which is that stamp, the moment Review was pressed
+    (decision 195A); the end, `session.json`'s `ended_at` in local time; the runtime between them;
+    the `drawing phase` and `text.delta` lines `Show-ReviewFacts` prints and the line
+    `Show-SetupTime` prints, word for word; and each round's time, to two decimals as the usage
+    line shows the last (decision 196A). It prints only where it wrote, never a figure, so nothing
+    on the console can be copied into the findings document; each call appends, after what the
+    engineer typed, even a last line Notepad left unended; and it reads the run folder and the
+    backend log without changing either, the note being the one file it writes."""
+    run = timed_run(tmp_path)
+    note = typed_note(tmp_path)
+    handover = note.parent.parent
+    events = [
+        json.loads(line)
+        for line in (run / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    started = datetime.fromisoformat(events[0]["at"].replace("Z", "+00:00"))
+    local = tmp_path / "local"
+    (local / "SwReview" / "logs").mkdir(parents=True)
+    (local / "SwReview" / "logs" / "backend-20261101-100000.log").write_text(
+        "".join(
+            f'[{(started + timedelta(seconds=offset)).isoformat()}] INFO:     127.0.0.1:50000 - '
+            '"POST /sessions HTTP/1.1" 201 Created\n'
+            for offset in (-4.0, 8.2, 60.0)
+        ),
+        encoding="utf-8",
+    )
+    before = {"run": files_of(run), "local": files_of(local)}
+    facts = run_one_liner(one_liner_of(plan, "Show-ReviewFacts"), run)
+    rounds = [event["body"]["latency_s"] for event in events if event["type"] == "usage"]
+    quoted = str(run).replace("'", "''")
+
+    printed = with_save_timing_note(
+        plan,
+        [
+            f"Save-TimingNote '{quoted}' 'A'",
+            f"Save-TimingNote '{quoted}\\' 'A'",
+            "'---'",
+            f"Show-SetupTime '{quoted}'",
+        ],
+        handover,
+        local,
+        tmp_path,
+    )
+
+    saved, setup = printed[: printed.index("---")], printed[printed.index("---") + 1 :]
+    block = [
+        "20261101-A",
+        "full stamp: 20261101-101112",
+        "start: 2026-11-01 10:11:12",
+        "end: 2026-11-01 10:25:30",
+        "runtime, from start to end: 14.3 min",
+        line_starting(facts, "drawing phase: "),
+        line_starting(facts, "seconds from session.started to the first text.delta: "),
+        *setup,
+        *[f"round {index}: {seconds:.2f} s" for index, seconds in enumerate(rounds, start=1)],
+    ]
+    assert saved == [f"appended to {note}"] * 2
+    assert note.read_text(encoding="utf-8").splitlines() == [
+        "A", "baseline 120", *block, "", *block
+    ]
+    assert line_starting(facts, "drawing phase: ") == "drawing phase: ok 1234 ms"
+    assert re.fullmatch(
+        r"setup, from session\.started to the 201 answer to POST /sessions: 8[.,]2 s", setup[-1]
+    ), setup
+    assert len(setup) == 1 and len(rounds) == 41
+    assert files_of(run) == before["run"]
+    assert files_of(local) == before["local"]
+    assert list(files_of(handover)) == ["notes/timing.txt"]
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+@pytest.mark.parametrize(
+    "case",
+    [
+        "a folder not named by a stamp",
+        "a check's folder",
+        "a review that has not ended",
+        "no letter",
+    ],
+)
+def test_save_timing_note_writes_nothing_for_a_folder_it_cannot_time(
+    plan: str, tmp_path: Path, case: str
+) -> None:
+    """It times only a review's run folder whose review has ended, under the letter it is given:
+    a folder whose name does not begin with a stamp, a check's folder, which keeps no event
+    stream, a review still running or cut off before its end was saved (`ended_at` null), and a
+    call without the letter each print why, and the note keeps its bytes."""
+    run, letter = timed_run(tmp_path), " 'A'"
+    if case == "a folder not named by a stamp":
+        run = run.rename(tmp_path / "fictional plate")
+    elif case == "a check's folder":
+        run = tmp_path / "20261101-101112-fictional plate-check"
+        shutil.copytree(FIXTURES / "attention" / "check-folder", run)
+    elif case == "a review that has not ended":
+        session = json.loads((run / "session.json").read_text(encoding="utf-8"))
+        session["ended_at"] = None
+        (run / "session.json").write_text(json.dumps(session), encoding="utf-8")
+    else:
+        letter = ""
+    note = typed_note(tmp_path)
+    local = tmp_path / "local"
+    local.mkdir()
+    before = files_of(run)
+    quoted = str(run).replace("'", "''")
+
+    printed = with_save_timing_note(
+        plan, [f"Save-TimingNote '{quoted}'{letter}"], note.parent.parent, local, tmp_path
+    )
+
+    assert printed == [NO_LETTER if case == "no letter" else NOT_TIMED]
+    assert note.read_bytes() == TYPED
+    assert files_of(run) == before
+    assert list(files_of(note.parent.parent)) == ["notes/timing.txt"]
+
+
+def test_save_timing_note_reads_the_run_folder_and_the_backend_log_and_writes_only_the_note(
+    plan: str,
+) -> None:
+    """007 T083 (cycle 14), the definition, read on every platform (the two tests above need
+    Windows PowerShell): the function sits in the setup block after the two commands whose lines
+    it takes; it reads no file but the run folder's `session.json` and `events.jsonl` and what
+    those two commands read - the run folder, and the backend log `Show-SetupTime` reads - and it
+    writes one, appending to `$H\\notes\\timing.txt`, with no other command that writes. What
+    `Show-ReviewFacts` and `Show-SetupTime` print is kept in the block, never printed; the
+    function prints the note's path, or why it wrote nothing, and no figure; and it calls no
+    model."""
+    function = plan_function(plan, "Save-TimingNote")
+    setup = section(plan, "Every PowerShell window: paste this first")
+    lines = [line.strip() for line in function.splitlines()]
+
+    assert (
+        setup.index("function Show-ReviewFacts ")
+        < setup.index("function Show-SetupTime ")
+        < setup.index("function Save-TimingNote ")
+        < setup.index("Set-Location $R")
+    )
+    assert lines[1] == "param([string] $run, [string] $letter)"
+    assert sorted(set(re.findall(r'"(\$\w+\\[^"$]+)"', function))) == [
+        "$H\\notes\\timing.txt", "$run\\events.jsonl", "$run\\session.json"
+    ]
+    assert re.findall(r"\bShow-\w+", function) == ["Show-ReviewFacts", "Show-SetupTime"]
+    assert "$facts = @(Show-ReviewFacts $run)" in lines
+    assert "$block += @(Show-SetupTime $run)" in lines
+    assert re.findall(r"\b(?:Add|Set|Clear|Out|Export|New|Write|Tee)-\w+", function) == [
+        "Add-Content"
+    ]
+    assert WRITING_COMMAND.findall(function) == [] and ">" not in function
+    assert (
+        'Add-Content -LiteralPath "$H\\notes\\timing.txt" -Value $block -Encoding UTF8'
+        " -ErrorAction Stop"
+    ) in lines
+    assert lines[-2:] == ['"appended to $H\\notes\\timing.txt"', "}"]
+    assert f"if (-not $session.ended_at) {{ '{NOT_TIMED}'; return }}" in lines
+    assert (
+        "if (-not $letter) { '" + NO_LETTER.replace("'", "''") + "'; return }"
+    ) in lines
+    assert not re.search(r"\b(?:uv|swreview|Invoke-\w+|Start-Process)\b", function)
+
+
+def test_step_4_1_writes_the_timed_reviews_figures_with_save_timing_note(plan: str) -> None:
+    """007 T083 (cycle 14): the plan has the engineer run `Save-TimingNote` where it had them copy
+    a timed review's figures into `notes\\timing.txt` by hand. Step 4.1, A's timed review, runs
+    it once, in a bullet of its own, once the review has ended - after the answers' turn, if it
+    asked questions, and before step 4.4 can send it anything - and on the stopped run's folder
+    too after a Retry; its opening says the command writes the start and end there, and that the
+    engineer notes none of the figures by hand; its Record line, what the commands do for
+    `Show-ReviewFacts` and `Show-SetupTime`, and step 4.11's Record line say the command writes
+    the durations there; what the commands do says what it writes, reads and prints; and rule 5,
+    which keeps any sitting's timed review (decision 197A), names it. No other step runs it."""
+    review = re.sub(r"\s+", " ", step(plan, "4.1"))
+    opening = review[: review.index("- 008 T103")]
+    timing = review[review.index("- The timing (rule 5): ") : review.index("- 007 T059, ")]
+    record_41 = review[review.index("Record: the facts") :]
+    rules = section(plan, "The rules for the whole sitting")
+    rule_5 = re.sub(r"\s+", " ", rules[rules.index("5. **In the findings document") :])
+    rule_5 = rule_5[: rule_5.index("6. **Do not")]
+    commands = re.sub(r"\s+", " ", section(plan, "Every PowerShell window: paste this first"))
+    calls = [
+        line.strip()
+        for block in POWERSHELL_BLOCK.findall(plan)
+        for line in block.splitlines()
+        if line.strip().startswith("Save-TimingNote ")
+    ]
+
+    assert calls == ["Save-TimingNote $run 'A'"]
+    assert [
+        block.strip()
+        for block in POWERSHELL_BLOCK.findall(step(plan, "4.1"))
+        if "Save-TimingNote" in block
+    ] == ["Save-TimingNote $run 'A'"]
+    assert review.index("- If the review asked questions, answer them all in one send") < (
+        review.index("- The timing (rule 5): ")
+    )
+    assert timing.startswith(
+        "- The timing (rule 5): once the review has ended, after the answers' turn if it asked"
+        " questions, and before step 4.4 can send it anything, write its figures in"
+        f" {TIMING_NOTE}: ```powershell Save-TimingNote $run 'A' ``` It prints `appended to` and"
+        " the note's path, and nothing else."
+    )
+    assert "After a Retry (box, item 6), run it on the stopped run's folder too." in timing
+    assert (
+        f"`Save-TimingNote` writes its start and end in {TIMING_NOTE}, beside A's minutes, which"
+        " you type (the 007 T060 bullet below), never in the findings document"
+    ) in opening
+    assert (
+        "You note none of them by hand: the timing bullet below writes them all once the review"
+        " has ended."
+    ) in opening
+    assert "Note the time it started and finished" not in plan
+    assert (
+        f"go in {TIMING_NOTE} only (rule 5; decision 196A), where `Save-TimingNote` wrote them;"
+    ) in record_41
+    assert (
+        f"`seconds from session.started to the first text.delta`, go in {TIMING_NOTE} only"
+        " (rule 5), where `Save-TimingNote` writes them."
+    ) in commands
+    assert (
+        f"on a timed review's folder, its line goes in {TIMING_NOTE} only (rule 5), where"
+        " `Save-TimingNote` writes it."
+    ) in commands
+    assert (
+        "- `Save-TimingNote '<run folder>' '<letter>'` writes a timed review's figures in"
+        f" {TIMING_NOTE} once the review has ended, so that you copy none of them by hand"
+        " (rule 5)"
+    ) in commands
+    assert (
+        "It reads only the run folder and the backend log, writes nothing but that note, never in"
+        " the run folder, calls no model, and prints only the note's path, never a figure."
+    ) in commands
+    assert (
+        "`Save-TimingNote` writes them there once the review has ended (step 4.1): its full"
+        " stamp, start and end times, runtime and every duration the plan's commands print for"
+        " it, so you copy none of them by hand; the six minutes and the update's minutes you"
+        " still type."
+    ) in rule_5
+    assert (
+        f"Step 4.1's `Save-TimingNote` has written those durations, and the folder's full stamp,"
+        f" in {TIMING_NOTE}: copy them nowhere."
+    ) in re.sub(r"\s+", " ", step(plan, "4.11"))
