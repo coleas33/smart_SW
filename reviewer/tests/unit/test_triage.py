@@ -37,9 +37,9 @@ decision and never inferred from it (002 research, 185A). What this pins:
 - **an outcome needed** (002 T376, roadmap hole H-c-010): the repair press made with no outcome -
   the decision recorded without a triage, sent again with none - is refused with a `ValueError`
   of its own class, which names the repair; a Defer that holds a triage is refused another Defer
-  as before, its message naming the triage. Cycle 15's Tier 2 review: on a flagged finding only,
-  a pass being refused as before; a Defer sent again with a triage to one that holds one is a
-  second triage; and a decision sent with no note keeps the note recorded.
+  as before, with a triage or none, its message naming the triage. Cycle 15's Tier 2 review: on
+  a flagged finding only, a pass being refused as before; and a decision sent with no note keeps
+  the note recorded.
 
 Every fixture is fictional: FICT names, and an explicit `by` on every record.
 """
@@ -428,7 +428,7 @@ def test_a_deferred_finding_takes_a_late_triage_and_stays_deferred(tmp_path: Pat
         ([("rejected", None)], ("accepted", "wrong"), TERMINAL, False),
         ([("accepted", "wrong")], ("rejected", "wrong"), TERMINAL, False),
         ([("accepted", None)], ("rejected", None), TERMINAL, False),
-        ([("deferred", "wrong")], ("deferred", "already_known"), "is deferred", True),
+        ([("deferred", "wrong")], ("deferred", "already_known"), "is deferred", False),
     ],
     ids=[
         "the-same-triage-again",
@@ -475,9 +475,11 @@ def test_a_second_triage_or_another_decision_is_still_refused(
     own class, `OutcomeNeededError`, and its message, every decision's, and that nothing is
     written; this test keeps every refusal whose class stays as it was.
 
-    *Changed 2026-11-03 on purpose (cycle 15's Tier 2 review):* `a-defer-again-holding-a-triage`
-    is a second triage, `TriageAlreadyRecordedError`, as on an Accept or Reject that holds one, so
-    the route's sentence names no reload, which would lose a note typed for the press
+    *Changed 2026-11-03 on purpose (cycle 15's Tier 2 review), then undone the same day (a
+    read-only check of its fixes):* the review made `a-defer-again-holding-a-triage` a second
+    triage, `TriageAlreadyRecordedError`; it is a plain `ValueError` again, the default 198A kept
+    (002 research, H-c-009), since that class's sentence, a triage "is recorded only once", is
+    untrue of a Defer, whose triage a later Accept or Reject replaces
     (`test_a_defer_holding_a_triage_is_refused_another_defer_naming_it`)."""
     run_dir = run_folder(tmp_path)
     for decision, triage in first:
@@ -523,12 +525,10 @@ def test_the_same_decision_again_without_an_outcome_says_to_pick_one_first(
 
 
 @pytest.mark.parametrize(
-    ("triage", "own_class"),
-    [(None, False), ("wrong", True), ("already_known", True)],
-    ids=["with-none", "with-the-same", "with-another"],
+    "triage", [None, "wrong", "already_known"], ids=["with-none", "with-the-same", "with-another"]
 )
 def test_a_defer_holding_a_triage_is_refused_another_defer_naming_it(
-    tmp_path: Path, triage: str | None, own_class: bool
+    tmp_path: Path, triage: str | None
 ) -> None:
     """Roadmap hole H-c-010 (002 T376): a Defer that holds a triage, sent Defer again - with none
     or another - is refused as before, with a plain `ValueError`: its outcome is recorded, so none
@@ -536,11 +536,12 @@ def test_a_defer_holding_a_triage_is_refused_another_defer_naming_it(
     accepted or rejected, which is true of a Defer that holds one; it said so of every Defer,
     which owner decision 198A made untrue: a Defer with none takes one, sent again with Defer.
 
-    *Changed 2026-11-03 on purpose (cycle 15's Tier 2 review):* sent with a triage - the one
-    recorded, as the card sends it with that triage pressed, or another - it is a second triage,
-    `TriageAlreadyRecordedError`, as on an Accept or Reject that holds one, so the route answers
-    with a sentence that names no reload, which would lose a note typed for the press; with none
-    it stays a plain `ValueError`. Case `with-the-same` added; the message is unchanged."""
+    *Changed 2026-11-03 on purpose (cycle 15's Tier 2 review, then a read-only check of its
+    fixes):* case `with-the-same` added, the triage recorded, which the card sends with the Defer
+    since it shows it pressed: refused alike, a plain `ValueError`. The review had made the two
+    cases with a triage `TriageAlreadyRecordedError`; the check undid it, since that class's
+    sentence, a triage "is recorded only once", is untrue of a Defer, whose triage a later Accept
+    or Reject replaces, and 198A kept this refusal as it was (002 research, H-c-009)."""
     run_dir = run_folder(tmp_path)
     apply_disposition(run_dir, "F-001", "deferred", "FICT note", BY, at=FIRST_AT, triage="wrong")
     before = folder_bytes(run_dir)
@@ -550,8 +551,7 @@ def test_a_defer_holding_a_triage_is_refused_another_defer_naming_it(
             run_dir, "F-001", "deferred", "FICT later note", OTHER_BY, at=LATER_AT, triage=triage
         )
 
-    expected = dispositions.TriageAlreadyRecordedError if own_class else ValueError
-    assert type(refused.value) is expected
+    assert type(refused.value) is ValueError
     assert str(refused.value) == (
         "finding F-001 is deferred with its triage ('wrong'); it can only move to accepted or "
         "rejected, not 'deferred' again"

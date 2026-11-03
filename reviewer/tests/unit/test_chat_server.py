@@ -3119,16 +3119,21 @@ def test_the_same_decision_again_without_an_outcome_is_a_409_of_its_own(
     assert folder_files(run_dir) == triaged
 
 
-def test_a_defer_again_with_a_triage_on_one_that_holds_one_is_a_second_triage(
+def test_a_defer_again_on_one_that_holds_a_triage_is_still_an_illegal_transition(
     client: TestClient, run_dir: Path, chat_with_a_finding: str
 ) -> None:
     """Cycle 15's Tier 2 review, through the route the pane presses: a deferred card that holds a
     triage shows it pressed, so Defer pressed again sends it - with a note typed, such as 188A's
-    date. That is `409 TriageAlreadyRecorded`, as on an Accept or Reject that holds one, whose
-    sentence names no reload, so the typed note stays in the box for the Accept or Reject that
-    follows; it was `409 IllegalTransition`, whose sentence says to reload the review, which loses
-    it. Another triage is refused alike, and Defer again with none is still
-    `409 IllegalTransition`; each message names the triage recorded, and nothing is written."""
+    date. That is `409 IllegalTransition`, as 198A kept it (002 research, H-c-009), and so is
+    another triage or none: `TriageAlreadyRecorded`'s sentence says a triage is recorded only
+    once, which is untrue of a Defer, whose triage a later Accept or Reject replaces. Each message
+    names the triage recorded, and nothing is written.
+
+    *Changed 2026-11-03 on purpose (a read-only check of the review's fixes):* renamed from
+    `test_a_defer_again_with_a_triage_on_one_that_holds_one_is_a_second_triage`, whose two posts
+    with a triage were `409 TriageAlreadyRecorded`, the review's change, which reversed that
+    default unsaid; `IllegalTransition`'s sentence, which says to reload, is H-c-010's *Left
+    open*."""
     url = disposition_url(chat_with_a_finding, run_dir)
     deferred = client.post(
         url, json={"decision": "deferred", "note": "", "by": "FICT-ENG", "triage": "wrong"}
@@ -3143,10 +3148,8 @@ def test_a_defer_again_with_a_triage_on_one_that_holds_one_is_a_second_triage(
     ]
 
     assert [(response.status_code, response.json()["error_class"]) for response in refused] == [
-        (409, "TriageAlreadyRecorded"),
-        (409, "TriageAlreadyRecorded"),
-        (409, "IllegalTransition"),
-    ]
+        (409, "IllegalTransition")
+    ] * 3
     assert [response.json()["message"] for response in refused] == [
         "finding F-001 is deferred with its triage ('wrong'); it can only move to accepted or "
         "rejected, not 'deferred' again"

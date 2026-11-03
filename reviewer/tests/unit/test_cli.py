@@ -1415,6 +1415,45 @@ def test_disposition_says_to_pick_an_outcome_when_the_same_decision_comes_again_
     assert run_files(run_dir) == before
 
 
+def test_disposition_on_a_pass_decided_again_without_an_outcome_names_value_error(
+    run_dir: Path,
+) -> None:
+    """Cycle 15's Tier 2 review: on a pass - 'Checked, no issue' - accepted with no triage, the
+    same `--decision` again with none is reported as before H-c-010, exit 1 and one line on stderr
+    naming `ValueError` and the terminal rule, not `OutcomeNeededError`, whose repair, an outcome,
+    is a miss on a pass; nothing is written. The folder's one finding is made a pass in its
+    `session.json`."""
+    session = load_session(run_dir / "session.json")
+    session.findings[0] = session.findings[0].model_copy(
+        update={"status": "checked_within_scope", "severity": "info"}
+    )
+    save_session(session, run_dir / "session.json")
+    payload(
+        invoke(
+            "disposition",
+            str(run_dir),
+            "F-001",
+            "--decision",
+            "accepted",
+            "--by",
+            "FICT-ENG",
+            "--json",
+        )
+    )
+    before = run_files(run_dir)
+
+    again = invoke(
+        "disposition", str(run_dir), "F-001", "--decision", "accepted", "--by", "FICT-ENG"
+    )
+
+    assert again.exit_code == 1
+    assert again.stderr.splitlines() == [
+        "error: ValueError: finding F-001 already has a terminal disposition ('accepted'); it "
+        "cannot be changed"
+    ]
+    assert run_files(run_dir) == before
+
+
 def test_a_console_decision_after_a_defer_keeps_its_note_when_none_is_sent(
     run_dir: Path, tmp_path: Path
 ) -> None:
