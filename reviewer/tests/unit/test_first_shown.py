@@ -1241,6 +1241,44 @@ def test_a_drawing_read_at_the_engineers_confirmation_keeps_its_earlier_date(
     assert run.context.finding_body(again).get("first_shown") == "2026-09-18"
 
 
+@pytest.mark.parametrize("meanwhile", ["deleted", "past the budget", "read only then"])
+def test_a_reload_keeps_the_earlier_day_of_its_read_and_the_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, meanwhile: str
+) -> None:
+    """The read-only check of cycle 21's Tier 2 fixes: the reload reads the dates again over the
+    run root as it is then, within a budget of its own, so it can miss an earlier review the start
+    read - its folder deleted meanwhile, or the budget spent before it - and name a later day, or
+    none, for a finding whose card already named the earlier one. Each subject key keeps the
+    earlier day of the two reads: the start's, `FIRST`'s; or the reload's, when only the reload
+    could read `FIRST`'s record, cut off while the review started."""
+    root = tmp_path / "runs"
+    first = earlier(root, FIRST, ON_ONE)
+    earlier(root, SECOND, ON_ONE)
+    whole = (first / SESSION_FILE_NAME).read_bytes()
+    if meanwhile == "read only then":
+        (first / SESSION_FILE_NAME).write_bytes(whole[: len(whole) // 2])
+    own = root / f"20261103-090000-{LABEL}"
+    save_package(PACKAGE, own)
+    run = runner.start_review(
+        own,
+        own,
+        provider=FakeProvider(script=[chat.turn("FICT nothing yet")], model=chat.MODEL),
+        run_root=root,
+    )
+    started = "2026-09-20" if meanwhile == "read only then" else SHOWN
+    assert run.context.finding_body(ON_ONE).get("first_shown") == started
+
+    if meanwhile == "deleted":
+        shutil.rmtree(first)
+    elif meanwhile == "past the budget":
+        monkeypatch.setattr(first_shown, "READ_BUDGET_S", -1.0)
+    else:
+        (first / SESSION_FILE_NAME).write_bytes(whole)
+    run.context.reload_package(load_package(own))
+
+    assert run.context.finding_body(ON_ONE).get("first_shown") == SHOWN
+
+
 # --- the body, the fold, the snapshot and report.md ---------------------------------------------
 
 
