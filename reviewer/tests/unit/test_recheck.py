@@ -60,6 +60,8 @@ from swreview.report.markdown import render_report
 from swreview.report.names import plural
 from swreview.report.session import (
     HUMAN_TIMING_FIELDS,
+    CoverageItem,
+    CoverageScope,
     DrawingOutcome,
     EvidenceRequest,
     ReviewSession,
@@ -2151,16 +2153,20 @@ def test_a_line_whose_finding_is_decided_since_or_not_raised_once_is_not_carried
 
 
 def test_the_carrys_own_line_follows_a_carried_one_and_is_shown(bare: Any) -> None:
-    """015 T121: two earlier findings said what F-001 says - F-007, undecided, its Reject cleared
-    by a restate, and F-008, accepted at medium. F-001 is high, so F-008's Accept is not carried
-    and the carry writes its own line (owner decision 194A). F-007's line is carried first, so the
-    carry's own, about the verdict as it now stands, is F-001's last line, the one its card and
-    both snapshots show."""
+    """015 T121: two earlier findings said what F-001 says - F-007, undecided at high, its Reject
+    cleared by a restate, and F-008, accepted at medium. F-001 is high, so F-008's Accept is not
+    carried and the carry writes its own line (owner decision 194A). F-007's line is carried first,
+    so the carry's own, about the verdict as it now stands, is F-001's last line, the one its card
+    and both snapshots show.
+
+    *Changed 2026-11-02 on purpose (015 T123; cycle 12's Tier 1 review, point 5):* F-007 is high,
+    F-001's verdict, where it was medium, F-008's: a line now goes only onto a finding at the
+    verdict it was written on."""
     run, earlier, events = bare
     run.session.findings[:] = [coaxial("F-001", "hol:0001").model_copy(update={"severity": "high"})]
     medium = coaxial("F-007", "hol:0001").model_copy(update={"severity": "medium"})
     earlier.findings[:] = [
-        medium,
+        medium.model_copy(update={"severity": "high"}),
         decided_with(medium.model_copy(update={"id": "F-008"}), "accepted", "already_known"),
     ]
     restated = decided_with(medium, "rejected", "wrong").disposition
@@ -2194,7 +2200,11 @@ def test_a_re_run_names_the_earlier_withdrawals_first_under_an_id_it_numbers_aga
     raises that finding again under the same id, undecided. Its `session.started` names the
     earlier withdrawal alone, and it is named first under "Withdrawn with a decision" all the same,
     before a withdrawal of the re-run's own - the rule that passes over a finding the session
-    still holds is for the session's own withdrawals, whose stream can run ahead of its record."""
+    still holds is for the session's own withdrawals, whose stream can run ahead of its record.
+
+    *Changed 2026-11-02 on purpose (015 T123; cycle 12's Tier 1 review, point 4):* the earlier
+    withdrawal's line ends marked as the earlier check run's, since its id is that record's and
+    here names an undecided finding of the re-run; the re-run's own is as before."""
     folder = package_folder(tmp_path, live_prerun_package())
     earlier = waited(checks_only(folder, None))
     set_aside(folder)
@@ -2229,7 +2239,7 @@ def test_a_re_run_names_the_earlier_withdrawals_first_under_an_id_it_numbers_aga
         start = report.index("## Withdrawn with a decision") + 2
         assert report[start : report.index("", start)] == [
             f"- {gone.id} withdrawn: bought part (your answer to ER-001); "
-            "your Reject (wrong) went with it",
+            "your Reject (wrong) went with it (earlier check run)",
             f"- {own} withdrawn: FICT a later answer; your Accept went with it",
         ]
     finally:
@@ -2321,7 +2331,11 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
     after a restart withdraws its own pin findings undecided, naming nothing, and its `report.md`
     names the earlier withdrawal, worded the same, from the re-run's own stream: its
     `session.started` carries the earlier body, valid against the events contract. The report a
-    later decision renders names it still."""
+    later decision renders names it still.
+
+    *Changed 2026-11-02 on purpose (015 T123; cycle 12's Tier 1 review, point 4):* the re-run's
+    `report.md` ends the earlier withdrawal's line marked as the earlier check run's, since its id
+    is that record's; the earlier record's own report names it as before."""
     review = chat.regraded_review(
         client, run_root / "FICT-recheck-withdrawn", ticked=False, answer="All bought"
     )
@@ -2333,12 +2347,13 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
     ]
     named = [f"- {review.pin} withdrawn: {withdrawal['reason']}; {withdrawal['taken']}"]
     assert chat.withdrawn_part(folder) == named
+    earlier = [f"{named[0]} (earlier check run)"]
     settings = server_settings(provider_control, models, silent)
     with restarted_app(run_root, settings) as fresh:
         rechecked = recheck(fresh, folder)
         assert rechecked.status_code == 201, rechecked.text
 
-        assert chat.withdrawn_part(folder) == named
+        assert chat.withdrawn_part(folder) == earlier
         events = chat.events_of(folder)
         assert events[0]["body"].get("carried_withdrawals") == [withdrawal]
         contract_validator("chat-events.schema.json").validate(events[0])
@@ -2357,7 +2372,7 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
             json={"decision": "rejected", "note": "FICT not here"},
         )
         assert decided.status_code == 200, decided.text
-        assert chat.withdrawn_part(folder) == named
+        assert chat.withdrawn_part(folder) == earlier
 
 
 def test_check_again_with_nothing_to_carry_writes_the_stream_and_report_of_before(
@@ -2404,6 +2419,134 @@ def test_check_again_with_nothing_to_carry_writes_the_stream_and_report_of_befor
     assert (folder / "report.md").read_text(encoding="utf-8") == render_report(
         session, package, ranking=rank(session)
     )
+
+
+# --- cycle 12's Tier 1 review (015 T123) ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "now", [{"severity": "low"}, {"status": "suspected"}], ids=["severity", "status"]
+)
+def test_a_line_whose_finding_the_re_run_raises_at_another_verdict_is_not_carried(
+    bare: Any, now: dict[str, str]
+) -> None:
+    """015 T123 (cycle 12's Tier 1 review, point 5): on the earlier record a restate changed
+    F-007's verdict and so cleared the Accept recorded on it, and F-007 stayed undecided, its card
+    saying so. The re-run raises what F-007 said at another severity or status - back at the one
+    decided, say, when the answer that changed it is not carried - where the line's words, that
+    this verdict changed, no longer hold: the carry writes no line, and `coverage.recheck` names
+    none, since a line holds no decision."""
+    run, earlier, events = bare
+    run.session.findings[:] = [coaxial("F-001", "hol:0001").model_copy(update=now)]
+    earlier.findings[:] = [coaxial("F-007", "hol:0001")]
+    accepted = decided_with(coaxial("F-007", "hol:0001"), "accepted", "already_known").disposition
+    assert accepted is not None
+    earlier_stream(run.out_dir, earlier, cleared_on("F-007", accepted, chat.RESTATED_LINE))
+
+    run.carry_from(earlier)
+
+    assert not [kind for kind, _ in events if kind.startswith("disposition")]
+    assert cleared_lines(run.session, replay_events(run.out_dir / "events.jsonl")) == []
+    assert recheck_row(run.session) == []
+
+
+def test_a_chain_of_check_agains_names_what_an_earlier_one_did_not_carry_once(bare: Any) -> None:
+    """015 T123 (cycle 12's Tier 1 review, point 1): the earlier record is itself a re-run, whose
+    `coverage.recheck` row named the Reject of F-007, a finding it no longer raised, and the
+    Standards profile it was graded with. Neither reached that record, so its re-run names both
+    again, first and in that row's order - the profile's item one item, its own "; " inside its
+    parentheses - and then its own: the Reject of F-008, whose finding it no longer raises, and the
+    profile, changed again, which is named once."""
+    run, earlier, _ = bare
+    earlier.findings[:] = [coaxial("F-008", "hol:0002", "rejected")]
+    gone = runner.NOT_CARRIED_DECISION_GONE.format(decision="Reject", id="F-007")
+    earlier.coverage.unresolved.append(
+        CoverageItem(
+            check="coverage.recheck",
+            scope=CoverageScope(),
+            reason=runner.NOT_CARRIED.format(items=f"{gone}; {runner.NOT_CARRIED_PROFILE}"),
+            error=None,
+        )
+    )
+    assert earlier.model_status is not None and run.session.model_status is not None
+    earlier.model_status = earlier.model_status.model_copy(
+        update={"profile": {"path": "C:\\FICT\\Standards\\profile-a.yaml", "sha256": "a" * 64}}
+    )
+    run.session.model_status = run.session.model_status.model_copy(
+        update={"profile": {"path": "C:\\FICT\\Standards\\profile-b.yaml", "sha256": "b" * 64}}
+    )
+
+    run.carry_from(earlier)
+
+    assert recheck_row(run.session) == [
+        runner.NOT_CARRIED.format(
+            items="; ".join([
+                gone,
+                runner.NOT_CARRIED_PROFILE,
+                runner.NOT_CARRIED_DECISION_GONE.format(decision="Reject", id="F-008"),
+            ])
+        )
+    ]
+
+
+def recheck_reasons(snapshot: dict[str, Any]) -> list[str]:
+    """The reasons of the `coverage.recheck` rows a snapshot names."""
+    return [
+        entry["item"]["reason"]
+        for entry in snapshot["coverage"]
+        if entry["item"]["check"] == "coverage.recheck"
+    ]
+
+
+def test_a_second_check_again_still_names_what_the_first_did_not_carry(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+) -> None:
+    """015 T123 (cycle 12's Tier 1 review, point 1), through the routes: a waiting review's Reject
+    is on a finding a changed Standards profile no longer raises, so Check again carries neither
+    and names both in its `coverage.recheck` row. That re-run waits in turn - its Send failed on a
+    bad key, say, and saving the key restarted the backend - and a second Check again, with the
+    profile the first had, has nothing of its own to name, yet names both still: in its new chat's
+    snapshot, its record, the `report.md` it wrote and a restarted backend's restore."""
+    folder = run_root / "FICT-recheck-chain"
+    waiting = earlier_with_profile(app, client, folder, profile=True)
+    finding = next(f for f in waiting.run.session.findings if f.check == REJECTED_CHECK)
+    decided = client.post(
+        f"/sessions/{waiting.chat_id}/findings/{finding.id}/disposition",
+        json={"decision": "rejected", "note": "FICT engineer decision"},
+    )
+    assert decided.status_code == 200, decided.text
+    now = folder / "FICT-profile-b.yaml"
+    now.write_text(
+        without_data_card_properties(waiting.fixture.profile.read_text("utf-8")), "utf-8"
+    )
+    row = runner.NOT_CARRIED.format(
+        items="; ".join([
+            f"the Reject of {finding.id} (its finding is no longer raised)",
+            runner.NOT_CARRIED_PROFILE,
+        ])
+    )
+    settings = server_settings(provider_control, models, silent)
+    with restarted_app(run_root, settings) as fresh:
+        assert recheck_row(rerun_of(fresh, folder, standards_profile=str(now)).session) == [row]
+    with restarted_app(run_root, settings) as again:
+        twice = recheck(again, folder, standards_profile=str(now))
+        assert twice.status_code == 201, twice.text
+        snapshot = again.get(f"/sessions/{twice.json()['chat_id']}/snapshot")
+        assert snapshot.status_code == 200, snapshot.text
+        assert recheck_reasons(snapshot.json()) == [row]
+
+    assert recheck_row(load_session(folder / "session.json")) == [row]
+    report = (folder / "report.md").read_text(encoding="utf-8").splitlines()
+    assert [line for line in report if line.startswith("| coverage.recheck |")] == [
+        f"| coverage.recheck | none | {row} |  |"
+    ]
+    restored = chat.restored_snapshot_of(run_root, provider_control, models, folder.name)
+    assert recheck_reasons(restored) == [row]
 
 
 def _request(request_id: str, question: str, *, answer: str | None = None) -> EvidenceRequest:

@@ -303,6 +303,14 @@ def test_the_withdrawn_clause_names_the_decision_and_its_triage() -> None:
     assert withdrawn.of("Defer", None) == "your Defer went with it"
 
 
+def test_an_earlier_records_withdrawal_is_marked_as_the_earlier_check_runs() -> None:
+    """015 T123 (cycle 12's Tier 1 review, point 4): a re-run's `report.md` names its earlier
+    record's withdrawals with a decision before its own, under ids that are that record's and may
+    name another finding here, so each such line ends with these words, after the clause. Printed
+    as it stands: no placeholder."""
+    assert load_words().withdrawn.earlier == " (earlier check run)"
+
+
 def test_the_three_owner_labels_are_decide_fix_verify() -> None:
     groups = load_words().groups
     assert (groups["decide"].label, groups["fix"].label, groups["verify"].label) == (
