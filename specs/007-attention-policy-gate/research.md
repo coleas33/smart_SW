@@ -1040,6 +1040,48 @@ setup block's helpers read or write now takes `-LiteralPath`, each helper checke
   `Show-DrawingReadLog`'s, and `Save-Fingerprint`'s and `Compare-Fingerprint`'s five;
   `Show-DrawingReadLog` printing nothing. Green after the fix, with no other test changed.
 
+**Settled**, the second item left open below, test first (2026-11-02): outside the setup block's
+helpers, the plan still gave a check folder and the run root by `-Path`. Step 5.2's
+`Select-String` read `"$run\report.md"` so: for a `-standards` folder whose name holds brackets
+it read no file and printed `False`, the step's pass. The run root is the folder the engineer
+types in the pane, whose name the run root's rule (`RunRootRule`, decisions 154A and 160A) lets
+hold brackets, and a bracket there left each listing of it empty, with no error: step 5.3 printed
+`no remodel folder` beside the tab's copy, step 6.2 would export no review and step 6.3 zip no
+run folder. A wildcard can bite there, so:
+
+- step 5.2 reads `report.md` by `-LiteralPath`;
+- the run root's five listings take it by `-LiteralPath`: step 5.3's two, T303a's wait for the
+  copy, with `"$H\runs-t303a"`, step 6.2's exports and step 6.3's folders.
+
+Not changed, each exempt by name in the new pin: the setup block's `%APPDATA%` read (line 458),
+which holds no document's name and lies in the account's profile, named after the Windows
+account, whose name cannot hold `[` or `]`, as do `%LOCALAPPDATA%`, `%TEMP%` and the handover
+folder, named by its date; and the checkout, `$R`, read at lines 610 and 611 and by the steps'
+`cd`. The checkout holds no document's name, and a bracket in its path fails the block's own
+check at once, a red `Cannot find path` and then `checkout found: False`; making it literal would
+touch some twenty commands, a line of the handover and five pins, so it stays in the backlog as a
+note.
+
+- Tests, new: `test_every_path_the_plans_powershell_builds_from_a_run_or_check_folder_is_literal`,
+  read on every platform - the helpers' pin carried to every command of the plan's PowerShell,
+  its blocks and the commands in its text: a command gives a path by `-Path` only when every name
+  it gives is in `NO_DOCUMENT_NAME`, the explicit exemptions, each in use, or when it only cuts
+  the string, so `$run`, `$check` or a name not yet written is read by `-LiteralPath`;
+  `test_step_5_2_reads_the_report_of_a_check_folder_whose_name_holds_brackets`, step 5.2's line
+  on a `-standards` folder, plain and with brackets, whose report says no revision table was
+  found, or does not; and
+  `test_step_5_3_finds_the_remodel_folder_under_a_run_root_whose_name_holds_brackets`.
+- Changed on purpose, this cycle's own, with a dated note: `PATH_CMDLET` matches
+  `Compress-Archive` and `cd` too, which the steps use; the helpers use neither.
+- Tests first: red, each for the finding's reason, while the plain cases passed. The whole-plan
+  pin listed six calls, step 5.2's and the five listings; step 5.2's line printed `False` for the
+  bracketed folder whose report says it; step 5.3's check printed `no remodel folder` under
+  `runs [pilot]`. Green after the fix, with no other test changed. Five mutants of plan lines
+  already literal - the copy of the run folders written in step 6.3's text, step 6.3's
+  `Compress-Archive`, step 4.5's `report.md` read and its kept copy, a `cd` into a run folder -
+  each turned the whole-plan pin red, listing that call alone; the plan was restored byte for
+  byte, its sha256 checked.
+
 **Left open**, in [`docs/review-backlog.md`](../../docs/review-backlog.md) under cycle 14:
 
 - `Show-SetupTime` takes the first `POST /sessions` 201 in the backend logs at or after the run's
@@ -1049,7 +1091,8 @@ setup block's helpers read or write now takes `-LiteralPath`, each helper checke
   checkout by `-Path`. Step 5.2's `Select-String` on a check folder's `report.md` prints `False`,
   its pass, for a folder whose name holds brackets, without reading the report; the run-root
   listings of steps 5.3, 6.2 and 6.3 and the block's own `Set-Location $R` read a bracket as a
-  wildcard too.
+  wildcard too. *Changed 2026-11-02:* settled above, all but the checkout, `$R`, which stays in
+  the backlog as a note.
 
 **Gates** (2026-11-02), on the fixed tree:
 
@@ -1057,5 +1100,16 @@ setup block's helpers read or write now takes `-LiteralPath`, each helper checke
 - `ruff check src tests` clean.
 - The link check over the cycle's six changed Markdown files, `docs/review-backlog.md` among
   them: 116 relative links, anchors included, none broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate. No SOLIDWORKS process, seat task, or paid or live
+  test ran.
+
+*Changed 2026-11-02:* that tree came before the second item's fix; the final tree's gates follow.
+
+**Gates** (2026-11-02), on the final tree:
+
+- Python 3.12.3, the tokenizer required, over the seven modules above: 507 passed, none skipped.
+- `ruff check src tests` clean.
+- The link check over the cycle's six changed Markdown files: 117 relative links, anchors
+  included, none broken. Every changed file LF in the index.
 - No C# or page file changed, so no C# gate. No SOLIDWORKS process, seat task, or paid or live
   test ran.
