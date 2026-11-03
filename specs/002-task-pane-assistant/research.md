@@ -8473,7 +8473,9 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
     relative links and none broken; every changed file LF in the index.
   - No C# or page file changed, so no C# gate, and no words changed. No SOLIDWORKS process, seat
     task, or paid or live test ran.
-  - The whole suites on the final tree: recorded once they run.
+  - The whole suites on the final tree (`69a7a743`, 2026-11-03): 19,060 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; no C# or page
+    file changed (T408's line).
   - *Changed 2026-11-03:* the counts above came before the Tier 2 review's fixes and the read-only
     check's; their gates are T408's two sub-items in [tasks.md](tasks.md).
   - *Done 2026-11-03, cycle 24 stacked on cycle 23:* the gates above ran on cycle 24 before it was
