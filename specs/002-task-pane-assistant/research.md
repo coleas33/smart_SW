@@ -7396,3 +7396,31 @@ the decision register now records 160A as done.
   (`1530105f`): 18,876 passed and 5 skipped on Python 3.12.3 and the same on 3.11; ruff clean;
   the identifier scan, 58 passed; C# with zero warnings, then 10,274 extractor and 4,348 add-in
   tests passed (T374's last sub-item).
+
+### H-c-010. A press repeated without an outcome says to pick one, and the console keeps the note (2026-11-03; cycle 15)
+
+- **Question**: the same decision pressed again with no outcome, on a decision recorded without a
+  triage - the repair press a card's no-triage line names, made with none picked - was refused as
+  `IllegalTransition`, whose sentence says to reload the review, and a reload draws the note box
+  from the record, so a note typed for the retry, such as 188A's date, was lost; and
+  `swreview disposition` without `--note`, after a Defer with a note, recorded none over it
+  ([roadmap hole H-c-010](../../docs/roadmap/holes.md); H-c-009's *Left open*, above). Built
+  ahead of the owner's pick; no decision id.
+- **Settled**, with the defaults taken inside the feature:
+  - **The refusal.** The record refuses the decision recorded, sent again with no triage when it
+    holds none - an Accept, a Reject or a Defer - with a `ValueError` of its own class,
+    `OutcomeNeededError`, which the live route answers `409 OutcomeNeeded`, not retryable, and the
+    console names on its one line. A record that holds a triage is refused as before
+    (`IllegalTransition`, or `TriageAlreadyRecorded` for a second triage), and so is every other
+    press.
+  - **The words.** `labels.errors.OutcomeNeeded`: "Pick an outcome first, then press the same
+    button again." An error sentence takes no placeholder, so it names the same button, and the
+    card's no-triage line beside it names the decision. The page prints it as any class's
+    sentence, and a refused press leaves the box as typed (H-c-009, *Settled*, the note box).
+  - **The record's message.** A Defer sent again now reaches the deferred refusal only when it
+    holds a triage, so the message names that triage and says the finding can only move to
+    accepted or rejected; it said so of every Defer, which 198A made untrue.
+  - **The console's note.** `--note` left out sends the note recorded, as the card's box, drawn
+    from the record, does, and none before a first decision; an empty `--note` records none. The
+    live route records the note its body sends, as before, and the console's printed line still
+    names no note: its `--json` payload carries it.
