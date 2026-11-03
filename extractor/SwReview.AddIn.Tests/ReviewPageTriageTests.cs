@@ -2154,6 +2154,9 @@ public sealed class ReviewPageTriageTests
     /// The line comes back with the Transcript (002 T360): a review switch restores chat-2 from its snapshot, the session after
     /// the withdrawal, and replays its stream from the start into the Transcript, where the withdrawal's line ends with the
     /// backend's clause, as it did live.
+    /// *Changed 2026-11-03 on purpose (002 T386; cycle 16's Tier 2 review):* F-001's body names the finding's title, as the
+    /// backend's has since cycle 16, and its replayed line names it right after the id, as the live line does; F-003 goes too,
+    /// its body an older backend's, which names none, and its line reads as F-001's did here before.
     /// </summary>
     [Fact]
     public void AReplayedWithdrawalSaysWhatItTook()
@@ -2170,13 +2173,16 @@ public sealed class ReviewPageTriageTests
             await driver.Click("view-transcript");
             await driver.Push(OtherChat, 1, "finding", Finding("F-001"));
             await driver.Push(OtherChat, 2, "finding", Finding("F-002"));
-            await driver.Push(OtherChat, 3, "disposition", DispositionEvent("F-001", RejectedWrong()));
-            await driver.Push(OtherChat, 4, "finding.withdrawn", Took("F-001", RejectedWrong(), TookRejectedWrong));
+            await driver.Push(OtherChat, 3, "finding", Finding("F-003"));
+            await driver.Push(OtherChat, 4, "disposition", DispositionEvent("F-001", RejectedWrong()));
+            await driver.Push(OtherChat, 5, "disposition", DispositionEvent("F-003", RejectedWrong()));
+            await driver.Push(OtherChat, 6, "finding.withdrawn", Titled(Took("F-001", RejectedWrong(), TookRejectedWrong), WithdrawnTitle));
+            await driver.Push(OtherChat, 7, "finding.withdrawn", Took("F-003", RejectedWrong(), TookRejectedWrong));
             await driver.Settle();
 
-            Assert.Contains(
-                "F-001 withdrawn: " + BoughtReason + "; " + TookRejectedWrong,
-                ReviewPageDriver.Strings(await driver.Read(ReadTranscript), "markers"));
+            string[] markers = ReviewPageDriver.Strings(await driver.Read(ReadTranscript), "markers");
+            Assert.Contains("F-001 (" + WithdrawnTitle + ") withdrawn: " + BoughtReason + "; " + TookRejectedWrong, markers);
+            Assert.Contains("F-003 withdrawn: " + BoughtReason + "; " + TookRejectedWrong, markers);
         });
     }
 
