@@ -4218,12 +4218,14 @@ def test_step_4_1_writes_the_timed_reviews_figures_with_save_timing_note(plan: s
 
 
 PATH_CMDLET = re.compile(
-    r"(?<![\w-])(Add-Content|Copy-Item|Export-Csv|Get-ChildItem|Get-Content|Get-Item|Import-Csv|"
-    r"Move-Item|Out-File|Push-Location|Remove-Item|Select-String|Set-Content|Set-Location|"
-    r"Split-Path|Test-Path)\b([^|;\n)}]*)"
+    r"(?<![\w-])(Add-Content|Compress-Archive|Copy-Item|Export-Csv|Get-ChildItem|Get-Content|"
+    r"Get-Item|Import-Csv|Move-Item|Out-File|Push-Location|Remove-Item|Select-String|Set-Content|"
+    r"Set-Location|Split-Path|Test-Path|cd)\b([^|;\n)}]*)"
 )
 """A call of a cmdlet that reads or writes a path, with its arguments up to a pipe, a semicolon,
-a closing bracket or the line's end."""
+a closing bracket or the line's end. *Changed 2026-11-02 (the backlog's second item; 007 T085):*
+`Compress-Archive` and `cd`, `Set-Location`'s alias, too, which the plan's steps use; the setup
+block's helpers use neither."""
 
 
 def test_every_path_the_setup_blocks_helpers_read_or_write_is_literal(plan: str) -> None:
@@ -4291,3 +4293,113 @@ def test_show_drawing_read_log_reads_the_tool_service_logs_in_a_folder_with_brac
     )
 
     assert lines == read[1:]
+
+
+# --- every path the plan's PowerShell builds from a run or check folder (the backlog's second
+# item, cycle 14) --------------------------------------------------------------------------------
+
+
+NO_DOCUMENT_NAME = {
+    "$H": "the handover folder, %LOCALAPPDATA%\\SwReview\\handover\\<date>",
+    "$findings": "the findings document in the handover folder, named by its date",
+    "$env:LOCALAPPDATA": "the account's local application data, in its profile",
+    "$env:APPDATA": "the account's roaming application data, in its profile",
+    "$env:TEMP": "the account's temporary folder, in its profile",
+    "$R": "the checkout: a bracket in its path fails the setup block's own check",
+    "<the smart_SW folder, as in the setup block>": "the checkout, as $R",
+    "<where the owner put the new file>": "the standards profile the owner hands over",
+    "$k": "a registry key",
+    "$wer": "a registry key",
+}
+"""Each name a command of the plan's PowerShell may still give by `-Path`, and why. None holds a
+document's name. The account's folders lie in its profile, named after the Windows account, whose
+name cannot hold `[` or `]`, and so does the handover folder, named by its date; the checkout is
+left as a note in `docs/review-backlog.md`, cycle 14 (007 T085, 2026-11-02)."""
+REFERENCE = re.compile(r"\$(?:env:\w+|_\.\w+|\w+)|<[^<>\n]+>")
+"""A name a command's arguments give: a variable (`$run`, `$env:APPDATA`, `$_.FullName`) or a
+placeholder (`<paste the run folder>`)."""
+
+
+def test_every_path_the_plans_powershell_builds_from_a_run_or_check_folder_is_literal(
+    plan: str,
+) -> None:
+    """Cycle 14's own findings, the backlog's second item (007 T085, 2026-11-02), read on every
+    platform: the pin above, carried from the setup block's helpers to all the plan's PowerShell,
+    its blocks and the commands written in its text. A run or check folder's name holds its
+    document's name, so a command that names one - `$run`, `$check` or any other name - reads it
+    by `-LiteralPath`: step 5.2 read `"$run\\report.md"` by `-Path` and, for a check folder whose
+    name holds brackets, printed `False`, the step's pass, without reading it. So does every
+    listing of the run root `$runs`, the folder the engineer types in the pane, which a bracket
+    left empty with no error. A command gives a path by `-Path` only when every name it gives is
+    in `NO_DOCUMENT_NAME`, each of which one does, or when it only cuts the string, as
+    `Split-Path $run -Leaf` does, which Windows PowerShell 5.1 refuses with `-LiteralPath`."""
+    blocks, written = (
+        [(match[1], match[2].strip()) for text in texts for match in PATH_CMDLET.finditer(text)]
+        for texts in (POWERSHELL_BLOCK.findall(plan), INLINE_CODE.findall(FENCED.sub("", plan)))
+    )
+    by_path = [
+        (f"{cmdlet} {arguments}", set(REFERENCE.findall(arguments)))
+        for cmdlet, arguments in blocks + written
+        if not arguments.startswith("-LiteralPath ")
+        and not (cmdlet == "Split-Path" and re.fullmatch(r"\$\w+ -(?:Leaf|Parent)", arguments))
+    ]
+
+    assert len(blocks) >= 100 and len(written) >= 5
+    assert [call for call, names in by_path if names - NO_DOCUMENT_NAME.keys()] == []
+    assert set().union(*(names for _, names in by_path)) == set(NO_DOCUMENT_NAME)
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+@pytest.mark.parametrize("name", [TIMED_RUN, BRACKETED_RUN])
+@pytest.mark.parametrize("says", [True, False])
+def test_step_5_2_reads_the_report_of_a_check_folder_whose_name_holds_brackets(
+    plan: str, tmp_path: Path, name: str, says: bool
+) -> None:
+    """Cycle 14's own findings, the backlog's second item (007 T085, 2026-11-02): step 5.2's last
+    line prints whether A-plate's drawing's `report.md` says no revision table was found, and
+    `False` is the step's pass. It read `"$run\\report.md"` by `-Path`, so for a `-standards`
+    folder whose name holds brackets, as its document's name may, it read no file and printed
+    `False` all the same. It prints `True` when the report says so, and `False` only when the
+    report it read does not, whatever the folder's name."""
+    [line] = [
+        line
+        for block in POWERSHELL_BLOCK.findall(step(plan, "5.2"))
+        for line in block.splitlines()
+        if "report.md" in line
+    ]
+    run = tmp_path / f"{name}-standards"
+    run.mkdir()
+    (run / "report.md").write_text(
+        "- no revision table was found on the 1 native sheet(s) of fictional plate that could be"
+        " enumerated\n" if says else "- a revision table on each native sheet\n",
+        encoding="utf-8",
+    )
+    quoted = str(run).replace("'", "''")
+
+    assert run_powershell(f"$run = '{quoted}'\n{line}\n", tmp_path) == [str(says)]
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+@pytest.mark.parametrize("root", ["runs", "runs [pilot]"])
+def test_step_5_3_finds_the_remodel_folder_under_a_run_root_whose_name_holds_brackets(
+    plan: str, tmp_path: Path, root: str
+) -> None:
+    """Cycle 14's own findings, the backlog's second item (007 T085, 2026-11-02): the run root is
+    the folder the engineer types in the pane, and the run root's rule lets its name hold
+    brackets. Step 5.3's copy check listed it by `-Path`, which read `[pilot]` as a wildcard and
+    found no folder, so it printed `no remodel folder`, with no error, beside the copy the tab had
+    made. By `-LiteralPath` it names the remodel folder and counts its copy; the pin above holds
+    the run root's other four listings, in steps 5.3, 6.2 and 6.3, to the same."""
+    [block] = [
+        block for block in POWERSHELL_BLOCK.findall(step(plan, "5.3")) if "copies in it" in block
+    ]
+    runs = tmp_path / root
+    (runs / "20261101-101112-fictional plate").mkdir(parents=True)
+    copy = runs / "20261101-101500-fictional plate-remodel" / "copy"
+    copy.mkdir(parents=True)
+    (copy / "fictional plate-RMS.SLDPRT").write_bytes(b"")
+    quoted = str(runs).replace("'", "''")
+
+    assert run_powershell(f"$runs = '{quoted}'\n{block}\n", tmp_path) == [
+        "remodel folder 20261101-101500 | copies in it: 1"
+    ]
