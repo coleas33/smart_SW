@@ -495,7 +495,7 @@
    * the engineer's edit of it, never an empty box over it.
    */
   function showNote(root, disposition) {
-    var box = root.querySelector('input.note');
+    var box = root.querySelector('.note');
     if (box) {
       box.value = disposition && disposition.note ? String(disposition.note) : '';
     }
