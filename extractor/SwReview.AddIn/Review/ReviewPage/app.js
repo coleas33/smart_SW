@@ -614,7 +614,10 @@
         return;
       case 'finding':
         showFinding(body);
-        showTally(body.triage_tally);
+        // An older backend's finding names no tally and leaves the one shown (009 FR-030); null hides it.
+        if (Object.prototype.hasOwnProperty.call(body, 'triage_tally')) {
+          showTally(body.triage_tally);
+        }
         return;
       case 'finding.withdrawn':
         withdrawFinding(body);
@@ -1428,7 +1431,8 @@
    * hides it, since the backend sends one only while some finding records a triage. It is the
    * summary's last part, so Send stays directly after the summary, and it shows alone while no
    * summary has arrived. A snapshot's `cleared` lines are not read for it: its summary holds the
-   * review's tally as it stands.
+   * review's tally as it stands. A `finding` names it on every body, null while none is recorded,
+   * and one with no key at all - an older backend's - leaves it (cycle 13's Tier 2 review).
    */
   function showTally(tally) {
     render.clear(ui.triageTally);

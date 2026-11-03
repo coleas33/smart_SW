@@ -909,8 +909,9 @@ def triage_tally(findings: Sequence[Finding]) -> TriageTally | None:
 def with_triage_tally(body: dict[str, Any], findings: Sequence[Finding]) -> dict[str, Any]:
     """`body` with the review's tally under `triage_tally` while some finding records a triage,
     and as it was otherwise: the disposition route's reply and the `disposition` and
-    `disposition.cleared` events, each as it is sent (feature 002 FR-031, cycle 7), and the
-    `finding` event (cycle 13)."""
+    `disposition.cleared` events, each as it is sent (feature 002 FR-031, cycle 7). The `finding`
+    event names the key on every body instead, null while none is recorded
+    (`ToolContext.finding_body`; cycle 13's Tier 2 review)."""
     tally = triage_tally(findings)
     return body if tally is None else {**body, "triage_tally": tally.model_dump(mode="json")}
 
