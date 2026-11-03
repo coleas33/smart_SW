@@ -314,6 +314,45 @@ def test_a_withdrawal_that_took_a_decision_names_it() -> None:
         validator().validate(event("finding.withdrawn", maybe))
 
 
+def test_a_re_runs_start_names_the_earlier_records_withdrawals_with_a_decision() -> None:
+    """015 T121 (owner decision 193A, extended to Check again; its FR-029): a re-run's
+    `session.started` may name the earlier record's withdrawals with a decision,
+    `carried_withdrawals`, each a `finding.withdrawn` body that names what it took; a start with
+    none is valid as before. An empty list, an item without its disposition or its clause, and a
+    fold's withdrawal, which names nothing, are each refused.
+
+    *Changed 2026-11-02 on purpose (015 T123; cycle 12's Codex review):* each item also names the
+    session that withdrew it, `session_id`, since finding ids restart in each session, and an item
+    without it is refused too."""
+    started = {**valid_bodies()["session.started"], "send_when_checked": False}
+    carried = {
+        "finding_id": "F-003",
+        "reason": "bought part (your answer to ER-001)",
+        "disposition": {
+            "decision": "accepted",
+            "note": "as modelled",
+            "by": "engineer",
+            "at": "2026-09-13T12:05:00Z",
+            "triage": "already_known",
+        },
+        "taken": "your Accept (real but already known) went with it",
+        "session_id": "00000000-0000-0000-0000-00000000000c",
+    }
+    validator().validate(event("session.started", {**started, "carried_withdrawals": [carried]}))
+    validator().validate(event("session.started", started))
+    for refused in (
+        [],
+        [{key: value for key, value in carried.items() if key != "disposition"}],
+        [{key: value for key, value in carried.items() if key != "taken"}],
+        [{key: value for key, value in carried.items() if key != "session_id"}],
+        [{"finding_id": "F-004", "reason": "a second verdict", "folded_into": "F-001"}],
+    ):
+        with pytest.raises(SchemaValidationError):
+            validator().validate(
+                event("session.started", {**started, "carried_withdrawals": refused})
+            )
+
+
 def test_event_rejects_an_unknown_type() -> None:
     with pytest.raises(ValidationError):
         AgentEvent(seq=1, at=AT, type="text.streamed", body={"text": "x"})

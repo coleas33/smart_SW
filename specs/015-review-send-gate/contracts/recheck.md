@@ -320,6 +320,30 @@ model's opening, and the id maps a page would need to re-key its own work are no
 7. **the profile.** When the profile in effect differs from `earlier.model_status.profile` (another
    path, or the same path with other bytes, or one of the two absent), the change is named (section
    5); decisions whose findings the new profile no longer raises are named by step 2's rule.
+8. **what the earlier record said of decisions already gone.** *Added 2026-11-02 (cycle 12, T122;
+   owner decision 193A, extended to Check again; FR-029):* the earlier record's own stream
+   (`agent/events.session_events`) is read twice. Before step 2's decisions, each undecided earlier
+   finding's last `disposition.cleared` (`snapshot.cleared_lines`) is written again onto the one
+   re-run finding with its subject key, its disposition and words as they were and its
+   `triage_tally` the review's, so a decision carried onto that finding ends it and a line step 2
+   writes there comes after it; a line with no such finding goes nowhere and is not named, since it
+   holds no decision. And the re-run's `session.started`, written by `start_review`, names the
+   earlier record's withdrawals with a decision (`snapshot.withdrawn_lines`, those it carried
+   itself first) as `carried_withdrawals`, which `report.md` names before the re-run's own. Every
+   reader reads both from the re-run's own stream, and with neither nothing is written.
+   *Amended 2026-11-02 (cycle 12's Tier 1 review, T123):* a line is written only onto a finding
+   whose status and severity are those of the earlier finding it was written on; elsewhere its
+   words, that this verdict changed, would not hold, so it goes nowhere and is not named. The
+   withdrawals are read by `snapshot.carried_withdrawals` (those the earlier record carried
+   itself) and `snapshot.withdrawn_lines` (its own), in that order, and `report.md` ends each of
+   them with the words file's `withdrawn.earlier`, " (earlier check run)", since its id is the
+   earlier record's and can name another finding of the re-run.
+   *Amended 2026-11-02 (cycle 12's Codex review, T123):* finding ids restart in each session, and a
+   chain of Check agains names several records' withdrawals, so each carried withdrawal names the
+   session that withdrew it, `session_id`: the earlier record's own are given that record's id
+   when first carried, and one it carried itself keeps the id it already has. `withdrawn.earlier`
+   is " (earlier check run, session {session_id})", the id in full as that record's `report.md`
+   heads itself.
 
 Nothing is carried by its number alone (FR-029). The carry ends with `_settle_waiting(applied)`,
 the step the waiting apply ends with too (owner decision 71A; `review-flow.md` section 4): the
@@ -382,6 +406,20 @@ decisions' items; their words are `words.md` section 4.
 severity changed is not named here: it has a card, and the card says so (section 4, step 2). Of
 187A's two items only the first stays, for a pass's triage recorded before 187A; the second, a
 finding no longer a pass, is a changed status, whose decision is not carried at all.
+
+*Amended 2026-11-02 (cycle 12's Tier 1 review, T123):* when the earlier record was itself a
+re-run, the list begins with the items its own `coverage.recheck` row named, in their order
+(`runner._not_carried_before`, which splits that row where they were joined, at each "; " outside
+parentheses): none of them reached that record, so none reaches this one, and a chain of Check
+agains keeps naming them. An item with the words of one before it is named once.
+
+*Amended 2026-11-02 (cycle 12's Codex review, T123):* those items name ids of the record before
+the earlier one, and ids restart in each session, so each that names an id - every item but the
+profile's - and no session yet is named in the session the earlier record was checked again from
+(its `rechecked_from`), whose id it is: `NOT_CARRIED_IN_SESSION`, " in session {session_id}"
+after the item (`words.md` section 4), the id in full as that session's `report.md` heads itself.
+An item already so named keeps its session; the profile's is named as it was, so a profile
+changed before each record is still named once; and the re-run's own items are as before.
 
 ## 6. Failure
 

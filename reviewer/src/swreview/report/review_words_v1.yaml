@@ -153,6 +153,10 @@ rerun:
 withdrawn:
   took: "your {decision} went with it"
   took_with_triage: "your {decision} ({triage}) went with it"
+  # Ends `report.md`'s line for each withdrawal a re-run (Check again, feature 015) names from an
+  # earlier record, whose id is that record's and may name another finding of the re-run's.
+  # `{session_id}` is the session that withdrew it, in full, as that record's report heads itself.
+  earlier: " (earlier check run, session {session_id})"
 
 read_only_lead: "The backend restarted, so this review is shown from its run folder."
 read_only_off: "Follow-ups, decisions and answers are off."

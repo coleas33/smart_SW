@@ -41,7 +41,9 @@ if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
     from swreview.report.summary import SendInput
 
 __all__ = [
+    "CARRIED_WITHDRAWALS",
     "WAITING_STATES",
+    "carried_withdrawals",
     "cleared_lines",
     "restored_snapshot",
     "review_snapshot",
@@ -54,6 +56,10 @@ WAITING_STATES = frozenset({"not_sent", "send_failed"})
 
 WHEN_FORMAT = "%Y-%m-%d %H:%M"
 """`{when}` of `send.restored_line`: the stored wall clock, never converted (015 records.md 1)."""
+
+CARRIED_WITHDRAWALS = "carried_withdrawals"
+"""The `session.started` key under which a re-run (Check again, feature 015) names its earlier
+record's withdrawals with a decision, as `carried_withdrawals` reads them there (015 cycle 12)."""
 
 
 def review_snapshot(
@@ -173,6 +179,19 @@ def withdrawn_lines(session: ReviewSession, events: Iterable[AgentEvent]) -> lis
         and "taken" in event.body
         and event.body.get("finding_id") not in held
     ]
+
+
+def carried_withdrawals(
+    session: ReviewSession, events: Iterable[AgentEvent]
+) -> list[dict[str, Any]]:
+    """The earlier record's withdrawals with a decision that a re-run's (Check again, feature 015)
+    `session.started` names (`CARRIED_WITHDRAWALS`), as they went; none for any other session.
+    `report.md` names them before the session's own (`withdrawn_lines`), each marked with the
+    session that withdrew it (`session_id`): their ids are that session's, which the re-run may
+    have given another finding, so `withdrawn_lines`' held-id skip is not theirs (015 cycle 12,
+    its Tier 1 and Codex reviews)."""
+    read = _own_events(session, events)
+    return [dict(body) for body in read[0].body.get(CARRIED_WITHDRAWALS, [])] if read else []
 
 
 def _own_events(session: ReviewSession, events: Iterable[AgentEvent]) -> list[AgentEvent]:

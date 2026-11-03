@@ -3797,8 +3797,17 @@ def test_a_regrade_that_withdraws_a_decided_finding_says_so_in_report_md(
 
 
 def withdrawn_part(folder: Path) -> list[str]:
-    """The lines `report.md` prints under "Withdrawn with a decision", none without the part."""
-    lines = (folder / "report.md").read_text(encoding="utf-8").splitlines()
+    """The lines `report.md` prints under "Withdrawn with a decision", none without the part.
+
+    *Changed 2026-11-02 (015 T123; cycle 12's read-only check):* read by `withdrawn_of`, which
+    `test_recheck.py` shares for a report it renders; the lines are as before."""
+    return withdrawn_of((folder / "report.md").read_text(encoding="utf-8").splitlines())
+
+
+def withdrawn_of(lines: list[str]) -> list[str]:
+    """The lines a `report.md`, split into `lines`, prints under "Withdrawn with a decision", none
+    without the part (015 T123, cycle 12's read-only check: one helper for this module and
+    `test_recheck.py`)."""
     if "## Withdrawn with a decision" not in lines:
         return []
     start = lines.index("## Withdrawn with a decision") + 2

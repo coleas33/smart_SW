@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
@@ -164,7 +165,13 @@ from swreview.report.session import (
     load_session,
     save_session,
 )
-from swreview.report.snapshot import root_document
+from swreview.report.snapshot import (
+    CARRIED_WITHDRAWALS,
+    carried_withdrawals,
+    cleared_lines,
+    root_document,
+    withdrawn_lines,
+)
 from swreview.report.sources import answer_basis
 from swreview.report.summary import (
     DECISION_NOUNS,
@@ -1194,6 +1201,49 @@ NOT_CARRIED_PROFILE = (
 """`coverage.recheck`'s reason and its items (`contracts/words.md` section 4): each item names
 an earlier id, never a path, and the items are joined with "; " in the carry's order."""
 
+NOT_CARRIED_IN_SESSION = "{item} in session {session_id}"
+"""An item a re-run names again from its earlier record's own row (`_not_carried_before`) that
+names an id, as every item but the profile's does: the id is the record's before the earlier one,
+`rechecked_from`, named in full as that record's `report.md` heads itself, since ids restart in
+each session (015 cycle 12's Codex review)."""
+
+
+def _not_carried_before(earlier: ReviewSession) -> list[str]:
+    """The items `earlier`'s own `coverage.recheck` row named, when it was itself a re-run, in its
+    order: none of them reached it, so none reaches a re-run of it, which names them again (015
+    cycle 12's Tier 1 review). Split where they were joined, at each "; " outside parentheses,
+    since the profile's item holds one inside its own; a row in other words names none. Each that
+    names an id, and no session yet, is named in the session `earlier` was checked again from,
+    whose id it is (cycle 12's Codex review). An item already named in its session is told by
+    `NOT_CARRIED_IN_SESSION`'s own words, read when called, since the owner may edit them (cycle
+    12's read-only check)."""
+    head, tail = NOT_CARRIED.split("{items}")
+    in_session = re.compile(
+        re.escape(NOT_CARRIED_IN_SESSION)
+        .replace(re.escape("{item}"), ".+")
+        .replace(re.escape("{session_id}"), r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+    )
+    before = earlier.model_status.rechecked_from if earlier.model_status is not None else None
+    items: list[str] = []
+    for row in earlier.coverage.unresolved:
+        reason = row.reason
+        if row.check != RECHECK_CHECK or not reason.startswith(head) or not reason.endswith(tail):
+            continue
+        text = reason.removeprefix(head).removesuffix(tail)
+        depth = start = 0
+        for at, char in enumerate(text):
+            depth += {"(": 1, ")": -1}.get(char, 0)
+            if depth == 0 and text.startswith("; ", at):
+                items.append(text[start:at])
+                start = at + 2
+        items.append(text[start:])
+    return [
+        item
+        if before is None or item == NOT_CARRIED_PROFILE or in_session.fullmatch(item)
+        else NOT_CARRIED_IN_SESSION.format(item=item, session_id=before)
+        for item in items
+    ]
+
 
 FOLDED_WITHDRAWAL = "a second verdict on what {id} judges, shown as {id}"
 """Why the id a re-run or restated finding was first announced under is withdrawn once it folds
@@ -1656,15 +1706,17 @@ class ReviewRun:
         answered code question onto the one question that `asks_same` (applied by code through
         `_apply_answers` with no drawing read), each decision onto the one finding with the same
         `finding_subject_key` (through `set_disposition` at its first time, announced as a live
-        decision is), the drawing outcome lines verbatim, every human timing input
+        decision is) and each undecided finding's cleared line onto it (`_carry_decisions`),
+        the drawing outcome lines verbatim, every human timing input
         (`HUMAN_TIMING_FIELDS`, owner decision 183A) and the model status. What cannot be
-        carried is named once in one `coverage.recheck` row.
+        carried is named once in one `coverage.recheck` row, after what the earlier record's own
+        row named, when it was itself a re-run (`_not_carried_before`).
         Nothing is written: no `save_session`, no report; `_open_waiting`'s finalization is the
         re-run's one write. When answers or outcome lines were carried, it ends as the waiting
         apply does, with `_settle_waiting`, so the opening at Send is rebuilt from them.
         """
         session = self.session
-        named: list[str] = []
+        named = _not_carried_before(earlier)
         index = DrawingIndex.for_package(self.context.ir)
         answers, answered_at = self._carried_answers(earlier, named, index)
         applied = (
@@ -1698,7 +1750,7 @@ class ReviewRun:
                 CoverageItem(
                     check=RECHECK_CHECK,
                     scope=CoverageScope(),
-                    reason=NOT_CARRIED.format(items="; ".join(named)),
+                    reason=NOT_CARRIED.format(items="; ".join(dict.fromkeys(named))),
                     error=None,
                 ),
             )
@@ -1757,11 +1809,31 @@ class ReviewRun:
         finding's status and severity are the ones decided (owner decision 194A); its triage with
         it only when the finding takes it, a pass `wrong` alone (owner decision 187A), and any
         other named. Onto a finding with another status or severity nothing is carried, and its
-        card says so (`disposition.cleared`), so `coverage.recheck` does not name it."""
+        card says so (`disposition.cleared`), so `coverage.recheck` does not name it.
+
+        First, each undecided earlier finding's cleared line, from the earlier record's own stream,
+        goes onto the one finding with its subject key, its tally the review's (owner decision 193A,
+        extended to Check again; 015 cycle 12): before any decision, so a decision carried onto that
+        finding ends the line, and a line the carry writes there itself is the one shown. Only onto
+        a finding whose status and severity are the ones the line was written on, where its words,
+        that this verdict changed, still hold (cycle 12's Tier 1 review). A line with no such
+        finding to land on holds no decision, so it is not named."""
         session = self.session
         by_key: dict[Any, list[Finding]] = {}
         for finding in session.findings:
             by_key.setdefault(finding_subject_key(finding), []).append(finding)
+        said = {finding.id: finding for finding in earlier.findings}
+        for line in cleared_lines(earlier, session_events(self.out_dir, earlier.session_id)):
+            written_on = said[line["finding_id"]]
+            matches = by_key.get(finding_subject_key(written_on), [])
+            if len(matches) == 1 and (matches[0].status, matches[0].severity) == (
+                written_on.status,
+                written_on.severity,
+            ):
+                self.sink.emit(
+                    "disposition.cleared",
+                    with_triage_tally({**line, "finding_id": matches[0].id}, session.findings),
+                )
         decided = [finding for finding in earlier.findings if finding.disposition is not None]
         target: dict[str, str] = {}
         for finding in decided:
@@ -2499,7 +2571,8 @@ def start_review(
             `no_redaction` is the default because a run may legitimately have no key.
         earlier: A re-run's earlier not-sent record (feature 015, `contracts/recheck.md`
             section 3): its live outcome is carried as one step and its drawing-read
-            capability onto the context, so the host is asked nothing either answered.
+            capability onto the context, so the host is asked nothing either answered, and
+            its withdrawals with a decision are named on `session.started` (section 4).
             Only with `send_when_checked` false.
     """
     if earlier is not None and send_when_checked:
@@ -2583,7 +2656,21 @@ def start_review(
         # opens a session on it and `benchmark/scorecard.py::seconds_to_first_finding`
         # counts no finding before it. It is emitted here rather than in `ReviewRun.start()`
         # for that reason, and a run with every lever off is unchanged by the move, because
-        # setup wrote nothing between the two places.
+        # setup wrote nothing between the two places. A re-run's also names the earlier record's
+        # withdrawals with a decision, whose findings no event of this session can name (015
+        # cycle 12): those it carried itself first, so a chain of Check agains keeps them. Each
+        # names the session that withdrew it, since finding ids restart in each session: the
+        # earlier record's own its id, a carried one the id it kept (cycle 12's Codex review).
+        carried: list[dict[str, Any]] = []
+        if earlier is not None:
+            stream = list(session_events(out, earlier.session_id))
+            carried = [
+                *carried_withdrawals(earlier, stream),
+                *(
+                    {**body, "session_id": str(earlier.session_id)}
+                    for body in withdrawn_lines(earlier, stream)
+                ),
+            ]
         sink.emit(
             "session.started",
             {
@@ -2593,6 +2680,7 @@ def start_review(
                 "model": chosen_model,
                 "effort_mapping": effort_mapping.model_dump(mode="json"),
                 **({"send_when_checked": False} if not send_when_checked else {}),
+                **({CARRIED_WITHDRAWALS: carried} if carried else {}),
             },
         )
         record_partial_evidence(session, loaded.package)

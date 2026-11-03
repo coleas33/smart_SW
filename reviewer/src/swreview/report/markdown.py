@@ -50,7 +50,7 @@ from swreview.report.session import (
     ReviewSession,
     SessionUsage,
 )
-from swreview.report.snapshot import cleared_lines, withdrawn_lines
+from swreview.report.snapshot import carried_withdrawals, cleared_lines, withdrawn_lines
 from swreview.report.summary import Words, bought_rows, load_words, triage_tally
 from swreview.report.text import markdown_text
 from swreview.report.titles import display_title
@@ -104,13 +104,15 @@ def render_report(
     `events` is the stream the session wrote (`agent/events.session_events`), which says what a
     clear or a withdrawal took from the engineer's decisions (002 FR-031, roadmap hole H-g-010):
     each undecided finding's cleared line, as both snapshots name it (`cleared_lines`), and the
-    findings withdrawn with a decision (`withdrawn_lines`). With none of either, the report is
-    what it was without them, byte for byte.
+    findings withdrawn with a decision (`withdrawn_lines`), a re-run's earlier record's first
+    (`carried_withdrawals`). With none of either, the report is what it was without them, byte
+    for byte.
     """
     components_by_id = _components_by_id(package)
     names = component_names(package) if package is not None else {}
     stream = list(events)
     cleared = {body["finding_id"]: body["reason"] for body in cleared_lines(session, stream)}
+    earlier = carried_withdrawals(session, stream)
     withdrawn = withdrawn_lines(session, stream)
     lines: list[str] = []
 
@@ -120,8 +122,8 @@ def render_report(
     lines.append("")
     lines.extend(_render_summary(session, package))
     lines.append("")
-    if withdrawn:
-        lines.extend(_render_withdrawn(withdrawn))
+    if earlier or withdrawn:
+        lines.extend(_render_withdrawn(earlier, withdrawn))
         lines.append("")
     rows = bought_rows(session)
     if rows:
@@ -320,17 +322,25 @@ def _by_triage(findings: Sequence[Finding]) -> list[str]:
 # --- withdrawn with a decision (roadmap hole H-g-010) ------------------------------------------
 
 
-def _render_withdrawn(withdrawn: Sequence[Mapping[str, Any]]) -> list[str]:
+def _render_withdrawn(
+    earlier: Sequence[Mapping[str, Any]], withdrawn: Sequence[Mapping[str, Any]]
+) -> list[str]:
     """Each finding an answer withdrew with a decision, in the order they went, right after the
     summary whose counts no longer hold them (002 FR-031, roadmap hole H-g-010): the Transcript's
     line - its id, why it went, and the backend's clause naming the decision and triage it took.
+    A re-run's (Check again, feature 015) earlier records' come first, each ending with the words
+    file's `withdrawn.earlier` naming the session that withdrew it, since its id is that
+    session's and may name another finding here (015 cycle 12's Tier 1 and Codex reviews).
     Rendered only when one did, so every other report keeps its bytes."""
+    mark = load_words().withdrawn.earlier
     return [
         "## Withdrawn with a decision",
         "",
         *(
             f"- {body['finding_id']} withdrawn: {body['reason']}; {body['taken']}"
-            for body in withdrawn
+            + (mark.format(session_id=body["session_id"]) if carried else "")
+            for bodies, carried in ((earlier, True), (withdrawn, False))
+            for body in bodies
         ),
     ]
 
