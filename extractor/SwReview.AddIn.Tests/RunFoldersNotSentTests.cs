@@ -132,6 +132,23 @@ public sealed class RunFoldersNotSentTests : IDisposable
         Assert.Equal(folder, Find(_root, document)!.RunDirectory);
     }
 
+    [Fact]
+    public void TheDocumentNameIsTheOneTheBackendFindsReviewsBy()
+    {
+        // 002 cycle 17's Tier 2 review: the backend copies this rule to find a document's earlier
+        // reviews (reviewer/src/swreview/report/first_shown.py), and one table holds the cases of
+        // both sides, which reviewer/tests/unit/test_first_shown.py reads too.
+        string table = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(),
+            "reviewer", "tests", "fixtures", "run-folders", "document-names.json");
+        using JsonDocument rows = JsonDocument.Parse(File.ReadAllText(table, Encoding.UTF8));
+
+        Assert.NotEmpty(rows.RootElement.EnumerateArray());
+        foreach (JsonElement row in rows.RootElement.EnumerateArray())
+        {
+            Assert.Equal(row.GetProperty("name").GetString(), RunFolders.DocumentName(row.GetProperty("path").GetString()));
+        }
+    }
+
     [Theory]
     [InlineData("{}")]
     [InlineData("{\"session_id\":\"FICT-session\",\"model_status\":null}")]

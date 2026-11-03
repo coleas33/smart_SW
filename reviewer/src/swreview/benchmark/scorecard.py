@@ -692,8 +692,9 @@ class StreamRead:
     withdrawn: dict[str, dict[str, Any]]
     """Each id a `finding.withdrawn` event names, in the order of its first withdrawal, with the
     last `finding` body announced for it before its latest withdrawal, the finding alone (002
-    cycle 13: without the triage tally a body may carry); a fold's withdrawal is not one
-    (`read_stream`)."""
+    cycle 13: without the triage tally a body may carry; cycle 17's Tier 2 review: its `Finding`'s
+    fields alone, so without the date an earlier review first showed it either); a fold's
+    withdrawal is not one (`read_stream`)."""
     unreadable_line: int | None
     """The 1-based line `replay_events` stopped at, or `None` when it read to the end."""
 
@@ -735,10 +736,11 @@ def read_stream(events_path: Path) -> StreamRead:
             if first is None and started_at is not None and body.get("carried_over_from") is None:
                 first = (event.at - started_at).total_seconds()
             if isinstance(body.get("id"), str):
-                # The finding alone: its body may carry the review's triage tally beside it
-                # (002 FR-031, cycle 13), which no `Finding` takes.
+                # The finding alone: its body may carry what no `Finding` takes beside it - the
+                # review's triage tally (002 FR-031, cycle 13) and the date an earlier review
+                # first showed it (cycle 17).
                 announced[body["id"]] = {
-                    key: value for key, value in body.items() if key != "triage_tally"
+                    key: value for key, value in body.items() if key in Finding.model_fields
                 }
         elif event.type == "finding.withdrawn" and FOLDED_INTO not in event.body:
             finding_id = event.body.get("finding_id")

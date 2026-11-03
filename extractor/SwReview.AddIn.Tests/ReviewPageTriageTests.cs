@@ -99,6 +99,11 @@ namespace SwReview.AddIn.Tests;
 /// `finding.withdrawn` body, and the Transcript's withdrawal line - live, replayed or a read-only restore's - names it in
 /// parentheses right after the id, printed as sent, so a line with no "recorded" line before it still says which finding
 /// went; a body without a title, an older backend's, or with a blank one reads as before.
+///
+/// The card names when an earlier review first showed its finding (002 T390; cycle 17, roadmap hole H-a-009): a `finding` body
+/// may name `first_shown`, the date an earlier review of the same document first showed it, and the card's head says so under
+/// the title in the backend's words (`labels.first_shown`), the date filled in as characters - live, after a review switch or a
+/// reload and on a read-only restore, whose snapshots name it as the events did. A body without it, or no labels, draws nothing.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -2515,6 +2520,150 @@ public sealed class ReviewPageTriageTests
         });
     }
 
+    // ---- the card names when an earlier review first showed its finding (002 T390; cycle 17) ----
+
+    /// <summary>
+    /// The live card (002 T390; roadmap hole H-a-009): F-001's `finding` body names the date an earlier review of the same
+    /// document first showed it, and its card's head says so in the backend's words, the date filled in - one line under the
+    /// title, before the no-triage line, read with the fold shut. F-002's date is hostile and reaches the card as characters,
+    /// never markup (FR-029). F-003's body, an older backend's, names none, and its head is as before.
+    /// </summary>
+    [Fact]
+    public void ACardSaysWhenAnEarlierReviewFirstShowedItsFinding()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver, Shown(Finding("F-001"), ShownDate), Shown(Finding("F-002"), HostileDate), Finding("F-003"));
+
+            JsonElement shown = await driver.Read(ReadFirstShown("F-001"));
+            Assert.Equal(1, shown.GetProperty("count").GetInt32());
+            Assert.Equal(ShownLine(ShownDate), shown.GetProperty("text").GetString());
+            Assert.True(shown.GetProperty("inHead").GetBoolean(), "the line is not in the card's head.");
+            Assert.True(shown.GetProperty("afterTitle").GetBoolean(), "the line is not under the title.");
+            Assert.True(shown.GetProperty("foldShut").GetBoolean(), "the finding's fold is open.");
+            Assert.True(shown.GetProperty("shown").GetBoolean(), "the line does not read with the fold shut.");
+            Assert.Equal(new[] { "card-line", "title", "card-first-shown", "card-no-triage" }, ReviewPageDriver.Strings(shown, "headChildren"));
+
+            JsonElement hostile = await driver.Read(ReadFirstShown("F-002"));
+            Assert.Equal(ShownLine(HostileDate), hostile.GetProperty("text").GetString());
+            Assert.Equal(0, hostile.GetProperty("injected").GetInt32());
+
+            JsonElement none = await driver.Read(ReadFirstShown("F-003"));
+            Assert.Equal(0, none.GetProperty("count").GetInt32());
+            Assert.Equal(new[] { "card-line", "title", "card-no-triage" }, ReviewPageDriver.Strings(none, "headChildren"));
+
+            await driver.Route("POST", DispositionPath("F-001"), 200, Finding("F-001", Disposition("accepted", string.Empty, "new_and_real")));
+            await Decide(driver, "F-001", "accept");
+            JsonElement decided = await driver.Read(ReadFirstShown("F-001"));
+            Assert.Equal(ShownLine(ShownDate), decided.GetProperty("text").GetString());
+            Assert.Equal(new[] { "card-line", "title", "card-first-shown" }, ReviewPageDriver.Strings(decided, "headChildren"));
+        });
+    }
+
+    /// <summary>
+    /// A review switch and a reload bring the line back through `GET /sessions/{chat}/snapshot`, whose finding bodies name the
+    /// date as their events did (002 T390). Chat-2's live snapshot holds F-001 with a date and F-002 without; after a reload the
+    /// page shows chat-1, the newest review of the document, from its live snapshot, F-003 with a date.
+    /// </summary>
+    [Fact]
+    public void AFirstShownLineComesBackAfterAReviewSwitchAndAReload()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string ChatRun = "20260923-101500-bracket-1";
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, ChatRun, ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200, Snapshot(
+                OtherRun, false, Shown(Finding("F-001"), ShownDate), Finding("F-002")));
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            Assert.Equal(ShownLine(ShownDate), (await driver.Read(ReadFirstShown("F-001"))).GetProperty("text").GetString());
+            Assert.Equal(0, (await driver.Read(ReadFirstShown("F-002"))).GetProperty("count").GetInt32());
+
+            driver.InitialRoutes.Add(("GET", "/sessions/" + Chat + "/snapshot", 200, Snapshot(
+                ChatRun, false, Shown(Finding("F-003"), "2026-09-20"))));
+            await driver.Reload();
+            await driver.Settle();
+            Assert.Equal(ShownLine("2026-09-20"), (await driver.Read(ReadFirstShown("F-003"))).GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// A review restored read-only from its run folder after a restart (002 T390): F-100's body names the date its stream's
+    /// `finding` event did, and its card says so; F-101's names none, and its card says nothing of an earlier review.
+    /// </summary>
+    [Fact]
+    public void AReadOnlyRestoreSaysWhenAnEarlierReviewFirstShowedAFinding()
+    {
+        ReviewPageDriver.Run(
+            driver =>
+            {
+                Labelled(driver);
+                driver.Sessions.Add(ReviewPageSessionsTests.Item(RestoredChat, RestoredRun, ReviewPageDriver.ReviewedPath, 9, 0));
+                driver.InitialRoutes.Add(("GET", "/sessions/" + RestoredChat + "/snapshot", 404, ReviewPageRecheckTests.UnknownChat));
+                driver.InitialRoutes.Add(("GET", "/reviews/" + RestoredRun, 200, Snapshot(
+                    RestoredRun,
+                    true,
+                    Shown(Finding("F-100", Disposition("accepted", "FICT intended", "new_and_real")), ShownDate),
+                    Finding("F-101"))));
+            },
+            async driver =>
+            {
+                await driver.Settle();
+
+                JsonElement shown = await driver.Read(ReadFirstShown("F-100"));
+                Assert.Equal(ShownLine(ShownDate), shown.GetProperty("text").GetString());
+                Assert.True(shown.GetProperty("afterTitle").GetBoolean(), "the line is not under the title.");
+                Assert.Equal(0, (await driver.Read(ReadFirstShown("F-101"))).GetProperty("count").GetInt32());
+            });
+    }
+
+    /// <summary>
+    /// FR-030: with no labels there are no words, so a body that names a date draws no line, and the head is its line and its
+    /// title, as before (002 T390).
+    /// </summary>
+    [Fact]
+    public void WithNoLabelsACardSaysNothingOfAnEarlierReview()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            await Reviewed(driver, Shown(Finding("F-001"), ShownDate));
+            JsonElement none = await driver.Read(ReadFirstShown("F-001"));
+            Assert.Equal(0, none.GetProperty("count").GetInt32());
+            Assert.Equal(new[] { "card-line", "title" }, ReviewPageDriver.Strings(none, "headChildren"));
+        });
+    }
+
+    /// <summary>
+    /// At a docked pane's 300 px, the card where a real turn leaves it, in its grouped row, shut (002 T390): with the row opened
+    /// and the card's fold shut, the line naming an earlier review's date is whole - inside the window and every box that
+    /// clips it, its words inside it - with no sideways page scroll.
+    /// </summary>
+    [Fact]
+    public void AFirstShownLineIsWhollyVisibleAtThreeHundredPixelsInItsRow()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
+            await driver.RouteAttention(Chat, SummarySample.Json());
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Shown(Finding("F-007", Disposition("accepted", string.Empty, null)), ShownDate));
+            await driver.EndSession(Chat);
+            JsonElement placed = await driver.Read(ReadRow("F-007"));
+            Assert.True(placed.GetProperty("inRow").GetBoolean(), "F-007's card is not in its grouped row.");
+            Assert.False(placed.GetProperty("rowOpen").GetBoolean(), "F-007's row is open before it is measured.");
+
+            JsonElement measured = await driver.Read(ReadFirstShownWhole("F-007"));
+            Assert.Equal(300, measured.GetProperty("width").GetInt32());
+            Assert.Equal(ShownLine(ShownDate), measured.GetProperty("text").GetString());
+            Assert.True(measured.GetProperty("foldShut").GetBoolean(), "the finding's fold is open.");
+            Assert.Empty(ReviewPageDriver.Strings(measured, "clipped"));
+            Assert.True(measured.GetProperty("noHorizontalOverflow").GetBoolean(), measured.ToString());
+        });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>
@@ -2929,6 +3078,26 @@ public sealed class ReviewPageTriageTests
         return body.ToJsonString();
     }
 
+    /// <summary>
+    /// <paramref name="finding"/> naming `first_shown`, the date an earlier review of the same document first showed it, as the
+    /// backend names it after the finding's other keys (002 cycle 17).
+    /// </summary>
+    private static string Shown(string finding, string date)
+    {
+        JsonObject body = JsonNode.Parse(finding)!.AsObject();
+        body["first_shown"] = date;
+        return body.ToJsonString();
+    }
+
+    /// <summary>A date an earlier review first showed a finding, as the backend writes one.</summary>
+    private const string ShownDate = "2026-09-18";
+
+    /// <summary>A date that is markup, which the page must print as characters (FR-029).</summary>
+    private const string HostileDate = "<img src=x onerror=alert(8)>2026-09-18";
+
+    /// <summary>The card's line for <paramref name="date"/>, in <see cref="LabelsSample"/>'s words, the date filled in.</summary>
+    private static string ShownLine(string date) => LabelsSample.FirstShown.Replace("{date}", date);
+
     /// <summary>A finding's display title as a withdrawal names it (002 cycle 16): whole, its part named.</summary>
     private const string WithdrawnTitle = "FICT M8x1 is fine pitch on FICT-pin-1 (M8's coarse pitch is 1.25)";
 
@@ -3000,6 +3169,51 @@ return JSON.stringify({
   foldShut: card.querySelector('.details').hidden,
   shown: h.rendered(line),
   headChildren: h.children(head)
+});";
+
+    /// <summary>
+    /// One card's line naming when an earlier review first showed its finding (002 cycle 17): how many the card holds, its words,
+    /// whether it stands in the card's head under the title, whether the fold is shut and the line reads all the same, how many
+    /// elements of markup it holds, and the head's children by class.
+    /// </summary>
+    private static string ReadFirstShown(string findingId) => @"
+var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
+if (!card) { return JSON.stringify({ ok: false, error: 'no card " + findingId + @"' }); }
+var head = card.querySelector('.card-head');
+var lines = card.querySelectorAll('.card-first-shown');
+var line = lines.length ? lines[0] : null;
+return JSON.stringify({
+  ok: true,
+  count: lines.length,
+  text: line ? line.textContent : null,
+  inHead: !!line && line.parentElement === head,
+  afterTitle: h.before(head.querySelector('.title'), line),
+  foldShut: card.querySelector('.details').hidden,
+  shown: h.rendered(line),
+  injected: h.injected(line),
+  headChildren: h.children(head)
+});";
+
+    /// <summary>
+    /// Opens the grouped row one card stands in, leaves the card's fold shut, and measures its line naming an earlier review's
+    /// date brought into view by <see cref="Whole"/>; a line that is missing counts as cut off.
+    /// </summary>
+    private static string ReadFirstShownWhole(string findingId) => @"
+var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
+var row = card.closest('details.type-row');
+if (row) { row.open = true; }
+" + Whole + @"
+var line = card.querySelector('.card-first-shown');
+var clipped = [];
+if (!line) { clipped.push('line missing'); }
+else if (!whole(line)) { clipped.push(JSON.stringify(line.getBoundingClientRect())); }
+return JSON.stringify({
+  ok: true,
+  width: window.innerWidth,
+  text: line ? line.textContent : null,
+  foldShut: card.querySelector('.details').hidden,
+  clipped: clipped,
+  noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth
 });";
 
     /// <summary>

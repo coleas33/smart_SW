@@ -16886,6 +16886,9 @@
     "note": {
       "not_kept": "The note recorded first stays."
     },
+    "first_shown": {
+      "earlier": "First shown in the review of {date}."
+    },
     "source": {
       "code": "Checked by code",
       "model": "AI guidance"

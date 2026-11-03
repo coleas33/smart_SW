@@ -113,6 +113,18 @@ it names the same button; a flagged finding's card has a `no_triage` line, which
 decision. A pass has none, and its press is `IllegalTransition` as before (cycle 15's Tier 2
 review). `errors` stays last.
 
+*Amended 2026-11-03 (feature 002, roadmap hole H-a-009; 002 cycle 17):* the block gains
+`first_shown`, after `note` and before `source`: `{earlier: "First shown in the review of
+{date}."}`, what a finding card says when an earlier review of the same document first showed the
+finding, for owner decision 188A's date. The page prints `labelOf(labels, "first_shown",
+"earlier", "")` under the title with `{date}` replaced by the `finding` body's `first_shown`, as
+text, and nothing for a body without one or with no labels (FR-030); `report.md` prints the same
+words under the finding's heading.
+
+| Surface | Word from |
+|---|---|
+| a finding card's head, when an earlier review first showed the finding | `first_shown` |
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and

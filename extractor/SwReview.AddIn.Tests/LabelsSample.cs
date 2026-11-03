@@ -40,6 +40,9 @@ namespace SwReview.AddIn.Tests;
 ///
 /// *Changed 2026-11-03 (002 T377; roadmap hole H-c-010):* `errors` gains `OutcomeNeeded`, the words file's own sentence: the
 /// decision recorded without a triage, pressed again with no outcome, is refused with words that name the repair.
+///
+/// *Changed 2026-11-03 (002 T389; cycle 17, roadmap hole H-a-009):* the `first_shown` group, the words file's own: the line a
+/// card says when an earlier review of the same document first showed its finding, `{date}` that review's date.
 /// </summary>
 internal static class LabelsSample
 {
@@ -96,6 +99,12 @@ internal static class LabelsSample
     /// (owner decision 198A; cycle 11's Tier 2 review).
     /// </summary>
     public const string NoteNotKept = "The note recorded first stays.";
+
+    /// <summary>
+    /// What a card says of a finding an earlier review of the same document first showed, `{date}` that review's date (roadmap
+    /// hole H-a-009; 002 cycle 17), which the page fills in as text.
+    /// </summary>
+    public const string FirstShown = "First shown in the review of {date}.";
 
     /// <summary>A second triage refused (roadmap hole H-g-012; owner decision 185A): the words file's sentence for it.</summary>
     public const string TriageAlreadyRecorded =
@@ -199,6 +208,13 @@ internal static class LabelsSample
             "note", new Dictionary<string, string>
             {
                 { "not_kept", NoteNotKept },
+            }
+        },
+        {
+            // Cycle 17 (roadmap hole H-a-009): when an earlier review first showed a finding, in words.
+            "first_shown", new Dictionary<string, string>
+            {
+                { "earlier", FirstShown },
             }
         },
         {

@@ -245,6 +245,11 @@ out the call to decide again (`Words.rerun.read_only`), and it adds `withdrawn`,
 that names the decision it took (`withdrawn_lines`, a finding the session still holds skipped),
 in the order they went. The live snapshot is as before.
 
+*Amended 2026-11-03 (feature 002 cycle 17):* each `findings` body names `first_shown`, after its
+other keys, when the last `finding` body of its id in the stream names it - the date an earlier
+review of the same document first showed the finding (`shown_dates`) - in both snapshots, so the
+card says it after a reload, a review switch or a restart; every other body is as before.
+
 The pane fixture `extractor/SwReview.AddIn.Tests/Fixtures/review-big-assembly.json` is this object
 for feature 008's `big-assembly` fixture, plus `labels` (section 7) so the page tests need no route.
 

@@ -7636,3 +7636,183 @@ restart, or in a Check again's `report.md`, whose carried withdrawals name an ea
     skipped on Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed;
     C# with zero warnings, then 10,274 extractor and 4,351 add-in tests passed (T386's last
     sub-item).
+
+### Cycle 17. The card names when an earlier review first showed its finding (2026-11-03)
+
+Roadmap run 5's first proposal, from hole H-a-009's route, built ahead of the owner's pick; Tier
+2, no decision id. Owner decision 188A keeps a real finding SwReview first showed at an earlier
+sitting "new and real", with that sitting's date in its note, but nothing showed which findings an
+earlier review showed, so the date rested on recall.
+
+- **Settled**, the defaults taken inside the feature:
+  - **Which side.** The backend: it writes the `finding` event and `report.md`, and it already
+    holds the run root (`ChatServer.run_root`, inside which every `run_dir` lies), so the add-in
+    passes nothing new and no host contract changes. `start_review` takes `run_root`; the CLI's
+    `swreview review` has none and names no date.
+  - **Which earlier reviews count.** The add-in's rule for a document's reviews
+    (`RunFolders.FindNotSentReview`), names first: the run root's folders named
+    `<yyyyMMdd-HHmmss>-<DocumentName(path)>`, with or without a `-N` collision suffix, none a
+    `-check`, `-standards` or `-remodel` folder (`report/first_shown.document_name` is
+    `RunFolders.DocumentName`'s rule). Then the folder's `session.json`, read once, must name the
+    same document: its `design_id` this review's (the root document's path ignoring case, as the
+    extractor hashes it) and, where it names its document (`model_status.document`, a review
+    started unticked), the same path ignoring case and configuration exactly
+    (`PageDocument.IsSameDocument`). A record sent at once names no configuration; each finding's
+    subject key ends with the configuration it was raised in. The review's own folder is never
+    read; a Check again's earlier record, which the re-run already holds, counts. A folder
+    stamped later than this review's start is not an earlier review. Rotated records
+    (`session.N.json`, a retry's or a Check again's earlier attempt) are not read, and no stream is.
+    *Changed 2026-11-03 (T392):* the path alone is compared, each finding's configuration being
+    its own however its review was started; the records a Retry or a re-run moved aside are read,
+    in a re-run's own folder too but never a Retry's own; and the folders are read oldest first,
+    within a budget (*Tier 2 review*, below).
+  - **The match and the date.** A flagged finding of such a record with the same subject key
+    (`findings.finding_subject_key`, as Check again's carry finds its finding), whatever its status
+    and severity, since 194A's condition is the carry's for a decision, which a date is not; any
+    number of them. The date is the earliest such folder's name stamp, `YYYY-MM-DD`: the local wall
+    clock the add-in names the folder with when the review starts (`RunFolders.Create`), so no zone
+    is converted, and a Check again keeps its folder, so its earlier record is dated by the review it
+    re-ran. A pass neither gets nor gives one (187A). *Changed 2026-11-03 (T392):* the date is the
+    record's own, not its folder's name: the local day it started, or its Send's for what a turn
+    raised after one; and a finding on a part another part's number now names gives none (*Tier 2
+    review*, below).
+  - **A finding withdrawn** later in an earlier review gives no date: its record no longer holds it,
+    and the record, not the stream, is what a review is taken to have raised.
+  - **The key.** `first_shown` on the `finding` body, after `triage_tally`, only when there is a
+    date, so a body without one keeps its bytes; `ToolContext.finding_body`, the one builder, gives
+    a re-run's fold and a restate theirs. Both snapshots and `report.md` read it back from the
+    session's own stream, the last `finding` body of each id, so `Finding` gains no field and the
+    model never reads it.
+  - **The words.** `labels.first_shown.earlier`, "First shown in the review of {date}.", after
+    `note` and before `source`: the card's head prints it under the title, `{date}` replaced as
+    text, and `report.md` as the first line under the finding's heading. With no labels, or a body
+    without the key, the card prints nothing (009 FR-030).
+- **Built** (2026-11-03; T388 to T391 in [tasks.md](tasks.md), Phase 35, each test written first):
+  - The backend (T389): `reviewer/src/swreview/report/first_shown.py`, the match; the context's
+    `first_shown` map, which `ToolContext.finding_body` reads; `start_review`'s `run_root`, which the
+    chat server passes; `report/snapshot.shown_dates`, which both snapshots and `report.md` read;
+    the words key; the contract's optional `first_shown`, a date, with dated notes in
+    [contracts/README.md](contracts/README.md), [data-model.md](data-model.md) section 2,
+    [contracts/chat-api.md](contracts/chat-api.md) and 009's plain words and data model; a dated
+    note on `findings.finding_subject_key`, which the match uses across two dumps. The pane
+    fixtures' generators moved the four that embed the labels by the new group alone.
+  - The page (T391): `render.js`'s `firstShownLine`, under the title, through the one text writer.
+  - The time (T389): on a fictional run root of thirty earlier reviews of the big-assembly replay
+    fixture (each record 0.66 MB, 96 findings), a Model check folder beside each, the match took
+    0.29 to 0.33 s in three runs on the development machine
+    (`reviewer/tests/perf/test_first_shown_perf.py`, `-m perf`, budget 2 s): about 10 ms a record,
+    read and validated once, and nothing for a folder the names rule out. *Changed 2026-11-03
+    (T392):* 0.33 to 0.35 s in three runs once each folder is listed for the records it moved
+    aside; the match now stops at a 2 s budget of its own.
+  - Tests first: T388's new module failed for want of the module and then of the wiring, and six
+    cases of three other modules for want of the contract's key, the words key or the labels
+    group; T390's four facts for want of the line. Ten mutants, each file restored byte for byte,
+    proved the guards ([tasks.md](tasks.md), T388 to T391). Changed on purpose, none loosened,
+    each with a dated note: `test_review_words.py`'s plain-word test over the new group,
+    `test_chat_server.py`'s labels route test naming it, the 002 literal of the specs-README pin
+    (T387, T392), and, found by the whole suite at the close, `test_benchmark_pane_parity.py`'s
+    transport rows, which every `start_review` argument must be classified among: `run_root` is
+    one, the pane's run root and none for a benchmark attempt, changing nothing the model is sent,
+    with a dated note in 014 [contracts/benchmark-run.md](../014-design-review-eval/contracts/benchmark-run.md)
+    section 5.1.
+- **Left open**:
+  - The match joins two dumps by a key whose component and entity ids are each dump's numbering,
+    as the route asks: an unchanged design keeps them (lever 9 even reuses its package), but after
+    an edit to the tree a renumbered part can carry a date onto another part's finding of the same
+    check, or lose its own, and a persistent reference a re-dump re-encodes loses one. A guard by
+    the findings' documents (`provenance`) would narrow it; for the owner. *Changed 2026-11-03
+    (T392):* that guard is the default taken for components: a part renumbered onto another's
+    number gives no date. Every id allocator numbers in sequence, so any edit that adds or removes
+    a component, hole, feature, view or dimension shifts the ids after it, and an edit is usually
+    why a second review happens: a component renumbered onto another instance of the same
+    document, or an entity renumbered within one document, can still move a date, or lose one;
+    for the owner (`docs/review-backlog.md`, cycle 17).
+  - Each earlier folder's `session.json` alone is read: a retry's or a Check again's rotated
+    records (`session.N.json`) are not, so a finding only an earlier attempt in that folder raised
+    gives no date, and its date is the folder's, the review it re-ran. A folder whose review was
+    deleted from the seat gives none, and a date an earlier review's own stream named is not
+    carried on (the route's "still on the seat"). *Changed 2026-11-03 (T392):* the rotated records
+    are read, each dated by its own clock; the rest stands.
+  - A record sent at once names no configuration, so its findings match by their own: a part's
+    finding of the standards checks, raised in the part's configuration, can take the date of a
+    review of the same assembly in another configuration, where it was shown. *Changed 2026-11-03
+    (T392):* by the default taken, so do the findings of a review started unticked. Model check
+    and Standards check folders, which raise the same checks, are not read, nor a review run in a
+    claimed `-check` folder (146A); whether they count is the owner's (backlog, cycle 17).
+  - The CLI's `swreview review` names no run root and so no date; a record written before this
+    cycle has no date in its stream, so its restore and its `report.md` name none.
+  - The time grows with the earlier reviews of the document on the seat, about 10 ms for each
+    record of the size measured; none is read for another document. *Changed 2026-11-03 (T392):*
+    the match stops after 2 s, oldest first, so a finding only a review past that showed names no
+    date; a narrower read of each record would fit more inside it (backlog, cycle 17). *Changed
+    2026-11-03 (the read-only check):* each record being dated by its own clock, one read within
+    the budget can also name a later day than a review past it showed - a review sent after a
+    restart days after its folder was named, say; the review's own folder is read whatever the
+    time.
+  - *Added 2026-11-03 (T392):* a follow-up turn or an answer on a later day than its review's
+    start or Send dates what it raised by that start or Send: the record names no turn's time,
+    though its stream's `finding` events do (backlog, cycle 17).
+  - A save of an earlier record in the instant the match reads it - a live review of the same
+    document deciding just then - fails on Windows: Python's `os.replace` (`MoveFileExW`), which
+    `write_atomic` uses, cannot replace a file another handle holds, whatever its share mode. The
+    match holds each record for one read, about a millisecond. The add-in's session-head read has
+    the same window: its `FileShare.Delete` lets `File.Replace` (`ReplaceFileW`), which its test
+    uses, through, but not `os.replace`, as a probe on the development machine showed. The cure
+    for every reader is in `write_atomic`; for the owner.
+- **Tier 2 review** (T392; 2026-11-03): one must-fix and five should-fix, fixed test first where
+  they lay in this cycle's change ([tasks.md](tasks.md), T392's sub-item), the rest in
+  `docs/review-backlog.md`'s cycle 17 section:
+  - **A record is dated by its own clock** (the must-fix). A folder can hold findings shown on
+    several days: Send can come days after the folder was named, live or after a restart, whose
+    re-run replaces `session.json`. Each record is now dated by the local day it started, or, for
+    a finding a turn raised after a Send (`model_status.sent_at`), the day it was sent; a finding
+    the checks raised before any turn - carried, the pre-run's or a set-up record, the origins
+    `benchmark/origins.finding_origin` reads, read again in the match since that module's imports
+    reach the runner - keeps the start's. A re-grade from an answer given while the review waited
+    takes the Send's day too, though shown before it: the record names no step's time.
+    The records moved aside (`session.<n>.json`) are read too, so what a waiting record showed
+    keeps its day though the re-run raised it again. The review's smallest fix, `source ==
+    "model"`, would have missed its own example: a check the model runs records `code`.
+  - **The defaults taken.** An earlier finding gives no date once a component it names is, in
+    this review's package, an instance of no document it drew on (should-fix 1). The folders are
+    read oldest first and the match stops after `READ_BUDGET_S`, 2 s (should-fix 2). A review
+    started unticked in another configuration counts, its findings matched by their own
+    configuration as a review sent at once's were (should-fix 5, its configuration half).
+  - **The rest fixed.** `benchmark/scorecard.read_stream` keeps a body's `Finding` fields alone,
+    so a withdrawn forbidden hit naming `first_shown` is still counted (should-fix 3). The folder
+    rules the match copies are pinned to `RunFolders.cs`, and `DocumentName`'s cases are one
+    table both sides read, `reviewer/tests/fixtures/run-folders/document-names.json` (should-fix
+    4).
+- **Read-only check** of those fixes (T392; 2026-11-03): no must-fix and six should-fix, all done
+  ([tasks.md](tasks.md), T392's second sub-item). The budget cut the review's own folder too,
+  the document's newest, dropping a re-run's earlier record though it was already held: the
+  budget now bounds the other reviews alone, and the own folder, with the records it moved aside,
+  is read whatever the time. `_same_parts`'s edges are pinned: a finding naming no component
+  keeps its date, and one on two parts gives none once either is another part's. The rest were
+  records: a component renumbered onto another instance of the same document, the budget's
+  later day and the re-grade while a review waited, above; FR-031's note on the budget, with
+  pointers to it in the contracts and `ToolContext.first_shown`; and one mutant's record.
+- **Gates** (T392; 2026-11-03), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required, on Python 3.12.3: 18,970 passed and 5
+    skipped, 27 of them this cycle's new cases. Its two warnings are neither of this cycle: the
+    test client's deprecation, and a serializer warning from `test_ir_loader_append.py`'s invalid
+    row. Its first run found the one failure the cycle caused, the parity test's unclassified
+    `run_root`, changed on purpose above.
+  - On Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the modules the change
+    touches and those that read the files it changed: 25 modules, 1,494 passed; then the two that
+    pin `start_review`'s signature, `test_benchmark_pane_parity.py` and `test_runner_send.py`, 61
+    passed, and the new module again after its last edit, 24 passed.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed; `-m perf`, the match's time
+    above.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,356 add-in tests passed.
+  - The link check over the cycle's ten changed Markdown files, anchors included, 462 links and
+    none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or
+    live test ran.
+  - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes; their gates are T392's
+    sub-item in [tasks.md](tasks.md), and the whole suites ran on the final tree (below).
+  - *Done 2026-11-03:* the whole suites on the final tree (`e885ce94`): 18,988 passed and 5
+    skipped on Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed;
+    C# with zero warnings, then 10,274 extractor and 4,357 add-in tests passed (T392's last
+    sub-item).

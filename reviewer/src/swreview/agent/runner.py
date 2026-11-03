@@ -141,6 +141,7 @@ from swreview.report.explanations import (
     generate_explanations,
     keep_explained,
 )
+from swreview.report.first_shown import first_shown_dates
 from swreview.report.markdown import render_report
 from swreview.report.names import component_files, component_names, plural
 from swreview.report.session import (
@@ -2516,6 +2517,7 @@ def start_review(
     explain_findings: bool = False,
     send_when_checked: bool = True,
     earlier: ReviewSession | None = None,
+    run_root: Path | str | None = None,
 ) -> ReviewRun:
     """Prepare a review of `package_dir` writing into `out_dir`; play it with `start()`.
 
@@ -2579,6 +2581,10 @@ def start_review(
             capability onto the context, so the host is asked nothing either answered, and
             its withdrawals with a decision are named on `session.started` (section 4).
             Only with `send_when_checked` false.
+        run_root: The run root `out_dir` lies in (the pane's). Given, each flagged finding's
+            `finding` body names the date an earlier review of this document there first showed
+            it, `earlier` among them (002 FR-031, cycle 17; `report/first_shown`). `None` - the
+            CLI's, and every caller before it - names none.
     """
     if earlier is not None and send_when_checked:
         raise ValueError("earlier is only accepted when send_when_checked is false")
@@ -2621,6 +2627,16 @@ def start_review(
             # Feature 015 (`contracts/recheck.md` section 3): a re-run asks the host nothing
             # its earlier record already answered.
             context.carry_drawing_read(earlier.drawing_read)
+        if run_root is not None:
+            # 002 FR-031, cycle 17 (roadmap hole H-a-009): when an earlier review of this
+            # document first showed each finding, read before setup records any.
+            context.first_shown = first_shown_dates(
+                run_root,
+                out,
+                loaded.package,
+                before=session.started_at.astimezone().replace(tzinfo=None),
+                earlier=earlier,
+            )
         # Feature 008 (FR-021): every recorded step of this review - the pre-run's included -
         # keeps its full result in the run folder. Only a review sets this, so a check run
         # and MCP general chat write none.

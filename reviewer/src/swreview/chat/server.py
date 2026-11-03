@@ -2592,6 +2592,7 @@ class ChatServer:
                 explain_findings=defaults.explain_findings,
                 send_when_checked=send_when_checked,
                 earlier=earlier,
+                run_root=self.run_root,
                 **context_options,
             )
         except PACKAGE_ERRORS as exc:

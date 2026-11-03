@@ -456,7 +456,10 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
     with `read_only`, the words such a card says while its review is read-only.
 
     *Changed 2026-11-02 on purpose (002 T368; cycle 11's Tier 2 review):* and the `note` group,
-    what a card says when a late triage keeps the note recorded first in place of the one sent."""
+    what a card says when a late triage keeps the note recorded first in place of the one sent.
+
+    *Changed 2026-11-03 on purpose (002 T388; cycle 17, roadmap hole H-a-009):* and the
+    `first_shown` group, the line a card says when an earlier review first showed its finding."""
     from swreview.report.summary import load_words
 
     response = client.get("/labels")
@@ -477,10 +480,12 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
         "pass_triage",
         "no_triage",
         "note",
+        "first_shown",
         "errors",
     }
     assert set(body["no_triage"]) == {"undecided", "accepted", "rejected", "deferred", "read_only"}
     assert set(body["note"]) == {"not_kept"}
+    assert set(body["first_shown"]) == {"earlier"}
     assert body["source"] == {"code": "Checked by code", "model": "AI guidance"}, "feature 013"
     assert body["status"]["checked_within_scope"] == "checked within scope"
     assert body["errors"]["TurnRunning"].startswith("A review turn is still running.")

@@ -18,7 +18,8 @@ Pure: it reads its arguments (and, through the summary, the words file) and writ
 nothing. The run's events, which the two routes replay from its stream, are one of them: owner
 decision 193A works a cleared decision's line out from them (`cleared`). `report.md` prints the
 same lines, and names the findings withdrawn with a decision (`withdrawn_lines`; roadmap hole
-H-g-010), which a read-only snapshot names too (`withdrawn`; 002 cycle 13).
+H-g-010), which a read-only snapshot names too (`withdrawn`; 002 cycle 13), and the date an earlier
+review first showed each finding (`shown_dates`; 002 cycle 17), which every snapshot's body names.
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ __all__ = [
     "restored_snapshot",
     "review_snapshot",
     "root_document",
+    "shown_dates",
     "withdrawn_lines",
 ]
 
@@ -90,9 +92,15 @@ def review_snapshot(
     Transcript (002 FR-031, cycle 13): its cleared lines leave out the call to decide again
     (`RerunWords.read_only`), and it adds `withdrawn`, the withdrawals that took a decision
     (`withdrawn_lines`), only when there is one, for the page to print as the live Transcript does.
+
+    A finding's body names `first_shown`, as its stream event did, when the stream gives it one
+    (`shown_dates`; 002 FR-031, cycle 17), so the card says it after a reload, a review switch or a
+    restart.
     """
     block = not_examined(package)
     names = component_names(package)
+    own = _own_events(session, events)
+    shown = shown_dates(session, own)
     snapshot = {
         "run_id": run_id,
         "read_only": read_only_reason is not None,
@@ -100,7 +108,10 @@ def review_snapshot(
         "chat_state": chat_state,
         "last_seq": last_seq,
         "document": root_document(package),
-        "findings": [pane_finding(finding, names) for finding in session.findings],
+        "findings": [
+            _dated(pane_finding(finding, names), shown.get(finding.id))
+            for finding in session.findings
+        ],
         "evidence_requests": [request.pane_body() for request in session.evidence_requests],
         "coverage": [
             {"bucket": bucket, "item": item.model_dump(mode="json")}
@@ -110,7 +121,6 @@ def review_snapshot(
         "ranking": to_jsonable_python(review_ranking(session, package, usage=usage, send=send)),
         "not_examined": None if block is None else block.model_dump(mode="json"),
     }
-    own = _own_events(session, events)
     cleared = cleared_lines(session, own)
     withdrawn: list[dict[str, Any]] = []
     if read_only_reason is not None:
@@ -153,6 +163,28 @@ def cleared_lines(session: ReviewSession, events: Iterable[AgentEvent]) -> list[
         for finding in session.findings
         if finding.disposition is None and finding.id in latest
     ]
+
+
+def shown_dates(session: ReviewSession, events: Iterable[AgentEvent]) -> dict[str, str]:
+    """For each finding the session holds, the `first_shown` date the last `finding` body of its id
+    in the run's stream names: when an earlier review of the same document first showed it (002
+    FR-031, cycle 17; `report/first_shown`). None where that body names none - a fold onto a pass,
+    an older backend's body - and none from a stream whose first event does not start this session
+    (`_own_events`). Worked out from the stream, as `cleared_lines` is, so `Finding` gains no field
+    and the model never reads it."""
+    held = {finding.id for finding in session.findings}
+    latest: dict[str, Any] = {}
+    for event in _own_events(session, events):
+        finding_id = str(event.body.get("id"))
+        if event.type == "finding" and finding_id in held:
+            latest[finding_id] = event.body.get("first_shown")
+    return {finding_id: day for finding_id, day in latest.items() if isinstance(day, str)}
+
+
+def _dated(body: dict[str, Any], day: str | None) -> dict[str, Any]:
+    """A finding's body naming `first_shown` after its other keys, as its event did, when it has
+    one; as it is otherwise, so a snapshot with no date keeps its bytes."""
+    return body if day is None else {**body, "first_shown": day}
 
 
 def withdrawn_lines(session: ReviewSession, events: Iterable[AgentEvent]) -> list[dict[str, Any]]:

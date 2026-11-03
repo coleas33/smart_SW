@@ -1041,6 +1041,25 @@ def test_a_withdrawn_hit_announced_with_the_tally_is_still_a_withdrawn_hit(
     }
 
 
+def test_a_withdrawn_hit_announced_with_an_earlier_reviews_date_is_still_a_withdrawn_hit(
+    tmp_path: Path,
+) -> None:
+    """002 cycle 17's Tier 2 review (FR-031): a `finding` body names `first_shown` when an earlier
+    review of the same document first showed the finding, so the last body announced before a
+    withdrawal can name one. The scorer reads the finding's own fields alone, so the hit is still
+    counted (`scoring.md` 3.3)."""
+    first, second, third = all_bought(tmp_path)
+
+    def dated_on_the_first(events: list[dict[str, Any]]) -> None:
+        last_announced(events, first)["body"]["first_shown"] = "2026-09-18"
+
+    edit_stream(tmp_path, dated_on_the_first)
+
+    score = score_all_bought(tmp_path)
+
+    assert score.withdrawn_forbidden_hit_finding_ids == [first, second, third]
+
+
 def test_with_the_stream_deleted_the_withdrawn_column_is_not_assessed(tmp_path: Path) -> None:
     all_bought(tmp_path)
     (tmp_path / RUN / "events.jsonl").unlink()

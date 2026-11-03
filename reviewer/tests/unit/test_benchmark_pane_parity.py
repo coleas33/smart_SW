@@ -60,10 +60,17 @@ TRANSPORT = frozenset(
         "bridge_factory",
         "callbacks",
         "redact",
+        "run_root",
     }
 )
 """Section 5.1's transport rows: how a review reaches its adapter, its folders, its bridge and its
-listeners, never what it reviews with."""
+listeners, never what it reviews with.
+
+*Changed 2026-11-03 on purpose (002 T392; cycle 17, roadmap hole H-a-009):* and `run_root`, the
+folder the pane's earlier reviews are in, from which a review names when one first showed each
+finding on its `finding` bodies (`report/first_shown`). It is the pane's run root and none for a
+benchmark attempt, whose folders no review of the add-in is named in, and it changes nothing the
+model is sent (`test_first_shown.py::test_the_date_adds_nothing_to_what_the_model_is_sent`)."""
 
 COMPARED = frozenset(
     {
