@@ -463,7 +463,10 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
 
     *Changed 2026-11-03 on purpose (007 T087; cycle 18, minutes typed on the Review page):* and the
     `timing` and `timing_form` groups, the minutes form's words, `timing` keyed by the timing
-    route's six body keys in their order."""
+    route's six body keys in their order.
+
+    *Changed 2026-11-03 on purpose (007 T097; cycle 20, roadmap hole H-a-015):* and `timing_form`'s
+    `all_six`, the line under the form's heading that says to type all six, zero for none."""
     from swreview.benchmark.timing import TIMING_INPUTS
     from swreview.report.summary import load_words
 
@@ -494,7 +497,7 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
     assert set(body["note"]) == {"not_kept"}
     assert set(body["first_shown"]) == {"earlier"}
     assert tuple(body["timing"]) == TIMING_INPUTS
-    assert set(body["timing_form"]) == {"heading", "save", "saved"}
+    assert set(body["timing_form"]) == {"heading", "all_six", "save", "saved"}
     assert body["source"] == {"code": "Checked by code", "model": "AI guidance"}, "feature 013"
     assert body["status"]["checked_within_scope"] == "checked within scope"
     assert body["errors"]["TurnRunning"].startswith("A review turn is still running.")

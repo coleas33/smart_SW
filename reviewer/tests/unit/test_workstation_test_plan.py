@@ -2065,7 +2065,12 @@ def test_the_minutes_are_typed_on_the_review_page_and_the_console_is_the_fallbac
     *Changed 2026-11-03 on purpose (007 T091; a read-only check of the Tier 2 review's fixes):*
     step 4.5's item 4 names the review that failed too, as step 4.1 does when it sends minutes
     not saved there, where it named only a backend restarted before they were saved, so an
-    engineer whose review failed read its fallback as not theirs."""
+    engineer whose review failed read its fallback as not theirs.
+
+    *Changed 2026-11-03 on purpose (007 T097; cycle 20, roadmap hole H-a-015):* the bullet says
+    all six are typed, 0 for none, as the line under the form's heading says, in the words file's
+    words, and that Save stays off until they are, where a blank supervision, verification or
+    false-alarms field was saved as its starting 0, unseen."""
     chips = step(plan, "4.5")
     restart = chips.index("The backend restarted, so this review is shown from its run folder.")
     review = re.sub(r"\s+", " ", step(plan, "4.1"))
@@ -2096,6 +2101,12 @@ def test_the_minutes_are_typed_on_the_review_page_and_the_console_is_the_fallbac
         r"\*\*[^*]+\*\*", form[form.index("in the field that begins with its name:") :]
     )[:6]
     assert f"press **{labels.timing_form['save']}**" in form
+    # Since cycle 20: all six typed, 0 for none, and Save off until they are.
+    assert "Type all six, 0 for none, as the line under the heading says" in form
+    assert (
+        f"(`{labels.timing_form['all_six']}`): **{labels.timing_form['save']}** stays off until"
+        " all six are typed, so no field counts as 0 unless you typed 0. Then press"
+    ) in form
     assert f"Pass: the line `{labels.timing_form['saved']}` shows under the button" in form
     assert (
         f"(`{labels.errors['InvalidTiming']}` means a field holds something other than a number,"

@@ -52,6 +52,9 @@ namespace SwReview.AddIn.Tests;
 ///
 /// *Changed 2026-11-03 (007 T091; cycle 18's Tier 2 review):* `InvalidTiming`'s sentence is the words file's new one, which
 /// names minutes of 0 or more, so it is true of a negative figure too.
+///
+/// *Changed 2026-11-03 (007 T097; cycle 20, roadmap hole H-a-015):* `timing_form` gains `all_six`, the words file's own line
+/// under the form's heading that says to type all six, zero for none.
 /// </summary>
 internal static class LabelsSample
 {
@@ -138,6 +141,9 @@ internal static class LabelsSample
 
     /// <summary>The minutes form's heading (feature 007, cycle 18).</summary>
     public const string TimingHeading = "Minutes for this review";
+
+    /// <summary>The line under the heading that says to type all six (feature 007, cycle 20).</summary>
+    public const string TimingAllSix = "Type all six, zero for none.";
 
     /// <summary>The minutes form's button.</summary>
     public const string TimingSave = "Save minutes";
@@ -257,10 +263,12 @@ internal static class LabelsSample
             "timing", Timing.ToDictionary(entry => entry.Key, entry => entry.Word)
         },
         {
-            // Feature 007, cycle 18: the minutes form's heading, its button and the line a save leaves.
+            // Feature 007, cycle 18: the minutes form's heading, its button and the line a save leaves; cycle 20, the line
+            // that says to type all six.
             "timing_form", new Dictionary<string, string>
             {
                 { "heading", TimingHeading },
+                { "all_six", TimingAllSix },
                 { "save", TimingSave },
                 { "saved", TimingSaved },
             }
