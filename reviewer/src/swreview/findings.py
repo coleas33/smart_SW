@@ -330,6 +330,12 @@ def finding_subject_key(finding: Finding) -> SubjectKey:
     never join two dumps of a design. It does not: the replay compares a recording with a
     replay of the recording's own package, and the fixture generator carries each recorded
     reference into the fixture's through the map that scrambled the package's references.
+
+    *Changed 2026-11-03 (002 cycle 17; roadmap hole H-a-009):* one reader does join two dumps:
+    the date an earlier review of the same document first showed a finding
+    (`report/first_shown`) matches its findings by this key, as Check again's carry does. There
+    a re-encoded reference only loses a date, and a component an edit to the tree renumbered can
+    move one onto another part's finding of the same check (002 research.md, cycle 17).
     """
     locations = subject_locations(
         (ref.document_id, ref.sheet, ref.view, ref.annotation, ref.page, ref.persist_ref)

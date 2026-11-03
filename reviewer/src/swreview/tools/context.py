@@ -39,7 +39,7 @@ from swreview.agent.settings import (
     default_model,
 )
 from swreview.exceptions import ExceptionStore
-from swreview.findings import Finding, FindingIdAllocator
+from swreview.findings import Finding, FindingIdAllocator, SubjectKey, finding_subject_key
 from swreview.ir.loader import LoadedPackage
 from swreview.ir.models import (
     ComponentInstance,
@@ -48,6 +48,7 @@ from swreview.ir.models import (
     Fastener,
     Hole,
 )
+from swreview.report.attention import SUPPRESSED_STATUS
 from swreview.report.names import component_files, component_names
 from swreview.report.session import (
     Contact,
@@ -186,6 +187,10 @@ class ToolContext:
     """Feature 016's explicitly supplied engineering-context snapshot. No tool searches
     the filesystem for one, resolves native references or confirms an engineering input.
     A context without a snapshot offers exactly the pre-existing tool surface."""
+    first_shown: dict[SubjectKey, str] = field(default_factory=dict)
+    """For each subject key an earlier review of this document raised flagged, the earliest such
+    review's date, `YYYY-MM-DD` (`report/first_shown.first_shown_dates`; 002 FR-031, cycle 17).
+    Set only by `start_review`, before any finding is recorded; empty for every other context."""
     _drawing_read: str | None = field(default=None, init=False, repr=False)
     """What `drawing_read_mode` answered, once asked (feature 013)."""
 
@@ -280,12 +285,24 @@ class ToolContext:
         The key is on every body, null while no finding records a triage, so the page tells such
         a body from an older backend's, which names none and leaves the tally shown (cycle 13's
         Tier 2 review).
+
+        After it, `first_shown`, the date an earlier review of this document first showed a
+        flagged finding with this one's subject key (the context's `first_shown`; 002 FR-031,
+        cycle 17), only
+        when there is one and the finding is flagged: a pass takes no triage but the miss (owner
+        decision 187A), and every other body keeps its bytes. The model reads tool results, never
+        this body, so the date never reaches it.
         """
         tally = triage_tally(self.require_session().findings)
-        return {
+        body = {
             **pane_finding(finding, component_names(self.ir)),
             "triage_tally": None if tally is None else tally.model_dump(mode="json"),
         }
+        if self.first_shown and finding.status != SUPPRESSED_STATUS:
+            day = self.first_shown.get(finding_subject_key(finding))
+            if day is not None:
+                body["first_shown"] = day
+        return body
 
     def record_coverage(self, bucket: CoverageBucket, item: CoverageItem) -> None:
         """Append a coverage item to `bucket` and announce which bucket it went into.

@@ -443,6 +443,9 @@ class Labels(ReviewModel):
     """What a card says when a decision's reply keeps the note recorded first in place of another,
     non-blank one its press sent: a late triage keeps it (owner decision 198A; cycle 11's Tier 2
     review)."""
+    first_shown: dict[Literal["earlier"], str]
+    """What a card and `report.md` say of a finding an earlier review of the same document first
+    showed, `{date}` that review's (roadmap hole H-a-009; 002 cycle 17)."""
     source: dict[Source, str]
     errors: dict[str, str]
 

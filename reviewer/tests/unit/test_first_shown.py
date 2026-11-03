@@ -464,8 +464,13 @@ def test_a_second_review_names_the_first_ones_date_and_keeps_it_through_a_restar
 def recorded_review(
     app: Any, client: TestClient, folder: Path, package_dir: Path
 ) -> list[RecordedRequest]:
-    """A pane review in `folder` and one follow-up, with every request it sends to the model."""
-    provider = RecordingProvider([chat.turn("FICT checked"), chat.turn("FICT again")])
+    """A pane review in `folder` and one follow-up, with every request it sends to the model. The
+    first turn reads F-001 whole (`get_finding`), so a finding's fields reach the second request:
+    the digest names the fixture's findings by their count alone."""
+    provider = RecordingProvider(
+        [chat.turn("FICT checked", chat.call("get_finding", finding_id="F-001")),
+         chat.turn("FICT again")]
+    )
     app.state.server.provider_factory = lambda settings: provider
     chat_id = pane_review(client, folder, package_dir)
     response = client.post(f"/sessions/{chat_id}/messages", json={"text": "FICT and the rest?"})

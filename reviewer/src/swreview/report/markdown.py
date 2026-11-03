@@ -50,7 +50,12 @@ from swreview.report.session import (
     ReviewSession,
     SessionUsage,
 )
-from swreview.report.snapshot import carried_withdrawals, cleared_lines, withdrawn_lines
+from swreview.report.snapshot import (
+    carried_withdrawals,
+    cleared_lines,
+    shown_dates,
+    withdrawn_lines,
+)
 from swreview.report.summary import Words, bought_rows, load_words, triage_tally
 from swreview.report.text import markdown_text
 from swreview.report.titles import display_title
@@ -106,12 +111,14 @@ def render_report(
     each undecided finding's cleared line, as both snapshots name it (`cleared_lines`), and the
     findings withdrawn with a decision (`withdrawn_lines`), a re-run's earlier record's first
     (`carried_withdrawals`). With none of either, the report is what it was without them, byte
-    for byte.
+    for byte. The stream also gives the date an earlier review first showed a finding
+    (`shown_dates`; 002 FR-031, cycle 17), the first line under its heading, only when it has one.
     """
     components_by_id = _components_by_id(package)
     names = component_names(package) if package is not None else {}
     stream = list(events)
     cleared = {body["finding_id"]: body["reason"] for body in cleared_lines(session, stream)}
+    shown = shown_dates(session, stream)
     earlier = carried_withdrawals(session, stream)
     withdrawn = withdrawn_lines(session, stream)
     lines: list[str] = []
@@ -143,7 +150,7 @@ def render_report(
         else {}
     )
     lines.extend(
-        _render_findings(session, package, components_by_id, names, explanations, cleared)
+        _render_findings(session, package, components_by_id, names, explanations, cleared, shown)
     )
     lines.append("")
     if session.contacts:
@@ -564,6 +571,7 @@ def _render_finding(
     names: Mapping[str, str],
     explanations: dict[str, str] | None = None,
     cleared: Mapping[str, str] | None = None,
+    shown: Mapping[str, str] | None = None,
 ) -> list[str]:
     heading = f"#### {finding.id}: {display_title(finding, names)}"
     if finding.carried_over_from is not None:
@@ -571,6 +579,10 @@ def _render_finding(
         # which verdicts were not computed today before reading a word of them (FR-102).
         heading += f" (carried over from session {finding.carried_over_from})"
     lines = [heading, ""]
+    day = (shown or {}).get(finding.id)
+    if day is not None:
+        # When an earlier review first showed it, 188A's date (002 FR-031, cycle 17).
+        lines.append(f"- {load_words().labels.first_shown['earlier'].format(date=day)}")
     explanation = (explanations or {}).get(finding.id)
     if explanation is not None:
         # Model-written text, labelled as the pane labels it (feature 013).
@@ -642,6 +654,7 @@ def _render_findings(
     names: Mapping[str, str],
     explanations: dict[str, str] | None = None,
     cleared: Mapping[str, str] | None = None,
+    shown: Mapping[str, str] | None = None,
 ) -> list[str]:
     lines = ["## Findings", ""]
     if not session.findings:
@@ -666,7 +679,9 @@ def _render_findings(
         lines.append("")
         for finding in findings:
             lines.extend(
-                _render_finding(finding, package, components_by_id, names, explanations, cleared)
+                _render_finding(
+                    finding, package, components_by_id, names, explanations, cleared, shown
+                )
             )
             lines.append("")
 
@@ -674,7 +689,14 @@ def _render_findings(
         if findings:
             lines.extend(
                 _render_family(
-                    family, findings, package, components_by_id, names, explanations, cleared
+                    family,
+                    findings,
+                    package,
+                    components_by_id,
+                    names,
+                    explanations,
+                    cleared,
+                    shown,
                 )
             )
 
@@ -689,6 +711,7 @@ def _render_family(
     names: Mapping[str, str],
     explanations: dict[str, str] | None,
     cleared: Mapping[str, str] | None,
+    shown: Mapping[str, str] | None,
 ) -> list[str]:
     """One folded family, collapsed, with every finding in full (feature 008, FR-014).
 
@@ -711,7 +734,9 @@ def _render_family(
     ]
     for finding in findings:
         lines.extend(
-            _render_finding(finding, package, components_by_id, names, explanations, cleared)
+            _render_finding(
+                finding, package, components_by_id, names, explanations, cleared, shown
+            )
         )
         lines.append("")
     lines.extend(["</details>", ""])
