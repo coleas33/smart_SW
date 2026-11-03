@@ -3076,7 +3076,10 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
 
     *Changed 2026-11-02 on purpose (002 T368; decision 198A):* 002's row is recounted with T364
     to T368 ticked, the repair press keeping a typed note and a Defer taking an outcome built:
-    360 done, 4 open."""
+    360 done, 4 open.
+
+    *Changed 2026-11-02 on purpose (002 T369; the owner's pick of four Review page fixes):* 002's
+    row is recounted with cycle 13's tasks, T369 to T374, T369 ticked: 361 done, 9 open."""
     readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
     flat = re.sub(r"\s+", " ", readme)
     rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
@@ -3085,7 +3088,7 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
     assert "decision 173A" in flat
     for number, counts, closed in (
         ("001", "107 / 3 / 0", "T098"),
-        ("002", "360 / 4 / 0", "T055a"),
+        ("002", "361 / 9 / 0", "T055a"),
         ("005", "90 / 27 / 0", "T073"),
         ("008", "132 / 5 / 0", "T106"),
     ):

@@ -7260,3 +7260,42 @@ the decision register now records 160A as done.
   console" is dropped, as *Left open* says the console's `--note` defaults to none. And two
   guards read the box after a `disposition` event and on a read-only restore, each proved by a
   mutant.
+
+### Cycle 13. Four Review page fixes (2026-11-02; the owner's pick)
+
+- **Question**: four fixes the reviews of cycles 7, 9 and 10 left for later, which the owner picked
+  on 2026-11-02 ([`docs/review-backlog.md`](../../docs/review-backlog.md), cycles 7 and 9; H-g-010's
+  *Left open*, above). No `finding` event carried the triage tally, so while a resumed turn ran the
+  tally shown left a new flagged finding out of "not recorded" until the turn ended. After a reload
+  the `/labels` read and the snapshot read raced, and a snapshot drawn first left its cards without
+  the backend's words, with nothing to draw them again. A read-only restore's cleared line ended
+  "Decide again." where the decision buttons are off. And a read-only restore after a backend
+  restart replays no Transcript, so a withdrawal that took a decision was in `report.md` alone.
+- **Settled**, with the defaults taken inside the feature:
+  - **The finding's tally.** `ToolContext.finding_body`, the one `finding` body, which the tool
+    layer and the runner's fold announcement share, carries the tally as the disposition events do
+    (`with_triage_tally`): the count once the finding is in the session, and none while no finding
+    records a triage. The page shows it as it shows theirs, so a body with none hides a shown one: a
+    fold that cleared the review's last triage says so with its `finding` event, before its cleared
+    notice. The events contract takes the key on the `finding` body; 001's `Finding`, still one list
+    of the model's fields, is closed where it is used rather than where it is defined
+    (`unevaluatedProperties: false` beside each `$ref`), so a session's finding still takes no other
+    key. The scorer reads a withdrawn finding's body without it.
+  - **The labels race.** The page waits for the labels before the first draw: `loadLabels` keeps its
+    read, and the two restore reads, the live snapshot's and the run folder's, draw their snapshot
+    once it has answered, a failed read included (009 FR-030). Drawing the cards again when the
+    labels land was the other way; it would have to redraw every part the words reach, and a
+    re-init's read would redraw a card under a note being typed.
+  - **The read-only line.** The backend's words: the call to decide again, which ends each of the six
+    cleared lines, is one key, `rerun.decide_again`; `RerunWords.of` appends it, so every line keeps
+    its bytes, and `RerunWords.read_only` leaves it out. A read-only snapshot names each cleared line
+    so; the stream, a live snapshot and `report.md` keep the line as written. 193A's line stays: what
+    cleared which decision and triage.
+  - **The restore's withdrawals.** A read-only snapshot names, under `withdrawn`, the
+    `finding.withdrawn` bodies `report.md` names under "Withdrawn with a decision" (`withdrawn_lines`:
+    the record's own stream, a finding the record still holds skipped), only when there is one; the
+    page prints each after the restored Transcript's note, through `render.withdrawalMarker`, so it
+    reads as the live line. The smallest default for the rest: a fold's withdrawal and an undecided
+    finding's took no decision and are left out, as `report.md` leaves them out.
+- **Tests**: T370 and T372 in [tasks.md](tasks.md), Phase 32, each written first; T371 and T373 make
+  them green, and T374 closes the records.
