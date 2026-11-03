@@ -131,9 +131,9 @@ holds the word for each human timing input, keyed by `benchmark.timing.TIMING_IN
 order: the page draws one field per key, in that order, labelled with its word, and posts each
 under its key to `POST /sessions/{chat_id}/timing`, so it holds no list of the inputs of its own.
 `timing_form` holds the form's `heading`, its button, `save`, and the one line a save leaves,
-`saved`. A refused save says its class's sentence from `errors` (`InvalidTiming`, "Enter the
-minutes as numbers, then save again.", among them), never the backend's message, which names a
-refused figure. With no labels, or a backend that names neither group, the page draws no form
+`saved`. A refused save says its class's sentence from `errors` (`InvalidTiming`, "Enter each as
+a number of minutes, 0 or more, then save again.", among them, since cycle 18's Tier 2 review
+true of a negative figure too), never the backend's message, which names a refused figure. With no labels, or a backend that names neither group, the page draws no form
 (FR-030).
 
 | Surface | Word from |

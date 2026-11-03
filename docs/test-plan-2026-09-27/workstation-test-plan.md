@@ -1871,12 +1871,11 @@ none of them by hand: the timing bullet below writes them all once the review ha
   alarms**, **Setup** and **By hand**; then press **Save minutes**. Pass: the line `The minutes are
   recorded.` shows under the button, and your numbers stay in their fields. The form is off while
   a turn runs: wait for it to end. If a sentence shows in place of that line, nothing was
-  recorded: put right what it says (`Enter the minutes as numbers, then save again.` means a field
-  holds something other than a number) and press **Save minutes** again. The page writes the
-  minutes in A's run folder, where `swreview timing` writes them, and shows them in their fields
-  only. If the backend restarted before you saved them - A's review comes back read-only, with no
-  form, or the form says the review is no longer held by the backend - step 4.5, item 4, records
-  them at the console.
+  recorded: put right what it says (`Enter each as a number of minutes, 0 or more, then save
+  again.` means a field holds something other than a number, or a number below 0) and press
+  **Save minutes** again. The page writes the minutes in A's run folder, where `swreview timing`
+  writes them, and shows them in their fields only. If the form is gone before you saved them -
+  the backend restarted, or the review failed - step 4.5, item 4, records them at the console.
 
 Record: the facts, the headline, the tally line, the not-reached line, the groups' goal lines,
 the drawings line (with letters in place of names) and the usage line, but no duration of the

@@ -49,6 +49,9 @@ namespace SwReview.AddIn.Tests;
 /// words file's own: the minutes form's word for each human timing input, keyed by `TIMING_INPUTS` in their order, and its
 /// heading, its button and the line a save leaves; and `errors` gains `InvalidTiming`, the words file's own sentence for a
 /// refused save.
+///
+/// *Changed 2026-11-03 (007 T091; cycle 18's Tier 2 review):* `InvalidTiming`'s sentence is the words file's new one, which
+/// names minutes of 0 or more, so it is true of a negative figure too.
 /// </summary>
 internal static class LabelsSample
 {
@@ -143,7 +146,7 @@ internal static class LabelsSample
     public const string TimingSaved = "The minutes are recorded.";
 
     /// <summary>A refused save of the minutes (feature 007, cycle 18): the words file's sentence for its class.</summary>
-    public const string InvalidTiming = "Enter the minutes as numbers, then save again.";
+    public const string InvalidTiming = "Enter each as a number of minutes, 0 or more, then save again.";
 
     /// <summary>
     /// A run root the run root rule refuses (owner decision 154A): the words file's sentence for it, true since the

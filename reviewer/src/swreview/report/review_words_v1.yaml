@@ -402,7 +402,7 @@ labels:
     InvalidRequest: "The request was not understood. Reload the task pane and try again."
     InvalidRunDir: "The backend refused the run folder's path: it writes only into a local folder inside the run root. Check the run root in Settings."
     InvalidSettings: "Check the provider, the model and the effort, then save again."
-    InvalidTiming: "Enter the minutes as numbers, then save again."
+    InvalidTiming: "Enter each as a number of minutes, 0 or more, then save again."
     InvalidTriage: "Pick one of the four triage outcomes, or none, then press the decision again. A finding in Checked, no issue takes only wrong: a miss."
     NoDocument: "Open the part or assembly you want reviewed, then press Review."
     NotAPart: "Remodel works on one part. Open a part, then try again."
