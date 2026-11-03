@@ -3872,7 +3872,11 @@ def test_a_regrade_that_withdraws_a_decided_finding_says_so_in_report_md(
     Accept and triage recorded on it, and that withdrawal says so - the disposition and the clause
     naming them - while the plate's findings, restated as decided, fold, and their withdrawals name
     nothing. The `report.md` the server rendered at the turn's end names the pin's finding among
-    those withdrawn with a decision, and so does the one a later decision renders."""
+    those withdrawn with a decision, and so does the one a later decision renders.
+
+    *Changed 2026-11-03 on purpose (002 T382; cycle 16):* each withdrawal also names its finding's
+    title, as the stream announced the id it withdraws - the pin's, and each fold's own - and the
+    pin's line in `report.md` names it right after the id."""
     review = regraded_review(
         client, run_root / "FICT-withdraw", ticked=ticked, answer="All bought"
     )
@@ -3885,14 +3889,13 @@ def test_a_regrade_that_withdraws_a_decided_finding_says_so_in_report_md(
     ]
     reason = f"bought part (your answer to {question})"
     took = "your Accept (real but already known) went with it"
-    withdrawals = [
-        event["body"]
-        for event in events_of(review.folder)
-        if event["type"] == "finding.withdrawn"
-    ]
+    events = events_of(review.folder)
+    title = announced_title(events, review.pin)
+    withdrawals = [event["body"] for event in events if event["type"] == "finding.withdrawn"]
     assert [body for body in withdrawals if "taken" in body] == [
         {
             "finding_id": review.pin,
+            "title": title,
             "reason": reason,
             "disposition": review.decided[review.pin],
             "taken": took,
@@ -3900,8 +3903,9 @@ def test_a_regrade_that_withdraws_a_decided_finding_says_so_in_report_md(
     ]
     folds = [body for body in withdrawals if "folded_into" in body]
     assert folds
-    assert all(set(body) == {"finding_id", "reason", "folded_into"} for body in folds)
-    named = [f"- {review.pin} withdrawn: {reason}; {took}"]
+    assert all(set(body) == {"finding_id", "title", "reason", "folded_into"} for body in folds)
+    assert all(body["title"] == announced_title(events, body["finding_id"]) for body in folds)
+    named = [f"- {review.pin} ({title}) withdrawn: {reason}; {took}"]
     assert withdrawn_part(review.folder) == named
 
     later = next(finding.id for finding in session.findings if finding.disposition is None)
@@ -3920,6 +3924,17 @@ def withdrawn_part(folder: Path) -> list[str]:
     *Changed 2026-11-02 (015 T123; cycle 12's read-only check):* read by `withdrawn_of`, which
     `test_recheck.py` shares for a report it renders; the lines are as before."""
     return withdrawn_of((folder / "report.md").read_text(encoding="utf-8").splitlines())
+
+
+def announced_title(events: list[dict[str, Any]], finding_id: str) -> str:
+    """The title the stream's last `finding` event announced `finding_id` with - what the live
+    Transcript's "F-007 recorded: <title>" line names - which a withdrawal of it names (002 cycle
+    16)."""
+    return [
+        event["body"]["title"]
+        for event in events
+        if event["type"] == "finding" and event["body"]["id"] == finding_id
+    ][-1]
 
 
 def withdrawn_of(lines: list[str]) -> list[str]:
@@ -3946,20 +3961,28 @@ def test_a_read_only_restore_names_each_withdrawal_with_a_decision(
     and triage recorded on it. A restarted backend's read-only restore replays no Transcript, so its
     snapshot names that withdrawal, the body the record's own stream holds, for the page to print
     as the live line does - and not the plate's folds, which took no decision. The live snapshot,
-    whose Transcript is replayed from the stream, names none."""
+    whose Transcript is replayed from the stream, names none.
+
+    *Changed 2026-11-03 on purpose (002 T382; cycle 16):* the restored withdrawal names the pin's
+    title, as the stream announced the pin, so the page's line says which finding went though no
+    "recorded" line comes before it."""
     review = regraded_review(
         client, run_root / "FICT-withdraw-restore", ticked=ticked, answer="All bought"
     )
 
+    events = events_of(review.folder)
     taken = [
         event["body"]
-        for event in events_of(review.folder)
+        for event in events
         if event["type"] == "finding.withdrawn" and "taken" in event["body"]
     ]
     assert [body["finding_id"] for body in taken] == [review.pin]
     assert "withdrawn" not in client.get(f"/sessions/{review.chat_id}/snapshot").json()
     restored = restored_snapshot_of(run_root, provider_control, models, review.folder.name)
     assert restored["withdrawn"] == taken
+    assert [body.get("title") for body in restored["withdrawn"]] == [
+        announced_title(events, review.pin)
+    ]
 
 
 def test_a_waiting_answer_that_cannot_close_names_no_withdrawal_its_record_still_holds(

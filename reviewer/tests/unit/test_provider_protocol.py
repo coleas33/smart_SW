@@ -314,6 +314,46 @@ def test_a_withdrawal_that_took_a_decision_names_it() -> None:
         validator().validate(event("finding.withdrawn", maybe))
 
 
+def test_a_withdrawal_may_name_its_findings_title() -> None:
+    """002 T382 (cycle 16; FR-031): a `finding.withdrawn` body may name its finding's display title,
+    `title` - an answer's withdrawal, a decision taken or not, and a fold's - and a re-run's carried
+    withdrawal keeps it; an older body without one stays valid, and a title that is not a string is
+    refused in either place."""
+    titled = {
+        "finding_id": "F-003",
+        "title": "FICT M8x1 is fine pitch on housing-1",
+        "reason": "bought part (your answer to ER-001)",
+    }
+    took = {
+        **titled,
+        "disposition": {
+            "decision": "accepted",
+            "note": "as modelled",
+            "by": "engineer",
+            "at": "2026-09-13T12:05:00Z",
+            "triage": "already_known",
+        },
+        "taken": "your Accept (real but already known) went with it",
+    }
+    fold = {
+        **titled,
+        "finding_id": "F-009",
+        "reason": "a second verdict on what F-001 judges, shown as F-001",
+        "folded_into": "F-001",
+    }
+    started = valid_bodies()["session.started"]
+    carried = {**took, "session_id": "00000000-0000-0000-0000-00000000000c"}
+    for body in (titled, took, fold, valid_bodies()["finding.withdrawn"]):
+        validator().validate(event("finding.withdrawn", body))
+    validator().validate(event("session.started", {**started, "carried_withdrawals": [carried]}))
+    for refused in (
+        event("finding.withdrawn", {**titled, "title": 16}),
+        event("session.started", {**started, "carried_withdrawals": [{**carried, "title": None}]}),
+    ):
+        with pytest.raises(SchemaValidationError):
+            validator().validate(refused)
+
+
 def test_a_re_runs_start_names_the_earlier_records_withdrawals_with_a_decision() -> None:
     """015 T121 (owner decision 193A, extended to Check again; its FR-029): a re-run's
     `session.started` may name the earlier record's withdrawals with a decision,

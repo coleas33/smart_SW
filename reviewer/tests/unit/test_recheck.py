@@ -2227,7 +2227,10 @@ def test_a_re_run_names_the_earlier_withdrawals_first_under_an_id_it_numbers_aga
     that withdrew it, the earlier record's, and the mark names that session in full; the body is
     built, and the part read, by the helpers the review's two new cases share. *Changed 2026-11-02
     (015 T123; cycle 12's read-only check):* the part is read by `test_chat_server.py`'s
-    `withdrawn_of`, one helper for both modules."""
+    `withdrawn_of`, one helper for both modules. *Changed 2026-11-03 on purpose (002 T382; cycle
+    16):* the re-run's own line names its finding's title, as the re-run's stream announced it,
+    right after the id; the earlier body, written before titles, names none, and its line is as
+    before."""
     folder = package_folder(tmp_path, live_prerun_package())
     earlier = waited(checks_only(folder, None))
     set_aside(folder)
@@ -2246,13 +2249,14 @@ def test_a_re_run_names_the_earlier_withdrawals_first_under_an_id_it_numbers_aga
         set_disposition(rerun.session, own, "accepted", "FICT as modelled", "FICT engineer")
         rerun.context.withdraw_findings([own], "FICT a later answer")
         stream = list(replay_events(folder / "events.jsonl"))
+        title = chat.announced_title(chat.events_of(folder), own)
 
         assert gone.id in {finding.id for finding in rerun.session.findings}
         assert stream[0].body["carried_withdrawals"] == [{**took, "session_id": str(EARLIER_ID)}]
         assert chat.withdrawn_of(render_report(rerun.session, events=stream).splitlines()) == [
             f"- {gone.id} withdrawn: bought part (your answer to ER-001); "
             f"your Reject (wrong) went with it (earlier check run, session {EARLIER_ID})",
-            f"- {own} withdrawn: FICT a later answer; your Accept went with it",
+            f"- {own} ({title}) withdrawn: FICT a later answer; your Accept went with it",
         ]
     finally:
         rerun.close()
@@ -2363,7 +2367,11 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
     purpose (015 T123; cycle 12 stacked on 002 cycle 13), a guard:* a restarted backend's
     read-only restore of the first re-run has no `withdrawn`, cycle 13's list of the session's own
     withdrawals with a decision: the earlier one is in the start's `carried_withdrawals` alone,
-    which the live Transcript does not replay either, and `report.md` names it."""
+    which the live Transcript does not replay either, and `report.md` names it. *Changed
+    2026-11-03 on purpose (002 T382; cycle 16):* the waiting review's withdrawal names the pin's
+    title, as its stream announced the pin; each Check again carries it with the body, valid
+    against the events contract, and every `report.md` names it right after the id, before the
+    mark."""
     review = chat.regraded_review(
         client, run_root / "FICT-recheck-withdrawn", ticked=False, answer="All bought"
     )
@@ -2373,7 +2381,9 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
         for event in chat.events_of(folder)
         if event["type"] == "finding.withdrawn" and "taken" in event["body"]
     ]
-    named = [f"- {review.pin} withdrawn: {withdrawal['reason']}; {withdrawal['taken']}"]
+    title = chat.announced_title(chat.events_of(folder), review.pin)
+    assert withdrawal.get("title") == title
+    named = [f"- {review.pin} ({title}) withdrawn: {withdrawal['reason']}; {withdrawal['taken']}"]
     assert chat.withdrawn_part(folder) == named
     first = chat.events_of(folder)[0]["body"]["session_id"]
     assert f"- Session: {first}" in (folder / "report.md").read_text(encoding="utf-8").splitlines()
@@ -2719,7 +2729,10 @@ def test_a_chain_of_check_agains_names_each_withdrawal_with_the_session_that_wit
     nor as C's own.
 
     *Changed 2026-11-02 (015 T123; cycle 12's read-only check):* the part is read by
-    `test_chat_server.py`'s `withdrawn_of`, one helper for both modules."""
+    `test_chat_server.py`'s `withdrawn_of`, one helper for both modules. *Changed 2026-11-03 on
+    purpose (002 T382; cycle 16):* B's line names its finding's title, as B's stream announced it,
+    which C's start carries with the body; A's body, written before titles, names none, and its
+    line is as before."""
     folder = package_folder(tmp_path, live_prerun_package())
     first = waited(checks_only(folder, None))
     set_aside(folder)
@@ -2728,6 +2741,7 @@ def test_a_chain_of_check_agains_names_each_withdrawal_with_the_session_that_wit
     earlier_stream(folder, first, ("finding.withdrawn", took))
     middle = checks_only(folder, None, earlier=first)
     own = middle.session.findings[-1].id
+    title = chat.announced_title(chat.events_of(folder), own)
     set_disposition(middle.session, own, "accepted", "FICT as modelled", "FICT engineer")
     middle.context.withdraw_findings([own], "FICT a later answer")
     second = waited(middle)
@@ -2749,7 +2763,7 @@ def test_a_chain_of_check_agains_names_each_withdrawal_with_the_session_that_wit
         assert chat.withdrawn_of(render_report(last.session, events=stream).splitlines()) == [
             f"- {gone.id} withdrawn: bought part (your answer to ER-001); "
             f"your Reject (wrong) went with it (earlier check run, session {EARLIER_ID})",
-            f"- {own} withdrawn: FICT a later answer; "
+            f"- {own} ({title}) withdrawn: FICT a later answer; "
             f"your Accept went with it (earlier check run, session {second.session_id})",
         ]
     finally:
