@@ -2422,7 +2422,7 @@ Standards tab press **Standards check**. Copy its `-standards` folder into `$run
 
 ```powershell
 Show-DrawingTables $run
-Select-String -Path "$run\report.md" -SimpleMatch 'no revision table was found' -Quiet
+Select-String -LiteralPath "$run\report.md" -SimpleMatch 'no revision table was found' -Quiet
 ```
 
 Pass (SC-009): the sheet that shows a revision table prints `revision tables 1` (or more) and the
@@ -2474,7 +2474,7 @@ B. **A throwaway box, before any real part.** In the ordinary window:
    **Remodel a copy**. Pass: it ends with `Planned. Press Start to apply the plan to the copy.` Then:
 
    ```powershell
-   $run = Get-ChildItem $runs -Directory | Where-Object { $_.Name -like '*-remodel' } | Sort-Object CreationTime | Select-Object -Last 1
+   $run = Get-ChildItem -LiteralPath $runs -Directory | Where-Object { $_.Name -like '*-remodel' } | Sort-Object CreationTime | Select-Object -Last 1
    Get-Content -LiteralPath (Join-Path $run.FullName 'remodel-open.jsonl') | ForEach-Object { ($_ | ConvertFrom-Json).phase }
    Select-String -LiteralPath (Join-Path $run.FullName 'remodel.log') -SimpleMatch 'stage=' | Select-Object -Last 2 | ForEach-Object { $_.Line }
    (Select-String -LiteralPath (Join-Path $run.FullName 'remodel.log') -SimpleMatch 'stage=').Count
@@ -2565,7 +2565,7 @@ Get-SeatHash $f; Get-Item -LiteralPath $f | Select-Object Length, LastWriteTime,
 3. If it planned, check that it planned on a copy:
 
    ```powershell
-   $run = Get-ChildItem $runs -Directory | Where-Object { $_.Name -like '*-remodel' } | Sort-Object CreationTime | Select-Object -Last 1
+   $run = Get-ChildItem -LiteralPath $runs -Directory | Where-Object { $_.Name -like '*-remodel' } | Sort-Object CreationTime | Select-Object -Last 1
    if (-not $run) { 'no remodel folder' } else { "remodel folder $($run.Name.Substring(0, 15)) | copies in it: $(@(Get-ChildItem -LiteralPath (Join-Path $run.FullName 'copy') -Filter '*-RMS.SLDPRT' -ErrorAction SilentlyContinue).Count)" }
    ```
 
@@ -2625,7 +2625,7 @@ fakes' (decision 169A). A plan waiting for Start is 004 T303b's, after Start is 
 
    ```powershell
    $start = Get-Date; $open = $null
-   while (-not $open -and ((Get-Date) - $start).TotalMinutes -lt 5) { Start-Sleep -Milliseconds 100; $open = Get-ChildItem $runs, "$H\runs-t303a" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*-remodel' -and $_.CreationTime -gt $start -and (Select-String -LiteralPath (Join-Path $_.FullName 'remodel-open.jsonl') -SimpleMatch 'open_record.written' -Quiet -ErrorAction SilentlyContinue) } | Select-Object -First 1 }
+   while (-not $open -and ((Get-Date) - $start).TotalMinutes -lt 5) { Start-Sleep -Milliseconds 100; $open = Get-ChildItem -LiteralPath $runs, "$H\runs-t303a" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*-remodel' -and $_.CreationTime -gt $start -and (Select-String -LiteralPath (Join-Path $_.FullName 'remodel-open.jsonl') -SimpleMatch 'open_record.written' -Quiet -ErrorAction SilentlyContinue) } | Select-Object -First 1 }
    $p = Get-Process -Id $backend -ErrorAction SilentlyContinue
    if ($open -and $p -and $p.ProcessName -in 'uv', 'swreview', 'python') { Stop-Process -Id $backend; "ended the backend, pid $backend" } else { 'nothing was ended: no copy opened within 5 minutes, or that number is no longer a backend' }
    ```
@@ -2942,7 +2942,7 @@ it leaves out `tool-results\` by design (6.3 carries the whole folders).
 
 ```powershell
 cd "$R\reviewer"
-Get-ChildItem $runs -Directory | Where-Object { $_.CreationTime -ge $since -and $_.Name -notmatch '-(check|standards|remodel)$' } | ForEach-Object { uv run swreview handoff $_.FullName --out "$H\exports\$($_.Name).zip" }
+Get-ChildItem -LiteralPath $runs -Directory | Where-Object { $_.CreationTime -ge $since -and $_.Name -notmatch '-(check|standards|remodel)$' } | ForEach-Object { uv run swreview handoff $_.FullName --out "$H\exports\$($_.Name).zip" }
 cd $R
 ```
 
@@ -2953,7 +2953,7 @@ only: rule 5), and the files it names.
 ### 6.3 The whole run folders, the logs, the probe reports and the dumps
 
 ```powershell
-$folders = @(Get-ChildItem $runs -Directory | Where-Object { $_.CreationTime -ge $since })
+$folders = @(Get-ChildItem -LiteralPath $runs -Directory | Where-Object { $_.CreationTime -ge $since })
 $folders | Select-Object Name
 $need = [math]::Round((($folders | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Recurse -File }) | Measure-Object Length -Sum).Sum / 1GB, 2)
 "the run folders take $need GB; free on C: $([math]::Round((Get-PSDrive C).Free / 1GB, 1)) GB"
