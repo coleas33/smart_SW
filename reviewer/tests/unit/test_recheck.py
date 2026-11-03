@@ -2783,6 +2783,52 @@ def test_a_chain_of_check_agains_names_the_session_of_each_earlier_item_with_an_
     ]
 
 
+# --- cycle 12's read-only check (015 T123) ----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "words",
+    ["{item} from session {session_id}", "{item} (session {session_id})"],
+    ids=["after_the_item", "around_the_session"],
+)
+def test_a_chain_tells_an_item_already_named_in_its_session_by_the_words_that_name_it(
+    bare: Any, monkeypatch: pytest.MonkeyPatch, words: str
+) -> None:
+    """015 T123 (cycle 12's read-only check), on the runner: `NOT_CARRIED_IN_SESSION` is an
+    owner-editable default, changed by a one-line edit (`contracts/words.md` section 4). With its
+    words changed - the session after the item in other words, or in parentheses as
+    `withdrawn.earlier` names its own - the earlier record, checked again from session S, named
+    a Defer of F-003 in session T in those words, and its own Reject of F-007. The re-run tells
+    the first by the same words, so it keeps T and is not named in S as well, which would credit
+    it to S; the second it names in S."""
+    monkeypatch.setattr(runner, "NOT_CARRIED_IN_SESSION", words)
+    run, earlier, _ = bare
+    before, older = UUID(int=21), UUID(int=20)
+    deferred = words.format(
+        item=runner.NOT_CARRIED_DECISION_GONE.format(decision="Defer", id="F-003"),
+        session_id=older,
+    )
+    gone = runner.NOT_CARRIED_DECISION_GONE.format(decision="Reject", id="F-007")
+    earlier.coverage.unresolved.append(
+        CoverageItem(
+            check="coverage.recheck",
+            scope=CoverageScope(),
+            reason=runner.NOT_CARRIED.format(items=f"{deferred}; {gone}"),
+            error=None,
+        )
+    )
+    assert earlier.model_status is not None
+    earlier.model_status = earlier.model_status.model_copy(update={"rechecked_from": before})
+
+    run.carry_from(earlier)
+
+    assert recheck_row(run.session) == [
+        runner.NOT_CARRIED.format(
+            items=f"{deferred}; {words.format(item=gone, session_id=before)}"
+        )
+    ]
+
+
 def _request(request_id: str, question: str, *, answer: str | None = None) -> EvidenceRequest:
     return EvidenceRequest(
         id=request_id,
