@@ -2903,7 +2903,9 @@
    * review's minutes no more - another backend replaced the one that held it, or its turn failed - where the
    * console stays the way; and off while a turn runs, a review starts, a Send is on its way or a save is. Its
    * controls are set as they stand, never rebuilt, so a turn starting or ending never takes a box out from under
-   * the engineer's cursor; Save is off while every box is blank, since it would record nothing.
+   * the engineer's cursor. Save is off while any box is blank, empty or spaces only, so each save records all six,
+   * 0 typed for none: a blank one posted null, which kept the starting 0 the net counts (cycle 20, roadmap hole
+   * H-a-015).
    */
   function renderTiming() {
     if (!ui.timing) {
@@ -2919,10 +2921,10 @@
     ui.timing.hidden = !boxes.length || !state.chatId || state.readOnly !== null || !state.turnEnded
       || state.chatGone;
     var locked = state.turnRunning || state.startPending || state.sendPending || state.timingPending;
-    var blank = true;
+    var blank = false;
     for (var index = 0; index < boxes.length; index++) {
       boxes[index].disabled = locked;
-      blank = blank && !boxes[index].value.trim();
+      blank = blank || !boxes[index].value.trim();
     }
     var save = ui.timing.querySelector('[data-action="save-timing"]');
     if (save) {
@@ -2936,12 +2938,12 @@
 
   /**
    * Save: every box posted to the live route under its key, which records the minutes on the review the backend
-   * holds, so nothing saves over them and no restart comes first. A blank box is null, which keeps what is
-   * recorded; a number goes as a number; other text goes as typed, for the route to refuse by name
-   * (`InvalidTiming`): the page holds no rule about minutes. Nothing of the reply - the figures and the net - is
-   * printed, and the boxes keep what was typed either way (decision 186A); once recorded, the review's draft goes
-   * (`keepTimingDraft`) if it is the one posted, not one typed since on the review shown again (cycle 18's read-only
-   * check). A reply for a review the engineer has left since writes nothing.
+   * holds, so nothing saves over them and no restart comes first. A number goes as a number; other text goes as
+   * typed, for the route to refuse by name (`InvalidTiming`): the page holds no rule about minutes. A blank box
+   * would go as null, which keeps what is recorded, but Save is off while one is (cycle 20). Nothing of the reply -
+   * the figures and the net - is printed, and the boxes keep what was typed either way (decision 186A); once
+   * recorded, the review's draft goes (`keepTimingDraft`) if it is the one posted, not one typed since on the review
+   * shown again (cycle 18's read-only check). A reply for a review the engineer has left since writes nothing.
    */
   function saveTiming() {
     var save = ui.timing.querySelector('[data-action="save-timing"]');
@@ -3019,7 +3021,9 @@
 
   /**
    * The form blank again for the review shown next, which never shows, or posts, another review's figures: what was
-   * typed on that review and not saved comes back with it (`showTimingDraft`).
+   * typed on that review and not saved comes back with it (`showTimingDraft`). Drawn again at once, so no Save drawn
+   * over the boxes before they were blanked stays on, posting nulls, while nothing else draws the form - a failed
+   * apply's review waiting for the host's list (cycle 20's Tier 2 review).
    */
   function clearTiming() {
     var boxes = timingBoxes();
@@ -3032,6 +3036,7 @@
     state.turnEnded = false;
     state.timingPending = false;
     state.chatGone = false;
+    renderTiming();
   }
 
   /** What the boxes hold, kept for the review on screen until a save of it is recorded (cycle 18's Tier 2 review). */
@@ -3804,7 +3809,7 @@
     ui.questions.addEventListener('click', onQuestionsClick);
     ui.questions.addEventListener('input', onQuestionsInput);
     // A box typed in: what is typed is kept for its review until a save records it, the line no longer says what is
-    // recorded, and Save follows whether any box holds text.
+    // recorded, and Save follows whether every box holds text (cycle 20).
     ui.timing.addEventListener('input', function () {
       keepTimingDraft();
       timingLine(null);

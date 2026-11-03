@@ -30,6 +30,13 @@ namespace SwReview.AddIn.Tests;
 /// *Added 2026-11-03 (007 T091; a read-only check of those fixes):* a save recorded drops only the minutes it posted, so
 /// minutes typed on its review since - left and shown again before the reply - come back with it; and a refused save's retry
 /// is read to wait its second, the one timer the save sets.
+/// *Changed 2026-11-03 (007 T097; cycle 20, roadmap hole H-a-015):* Save stays off while any field is blank - empty, or
+/// spaces only - so every save posts all six, 0 typed for none, and no field posts null; one line from the words file, under
+/// the heading, says to type all six. The page still holds no rule about what a figure may be: text that is no number is
+/// posted as typed, for the route to refuse.
+/// *Added 2026-11-03 (007 T099; cycle 20's Tier 2 review):* Save stays off on a review shown again with a field left blank,
+/// after all six were typed on another; and a failed apply's review, waiting for the host's list before it is shown from its
+/// folder, has no form, where Save stayed on over six blank fields and a press posted six nulls.
 /// </summary>
 public sealed class ReviewPageTimingTests
 {
@@ -78,6 +85,10 @@ public sealed class ReviewPageTimingTests
     /// with the token - and Save is off while every field is blank, since it would record nothing. A blank field posts
     /// null, which keeps what is recorded, and text that is no number is posted as typed, for the route to refuse by name:
     /// the page holds no rule about minutes.
+    ///
+    /// *Changed 2026-11-03 on purpose (007 T097; cycle 20, roadmap hole H-a-015):* Save no longer posts a blank field
+    /// (`SaveStaysOffUntilEveryMinuteIsTyped`), so the second save, which left two fields blank, types all six, 0 for none,
+    /// and reads a 0 typed - spaces around it trimmed - posted as the number 0, where a blank field posted null.
     /// </summary>
     [Fact]
     public void TheFormPostsEachFigureToTheTimingRoute()
@@ -103,10 +114,10 @@ public sealed class ReviewPageTimingTests
             Assert.Equal("Bearer " + ReviewPageDriver.Token, call.GetProperty("authorization").GetString());
 
             await driver.ClearCalls();
-            await Type(driver, string.Empty, "about 30", "331", "  ", "57", "8.5");
+            await Type(driver, "60", "about 30", "331", " 0 ", "57", "8.5");
             await Save(driver);
             Assert.Equal(
-                "{\"baseline\":null,\"supervision\":\"about 30\",\"verification\":331,\"false_alarms\":null,\"setup\":57,\"by_hand\":8.5}",
+                "{\"baseline\":60,\"supervision\":\"about 30\",\"verification\":331,\"false_alarms\":0,\"setup\":57,\"by_hand\":8.5}",
                 Assert.Single(await TimingCalls(driver)).GetProperty("body").GetString());
         });
     }
@@ -265,6 +276,9 @@ public sealed class ReviewPageTimingTests
     /// that holds no minutes typed and not saved: switched to another live review of the same document, it shows blank, with
     /// no line, and never another review's figures; Save then posts that review's own figures to its own route; and back on
     /// the first review, whose minutes were recorded, the form is blank again.
+    ///
+    /// *Changed 2026-11-03 on purpose (007 T097; cycle 20, roadmap hole H-a-015):* the other review's save types all six, 0
+    /// for none, where it typed the baseline alone, which Save no longer posts.
     /// </summary>
     [Fact]
     public void AnotherReviewShowsTheFormBlank()
@@ -290,12 +304,12 @@ public sealed class ReviewPageTimingTests
             string otherPath = "/sessions/" + OtherChat + "/timing";
             await driver.Route("POST", otherPath, 200, Recorded);
             await driver.ClearCalls();
-            await Type(driver, "60", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
+            await Type(driver, "60", "0", "0", "0", "0", "0");
             await Save(driver);
             JsonElement call = Assert.Single(await TimingCalls(driver));
             Assert.Equal(otherPath, call.GetProperty("path").GetString());
             Assert.Equal(
-                "{\"baseline\":60,\"supervision\":null,\"verification\":null,\"false_alarms\":null,\"setup\":null,\"by_hand\":null}",
+                "{\"baseline\":60,\"supervision\":0,\"verification\":0,\"false_alarms\":0,\"setup\":0,\"by_hand\":0}",
                 call.GetProperty("body").GetString());
 
             await driver.Route("GET", "/sessions/" + Chat + "/snapshot", 200, Snapshot("20260923-101500-bracket-1", false));
@@ -341,6 +355,9 @@ public sealed class ReviewPageTimingTests
     /// each labelled with its word and posted under its key, the button and the line after a save, from
     /// `labels.timing_form` - here words no page could hold, in an order the words file does not use, one of them markup,
     /// which stays characters.
+    ///
+    /// *Changed 2026-11-03 on purpose (007 T097; cycle 20, roadmap hole H-a-015):* and the line under the heading that says
+    /// to type all six, `labels.timing_form`'s `all_six`.
     /// </summary>
     [Fact]
     public void TheFormIsLabelledFromTheWordsFile()
@@ -364,6 +381,7 @@ public sealed class ReviewPageTimingTests
                 JsonElement form = await driver.Read(ReadForm);
 
                 Assert.Equal("FICT minutes heading", form.GetProperty("heading").GetString());
+                Assert.Equal("FICT type every one", form.GetProperty("allSix").GetString());
                 Assert.Equal(words.Select(word => word.Item2).ToArray(), ReviewPageDriver.Strings(form, "labels"));
                 Assert.Equal(words.Select(word => word.Item1).ToArray(), ReviewPageDriver.Strings(form, "keys"));
                 Assert.Equal("FICT save the minutes", form.GetProperty("save").GetString());
@@ -378,7 +396,12 @@ public sealed class ReviewPageTimingTests
             });
     }
 
-    /// <summary>009 FR-030: a backend that sends no labels names no words for the form, so there is no form.</summary>
+    /// <summary>
+    /// 009 FR-030: a backend that sends no labels names no words for the form, so there is no form.
+    ///
+    /// *Changed 2026-11-03 on purpose (007 T097; cycle 20, roadmap hole H-a-015):* nor the line that says to type all six:
+    /// the page holds no copy of it, anywhere in its text.
+    /// </summary>
     [Fact]
     public void WithNoLabelsThereIsNoForm()
     {
@@ -389,6 +412,8 @@ public sealed class ReviewPageTimingTests
 
             Assert.False(form.GetProperty("shown").GetBoolean(), "a form shows with no words to label it.");
             Assert.Empty(ReviewPageDriver.Strings(form, "keys"));
+            Assert.Equal(JsonValueKind.Null, form.GetProperty("allSix").ValueKind);
+            Assert.DoesNotContain(LabelsSample.TimingAllSix, form.GetProperty("bodyText").GetString());
         });
     }
 
@@ -396,6 +421,9 @@ public sealed class ReviewPageTimingTests
     /// At a docked pane's 300 px every part of the form is whole - inside the window and every box that clips it, its words
     /// wrapping rather than cut off - with no sideways page scroll: the heading, each field's label and box, Save, the line
     /// after a save, and a refusal's sentence and its Details.
+    ///
+    /// *Changed 2026-11-03 on purpose (007 T097; cycle 20, roadmap hole H-a-015):* and the line under the heading that says
+    /// to type all six: 16 parts after a save, where there were 15, and 17 after a refusal, where there were 16.
     /// </summary>
     [Fact]
     public void TheFormIsWhollyVisibleAtThreeHundredPixels()
@@ -410,14 +438,14 @@ public sealed class ReviewPageTimingTests
 
             JsonElement saved = await driver.Read(ReadFormWhole);
             Assert.Equal(300, saved.GetProperty("width").GetInt32());
-            Assert.Equal(15, saved.GetProperty("count").GetInt32());
+            Assert.Equal(16, saved.GetProperty("count").GetInt32());
             Assert.Empty(ReviewPageDriver.Strings(saved, "clipped"));
             Assert.True(saved.GetProperty("noHorizontalOverflow").GetBoolean(), saved.ToString());
 
             await driver.Route("POST", TimingPath, 400, InvalidTiming);
             await Save(driver);
             JsonElement refused = await driver.Read(ReadFormWhole);
-            Assert.Equal(16, refused.GetProperty("count").GetInt32());
+            Assert.Equal(17, refused.GetProperty("count").GetInt32());
             Assert.Empty(ReviewPageDriver.Strings(refused, "clipped"));
             Assert.True(refused.GetProperty("noHorizontalOverflow").GetBoolean(), refused.ToString());
         });
@@ -775,6 +803,179 @@ public sealed class ReviewPageTimingTests
         });
     }
 
+    // ---- cycle 20: all six typed (007 T097; roadmap hole H-a-015) -------------------------------
+
+    /// <summary>
+    /// Save stays off while any field is blank - empty, or spaces only - so every save records all six, 0 typed for none: a
+    /// blank supervision, verification or false-alarms field was posted as null, which kept its starting 0, and the net
+    /// counted it, unannounced. Off with every field blank; with five typed, each field blank in turn; with a field cleared
+    /// after all six were typed; and with a field of spaces only - a press posting nothing each time. On once all six hold
+    /// text, whatever it says, text that is no number among them, and a press posts all six: the page holds no rule about
+    /// what a figure may be, and the route refuses such text by name.
+    /// </summary>
+    [Fact]
+    public void SaveStaysOffUntilEveryMinuteIsTyped()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver);
+            await driver.Route("POST", TimingPath, 200, Recorded);
+            await driver.ClearCalls();
+            Assert.True((await driver.Read(ReadForm)).GetProperty("saveDisabled").GetBoolean(), "Save is on with every field blank.");
+            await Save(driver);
+
+            for (int blank = 0; blank < Typed.Length; blank++)
+            {
+                await Type(driver, Typed.Select((figure, index) => index == blank ? string.Empty : figure).ToArray());
+                Assert.True((await driver.Read(ReadForm)).GetProperty("saveDisabled").GetBoolean(), $"Save is on with field {blank} blank.");
+                await Save(driver);
+            }
+
+            await Type(driver, Typed);
+            Assert.False((await driver.Read(ReadForm)).GetProperty("saveDisabled").GetBoolean(), "Save is off with all six typed.");
+            await driver.Read(
+                "var field = document.querySelectorAll('#timing input[data-input]')[2]; field.value = '';"
+                + "field.dispatchEvent(new Event('input', { bubbles: true })); return JSON.stringify({ ok: true });");
+            Assert.True((await driver.Read(ReadForm)).GetProperty("saveDisabled").GetBoolean(), "Save is on with a field cleared after all six were typed.");
+            await Save(driver);
+
+            await Type(driver, "417", "23.75", "331", " \t ", "57", "86");
+            Assert.True((await driver.Read(ReadForm)).GetProperty("saveDisabled").GetBoolean(), "Save is on with a field of spaces only.");
+            await Save(driver);
+            Assert.Empty(await TimingCalls(driver));
+
+            await Type(driver, "417", "about 30", "331", "0", "57", "86");
+            Assert.False((await driver.Read(ReadForm)).GetProperty("saveDisabled").GetBoolean(), "Save is off with all six holding text.");
+            await Save(driver);
+            Assert.Equal(
+                "{\"baseline\":417,\"supervision\":\"about 30\",\"verification\":331,\"false_alarms\":0,\"setup\":57,\"by_hand\":86}",
+                Assert.Single(await TimingCalls(driver)).GetProperty("body").GetString());
+        });
+    }
+
+    /// <summary>
+    /// One line from the words file says to type all six, zero for none - `labels.timing_form`'s `all_six` - shown with the
+    /// form, under its heading and before its first field, so it is read before a figure is typed and says why Save is off.
+    /// </summary>
+    [Fact]
+    public void TheLineUnderTheHeadingSaysToTypeAllSix()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(driver);
+            JsonElement form = await driver.Read(ReadForm);
+
+            Assert.True(form.GetProperty("allSixShown").GetBoolean(), "the line that says to type all six is not shown.");
+            Assert.Equal(LabelsSample.TimingAllSix, form.GetProperty("allSix").GetString());
+            Assert.True(form.GetProperty("allSixPlaced").GetBoolean(), "the line is not between the heading and the first field.");
+        });
+    }
+
+    /// <summary>
+    /// Labels that name the form's words but no line to type all six - a backend from before cycle 20 - draw the form
+    /// without the line, and the page prints no words of its own in its place (009 FR-030); Save still waits for all six.
+    /// </summary>
+    [Fact]
+    public void LabelsThatNameNoLineDrawTheFormWithoutIt()
+    {
+        JsonObject labels = JsonNode.Parse(LabelsSample.Json())!.AsObject();
+        labels["timing_form"]!.AsObject().Remove("all_six");
+
+        ReviewPageDriver.Run(
+            driver => driver.InitialRoutes.Add(("GET", "/labels", 200, labels.ToJsonString())),
+            async driver =>
+            {
+                await Reviewed(driver);
+                await Type(driver, "417", "23.75", "331", string.Empty, "57", "86");
+                JsonElement form = await driver.Read(ReadForm);
+
+                Assert.True(form.GetProperty("shown").GetBoolean(), "labels without the line show no form.");
+                Assert.Equal(JsonValueKind.Null, form.GetProperty("allSix").ValueKind);
+                Assert.DoesNotContain(LabelsSample.TimingAllSix, form.GetProperty("bodyText").GetString());
+                Assert.True(form.GetProperty("saveDisabled").GetBoolean(), "Save is on with a field blank.");
+            });
+    }
+
+    // ---- cycle 20's Tier 2 review (007 T099) ----------------------------------------------------
+
+    /// <summary>
+    /// A review shown again with a field left blank has Save off, whatever the review left before it allowed: five typed on
+    /// the first review and not saved, all six on another, which turns Save on there, and back on the first the five come
+    /// back with Save off, and a press posts nothing - never the other review's Save over a blank field, which would post
+    /// null.
+    /// </summary>
+    [Fact]
+    public void SaveStaysOffOnAReviewShownAgainWithAFieldLeftBlank()
+    {
+        string[] five = { "417", "23.75", "331", string.Empty, "57", "86" };
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver);
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200, Snapshot(OtherRun, false));
+            await driver.Route("GET", "/sessions/" + Chat + "/snapshot", 200, Snapshot("20260923-101500-bracket-1", false));
+            await driver.Route("POST", TimingPath, 200, Recorded);
+            await Type(driver, five);
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            await Type(driver, Typed);
+            Assert.False((await driver.Read(ReadForm)).GetProperty("saveDisabled").GetBoolean(), "Save is off with all six typed on the other review.");
+
+            await driver.Read(ReviewPageSessionsTests.Chip(Chat));
+            await driver.Settle();
+            JsonElement back = await driver.Read(ReadForm);
+            Assert.True(back.GetProperty("shown").GetBoolean(), "the first review shows no form after the switch back.");
+            Assert.Equal(five, Values(back));
+            Assert.True(back.GetProperty("saveDisabled").GetBoolean(), "Save is on with a field blank on the review shown again.");
+
+            await driver.ClearCalls();
+            await Save(driver);
+            Assert.Empty(await TimingCalls(driver));
+        });
+    }
+
+    /// <summary>
+    /// An apply of answers that fails on a review waiting for Send - its six typed, Save on - shows that review from its folder,
+    /// read-only, where there is no form. A review started on this page may wait for the host's list to name it first, and
+    /// meanwhile the form is gone already, Save off, and a press posts nothing, where the form stayed with Save on over six
+    /// fields made blank, and a press posted six nulls.
+    /// </summary>
+    [Fact]
+    public void TheFormGoesWhileAFailedApplyWaitsForItsReview()
+    {
+        WaitingReviewFixture fixture = WaitingReviewFixture.Read();
+        ReviewPageDriver.Run(
+            driver =>
+            {
+                fixture.Configure(driver);
+                driver.Sessions.Clear();
+            },
+            async driver =>
+            {
+                await fixture.Start(driver);
+                await Type(driver, Typed);
+                Assert.False((await driver.Read(ReadForm)).GetProperty("saveDisabled").GetBoolean(), "Save is off with all six typed.");
+                await driver.Route("POST", "/sessions/" + Chat + "/evidence", 202, "{\"state\":\"running\"}");
+                await driver.Read("document.querySelector('#questions [data-action=question-option]').click(); return JSON.stringify({ ok: true });");
+                await driver.Settle();
+                await driver.Read("document.querySelector('#questions [data-action=question-send]').click(); return JSON.stringify({ ok: true });");
+                await driver.Settle();
+
+                driver.HoldSessions = true;
+                await driver.Push(Chat, 3, "error", "{\"error_class\":\"OSError\",\"message\":\"FICT apply failed\",\"retryable\":true}");
+                await driver.Settle();
+                JsonElement failed = await driver.Read(ReadForm);
+                Assert.False(failed.GetProperty("shown").GetBoolean(), "the form shows while the failed apply's review waits for the host's list.");
+                Assert.True(failed.GetProperty("saveDisabled").GetBoolean(), "Save is on over blank fields.");
+                await driver.ClearCalls();
+                await Save(driver);
+                Assert.Empty(await TimingCalls(driver));
+                await driver.ReleaseSessions();
+            });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>
@@ -840,6 +1041,7 @@ public sealed class ReviewPageTimingTests
         labels["timing_form"] = new JsonObject
         {
             ["heading"] = "FICT minutes heading",
+            ["all_six"] = "FICT type every one",
             ["save"] = "FICT save the minutes",
             ["saved"] = "FICT the minutes are in",
         };
@@ -867,11 +1069,13 @@ public sealed class ReviewPageTimingTests
 
     /// <summary>
     /// The minutes form as it stands: whether it is shown, its heading, each field's label (read through its `for`), key,
-    /// value and state, Save, the line after a save and a refusal, the read-only line, and every text of the page.
+    /// value and state, Save, the line after a save and a refusal, the read-only line, and every text of the page; and,
+    /// since cycle 20, the line that says to type all six, and whether it is between the heading and the first field.
     /// </summary>
     private const string ReadForm = @"
 var form = document.getElementById('timing');
 var fields = form ? form.querySelectorAll('input[data-input]') : [];
+var allSix = form ? form.querySelector('.timing-all-six') : null;
 var labels = [], keys = [], values = [], disabled = [];
 for (var i = 0; i < fields.length; i++) {
   var label = fields[i].id ? form.querySelector('label[for=""' + fields[i].id + '""]') : null;
@@ -888,6 +1092,9 @@ return JSON.stringify({
   ok: true,
   shown: !!form && h.rendered(form),
   heading: form ? h.text(form, 'h2') : null,
+  allSix: allSix ? allSix.textContent : null,
+  allSixShown: !!allSix && h.rendered(allSix),
+  allSixPlaced: !!allSix && h.before(form.querySelector('h2'), allSix) && h.before(allSix, fields[0]),
   labels: labels,
   keys: keys,
   values: values,
@@ -907,13 +1114,15 @@ return JSON.stringify({
 
     /// <summary>
     /// Every part of the shown form at the pane's width, measured by <see cref="ReviewPageTriageTests.Whole"/>: the heading,
-    /// each label and its box, Save, the line after a save when shown, and a refusal's sentence and its Details when shown.
+    /// each label and its box, Save, the line after a save when shown, and a refusal's sentence and its Details when shown;
+    /// and, since cycle 20, the line that says to type all six.
     /// </summary>
     private const string ReadFormWhole = @"
 var form = document.getElementById('timing');
 var parts = [];
 if (form) {
   parts.push(form.querySelector('h2'));
+  parts.push(form.querySelector('.timing-all-six'));
   var fields = form.querySelectorAll('.field');
   for (var i = 0; i < fields.length; i++) {
     parts.push(fields[i].querySelector('label'));

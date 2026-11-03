@@ -547,10 +547,13 @@ and 184A)."""
 
 TIMING_FORM = {
     "heading": "Minutes for this review",
+    "all_six": "Type all six once you know them, zero for none. Each replaces what is recorded.",
     "save": "Save minutes",
     "saved": "The minutes are recorded.",
 }
-"""The minutes form's own words: its heading, its button and the one line a save leaves."""
+"""The minutes form's own words: its heading, its button and the one line a save leaves; and,
+since 2026-11-03 (007 cycle 20, roadmap hole H-a-015), the line under the heading that says to
+type all six, zero for none, since Save stays off while any field is blank."""
 
 
 def test_the_minutes_form_names_each_timing_input_in_their_order() -> None:
@@ -570,7 +573,18 @@ def test_the_minutes_form_names_each_timing_input_in_their_order() -> None:
 def test_the_minutes_forms_words_name_no_figure() -> None:
     """007 cycle 18: the form's heading, its button and the line a save leaves, a group of its own
     after `timing`. No word of either group holds a digit or a token: the figures stay in the
-    form's fields, and in no word the page prints beside them (decision 186A)."""
+    form's fields, and in no word the page prints beside them (decision 186A).
+
+    *Changed 2026-11-03 on purpose (007 T097; cycle 20, roadmap hole H-a-015):* the group gains
+    `all_six`, the line under the heading that says to type all six, zero for none, since Save
+    stays off while any field is blank. It says zero in a word: the rule that no word holds a
+    digit stands.
+
+    *Changed 2026-11-03 on purpose (007 T099; cycle 20's Tier 2 review):* the line says to type
+    them once known, and that each replaces what is recorded. The form is blank over minutes
+    already recorded - after a switch back, a reload or a re-run, which carries all six - so a 0
+    typed there for none replaced a recorded figure, and a 0 for a figure not known yet counted
+    in the net."""
     labels = load_words().labels
     order = list(raw_words()["labels"])
     words = [*labels.timing.values(), *labels.timing_form.values()]
