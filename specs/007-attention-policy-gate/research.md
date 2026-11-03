@@ -1514,13 +1514,13 @@ mirroring the line. The seat plan's step 4.1. Dated notes in
 - On the page a correction retypes all six; the route and `swreview timing` still take one figure
   alone (default 4). *Changed 2026-11-03 (the Tier 2 review, below):* the form is blank over the
   six once recorded - back on the review, after a reload, or after a feature 015 re-run, which
-  carries all six into its new chat - so a correction retypes all six from the note, as the line
-  and the seat plan's step 4.1 now say.
+  carries all six into its new chat - so a correction retypes all six from the note, as the seat
+  plan's step 4.1 now says, the line saying each replaces what is recorded.
 - *Added 2026-11-03 (the Tier 2 review, below):* a figure not known yet - setup or by hand, which
   183A keeps unknown, and the net with it - cannot be left out of a save on the page, as it could
-  before this cycle. The line and step 4.1 say to save once all six are known, never 0 for one
-  not known; leaving one out takes the console, once the backend no longer holds the review (step
-  4.5, item 4).
+  before this cycle. The line and step 4.1 say to save once all six are known, and step 4.1 never
+  to type 0 for one not known; leaving one out takes the console, once the backend no longer holds
+  the review (step 4.5, item 4).
 - M0-a's check of what the page wrote waits for M0's tables (197A), as H-a-015's route says.
 - The record still cannot tell a recorded 0 of supervision, verification or false alarms from
   their starting 0 (the backlog's cycle 1 item; R12, *Left open*). A save on the page no longer
@@ -1579,3 +1579,9 @@ identifier scan among them, 3,324 passed on Python 3.12.3 with the tokenizer req
 changed modules 438 on 3.11.16 (`--isolated`); `ruff check src tests` clean; the link check over
 the four Markdown files the fixes changed, 82 relative links, anchors included, none broken. No
 task was added, so 007 stays 94 / 5 / 0.
+
+*Added 2026-11-03:* a read-only check of these fixes, no must-fix and one should-fix, taken, as
+T099's second dated sub-item records. *Left open* credited the line with what only step 4.1 says:
+that a correction retypes all six from the note, and that 0 is never typed for a figure not known
+yet. It now credits step 4.1, the line saying each figure replaces what is recorded. Words in this
+record only: no code, test or words file changed.
