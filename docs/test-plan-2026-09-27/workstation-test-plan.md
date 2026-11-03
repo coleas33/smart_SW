@@ -39,7 +39,7 @@ sitting. S2 comes after them. The table is in that order.
 | Sitting | Theme | Length | What it holds |
 |---|---|---|---|
 | S1 | Start readiness | 3 h 10 min, and an optional 25 min | the next section: Remodel Start's evidence, with no key and no paid call, and step 5.1's owner's parts when its clock allows |
-| M0-a | the first triaged review | 3 h 30 min at most | no key: A, a design the engineer knows, reviewed with the send box unticked (step 4.10, items 1 and 2), every finding judged and the minutes kept with `swreview timing`; the escape replay's pre-fix revisions, each opened read-only (no step yet: it is written when M0-a is planned, with the revisions lettered in section 0.2 so that the fingerprint covers them); step 5.1's owner's parts if S1 did not run them |
+| M0-a | the first triaged review | 3 h 30 min at most | no key: A, a design the engineer knows, reviewed with the send box unticked (step 4.10, items 1 and 2), every finding judged and the minutes typed on the Review page before leaving the review, with `swreview timing` the fallback after a restart; the escape replay's pre-fix revisions, each opened read-only (no step yet: it is written when M0-a is planned, with the revisions lettered in section 0.2 so that the fingerprint covers them); step 5.1's owner's parts if S1 did not run them |
 | M0-b | the first paid reviews | 3 h 30 min at most | S3's first sitting: the key (step 2.5), A reviewed with the model (step 4.1), B (step 4.2), the timing of A's review (step 4.5) and 014's smoke review (step 4.11), every finding judged and timed |
 | S2 | Start on | 3 h 30 min at most | after M0's checkpoint and 004 T003's numbers, the first sitting after the development machine switches Start on: 004 T303b first (decision 169A), then the stage-1 runs, 004 T135 to T141 |
 | S3 | paid review | 3 h 30 min at most | the key and the paid reviews M0-b leaves (steps 2.5 to 2.7, 3.4, step 4 and 5.5), in as many sittings of this length as they need |
@@ -1844,12 +1844,13 @@ none of them by hand: the timing bullet below writes them all once the review ha
   - **real but already known**: a real problem known before SwReview first showed it.
   - **wrong**: not a real problem: a false alarm.
   - **true but not worth flagging**: true of the design, but not worth an engineer's attention.
-- 007 T060, the minutes (the command that records them runs at step 4.5, item 4, once the backend
-  no longer holds this review). They are A's real figures, company facts that stay in the private
-  fork (decision 186A): write them in a private note in the handover folder, `notes\timing.txt`
-  (`notepad "$H\notes\timing.txt"` opens it), a line `A` and then each number on a line of its own
-  with its name, and never in the findings document. Before the engineer who knows A leaves, ask
-  them how many minutes a review of A by hand, without SwReview, takes them: the **baseline**.
+- 007 T060, the minutes (you type them on the Review page before you leave A's review, the next
+  bullet, and step 4.5, item 4, checks them). They are A's real figures, company facts that stay
+  in the private fork (decision 186A): write them in a private note in the handover folder,
+  `notes\timing.txt` (`notepad "$H\notes\timing.txt"` opens it), a line `A` and then each number on
+  a line of its own with its name, and never in the findings document. Before the engineer who
+  knows A leaves, ask them how many minutes a review of A by hand, without SwReview, takes them:
+  the **baseline**.
   Then write down five more, in whole minutes (decisions 183A and 184A): **setup**,
   this design's own setup only - preparing the package, opening the assembly, attaching drawings,
   starting the review and any rerun; the sitting's software update is not part of it, so write
@@ -1863,6 +1864,19 @@ none of them by hand: the timing bullet below writes them all once the review ha
   together are the whole time spent checking the findings; count no minute twice. The six numbers,
   the update's minutes and the review's start and end times go in `notes\timing.txt` only: of A's
   timing, the findings document holds the net saved alone, which step 4.5 records.
+- 007 T060, the minutes on the Review page, before you leave A's review: once the review has
+  ended (after the answers' turn, if it asked questions) and every finding is judged, scroll to
+  the end of Results, to **Minutes for this review**. Type each of the six from `notes\timing.txt`
+  in the field that begins with its name: **Baseline**, **Supervision**, **Verification**, **False
+  alarms**, **Setup** and **By hand**; then press **Save minutes**. Pass: the line `The minutes are
+  recorded.` shows under the button, and your numbers stay in their fields. The form is off while
+  a turn runs: wait for it to end. If a sentence shows in place of that line, nothing was
+  recorded: put right what it says (`Enter the minutes as numbers, then save again.` means a field
+  holds something other than a number) and press **Save minutes** again. The page writes the
+  minutes in A's run folder, where `swreview timing` writes them, and shows them in their fields
+  only. If the backend restarted before you saved them - A's review comes back read-only, with no
+  form, or the form says the review is no longer held by the backend - step 4.5, item 4, records
+  them at the console.
 
 Record: the facts, the headline, the tally line, the not-reached line, the groups' goal lines,
 the drawings line (with letters in place of names) and the usage line, but no duration of the
@@ -1998,27 +2012,39 @@ Record: each pass or fail. Save no configuration change.
    space) and run it again. Then press **Clear review**, then A-pin's chip. Pass:
    `This review can no longer be restored.` with a **Remove** button; Remove takes the chip away.
 4. **007 T060: record the timing of A's review**, with the six minutes you wrote in
-   `notes\timing.txt` at step 4.1. It is done here because since item 2's restart the backend no
-   longer holds A's review, so nothing can save over what this writes; it writes only in A's run
-   folder (`session.json`, then `report.md` and `attention.json` rendered again). Make A active
-   and press its chip, press **Open run folder**, copy the address bar, and close that Explorer
-   window. Then replace each `'<...>'` of the second line with its number of minutes from that
-   note (the quotes may stay):
+   `notes\timing.txt` at step 4.1. You saved them on the Review page at step 4.1, so here you check
+   what it wrote, in A's run folder only (`session.json`, then `report.md` and `attention.json`
+   rendered again). If you did not - the backend restarted before you saved them - you record them
+   here, at the console, the fallback: since item 2's restart the backend no longer holds A's
+   review, so nothing can save over what the command writes, in the same files. Make A active and
+   press its chip, press **Open run folder**, copy the address bar, and close that Explorer window.
+   Then paste the run folder in this line and run it:
 
    ```powershell
    $run = '<paste the run folder of A, from step 4.1>'
+   ```
+
+   Only if you did not save them on the Review page at step 4.1, replace each `'<...>'` of this
+   line with its number of minutes from that note (the quotes may stay) and run it:
+
+   ```powershell
    cd "$R\reviewer"; uv run swreview timing $run --baseline '<baseline minutes>' --supervision '<supervision minutes>' --verification '<verification minutes>' --false-alarms '<false-alarm minutes>' --setup '<setup minutes>' --by-hand '<by-hand minutes>'; "exit code: $LASTEXITCODE"; cd $R
+   ```
+
+   Then, either way:
+
+   ```powershell
    Select-String -LiteralPath "$run\report.md" -SimpleMatch 'Net saved minutes:' | ForEach-Object { $_.Line }
    "session.json carries a baseline: $($null -ne (Get-Content -LiteralPath "$run\session.json" -Raw -Encoding UTF8 | ConvertFrom-Json).timing.baseline_minutes)"
    ```
 
-   Pass: the command prints `baseline <b>, supervision <s>, verification <v>, false alarms <f>,
-   setup <u>, by hand <h>` with your six numbers (written with `.0`), `net saved: <n>` with `<n>`
-   the baseline less the other five, and a line `report: ...`, which holds a path (never copy
-   it); then
-   `exit code: 0`; then `- Net saved minutes: <n>` (the report's Timing section); and last
-   `session.json carries a baseline: True`, the evidence 007 T060 names. Of these lines only the
-   net saved may go in the findings document: the first is A's six minutes, to compare with the
+   Pass: `- Net saved minutes: <n>` (the report's Timing section), with `<n>` the baseline less the
+   other five, and last `session.json carries a baseline: True`, the evidence 007 T060 names; at the
+   console, before them, the command prints `baseline <b>, supervision <s>, verification <v>, false
+   alarms <f>, setup <u>, by hand <h>` with your six numbers (written with `.0`), `net saved: <n>`
+   and a line `report: ...`, which holds a path (never copy it); then `exit code: 0`. Of these
+   lines only the net saved may go in the findings document: the first is A's six minutes, to
+   compare with the
    note and never copy, and `report.md`'s Timing section holds the same minutes and the review's
    runtime (decision 186A; decision 192A (the owner's answer of 2026-11-01, 13A)). A message
    `Invalid value for '--baseline'` (or another input) with `exit code: 2` means a `'<...>'` was
@@ -2033,12 +2059,12 @@ Record: each pass or fail. Save no configuration change.
    baseline from the engineer, write `blocked: no baseline` and run nothing. From here on the
    owner times each pilot run the same way; at this sitting, A's review is the one timed.
 
-Record: each pass or fail; for 007 T060 the net saved, as `swreview timing` printed it
-(`net saved: <n>`), and A's run folder by its date and letter (`<date>-A`, as `20261101-A`; rule
-5), never the six minutes, the update's, the review's start and end times, the folder's full
-stamp or a timing failure's message, which stay in `notes\timing.txt` (decision 186A; decision
-192A (the owner's answer of 2026-11-01, 13A); decision 195A). From here on SOLIDWORKS may be
-closed and reopened.
+Record: each pass or fail; for 007 T060 the net saved, as item 4's report line printed it
+(`- Net saved minutes: <n>`), and A's run folder by its date and letter (`<date>-A`, as
+`20261101-A`; rule 5), never the six minutes, the update's, the review's start and end times,
+the folder's full stamp or a timing failure's message, which stay in `notes\timing.txt`
+(decision 186A; decision 192A (the owner's answer of 2026-11-01, 13A); decision 195A). From here
+on SOLIDWORKS may be closed and reopened.
 
 ### 4.6 Drawing questions, three answers in one send, and a confirmed candidate left closed [011 T067; 009 T084; 011 T077]
 

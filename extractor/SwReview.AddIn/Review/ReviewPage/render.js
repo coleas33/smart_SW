@@ -1331,6 +1331,51 @@
     return block;
   }
 
+  /**
+   * The minutes form (feature 007, cycle 18; its contracts/timing.md section 3): the heading, one text box per
+   * human timing input the backend's labels name - `labels.timing`, keyed by `TIMING_INPUTS` in their order -
+   * labelled with its word and carrying its key, then Save, the line a save leaves and the place for a refusal,
+   * both hidden, in `labels.timing_form`'s words. Text boxes, blank, so what is typed is what is posted and what
+   * stays. Null with no labels, or a backend that names neither group: no words, no form (009 FR-030). `app.js`
+   * shows it, posts it and writes its line.
+   */
+  function timingForm(labels) {
+    var own = Object.prototype.hasOwnProperty;
+    var inputs = (labels && own.call(labels, 'timing') && own.call(labels, 'timing_form')) ? labels.timing : null;
+    if (!inputs || typeof inputs !== 'object') {
+      return null;
+    }
+    var form = el('div', 'timing-form');
+    var heading = el('h2', null, labelOf(labels, 'timing_form', 'heading', ''));
+    heading.id = 'timing-heading';
+    form.appendChild(heading);
+    var keys = Object.keys(inputs);
+    for (var index = 0; index < keys.length; index++) {
+      var row = el('div', 'field');
+      var label = el('label', null, labelOf(labels, 'timing', keys[index], keys[index]));
+      var box = el('input');
+      box.type = 'text';
+      box.id = 'timing-' + keys[index];
+      box.setAttribute('inputmode', 'decimal');
+      box.setAttribute('autocomplete', 'off');
+      box.setAttribute('spellcheck', 'false');
+      box.setAttribute('data-input', keys[index]);
+      label.setAttribute('for', box.id);
+      form.appendChild(append(row, [label, box]));
+    }
+    var actions = el('div', 'actions');
+    actions.appendChild(button(labelOf(labels, 'timing_form', 'save', ''), 'save-timing', 'save-timing'));
+    form.appendChild(actions);
+    var status = el('div', 'timing-status');
+    status.setAttribute('role', 'status');
+    var saved = el('p', 'note timing-saved', labelOf(labels, 'timing_form', 'saved', ''));
+    saved.hidden = true;
+    var refused = el('div', 'timing-refused note bad');
+    refused.hidden = true;
+    form.appendChild(append(status, [saved, refused]));
+    return form;
+  }
+
   // ---- the running usage line (feature 005 T016a) --------------------------------------
 
   /**
@@ -1423,6 +1468,7 @@
     summaryBlock: summaryBlock,
     triageTally: triageTally,
     sendBlock: sendBlock,
+    timingForm: timingForm,
     contactList: contactList,
     notExaminedHeadline: notExaminedHeadline,
     reviewChips: reviewChips,

@@ -274,6 +274,15 @@
 <!-- Follow-up answers, pinned under their questions, so nobody has to switch to read one (FR-019). -->
 <div id="answers" class="answers"></div>
 
+<!--
+  The minutes form (feature 007, cycle 18; its contracts/timing.md section 3): one box per human timing input and
+  Save, which posts them to POST /sessions/{chat_id}/timing, so the minutes are recorded on the review the backend
+  holds, with no restart and no console step. app.js draws it from the backend's words (`labels.timing`,
+  `labels.timing_form`) and shows it on a live review once a turn of it has ended; it is off while a turn runs and
+  absent on a read-only restore. The figures stay in its boxes: no other text of the page prints one.
+-->
+<section id="timing" class="panel" aria-labelledby="timing-heading" hidden></section>
+
 </section>
 
 <!--
