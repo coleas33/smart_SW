@@ -1593,20 +1593,23 @@ class ReviewRun:
     ) -> None:
         """Say what folds did, so the stream agrees with them (002 FR-031): for each fold, the id
         its finding was first announced under is withdrawn, naming the id it took
-        (`FOLDED_INTO`), and the finding is announced under that id; then one
+        (`FOLDED_INTO`) and the title of the `finding` body that announces it under that id next,
+        which is the title it was first announced with (cycle 16); then one
         `disposition.cleared` per decision the folds cleared - each finding as decided, from
         `_cleared` - after the last `finding` event of its id, so the line lands on the card the
         fold drew, worded for its `cause`."""
         for spent, finding in folds:
+            announced = self.context.finding_body(finding)
             self.sink.emit(
                 "finding.withdrawn",
                 {
                     "finding_id": spent,
+                    "title": announced["title"],
                     "reason": FOLDED_WITHDRAWAL.format(id=finding.id),
                     FOLDED_INTO: finding.id,
                 },
             )
-            self.sink.emit("finding", self.context.finding_body(finding))
+            self.sink.emit("finding", announced)
         for decided in cleared:
             self.sink.emit(
                 "disposition.cleared",

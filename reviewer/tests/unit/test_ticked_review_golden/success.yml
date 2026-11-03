@@ -1158,34 +1158,40 @@ files:
     :0,\\\"candidate\\\":1,\\\"absent\\\":1,\\\"bought\\\":1},\\\"coverage\\\":{\\\
     \"checked\\\":0,\\\"skipped\\\":0,\\\"unresolve…\",\"elapsed_s\":<DURATION_21>,\"\
     error\":null}}\r\n{\"seq\":211,\"at\":\"<TIME_212>\",\"type\":\"finding.withdrawn\"\
-    ,\"body\":{\"finding_id\":\"F-002\",\"reason\":\"bought part (your answer to ER-001)\"\
-    }}\r\n{\"seq\":212,\"at\":\"<TIME_213>\",\"type\":\"finding.withdrawn\",\"body\"\
-    :{\"finding_id\":\"F-005\",\"reason\":\"bought part (your answer to ER-001)\"\
+    ,\"body\":{\"finding_id\":\"F-002\",\"title\":\"missing group folder(s): 1-Ref,\
+    \ 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine\",\"reason\":\"bought\
+    \ part (your answer to ER-001)\"}}\r\n{\"seq\":212,\"at\":\"<TIME_213>\",\"type\"\
+    :\"finding.withdrawn\",\"body\":{\"finding_id\":\"F-005\",\"title\":\"the equation\
+    \ manager holds no equations\",\"reason\":\"bought part (your answer to ER-001)\"\
     }}\r\n{\"seq\":213,\"at\":\"<TIME_214>\",\"type\":\"finding.withdrawn\",\"body\"\
-    :{\"finding_id\":\"F-006\",\"reason\":\"bought part (your answer to ER-001)\"\
-    }}\r\n{\"seq\":214,\"at\":\"<TIME_215>\",\"type\":\"finding.withdrawn\",\"body\"\
-    :{\"finding_id\":\"F-011\",\"reason\":\"bought part (your answer to ER-001)\"\
-    }}\r\n{\"seq\":215,\"at\":\"<TIME_216>\",\"type\":\"finding.withdrawn\",\"body\"\
-    :{\"finding_id\":\"F-014\",\"reason\":\"bought part (your answer to ER-001)\"\
+    :{\"finding_id\":\"F-006\",\"title\":\"the equation manager holds no equations\"\
+    ,\"reason\":\"bought part (your answer to ER-001)\"}}\r\n{\"seq\":214,\"at\":\"\
+    <TIME_215>\",\"type\":\"finding.withdrawn\",\"body\":{\"finding_id\":\"F-011\"\
+    ,\"title\":\"FICT-KALO-PIN.SLDPRT has no Meridian Part Ref\",\"reason\":\"bought\
+    \ part (your answer to ER-001)\"}}\r\n{\"seq\":215,\"at\":\"<TIME_216>\",\"type\"\
+    :\"finding.withdrawn\",\"body\":{\"finding_id\":\"F-014\",\"title\":\"FICT-KALO-PIN.SLDPRT\
+    \ carries no MeridianRev\",\"reason\":\"bought part (your answer to ER-001)\"\
     }}\r\n{\"seq\":216,\"at\":\"<TIME_217>\",\"type\":\"finding.withdrawn\",\"body\"\
-    :{\"finding_id\":\"F-016\",\"reason\":\"a second verdict on what F-001 judges,\
-    \ shown as F-001\",\"folded_into\":\"F-001\"}}\r\n{\"seq\":217,\"at\":\"<TIME_218>\"\
-    ,\"type\":\"finding\",\"body\":{\"id\":\"F-001\",\"check\":\"rms.folders.present\"\
-    ,\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail,\
-    \ 5-Modify, 6-Quarantine\",\"status\":\"suspected\",\"severity\":\"low\",\"component_ids\"\
-    :[\"cmp:0001\"],\"drawing_locations\":[],\"provenance\":[{\"document_id\":\"doc:0002\"\
-    ,\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-7001.SLDPRT\",\"vault_version\"\
-    :1,\"revision\":null,\"configuration\":\"Default\",\"local_modified\":false,\"\
-    export_method\":\"native\"}],\"configuration\":\"Default\",\"observed\":\"missing\
-    \ group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine\"\
-    ,\"requirement\":\"Every one of the six groups exists as a folder.\",\"inputs\"\
-    :[],\"calculation\":null,\"tool_result_ids\":[10],\"coverage_limits\":[],\"recommended_action\"\
-    :\"Add the missing group folders and move the features that belong in them.\"\
-    ,\"group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\":null,\"\
-    source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":218,\"at\":\"<TIME_219>\"\
-    ,\"type\":\"finding.withdrawn\",\"body\":{\"finding_id\":\"F-017\",\"reason\"\
-    :\"a second verdict on what F-003 judges, shown as F-003\",\"folded_into\":\"\
-    F-003\"}}\r\n{\"seq\":219,\"at\":\"<TIME_220>\",\"type\":\"finding\",\"body\"\
+    :{\"finding_id\":\"F-016\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction,\
+    \ 3-Core, 4-Detail, 5-Modify, 6-Quarantine\",\"reason\":\"a second verdict on\
+    \ what F-001 judges, shown as F-001\",\"folded_into\":\"F-001\"}}\r\n{\"seq\"\
+    :217,\"at\":\"<TIME_218>\",\"type\":\"finding\",\"body\":{\"id\":\"F-001\",\"\
+    check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction,\
+    \ 3-Core, 4-Detail, 5-Modify, 6-Quarantine\",\"status\":\"suspected\",\"severity\"\
+    :\"low\",\"component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"provenance\"\
+    :[{\"document_id\":\"doc:0002\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\\
+    FICT-7001.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\":\"\
+    Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
+    :\"Default\",\"observed\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core,\
+    \ 4-Detail, 5-Modify, 6-Quarantine\",\"requirement\":\"Every one of the six groups\
+    \ exists as a folder.\",\"inputs\":[],\"calculation\":null,\"tool_result_ids\"\
+    :[10],\"coverage_limits\":[],\"recommended_action\":\"Add the missing group folders\
+    \ and move the features that belong in them.\",\"group\":null,\"capture_ids\"\
+    :[],\"disposition\":null,\"exception_id\":null,\"source\":\"code\",\"triage_tally\"\
+    :null}}\r\n{\"seq\":218,\"at\":\"<TIME_219>\",\"type\":\"finding.withdrawn\",\"\
+    body\":{\"finding_id\":\"F-017\",\"title\":\"the equation manager holds no equations\"\
+    ,\"reason\":\"a second verdict on what F-003 judges, shown as F-003\",\"folded_into\"\
+    :\"F-003\"}}\r\n{\"seq\":219,\"at\":\"<TIME_220>\",\"type\":\"finding\",\"body\"\
     :{\"id\":\"F-003\",\"check\":\"rms.params.global_variables_present\",\"title\"\
     :\"the equation manager holds no equations\",\"status\":\"demonstrated\",\"severity\"\
     :\"medium\",\"component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"provenance\"\
@@ -1199,89 +1205,92 @@ files:
     \ the dimensions from them.\",\"group\":null,\"capture_ids\":[],\"disposition\"\
     :null,\"exception_id\":null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"\
     seq\":220,\"at\":\"<TIME_221>\",\"type\":\"finding.withdrawn\",\"body\":{\"finding_id\"\
-    :\"F-018\",\"reason\":\"a second verdict on what F-004 judges, shown as F-004\"\
-    ,\"folded_into\":\"F-004\"}}\r\n{\"seq\":221,\"at\":\"<TIME_222>\",\"type\":\"\
-    finding\",\"body\":{\"id\":\"F-004\",\"check\":\"rms.params.dimensions_driven_by_equations\"\
-    ,\"title\":\"the equation manager holds no equations\",\"status\":\"suspected\"\
-    ,\"severity\":\"low\",\"component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"\
-    provenance\":[{\"document_id\":\"doc:0002\",\"vault_path\":\"C:\\\\Fictional\\\
-    \\Vault\\\\FICT-7001.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\"\
-    :\"Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
+    :\"F-018\",\"title\":\"the equation manager holds no equations\",\"reason\":\"\
+    a second verdict on what F-004 judges, shown as F-004\",\"folded_into\":\"F-004\"\
+    }}\r\n{\"seq\":221,\"at\":\"<TIME_222>\",\"type\":\"finding\",\"body\":{\"id\"\
+    :\"F-004\",\"check\":\"rms.params.dimensions_driven_by_equations\",\"title\":\"\
+    the equation manager holds no equations\",\"status\":\"suspected\",\"severity\"\
+    :\"low\",\"component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"provenance\"\
+    :[{\"document_id\":\"doc:0002\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\\
+    FICT-7001.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\":\"\
+    Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
     :\"Default\",\"observed\":\"the equation manager holds no equations\",\"requirement\"\
     :\"At least one dimension is driven by an equation.\",\"inputs\":[],\"calculation\"\
     :null,\"tool_result_ids\":[11],\"coverage_limits\":[],\"recommended_action\":\"\
     Drive the dimensions that carry the design intent from the global variables.\"\
     ,\"group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\":null,\"\
     source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":222,\"at\":\"<TIME_223>\"\
-    ,\"type\":\"finding.withdrawn\",\"body\":{\"finding_id\":\"F-019\",\"reason\"\
-    :\"a second verdict on what F-009 judges, shown as F-009\",\"folded_into\":\"\
-    F-009\"}}\r\n{\"seq\":223,\"at\":\"<TIME_224>\",\"type\":\"finding\",\"body\"\
-    :{\"id\":\"F-009\",\"check\":\"hygiene.part_number_matches_file\",\"title\":\"\
-    FICT-7000.SLDASM has no Meridian Part Ref\",\"status\":\"demonstrated\",\"severity\"\
-    :\"low\",\"component_ids\":[],\"drawing_locations\":[],\"provenance\":[{\"document_id\"\
-    :\"doc:0001\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-7000.SLDASM\"\
+    ,\"type\":\"finding.withdrawn\",\"body\":{\"finding_id\":\"F-019\",\"title\":\"\
+    FICT-7000.SLDASM has no Meridian Part Ref\",\"reason\":\"a second verdict on what\
+    \ F-009 judges, shown as F-009\",\"folded_into\":\"F-009\"}}\r\n{\"seq\":223,\"\
+    at\":\"<TIME_224>\",\"type\":\"finding\",\"body\":{\"id\":\"F-009\",\"check\"\
+    :\"hygiene.part_number_matches_file\",\"title\":\"FICT-7000.SLDASM has no Meridian\
+    \ Part Ref\",\"status\":\"demonstrated\",\"severity\":\"low\",\"component_ids\"\
+    :[],\"drawing_locations\":[],\"provenance\":[{\"document_id\":\"doc:0001\",\"\
+    vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-7000.SLDASM\",\"vault_version\"\
+    :1,\"revision\":null,\"configuration\":\"Default\",\"local_modified\":false,\"\
+    export_method\":\"native\"}],\"configuration\":\"Default\",\"observed\":\"FICT-7000.SLDASM\
+    \ has no Meridian Part Ref\",\"requirement\":\"a model's part-number property\
+    \ is its file name's stem\",\"inputs\":[\"doc:0001\"],\"calculation\":null,\"\
+    tool_result_ids\":[13],\"coverage_limits\":[],\"recommended_action\":\"Set the\
+    \ Meridian Part Ref of FICT-7000.SLDASM to its file name, or rename the file.\"\
+    ,\"group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\":null,\"\
+    source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":224,\"at\":\"<TIME_225>\"\
+    ,\"type\":\"finding.withdrawn\",\"body\":{\"finding_id\":\"F-020\",\"title\":\"\
+    FICT-7001.SLDPRT has no Meridian Part Ref\",\"reason\":\"a second verdict on what\
+    \ F-010 judges, shown as F-010\",\"folded_into\":\"F-010\"}}\r\n{\"seq\":225,\"\
+    at\":\"<TIME_226>\",\"type\":\"finding\",\"body\":{\"id\":\"F-010\",\"check\"\
+    :\"hygiene.part_number_matches_file\",\"title\":\"FICT-7001.SLDPRT has no Meridian\
+    \ Part Ref\",\"status\":\"demonstrated\",\"severity\":\"low\",\"component_ids\"\
+    :[\"cmp:0001\"],\"drawing_locations\":[],\"provenance\":[{\"document_id\":\"doc:0002\"\
+    ,\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-7001.SLDPRT\",\"vault_version\"\
+    :1,\"revision\":null,\"configuration\":\"Default\",\"local_modified\":false,\"\
+    export_method\":\"native\"}],\"configuration\":\"Default\",\"observed\":\"FICT-7001.SLDPRT\
+    \ has no Meridian Part Ref\",\"requirement\":\"a model's part-number property\
+    \ is its file name's stem\",\"inputs\":[\"doc:0002\"],\"calculation\":null,\"\
+    tool_result_ids\":[13],\"coverage_limits\":[],\"recommended_action\":\"Set the\
+    \ Meridian Part Ref of FICT-7001.SLDPRT to its file name, or rename the file.\"\
+    ,\"group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\":null,\"\
+    source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":226,\"at\":\"<TIME_227>\"\
+    ,\"type\":\"finding.withdrawn\",\"body\":{\"finding_id\":\"F-021\",\"title\":\"\
+    FICT-7000.SLDASM carries no MeridianRev\",\"reason\":\"a second verdict on what\
+    \ F-012 judges, shown as F-012\",\"folded_into\":\"F-012\"}}\r\n{\"seq\":227,\"\
+    at\":\"<TIME_228>\",\"type\":\"finding\",\"body\":{\"id\":\"F-012\",\"check\"\
+    :\"hygiene.revision_present\",\"title\":\"FICT-7000.SLDASM carries no MeridianRev\"\
+    ,\"status\":\"demonstrated\",\"severity\":\"low\",\"component_ids\":[],\"drawing_locations\"\
+    :[],\"provenance\":[{\"document_id\":\"doc:0001\",\"vault_path\":\"C:\\\\Fictional\\\
+    \\Vault\\\\FICT-7000.SLDASM\",\"vault_version\":1,\"revision\":null,\"configuration\"\
+    :\"Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
+    :\"Default\",\"observed\":\"FICT-7000.SLDASM carries no MeridianRev\",\"requirement\"\
+    :\"every part and assembly carries its revision\",\"inputs\":[\"doc:0001\"],\"\
+    calculation\":null,\"tool_result_ids\":[13],\"coverage_limits\":[],\"recommended_action\"\
+    :\"Give FICT-7000.SLDASM its MeridianRev.\",\"group\":null,\"capture_ids\":[],\"\
+    disposition\":null,\"exception_id\":null,\"source\":\"code\",\"triage_tally\"\
+    :null}}\r\n{\"seq\":228,\"at\":\"<TIME_229>\",\"type\":\"finding.withdrawn\",\"\
+    body\":{\"finding_id\":\"F-022\",\"title\":\"FICT-7001.SLDPRT carries no MeridianRev\"\
+    ,\"reason\":\"a second verdict on what F-013 judges, shown as F-013\",\"folded_into\"\
+    :\"F-013\"}}\r\n{\"seq\":229,\"at\":\"<TIME_230>\",\"type\":\"finding\",\"body\"\
+    :{\"id\":\"F-013\",\"check\":\"hygiene.revision_present\",\"title\":\"FICT-7001.SLDPRT\
+    \ carries no MeridianRev\",\"status\":\"demonstrated\",\"severity\":\"low\",\"\
+    component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"provenance\":[{\"document_id\"\
+    :\"doc:0002\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-7001.SLDPRT\"\
     ,\"vault_version\":1,\"revision\":null,\"configuration\":\"Default\",\"local_modified\"\
     :false,\"export_method\":\"native\"}],\"configuration\":\"Default\",\"observed\"\
-    :\"FICT-7000.SLDASM has no Meridian Part Ref\",\"requirement\":\"a model's part-number\
-    \ property is its file name's stem\",\"inputs\":[\"doc:0001\"],\"calculation\"\
-    :null,\"tool_result_ids\":[13],\"coverage_limits\":[],\"recommended_action\":\"\
-    Set the Meridian Part Ref of FICT-7000.SLDASM to its file name, or rename the\
-    \ file.\",\"group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\"\
-    :null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":224,\"at\":\"<TIME_225>\"\
-    ,\"type\":\"finding.withdrawn\",\"body\":{\"finding_id\":\"F-020\",\"reason\"\
-    :\"a second verdict on what F-010 judges, shown as F-010\",\"folded_into\":\"\
-    F-010\"}}\r\n{\"seq\":225,\"at\":\"<TIME_226>\",\"type\":\"finding\",\"body\"\
-    :{\"id\":\"F-010\",\"check\":\"hygiene.part_number_matches_file\",\"title\":\"\
-    FICT-7001.SLDPRT has no Meridian Part Ref\",\"status\":\"demonstrated\",\"severity\"\
-    :\"low\",\"component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"provenance\"\
-    :[{\"document_id\":\"doc:0002\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\\
-    FICT-7001.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\":\"\
-    Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
-    :\"Default\",\"observed\":\"FICT-7001.SLDPRT has no Meridian Part Ref\",\"requirement\"\
-    :\"a model's part-number property is its file name's stem\",\"inputs\":[\"doc:0002\"\
-    ],\"calculation\":null,\"tool_result_ids\":[13],\"coverage_limits\":[],\"recommended_action\"\
-    :\"Set the Meridian Part Ref of FICT-7001.SLDPRT to its file name, or rename the\
-    \ file.\",\"group\":null,\"capture_ids\":[],\"disposition\":null,\"exception_id\"\
-    :null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":226,\"at\":\"<TIME_227>\"\
-    ,\"type\":\"finding.withdrawn\",\"body\":{\"finding_id\":\"F-021\",\"reason\"\
-    :\"a second verdict on what F-012 judges, shown as F-012\",\"folded_into\":\"\
-    F-012\"}}\r\n{\"seq\":227,\"at\":\"<TIME_228>\",\"type\":\"finding\",\"body\"\
-    :{\"id\":\"F-012\",\"check\":\"hygiene.revision_present\",\"title\":\"FICT-7000.SLDASM\
-    \ carries no MeridianRev\",\"status\":\"demonstrated\",\"severity\":\"low\",\"\
-    component_ids\":[],\"drawing_locations\":[],\"provenance\":[{\"document_id\":\"\
-    doc:0001\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\FICT-7000.SLDASM\",\"\
-    vault_version\":1,\"revision\":null,\"configuration\":\"Default\",\"local_modified\"\
-    :false,\"export_method\":\"native\"}],\"configuration\":\"Default\",\"observed\"\
-    :\"FICT-7000.SLDASM carries no MeridianRev\",\"requirement\":\"every part and\
-    \ assembly carries its revision\",\"inputs\":[\"doc:0001\"],\"calculation\":null,\"\
-    tool_result_ids\":[13],\"coverage_limits\":[],\"recommended_action\":\"Give FICT-7000.SLDASM\
+    :\"FICT-7001.SLDPRT carries no MeridianRev\",\"requirement\":\"every part and\
+    \ assembly carries its revision\",\"inputs\":[\"doc:0002\"],\"calculation\":null,\"\
+    tool_result_ids\":[13],\"coverage_limits\":[],\"recommended_action\":\"Give FICT-7001.SLDPRT\
     \ its MeridianRev.\",\"group\":null,\"capture_ids\":[],\"disposition\":null,\"\
-    exception_id\":null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":228,\"\
-    at\":\"<TIME_229>\",\"type\":\"finding.withdrawn\",\"body\":{\"finding_id\":\"\
-    F-022\",\"reason\":\"a second verdict on what F-013 judges, shown as F-013\",\"\
-    folded_into\":\"F-013\"}}\r\n{\"seq\":229,\"at\":\"<TIME_230>\",\"type\":\"finding\"\
-    ,\"body\":{\"id\":\"F-013\",\"check\":\"hygiene.revision_present\",\"title\":\"\
-    FICT-7001.SLDPRT carries no MeridianRev\",\"status\":\"demonstrated\",\"severity\"\
-    :\"low\",\"component_ids\":[\"cmp:0001\"],\"drawing_locations\":[],\"provenance\"\
-    :[{\"document_id\":\"doc:0002\",\"vault_path\":\"C:\\\\Fictional\\\\Vault\\\\\
-    FICT-7001.SLDPRT\",\"vault_version\":1,\"revision\":null,\"configuration\":\"\
-    Default\",\"local_modified\":false,\"export_method\":\"native\"}],\"configuration\"\
-    :\"Default\",\"observed\":\"FICT-7001.SLDPRT carries no MeridianRev\",\"requirement\"\
-    :\"every part and assembly carries its revision\",\"inputs\":[\"doc:0002\"],\"\
-    calculation\":null,\"tool_result_ids\":[13],\"coverage_limits\":[],\"recommended_action\"\
-    :\"Give FICT-7001.SLDPRT its MeridianRev.\",\"group\":null,\"capture_ids\":[],\"\
-    disposition\":null,\"exception_id\":null,\"source\":\"code\",\"triage_tally\"\
-    :null}}\r\n{\"seq\":230,\"at\":\"<TIME_231>\",\"type\":\"coverage.withdrawn\"\
-    ,\"body\":{\"checks\":[\"coverage.prerun.maybe_bought\"],\"buckets\":[\"unresolved\"\
-    ]}}\r\n{\"seq\":231,\"at\":\"<TIME_232>\",\"type\":\"coverage\",\"body\":{\"bucket\"\
-    :\"skipped\",\"item\":{\"check\":\"coverage.prerun.bought_parts\",\"scope\":{\"\
-    component_ids\":[],\"pairs\":[],\"configuration\":null,\"positions\":[],\"document_ids\"\
-    :[\"doc:0003\"]},\"reason\":\"1 part not graded for modelling practice or hygiene\
-    \ (bought): FICT-KALO-PIN.SLDPRT (you answered it is bought); withdrew F-002,\
-    \ F-005, F-006, F-011, F-014\",\"error\":null}}}\r\n{\"seq\":232,\"at\":\"<TIME_233>\"\
-    ,\"type\":\"usage\",\"body\":{\"round_index\":0,\"provider\":\"fake\",\"model\"\
-    :\"fake-1\",\"input_tokens\":1337,\"cached_input_tokens\":419,\"cache_write_tokens\"\
-    :null,\"output_tokens\":211,\"reasoning_tokens\":67,\"tool_result_input_tokens\"\
+    exception_id\":null,\"source\":\"code\",\"triage_tally\":null}}\r\n{\"seq\":230,\"\
+    at\":\"<TIME_231>\",\"type\":\"coverage.withdrawn\",\"body\":{\"checks\":[\"coverage.prerun.maybe_bought\"\
+    ],\"buckets\":[\"unresolved\"]}}\r\n{\"seq\":231,\"at\":\"<TIME_232>\",\"type\"\
+    :\"coverage\",\"body\":{\"bucket\":\"skipped\",\"item\":{\"check\":\"coverage.prerun.bought_parts\"\
+    ,\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":null,\"positions\"\
+    :[],\"document_ids\":[\"doc:0003\"]},\"reason\":\"1 part not graded for modelling\
+    \ practice or hygiene (bought): FICT-KALO-PIN.SLDPRT (you answered it is bought);\
+    \ withdrew F-002, F-005, F-006, F-011, F-014\",\"error\":null}}}\r\n{\"seq\":232,\"\
+    at\":\"<TIME_233>\",\"type\":\"usage\",\"body\":{\"round_index\":0,\"provider\"\
+    :\"fake\",\"model\":\"fake-1\",\"input_tokens\":1337,\"cached_input_tokens\":419,\"\
+    cache_write_tokens\":null,\"output_tokens\":211,\"reasoning_tokens\":67,\"tool_result_input_tokens\"\
     :null,\"total_tokens\":1548,\"latency_s\":<DURATION_22>,\"cache_diagnostic\":null}}\r\
     \n{\"seq\":233,\"at\":\"<TIME_234>\",\"type\":\"text.delta\",\"body\":{\"text\"\
     :\"Regraded \"}}\r\n{\"seq\":234,\"at\":\"<TIME_235>\",\"type\":\"text.delta\"\

@@ -344,6 +344,10 @@ model's opening, and the id maps a page would need to re-key its own work are no
    when first carried, and one it carried itself keeps the id it already has. `withdrawn.earlier`
    is " (earlier check run, session {session_id})", the id in full as that record's `report.md`
    heads itself.
+   *Amended 2026-11-03 (feature 002 cycle 16, T383):* a carried withdrawal keeps the `title` of the
+   body it carries, the finding's display title, when that body names one, and `report.md` names it
+   right after the id, before the mark; one carried from a record written before has none, and its
+   line is as before.
 
 Nothing is carried by its number alone (FR-029). The carry ends with `_settle_waiting(applied)`,
 the step the waiting apply ends with too (owner decision 71A; `review-flow.md` section 4): the
