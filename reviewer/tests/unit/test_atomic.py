@@ -18,11 +18,14 @@ the rule move onto it (plan decisions RF-31, RF-88; owner decision 34A; `benchma
    another handle holds the target (WinError 5, whatever its share mode) or the temporary
    (WinError 32); the writer tries again after short waits, about 2 s in all, from the same
    whole temporary, and past them the refusal reaches the caller as before. Any other
-   error, and every other platform's, which names no WinError, raises at once.
+   error, and every other platform's, which names no WinError, raises at once; so does a
+   target no wait lets through, a folder at its name or a file marked read-only (the
+   cycle's Tier 2 review).
 
 `os.replace` is patched through `swreview.atomic.os`, the module's own `import os`, which is
 how the writers' failure tests reach it once they move here (T011); the waits are recorded
-through `time.sleep`, which the module calls through its own `import time`.
+through `swreview.atomic.time`, the module's own `import time`, replaced for the writer
+alone (`_waits`).
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -240,9 +244,13 @@ def _error(kind: type[OSError], code: int, winerror: int | None) -> OSError:
 
 
 def _waits(monkeypatch: pytest.MonkeyPatch) -> list[float]:
-    """The writer's waits, recorded instead of slept."""
+    """The writer's waits, recorded instead of slept.
+
+    *Changed 2026-11-03 on purpose (002 T412, cycle 25's Tier 2 review):* through the
+    writer's own `time`, not the process's `time.sleep`, so another live thread's sleep is
+    neither recorded nor cut short and a `waits ==` assert cannot flake in a full run."""
     waits: list[float] = []
-    monkeypatch.setattr(time, "sleep", waits.append)
+    monkeypatch.setattr(atomic, "time", SimpleNamespace(sleep=waits.append))
     return waits
 
 

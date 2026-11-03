@@ -51,6 +51,7 @@ import json
 import logging
 import os
 import shutil
+import threading
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -1334,6 +1335,10 @@ class ChatServer:
         self.chats: dict[UUID, ChatSession] = {}
         self._workers: dict[UUID, ThreadPoolExecutor] = {}
         self._pending_run_dirs: set[Path] = set()
+        self._check_folders: dict[Path, threading.Lock] = {}
+        """One lock per check folder an accept has reached, held across the accept and the
+        check's re-run (`_accept_and_recheck`); `_check_folders_guard` guards the dict."""
+        self._check_folders_guard = threading.Lock()
         # The separate route module reuses ChatError after this module is loaded.
         from swreview.chat.engineering_context import EngineeringContextServer
 
@@ -1897,9 +1902,9 @@ class ChatServer:
                 "a blanket exclusion and is refused"
             )
         family = await run_in_threadpool(partial(self._family_of, check_dir))
-        exception_id = await run_in_threadpool(
+        exception_id, result = await run_in_threadpool(
             partial(
-                self._accept_exception,
+                self._accept_and_recheck,
                 check_dir,
                 finding_id,
                 note=note,
@@ -1907,7 +1912,6 @@ class ChatServer:
                 family=family,
             )
         )
-        result = await run_in_threadpool(partial(self._recheck, check_dir, family))
         # A waived finding keeps its row (Principle VI: never hidden), so this is the same
         # finding rendered as checked within scope rather than a finding that went away.
         row = next(
@@ -2179,6 +2183,24 @@ class ChatServer:
             document_id=record.documents or None,
             standards_profile=record.standards_profile,
         )
+
+    def _accept_and_recheck(
+        self, check_dir: Path, finding_id: str, *, note: str, by: str, family: str
+    ) -> tuple[str, dict[str, Any]]:
+        """Accept (`_accept_exception`), then evaluate the folder again (`_recheck`), holding
+        the folder's one lock across both. Blocking.
+
+        Two accepts on one folder take turns, so each reads the store the other wrote and the
+        later one's re-run lands last: a save that waits out a reader (`atomic.write_atomic`)
+        never lands over a later one (002 cycle 25's Tier 2 review).
+        """
+        with self._check_folders_guard:
+            lock = self._check_folders.setdefault(check_dir, threading.Lock())
+        with lock:
+            exception_id = self._accept_exception(
+                check_dir, finding_id, note=note, by=by, family=family
+            )
+            return exception_id, self._recheck(check_dir, family)
 
     def _accept_exception(
         self, check_dir: Path, finding_id: str, *, note: str, by: str, family: str

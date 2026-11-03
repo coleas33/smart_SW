@@ -10,8 +10,9 @@ through `swreview.atomic.os`.
 Windows refuses the replace (`MoveFileExW`) while another handle holds the target,
 whatever its share mode, or the temporary, and a reader holds a record for about a
 millisecond, so such a refusal is tried again after each of `REPLACE_WAITS_S`, the
-temporary whole meanwhile (002 research, cycle 25). `time` is imported as a module too,
-so a test records the waits through `time.sleep`.
+temporary whole meanwhile (002 research, cycle 25); a target no wait lets through, a
+folder at its name or a file marked read-only, raises at once. `time` is imported as a
+module too, so a test records the waits through `swreview.atomic.time`.
 
 It takes bytes only, never text: a text-mode write gives `\\r\\n` on Windows and would move
 a digest, so the caller encodes and the bytes land as given.
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import stat
 import tempfile
 import time
 from pathlib import Path
@@ -59,7 +61,8 @@ def write_atomic(path: Path, data: bytes) -> None:
 
 def _replace(temporary: Path, path: Path) -> None:
     """`os.replace`, tried again after each of `REPLACE_WAITS_S` while another handle
-    refuses it; any other error, and the refusal after the last wait, raises as it is.
+    refuses it; any other error, a target no wait lets through (`_never_takes`), and the
+    refusal after the last wait raise as they are.
 
     Only Windows names a `winerror`, so on every other platform nothing is tried again.
     """
@@ -68,7 +71,20 @@ def _replace(temporary: Path, path: Path) -> None:
             os.replace(temporary, path)
             return
         except PermissionError as refusal:
-            if getattr(refusal, "winerror", None) not in HELD_ELSEWHERE:
+            if getattr(refusal, "winerror", None) not in HELD_ELSEWHERE or _never_takes(path):
                 raise
         time.sleep(wait)
     os.replace(temporary, path)
+
+
+def _never_takes(path: Path) -> bool:
+    """Whether `path` is a target no wait lets a replace through: a folder at its name, or
+    a file marked read-only, each of which Windows refuses with the `ERROR_ACCESS_DENIED` a
+    held file gives. One absent - a first write, whose temporary is held - or unreadable is
+    waited for as a held one is; an access list that denies the write is told from neither.
+    """
+    try:
+        mode = path.stat().st_mode
+    except OSError:
+        return False
+    return stat.S_ISDIR(mode) or not mode & stat.S_IWRITE

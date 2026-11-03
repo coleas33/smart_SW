@@ -612,6 +612,14 @@ def _accept_the_first(run: runner.ReviewRun) -> None:
     record_disposition(run, run.session.findings[0].id, decision="accepted", note="", by="FICT")
 
 
+def _accept_the_first_before_the_end(run: runner.ReviewRun) -> None:
+    """A decision on a review with no end yet, as a turn leaves it until its finalization
+    (`_run_turn`), so the close's is the one save that writes an end: two ends read from
+    one tick of the clock would make the two saves the same bytes."""
+    run.session.ended_at = None
+    _accept_the_first(run)
+
+
 def _reject_the_second(run: runner.ReviewRun) -> None:
     record_disposition(run, run.session.findings[1].id, decision="rejected", note="", by="FICT")
 
@@ -629,7 +637,7 @@ def _close(run: runner.ReviewRun) -> None:
     [
         (_accept_the_first, _reject_the_second),
         (_record_minutes, _reject_the_second),
-        (_accept_the_first, _close),
+        (_accept_the_first_before_the_end, _close),
     ],
     ids=["a-decision-then-another", "minutes-then-a-decision", "a-decision-then-the-close"],
 )
