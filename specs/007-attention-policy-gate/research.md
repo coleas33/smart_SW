@@ -1585,3 +1585,56 @@ T099's second dated sub-item records. *Left open* credited the line with what on
 that a correction retypes all six from the note, and that 0 is never typed for a figure not known
 yet. It now credits step 4.1, the line saying each figure replaces what is recorded. Words in this
 record only: no code, test or words file changed.
+
+## R15. The update and registration scripts and the runbook read the checkout literally (cycle 26, 2026-11-03)
+
+**Settled** (T100, 2026-11-03): every read of the checkout in
+`extractor/tools/update-workstation.ps1`, `extractor/tools/register-addin.ps1` and the PowerShell
+of [`docs/workstation-runbook.md`](../../docs/workstation-runbook.md) names it literally. Cycle 19's
+own finding in [`docs/review-backlog.md`](../../docs/review-backlog.md) (R13, *Left open*),
+proposed in roadmap run 6's brief and picked by the owner on 2026-11-03, at review Tier 3 (the
+gates and CI, no review). It carries no decision of its own.
+
+Why: Windows PowerShell reads a path given by `-Path`, or by position, as a wildcard, and so do
+the call operator and `Set-Alias`. Tried in Windows PowerShell 5.1 on fictional checkouts:
+`Resolve-Path` of a path whose brackets match nothing answers nothing, with no error, so in a
+checkout under `chk [1]` alone the update script stops at its next line, `Join-Path : Cannot
+bind argument to parameter 'Path' because it is null`. Beside `chk 1`, a checkout of its own,
+`Resolve-Path` answers that folder, and so do `Push-Location`, the registration script's
+`Test-Path` and `Resolve-Path`, the call operator by which `-Register` runs the registration
+script, and the runbook's `cd '<repo>'` and alias: the update script would build, gate and
+register the other checkout. A script run by its relative path from the checkout, as the
+runbook runs both, is the checkout's own, and its `$PSScriptRoot` names its folder literally.
+
+Defaults taken:
+
+1. Every cmdlet that reads the checkout, or a path in it, takes it by `-LiteralPath`: the update
+   script's two `Push-Location`s, into the checkout and its `reviewer` folder, and its `Test-Path`
+   of the built console; the registration script's `Test-Path` of the build folder and of the
+   add-in in it; and the runbook's three `cd '<repo>'` (sections 3, 4 and 9), `cd` being
+   `Set-Location`'s alias. The runbook's `cd` is named in no brief, but it reads the checkout as
+   the alias does, and every command after it runs in the folder it went into.
+2. `Convert-Path -LiteralPath` in place of `(Resolve-Path ...).Path`, in both scripts: it answers
+   the same string for an ordinary path, `..` resolved, and stops with `Cannot find path` where a
+   wildcard's `Resolve-Path` answered nothing.
+3. The call operator and `Set-Alias` take no `-LiteralPath`, so their path is escaped by
+   `[Management.Automation.WildcardPattern]::Escape`, as the seat plan's alias is since cycle 19:
+   the update script's run of the registration script, the alias line it prints for the engineer
+   to paste, and the runbook's two alias lines, in its table of where things are and in its quick
+   reference. A path with no bracket is unchanged.
+4. The registration script's `Copy-Item` of the seat's interops reads its `-Destination`, the
+   build folder, literally already (tried in Windows PowerShell 5.1); its source, an interop
+   under `-SolidWorksRoot`, is taken by `-LiteralPath` too, so the one call that names the
+   checkout reads every path it names literally.
+5. A read that is not of the checkout stays as it was, each name it gives listed in the static
+   pin with what it is: the seat's interops under `-SolidWorksRoot`, the 64-bit regasm under
+   `%WINDIR%`, the standards profile and the logs in the account's local application data, the
+   runbook's registry keys, and the script block `Invoke-Step` runs. A path relative to the
+   checkout - the runbook's `cd reviewer` and `cd ..`, and the scripts run as
+   `.\extractor\tools\...` - stays by `-Path`, which Windows PowerShell 5.1 reads rightly there
+   (R13, default 3).
+6. The run-time pin runs only the lines that find the checkout, as they stand in the scripts:
+   the update script's first lines and its health step's console lines, and the registration
+   script's lines that find its build, each in a file of its own in the fictional checkout's
+   `extractor\tools`, so its `$PSScriptRoot` is the script's own. The lines run alone as they
+   are, so no function was needed; nothing builds, registers or touches the registry.
