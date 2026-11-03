@@ -115,6 +115,9 @@ namespace SwReview.AddIn.Tests;
 /// *Changed 2026-11-03 (002 T404; cycle 23's Tier 2 review):* a refusal of the record carries the review's tally too, as a
 /// reply does, and the page shows it with the record; and it draws both only while the card holds the record it held when
 /// that press was made, since a later press's reply or event can land before the refusal, whose record is then the older.
+///
+/// *Changed 2026-11-03 (002 T404; cycle 23's read-only check):* a refusal of the record that carries no tally hides the one
+/// shown, as a reply that carries none does.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -2124,6 +2127,47 @@ public sealed class ReviewPageTriageTests
             Assert.Equal(new[] { "wrong" }, Pressed(card));
             Assert.Equal(0, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("count").GetInt32());
             Assert.Equal(Lines(tally), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+        });
+    }
+
+    /// <summary>
+    /// Cycle 23's read-only check (002 T404): a refusal of the record that carries no tally hides the one shown, as a reply that
+    /// carries none does, since the backend sends one only while some finding records a triage. The session has ended, so the
+    /// stream is closed, and the summary's tally counts F-002's `wrong` and F-001, accepted with no triage, not recorded. Another
+    /// client's turn then clears F-002's Reject, unseen once the stream closed, so no finding records a triage. Accept pressed
+    /// again on F-001 with no outcome picked is `409 OutcomeNeeded`, naming the Accept with no triage and no tally: the card
+    /// shows the Accept above the refusal, and the tally is hidden.
+    /// </summary>
+    [Fact]
+    public void ARefusalOfTheRecordThatCarriesNoTallyHidesTheTally()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            JsonObject before = Tally(0, 0, 1, 0, 1, 0);
+            Dictionary<string, object?> untriaged = Disposition("accepted", string.Empty, null);
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001", untriaged));
+            await driver.Push(Chat, 2, "finding", Finding("F-002", RejectedWrong()));
+            await driver.RouteAttention(Chat, SummarySample.Json(summary => summary["triage_tally"] = before.DeepClone()));
+            await driver.EndSession(Chat);
+            Assert.Equal(Lines(before), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+
+            await driver.Route(
+                "POST",
+                DispositionPath("F-001"),
+                409,
+                Refused(
+                    "OutcomeNeeded",
+                    "FICT finding F-001 is accepted with no triage recorded; send 'accepted' again with a triage to record one",
+                    untriaged));
+            await Decide(driver, "F-001", "accept");
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Equal("OutcomeNeeded", card.GetProperty("refusalClass").GetString());
+            Assert.Equal("Disposition: accepted by " + Engineer + " at " + RecordedAt, card.GetProperty("record").GetString());
+            JsonElement gone = await driver.Read(ReadTally);
+            Assert.False(gone.GetProperty("shown").GetBoolean(), "a refusal that carries no tally left the tally shown.");
+            Assert.Empty(ReviewPageDriver.Strings(gone, "lines"));
         });
     }
 

@@ -815,7 +815,11 @@ def test_the_decision_recorded_sent_again_with_nothing_new_says_it_is_already_re
     the terminal rule or, on a Defer, what may follow it. Three cases added, the same press on a
     record that holds a triage, its triage let go: a pass accepted with the miss, and a flagged
     Accept and Reject - the case `the-same-decision-with-none`, which
-    `test_a_second_triage_or_another_decision_is_still_refused` held as a plain `ValueError`."""
+    `test_a_second_triage_or_another_decision_is_still_refused` held as a plain `ValueError`.
+
+    *Changed 2026-11-03 on purpose (002 T404; cycle 23's read-only check):* the pass's Defer, the
+    one Defer this refusal meets, also says that it can still move to accepted or rejected, as the
+    page's sentence says a Defer still needs one of them; the other five messages are unchanged."""
     run_dir = pass_folder(tmp_path)
     apply_disposition(run_dir, finding_id, decision, "FICT note", BY, at=FIRST_AT, triage=held)
     before = folder_bytes(run_dir)
@@ -826,9 +830,10 @@ def test_the_decision_recorded_sent_again_with_nothing_new_says_it_is_already_re
     # Read from the module, so a missing class fails these cases alone and not the collection.
     assert type(refused.value) is getattr(dispositions, "DecisionAlreadyRecordedError", None)
     with_triage = f" with its triage ({held!r})" if held is not None else ""
+    follows = "; it can still move to accepted or rejected" if decision == "deferred" else ""
     assert str(refused.value) == (
         f"finding {finding_id} is already {decision}{with_triage}; {decision!r} again with no "
-        "triage changes nothing"
+        f"triage changes nothing{follows}"
     )
     assert folder_bytes(run_dir) == before
 

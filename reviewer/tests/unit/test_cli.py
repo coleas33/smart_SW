@@ -1415,8 +1415,24 @@ def test_disposition_says_to_pick_an_outcome_when_the_same_decision_comes_again_
     assert run_files(run_dir) == before
 
 
+@pytest.mark.parametrize(
+    ("decision", "line"),
+    [
+        (
+            "accepted",
+            "error: DecisionAlreadyRecordedError: finding F-001 is already accepted; 'accepted' "
+            "again with no triage changes nothing",
+        ),
+        (
+            "deferred",
+            "error: DecisionAlreadyRecordedError: finding F-001 is already deferred; 'deferred' "
+            "again with no triage changes nothing; it can still move to accepted or rejected",
+        ),
+    ],
+    ids=["accepted", "deferred"],
+)
 def test_disposition_on_a_pass_decided_again_without_an_outcome_says_it_is_already_recorded(
-    run_dir: Path,
+    run_dir: Path, decision: str, line: str
 ) -> None:
     """Cycle 15's Tier 2 review: on a pass - 'Checked, no issue' - accepted with no triage, the
     same `--decision` again with none is reported as before H-c-010, exit 1 and one line on stderr
@@ -1428,7 +1444,11 @@ def test_disposition_on_a_pass_decided_again_without_an_outcome_says_it_is_alrea
     `test_disposition_on_a_pass_decided_again_without_an_outcome_names_value_error`. The line names
     the record's own class, `DecisionAlreadyRecordedError`, and says the decision is already
     recorded, as the page's sentence for it does, where it named `ValueError` and the terminal
-    rule."""
+    rule.
+
+    *Changed 2026-11-03 on purpose (002 T404; cycle 23's read-only check):* a pass deferred with no
+    triage, deferred again with none, added: its line also says that it can still move to
+    accepted or rejected, as the page's sentence says a Defer still needs one of them."""
     session = load_session(run_dir / "session.json")
     session.findings[0] = session.findings[0].model_copy(
         update={"status": "checked_within_scope", "severity": "info"}
@@ -1440,7 +1460,7 @@ def test_disposition_on_a_pass_decided_again_without_an_outcome_says_it_is_alrea
             str(run_dir),
             "F-001",
             "--decision",
-            "accepted",
+            decision,
             "--by",
             "FICT-ENG",
             "--json",
@@ -1448,15 +1468,10 @@ def test_disposition_on_a_pass_decided_again_without_an_outcome_says_it_is_alrea
     )
     before = run_files(run_dir)
 
-    again = invoke(
-        "disposition", str(run_dir), "F-001", "--decision", "accepted", "--by", "FICT-ENG"
-    )
+    again = invoke("disposition", str(run_dir), "F-001", "--decision", decision, "--by", "FICT-ENG")
 
     assert again.exit_code == 1
-    assert again.stderr.splitlines() == [
-        "error: DecisionAlreadyRecordedError: finding F-001 is already accepted; 'accepted' again "
-        "with no triage changes nothing"
-    ]
+    assert again.stderr.splitlines() == [line]
     assert run_files(run_dir) == before
 
 
