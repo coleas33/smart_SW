@@ -16,21 +16,19 @@ Nothing here is a task: proposed work says "proposed, not in any tasks.md" and r
 | 2 (update) | 2026-11-01 | `65bc3b21` | 185A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 6 of 8: Opus 6 (three hunters, lenses a, c and d, g; three skeptics) |
 | 3 (update) | 2026-11-02 | `821944de` | 194A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 4 of 8: Opus 4 (one hunter, two skeptics, the writer) |
 | 4 (update) | 2026-11-02 | `0b9731b6` | 196A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 3 of 8: Opus 3 (one hunter, one skeptic, the writer) |
+| 5 (update) | 2026-11-03 | `0ffb5c38` | 198A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 3 of 8: Opus 3 (one hunter, one skeptic, the writer) |
 
 ## Change log
 
-### Run 4, 2026-11-02 (update run)
+### Run 5, 2026-11-03 (update run)
 
-Read `git log d1483694..0b9731b6` (PRs #68 to #70), the register rows 195A and 196A and no sitting
-record (none since 2026-10-13); re-read the holes they touch, lenses a, c and g. **Closed offline:**
-H-c-008 (PR #69), its tests in [`holes.md`](holes.md). **Opened**, verified: H-c-009, the repair
-press drops a note sent with it, such as 188A's date (12). **Restated**, scores kept: H-g-010 (14),
-its code half done by PR #70, its sitting step left; seven more rows take the batch's evidence.
-**Run 3's next cycles:** 8 to 10 done (PRs #68 to #70); its two backlog features picked now (29);
-M0's tables wait for M0-a's planning. **Measured:** nothing at a seat. **Decided:** 196A (24A,
-cycle 8), done with 195A (PR #68); in this run, 197A (28A) and 198A (29). One security item reported
-to the owner privately, 2026-11-02 (cycle 8). One security item reported to the owner privately,
-2026-11-02 (run 4). Run 3's entry: [`archive/2026-11-02.md`](archive/2026-11-02.md#run-3-2026-11-02-update-run).
+Read `git log 0ffb5c38..13611b22` (PRs #72 to #75), 197A, 198A and no sitting record; re-read lenses a,
+c and g. **Closed offline:** H-c-009 (PR #72, 198A). **Opened**, verified: H-c-010, a press repeated
+with no outcome is told to reload, which discards the typed note, and a console decision after a Defer
+drops its note unless `--note` is given (12). **Restated**, scores kept: ten rows, H-a-009 and H-g-010
+with feature routes, all in [`holes.md`](holes.md). **Run 4's next cycles:** 11 to 14 done (PRs #72,
+#74, #73, #75); M0's tables wait for M0-a's planning (197A). **Measured:** nothing at a seat.
+**Decided:** nothing new; 198A done. Run 4's entry: [`archive/2026-11-02.md`](archive/2026-11-02.md#run-4-2026-11-02-update-run).
 
 ## Value model
 
@@ -125,7 +123,7 @@ new check enters without a real instance and the owner's estimate of its frequen
      or not, and the engineer judges each (H-g-002); on B, only these (190A).
   5. One report, carried off the seat by `swreview handoff`, read by the second reader, who gives
      each finding the four outcomes.
-- **Holes it closes:** H-a-001 to H-a-004, H-a-009, H-a-010, H-a-013, H-a-014, H-c-006, H-c-009,
+- **Holes it closes:** H-a-001 to H-a-004, H-a-009, H-a-010, H-a-013, H-a-014, H-c-006, H-c-010,
   H-e-003, H-g-002, H-g-003, H-g-010, H-g-011, H-g-013.
 - **Seat time:** two sittings after S1: M0-a, no key (step 1, the triaged review, the replay's
   extractions, step 6); M0-b, S3's first sitting (steps 2.5, 4.1, 4.2, 4.5 and 4.11).
@@ -212,15 +210,14 @@ new check enters without a real instance and the owner's estimate of its frequen
 
 ## The next cycles' brief
 
-**Cycles 1 to 10: done** (PRs #59, #61 to #66, #68 to #70). **Picked by the owner, 2026-11-02** (29),
-each failing tests first at its 180A tier, merged on the owner's word:
-- **Cycle 11** (H-c-009, 198A; Tier 2): the repair press keeps its note; a Defer takes an outcome.
-- **Cycle 12** (backlog, cycle 6; H-g-013; Tier 1): Check again keeps the earlier record's cleared
-  lines, on the card and in `report.md`, and its withdrawals in `report.md`.
-- **Cycle 13** (backlog, cycles 7 and 9; 002 research; Tier 2), four page fixes: the tally counts a
-  resumed turn's finding at once; cards get their words after any reload; a read-only restore's
-  cleared line asks for no decision, and its Transcript shows withdrawals after a restart.
-- **Cycle 14** (Tier 3): one seat command writes the timed review's stamp and durations to `notes\timing.txt`.
+**Cycles 1 to 14: done** (PRs #59, #61 to #66, #68 to #70, #72 to #75). **Proposed, not in any tasks.md**, best first, each at its 180A tier:
+- **The card names when an earlier review first showed its finding**, for 188A's date (H-a-009, 16; Tier 2).
+- **Minutes typed on the Review page**, so no restart or console step before timing (H-g-010, 14; Tier 2).
+- **A restored or carried withdrawal names its finding's title**, on a read-only restore and in `report.md` (H-c-006, 14; backlog, cycle 13; Tier 2).
+- **A refused press names the missing outcome; the console keeps a Defer's note** (H-c-010, 12; backlog, cycle 11; Tier 2).
+- **`Show-SetupTime` takes the timed review's own `POST /sessions` answer** (backlog, cycle 14; needs a design; Tier 3).
+- **The checkout path read literally at the seat** (backlog, cycle 14; Tier 3).
+- **The replay fixtures regenerated once with the null tally key**, from the owner's recordings: the owner's to-do (backlog, cycle 13).
 - **Then M0's tables** (H-a-003, H-a-004, H-a-009, H-a-010 with 190A, H-a-013, H-a-014, H-g-010,
   H-g-011, H-g-013; 197A), when M0-a is planned; then H-g-003's escape keys, by hand till then.
 
@@ -237,14 +234,17 @@ the north-star question waits for M0's exit; the 2026-10-14 roadmap stays where 
 moving it into `docs/history/` breaks six links in files this run may not change; M0-b reviews A
 fresh, the send box ticked first (H-g-013); how the vault returns an old revision with its
 references, assumption, owner to confirm (H-a-013); from cycles 4 and 7, each notice's tally is its
-count when sent, and an untimed B's start and end times stay in the findings document (190A); and,
+count when sent, and an untimed B's start and end times stay in the findings document (190A);
 from cycles 9 and 10, the card's words "No triage recorded yet", the repair named only on a card
-decided without a triage, and `report.md`'s withdrawn part placed right after the Summary.
+decided without a triage, and `report.md`'s withdrawn part placed right after the Summary; and,
+from cycles 11 to 14: 198A's first note stays over a non-blank edit, as the card says; a refused press leaves
+the note box as typed; a cleared line is carried only at its own verdict, and no decision is restored to a
+finding back at the decided one (194A); carried withdrawals name the full session id; mid-turn the tally
+counts one too many per re-run; and `Save-TimingNote` times from the run folder's stamp to its `ended_at`.
 
-**Owner questions the holes route to a decision, each asked with its milestone:** one model for
-the seat, the pane default and the study (H-e-003, M0); a lighter seat update (H-c-003), a growth
-budget (H-f-005), an ask register (H-g-008), and parking 004 if 004 T003's numbers are poor
-(H-f-004), all M1; 14A and the 2026-10-13 retest (H-c-001), the press-fit rule (H-d-002), labels
-for reads never checked against known values (H-d-003, H-d-004), and carrying answers into a
-re-review (H-c-002), all M2; and, on M0-a's records, which by-hand reading the net counts
-(H-a-002).
+**Owner questions the holes route to a decision, each asked with its milestone:** one model for the
+seat, the pane default and the study (H-e-003, M0); a lighter seat update (H-c-003), a growth budget
+(H-f-005), an ask register (H-g-008), and parking 004 if 004 T003's numbers are poor (H-f-004), all
+M1; 14A and the 2026-10-13 retest (H-c-001), the press-fit rule (H-d-002), labels for reads never
+checked against known values (H-d-003, H-d-004), and carrying answers into a re-review (H-c-002),
+all M2; and, on M0-a's records, which by-hand reading the net counts (H-a-002).
