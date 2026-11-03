@@ -386,6 +386,7 @@
     // it is the fold's first labelled row, "Rule" - one press away, never gone.
     head.appendChild(line);
     head.appendChild(el('h3', 'title', body.title || '(untitled finding)'));
+    append(head, [firstShownLine(body, labels)]);
     append(head, [noTriageLine(body, labels, readOnly)]);
     card.appendChild(head);
 
@@ -481,6 +482,21 @@
     var key = (disposition && disposition.decision) ? disposition.decision : 'undecided';
     var text = labelOf(labels, 'no_triage', readOnly ? 'read_only' : key, '');
     return text ? el('p', 'card-no-triage', text) : null;
+  }
+
+  /**
+   * Roadmap hole H-a-009 (002 FR-031, cycle 17): when an earlier review of the same document first showed this finding, so
+   * owner decision 188A's date is read, not recalled - the backend's sentence (`labels.first_shown.earlier`) with `{date}` the
+   * body's `first_shown`, under the title, written as text like every backend string. Nothing for a body without a date, an
+   * older backend's, and nothing with no labels, the head as before (009 FR-030).
+   */
+  function firstShownLine(body, labels) {
+    var date = body.first_shown;
+    var words = labelOf(labels, 'first_shown', 'earlier', '');
+    if (typeof date !== 'string' || !date || !words) {
+      return null;
+    }
+    return el('p', 'card-first-shown', words.split('{date}').join(date));
   }
 
   /** The head's line drawn again from `body`, the finding as now recorded (`app.js`, after each decision). */

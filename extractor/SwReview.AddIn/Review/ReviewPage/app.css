@@ -1191,6 +1191,14 @@ body.view-transcript #results {
   -webkit-line-clamp: none;
 }
 
+/* When an earlier review of the same document first showed the finding, under its title, in the
+   second ink: a fact for the triage's note, not a call to act (H-a-009). */
+.card-first-shown {
+  margin: 2px 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+}
+
 /* A flagged finding with no triage recorded says so under its title, in the hue of what only the
    engineer can settle (H-c-008). */
 .card-no-triage {
