@@ -1324,3 +1324,42 @@ post that window allows, of the figures shown again, records them again and is l
 fact now reads the retry's second; the seat plan's step 4.5, item 4, names a failed review beside
 a restart, as step 4.1 does; and two test summaries and 009 `contracts/plain-words.md` section 1
 were put right.
+
+## R13. The checkout read literally at the seat (cycle 19, 2026-11-03)
+
+**Settled** (T092, 2026-11-03): every read of the checkout, `$R`, in the seat plan's PowerShell
+names it literally. Roadmap run 5's brief proposed it from the third item of cycle 14's findings
+in [`docs/review-backlog.md`](../../docs/review-backlog.md), and it was built before the owner's
+pick, at review Tier 3 (the gates and CI, no review). It carries no decision of its own.
+
+Why: Windows PowerShell reads a path given by `-Path`, or by position, as a wildcard, `[1]` being
+the one character `1`. Cycle 14 left the checkout by `-Path` because a bracket there fails the
+setup block's own check at once (R11). Tried in Windows PowerShell 5.1 on a fictional checkout in
+a folder `repos [1]`, that holds alone: `Set-Location $R` prints a red `Cannot find path` and the
+check `checkout found: False`. Beside a folder the brackets match, `repos 1`, holding a checkout
+of its own, it does not: `Set-Location $R` goes into `repos 1` with no red line, the check finds
+the update script there and prints `checkout found: True`, and the `swreview-extract` alias runs
+that folder's console. The check passes in another checkout.
+
+Defaults taken:
+
+1. Every cmdlet that reads the checkout takes it by `-LiteralPath`: the setup block's
+   `Set-Location` and its check's `Test-Path`, step 1.4's `Copy-Item` of the results sheet, step
+   1.5's `cd` into the folder the engineer types, and the steps' `cd "$R\reviewer"` and `cd $R`,
+   `cd` being `Set-Location`'s alias.
+2. The alias takes the console's path escaped, by
+   `[Management.Automation.WildcardPattern]::Escape`: `Set-Alias` has no path parameter, and
+   PowerShell finds an alias's command by its path read as a wildcard. Escaped, the path names the
+   checkout's own console; a path with no bracket is unchanged.
+3. A path relative to the checkout stays by `-Path`: step 1.4's `Test-Path docs\...` and the
+   scripts run as `.\extractor\tools\...`. Windows PowerShell 5.1 resolves a relative
+   `-LiteralPath` against the current folder escaped, so in a folder whose path holds brackets it
+   finds nothing, while a relative `-Path` reads the right file there, beside a matching folder
+   too.
+4. `git -C $R` stays: git, not PowerShell, reads the path, and reads it literally.
+5. The setup block's own check stays, now by `-LiteralPath`: `checkout found: False` still means
+   `$R` is not the smart_SW folder itself, and a `CHANGE` line left unchanged or a folder that
+   does not exist prints the same red line as before.
+6. The handover's step 1.6 line is the plan's, and changes with it. The runbook's alias line,
+   which names `<repo>`, and the update and registration scripts, which find the checkout from
+   their own folder, are not the plan's PowerShell and are not changed here.

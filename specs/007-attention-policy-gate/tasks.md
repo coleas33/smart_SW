@@ -299,6 +299,21 @@ description: "Task list for the attention policy and the procedural gate"
 
 ---
 
+## Phase 15: The checkout read literally at the seat (cycle 19, 2026-11-03)
+
+**Purpose**: The seat plan's PowerShell read the checkout, `$R`, by `-Path`, which Windows PowerShell reads as a wildcard, `[1]` being the one character `1`. For a checkout whose path holds brackets the setup block's `Set-Location $R` failed with a red `Cannot find path` and its check printed `checkout found: False`; beside a folder the brackets match, the block went into that folder with no red line, its check passed there, and the `swreview-extract` alias ran that folder's console. Every read of the checkout in the plan's PowerShell now names it literally: `-LiteralPath`, `cd -LiteralPath` for the steps' `cd`, and the alias's path escaped. The third item of cycle 14's findings in [`docs/review-backlog.md`](../../docs/review-backlog.md), proposed in roadmap run 5's brief and built before the owner's pick (review Tier 3: the gates and CI, no review); it carries no decision. [research.md](research.md) R13. Every example is fictional.
+
+- [x] T092 Records first, no code: this phase and its line under Phase dependencies; the Status line in [spec.md](spec.md); R13 opened in [research.md](research.md); 007's row in `specs/README.md` recounted, the row's literal in `test_the_specs_readme_counts_a_task_173a_closed_as_done` changed first, on purpose. Acceptance: that pin red against the old row, then green; the links added resolve; every changed file LF in the index *Done 2026-11-03: the records written; 007's row 87 / 8 / 0, the pin red against 86 / 5 / 0 first and green after.*
+- [ ] T093 Test first, every read of the checkout literal. `reviewer/tests/unit/test_workstation_test_plan.py`: `NO_DOCUMENT_NAME` loses the checkout, `$R`, and step 1.5's placeholder for it, so `test_every_path_the_plans_powershell_builds_from_a_run_or_check_folder_is_literal` holds every command that names the checkout to `-LiteralPath`; new, `test_the_setup_block_finds_a_checkout_whose_path_holds_brackets` (in Windows PowerShell, the setup block's alias, `Set-Location` and check on a fictional checkout - plain, in a folder whose name holds brackets, and there beside a folder the brackets match: the check ends `checkout found: True`, the window is in the checkout, and the alias names the checkout's own `swreview-extract.exe`); changed on purpose, with a dated note, each pin that quotes a read of the checkout: `test_the_plan_starts_the_findings_document_once_the_update_has_brought_the_sheet`, `test_show_remodel_ledger_hands_each_answers_file_to_swreview_remodel_ledger`, `test_show_findings_by_type_prints_each_groups_rows_in_the_reports_order`, `test_s1s_steps_hold_what_s1_asks_of_them` and `test_save_timing_note_reads_the_run_folder_and_the_backend_log_and_writes_only_the_note`. Acceptance: each fails before T094 for want of the literal reads; the module's other cases pass
+- [ ] T094 The plan and the handover: `docs/test-plan-2026-09-27/workstation-test-plan.md`'s setup block (the alias, `Set-Location` and the check's `Test-Path`), step 1.4's copy of the results sheet, step 1.5's `cd`, and the steps' `cd "$R\reviewer"` and `cd $R`; and `docs/test-plan-2026-09-27/workstation-handover.md`'s step 1.6 line, which is the plan's. Acceptance: T093 green; every other case of the modules that read the plan green with no other edit
+- [ ] T095 Close: R13 completed; the checkout's item under cycle 14 in [`docs/review-backlog.md`](../../docs/review-backlog.md) marked resolved; 007's row in `specs/README.md` and the Status line recounted, the pin's literal changed first. Acceptance: the gates pass - the whole non-live suite on Python 3.12, and on 3.11 (95A) the modules that read the changed files, with the tokenizer required, the identifier scan among them; `ruff check`; the link check; every changed file LF in the index
+
+**Order**: T092 first; then T093 before T094; T095 last.
+
+**Checkpoint**: Every command of the seat plan's PowerShell that names the checkout reads it literally, so a checkout whose path holds brackets passes the setup block's check in its own folder, never in a folder the brackets match.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies
@@ -317,6 +332,7 @@ description: "Task list for the attention policy and the procedural gate"
 - **Owner decision 196A (Phase 12)**: after Phase 11; before M0-a; T060's Done note leaves the timed review's runtime and its other durations in the private note, as T078's note says (*added 2026-11-02*)
 - **The timing note's seat command (Phase 13)**: after Phase 12; before M0-a, whose timed review it writes (*added 2026-11-02*)
 - **Minutes typed on the Review page (Phase 14)**: after Phase 13; before M0-a, whose timed review's minutes it records (*added 2026-11-03*)
+- **The checkout read literally at the seat (Phase 15)**: after Phase 14; before the next sitting, whose setup block it changes (*added 2026-11-03; changed 2026-11-03 to after Phase 14, where it read after Phase 13, when cycle 19 was stacked on cycle 18*)
 
 ### Task-level dependencies
 
