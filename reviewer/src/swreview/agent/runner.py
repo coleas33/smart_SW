@@ -1207,9 +1207,6 @@ names an id, as every item but the profile's does: the id is the record's before
 `rechecked_from`, named in full as that record's `report.md` heads itself, since ids restart in
 each session (015 cycle 12's Codex review)."""
 
-_IN_SESSION = re.compile(r" in session [0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
-"""An item already named in its session (`NOT_CARRIED_IN_SESSION`), which keeps it."""
-
 
 def _not_carried_before(earlier: ReviewSession) -> list[str]:
     """The items `earlier`'s own `coverage.recheck` row named, when it was itself a re-run, in its
@@ -1217,8 +1214,15 @@ def _not_carried_before(earlier: ReviewSession) -> list[str]:
     cycle 12's Tier 1 review). Split where they were joined, at each "; " outside parentheses,
     since the profile's item holds one inside its own; a row in other words names none. Each that
     names an id, and no session yet, is named in the session `earlier` was checked again from,
-    whose id it is (cycle 12's Codex review)."""
+    whose id it is (cycle 12's Codex review). An item already named in its session is told by
+    `NOT_CARRIED_IN_SESSION`'s own words, read when called, since the owner may edit them (cycle
+    12's read-only check)."""
     head, tail = NOT_CARRIED.split("{items}")
+    in_session = re.compile(
+        re.escape(NOT_CARRIED_IN_SESSION)
+        .replace(re.escape("{item}"), ".+")
+        .replace(re.escape("{session_id}"), r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+    )
     before = earlier.model_status.rechecked_from if earlier.model_status is not None else None
     items: list[str] = []
     for row in earlier.coverage.unresolved:
@@ -1235,7 +1239,7 @@ def _not_carried_before(earlier: ReviewSession) -> list[str]:
         items.append(text[start:])
     return [
         item
-        if before is None or item == NOT_CARRIED_PROFILE or _IN_SESSION.search(item)
+        if before is None or item == NOT_CARRIED_PROFILE or in_session.fullmatch(item)
         else NOT_CARRIED_IN_SESSION.format(item=item, session_id=before)
         for item in items
     ]
