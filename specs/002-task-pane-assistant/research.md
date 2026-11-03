@@ -7995,3 +7995,50 @@ date, so a new problem read as old (`docs/review-backlog.md`, cycle 17).
     `reviewer/tests/unit/test_workstation_test_plan.py`, resolved by hand. Each kept both cycles'
     text, cycle 20's first, and 002 stays 388 / 4 / 0. T396's sub-item of the stacking in
     [tasks.md](tasks.md) names each meeting.
+
+### Cycle 22. After a backend restart, a finished review is shown read-only at once (2026-11-03; roadmap hole H-c-011)
+
+The owner's pick of 2026-11-03 from roadmap run 6's brief, from hole H-c-011's route; Tier 2, no
+decision id. When `init` named another backend - a Settings save, or a backend started again
+after it stopped - the page showed a review waiting for Send from its run folder at once (015
+FR-042), but any other live review on screen only lost its stream and the minutes form (007 cycle
+18): its decision, triage and note controls, its follow-up box and its answers stayed on, and each
+press was refused `404 UnknownChat`, "This review is no longer held by the backend. Press Review
+to start a new one.", which sends the engineer to a new review, a paid one when the send box is
+ticked.
+
+- **Settled**, the defaults taken inside the feature:
+  - **Which reviews.** The live review on screen when `init` names another backend, of whichever
+    document - the active one, or another behind the stale line - unless a start, a Send or a
+    re-run is on its way, which `showReview` refuses: it is shown from its run folder at once, by
+    the path a waiting one took (`showReview`, its snapshot gone, then `GET /reviews/{run_id}`),
+    read-only with the reason a restore after a restart gives (009 FR-021). A live review not on
+    screen needs nothing new: the new backend holds no chat of the old one, so choosing its chip,
+    or returning to its document, restores it from its folder, as before.
+  - **A review mid-turn.** Until now the page closed its stream and left it running: "The review
+    is running.", Stop on, Review off, and the chips and the document rule refused, until a
+    reload. The default taken: its turn ran on the backend that went, so it is over - a follow-up
+    still waiting says it had no answer, in the page's own line, "No answer: the turn ended
+    (restarted)." - and it is shown from its folder as any other: read-only when the folder holds
+    a record; when it holds none (`404 UnknownReview`), its chip says it can no longer be
+    restored, as 009's chip does, and the pane shows no review, Review on.
+  - **The console line.** The backend's, since it composes a restored record's line
+    (`restored_snapshot`) and the page prints it as sent: the words file's `read_only_console`,
+    "Record the rest of the triage at the console: swreview disposition.", follows 009's sentence
+    after a space while a flagged finding - every status but a pass, which takes no outcome but
+    the miss (187A) - records no outcome, decided or not, as `report.md`'s tally counts one "not
+    recorded"; once every flagged finding records one, or none is flagged, the line is 009's
+    alone. A record that waits for Send never names it: its Send leads back to a review that takes
+    decisions, and 015's line stands. Every restore from a folder names it so, after a SOLIDWORKS
+    restart or a reload too.
+  - **The rest, as after a restore.** The minutes form goes, as on any read-only restore, and the
+    console records the minutes (007 cycle 18); which review stays in front is the document
+    rule's, as after a restore; the Transcript is the restored one, which points to `events.jsonl`;
+    a card's typed note goes with the live card, as on a review switch, while the questions'
+    drafts and the pins stay in page memory per chat, where the page already keeps them.
+    Decisions on a restored review stay off: allowing them would amend 009 FR-021 and wait on the
+    owner.
+- **Built**: at the close (T398 to T400 in [tasks.md](tasks.md), Phase 37).
+- **Left open**: at the close.
+- **Gates** (T400), on the cycle's final tree:
+  - The whole suites on the final tree: recorded once they run.
