@@ -1351,11 +1351,11 @@ Defaults taken:
    `[Management.Automation.WildcardPattern]::Escape`: `Set-Alias` has no path parameter, and
    PowerShell finds an alias's command by its path read as a wildcard. Escaped, the path names the
    checkout's own console; a path with no bracket is unchanged.
-3. A path relative to the checkout stays by `-Path`: step 1.4's `Test-Path docs\...` and the
-   scripts run as `.\extractor\tools\...`. Windows PowerShell 5.1 resolves a relative
+3. A path relative to the checkout stays as it was: step 1.4's `Test-Path docs\...`, by `-Path`,
+   and the scripts run as `.\extractor\tools\...`. Windows PowerShell 5.1 resolves a relative
    `-LiteralPath` against the current folder escaped, so in a folder whose path holds brackets it
    finds nothing, while a relative `-Path` reads the right file there, beside a matching folder
-   too.
+   too, and a script run by its relative path is the checkout's own.
 4. `git -C $R` stays: git, not PowerShell, reads the path, and reads it literally.
 5. The setup block's own check stays, now by `-LiteralPath`: `checkout found: False` still means
    `$R` is not the smart_SW folder itself, and a `CHANGE` line left unchanged or a folder that
@@ -1363,3 +1363,63 @@ Defaults taken:
 6. The handover's step 1.6 line is the plan's, and changes with it. The runbook's alias line,
    which names `<repo>`, and the update and registration scripts, which find the checkout from
    their own folder, are not the plan's PowerShell and are not changed here.
+
+**Built** (T094, 2026-11-03), as *Settled* says. In the seat plan, the setup block's alias,
+`Set-Alias swreview-extract ([Management.Automation.WildcardPattern]::Escape("$R\..."))`,
+its `Set-Location -LiteralPath $R` and its check's `Test-Path -LiteralPath`; step 1.4's
+`Copy-Item -LiteralPath` of the results sheet; step 1.5's `cd -LiteralPath`; and the steps' nine
+pairs of `cd -LiteralPath "$R\reviewer"` and `cd -LiteralPath $R`. In the handover, the step 1.6
+line, which is the plan's. One more behaviour of Windows PowerShell 5.1, found on the way and not
+changed: `Copy-Item` given a missing file under a path that holds brackets prints no red line and
+copies nothing, by `-LiteralPath` as by `-Path`, so for such a checkout without the results sheet
+step 1.4's copy is silent; the block before it has printed `False` for the sheet by then, which
+stops the sitting.
+
+- Tests, new: `test_the_setup_block_finds_a_checkout_whose_path_holds_brackets`, in Windows
+  PowerShell, runs the block's alias, `Set-Location` and check on a fictional checkout - plain, in
+  `repos [1]` alone, and there beside `repos 1`, a checkout of its own - whose console and update
+  script are empty files, so nothing runs: the check ends `checkout found: True`, the window is in
+  the checkout, and the alias resolves to the checkout's own console.
+- Changed on purpose, each with a dated note, none loosened: `NO_DOCUMENT_NAME`, without `$R` and
+  step 1.5's placeholder, with the docstring of
+  `test_every_path_the_plans_powershell_builds_from_a_run_or_check_folder_is_literal`; the
+  literal lines of `test_the_plan_starts_the_findings_document_once_the_update_has_brought_the_sheet`,
+  `test_show_remodel_ledger_hands_each_answers_file_to_swreview_remodel_ledger`,
+  `test_show_findings_by_type_prints_each_groups_rows_in_the_reports_order`,
+  `test_s1s_steps_hold_what_s1_asks_of_them` and
+  `test_save_timing_note_reads_the_run_folder_and_the_backend_log_and_writes_only_the_note`; and
+  007's row in `test_the_specs_readme_counts_a_task_173a_closed_as_done`.
+- Tests first: nine cases failed before T094, each for want of the literal reads. The whole-plan
+  pin listed 22 calls: the block's `Set-Location $R` and `Test-Path`, step 1.4's `Copy-Item`, step
+  1.5's `cd` and the steps' nine pairs. The new pin failed in `repos [1]` alone on
+  `Set-Location`'s red `Cannot find path`, and beside `repos 1` on the window and the alias in
+  `repos 1`, while the check printed `checkout found: True`. The five pins that quote a read of
+  the checkout, six cases, failed on their literal lines. All passed after T094 with no other test
+  changed. Two mutants of the plan, each restored byte for byte with its sha256 checked: the
+  alias's path unescaped turned the new pin's case beside `repos 1` red on the alias alone, which
+  the whole-plan pin does not read; the check's `Test-Path` by `-Path` turned the whole-plan pin
+  red on that call, and the new pin's bracketed case on `checkout found: False`. The README pin
+  was red against 86 / 5 / 0 at T092 and against 87 / 8 / 0 at T095 before each recount.
+
+**Left open**, in [`docs/review-backlog.md`](../../docs/review-backlog.md) under cycle 19: the
+update and registration scripts find the checkout, or the add-in's build in it, from their own
+folder by `-Path`, and the runbook's alias line names the console by its `<repo>` path. Tried on
+the update script's first lines, a checkout under `chk [1]` alone stops at once, and beside
+`chk 1` they name that folder's checkout. None is the plan's PowerShell, and the plan clones the
+checkout into `C:\smart_SW` or the account's profile, whose paths hold no bracket.
+
+**Gates** (T095; 2026-11-03), on the final tree:
+
+- Python 3.12.3, the tokenizer required: the whole non-live suite, 18,946 passed and 5
+  skipped.
+- Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required, over the
+  seven seat modules, which hold every module that reads the changed files -
+  `test_workstation_test_plan.py`, `test_workstation_handover.py`,
+  `test_update_workstation_script.py`, `test_seat_assumptions.py`, `test_seat_switch_evidence.py`,
+  `test_remodel_ledger.py` and the identifier scan, `test_tracked_files_carry_no_recorded_number.py`:
+  510 passed, none skipped, as on 3.12.
+- `ruff check src tests` clean; the identifier scan, 58 passed.
+- The link check over the cycle's seven changed Markdown files: 124 relative links, anchors
+  included, none broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate, and no words changed. No SOLIDWORKS process, seat
+  task, or paid or live test ran.

@@ -3212,7 +3212,10 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
     5 open.
 
     *Changed 2026-11-03 on purpose (007 T092; cycle 19):* 007's row is recounted with cycle 19's
-    tasks, T092 to T095, T092 ticked: 87 done, 8 open."""
+    tasks, T092 to T095, T092 ticked: 87 done, 8 open.
+
+    *Changed 2026-11-03 on purpose (007 T095; cycle 19):* 007's row is recounted with T093 to T095
+    ticked, the checkout read literally at the seat built: 90 done, 5 open."""
     readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
     flat = re.sub(r"\s+", " ", readme)
     rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
@@ -3229,7 +3232,7 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
         assert "Closed on 2026-10-31 (decision 173A)" in rows[number], number
         assert closed in rows[number].split("Closed on 2026-10-31")[1], number
     assert "| 393 / 22 / 0 |" in rows["004"]
-    assert "| 87 / 8 / 0 |" in rows["007"]
+    assert "| 90 / 5 / 0 |" in rows["007"]
     assert "T180" not in rows["004"]
     for task in ("T182", "T187", "T303a", "T303b", "T353"):
         assert re.search(rf"\b{task}\b", rows["004"]), task
@@ -4459,7 +4462,7 @@ left as a note in `docs/review-backlog.md`, cycle 14 (007 T085, 2026-11-02).
 placeholder for it are exempt no more. A bracket in the checkout's path does not always fail the
 setup block's check: beside a folder the brackets match, `Set-Location $R` went into that folder
 and the check passed there. A path relative to the checkout, as step 1.4's `Test-Path docs\\...`,
-names no name here and stays by `-Path`: Windows PowerShell 5.1 resolves a relative
+gives no name and stays by `-Path`: Windows PowerShell 5.1 resolves a relative
 `-LiteralPath` against the current folder escaped, and finds nothing in a folder whose path holds
 brackets (007 `research.md` R13)."""
 REFERENCE = re.compile(r"\$(?:env:\w+|_\.\w+|\w+)|<[^<>\n]+>")
