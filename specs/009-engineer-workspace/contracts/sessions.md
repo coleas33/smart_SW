@@ -185,6 +185,12 @@ and restoration rules above.
   start, a Send or a re-run is on its way - one mid-turn included, its turn over with the backend
   that ran it, its chip saying it can no longer be restored when its folder holds no record; a live
   review not on screen is restored when chosen, as before.
+  *Changed 2026-11-03 (feature 002 cycle 22's Tier 2 review):* the review restored is the one on
+  screen as the page asked for that `init`, so a review the new backend started is left as it is;
+  a start or a Send on its way does not hold the restore back, the start's answer replacing the
+  review as any start's does and the Send's dropped; and a review stays as it was when its turn
+  failed, its error card keeping Retry, when the save moved the run root, the new backend reading
+  no run folder outside its own, or when the host lists no record of it.
 
 ## 7. The configuration change
 

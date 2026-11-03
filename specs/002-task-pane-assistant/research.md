@@ -8010,9 +8010,10 @@ ticked.
 - **Settled**, the defaults taken inside the feature:
   - **Which reviews.** The live review on screen when `init` names another backend, of whichever
     document - the active one, or another behind the stale line - unless a start, a Send or a
-    re-run is on its way, which `showReview` refuses: it is shown from its run folder at once, by
-    the path a waiting one took (`showReview`, its snapshot gone, then `GET /reviews/{run_id}`),
-    read-only with the reason a restore after a restart gives (009 FR-021). A live review not on
+    re-run is on its way, which `showReview` refuses (*changed on the Tier 2 review*, below): it
+    is shown from its run folder at once, by the path a waiting one took (`showReview`, its
+    snapshot gone, then `GET /reviews/{run_id}`), read-only with the reason a restore after a
+    restart gives (009 FR-021). A live review not on
     screen needs nothing new: the new backend holds no chat of the old one, so choosing its chip,
     or returning to its document, restores it from its folder, as before.
   - **A review mid-turn.** Until now the page closed its stream and left it running: "The review
@@ -8072,12 +8073,45 @@ ticked.
     the other ends of a turn do, not the words file's; a turn that did end with an answer the page
     had not read yet has it in `events.jsonl`, where the restored Transcript points.
   - A start, a Send or a re-run on its way at the restart keeps cycle 18's rule - the form goes
-    and nothing else changes - until its answer lands.
+    and nothing else changes - until its answer lands. *Changed 2026-11-03 (the Tier 2 review,
+    below):* nothing restored the review once that answer landed; a start or a Send on its way no
+    longer holds the restore back, and a re-run's review is read-only already.
   - The captured page fixture `review-waiting-apply-failure.json` has no generator and keeps its
     capture's 009 sentence on its two restored records, whose flagged findings record no outcome,
     though the backend now ends that line with the console's for them.
   - Decisions on a restored review stay off (009 FR-021); allowing them would amend FR-021, and is
     the owner's.
+- **Tier 2 review** (T400; 2026-11-03): two must-fix and three should-fix, all fixed test first
+  ([tasks.md](tasks.md), T400's sub-item); what lies outside the cycle's change is in
+  `docs/review-backlog.md`'s cycle 22 section. The defaults taken:
+  - **A failed review keeps Retry** (must-fix 1). The restore's reset took down the error card of
+    a review whose turn failed, and Retry with it (FR-028), in the very flow the card offers: Open
+    Settings, then Save. A review the backend took no more before the restart - its turn failed,
+    or an earlier restart left it (`chatGone`) - stays as it was; a failed chat's follow-ups,
+    answers and decisions were refused before the restart too.
+  - **A moved run root wipes nothing** (must-fix 2). A save that moved the folder for runs
+    restarted the backend under the new root, which reads no run folder outside it, so the restore
+    met `UnknownReview` and wiped the review, its chip saying it could no longer be restored, with
+    a Remove that forgets the record. When `init` names a run root other than the one held as the
+    page asked, the review on screen - waiting for Send or not, since 015's restore met the same
+    answer - stays as it was before this cycle, its stream and minutes form gone and its turn
+    over; Open report and Open run folder reach its record (154A).
+  - **The review restored is the old backend's** (should-fix 1). A start that made the restart
+    itself is answered before the `init` the restart asked for, the host answering one message at
+    a time, and its review was taken for the old backend's. Only the review on screen as the
+    `ready` went is now (`heldChat`); one the new backend started is left as it is, its stream
+    asked for again. A review chosen in that moment, by a chip or the document rule, is taken for
+    the new backend's too.
+  - **Nothing on its way holds the restore back** (should-fix 2). The restore is made at once:
+    `showReview` takes a restart's (`restarted`) while a start or a Send is on its way, the start's
+    answer replacing the review as any start's does and the Send's dropped by the restore epoch
+    (`sendToModel`), so the restored Send shows no refusal and no stream is asked of the backend
+    that went. The review's own fix, a restore owed until the answer lands, would hook every answer
+    a start can end with; a re-run needs neither, its review read-only already. A review the host
+    lists no record of stays as it was too, its chat kept: the pane never holds cards whose
+    presses go nowhere.
+  - **The older facts read the restore** (should-fix 3). The two facts whose drivers kept no
+    record now read both paths, and the mid-turn fact asks for no stream after the restart.
 - **Gates** (T400; 2026-11-03), on the cycle's final tree:
   - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,006 passed and 5
     skipped, ten of them this cycle's new cases. Its two warnings are neither of this cycle: the
@@ -8093,3 +8127,5 @@ ticked.
     none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or
     live test ran.
   - The whole suites on the final tree: recorded once they run.
+  - *Changed 2026-11-03:* the tree above came before the Tier 2 review's fixes, whose gates are
+    T400's sub-item in [tasks.md](tasks.md).
