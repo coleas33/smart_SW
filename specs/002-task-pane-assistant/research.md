@@ -7997,3 +7997,170 @@ date, so a new problem read as old (`docs/review-backlog.md`, cycle 17).
     `reviewer/tests/unit/test_workstation_test_plan.py`, resolved by hand. Each kept both cycles'
     text, cycle 20's first, and 002 stays 388 / 4 / 0. T396's sub-item of the stacking in
     [tasks.md](tasks.md) names each meeting.
+
+### Cycle 22. After a backend restart, a finished review is shown read-only at once (2026-11-03; roadmap hole H-c-011)
+
+The owner's pick of 2026-11-03 from roadmap run 6's brief, from hole H-c-011's route; Tier 2, no
+decision id. When `init` named another backend - a Settings save, or a backend started again
+after it stopped - the page showed a review waiting for Send from its run folder at once (015
+FR-042), but any other live review on screen only lost its stream and the minutes form (007 cycle
+18): its decision, triage and note controls, its follow-up box and its answers stayed on, and each
+press was refused `404 UnknownChat`, "This review is no longer held by the backend. Press Review
+to start a new one.", which sends the engineer to a new review, a paid one when the send box is
+ticked.
+
+- **Settled**, the defaults taken inside the feature:
+  - **Which reviews.** The live review on screen when `init` names another backend, of whichever
+    document - the active one, or another behind the stale line - unless a start, a Send or a
+    re-run is on its way, which `showReview` refuses (*changed on the Tier 2 review*, below): it
+    is shown from its run folder at once, by the path a waiting one took (`showReview`, its
+    snapshot gone, then `GET /reviews/{run_id}`), read-only with the reason a restore after a
+    restart gives (009 FR-021). A live review not on
+    screen needs nothing new: the new backend holds no chat of the old one, so choosing its chip,
+    or returning to its document, restores it from its folder, as before.
+  - **A review mid-turn.** Until now the page closed its stream and left it running: "The review
+    is running.", Stop on, Review off, and the chips and the document rule refused, until a
+    reload. The default taken: its turn ran on the backend that went, so it is over - a follow-up
+    still waiting says it had no answer, in the page's own line, "No answer: the turn ended
+    (restarted)." - and it is shown from its folder as any other: read-only when the folder holds
+    a record; when it holds none (`404 UnknownReview`), its chip says it can no longer be
+    restored, as 009's chip does, and the pane shows no review, Review on.
+  - **The console line.** The backend's, since it composes a restored record's line
+    (`restored_snapshot`) and the page prints it as sent: the words file's `read_only_console`,
+    "Record the rest of the triage at the console: swreview disposition.", follows 009's sentence
+    after a space while a flagged finding - every status but a pass, which takes no outcome but
+    the miss (187A) - records no outcome, decided or not, as `report.md`'s tally counts one "not
+    recorded"; once every flagged finding records one, or none is flagged, the line is 009's
+    alone. A record that waits for Send never names it: its Send leads back to a review that takes
+    decisions, and 015's line stands. Every restore from a folder names it so, after a SOLIDWORKS
+    restart or a reload too.
+  - **The rest, as after a restore.** The minutes form goes, as on any read-only restore, and the
+    console records the minutes (007 cycle 18); which review stays in front is the document
+    rule's, as after a restore; the Transcript is the restored one, which points to `events.jsonl`;
+    a card's typed note goes with the live card, as on a review switch, while the questions'
+    drafts and the pins stay in page memory per chat, where the page already keeps them.
+    Decisions on a restored review stay off: allowing them would amend 009 FR-021 and wait on the
+    owner.
+- **Built** (2026-11-03; T397 to T400 in [tasks.md](tasks.md), Phase 37, each test written first):
+  - The backend (T399): the words file's `read_only_console`, after `read_only_off`, and its
+    `Words` field; `report/snapshot.restored_snapshot` ends 009's sentence with it, after a space,
+    for a record that waits for no Send while `_outcomes_missing` holds - a flagged finding with
+    no triage, decided or not; dated notes in [contracts/chat-api.md](contracts/chat-api.md)
+    (`GET /reviews/{run_id}`), 009 [contracts/sessions.md](../009-engineer-workspace/contracts/sessions.md)
+    sections 4 and 6 and 009 [data-model.md](../009-engineer-workspace/data-model.md) sections 1
+    and 8. The pane fixtures' three generators wrote every fixture byte for byte as committed, so
+    the sha256 pin of `review-send-failure-events.json` stands; `LabelsSample.cs` mirrors the
+    `labels` group alone, which the new key is not in.
+  - The page (T399): `app.js`'s `requestInit`, when `init` names another backend, closes the
+    stream of the live review on screen, says a follow-up still waiting had no answer, ends a turn
+    on screen and shows the review again through `showReview`, the waiting one's path; the minutes
+    form's `chatGone` stays for a start, a Send or a re-run on its way. *Changed 2026-11-03 (the
+    Tier 2 review, below):* a start or a Send on its way no longer holds the restore back.
+  - Tests first: T398's 11 Python cases failed for want of `Words.read_only_console`, and 8 of
+    them, with the words alone written, for want of the line's end; its six page facts failed for
+    want of the restore - no read-only line, no read of the folder, Stop left on for a turn that
+    ended with its backend. The guards that passed at once - the four Python cases whose line is
+    009's alone, and the waiting review's page fact - were proved by mutants, each file restored
+    byte for byte and its sha256 checked ([tasks.md](tasks.md), T399). Changed on purpose, none
+    loosened, each with a dated note: the three tests that pinned the line of a finished record
+    whose flagged findings record no outcome (`test_review_snapshot.py`,
+    `test_chat_review_routes.py` and `test_waiting_answers.py`), and the 002 literal of the
+    specs-README pin (T397, T400).
+- **Left open**:
+  - A card's note typed before a restart goes with the live card, as on a review switch: the
+    console records that finding's outcome now, and its note is typed again there (`--note`).
+  - The console line names the command alone, not its run folder, finding and decision; and the
+    seat plan has no step that records the rest of a triage at the console after a restart, its
+    step 4.5 recording only the minutes there. For the owner, with M0-a's records.
+  - A follow-up's pin says "No answer: the turn ended (restarted)." in the page's own words, as
+    the other ends of a turn do, not the words file's; a turn that did end with an answer the page
+    had not read yet has it in `events.jsonl`, where the restored Transcript points.
+  - A start, a Send or a re-run on its way at the restart keeps cycle 18's rule - the form goes
+    and nothing else changes - until its answer lands. *Changed 2026-11-03 (the Tier 2 review,
+    below):* nothing restored the review once that answer landed; a start or a Send on its way no
+    longer holds the restore back, and a re-run's review is read-only already.
+  - The captured page fixture `review-waiting-apply-failure.json` has no generator and keeps its
+    capture's 009 sentence on its two restored records, whose flagged findings record no outcome,
+    though the backend now ends that line with the console's for them.
+  - Decisions on a restored review stay off (009 FR-021); allowing them would amend FR-021, and is
+    the owner's.
+- **Tier 2 review** (T400; 2026-11-03): two must-fix and three should-fix, all fixed test first
+  ([tasks.md](tasks.md), T400's sub-item); what lies outside the cycle's change is in
+  `docs/review-backlog.md`'s cycle 22 section. The defaults taken:
+  - **A failed review keeps Retry** (must-fix 1). The restore's reset took down the error card of
+    a review whose turn failed, and Retry with it (FR-028), in the very flow the card offers: Open
+    Settings, then Save. A review the backend took no more before the restart - its turn failed,
+    or an earlier restart left it (`chatGone`) - stays as it was; a failed chat's follow-ups,
+    answers and decisions were refused before the restart too.
+  - **The restart's own restore wipes nothing under a moved run root** (must-fix 2). A save that
+    moved the folder for runs restarted the backend under the new root, which reads no run folder
+    outside it, so the restore met `UnknownReview` and wiped the review, its chip saying it could
+    no longer be restored, with a Remove that forgets the record. When `init` names a run root
+    other than the one held as the page asked, the review on screen - waiting for Send or not,
+    since 015's restore met the same answer - is not restored: it stays live, as a finished one
+    stayed before this cycle, its stream and minutes form gone and its turn over; Open report and
+    Open run folder reach its record (154A). A waiting one's Send is off, saying why (the
+    read-only check, below). The document rule that runs after that `init` can still meet the same
+    answer (`docs/review-backlog.md`, cycle 22).
+  - **The review restored is the old backend's** (should-fix 1). A start that made the restart
+    itself is answered before the `init` the restart asked for, the host answering one message at
+    a time, and its review was taken for the old backend's. Only the review on screen as the
+    `ready` went is now (`heldChat`); one the new backend started is left as it is, its stream
+    asked for again. A review chosen in that moment, by a chip or the document rule, is taken for
+    the new backend's too.
+  - **Nothing on its way holds the restore back** (should-fix 2). The restore is made at once:
+    `showReview` takes a restart's (`restarted`) while a start or a Send is on its way, the start's
+    answer replacing the review as any start's does and the Send's dropped by the restore epoch
+    (`sendToModel`), so the restored Send shows no refusal and no stream is asked of the backend
+    that went. The review's own fix, a restore owed until the answer lands, would hook every answer
+    a start can end with; a re-run needs neither, its review read-only already. A review the host
+    lists no record of stays as it was too, its chat kept: the pane never holds cards whose
+    presses go nowhere.
+  - **The older facts read the restore** (should-fix 3). The two facts whose drivers kept no
+    record now read both paths, and the mid-turn fact asks for no stream after the restart.
+- **Read-only check** of those fixes (T400; 2026-11-03): one must-fix and five should-fix, all
+  done ([tasks.md](tasks.md), T400's second sub-item). The defaults taken:
+  - **A waiting review left as it was has its Send off, saying why** (the must-fix, the owner's
+    call between two ways: this one keeps 015 FR-042's "MUST NOT be refused as a chat the backend
+    does not know"; the other kept Send on and noted the exception there). Under a run root a
+    save moved, 015's restore had met `UnknownReview` and taken the waiting review down, and the
+    Tier 2 fix left it live with Send on, which met `404 UnknownChat`. A live review the backend
+    takes no more (`chatGone`) now has Send off, the Settings line no longer says its Send checks
+    its saved evidence again, and the words file's sentence beside Send says why, for the class
+    the page names: `RunRootChanged` when the run root moved, `UnknownChat` when the host lists no
+    record of the review. A waiting review shown from its folder keeps Send across another
+    restart, the host re-running it there. Notes in 015 FR-042 and its pane contract, section 7.
+  - **A start refused before the `init` keeps its card.** A start that makes a restart waiting
+    since a save is answered before the `init` the restart asked for, and the restore's reset took
+    its refusal down, Retry with it: the error cards shown since the `ready` went now stay across
+    the restore (`heldErrors`), in Results; the Transcript is the restored one.
+  - **The same run root ignores letter case**, as the host's one rule does (`SameRunRoot`, 154A),
+    so a run root retyped in another case restores the review.
+  - **The rest were records**: the Tier 2 bullet on a moved run root narrowed to the restart's own
+    restore, the document rule's path added to the backlog; the dropped Send answer's comments
+    say whoever gave it; the Built item's pointer; and the Tier 2 tests' commit message, which had
+    every fact written first.
+- **Gates** (T400; 2026-11-03), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,006 passed and 5
+    skipped, ten of them this cycle's new cases. Its two warnings are neither of this cycle: the
+    test client's deprecation, and a serializer warning from `test_ir_loader_append.py`'s invalid
+    row.
+  - On Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the modules the change
+    touches and those that read the files it changed: 27 modules, 1,691 passed.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,385 add-in tests passed, seven of them this cycle's new facts.
+  - The link check over the cycle's eight changed Markdown files, anchors included, 469 links and
+    none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or
+    live test ran.
+  - The whole suites on the final tree (`25da7142`, 2026-11-03): 19,031 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; C# with zero
+    warnings, then 10,274 extractor and 4,405 add-in tests passed (T400's line).
+  - *Changed 2026-11-03:* the tree above came before the Tier 2 review's fixes and the read-only
+    check's, whose gates are T400's two sub-items in [tasks.md](tasks.md).
+  - *Done 2026-11-03, cycle 22 stacked on cycle 21:* the gates above ran on cycle 22 before it was
+    stacked on cycle 21 (Phase 36, T393 to T396, itself on feature 007's cycle 20). The two met in
+    twelve files, and each kept both cycles' text, the lower cycle's first; 002's row is 389 / 7 / 0
+    at T397 and 392 / 4 / 0 at the close, and the pane fixtures regenerate byte-identical, so the
+    sha256 pin stands. T400's sub-item of the stacking in [tasks.md](tasks.md) names each meeting.

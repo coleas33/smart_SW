@@ -1312,8 +1312,13 @@ def test_disk_restore_keeps_legacy_and_actually_sent_review_snapshots_unchanged(
     builds = len(provider_control.built)
     response = client.get(f"/reviews/{folder.name}")
     assert response.status_code == 200, response.text
+    # *Changed 2026-11-03 on purpose (002 T398; cycle 22, roadmap hole H-c-011):* the record's
+    # flagged findings record no outcome, so 009's sentence is followed by the console's, which
+    # records the rest (`read_only_console`); the record still restores as 009's did, no Send block.
+    words = load_words()
     assert response.json() == review_snapshot(
-        saved, run.context.ir, run_id=folder.name, read_only_reason=load_words().read_only,
+        saved, run.context.ir, run_id=folder.name,
+        read_only_reason=f"{words.read_only} {words.read_only_console}",
     )
     assert "send" not in response.json()["ranking"]["summary"]
     assert send_cases.routes.tree_state(folder) == before

@@ -176,18 +176,21 @@ def test_an_unknown_chat_has_no_snapshot(client: TestClient) -> None:
 def test_the_run_folder_restores_read_only_with_the_words_files_reason(
     client: TestClient, run_dir: Path, finished_chat: str
 ) -> None:
+    """*Changed 2026-11-03 on purpose (002 T398; cycle 22, roadmap hole H-c-011):* the finished
+    chat's flagged findings record no outcome, so the reason is 009's sentence followed by the
+    console's, which records the rest (`read_only_console`), where it was 009's alone."""
     response = client.get(f"/reviews/{run_dir.name}")
 
     assert response.status_code == 200, response.text
     body = response.json()
     session = load_session(run_dir / "session.json")
     package = load_package(run_dir).package
+    words = load_words()
+    reason = f"{words.read_only} {words.read_only_console}"
     assert body == to_jsonable_python(
-        review_snapshot(
-            session, package, run_id=run_dir.name, read_only_reason=load_words().read_only
-        )
+        review_snapshot(session, package, run_id=run_dir.name, read_only_reason=reason)
     )
-    assert (body["read_only"], body["read_only_reason"]) == (True, load_words().read_only)
+    assert (body["read_only"], body["read_only_reason"]) == (True, reason)
     assert (body["chat_state"], body["last_seq"]) == (None, None)
     ranking = dict(body["ranking"])
     summary = ranking.pop("summary")

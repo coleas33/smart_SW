@@ -1044,6 +1044,22 @@ def test_the_replaced_read_only_file_key_is_refused() -> None:
         Words.model_validate(data)
 
 
+def test_a_restored_reviews_line_sends_the_rest_of_the_triage_to_the_console() -> None:
+    """Feature 002 FR-031, cycle 22 (roadmap hole H-c-011): a review restored from its run folder
+    takes no decision in the pane (009 FR-021), so while a flagged finding records no outcome the
+    line under its status line ends with the console's command, which still records one
+    (`snapshot.restored_snapshot`). One sentence, no placeholder, and required, as the two
+    read-only sentences it follows are."""
+    data = raw_words()
+    assert load_words().read_only_console == (
+        "Record the rest of the triage at the console: swreview disposition."
+    )
+    assert list(data).index("read_only_console") == list(data).index("read_only_off") + 1
+    del data["read_only_console"]
+    with pytest.raises(ValidationError):
+        Words.model_validate(data)
+
+
 def test_the_five_send_errors_are_exact_contract_sentences() -> None:
     errors = load_words().labels.errors
     assert {key: errors.get(key) for key in SEND_ERRORS} == SEND_ERRORS

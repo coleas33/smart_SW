@@ -1480,12 +1480,20 @@
       && state.summary.send.state === 'restored');
   }
 
+  /**
+   * A live review the backend takes no more (`chatGone`): a restart left it as it was, or its turn failed. Its Send
+   * would be refused as a chat the backend does not know, so it is off (015 FR-042; 002 cycle 22's read-only check).
+   */
+  function liveChatGone() {
+    return state.readOnly === null && state.chatGone;
+  }
+
   /** The single enabling rule used by both Send's renderer and its press. */
   function canSendToModel() {
     return !!state.chatId && !!(state.summary && state.summary.send) && !state.resultsStale
       && !isDrawing(state.documentInfo) && !state.startPending && !state.turnRunning
       && !state.sending && !state.sendPending && !state.applySummaryPending && !state.rechecking
-      && (state.readOnly === null || restoredSend());
+      && !liveChatGone() && (state.readOnly === null || restoredSend());
   }
 
   function sendToModel() {
@@ -1497,6 +1505,9 @@
       return;
     }
     var chatId = state.chatId;
+    // A restart shows the review again from its folder while the Send is on its way (`requestInit`),
+    // and the Send's answer, whoever gave it, is then dropped.
+    var epoch = state.restoreEpoch;
     var resumeStream = !!state.stream || state.reconnectTimer !== null;
     state.sendPending = true;
     // Pause an old attempt's stream without consuming its cursor. Accepted Send events and
@@ -1505,7 +1516,7 @@
     state.sendError = null;
     renderSend();
     call(sessionPath('/send'), 'POST').then(function () {
-      if (state.chatId !== chatId) return;
+      if (state.chatId !== chatId || state.restoreEpoch !== epoch) return;
       state.sendPending = false;
       state.sending = true;
       state.sendAwaitingStart = true;
@@ -1513,7 +1524,7 @@
       renderSend();
       openStream();
     }, function (error) {
-      if (state.chatId !== chatId) return;
+      if (state.chatId !== chatId || state.restoreEpoch !== epoch) return;
       state.sendPending = false;
       state.sendError = errorBody(error);
       renderSend();
@@ -1542,8 +1553,9 @@
       if (state.sendFocus && button && !button.disabled && !ui.send.hidden) button.focus();
     }
     // Only while the review waits: from Send's press to its first usage a save is refused
-    // (FR-027), so the line would promise what the host will not do (98A).
-    var waitingNote = waitingForSend() && !state.sending && !state.sendPending;
+    // (FR-027), so the line would promise what the host will not do (98A); nor while its Send is
+    // off for a chat the backend takes no more.
+    var waitingNote = waitingForSend() && !state.sending && !state.sendPending && !liveChatGone();
     ui.waitingSettingsNote.textContent = state.rechecking
       ? 'Checking the saved evidence again; save when it is done.'
       : waitingNote
@@ -1884,9 +1896,13 @@
    * chat, `GET /reviews/{run_id}` from its run folder, read-only. No `POST` and no `review.start`:
    * returning costs no token (SC-005). A run folder that is gone too marks the chip, and the pane
    * shows no review.
+   *
+   * A restart's (`restarted`, `requestInit`) shows the review on screen again while a start or a
+   * Send is on its way too (002 cycle 22's Tier 2 review): the start's answer replaces it as any
+   * start's does, and the Send's, whoever gave it, is dropped (`sendToModel`).
    */
-  function showReview(chatId) {
-    if (state.turnRunning || state.startPending || state.sendPending || state.rechecking) {
+  function showReview(chatId, restarted) {
+    if (state.turnRunning || state.rechecking || (!restarted && (state.startPending || state.sendPending))) {
       return;
     }
     var item = keptReview(chatId);
@@ -3570,6 +3586,14 @@
 
     state.initPending = true;
     var heldToken = state.token;
+    // The review on screen as this `ready` goes, and the run root in force then (002 cycle 22's
+    // Tier 2 review): the host answers one message at a time, so a start or a re-run it answers
+    // before this `init` ran on the backend the `init` names.
+    var heldChat = state.chatId;
+    var heldRunRoot = state.runRoot;
+    // And the error cards then (its read-only check): one shown since - a start the host refused
+    // before this `init` - is no card of the old backend's review, so its restore keeps it, Retry too.
+    var heldErrors = Array.prototype.slice.call(ui.errors.children);
     var failureRevision = state.backendFailureRevision;
     send('ready', {}).then(function (payload) {
       // The host can read this init's endpoint before a watcher fails its restart, then deliver
@@ -3578,20 +3602,34 @@
         return;
       }
       // Another token is another backend (a Settings save, or a restart after it stopped): no
-      // chat of the old one survives. A live waiting review on screen is restored from its folder
-      // at once, read-only with Send offered (feature 015 FR-042, contracts/pane.md section 7).
-      // `backend.restarted` says so as well (owner decision 143A), and is believed even when the
-      // `init` before this one was read while there was no backend, and so carried no token to
-      // compare: it is kept until an `init` names the new backend - a token other than the one
-      // held when it arrived, since an `init` the host read before the restart names that one.
+      // chat of the old one survives. The live review on screen, of whichever document, is shown
+      // from its folder at once, read-only as a restore after a restart shows it (009 FR-021): a
+      // waiting one with Send offered (feature 015 FR-042, contracts/pane.md section 7), any other
+      // with every control that would post to the old backend off (002 cycle 22, roadmap hole
+      // H-c-011). `backend.restarted` says so as well (owner decision 143A), and is believed even
+      // when the `init` before this one was read while there was no backend, and so carried no
+      // token to compare: it is kept until an `init` names the new backend - a token other than
+      // the one held when it arrived, since an `init` the host read before the restart names
+      // that one.
       var replaced = state.backendReplaced && !!payload.token && payload.token !== state.replacedToken;
       var restarted = replaced || (!!payload.token && !!heldToken && payload.token !== heldToken);
       if (replaced) {
         state.backendReplaced = false;
         state.replacedToken = null;
       }
-      var waiting = restarted && !!state.chatId && state.readOnly === null && waitingForSend()
-        && !state.sending && !state.sendPending;
+      // The old backend's review is the one on screen as this `ready` went. It is shown again from
+      // its folder - a start or a Send on its way notwithstanding, whose answer then replaces it or
+      // is dropped - unless a re-run is on its way, which `showReview` refuses; the backend took it
+      // no more before this restart: its turn failed, its error card offering Retry (FR-028), or an
+      // earlier restart left it; the restart moved the run root, and the new backend reads no folder
+      // outside its own (`GET /reviews/{run_id}`); or the host keeps no record of it. Each such
+      // review stays as it was. A turn on screen is no reason not to, since it ran on the backend
+      // that went.
+      var old = restarted && !!state.chatId && state.chatId === heldChat;
+      // The same run root ignores letter case, as the host's one rule does (154A, `SameRunRoot`).
+      var sameRoot = String(payload.run_root || '').toLowerCase() === String(heldRunRoot || '').toLowerCase();
+      var shown = old && state.readOnly === null && !state.rechecking && !state.chatGone
+        && sameRoot && !!keptReview(state.chatId) ? state.chatId : null;
       state.providers = payload.providers || state.providers;
       state.backend = payload.backend || null;
       state.token = payload.token || null;
@@ -3627,23 +3665,42 @@
       if (state.backend) {
         loadLabels();
       }
-      if (waiting) {
-        var shown = state.chatId;
-        state.chatId = null;
-        showReview(shown);
-      } else if (restarted) {
+      if (old) {
         // The new backend does not hold the chat on screen, so nothing is asked of its stream:
-        // not now, and not by a reconnect the old stream's close left waiting. Nor its minutes:
-        // a save would be refused, so the form goes and the console records them (007 cycle 18).
+        // not now, and not by a reconnect the old stream's close left waiting. A turn on screen is
+        // over, so a follow-up still waiting for its answer says it had none.
         closeStream();
-        state.chatGone = true;
-        renderTiming();
+        unansweredFollowUp('restarted');
+        setTurnRunning(false);
+        if (shown) {
+          var refused = Array.prototype.filter.call(ui.errors.children, function (card) {
+            return heldErrors.indexOf(card) < 0;
+          });
+          state.chatId = null;
+          showReview(shown, true);
+          for (var index = 0; index < refused.length; index++) {
+            ui.errors.appendChild(refused[index]);
+          }
+        } else {
+          // Nor its minutes: a save would be refused, so the form goes and the console records
+          // them (007 cycle 18).
+          state.chatGone = true;
+          renderTiming();
+          // Nor a live waiting review's Send, never refused as a chat the backend does not know
+          // (015 FR-042): it is off, and says why - under a run root a save moved, the backend
+          // makes runs only under its own - in the words file's sentence for the class.
+          if (liveChatGone() && waitingForSend()) {
+            state.sendError = { error_class: sameRoot ? 'UnknownChat' : 'RunRootChanged' };
+          }
+          renderSend();
+        }
       } else if (state.stream) {
         // A `ready` also makes the host close the event reader it holds for this page - that is
         // how a page that reloads drops a stream it no longer shows - but this page did not
         // reload. Reading a stream, it asks for it again from the last event it showed, on the
         // same backend: a re-init while a turn runs - after a save that turn started during
-        // (owner decision 143A) - must not cost the page the rest of the turn.
+        // (owner decision 143A), or a review the new backend started - must not cost the page
+        // the rest of the turn.
         openStream();
       }
       // The reviews the host kept for this SOLIDWORKS session, and - a page reloaded with one of

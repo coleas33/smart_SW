@@ -357,15 +357,30 @@ public sealed class ReviewPageBackendRestartTests
     /// ...and a page told the backend was replaced asks nothing of the old chat's stream: not when
     /// it re-inits, and not by a reconnect the old stream's close left waiting - the new backend
     /// does not hold the chat, and each 404 would only schedule another.
+    /// *Changed 2026-11-03 (002 cycle 22's Tier 2 review):* since 002 cycle 22 a restart shows the
+    /// review from its run folder when the host keeps a record of it, and this fact's driver kept
+    /// none, so it read only the review left as it was; it now reads both.
     /// </summary>
-    [Fact]
-    public void AReInitOnARestartedBackendAsksNothingOfTheOldChatsStream()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AReInitOnARestartedBackendAsksNothingOfTheOldChatsStream(bool kept)
     {
-        ReviewPageDriver.Run(null, async driver =>
+        const string Run = "20260923-101500-bracket-1";
+        ReviewPageDriver.Run(driver =>
+        {
+            if (kept)
+            {
+                driver.Sessions.Add(ReviewPageSessionsTests.Item("chat-1", Run, ReviewPageDriver.ReviewedPath, 10, 15));
+            }
+        }, async driver =>
         {
             await driver.HoldTimers();
             await driver.StartReview();
             string chatId = Assert.Single(driver.Posted("events.open")).GetProperty("chat_id").GetString()!;
+            await driver.Route("GET", "/sessions/" + chatId + "/snapshot", 404, ReviewPageRecheckTests.UnknownChat);
+            await driver.Route("GET", "/reviews/" + Run, 200,
+                ReviewPageSessionsTests.Snapshot(Run, ReviewPageDriver.ReviewedPath, new[] { "F-001" }, null, null, readOnly: true));
             await driver.Push(chatId, 7, "text.delta", "{\"text\":\"FICT\"}");
             await driver.Settle();
 
@@ -382,6 +397,7 @@ public sealed class ReviewPageBackendRestartTests
             await driver.RunHeldTimers();
 
             Assert.Single(driver.Posted("events.open"));
+            Assert.Equal(kept ? 1 : 0, (await driver.Calls()).Count(call => call.GetProperty("path").GetString() == "/reviews/" + Run));
         });
     }
 

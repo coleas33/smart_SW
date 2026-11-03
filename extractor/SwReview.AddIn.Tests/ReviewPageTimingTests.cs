@@ -44,6 +44,9 @@ public sealed class ReviewPageTimingTests
 
     private const string TimingPath = "/sessions/" + Chat + "/timing";
 
+    /// <summary>The run folder of the review started first, as the driver's `review.started` names it.</summary>
+    private const string Run = "20260923-101500-bracket-1";
+
     /// <summary>An earlier live review of the same document, kept by the host.</summary>
     private const string OtherChat = "chat-2";
 
@@ -458,14 +461,28 @@ public sealed class ReviewPageTimingTests
     /// does not hold it, and a save could only be refused, with a sentence that sends the engineer to Review: the form goes,
     /// figures and all, and a press posts nothing; the console records the minutes then (the seat plan's step 4.5, item 4).
     /// A review started on the new backend takes its minutes on the page again.
+    /// *Changed 2026-11-03 (002 cycle 22's Tier 2 review):* since 002 cycle 22 a restart shows the review from its run folder,
+    /// read-only, when the host keeps a record of it, and this fact's driver kept none, so it read only the review left as it
+    /// was; it now reads both, the form gone either way.
     /// </summary>
-    [Fact]
-    public void TheFormGoesOnceAnotherBackendReplacesTheOneThatHeldTheReview()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TheFormGoesOnceAnotherBackendReplacesTheOneThatHeldTheReview(bool kept)
     {
-        ReviewPageDriver.Run(Labelled, async driver =>
+        ReviewPageDriver.Run(driver =>
+        {
+            Labelled(driver);
+            if (kept)
+            {
+                driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, Run, ReviewPageDriver.ReviewedPath, 10, 15));
+            }
+        }, async driver =>
         {
             await Reviewed(driver);
             await driver.Route("POST", TimingPath, 200, Recorded);
+            await driver.Route("GET", "/sessions/" + Chat + "/snapshot", 404, ReviewPageRecheckTests.UnknownChat);
+            await driver.Route("GET", "/reviews/" + Run, 200, Snapshot(Run, true));
             await Type(driver, Typed);
             Assert.True((await driver.Read(ReadForm)).GetProperty("shown").GetBoolean(), "the form is not shown before the restart.");
 
@@ -474,9 +491,12 @@ public sealed class ReviewPageTimingTests
             await driver.Click("save-settings");
             await driver.Until(() => driver.Posted("ready").Length > readies, "asked for init after the save");
             await driver.Settle();
+            Assert.Equal(kept ? 1 : 0, (await driver.Calls()).Count(call => call.GetProperty("path").GetString() == "/reviews/" + Run));
             await driver.ClearCalls();
 
-            Assert.False((await driver.Read(ReadForm)).GetProperty("shown").GetBoolean(), "the form stays on a review the backend no longer holds.");
+            JsonElement replaced = await driver.Read(ReadForm);
+            Assert.False(replaced.GetProperty("shown").GetBoolean(), "the form stays on a review the backend no longer holds.");
+            Assert.Equal(kept ? ReviewPageSessionsTests.ReadOnlyReason : null, replaced.GetProperty("readOnly").GetString());
             await Save(driver);
             Assert.Empty(await TimingCalls(driver));
 

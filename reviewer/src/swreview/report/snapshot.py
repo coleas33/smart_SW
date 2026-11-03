@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic_core import to_jsonable_python
 
 from swreview.ir.models import EvidencePackage
+from swreview.report.attention import SUPPRESSED_STATUS
 from swreview.report.names import component_names
 from swreview.report.summary import COVERAGE_BUCKETS, load_words, review_ranking
 from swreview.report.titles import pane_finding
@@ -257,12 +258,21 @@ def restored_snapshot(
     block, with no count, from the persisted provider alone. `events`, the folder's stream,
     gives `cleared` as `review_snapshot`'s do, in their read-only form, and `withdrawn` (002 cycle
     13).
+
+    Any other record's sentence is followed, after a space, by the words file's
+    `read_only_console` while a flagged finding records no outcome (`_outcomes_missing`): its
+    decision buttons are off on the page (009 FR-021), and the console still records one (002
+    FR-031, cycle 22). A record that waits for Send never names it, since its Send leads back to a
+    review that takes decisions.
     """
     words = load_words()
     status = session.model_status
     if status is None or status.state not in WAITING_STATES:
+        reason = words.read_only
+        if _outcomes_missing(session):
+            reason = f"{reason} {words.read_only_console}"
         return review_snapshot(
-            session, package, run_id=run_id, read_only_reason=words.read_only, events=events
+            session, package, run_id=run_id, read_only_reason=reason, events=events
         )
     send: SendInput = {
         "state": "restored",
@@ -274,6 +284,17 @@ def restored_snapshot(
     reason = f"{words.read_only_lead} {words.send.restored_line.format(when=when)}"
     return review_snapshot(
         session, package, run_id=run_id, send=send, read_only_reason=reason, events=events
+    )
+
+
+def _outcomes_missing(session: ReviewSession) -> bool:
+    """Whether a flagged finding - every status but a pass, `SUPPRESSED_STATUS`, which takes no
+    outcome but the miss (187A) - records no outcome, its triage, decided or not: the findings
+    `summary.triage_tally` counts as not recorded (185A; 002 cycle 22)."""
+    return any(
+        finding.status != SUPPRESSED_STATUS
+        and (finding.disposition is None or finding.disposition.triage is None)
+        for finding in session.findings
     )
 
 

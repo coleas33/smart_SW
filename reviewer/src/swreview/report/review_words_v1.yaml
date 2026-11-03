@@ -160,6 +160,11 @@ withdrawn:
 
 read_only_lead: "The backend restarted, so this review is shown from its run folder."
 read_only_off: "Follow-ups, decisions and answers are off."
+# Ends the line of a record restored from its run folder that waits for no Send, after a space,
+# while a flagged finding - every status but a pass - records no outcome: its decision buttons are
+# off, and the console still records one (feature 002 FR-031, cycle 22; roadmap hole H-c-011). A
+# record waiting for Send never names it, since its Send leads back to a review that takes them.
+read_only_console: "Record the rest of the triage at the console: swreview disposition."
 
 goal_states:
   issues: "issues found"

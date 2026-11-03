@@ -35,6 +35,7 @@ Loaded once per process by `summary.load_words() -> Words` (`functools.cache`, l
 | `resume` | `{with_tokens, without}` | "Sending resumes the review once. Its last round sent {tokens} input tokens." / "Sending resumes the review once." |
 | `read_only_lead` | str | "The backend restarted, so this review is shown from its run folder." (*015 amendment, 2026-10-12, owner decision 73A*) |
 | `read_only_off` | str | "Follow-ups, decisions and answers are off." |
+| `read_only_console` | str | *added 2026-11-03 (feature 002 FR-031, cycle 22; roadmap hole H-c-011):* "Record the rest of the triage at the console: swreview disposition.", which ends the line of a record restored from its folder that waits for no Send, after a space, while a flagged finding records no outcome (section 8) |
 | `Words.read_only` | property | Composes the two file keys with a space, preserving the previous sentence exactly. The file no longer accepts a `read_only` key; a restored waiting review uses the lead plus `send.restored_line` (015 `contracts/words.md` section 1). |
 | `goal_states` | map `issues \| checked \| not_reached \| not_applicable` → str | "issues found", "checked, no issue", "not reached", "not applicable" |
 | `goal_reasons` | map `unresolved \| skipped \| failed \| out_of_scope \| no_check` → str | "evidence missing", "skipped", "a check failed", "out of scope", "no check ran" |
@@ -249,6 +250,11 @@ in the order they went. The live snapshot is as before.
 other keys, when the last `finding` body of its id in the stream names it - the date an earlier
 review of the same document first showed the finding (`shown_dates`) - in both snapshots, so the
 card says it after a reload, a review switch or a restart; every other body is as before.
+
+*Amended 2026-11-03 (feature 002 cycle 22):* `restored_snapshot`'s `read_only_reason` for a record
+that waits for no Send is `read_only` followed, after a space, by the words file's
+`read_only_console` while a flagged finding - every status but a pass - records no outcome; a
+record that waits for Send keeps its line.
 
 The pane fixture `extractor/SwReview.AddIn.Tests/Fixtures/review-big-assembly.json` is this object
 for feature 008's `big-assembly` fixture, plus `labels` (section 7) so the page tests need no route.
