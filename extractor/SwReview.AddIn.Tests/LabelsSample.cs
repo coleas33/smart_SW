@@ -62,6 +62,9 @@ namespace SwReview.AddIn.Tests;
 /// *Changed 2026-11-03 (002 T402; cycle 23):* `errors` gains `IllegalTransition`, `DecisionAlreadyRecorded` and
 /// `AlreadyDeferred`, the words file's own sentences for the refused presses that said to reload the review: each says what
 /// is recorded and what the engineer can do.
+///
+/// *Changed 2026-11-03 (002 T404; cycle 23's Tier 2 review):* `DecisionAlreadyRecorded`'s sentence is the words file's new one,
+/// which says that an Accept or a Reject is final and that a Defer still needs one of them.
 /// </summary>
 internal static class LabelsSample
 {
@@ -140,7 +143,8 @@ internal static class LabelsSample
     /// The decision recorded, pressed again with nothing new to record - a pass pressed again among them - refused (002 cycle
     /// 23): the words file's sentence for it.
     /// </summary>
-    public const string DecisionAlreadyRecorded = "That decision is already recorded, so nothing changed.";
+    public const string DecisionAlreadyRecorded =
+        "That decision is already recorded, so nothing changed. An Accept or a Reject is final; a Defer still needs one of them when you decide.";
 
     /// <summary>Defer pressed again on a Defer that holds a triage refused (002 cycle 23): the words file's sentence for it.</summary>
     public const string AlreadyDeferred =

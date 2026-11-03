@@ -3354,6 +3354,48 @@ def test_each_refusal_of_the_record_names_the_disposition_as_it_stands(
     assert all("disposition" not in response.json() for response in others)
 
 
+def test_a_refusal_of_the_record_carries_the_tally_as_the_reply_does(
+    client: TestClient, run_dir: Path, chat_with_a_finding: str
+) -> None:
+    """Cycle 23's Tier 2 review (002 T404), through the route the pane presses: a refusal of the
+    record carries the review's triage tally beside the disposition, as the 200 reply does
+    (`with_triage_tally`) - none while no finding records a triage, the review's one count once one
+    does - so the card a refusal draws comes with the tally the record leaves, which nothing else
+    tells the page once the session's end has closed its stream. An Accept with no triage, pressed
+    again with none (`OutcomeNeeded`), carries none. An Accept as `new_and_real`, recorded though
+    its reply was lost - the proxy's `502 BackendUnavailable` - then pressed again as the engineer
+    would (`TriageAlreadyRecorded`), and a Reject on it (`IllegalTransition`), carry the tally that
+    Accept left, its reply's. A refusal that is not the record's carries none."""
+    findings = load_session(run_dir / "session.json").findings
+    flagged = [finding.id for finding in findings if finding.status != "checked_within_scope"]
+    url = f"/sessions/{chat_with_a_finding}/findings/{flagged[0]}/disposition"
+    typed = {"note": "FICT typed note", "by": "FICT-ENG"}
+
+    plain = client.post(url, json={"decision": "accepted", **typed})
+    untriaged = client.post(url, json={"decision": "accepted", **typed})
+    lost = client.post(url, json={"decision": "accepted", "triage": "new_and_real", **typed})
+    again = client.post(url, json={"decision": "accepted", "triage": "new_and_real", **typed})
+    other = client.post(url, json={"decision": "rejected", **typed})
+    unknown = client.post(url.replace(flagged[0], "F-404"), json={"decision": "rejected", **typed})
+
+    assert [response.status_code for response in (plain, lost)] == [200, 200]
+    assert [
+        (response.status_code, response.json()["error_class"])
+        for response in (untriaged, again, other, unknown)
+    ] == [
+        (409, "OutcomeNeeded"),
+        (409, "TriageAlreadyRecorded"),
+        (409, "IllegalTransition"),
+        (404, "UnknownFinding"),
+    ]
+    tally = tally_body(new=1, not_recorded=len(flagged) - 1)
+    assert lost.json()["triage_tally"] == tally
+    assert [again.json()["triage_tally"], other.json()["triage_tally"]] == [tally, tally]
+    assert again.json()["disposition"] == other.json()["disposition"] == lost.json()["disposition"]
+    assert "triage_tally" not in untriaged.json()
+    assert "triage_tally" not in unknown.json()
+
+
 # --- a check run again after an answer (002 T326; owner decisions 189A and 191A) ------------------
 
 

@@ -447,7 +447,10 @@ REFUSED_PRESSES = {
         "That finding already has a decision, and an Accept or a Reject is final. The one recorded "
         "stands and is shown again; the card cannot change it."
     ),
-    "DecisionAlreadyRecorded": "That decision is already recorded, so nothing changed.",
+    "DecisionAlreadyRecorded": (
+        "That decision is already recorded, so nothing changed. An Accept or a Reject is final; a "
+        "Defer still needs one of them when you decide."
+    ),
     "AlreadyDeferred": (
         "That finding is already deferred, with its triage. When you decide, Accept or Reject "
         "keeps that triage, or takes the one you pick."
@@ -459,7 +462,12 @@ review, a reload drawing the note box from the record and so losing a note typed
 final and which no control on the page clears or changes; the decision recorded, sent again with
 nothing new to record, a pass pressed again among them; and Defer again on a Defer that holds a
 triage, which a later Accept or Reject keeps or replaces. Each says what is recorded and what the
-engineer can do; the card shows the record above it, drawn from the refusal."""
+engineer can do; the card shows the record above it, drawn from the refusal.
+
+*Changed 2026-11-03 on purpose (002 T404; cycle 23's Tier 2 review):* `DecisionAlreadyRecorded`'s
+sentence also says what can follow, since a pass's Defer recorded without a triage and pressed
+again with none meets it, and a pass's card has no no-triage line to say that the Defer still needs
+an Accept or a Reject."""
 
 
 def test_each_refused_press_says_what_is_recorded_and_never_to_reload() -> None:

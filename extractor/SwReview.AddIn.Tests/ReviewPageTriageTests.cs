@@ -111,6 +111,10 @@ namespace SwReview.AddIn.Tests;
 /// and what the engineer can do, and the typed note stays in the box. A refusal of the record names the disposition as it
 /// stands, which the card draws - its sentence above the refusal, its triage pressed, the head's line - and keeps as the
 /// finding's record, so a decision another client recorded is the one shown; the note box is left as typed.
+///
+/// *Changed 2026-11-03 (002 T404; cycle 23's Tier 2 review):* a refusal of the record carries the review's tally too, as a
+/// reply does, and the page shows it with the record; and it draws both only while the card holds the record it held when
+/// that press was made, since a later press's reply or event can land before the refusal, whose record is then the older.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -2021,6 +2025,105 @@ public sealed class ReviewPageTriageTests
             Assert.True(card.GetProperty("recordFirst").GetBoolean(), "the record named is not above the refusal.");
             Assert.Equal(new[] { "wrong" }, Pressed(card));
             Assert.Equal(LabelsSample.IllegalTransition, card.GetProperty("refusal").GetString());
+        });
+    }
+
+    /// <summary>
+    /// Cycle 23's Tier 2 review (002 T404): a refusal of the record carries the review's tally beside the record it names, as a
+    /// reply does, and the page shows both. The session has ended, so the stream is closed, and the summary's tally counts
+    /// F-002's `wrong` and F-001 not recorded. The engineer picks `new and real` and presses Accept on F-001: the backend
+    /// records it, but the reply comes back as the proxy's `502 BackendUnavailable`, which names no record, and the tally stays
+    /// as it was. `new and real` picked again and Accept pressed again is `409 TriageAlreadyRecorded`, naming that Accept and
+    /// the tally it left: the card shows the Accept above the refusal, and the tally counts F-001 as new and real.
+    /// </summary>
+    [Fact]
+    public void ARefusalOfTheRecordShowsTheTallyItCarries()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            JsonObject before = Tally(0, 0, 1, 0, 1, 0);
+            JsonObject after = Tally(1, 0, 1, 0, 0, 0);
+            Dictionary<string, object?> accepted = Disposition("accepted", string.Empty, "new_and_real");
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "finding", Finding("F-002", RejectedWrong()));
+            await driver.RouteAttention(Chat, SummarySample.Json(summary => summary["triage_tally"] = before.DeepClone()));
+            await driver.EndSession(Chat);
+            Assert.Equal(Lines(before), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+
+            await driver.Route("POST", DispositionPath("F-001"), 502, Refusal("BackendUnavailable", "the review backend is not running.", true));
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "accept");
+            Assert.Equal("BackendUnavailable", (await driver.Read(ReadCard("F-001"))).GetProperty("refusalClass").GetString());
+            Assert.Equal(Lines(before), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+
+            await driver.Route(
+                "POST",
+                DispositionPath("F-001"),
+                409,
+                WithTally(
+                    Refused(
+                        "TriageAlreadyRecorded",
+                        "FICT finding F-001 already has a terminal disposition ('accepted') with its triage ('new_and_real'); a triage is recorded once and cannot be changed",
+                        accepted),
+                    after));
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "accept");
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Equal("TriageAlreadyRecorded", card.GetProperty("refusalClass").GetString());
+            Assert.Equal(Sentence("accepted", "new_and_real", string.Empty), card.GetProperty("record").GetString());
+            Assert.Equal(new[] { "new_and_real" }, Pressed(card));
+            Assert.Equal(Lines(after), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+        });
+    }
+
+    /// <summary>
+    /// Cycle 23's Tier 2 review (002 T404): a refusal draws the record and the tally it names only while the card holds the
+    /// record it held when that press was made. Each reply comes back on a task of its own and the events on the stream, so a
+    /// later press's reply and event can land before an earlier press's refusal, whose record, read before that later press was
+    /// recorded, is then the older. F-001 is accepted with no triage, the stream open. The engineer presses Accept with no
+    /// outcome picked, and its refusal is held; then picks `wrong` and presses Accept again, recorded, its reply and its
+    /// `disposition` event landing with the tally; then the held `409 OutcomeNeeded` lands, naming the Accept with no triage and
+    /// no tally. The card keeps the record the reply and the event drew - `wrong` pressed, its sentence above the refusal and no
+    /// no-triage line - and the tally stays.
+    /// </summary>
+    [Fact]
+    public void ARefusalThatLandsAfterALaterPressesReplyKeepsTheNewerRecord()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            Dictionary<string, object?> untriaged = Disposition("accepted", string.Empty, null);
+            Dictionary<string, object?> judged = Disposition("accepted", string.Empty, "wrong");
+            JsonObject tally = Tally(0, 0, 1, 0, 0, 0);
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001", untriaged));
+            await driver.Settle();
+            Assert.Equal(LabelsSample.NoTriageAccepted, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("text").GetString());
+
+            await driver.HoldRoute(
+                "POST",
+                DispositionPath("F-001"),
+                409,
+                Refused(
+                    "OutcomeNeeded",
+                    "FICT finding F-001 is accepted with no triage recorded; send 'accepted' again with a triage to record one",
+                    untriaged));
+            await Decide(driver, "F-001", "accept");
+            await driver.Route("POST", DispositionPath("F-001"), 200, WithTally(Finding("F-001", judged), tally));
+            await Press(driver, "F-001", "wrong");
+            await Decide(driver, "F-001", "accept");
+            await driver.Push(Chat, 2, "disposition", WithTally(DispositionEvent("F-001", judged), tally));
+            await driver.Settle();
+            await driver.ReleaseRoute("POST", DispositionPath("F-001"));
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Equal("OutcomeNeeded", card.GetProperty("refusalClass").GetString());
+            Assert.Equal(Sentence("accepted", "wrong", string.Empty), card.GetProperty("record").GetString());
+            Assert.True(card.GetProperty("recordFirst").GetBoolean(), "the record is not above the refusal.");
+            Assert.Equal(new[] { "wrong" }, Pressed(card));
+            Assert.Equal(0, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("count").GetInt32());
+            Assert.Equal(Lines(tally), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
         });
     }
 
