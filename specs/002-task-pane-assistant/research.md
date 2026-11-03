@@ -7421,6 +7421,8 @@ the decision register now records 160A as done.
     holds a triage, so the message names that triage and says the finding can only move to
     accepted or rejected; it said so of every Defer, which 198A made untrue.
   - **The console's note.** `--note` left out sends the note recorded, as the card's box, drawn
-    from the record, does, and none before a first decision; an empty `--note` records none. The
-    live route records the note its body sends, as before, and the console's printed line still
-    names no note: its `--json` payload carries it.
+    from the record, does, and none before a first decision; an empty `--note` sends none, so a
+    decision that replaces a Defer records none, while a late triage keeps the note recorded, as
+    a blank note sent with it always has (198A). The live route records the note its body sends,
+    as before, and the console's printed line still names no note: its `--json` payload
+    carries it.

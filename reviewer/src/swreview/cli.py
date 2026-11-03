@@ -978,7 +978,7 @@ def disposition(
         typer.Option(
             "--note",
             help="Why, in the engineer's words. Left out, the note already recorded stays; "
-            "an empty one records none.",
+            "given empty, a decision that replaces a Defer records none.",
         ),
     ] = None,
     by: Annotated[
@@ -1001,7 +1001,7 @@ def disposition(
     the disposition as recorded, which then keeps the first `by` and time, and the first note, or
     the `--note` sent with the triage when none was recorded (198A). Without `--note` the note
     already recorded is sent, as the pane's note box sends it, so a decision that replaces a Defer
-    keeps its note; an empty `--note` records none (roadmap hole H-c-010).
+    keeps the Defer's note, and an empty `--note` gives it none (roadmap hole H-c-010).
     """
     decided_by = by if by else _default_user()
     with _errors_as_exit_1():
