@@ -55,6 +55,13 @@
   var RECONNECT_MAX = 15000;
 
   /**
+   * How long a save of the minutes the backend refused as running a turn waits to be tried once more, in
+   * milliseconds (feature 007, cycle 18's Tier 2 review): the backend holds a turn's chat running until it has
+   * written the report, a moment after the page has read the turn's end.
+   */
+  var TIMING_RETRY = 1000;
+
+  /**
    * The separator between the facts that share the transcript header's one line. An escape
    * rather than the character itself, so this file stays ASCII like every other page file in
    * the pane.
@@ -153,6 +160,18 @@
 
     // Whether the last follow-up is still waiting for its `text.done`, which fills its pin.
     followUpPending: false,
+
+    // The minutes form (feature 007, cycle 18): whether the review on screen has ended a turn - its stream's
+    // `turn.ended` or `session.ended`, which a waiting review's checks end with too, or a live snapshot not
+    // mid-turn - which shows the form; and whether a save of it is on its way, which turns it off.
+    turnEnded: false,
+    timingPending: false,
+    // And (cycle 18's Tier 2 review) whether the backend takes the review's minutes no more - another backend
+    // replaced the one that held it, or its turn failed: an `error` on its stream, or a live snapshot's `failed` -
+    // which takes the form away, the console being the way then; and the minutes typed and not saved, per chat id
+    // (`{input key: text}`), page memory as the questions' drafts are, so a review shown again shows them again.
+    chatGone: false,
+    timingDrafts: Object.create(null),
 
     // The follow-ups and their answers pinned in Results, per chat id: `[{question, answer}]`,
     // `answer` null while it is on its way. Page memory only - the answers themselves stay in
@@ -686,6 +705,8 @@
           restoreFailedApply(body);
           return;
         }
+        // The review failed, and the backend refuses its every save from here on: the minutes form goes.
+        state.chatGone = true;
         setTurnRunning(false);
         unansweredFollowUp('failed');
         showError(body);
@@ -1309,6 +1330,7 @@
   }
 
   function endTurn(body) {
+    state.turnEnded = true;
     setTurnRunning(false);
     state.textBlock = null;
     state.runningTool = '';
@@ -1329,6 +1351,7 @@
     }
     state.sending = false;
     state.sendAwaitingStart = false;
+    state.turnEnded = true;
     setTurnRunning(false);
     state.textBlock = null;
     state.runningTool = '';
@@ -1684,6 +1707,7 @@
   function loadLabels() {
     state.labelsRead = call('/labels', 'GET').then(function (labels) {
       state.labels = (labels && typeof labels === 'object') ? labels : null;
+      renderTiming();
     }, function () {
       state.labels = null;
     });
@@ -1873,6 +1897,7 @@
     closeStream();
     resetTranscript();
     state.chatId = chatId;
+    showTimingDraft();
     state.runDir = item.run_dir || null;
     state.reviewed = reviewDocument(item);
     state.lastSeq = 0;
@@ -1985,6 +2010,10 @@
     state.streamSent = state.sending;
     state.readOnly = body.read_only ? String(body.read_only_reason || '') : null;
     state.snapshotLastSeq = typeof body.last_seq === 'number' ? body.last_seq : 0;
+    state.turnEnded = body.chat_state !== 'running';
+    if (body.chat_state === 'failed') {
+      state.chatGone = true;
+    }
 
     // Whatever stream is opened for this chat from here on - a follow-up, the answers, a turn
     // still running - picks up after the snapshot: the events up to it are what Results already
@@ -2305,6 +2334,7 @@
     }
     ui.clearReview.disabled = !canClearReview();
     syncQuestionControls();
+    renderTiming();
     if (contextPane) contextPane.refreshControls();
   }
 
@@ -2462,6 +2492,7 @@
     state.toolsFinished = 0;
     state.runningTool = '';
     state.followUpPending = false;
+    clearTiming();
     state.notExamined = null;
     renderNotExamined();
     renderTranscriptHead();
@@ -2561,6 +2592,9 @@
     switch (action) {
       case 'send':
         sendToModel();
+        return;
+      case 'save-timing':
+        saveTiming();
         return;
       case 'show':
         showInSolidWorks(card);
@@ -2858,6 +2892,165 @@
     var control = ui.questions.querySelector('[data-action="' + action + '"]');
     if (control) {
       control.disabled = disabled;
+    }
+  }
+
+  // ---- the minutes form (feature 007, cycle 18) -----------------------------------------------
+
+  /**
+   * The minutes form (its contracts/timing.md section 3): drawn once the labels name its words, and shown on a
+   * live review once a turn of it has ended; absent on a read-only restore, and gone once the backend takes the
+   * review's minutes no more - another backend replaced the one that held it, or its turn failed - where the
+   * console stays the way; and off while a turn runs, a review starts, a Send is on its way or a save is. Its
+   * controls are set as they stand, never rebuilt, so a turn starting or ending never takes a box out from under
+   * the engineer's cursor; Save is off while every box is blank, since it would record nothing.
+   */
+  function renderTiming() {
+    if (!ui.timing) {
+      return;
+    }
+    if (!ui.timing.firstChild) {
+      var form = render.timingForm(state.labels);
+      if (form) {
+        ui.timing.appendChild(form);
+      }
+    }
+    var boxes = timingBoxes();
+    ui.timing.hidden = !boxes.length || !state.chatId || state.readOnly !== null || !state.turnEnded
+      || state.chatGone;
+    var locked = state.turnRunning || state.startPending || state.sendPending || state.timingPending;
+    var blank = true;
+    for (var index = 0; index < boxes.length; index++) {
+      boxes[index].disabled = locked;
+      blank = blank && !boxes[index].value.trim();
+    }
+    var save = ui.timing.querySelector('[data-action="save-timing"]');
+    if (save) {
+      save.disabled = locked || blank;
+    }
+  }
+
+  function timingBoxes() {
+    return ui.timing ? ui.timing.querySelectorAll('input[data-input]') : [];
+  }
+
+  /**
+   * Save: every box posted to the live route under its key, which records the minutes on the review the backend
+   * holds, so nothing saves over them and no restart comes first. A blank box is null, which keeps what is
+   * recorded; a number goes as a number; other text goes as typed, for the route to refuse by name
+   * (`InvalidTiming`): the page holds no rule about minutes. Nothing of the reply - the figures and the net - is
+   * printed, and the boxes keep what was typed either way (decision 186A); once recorded, the review's draft goes
+   * (`keepTimingDraft`) if it is the one posted, not one typed since on the review shown again (cycle 18's read-only
+   * check). A reply for a review the engineer has left since writes nothing.
+   */
+  function saveTiming() {
+    var save = ui.timing.querySelector('[data-action="save-timing"]');
+    if (!save || save.disabled || ui.timing.hidden) {
+      return;
+    }
+    var body = {};
+    var boxes = timingBoxes();
+    for (var index = 0; index < boxes.length; index++) {
+      var text = boxes[index].value.trim();
+      var number = Number(text);
+      body[boxes[index].getAttribute('data-input')] = !text ? null : (isFinite(number) ? number : text);
+    }
+    var chatId = state.chatId;
+    var draft = state.timingDrafts[chatId];
+    var epoch = state.restoreEpoch;
+    state.timingPending = true;
+    timingLine(null);
+    renderTiming();
+    postTiming(sessionPath('/timing'), body, true).then(function () {
+      if (state.timingDrafts[chatId] === draft) {
+        delete state.timingDrafts[chatId];
+      }
+      if (epoch === state.restoreEpoch) {
+        timingLine('saved');
+      }
+    }, function (error) {
+      if (epoch === state.restoreEpoch) {
+        timingLine('refused', error);
+      }
+    }).then(function () {
+      if (epoch === state.restoreEpoch) {
+        state.timingPending = false;
+        renderTiming();
+      }
+    });
+  }
+
+  /**
+   * One save's POST to `path`, the review it was pressed on. The backend answers `TurnRunning` for a moment
+   * after the page has read a turn's end, while it writes the report, so that refusal is tried once more,
+   * `TIMING_RETRY` later, and a second refusal is the save's answer (cycle 18's Tier 2 review).
+   */
+  function postTiming(path, body, again) {
+    return call(path, 'POST', body).catch(function (error) {
+      if (!again || error.errorClass !== 'TurnRunning') {
+        throw error;
+      }
+      return new Promise(function (resolve) {
+        window.setTimeout(resolve, TIMING_RETRY);
+      }).then(function () {
+        return postTiming(path, body, false);
+      });
+    });
+  }
+
+  /**
+   * The one line under Save: `saved`, the words file's line that the minutes are recorded; `refused`, the
+   * refusal's class's sentence from `labels.errors` with the class in the fold, and never its message, which
+   * names a refused figure; or, for null, none.
+   */
+  function timingLine(kind, error) {
+    var saved = ui.timing.querySelector('.timing-saved');
+    var refused = ui.timing.querySelector('.timing-refused');
+    if (!saved || !refused) {
+      return;
+    }
+    saved.hidden = kind !== 'saved';
+    render.clear(refused);
+    if (kind === 'refused') {
+      refused.appendChild(render.plainError({ error_class: error.errorClass }, state.labels));
+    }
+    refused.hidden = kind !== 'refused';
+  }
+
+  /**
+   * The form blank again for the review shown next, which never shows, or posts, another review's figures: what was
+   * typed on that review and not saved comes back with it (`showTimingDraft`).
+   */
+  function clearTiming() {
+    var boxes = timingBoxes();
+    for (var index = 0; index < boxes.length; index++) {
+      boxes[index].value = '';
+    }
+    if (ui.timing) {
+      timingLine(null);
+    }
+    state.turnEnded = false;
+    state.timingPending = false;
+    state.chatGone = false;
+  }
+
+  /** What the boxes hold, kept for the review on screen until a save of it is recorded (cycle 18's Tier 2 review). */
+  function keepTimingDraft() {
+    var draft = Object.create(null);
+    var boxes = timingBoxes();
+    for (var index = 0; index < boxes.length; index++) {
+      draft[boxes[index].getAttribute('data-input')] = boxes[index].value;
+    }
+    state.timingDrafts[state.chatId] = draft;
+  }
+
+  /** The boxes as the review shown left them, typed and not saved, or blank: never another review's figures. */
+  function showTimingDraft() {
+    var draft = state.timingDrafts[state.chatId];
+    var boxes = timingBoxes();
+    for (var index = 0; index < boxes.length; index++) {
+      var text = draft ? draft[boxes[index].getAttribute('data-input')] : '';
+      boxes[index].value = typeof text === 'string' ? text : '';
     }
   }
 
@@ -3435,8 +3628,11 @@
         showReview(shown);
       } else if (restarted) {
         // The new backend does not hold the chat on screen, so nothing is asked of its stream:
-        // not now, and not by a reconnect the old stream's close left waiting.
+        // not now, and not by a reconnect the old stream's close left waiting. Nor its minutes:
+        // a save would be refused, so the form goes and the console records them (007 cycle 18).
         closeStream();
+        state.chatGone = true;
+        renderTiming();
       } else if (state.stream) {
         // A `ready` also makes the host close the event reader it holds for this page - that is
         // how a page that reloads drops a stream it no longer shows - but this page did not
@@ -3526,6 +3722,7 @@
     ui.findings = document.getElementById('findings');
     ui.errors = document.getElementById('errors');
     ui.answers = document.getElementById('answers');
+    ui.timing = document.getElementById('timing');
     ui.transcriptCounts = document.getElementById('transcript-counts');
     ui.collapseFindings = document.getElementById('collapse-findings');
     ui.transcript = document.getElementById('transcript');
@@ -3606,6 +3803,13 @@
     ui.collapseFindings.addEventListener('click', collapseFindings);
     ui.questions.addEventListener('click', onQuestionsClick);
     ui.questions.addEventListener('input', onQuestionsInput);
+    // A box typed in: what is typed is kept for its review until a save records it, the line no longer says what is
+    // recorded, and Save follows whether any box holds text.
+    ui.timing.addEventListener('input', function () {
+      keepTimingDraft();
+      timingLine(null);
+      renderTiming();
+    });
 
     contextPane = window.SwReviewEngineeringContext.create({
       send: send, call: call,

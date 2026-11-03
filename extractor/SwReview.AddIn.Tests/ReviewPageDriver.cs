@@ -390,9 +390,11 @@ internal sealed class ReviewPageDriver
     /// <summary>
     /// Holds the page's timers from here on: `window.setTimeout` records its callback instead of
     /// starting a clock, and <see cref="RunHeldTimers"/> runs what it recorded. The Review page has
-    /// one timer, the event stream's reconnect (one second at first), so a state that lasts until it
+    /// two timers. The event stream's reconnect (one second at first): a state that lasts until it
     /// fires - "Reconnecting to the review." - is read without racing it, and the reconnect happens
-    /// when the test says so rather than after a second of wall clock.
+    /// when the test says so rather than after a second of wall clock. And, *since 2026-11-03* (007
+    /// cycle 18), the minutes form's one retry of a save refused as running a turn, a second later
+    /// (`TIMING_RETRY`), likewise run when the test says so.
     /// </summary>
     public Task HoldTimers() => Page.ExecuteScriptAsync(@"(function () {
   if (window.__heldTimers) { return 0; }

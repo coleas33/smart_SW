@@ -93,6 +93,21 @@ Writes the **live** session the run holds and saves it, re-renders `report.md` a
 event). A review may be timed after `session.ended`; check runs register no chat and are timed
 from the command line.
 
+*Amended 2026-11-03 (cycle 18; research R12):* the Review page's minutes form is this route's page
+caller, every rule above unchanged. It shows on a live review once a turn of it has ended, is off
+while a turn runs and is absent on a read-only restore. Save posts all six keys, through the
+pane's proxy, which counts the call as starting no turn: `null` for a blank field, which keeps
+what is recorded; the number typed; and text that is not a number as typed, which this route
+refuses as `InvalidTiming`. The page prints nothing of the `200`'s `Timing`: after it, one line,
+the words file's `labels.timing_form.saved`; after a refusal, its class's sentence from
+`labels.errors`, never its message, which names a refused figure. The typed figures stay in the
+fields, and reach no other text of the page. Since cycle 18's Tier 2 review (research R12): the
+form goes once the backend takes the review's minutes no more - another backend replaced the one
+that held it, or its turn failed - where `swreview timing` is the way; a `409 TurnRunning`, which
+this route answers for a moment after the turn's `session.ended` while the backend writes the
+report, is tried once more a second later; and what was typed on a review and not saved stays in
+page memory, as the questions' drafts do, and comes back when that review is shown again.
+
 ## 4. The ledger column
 
 `adoption.METRICS["median_net_saved_minutes"]` reads `scorecard.aggregate.median_net_saved_minutes`

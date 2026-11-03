@@ -51,6 +51,19 @@
     "first_shown": {
       "earlier": "First shown in the review of {date}."
     },
+    "timing": {
+      "baseline": "Baseline: a review of this design by hand, without SwReview",
+      "supervision": "Supervision: your time on the review while it ran",
+      "verification": "Verification: checking the findings judged right",
+      "false_alarms": "False alarms: the findings judged wrong",
+      "setup": "Setup: preparing and starting this review, any rerun included",
+      "by_hand": "By hand: checking what the review did not reach"
+    },
+    "timing_form": {
+      "heading": "Minutes for this review",
+      "save": "Save minutes",
+      "saved": "The minutes are recorded."
+    },
     "source": {
       "code": "Checked by code",
       "model": "AI guidance"
@@ -85,7 +98,7 @@
       "InvalidRequest": "The request was not understood. Reload the task pane and try again.",
       "InvalidRunDir": "The backend refused the run folder's path: it writes only into a local folder inside the run root. Check the run root in Settings.",
       "InvalidSettings": "Check the provider, the model and the effort, then save again.",
-      "InvalidTiming": "Enter the minutes as numbers, then save again.",
+      "InvalidTiming": "Enter each as a number of minutes, 0 or more, then save again.",
       "InvalidTriage": "Pick one of the four triage outcomes, or none, then press the decision again. A finding in Checked, no issue takes only wrong: a miss.",
       "NoDocument": "Open the part or assembly you want reviewed, then press Review.",
       "NotAPart": "Remodel works on one part. Open a part, then try again.",

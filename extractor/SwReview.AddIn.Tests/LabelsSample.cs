@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 
 namespace SwReview.AddIn.Tests;
@@ -43,6 +44,14 @@ namespace SwReview.AddIn.Tests;
 ///
 /// *Changed 2026-11-03 (002 T389; cycle 17, roadmap hole H-a-009):* the `first_shown` group, the words file's own: the line a
 /// card says when an earlier review of the same document first showed its finding, `{date}` that review's date.
+///
+/// *Changed 2026-11-03 (007 T088; cycle 18, minutes typed on the Review page):* the `timing` and `timing_form` groups, the
+/// words file's own: the minutes form's word for each human timing input, keyed by `TIMING_INPUTS` in their order, and its
+/// heading, its button and the line a save leaves; and `errors` gains `InvalidTiming`, the words file's own sentence for a
+/// refused save.
+///
+/// *Changed 2026-11-03 (007 T091; cycle 18's Tier 2 review):* `InvalidTiming`'s sentence is the words file's new one, which
+/// names minutes of 0 or more, so it is true of a negative figure too.
 /// </summary>
 internal static class LabelsSample
 {
@@ -112,6 +121,32 @@ internal static class LabelsSample
 
     /// <summary>A press repeated without an outcome refused (roadmap hole H-c-010): the words file's sentence for it.</summary>
     public const string OutcomeNeeded = "Pick an outcome first, then press the same button again.";
+
+    /// <summary>
+    /// The minutes form's word for each human timing input (feature 007, cycle 18), keyed by `TIMING_INPUTS` in their order:
+    /// the words file's own.
+    /// </summary>
+    public static readonly (string Key, string Word)[] Timing =
+    {
+        ("baseline", "Baseline: a review of this design by hand, without SwReview"),
+        ("supervision", "Supervision: your time on the review while it ran"),
+        ("verification", "Verification: checking the findings judged right"),
+        ("false_alarms", "False alarms: the findings judged wrong"),
+        ("setup", "Setup: preparing and starting this review, any rerun included"),
+        ("by_hand", "By hand: checking what the review did not reach"),
+    };
+
+    /// <summary>The minutes form's heading (feature 007, cycle 18).</summary>
+    public const string TimingHeading = "Minutes for this review";
+
+    /// <summary>The minutes form's button.</summary>
+    public const string TimingSave = "Save minutes";
+
+    /// <summary>The one line a save leaves.</summary>
+    public const string TimingSaved = "The minutes are recorded.";
+
+    /// <summary>A refused save of the minutes (feature 007, cycle 18): the words file's sentence for its class.</summary>
+    public const string InvalidTiming = "Enter each as a number of minutes, 0 or more, then save again.";
 
     /// <summary>
     /// A run root the run root rule refuses (owner decision 154A): the words file's sentence for it, true since the
@@ -218,6 +253,19 @@ internal static class LabelsSample
             }
         },
         {
+            // Feature 007, cycle 18: the minutes form's word for each timing input, in `TIMING_INPUTS`' order.
+            "timing", Timing.ToDictionary(entry => entry.Key, entry => entry.Word)
+        },
+        {
+            // Feature 007, cycle 18: the minutes form's heading, its button and the line a save leaves.
+            "timing_form", new Dictionary<string, string>
+            {
+                { "heading", TimingHeading },
+                { "save", TimingSave },
+                { "saved", TimingSaved },
+            }
+        },
+        {
             // Feature 013 (contracts/sources.md section 2): who wrote a record, in words.
             "source", new Dictionary<string, string>
             {
@@ -238,6 +286,7 @@ internal static class LabelsSample
                 { "RunRootRefused", RunRootRefused },
                 { "TriageAlreadyRecorded", TriageAlreadyRecorded },
                 { "OutcomeNeeded", OutcomeNeeded },
+                { "InvalidTiming", InvalidTiming },
                 { "HttpError", HttpError },
             }
         },

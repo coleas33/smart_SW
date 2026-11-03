@@ -420,7 +420,10 @@ row per step and task id. The development machine moves each answer into the res
     document writes the folder by its date and letter (`20261101-A`), so that no private figure
     can be worked out from it. *Since 2026-11-02* (decision 196A) the review's runtime and every
     other duration of it, the timings of its facts and its usage line's last round among them,
-    go in `notes\timing.txt` too, never in the findings document.
+    go in `notes\timing.txt` too, never in the findings document. *Since 2026-11-03* (007 cycle 18)
+    the seat types the six on the Review page before leaving the review, which records them on the
+    review the backend holds, so nothing saves over them, and `swreview timing` after the restart
+    is the fallback (the test plan's steps 4.1 and 4.5).
 
 14. **009 T081, 009 T083, 009 T084.** Configuration switch (T081), chips and restore (T083),
     three open questions answered in one send (T084), each as its task text says; T084's resumed

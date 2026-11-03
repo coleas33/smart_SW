@@ -28,8 +28,10 @@ from pydantic import ValidationError
 import swreview.chat.remodel  # noqa: F401 - registers the remodel routes' ChatError classes
 from swreview import findings
 from swreview.agent.checklist import CHECKLIST_FILE
+from swreview.benchmark.timing import TIMING_INPUTS
 from swreview.chat.server import ChatError
 from swreview.findings import TRIAGES, FindingStatus, Severity
+from swreview.report import summary
 from swreview.report.attention import CHECKLIST_ITEM_IDS, CLOSEOUT_ITEM_ID, load_policy
 from swreview.report.dispositions import DECISIONS
 from swreview.report.session import CoverageBucket
@@ -526,6 +528,80 @@ def test_a_finding_an_earlier_review_first_showed_names_that_reviews_date() -> N
         "First shown in the review of 2026-09-18."
     )
     assert order.index("first_shown") == order.index("note") + 1
+
+
+TIMING_WORDS = {
+    "baseline": "Baseline: a review of this design by hand, without SwReview",
+    "supervision": "Supervision: your time on the review while it ran",
+    "verification": "Verification: checking the findings judged right",
+    "false_alarms": "False alarms: the findings judged wrong",
+    "setup": "Setup: preparing and starting this review, any rerun included",
+    "by_hand": "By hand: checking what the review did not reach",
+}
+"""The minutes form on the Review page (feature 007, cycle 18): the word for each human timing
+input, keyed by `benchmark.timing.TIMING_INPUTS` in their order. The page draws one field per key,
+in this order, labelled with its word, and posts each under its key to
+`POST /sessions/{chat_id}/timing`, so it holds no list of the inputs of its own. Each word names
+its input as the seat plan's step 4.1 names it, then what its minutes count (owner decisions 183A
+and 184A)."""
+
+TIMING_FORM = {
+    "heading": "Minutes for this review",
+    "save": "Save minutes",
+    "saved": "The minutes are recorded.",
+}
+"""The minutes form's own words: its heading, its button and the one line a save leaves."""
+
+
+def test_the_minutes_form_names_each_timing_input_in_their_order() -> None:
+    """007 cycle 18: one word per human timing input, keyed by `TIMING_INPUTS` in their order and
+    nothing else, a group of its own after `note` and `first_shown`, so `source` stays just before
+    `errors` (`test_sources_labels.py`). `report/summary.py` copies the six as a `Literal`, since it
+    imports no session module; read from the module, so its absence fails this case alone."""
+    labels = load_words().labels
+    order = list(raw_words()["labels"])
+
+    assert tuple(labels.timing) == TIMING_INPUTS
+    assert labels.timing == TIMING_WORDS
+    assert get_args(summary.TimingInput) == TIMING_INPUTS
+    assert order.index("timing") == order.index("first_shown") + 1
+
+
+def test_the_minutes_forms_words_name_no_figure() -> None:
+    """007 cycle 18: the form's heading, its button and the line a save leaves, a group of its own
+    after `timing`. No word of either group holds a digit or a token: the figures stay in the
+    form's fields, and in no word the page prints beside them (decision 186A)."""
+    labels = load_words().labels
+    order = list(raw_words()["labels"])
+    words = [*labels.timing.values(), *labels.timing_form.values()]
+
+    assert labels.timing_form == TIMING_FORM
+    assert order.index("timing_form") == order.index("timing") + 1
+    assert [word for word in words if any(character.isdigit() for character in word)] == []
+    assert [word for word in words if "_" in word] == []
+
+
+@pytest.mark.parametrize("group", ["timing", "timing_form"])
+def test_a_key_the_minutes_form_does_not_name_is_refused(group: str) -> None:
+    """007 cycle 18: a misspelt or extra key in either group is an error when the file loads,
+    never a field or a word the page draws silently."""
+    data = raw_words()
+    data["labels"][group]["unexpected"] = "a word nobody reads"
+
+    with pytest.raises(ValidationError):
+        Words.model_validate(data)
+
+
+INVALID_TIMING = {"InvalidTiming": "Enter each as a number of minutes, 0 or more, then save again."}
+"""The class the timing route refuses a saved minute with (007 `contracts/timing.md` section 3),
+which the minutes form says after a refused save (cycle 18's Tier 2 review): the page posts no key
+the route does not take, so the class answers a field that holds no number or a negative one, and
+the sentence names both - "Enter the minutes as numbers" was untrue of a negative figure."""
+
+
+def test_a_refused_save_of_the_minutes_says_what_each_field_takes() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in INVALID_TIMING} == INVALID_TIMING
 
 
 def test_a_triage_a_finding_does_not_take_says_what_a_pass_takes() -> None:
