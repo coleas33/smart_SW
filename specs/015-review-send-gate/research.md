@@ -2325,3 +2325,43 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     exists; Remodel's awaiting rule is held once.
 
   016's `tasks.md` (T022-T026) and `validation.md` record each with its commit and gate.
+
+## R9. Check again keeps what the earlier record said (2026-11-02; cycle 12)
+
+- **Question**: a successful Check again - which Send on a restored waiting review runs first -
+  starts a new session and stream. The carry (`runner._carry_decisions`) passes over every
+  undecided earlier finding, so the line a restate or a re-run left on its card, saying its
+  decision was cleared, is in no stream the new record reads: the card shows the finding simply
+  undecided. And the new `report.md` names neither the earlier record's withdrawals with a
+  decision nor its cleared lines ([`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 6's
+  carry item; 002 [research.md](../002-task-pane-assistant/research.md), H-g-010's *Left open*). The
+  owner picked it on 2026-11-02 (roadmap update run 4's round, 29), extending owner decision 193A's
+  line to Check again; no new decision.
+- **Settled**:
+  - **The lines.** `_carry_decisions` reads the earlier record's own stream
+    (`agent/events.session_events`, cycle 6's `own_stream` rule) and, for each undecided earlier
+    finding with a line there (`snapshot.cleared_lines`), writes that line as a `disposition.cleared`
+    on the new stream, naming the one re-run finding with its subject key (72A's match), the
+    earlier disposition and words unchanged and the review's own tally in place of the earlier one.
+    It does so before any decision it carries, so a decision carried onto that finding ends the line,
+    and a line the carry itself writes, for a verdict that changed, comes after it and is the one
+    shown. Both snapshots, the page and `report.md` already read that event from the session's own
+    stream, so none of them changes, and the line goes with the engineer's next decision, as any
+    cleared line does.
+  - **The withdrawals.** A withdrawal with a decision takes its finding out of the earlier session,
+    so the re-run holds no finding to name it on, and its id is the earlier record's, which the
+    re-run may have given another finding. Written again as `finding.withdrawn`, it would drop that
+    finding's card from a page that read it live, and a replayed Transcript would say that finding
+    was withdrawn; as an event of a new type, today's page would report it unreadable. So the re-run's
+    `session.started` names them, `carried_withdrawals`, each the earlier `finding.withdrawn` body
+    with its `disposition` and `taken` (`snapshot.withdrawn_lines` of the earlier record, its own
+    carried ones first), and `withdrawn_lines` names them before the session's own: `report.md`'s
+    "Withdrawn with a decision" prints them worded as the earlier report did. The page ignores the
+    key; a fold's withdrawal still names nothing.
+  - **Nothing to carry.** No line and no key are written, so the stream and `report.md` are what a
+    Check again writes today, and the pane fixtures' re-run keeps its bytes.
+  - **No page change.** After a Check again the page reads the new chat's snapshot through
+    `restore`, as a review switch does (`showRechecked`), so its `cleared` lines are drawn by the
+    path 002's `ReviewPageTriageTests.AClearedLineComesBackAfterAReviewSwitch` covers.
+- **Tests**: T121 in [tasks.md](tasks.md), Phase 8, written first; T122 makes it green, and T123
+  closes the records.
