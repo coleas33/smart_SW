@@ -8199,7 +8199,10 @@ note box from the record, losing a note typed for the press.
     decision recorded, since the page's words name the card and its buttons. A different
     decision's message is as before; the Defer's now says what a later accepted or rejected does
     with its triage; a decision already recorded says that sending it again with no triage
-    changes nothing.
+    changes nothing. *Changed 2026-11-03 by the read-only check of the Tier 2 review's fixes
+    (below):* on a Defer - a pass's, the one Defer it meets - it also says that the finding can
+    still move to accepted or rejected, as the page's sentence says a Defer still needs one of
+    them.
   - **The record shown.** Each refusal of the record - `IllegalTransition`, `TriageAlreadyRecorded`,
     `OutcomeNeeded`, `DecisionAlreadyRecorded` and `AlreadyDeferred` - names the finding's
     disposition as the record holds it, `disposition` beside `error_class`, `message` and
@@ -8247,10 +8250,12 @@ note box from the record, losing a note typed for the press.
   - *Added 2026-11-03 (the Tier 2 review):* the page orders no reply, refusal or event against
     another, so a refusal draws its record and tally only while the card holds the record it held
     at its press. After the session's end, a decision another client records between two presses
-    on one card, the first press's reply landing after the second was made, is then not shown
-    until the next press; and a refusal on one card that lands after another card's later reply
-    shows the older tally, as two replies on two cards have since cycle 7 (`docs/review-backlog.md`,
-    cycle 23).
+    on one card, the first press's reply or refusal landing after the second was made, is then not
+    shown until the next press; and a refusal on one card that lands after another card's later
+    reply shows the older tally, as two replies on two cards have since cycle 7
+    (`docs/review-backlog.md`, cycle 23). *Changed 2026-11-03 by the read-only check (below):* "or
+    refusal" added, since an earlier press's refusal redraws the record the guard compares too;
+    before the guard, the second press's refusal drew the other client's record there.
   - Other refusals still say to reload where a reload is what shows the truth: `UnknownFinding`
     (a finding the review no longer holds), `AlreadyAnswered`, `UnknownEvidenceRequest` and
     `NotWaiting`. None is a decision the record refused.
@@ -8287,6 +8292,16 @@ note box from the record, losing a note typed for the press.
     phase's *Checkpoint* in [tasks.md](tasks.md) said no refusal, or no refused decision, says to
     reload; `404 UnknownFinding` still does (*Left open*). Each now says it of a refusal of the
     record.
+  - *Added 2026-11-03:* a read-only check of these fixes, no must-fix and three should-fix, all
+    three done, as T404's second dated sub-item records. A pass's Defer refused as already
+    recorded now says, on the console and in the route's message, that it can still move to
+    accepted or rejected (*The console*). The guard's comment said that a record drawn since came
+    from a later write, but an earlier press's refusal redraws it too: the comment and *Left open*
+    now say so (the default taken: the records, not a guard that only a reply or an event moves,
+    which would show the other client's record there but let two refusals landing out of order
+    draw the older one, which this guard keeps from the card; each guard leaves one order, and
+    the revision the backlog names fixes both). And a fact pins that a refusal of the record with
+    no tally hides the tally.
 - **Gates** (T404; 2026-11-03), on the cycle's own tree:
   - The whole non-live suite, the tokenizer required: 19,006 passed and 5 skipped on Python
     3.12.3, its two warnings neither of this cycle: the test client's deprecation, and a
@@ -8303,3 +8318,5 @@ note box from the record, losing a note typed for the press.
   - The whole suites on the final tree: recorded once they run.
   - *Added 2026-11-03 (the Tier 2 review):* the review's fixes came after that tree; their gates
     are T404's sub-item in [tasks.md](tasks.md).
+  - *Added 2026-11-03 (the read-only check):* its fixes came after that tree too; their gates are
+    T404's second sub-item.
