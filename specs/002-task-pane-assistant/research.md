@@ -6906,7 +6906,8 @@ the decision register now records 160A as done.
   or the words, while the five modules' other 533 cases passed; T348's eight facts failed before
   T349, each for want of the tally's section, while the class's other 30 passed.
 - **Left open**: a finding a turn adds is counted when the turn's end reads the summary, not as it
-  arrives; a session's-end ranking read that lands after a press made at that moment would show
+  arrives (*since 2026-11-02, cycle 13 below: as it arrives*); a session's-end ranking read that
+  lands after a press made at that moment would show
   the tally before the press until the next decision or event (both read the live session; not
   seen in tests); and roadmap holes H-c-007, H-g-004 and H-g-011 still cite 185A's "no tally in
   the pane", for the roadmap's next update.
@@ -7120,7 +7121,8 @@ the decision register now records 160A as done.
     undecided, is named in neither place: its cleared line goes with it, and its withdrawal took
     no decision.
   - The Transcript's line is the live chat's: a read-only restore after a restart replays no
-    Transcript, and `report.md` carries the part there.
+    Transcript, and `report.md` carries the part there. *Since 2026-11-02 (cycle 13, below):* the
+    read-only snapshot names each such withdrawal, and its Transcript prints it as the live line.
   - Older records name the rule by its old place, `server._own_stream` (the backlog's cycle 6 item,
     193A above); they are history and left as they are. The hole's row in
     [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the roadmap's next update run.
@@ -7299,3 +7301,51 @@ the decision register now records 160A as done.
     finding's took no decision and are left out, as `report.md` leaves them out.
 - **Tests**: T370 and T372 in [tasks.md](tasks.md), Phase 32, each written first; T371 and T373 make
   them green, and T374 closes the records.
+- **Built** (2026-11-02, T371 and T373):
+  - The backend (T371): `ToolContext.finding_body` carries the tally (`with_triage_tally`), which
+    the tool layer's `record_finding` and the runner's fold announcement share; the `finding`
+    body's optional `triage_tally` in [contracts/chat-events.schema.json](contracts/chat-events.schema.json),
+    closed in the event's branch, with 001
+    [review-session.schema.json](../001-agentic-design-review/contracts/review-session.schema.json)'s
+    `Finding` closed where the session lists it; `benchmark/scorecard.read_stream`, which keeps a
+    withdrawn finding's body without the tally, so a forbidden hit announced with one still counts;
+    the words file's `rerun.decide_again` and `RerunWords.read_only`; and `review_snapshot`, whose
+    read-only snapshot names each cleared line in that form and adds `withdrawn`.
+  - The page (T373): `app.js`'s live `finding` case shows its tally (`showTally`); `loadLabels`
+    keeps its read, and `afterLabels` holds each restore read's snapshot until it has answered; and
+    `restore` prints a read-only snapshot's `withdrawn` after the restored Transcript's note
+    (`render.withdrawalMarker`). `ReviewPageDriver` gains `HeldInitialRoutes`.
+- **Tests changed on purpose**, none loosened, each restored line now in its read-only form:
+  `test_chat_server.py`'s `test_the_live_and_the_restored_snapshot_carry_a_cleared_line_until_a_decision`
+  and `test_a_regrade_that_clears_a_decision_says_so_in_every_view`; `test_recheck.py`'s
+  `test_a_restore_after_a_failed_re_run_still_shows_the_records_cleared_line` and
+  `test_check_again_whose_carry_clears_a_decision_shows_its_line_in_the_new_chats_snapshot`, a case
+  T370 missed, with `Regraded.read_only_line` and `carried_line(read_only=)` beside the live lines;
+  `ReviewPageTriageTests`' `AClearedLineComesBackInAReadOnlyRestore` and
+  `ARestoredReviewSaysWhichCardsHaveNoTriage`, whose read-only snapshots named the live line; and
+  the 002 literal of the specs-README pin (T369, T374).
+- **Tests first**: T370's 15 cases failed before T371, and T372's three facts before T373, each for
+  want of its change ([tasks.md](tasks.md), T370 and T372); a mutant that drew the run folder's
+  snapshot without waiting for the labels failed the labels fact's read-only half (T373).
+- **Left open**:
+  - A labels read that never answers holds a restore with it; both reads go to the one loopback
+    backend, and a read that fails lets the snapshot through.
+  - Only the two restore reads wait: a Review pressed before a reload's labels read answers, and a
+    Check again's snapshot (`showRechecked`), which Send reaches from a review already drawn, do not.
+  - A re-run announced under its own id is counted not recorded until its fold, as its card is
+    shown until then; the fold's announcement counts what the fold left.
+  - `report.md`'s cleared line keeps the call to decide again: it is the run's record, not a view
+    with locked buttons. H-g-010's row in [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is
+    for the roadmap's next update run.
+- **Gates** (T374; 2026-11-02), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required: 18,874 passed and 5 skipped on Python
+    3.12.3, and the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), cycle 11's
+    18,865 and T370's nine. Its two warnings are neither of this cycle: the test client's
+    deprecation, and a serializer warning from `test_ir_loader_append.py`'s invalid row.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,339 add-in tests passed.
+  - The link check over the cycle's ten changed Markdown files, anchors included, none broken;
+    every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
+    ran.
