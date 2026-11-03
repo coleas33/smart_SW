@@ -424,6 +424,10 @@ class Labels(ReviewModel):
     """What a flagged finding's card head says until its triage is recorded, keyed by the decision
     recorded without one, or `undecided` (roadmap hole H-c-008); `read_only` while its review is
     read-only, whatever its decision (cycle 9's Tier 2 review)."""
+    note: dict[Literal["not_kept"], str]
+    """What a card says when a decision's reply keeps the note recorded first in place of another,
+    non-blank one its press sent: a late triage keeps it (owner decision 198A; cycle 11's Tier 2
+    review)."""
     source: dict[Source, str]
     errors: dict[str, str]
 

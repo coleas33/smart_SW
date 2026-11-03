@@ -327,6 +327,12 @@ labels:
     rejected: "No triage recorded yet: pick one, then press Reject again"
     deferred: "No triage recorded yet: pick one, then press Defer again"
     read_only: "No triage recorded yet"
+  # What a card says when a late triage keeps the note recorded first (owner decision 198A, feature
+  # 002 FR-031; cycle 11's Tier 2 review): a different note sent with it is not kept, so the page,
+  # comparing the note its press sent, when not blank, with the reply's, both trimmed, prints this
+  # under the reply's sentence until the card's status is next written; with no labels, nothing.
+  note:
+    not_kept: "The note recorded first stays."
   # Who wrote a finding, a question or a coverage row (feature 013): the page prints the word
   # for a record's `source` token and compares nothing; `report.md` uses the same two.
   source:

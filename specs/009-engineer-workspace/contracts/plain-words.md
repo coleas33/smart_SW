@@ -91,6 +91,18 @@ on a pass; with no labels there are no words and the head is as before (FR-030),
 |---|---|
 | a flagged finding's card head, until its triage is recorded | `no_triage` |
 
+*Amended 2026-11-02 (feature 002, owner decision 198A; its cycle 11's Tier 2 review, 002 T368):*
+the block gains `note`, after `no_triage` and before `source`: `{not_kept: "The note recorded first
+stays."}`, what a finding card says when a decision's reply keeps the note recorded first in place
+of another one the press sent, as a late triage does (198A). The page compares the note its press
+sent, when not blank, with the reply's, both trimmed, and prints
+`labelOf(labels, "note", "not_kept", "")` on the card's status line after the reply's sentence,
+until the status is next written; with no labels it prints nothing (FR-030).
+
+| Surface | Word from |
+|---|---|
+| a finding card's status line, after a reply that kept the note recorded first in place of the one sent | `note` |
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and

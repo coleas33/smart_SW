@@ -45,6 +45,9 @@
       "deferred": "No triage recorded yet: pick one, then press Defer again",
       "read_only": "No triage recorded yet"
     },
+    "note": {
+      "not_kept": "The note recorded first stays."
+    },
     "source": {
       "code": "Checked by code",
       "model": "AI guidance"

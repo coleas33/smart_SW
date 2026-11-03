@@ -74,7 +74,9 @@ namespace SwReview.AddIn.Tests;
 /// drawn and after each reply, a refusal's too, so it never shows a note the backend did not keep and a later press posts the
 /// recorded note - after a reload or a review switch too - rather than an empty box over it.
 /// *Changed 2026-11-02 (002 T368; cycle 11's Tier 2 review):* not a refusal's: a refused press leaves the box as typed, since the
-/// backend never read its note, so the retry posts it.
+/// backend never read its note, so the retry posts it. And when a reply keeps the note recorded first in place of another,
+/// non-blank one the press sent - a late triage keeps it - the card says so after the reply's sentence, in the backend's words
+/// (`labels.note`), until its status is next written.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -326,7 +328,10 @@ public sealed class ReviewPageTriageTests
     /// *Changed 2026-11-02 on purpose (002 T368; cycle 11's Tier 2 review):* after the refusal the
     /// box holds `FICT third note` as typed, where it showed the recorded note again: the backend
     /// never read the refused press's note, so the box keeps it for the retry
-    /// (<see cref="ARefusedPressLeavesTheTypedNoteForTheRetry"/>).
+    /// (<see cref="ARefusedPressLeavesTheTypedNoteForTheRetry"/>). And the late triage's status
+    /// line is the reply's sentence followed by the words file's line that the note recorded first
+    /// stays, where it was the sentence alone: `FICT second note` was sent and not kept
+    /// (<see cref="ALateTriageThatKeepsTheNoteRecordedFirstSaysSo"/>).
     /// </summary>
     [Fact]
     public void ADecidedFindingWithoutATriageTakesOneWithTheSameDecision()
@@ -358,7 +363,8 @@ public sealed class ReviewPageTriageTests
             JsonElement late = await driver.Read(ReadCard("F-001"));
             Assert.Equal(new[] { "already_known" }, Pressed(late));
             Assert.Equal(
-                "Disposition: accepted (" + Word("already_known") + ") by " + Engineer + " at " + RecordedAt + " - FICT first note",
+                "Disposition: accepted (" + Word("already_known") + ") by " + Engineer + " at " + RecordedAt + " - FICT first note"
+                    + LabelsSample.NoteNotKept,
                 late.GetProperty("status").GetString());
             Assert.Equal("card-status decided", late.GetProperty("statusClass").GetString());
             Assert.Equal("FICT first note", await NoteBox(driver, "F-001"));
@@ -1757,6 +1763,130 @@ public sealed class ReviewPageTriageTests
     }
 
     /// <summary>
+    /// Cycle 11's Tier 2 review (002 T368; owner decision 198A): a late triage keeps the note recorded first, so a different note
+    /// sent with it is not kept, and the card says so in one line of the backend's words after the reply's sentence - where the
+    /// box, which shows the recorded note and so invites the edit, goes back to it. F-001 is deferred with a note and no triage;
+    /// the engineer edits the note, picks `new and real` and presses Defer again, and the reply keeps the Defer's note. The line
+    /// lasts as the record's sentence above a refusal does: the next status written on the card, a refused press's, replaces it.
+    /// </summary>
+    [Fact]
+    public void ALateTriageThatKeepsTheNoteRecordedFirstSaysSo()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string Kept = "FICT first shown at an earlier sitting";
+            const string Edited = "FICT first shown at the sitting before this one";
+            await Reviewed(driver, Finding("F-001", Disposition("deferred", Kept, null)));
+            await driver.Route("POST", DispositionPath("F-001"), 200, Finding("F-001", Disposition("deferred", Kept, "new_and_real")));
+            await Note(driver, "F-001", Edited);
+            await driver.ClearCalls();
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "defer");
+
+            Assert.Equal("decision=deferred, note=" + Edited + ", triage=new_and_real", Body(Assert.Single(await DispositionCalls(driver))));
+            JsonElement late = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(LabelsSample.NoteNotKept, late.GetProperty("noteKept").GetString());
+            Assert.Equal(Sentence("deferred", "new_and_real", Kept) + LabelsSample.NoteNotKept, late.GetProperty("status").GetString());
+            Assert.Equal("card-status decided", late.GetProperty("statusClass").GetString());
+            Assert.Equal(Kept, await NoteBox(driver, "F-001"));
+
+            await driver.Route("POST", DispositionPath("F-001"), 409, TurnRunning);
+            await Decide(driver, "F-001", "defer");
+            JsonElement refused = await driver.Read(ReadCard("F-001"));
+            Assert.Equal("TurnRunning", refused.GetProperty("refusalClass").GetString());
+            Assert.Equal(Sentence("deferred", "new_and_real", Kept), refused.GetProperty("record").GetString());
+            Assert.Equal(JsonValueKind.Null, refused.GetProperty("noteKept").ValueKind);
+        });
+    }
+
+    /// <summary>
+    /// Cycle 11's Tier 2 review (002 T368), a guard: a reply that keeps the note the press sent says nothing of the note. F-001
+    /// is accepted with no note and no triage; the engineer types the earlier sitting 188A asks for, picks `new and real` and
+    /// presses Accept again, and the reply keeps that note (198A: none was recorded). F-002 is accepted with a note and no
+    /// triage; its box shows the note, which goes back with a space typed after it, and the reply keeps the note recorded - the
+    /// same note, the two compared trimmed. Each card shows the reply's sentence alone.
+    /// </summary>
+    [Fact]
+    public void ALateTriageThatKeepsTheNoteSentSaysNothingOfIt()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string Dated = "FICT first shown at an earlier sitting";
+            await Reviewed(
+                driver,
+                Finding("F-001", Disposition("accepted", string.Empty, null)),
+                Finding("F-002", Disposition("accepted", "FICT first note", null)));
+            await driver.Route("POST", DispositionPath("F-001"), 200, Finding("F-001", Disposition("accepted", Dated, "new_and_real")));
+            await driver.Route("POST", DispositionPath("F-002"), 200,
+                Finding("F-002", Disposition("accepted", "FICT first note", "already_known")));
+            await driver.ClearCalls();
+
+            await Note(driver, "F-001", Dated);
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "accept");
+            await Note(driver, "F-002", "FICT first note ");
+            await Press(driver, "F-002", "already_known");
+            await Decide(driver, "F-002", "accept");
+
+            Assert.Equal(
+                new[]
+                {
+                    "decision=accepted, note=" + Dated + ", triage=new_and_real",
+                    "decision=accepted, note=FICT first note , triage=already_known",
+                },
+                (await DispositionCalls(driver)).Select(Body).ToArray());
+            JsonElement dated = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(Sentence("accepted", "new_and_real", Dated), dated.GetProperty("status").GetString());
+            Assert.Equal(JsonValueKind.Null, dated.GetProperty("noteKept").ValueKind);
+            JsonElement same = await driver.Read(ReadCard("F-002"));
+            Assert.Equal(Sentence("accepted", "already_known", "FICT first note"), same.GetProperty("status").GetString());
+            Assert.Equal(JsonValueKind.Null, same.GetProperty("noteKept").ValueKind);
+        });
+    }
+
+    /// <summary>
+    /// Cycle 11's Tier 2 review (002 T368), a guard: a press that sends no note says nothing of the note the reply keeps. F-001
+    /// and F-002 are accepted with a note and no triage; the engineer empties F-001's box and leaves two spaces in F-002's - a
+    /// blank note is none (198A) - picks `already known` on each and presses Accept again, and each reply keeps the note
+    /// recorded. Each card shows the reply's sentence alone, and its box the recorded note.
+    /// </summary>
+    [Fact]
+    public void ALateTriageSentWithNoNoteSaysNothingOfTheNote()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await Reviewed(
+                driver,
+                Finding("F-001", Disposition("accepted", "FICT first note", null)),
+                Finding("F-002", Disposition("accepted", "FICT second note", null)));
+            await driver.Route("POST", DispositionPath("F-001"), 200,
+                Finding("F-001", Disposition("accepted", "FICT first note", "already_known")));
+            await driver.Route("POST", DispositionPath("F-002"), 200,
+                Finding("F-002", Disposition("accepted", "FICT second note", "already_known")));
+            await driver.ClearCalls();
+
+            await Note(driver, "F-001", string.Empty);
+            await Press(driver, "F-001", "already_known");
+            await Decide(driver, "F-001", "accept");
+            await Note(driver, "F-002", "  ");
+            await Press(driver, "F-002", "already_known");
+            await Decide(driver, "F-002", "accept");
+
+            Assert.Equal(
+                new[] { "decision=accepted, note=, triage=already_known", "decision=accepted, note=  , triage=already_known" },
+                (await DispositionCalls(driver)).Select(Body).ToArray());
+            JsonElement emptied = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(Sentence("accepted", "already_known", "FICT first note"), emptied.GetProperty("status").GetString());
+            Assert.Equal(JsonValueKind.Null, emptied.GetProperty("noteKept").ValueKind);
+            Assert.Equal("FICT first note", await NoteBox(driver, "F-001"));
+            JsonElement blank = await driver.Read(ReadCard("F-002"));
+            Assert.Equal(Sentence("accepted", "already_known", "FICT second note"), blank.GetProperty("status").GetString());
+            Assert.Equal(JsonValueKind.Null, blank.GetProperty("noteKept").ValueKind);
+            Assert.Equal("FICT second note", await NoteBox(driver, "F-002"));
+        });
+    }
+
+    /// <summary>
     /// A read-only check of cycle 9's Tier 2 fixes, a guard: a switch from a live review to a read-only restore draws every
     /// card's line again in the read-only words, since the page reads `state.readOnly` when it draws a card and sets it before
     /// a restore draws them. Chat-1 is live: its F-001 Accept, F-002 Reject and F-003 Defer, each recorded without a triage,
@@ -2289,7 +2419,8 @@ return JSON.stringify({
   refusal: status ? h.text(status, '.plain-error-text') : null,
   recordFirst: !!status && h.before(status.querySelector('.card-record'), status.querySelector('.plain-error')),
   cleared: status ? h.text(status, '.card-cleared') : null,
-  clearedFirst: !!status && h.before(status.querySelector('.card-cleared'), status.querySelector('.plain-error'))
+  clearedFirst: !!status && h.before(status.querySelector('.card-cleared'), status.querySelector('.plain-error')),
+  noteKept: status ? h.text(status, '.card-note-kept') : null
 });";
 
     /// <summary>

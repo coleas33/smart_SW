@@ -2687,7 +2687,18 @@
       'POST',
       body
     ).then(function (finding) {
-      showDisposition(card, finding && finding.disposition);
+      var disposition = finding && finding.disposition;
+      showDisposition(card, disposition);
+      // A late triage keeps the note recorded first (owner decision 198A), so a reply holding another
+      // note than the non-blank one sent says so after its sentence until the status is next written,
+      // as the record above a refusal lasts (cycle 11's Tier 2 review). Which note is kept is the
+      // backend's rule: the page compares the two, trimmed, and decides nothing.
+      var sent = body.note.trim();
+      var line = attention.labelOf(state.labels, 'note', 'not_kept', '');
+      var status = card.querySelector('.card-status');
+      if (disposition && sent && sent !== String(disposition.note || '').trim() && line && status) {
+        status.appendChild(render.el('span', 'card-note-kept', line));
+      }
       // The review's tally as this decision left it (002 cycle 7), only while the card pressed is the
       // one the review on screen holds: a reply that lands after a switch is another review's.
       if (entryOf(card)) {
