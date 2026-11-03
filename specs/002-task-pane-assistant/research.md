@@ -7986,7 +7986,9 @@ date, so a new problem read as old (`docs/review-backlog.md`, cycle 17).
   - The link check over the cycle's seven changed Markdown files, anchors included, 466 links
     and none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or
     paid or live test ran.
-  - The whole suites on the final tree: recorded once they run.
+  - The whole suites on the final tree (`3c3bacd1`, 2026-11-03): 19,021 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; no C# or page
+    file changed (T396's line).
   - *Changed 2026-11-03:* the tree above came before the Tier 2 review's fixes; their checks are
     T396's sub-item in [tasks.md](tasks.md).
   - *Done 2026-11-03, cycle 21 stacked on cycle 20:* the gates above ran on cycle 21 before it was
@@ -8152,7 +8154,9 @@ ticked.
   - The link check over the cycle's eight changed Markdown files, anchors included, 469 links and
     none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or
     live test ran.
-  - The whole suites on the final tree: recorded once they run.
+  - The whole suites on the final tree (`25da7142`, 2026-11-03): 19,031 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; C# with zero
+    warnings, then 10,274 extractor and 4,405 add-in tests passed (T400's line).
   - *Changed 2026-11-03:* the tree above came before the Tier 2 review's fixes and the read-only
     check's, whose gates are T400's two sub-items in [tasks.md](tasks.md).
   - *Done 2026-11-03, cycle 22 stacked on cycle 21:* the gates above ran on cycle 22 before it was
@@ -8315,7 +8319,9 @@ note box from the record, losing a note typed for the press.
   - The link check over the cycle's seven changed Markdown files, anchors included, none broken;
     every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
     ran.
-  - The whole suites on the final tree: recorded once they run.
+  - The whole suites on the final tree (`fc2ce6c9`, 2026-11-03): 19,043 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; C# with zero
+    warnings, then 10,274 extractor and 4,411 add-in tests passed (T404's line).
   - *Added 2026-11-03 (the Tier 2 review):* the review's fixes came after that tree; their gates
     are T404's sub-item in [tasks.md](tasks.md).
   - *Added 2026-11-03 (the read-only check):* its fixes came after that tree too; their gates are
