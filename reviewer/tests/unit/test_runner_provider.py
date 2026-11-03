@@ -1703,6 +1703,60 @@ def test_a_cleared_notice_carries_the_tally_its_clear_left(
         validator.validate(event)
 
 
+def test_a_resumed_turns_findings_carry_the_tally_as_each_leaves_it(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """002 cycle 13 (the backlog's cycle 7 section; FR-031): a `finding` event carries the review's
+    triage tally, as the disposition events do, so the page counts a finding a resumed turn adds as
+    it arrives, not when the turn ends. Sheet1's Reject as `wrong` and Sheet2's Accept as
+    `already_known` are recorded while the question is open, and the opening turn's announcements,
+    made while no finding recorded a triage, carry none. The resumed turn records Sheet3, a new
+    finding, and runs Sheet2's check again with another verdict: Sheet3's announcement counts it not
+    recorded; the re-run's own, under its new id, counts that card too, as the page then shows it;
+    and the fold's announcement of Sheet2's finding, its Accept cleared, counts what the fold left,
+    as its cleared notice does. Every event stays valid against the events contract."""
+    run = review(
+        [
+            turn(
+                "blocked",
+                on_sheet("Sheet1", "suspected"),
+                on_sheet("Sheet2", "suspected"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("re-run", on_sheet("Sheet3", "suspected"), on_sheet("Sheet2", "unresolved")),
+        ]
+    )
+    opening = bodies_of(run, "finding")
+    record_disposition(
+        run, "F-001", decision="rejected", note="FICT missed", by=ENGINEER, triage="wrong"
+    )
+    record_disposition(
+        run, "F-002", decision="accepted", note="FICT intended", by=ENGINEER, triage="already_known"
+    )
+    mark = len(events_of(run))
+
+    run.answer_evidence("ER-001", "The usable thread depth is 12 mm.")
+
+    assert [body["id"] for body in opening] == ["F-001", "F-002"]
+    assert all("triage_tally" not in body for body in opening)
+    after = events_of(run)[mark:]
+    announced = [
+        (event["body"]["id"], event["body"].get("triage_tally"))
+        for event in after
+        if event["type"] == "finding"
+    ]
+    assert announced == [
+        ("F-003", tally_body(wrong=1, known=1, not_recorded=1)),
+        ("F-004", tally_body(wrong=1, known=1, not_recorded=2)),
+        ("F-002", tally_body(wrong=1, not_recorded=2)),
+    ]
+    [notice] = [event["body"] for event in after if event["type"] == "disposition.cleared"]
+    assert (notice["finding_id"], notice["triage_tally"]) == announced[-1]
+    validator = contract_validator("chat-events.schema.json")
+    for event in events_of(run):
+        validator.validate(event)
+
+
 def test_two_earlier_findings_with_one_verdict_key_take_no_rerun(
     review: Callable[..., runner.ReviewRun],
 ) -> None:

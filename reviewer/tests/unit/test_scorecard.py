@@ -75,6 +75,7 @@ from tests.support.packages import build_package, persist_ref
 from tests.support.roles_review import PIN_ID, roles_review, write_profile
 from tests.support.roles_review import write_package as write_roles_package
 from tests.support.scoring_probes import NOT_ASSESSED_WITHOUT_EXTENSIONS, assert_oracle_and_null
+from tests.support.triage import tally_body
 from tests.unit.test_benchmark_attempts import driver_sleeps as driver_sleeps
 from tests.unit.test_checks_fastener import layer, mm, screw, tapped_hole
 from tests.unit.test_drawing_finding_number_guard import (
@@ -1004,6 +1005,28 @@ def test_a_withdrawn_finding_whose_last_body_is_no_finding_is_skipped_the_column
 
     assert score.withdrawn_forbidden_hit_finding_ids == [first, second]
     assert "withdrawn_forbidden_hit_finding_ids" not in score.not_assessed
+
+
+def test_a_withdrawn_hit_announced_with_the_tally_is_still_a_withdrawn_hit(
+    tmp_path: Path,
+) -> None:
+    """002 cycle 13 (FR-031): a `finding` body carries the review's triage tally beside the finding
+    while some finding records a triage, so the last body announced before a withdrawal can carry
+    one - a finding a resumed turn added after a decision was triaged. The scorer reads the finding
+    without it, so the hit is still counted (`scoring.md` 3.3)."""
+    first, second, third = all_bought(tmp_path)
+
+    def tally_on_the_first(events: list[dict[str, Any]]) -> None:
+        last_announced(events, first)["body"]["triage_tally"] = tally_body(known=1, not_recorded=4)
+
+    edit_stream(tmp_path, tally_on_the_first)
+
+    score = score_all_bought(tmp_path)
+
+    assert score.withdrawn_forbidden_hit_finding_ids == [first, second, third]
+    assert {score.finding_origins[finding_id] for finding_id in (first, second, third)} == {
+        "code_only_call"
+    }
 
 
 def test_with_the_stream_deleted_the_withdrawn_column_is_not_assessed(tmp_path: Path) -> None:

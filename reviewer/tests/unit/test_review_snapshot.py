@@ -439,3 +439,80 @@ def test_a_snapshot_with_no_cleared_line_keeps_its_keys(
 
     assert set(with_stream) == KEYS
     assert as_bytes(with_stream) == as_bytes(review_snapshot(session, package, run_id=RUN_ID))
+
+
+# --- 002 cycle 13: what a read-only restore names -----------------------------------------------
+
+
+def withdrawn(seq: int, finding_id: str, **named: Any) -> AgentEvent:
+    """A `finding.withdrawn` event of `finding_id`, naming whatever else `named` gives its body."""
+    return event(
+        seq, "finding.withdrawn", {"finding_id": finding_id, "reason": "FICT bought part", **named}
+    )
+
+
+@pytest.mark.parametrize("waiting", [False, True], ids=["sent", "waiting"])
+def test_a_read_only_snapshot_names_each_cleared_line_in_its_read_only_form(
+    session: ReviewSession, package: EvidencePackage, waiting: bool
+) -> None:
+    """002 cycle 13 (FR-031): a read-only restore's decision buttons are off, so it names each
+    cleared line without the call to decide again (`RerunWords.read_only`) - its finding,
+    disposition and the rest of its words as the stream holds them, and a line written with other
+    words as written - whether the record was sent or waits for Send. The live snapshot, whose
+    buttons are on, names each line as written."""
+    record = with_status(session, "not_sent") if waiting else session
+    line = load_words().rerun.of("Accept", "real but already known", cause="restate")
+    stream = [
+        started(session.session_id),
+        cleared(2, "F-002", line),
+        cleared(3, "F-004", "FICT a cleared line written with other words."),
+    ]
+
+    live = review_snapshot(record, package, run_id=RUN_ID, events=stream)
+    restored = restored_snapshot(record, package, run_id=RUN_ID, events=stream)
+
+    assert live["cleared"] == [stream[1].body, stream[2].body]
+    assert restored["cleared"] == [
+        {
+            **stream[1].body,
+            "reason": (
+                "Your answer graded the checks again and this verdict changed, so your Accept "
+                "(real but already known) was cleared."
+            ),
+        },
+        stream[2].body,
+    ]
+
+
+def test_a_read_only_snapshot_names_each_withdrawal_that_took_a_decision(
+    session: ReviewSession, package: EvidencePackage
+) -> None:
+    """002 cycle 13 (FR-031; H-g-010's *Left open*): a read-only restore replays no Transcript, so
+    its snapshot names, under `withdrawn`, each withdrawal the record's own stream holds that took a
+    decision, in the order they went - the bodies `report.md` names under "Withdrawn with a
+    decision" - for the page to print as the live Transcript does, whether the record was sent or
+    waits for Send. A fold's withdrawal and an undecided finding's took none, and one of a finding
+    the record still holds is a stream run ahead of its record (cycle 10's Tier 2 review): none of
+    the three is named. The live snapshot, whose Transcript is replayed from the stream, names none;
+    and with none to name the key is left out, so every other snapshot keeps its bytes."""
+    taken = {"disposition": DECIDED.model_dump(mode="json"), "taken": "your Accept went with it"}
+    stream = [
+        started(session.session_id),
+        withdrawn(2, "F-090", **taken),
+        withdrawn(3, "F-091"),
+        withdrawn(4, "F-092", folded_into="F-001"),
+        withdrawn(5, "F-002", **taken),
+        withdrawn(6, "F-093", **{**taken, "taken": "your Reject (wrong) went with it"}),
+    ]
+
+    live = review_snapshot(session, package, run_id=RUN_ID, events=stream)
+    restored = restored_snapshot(session, package, run_id=RUN_ID, events=stream)
+    waiting = restored_snapshot(
+        with_status(session, "not_sent"), package, run_id=RUN_ID, events=stream
+    )
+    none_taken = restored_snapshot(session, package, run_id=RUN_ID, events=stream[:1] + stream[2:5])
+
+    assert restored["withdrawn"] == [stream[1].body, stream[5].body]
+    assert waiting["withdrawn"] == restored["withdrawn"]
+    assert "withdrawn" not in live
+    assert as_bytes(none_taken) == as_bytes(restored_snapshot(session, package, run_id=RUN_ID))

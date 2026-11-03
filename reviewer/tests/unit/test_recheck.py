@@ -1045,7 +1045,11 @@ def test_a_restore_after_a_failed_re_run_still_shows_the_records_cleared_line(
     any stream of its own; or its carry or its finalization raising, after it wrote one - so the
     record stays canonical beside a stream that is not its own, or none. A restarted backend's
     read-only restore still names the pin's line: the restore reads the stream the record's own
-    session wrote, wherever the re-run moved it."""
+    session wrote, wherever the re-run moved it.
+
+    *Changed 2026-11-02 on purpose (002 T370; cycle 13):* a read-only restore's buttons are off, so
+    it names the pin's line without the call to decide again (`read_only_line`), where it named the
+    stream's words."""
     review = chat.regraded_review(client, run_root / "FICT-recheck-line", ticked=False)
     folder = review.folder
     record = (folder / "session.json").read_bytes()
@@ -1073,7 +1077,7 @@ def test_a_restore_after_a_failed_re_run_still_shows_the_records_cleared_line(
         restored = fresh.get(f"/reviews/{folder.name}")
 
     assert restored.status_code == 200, restored.text
-    assert restored.json().get("cleared") == [review.line]
+    assert restored.json().get("cleared") == [review.read_only_line]
 
 
 def test_a_records_own_stream_is_the_canonical_one_or_its_latest_rotated_one(
