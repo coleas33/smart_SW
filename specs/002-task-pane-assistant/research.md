@@ -8345,7 +8345,8 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
     Send (`send`). The page can press each on a review it shows finished, and a follow-up,
     answers or Send that waits starts its turn only once the chat has settled, so no new turn
     starts before the two files are written. A Retry (`POST /sessions` naming `retry_of`) is not a
-    write on the review: it is still `409 RunDirInUse` until the folder is released.
+    write on the review: it is still `409 RunDirInUse` until the folder is released. *Changed
+    2026-11-03 (the Tier 2 review, below):* the live snapshot waits too.
   - **When a write waits.** From the moment the turn's action has returned until the chat has
     settled: `ChatSession.settling`, which `_play` sets before it writes the two files and clears
     once it has moved the chat. The session's `ended_at` is not the sign: a turn just started still
@@ -8359,7 +8360,10 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
   - **Then.** The route goes on as it would a moment later, asking the chat's state again: a turn
     that failed is `409 SessionFailed`, and a write on a review that now waits for Send goes to the
     chat's worker, as before. Past the bound, and while a turn still runs, the refusal is today's
-    `409 TurnRunning`, its message and sentence unchanged, so no words change.
+    `409 TurnRunning`, its message and sentence unchanged, so no words change. *Changed 2026-11-03
+    (the Tier 2 review, below):* the requests that waited go on one at a time in the order they
+    came, and a decision or minutes among them goes to the chat's worker whatever the chat settled
+    in.
   - **`report.md`.** A write that waited re-renders `report.md` and the attention record as it
     does today (`record_disposition`, `record_timing_live`), after the turn's own render, so both
     show it.
@@ -8401,11 +8405,52 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
     ([`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 24): `POST /stop` sets a
     running chat's stop flag, and `_play` clears the flag before it writes the two files, so a
     flag a Stop sets after the clear and before the settle stays set, and the next turn stops at
-    its first tool boundary. The page's Stop goes off once it reads `session.ended`, so only a
-    press within the stream's lag reaches the moment.
+    its first tool boundary. *Corrected 2026-11-03 (the Tier 2 review):* this said only a press
+    within the stream's lag reaches the moment, since the page's Stop goes off once it reads
+    `session.ended`; but a follow-up or answers sent in the moment wait in the backend while the
+    page shows Stop on for them (`sendFollowUp`, `sendAnswers`), so a Stop can be pressed for the
+    whole wait, and the flag it sets stops that turn at its first tool boundary, as the engineer
+    asked. Only a flag set with no such turn waiting stops a turn nobody stopped, and a later fix
+    must keep the Stop a waiting turn takes.
   - The few statements between the runner's `session.ended` and the action's return are not
     covered: a write there is still refused at once. The page reads the event through the
-    stream, which is polled every 20 ms, after them.
+    stream, which is polled every 20 ms, after them. *Changed 2026-11-03 (the Tier 2 review):*
+    a snapshot asked for there still says `running`, which a switch or a reload would have to land
+    in those statements to meet.
+  - *Added 2026-11-03 (the Tier 2 review):* a decision or minutes that did not wait still takes the
+    thread pool, owner decision 69A's path for a review not waiting for Send, so one pressed while
+    a write a settle released still runs on the worker can run beside it, as two writes pressed
+    within one write's time always could (backlog, cycle 24).
+  - *Added 2026-11-03 (the Tier 2 review):* `_play`'s `release_bridge()` for a chat settling back
+    to `awaiting_send` is not guarded as the failed chat's is: if it raises, the chat stays
+    `running` and settling, so each write and snapshot waits out the bound first (backlog, cycle
+    24).
+- **Tier 2 review** (T408; 2026-11-03): no must-fix and five should-fix, all fixed test first
+  ([tasks.md](tasks.md), T408's sub-item); what the fixes leave is under *Left open* and in
+  `docs/review-backlog.md`'s cycle 24 section:
+  - **The snapshot waits** (should-fix 1, older than the cycle but in its moment). A review
+    switched to, or the pane reloaded, as a turn settled was restored `running` while its
+    `last_seq` already counted `session.ended`, so the page held its turn running on a stream
+    opened past the one event that ends it, with Review, the minutes and the follow-up locked and
+    no switch away until a reload. The wait comes out of `_require_idle` into
+    `ChatServer._settled`, which `snapshot` awaits too.
+  - **One line** (should-fix 2, new with the cycle; the default taken). The settle released every
+    request that had waited at once: each write ran in the thread pool beside the others, so
+    `session.json` could be replaced last by an older copy, or two `os.replace` calls onto one file
+    collide on Windows, as the failing test met; and a follow-up that saw the settle first refused
+    the decision pressed before it. The requests that wait now go on one at a time in the order
+    they came (`ChatSession.settle_line`), one that arrives while an earlier one still waits goes
+    behind it, and a decision or minutes that waited is written on the chat's worker, where the
+    next turn runs: a decision pressed before a follow-up is written before its turn, and one
+    pressed after it meets that turn, `409 TurnRunning`, as a moment later.
+  - **Stop** (should-fix 3): the claim corrected under *Left open*, and the backlog's fix, which
+    would have dropped the Stop a waiting turn takes, replaced by one that keeps it.
+  - **The branches the contract names** (should-fix 4): cases for `send`, both `evidence` routes,
+    and a decision or minutes waiting into `awaiting_send`, each a guard proved by a mutant. The
+    review's other mutant, `run.awaiting_send` read before the wait, is equivalent: the flag does
+    not change while a chat settles.
+  - **`raising=False`** dropped from both `SETTLE_WAIT_S` monkeypatches (should-fix 5), so a
+    renamed constant fails them rather than leaving the real 5 s in force.
 - **Gates** (T408; 2026-11-03), on the cycle's final tree:
   - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,003 passed and
     5 skipped, seven of them this cycle's new cases. Its two warnings are neither of this cycle:
@@ -8423,3 +8468,5 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
   - No C# or page file changed, so no C# gate, and no words changed. No SOLIDWORKS process, seat
     task, or paid or live test ran.
   - The whole suites on the final tree: recorded once they run.
+  - *Changed 2026-11-03:* the counts above came before the Tier 2 review's fixes; their gates are
+    T408's sub-item in [tasks.md](tasks.md).
