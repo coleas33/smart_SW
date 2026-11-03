@@ -86,7 +86,8 @@ namespace SwReview.AddIn.Tests;
 /// a read-only restore's Transcript names each withdrawal that took a decision, as the live line does.
 /// *Changed 2026-11-02 (002 T374; cycle 13's Tier 2 review):* a `finding` event names the tally, null while no finding records
 /// a triage, and the page changes the tally only when the event names it, so an older backend's finding, which never does,
-/// leaves it as it was (009 FR-030).
+/// leaves it as it was (009 FR-030). And a restore read that fails before the labels answer draws its error card once they
+/// have, so the card says its next step.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -2236,6 +2237,44 @@ public sealed class ReviewPageTriageTests
     }
 
     /// <summary>
+    /// A restore read that fails before the labels answer draws its error card once they have, as a snapshot is drawn (cycle
+    /// 13's Tier 2 review): drawn first, the card would say no next step, and nothing would draw it again. After a reload
+    /// chat-1's live snapshot read answers 500 with no error body, which the page names `HttpError`, while the labels are
+    /// held; reloaded again with chat-1 gone from the backend, its run folder's read answers so too. Each time, once the labels
+    /// answer, the one error card says the backend's sentence for that class.
+    /// </summary>
+    [Fact]
+    public void ARestoreReadThatFailsBeforeTheLabelsSaysWhatToDoNext()
+    {
+        const string ChatRun = "20260923-101500-bracket-1";
+        string livePath = "/sessions/" + Chat + "/snapshot";
+        ReviewPageDriver.Run(
+            driver =>
+            {
+                driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, ChatRun, ReviewPageDriver.ReviewedPath, 10, 15));
+                driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json()));
+                driver.HeldInitialRoutes.Add(("GET", "/labels"));
+                driver.InitialRoutes.Add(("GET", livePath, 500, "null"));
+            },
+            async driver =>
+            {
+                await LabelsAnswerAfter(driver, livePath);
+                JsonElement live = await driver.Read(ReadErrorCards);
+                Assert.Equal(1, live.GetProperty("cards").GetInt32());
+                Assert.Equal(LabelsSample.HttpError, live.GetProperty("sentence").GetString());
+
+                driver.InitialRoutes.RemoveAll(route => route.Path == livePath);
+                driver.InitialRoutes.Add(("GET", livePath, 404, ReviewPageRecheckTests.UnknownChat));
+                driver.InitialRoutes.Add(("GET", "/reviews/" + ChatRun, 500, "null"));
+                await driver.Reload();
+                await LabelsAnswerAfter(driver, "/reviews/" + ChatRun);
+                JsonElement folder = await driver.Read(ReadErrorCards);
+                Assert.Equal(1, folder.GetProperty("cards").GetInt32());
+                Assert.Equal(LabelsSample.HttpError, folder.GetProperty("sentence").GetString());
+            });
+    }
+
+    /// <summary>
     /// A read-only restore after a backend restart replays no Transcript (H-g-010's *Left open*), so its snapshot names, under
     /// `withdrawn`, each withdrawal that took a decision, from the record's own stream, and the Transcript prints each after its
     /// note that the transcript is in the run folder, worded as the live line: the reason, then the backend's clause, as sent -
@@ -2849,6 +2888,12 @@ return JSON.stringify({
   markers: h.texts(transcript, '.marker'),
   noteFirst: h.before(transcript.querySelector('.restored'), transcript.querySelector('.marker'))
 });";
+
+    /// <summary>Results' error cards: how many, and the last one's sentence in the backend's words (null with no labels).</summary>
+    private const string ReadErrorCards = @"
+var cards = document.querySelectorAll('#errors .card.error');
+var card = cards[cards.length - 1];
+return JSON.stringify({ ok: true, cards: cards.length, sentence: card ? h.text(card, '.plain-error-text') : null });";
 
     /// <summary>How many elements backend text injected into the Transcript.</summary>
     private const string ReadInjected = @"
