@@ -289,8 +289,8 @@ class InvalidTriage(ChatError):
     A class of its own, not `InvalidDecision`, whose sentence asks for accept, reject or defer.
     The route checks both before the chat's state, as the decision is: the record's own refusal
     is a `ValueError`, which the route answers as `IllegalTransition` (a second triage as
-    `TriageAlreadyRecorded`, a press repeated without an outcome as `OutcomeNeeded`, a triage a
-    pass does not take as this class). One class for both,
+    `TriageAlreadyRecorded`, a flagged finding's press repeated without an outcome as
+    `OutcomeNeeded`, a triage a pass does not take as this class). One class for both,
     since both are a triage the finding does not take, answered alike, and the page sends neither:
     its pass card offers `wrong` alone.
     """
@@ -397,10 +397,9 @@ class IllegalTransition(ChatError):
 
 class TriageAlreadyRecorded(ChatError):
     """A second triage on an Accept or Reject that holds one (roadmap hole H-g-012; 185A takes a
-    triage once), or on a Defer (cycle 15's Tier 2 review): the record's
-    `TriageAlreadyRecordedError`. A class of its own because the page shows its class's sentence,
-    and `IllegalTransition`'s reads as a refused decision where this one says the triage recorded
-    stands."""
+    triage once): the record's `TriageAlreadyRecordedError`. A class of its own because the page
+    shows its class's sentence, and `IllegalTransition`'s reads as a refused decision where this
+    one says the triage recorded stands."""
 
     status = 409
     error_class = "TriageAlreadyRecorded"
