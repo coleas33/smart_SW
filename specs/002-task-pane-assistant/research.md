@@ -7816,3 +7816,58 @@ earlier review showed, so the date rested on recall.
     skipped on Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed;
     C# with zero warnings, then 10,274 extractor and 4,357 add-in tests passed (T392's last
     sub-item).
+
+### Cycle 21. The first-shown date only for the same instance or entity (2026-11-03)
+
+Roadmap hole H-d-009, opened by run 6; the owner picked it on 2026-11-03 from run 6's brief, with
+its default: match each instance by its full path. Review Tier 2; no decision id. Cycle 17 dates a
+flagged finding by the earliest earlier review of the same document whose record held a flagged
+finding with the same subject key, and the key holds each dump's numbering: every allocator numbers
+in sequence, so an edit that adds or removes a component, a hole, a feature, a view or a dimension
+shifts every id after it. `_same_parts` refused only a component renumbered onto another
+document's instance; one renumbered onto another instance of the same document - of two instances
+of one bolt, the second takes the first's number once a component before them is removed - or an
+entity renumbered within one document, a drawing's `dan:0012` say, carried the earlier finding's
+date, so a new problem read as old (`docs/review-backlog.md`, cycle 17).
+
+- **Settled**, the defaults taken inside the feature:
+  - **The match.** A date is never another subject's; it may be missing. An earlier record of
+    another dump than this review's (its `package_id`, which the record names) has each id its
+    subject key holds - its components, its entity inputs and the ids among its drawing places -
+    matched by the stable name its own dump gives it (`report/first_shown.stable_names`): the
+    earlier finding's key is renumbered into this review's numbering, each id replaced by the id
+    whose stable name here is the one it had there, and matched as before. An id with no stable
+    name on either side gives the finding no date. A path hash (`doc:`, `dsn:`, `DocumentIds`) is
+    matched as it is, and so are the names and persistent references the key already holds.
+  - **The stable names.** A component's full instance path (`ComponentInstance.full_path`,
+    `IComponent2.Name2`, unique in the assembly); a feature's and a cut-list item's name in their
+    document and configuration, and a model dimension's full name in its document; a hole by its
+    Hole Wizard feature's name in its component's path (the dump reads one hole a feature an
+    instance) and a fastener by its component's path (one a component); a drawing sheet by its
+    name in its drawing, and a view, a display dimension (`IDimension.FullName`) and an annotation
+    (`IAnnotation.GetName`) by theirs in their drawing, sheet and view. Each name begins with its
+    id's kind, so a component never takes a fastener's id. The dump names nothing else in a way an
+    edit leaves alone: a cosmetic thread (it reads the feature's name but keeps none), a face, a
+    body, a mate, an interference, a note, a revision or other table, a model annotation, and a
+    hole instance the joint map numbers by its faces' order (`hol:0014#2`) have none. An empty
+    name, or one two entities of a kind share in one dump - a sketch the tree lists both at the
+    top and under its feature, say - is none.
+  - **Where the earlier side's names come from: its package.** The earlier review's own package in
+    its folder, `package.json`, not the record. The add-in dumps each review into its own run
+    folder, and a Check again, a Send after a restart and a context review's Retry re-run in that
+    folder without extracting again; a live check's rows and a drawing read are merged into it,
+    keeping every id it had. So the folder holds the dump the record's ids number, which the
+    match checks by its `package_id`. Every record already on the seat, each written before this
+    cycle, so keeps its dates, where a field added to the record would give each of them none for
+    any finding naming a component; and no contract or record changes. A folder whose package is
+    gone, cannot be read or is another dump's than its record gives no date to a finding needing a
+    stable name, and keeps it for one needing none - the route's "older record without the names".
+  - **A record of this review's own dump keeps its ids as they are**: a Check again's or a Send's
+    earlier record in this review's folder, or a package copied whole. Its ids number this very
+    dump, so matching them by name could only lose a date, to an id with no stable name.
+  - **The rest of cycle 17 kept**: the earliest such review; each record dated by its own clock;
+    the 2 s budget, the other folders read oldest first, an earlier package read inside it; the
+    date never sent to the model; the card's and `report.md`'s lines unchanged. `_same_parts`
+    stays, asked of the components as this review numbers them, so an instance of the same path
+    whose document is another - a part replaced by one of the same file name from another folder -
+    still gives none.
