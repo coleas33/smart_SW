@@ -2365,3 +2365,63 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     path 002's `ReviewPageTriageTests.AClearedLineComesBackAfterAReviewSwitch` covers.
 - **Tests**: T121 in [tasks.md](tasks.md), Phase 8, written first; T122 makes it green, and T123
   closes the records.
+- **Built** (2026-11-02, T122):
+  - The lines: `runner._carry_decisions` first writes, for each undecided earlier finding with a
+    line on the earlier record's own stream (`snapshot.cleared_lines` over
+    `events.session_events`), that body again onto the one re-run finding with its subject key -
+    the map the decisions use - its `finding_id` changed and its tally the review's
+    (`summary.with_triage_tally`).
+  - The withdrawals: `start_review`, given the earlier record, names on `session.started` the
+    earlier record's withdrawals with a decision (`snapshot.withdrawn_lines` over its own stream)
+    under `snapshot.CARRIED_WITHDRAWALS`, beside `send_when_checked`; `withdrawn_lines` names them
+    first and keeps the held-id rule for the session's own withdrawals.
+  - The contract: `session.started`'s optional `carried_withdrawals` (one item at least, each
+    closed, with `finding_id`, `reason`, `disposition` and `taken`) and `disposition.cleared`'s
+    description, in 002 [contracts/chat-events.schema.json](../002-task-pane-assistant/contracts/chat-events.schema.json),
+    with a dated note in its [README](../002-task-pane-assistant/contracts/README.md);
+    [contracts/recheck.md](contracts/recheck.md) section 4, step 8.
+  - Unchanged: `report/markdown.py`, `review_snapshot` and `restored_snapshot`, the server, the
+    page and its C# tests.
+- **Defaults taken**, which the owner may revise:
+  - A line goes only onto the one re-run finding with its subject key, as a decision does (72A);
+    one with no such finding, or more than one, goes nowhere and is not named in
+    `coverage.recheck`, since it holds no decision of the engineer's.
+  - A line goes onto its finding whatever the re-run's status and severity: it says a decision
+    was cleared, which stays true.
+  - Two earlier lines that meet one re-run finding are both written, in the earlier session's
+    order, and the last is shown; a decision carried onto that finding ends them, and a line the
+    carry writes there itself comes after them.
+  - The withdrawals are history, carried whatever the re-run raises: when the re-run raises the
+    withdrawn finding again (an answer not carried, say), the report shows it undecided beside
+    the earlier withdrawal.
+- **Tests changed on purpose**: none of before this cycle. T121's own helper `earlier_stream`
+  takes the folder and writes the stream afresh (T122), for the case T122 added.
+- **Tests first**: T121's five cases failed before T122, each for want of the feature - the
+  carry's two, no line written onto F-001; the routes' two, the new chat's snapshot naming no
+  `cleared` and the re-run's `report.md` no withdrawal; and the contract's, `carried_withdrawals`
+  refused as unexpected - while the two modules' other 144 cases passed, its two guards among them.
+  A mutant that skipped a carried withdrawal whose id the re-run holds survived them, so T122
+  added `test_a_re_run_names_the_earlier_withdrawals_first_under_an_id_it_numbers_again`, red on
+  T121's tree and on that mutant. Seven mutants in all each failed a case of `test_recheck.py`.
+- **Left open**:
+  - A finding whose decision a clear took, and which a later restate withdrew while still
+    undecided, is named nowhere (002 research, H-g-010's *Left open*): its line went with the
+    finding, and its withdrawal took no decision, so a Check again has nothing of it to carry.
+  - A line whose finding the re-run no longer raises, or raises more than once, goes nowhere (the
+    first default above).
+  - A Check again's replayed Transcript does not show the earlier withdrawals; `report.md` names
+    them (the Transcript after a restart is cycle 13's).
+  - A Check again reads the earlier record's stream twice, at `session.started` and in the carry.
+    A waiting record's stream is its checks' and any failed Send's, small beside the re-run's
+    checks; the two reads were not measured against R2.17's bound.
+- **Gates** (T123; 2026-11-02), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required: 18,855 passed and 5 skipped on Python 3.12.3, and
+    the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`). Its two warnings are
+    neither of this cycle: the test client's deprecation, and a serializer warning from
+    `test_ir_loader_append.py`'s invalid row.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed.
+  - No C# or page file changed, so no C# gate ran; the events contract the add-in's tests copy is
+    read there for its `type` enum and its `coverage.withdrawn` body, neither of which changed.
+  - The link check over the cycle's seven changed Markdown files, anchors included, none broken;
+    every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test ran.
