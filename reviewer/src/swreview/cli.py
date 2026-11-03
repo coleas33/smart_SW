@@ -973,7 +973,14 @@ def disposition(
     decision: Annotated[
         Decision, typer.Option("--decision", help="accepted, rejected or deferred.")
     ],
-    note: Annotated[str, typer.Option("--note", help="Why, in the engineer's words.")] = "",
+    note: Annotated[
+        str | None,
+        typer.Option(
+            "--note",
+            help="Why, in the engineer's words. Left out, the note already recorded stays; "
+            "given empty, a decision that replaces a Defer records none.",
+        ),
+    ] = None,
     by: Annotated[
         str | None, typer.Option("--by", help="Who decided; defaults to the current user.")
     ] = None,
@@ -992,7 +999,10 @@ def disposition(
     A decision recorded without `--triage` may take one once, sent again with the same decision
     (owner decision 185A), a Defer too, which stays deferred (198A); the payload and the line name
     the disposition as recorded, which then keeps the first `by` and time, and the first note, or
-    the `--note` sent with the triage when none was recorded (198A).
+    the `--note` sent with the triage when none was recorded (198A). Without `--note` the record
+    keeps the note already recorded (`set_disposition`), as the pane's note box sends it, so a
+    decision that replaces a Defer keeps the Defer's note, and an empty `--note` gives it none
+    (roadmap hole H-c-010).
     """
     decided_by = by if by else _default_user()
     with _errors_as_exit_1():

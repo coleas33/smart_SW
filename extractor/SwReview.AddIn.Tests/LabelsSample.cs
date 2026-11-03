@@ -37,6 +37,9 @@ namespace SwReview.AddIn.Tests;
 ///
 /// *Changed 2026-11-02 (002 T374; cycle 13's Tier 2 review):* `errors` gains `HttpError`, the words file's own sentence, so a
 /// page fact can check that a failed restore read's card says its next step.
+///
+/// *Changed 2026-11-03 (002 T377; roadmap hole H-c-010):* `errors` gains `OutcomeNeeded`, the words file's own sentence: the
+/// decision recorded without a triage, pressed again with no outcome, is refused with words that name the repair.
 /// </summary>
 internal static class LabelsSample
 {
@@ -97,6 +100,9 @@ internal static class LabelsSample
     /// <summary>A second triage refused (roadmap hole H-g-012; owner decision 185A): the words file's sentence for it.</summary>
     public const string TriageAlreadyRecorded =
         "That finding already has a triage, and a triage is recorded only once. The one recorded stands and is shown again.";
+
+    /// <summary>A press repeated without an outcome refused (roadmap hole H-c-010): the words file's sentence for it.</summary>
+    public const string OutcomeNeeded = "Pick an outcome first, then press the same button again.";
 
     /// <summary>
     /// A run root the run root rule refuses (owner decision 154A): the words file's sentence for it, true since the
@@ -215,6 +221,7 @@ internal static class LabelsSample
                 { "AddInStopping", AddInStopping },
                 { "RunRootRefused", RunRootRefused },
                 { "TriageAlreadyRecorded", TriageAlreadyRecorded },
+                { "OutcomeNeeded", OutcomeNeeded },
                 { "HttpError", HttpError },
             }
         },

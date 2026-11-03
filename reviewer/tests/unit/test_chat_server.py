@@ -2991,7 +2991,12 @@ def test_a_deferred_finding_takes_a_late_triage_and_a_note_on_the_live_route(
     no triage and no note, sent again with an outcome and a note - such as 188A's date - records
     both and stays deferred, its `by` and `at` as first recorded, and the reply, `session.json`,
     `report.md` and the `disposition` event all say so. A Defer again with no triage is still
-    `409 IllegalTransition`, and writes nothing."""
+    `409 IllegalTransition`, and writes nothing.
+
+    *Changed 2026-11-03 on purpose (002 T376; roadmap hole H-c-010):* that Defer again with no
+    triage is still refused and writes nothing, but as `409 OutcomeNeeded`, whose sentence says to
+    pick an outcome first, where `IllegalTransition`'s says to reload the review
+    (`test_the_same_decision_again_without_an_outcome_is_a_409_of_its_own`)."""
     url = disposition_url(chat_with_a_finding, run_dir)
     first = client.post(url, json={"decision": "deferred", "note": "", "by": "FICT-ENG"}).json()[
         "disposition"
@@ -3000,7 +3005,7 @@ def test_a_deferred_finding_takes_a_late_triage_and_a_note_on_the_live_route(
 
     again = client.post(url, json={"decision": "deferred", "note": "", "by": "FICT-ENG"})
 
-    assert (again.status_code, again.json()["error_class"]) == (409, "IllegalTransition")
+    assert (again.status_code, again.json()["error_class"]) == (409, "OutcomeNeeded")
     assert folder_files(run_dir) == before
 
     late = client.post(
@@ -3067,6 +3072,91 @@ def test_a_second_triage_is_a_409_of_its_own_and_writes_nothing(
     assert folder_files(run_dir) == before
 
 
+def test_the_same_decision_again_without_an_outcome_is_a_409_of_its_own(
+    client: TestClient, run_dir: Path, chat_with_a_finding: str
+) -> None:
+    """Roadmap hole H-c-010 (002 T376), through the route the pane presses: the decision recorded
+    without a triage, sent again with none - a Defer, then the Accept that follows it - is
+    `409 OutcomeNeeded`, a class of its own (the record's `OutcomeNeededError`), not retryable,
+    its message naming the repair, so the page can say to pick an outcome first, where
+    `IllegalTransition`'s sentence says to reload the review and a reload loses the note typed for
+    the retry; neither writes anything. Once the Accept takes its late triage, an Accept again
+    with none is `409 IllegalTransition`, as before."""
+    url = disposition_url(chat_with_a_finding, run_dir)
+    pressed = {"note": "FICT first shown at an earlier sitting", "by": "FICT-ENG"}
+    deferred = client.post(url, json={"decision": "deferred", "note": "", "by": "FICT-ENG"})
+    assert deferred.status_code == 200, deferred.text
+    before_defer = folder_files(run_dir)
+    defer_again = client.post(url, json={"decision": "deferred", **pressed})
+    after_defer = folder_files(run_dir)
+    accepted = client.post(url, json={"decision": "accepted", "note": "", "by": "FICT-ENG"})
+    assert accepted.status_code == 200, accepted.text
+    before_accept = folder_files(run_dir)
+
+    accept_again = client.post(url, json={"decision": "accepted", **pressed})
+
+    refused = [defer_again, accept_again]
+    assert [(response.status_code, response.json()["error_class"]) for response in refused] == [
+        (409, "OutcomeNeeded"),
+        (409, "OutcomeNeeded"),
+    ]
+    assert [response.json()["retryable"] for response in refused] == [False, False]
+    assert [response.json()["message"] for response in refused] == [
+        "finding F-001 is deferred with no triage recorded; send 'deferred' again with a triage "
+        "to record one",
+        "finding F-001 is accepted with no triage recorded; send 'accepted' again with a triage "
+        "to record one",
+    ]
+    assert after_defer == before_defer
+    assert folder_files(run_dir) == before_accept
+
+    late = client.post(url, json={"decision": "accepted", "triage": "new_and_real", **pressed})
+    assert late.status_code == 200, late.text
+    triaged = folder_files(run_dir)
+    again = client.post(url, json={"decision": "accepted", **pressed})
+
+    assert (again.status_code, again.json()["error_class"]) == (409, "IllegalTransition")
+    assert folder_files(run_dir) == triaged
+
+
+def test_a_defer_again_on_one_that_holds_a_triage_is_still_an_illegal_transition(
+    client: TestClient, run_dir: Path, chat_with_a_finding: str
+) -> None:
+    """Cycle 15's Tier 2 review, through the route the pane presses: a deferred card that holds a
+    triage shows it pressed, so Defer pressed again sends it - with a note typed, such as 188A's
+    date. That is `409 IllegalTransition`, as 198A kept it (002 research, H-c-009), and so is
+    another triage or none: `TriageAlreadyRecorded`'s sentence says a triage is recorded only
+    once, which is untrue of a Defer, whose triage a later Accept or Reject replaces. Each message
+    names the triage recorded, and nothing is written.
+
+    *Changed 2026-11-03 on purpose (a read-only check of the review's fixes):* renamed from
+    `test_a_defer_again_with_a_triage_on_one_that_holds_one_is_a_second_triage`, whose two posts
+    with a triage were `409 TriageAlreadyRecorded`, the review's change, which reversed that
+    default unsaid; `IllegalTransition`'s sentence, which says to reload, is H-c-010's *Left
+    open*."""
+    url = disposition_url(chat_with_a_finding, run_dir)
+    deferred = client.post(
+        url, json={"decision": "deferred", "note": "", "by": "FICT-ENG", "triage": "wrong"}
+    )
+    assert deferred.status_code == 200, deferred.text
+    before = folder_files(run_dir)
+    pressed = {"decision": "deferred", "note": "FICT first shown at an earlier sitting"}
+
+    refused = [
+        client.post(url, json={**pressed, "by": "FICT-ENG", "triage": triage})
+        for triage in ("wrong", "already_known", None)
+    ]
+
+    assert [(response.status_code, response.json()["error_class"]) for response in refused] == [
+        (409, "IllegalTransition")
+    ] * 3
+    assert [response.json()["message"] for response in refused] == [
+        "finding F-001 is deferred with its triage ('wrong'); it can only move to accepted or "
+        "rejected, not 'deferred' again"
+    ] * 3
+    assert folder_files(run_dir) == before
+
+
 def test_a_pass_takes_no_triage_but_wrong_on_the_live_route(
     app: Any,
     client: TestClient,
@@ -3122,6 +3212,34 @@ def test_a_pass_takes_no_triage_but_wrong_on_the_live_route(
     saved = load_session(run_dir / "session.json").findings[0]
     assert saved.status == "checked_within_scope"
     assert saved.disposition is not None and saved.disposition.triage == "wrong"
+
+
+def test_a_pass_accepted_again_without_an_outcome_is_still_an_illegal_transition(
+    app: Any, client: TestClient, run_dir: Path, chat_with_a_finding: str
+) -> None:
+    """Cycle 15's Tier 2 review, through the route the pane presses: a pass accepted with no
+    triage, Accept pressed again with none - a note typed meanwhile, or a double click - is
+    `409 IllegalTransition`, as before H-c-010, not `409 OutcomeNeeded`, whose sentence asks for
+    an outcome where the pass's card offers only the miss; nothing is written. The chat's one
+    finding is made a pass in the session the run holds, which is the session the route reads."""
+    run = app.state.server.chats[UUID(chat_with_a_finding)].run
+    run.session.findings[0] = run.session.findings[0].model_copy(
+        update={"status": "checked_within_scope", "severity": "info"}
+    )
+    url = disposition_url(chat_with_a_finding, run_dir)
+    accepted = client.post(url, json={"decision": "accepted", "note": "", "by": "FICT-ENG"})
+    assert accepted.status_code == 200, accepted.text
+    before = folder_files(run_dir)
+
+    again = client.post(
+        url, json={"decision": "accepted", "note": "FICT typed note", "by": "FICT-ENG"}
+    )
+
+    assert (again.status_code, again.json()["error_class"]) == (409, "IllegalTransition")
+    assert again.json()["message"] == (
+        "finding F-001 already has a terminal disposition ('accepted'); it cannot be changed"
+    )
+    assert folder_files(run_dir) == before
 
 
 # --- a check run again after an answer (002 T326; owner decisions 189A and 191A) ------------------

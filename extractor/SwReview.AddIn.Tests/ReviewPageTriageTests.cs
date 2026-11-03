@@ -90,6 +90,10 @@ namespace SwReview.AddIn.Tests;
 /// have, so the card says its next step.
 /// *Added 2026-11-03 (002 T374; a read-only check of those fixes):* a restore read for a review the engineer left before the
 /// labels answered draws nothing once they have, neither its snapshot nor its error card.
+///
+/// Roadmap hole H-c-010 (002 T378): the decision recorded without a triage, pressed again with no outcome picked, is refused with a
+/// class of its own, `OutcomeNeeded`, whose sentence names the repair where `IllegalTransition`'s said to reload the review; the
+/// card shows the record above it, as after any refusal, and the note box keeps what was typed, so the retry posts it.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -1796,6 +1800,70 @@ public sealed class ReviewPageTriageTests
             await Press(driver, "F-001", "new_and_real");
             await Decide(driver, "F-001", "accept");
             Assert.Equal("decision=accepted, note=" + Typed + ", triage=new_and_real", Body(Assert.Single(await DispositionCalls(driver))));
+        });
+    }
+
+    /// <summary>
+    /// Roadmap hole H-c-010 (002 T378): the repair press made with no outcome picked is refused with a class of its own, whose
+    /// sentence names the repair, and the note typed for the retry stays. F-001 is accepted and F-002 deferred, each with no note
+    /// and no triage, so each card's head says to pick one, then press the same decision again. On each the engineer types the
+    /// earlier sitting 188A asks for and presses that decision with no outcome picked, and the backend refuses it (a scripted
+    /// `409 OutcomeNeeded`): each card shows its record above the class's sentence, presses no outcome, keeps its head's line and
+    /// keeps the typed note. An outcome then picked and the same decision pressed again posts the typed note with it.
+    /// </summary>
+    [Fact]
+    public void APressRepeatedWithoutAnOutcomeSaysToPickOneFirstAndKeepsTheTypedNote()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string Typed = "FICT first shown at an earlier sitting";
+            var cards = new[]
+            {
+                (Id: "F-001", Decision: "accepted", Action: "accept", Line: LabelsSample.NoTriageAccepted),
+                (Id: "F-002", Decision: "deferred", Action: "defer", Line: LabelsSample.NoTriageDeferred),
+            };
+            await Reviewed(
+                driver,
+                Finding("F-001", Disposition("accepted", string.Empty, null)),
+                Finding("F-002", Disposition("deferred", string.Empty, null)));
+            foreach (var card in cards)
+            {
+                string message = "FICT finding " + card.Id + " is " + card.Decision + " with no triage recorded; send '" + card.Decision
+                    + "' again with a triage to record one";
+                await driver.Route("POST", DispositionPath(card.Id), 409, Refusal("OutcomeNeeded", message, false));
+                await Note(driver, card.Id, Typed);
+                await Decide(driver, card.Id, card.Action);
+            }
+
+            foreach (var card in cards)
+            {
+                JsonElement refused = await driver.Read(ReadCard(card.Id));
+                Assert.Equal("card-status bad", refused.GetProperty("statusClass").GetString());
+                Assert.Equal("OutcomeNeeded", refused.GetProperty("refusalClass").GetString());
+                Assert.Equal(LabelsSample.OutcomeNeeded, refused.GetProperty("refusal").GetString());
+                Assert.Equal("Disposition: " + card.Decision + " by " + Engineer + " at " + RecordedAt, refused.GetProperty("record").GetString());
+                Assert.True(refused.GetProperty("recordFirst").GetBoolean(), "the recorded sentence is not above the refusal.");
+                Assert.Empty(Pressed(refused));
+                Assert.Equal(card.Line, (await driver.Read(ReadNoTriage(card.Id))).GetProperty("text").GetString());
+                Assert.Equal(Typed, await NoteBox(driver, card.Id));
+            }
+
+            await driver.ClearCalls();
+            foreach (var card in cards)
+            {
+                await driver.Route("POST", DispositionPath(card.Id), 200, Finding(card.Id, Disposition(card.Decision, Typed, "new_and_real")));
+                await Press(driver, card.Id, "new_and_real");
+                await Decide(driver, card.Id, card.Action);
+                Assert.Equal(Sentence(card.Decision, "new_and_real", Typed), (await driver.Read(ReadCard(card.Id))).GetProperty("status").GetString());
+            }
+
+            Assert.Equal(
+                new[]
+                {
+                    "decision=accepted, note=" + Typed + ", triage=new_and_real",
+                    "decision=deferred, note=" + Typed + ", triage=new_and_real",
+                },
+                (await DispositionCalls(driver)).Select(Body).ToArray());
         });
     }
 

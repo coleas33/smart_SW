@@ -16928,6 +16928,7 @@
       "NotFound": "That file or folder no longer exists. It may have been moved or deleted.",
       "NotModelCheck": "The run folder does not hold a model check of one part. Run the Model check again.",
       "OpenFailed": "The file could not be opened. Check that it still exists and that you can open it.",
+      "OutcomeNeeded": "Pick an outcome first, then press the same button again.",
       "PackageAfterRefused": "The remodelled part could not be read back. Open the run folder to see what was written.",
       "PackageMissing": "The model dump has not arrived yet. Wait for it, then try again.",
       "PathRefused": "That path is outside the folders this pane may open.",

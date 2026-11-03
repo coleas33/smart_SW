@@ -103,6 +103,16 @@ until the status is next written; with no labels it prints nothing (FR-030).
 |---|---|
 | a finding card's status line, after a reply that kept the note recorded first in place of the one sent | `note` |
 
+*Amended 2026-11-03 (feature 002, roadmap hole H-c-010; 002 T377):* `errors` gains
+`OutcomeNeeded`'s sentence, "Pick an outcome first, then press the same button again.", for the
+class the disposition route answers when a flagged finding's decision recorded without a triage is
+sent again with none (002 `contracts/chat-api.md`, the disposition route). That press was
+`IllegalTransition`, whose sentence says to reload the review, and a reload draws the card's note
+box from the record, so a note typed for the retry was lost. The sentence takes no placeholder, so
+it names the same button; a flagged finding's card has a `no_triage` line, which names the
+decision. A pass has none, and its press is `IllegalTransition` as before (cycle 15's Tier 2
+review). `errors` stays last.
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and
