@@ -230,6 +230,11 @@ Its Send:
 the page held and the review on screen was a live waiting one, the page calls `showReview` for it at
 once; its snapshot is gone (`UnknownChat`), so it is restored from its folder as above: read-only,
 with Send offered. A draft answer typed before the restart is dropped with the live chat (68A).
+*Changed 2026-11-03 (feature 002 cycle 22's read-only check; FR-042's note):* when `init` names a
+run root other than the one the page held, ignoring letter case, or the host lists no record of the
+review, it is not restored but stays live, its Send off rather than refused, and the Send block's
+failure line prints the words file's sentence for `RunRootChanged`, or for `UnknownChat`; the
+Settings line of section 9 is not shown for it.
 
 ## 8. The chips
 

@@ -191,6 +191,9 @@ and restoration rules above.
   review as any start's does and the Send's dropped; and a review stays as it was when its turn
   failed, its error card keeping Retry, when the save moved the run root, the new backend reading
   no run folder outside its own, or when the host lists no record of it.
+  *Changed 2026-11-03 (its read-only check):* a waiting one so left has its Send off, saying why
+  (015 FR-042's note); a start refused before that `init` keeps its card through the restore; and
+  the run root compares ignoring letter case.
 
 ## 7. The configuration change
 

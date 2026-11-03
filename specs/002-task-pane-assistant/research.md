@@ -8052,7 +8052,8 @@ ticked.
   - The page (T399): `app.js`'s `requestInit`, when `init` names another backend, closes the
     stream of the live review on screen, says a follow-up still waiting had no answer, ends a turn
     on screen and shows the review again through `showReview`, the waiting one's path; the minutes
-    form's `chatGone` stays for a start, a Send or a re-run on its way.
+    form's `chatGone` stays for a start, a Send or a re-run on its way. *Changed 2026-11-03 (the
+    Tier 2 review, below):* a start or a Send on its way no longer holds the restore back.
   - Tests first: T398's 11 Python cases failed for want of `Words.read_only_console`, and 8 of
     them, with the words alone written, for want of the line's end; its six page facts failed for
     want of the restore - no read-only line, no read of the folder, Stop left on for a turn that
@@ -8089,13 +8090,16 @@ ticked.
     Settings, then Save. A review the backend took no more before the restart - its turn failed,
     or an earlier restart left it (`chatGone`) - stays as it was; a failed chat's follow-ups,
     answers and decisions were refused before the restart too.
-  - **A moved run root wipes nothing** (must-fix 2). A save that moved the folder for runs
-    restarted the backend under the new root, which reads no run folder outside it, so the restore
-    met `UnknownReview` and wiped the review, its chip saying it could no longer be restored, with
-    a Remove that forgets the record. When `init` names a run root other than the one held as the
-    page asked, the review on screen - waiting for Send or not, since 015's restore met the same
-    answer - stays as it was before this cycle, its stream and minutes form gone and its turn
-    over; Open report and Open run folder reach its record (154A).
+  - **The restart's own restore wipes nothing under a moved run root** (must-fix 2). A save that
+    moved the folder for runs restarted the backend under the new root, which reads no run folder
+    outside it, so the restore met `UnknownReview` and wiped the review, its chip saying it could
+    no longer be restored, with a Remove that forgets the record. When `init` names a run root
+    other than the one held as the page asked, the review on screen - waiting for Send or not,
+    since 015's restore met the same answer - is not restored: it stays live, as a finished one
+    stayed before this cycle, its stream and minutes form gone and its turn over; Open report and
+    Open run folder reach its record (154A). A waiting one's Send is off, saying why (the
+    read-only check, below). The document rule that runs after that `init` can still meet the same
+    answer (`docs/review-backlog.md`, cycle 22).
   - **The review restored is the old backend's** (should-fix 1). A start that made the restart
     itself is answered before the `init` the restart asked for, the host answering one message at
     a time, and its review was taken for the old backend's. Only the review on screen as the
@@ -8112,6 +8116,28 @@ ticked.
     presses go nowhere.
   - **The older facts read the restore** (should-fix 3). The two facts whose drivers kept no
     record now read both paths, and the mid-turn fact asks for no stream after the restart.
+- **Read-only check** of those fixes (T400; 2026-11-03): one must-fix and five should-fix, all
+  done ([tasks.md](tasks.md), T400's second sub-item). The defaults taken:
+  - **A waiting review left as it was has its Send off, saying why** (the must-fix, the owner's
+    call between two ways: this one keeps 015 FR-042's "MUST NOT be refused as a chat the backend
+    does not know"; the other kept Send on and noted the exception there). Under a run root a
+    save moved, 015's restore had met `UnknownReview` and taken the waiting review down, and the
+    Tier 2 fix left it live with Send on, which met `404 UnknownChat`. A live review the backend
+    takes no more (`chatGone`) now has Send off, the Settings line no longer says its Send checks
+    its saved evidence again, and the words file's sentence beside Send says why, for the class
+    the page names: `RunRootChanged` when the run root moved, `UnknownChat` when the host lists no
+    record of the review. A waiting review shown from its folder keeps Send across another
+    restart, the host re-running it there. Notes in 015 FR-042 and its pane contract, section 7.
+  - **A start refused before the `init` keeps its card.** A start that makes a restart waiting
+    since a save is answered before the `init` the restart asked for, and the restore's reset took
+    its refusal down, Retry with it: the error cards shown since the `ready` went now stay across
+    the restore (`heldErrors`), in Results; the Transcript is the restored one.
+  - **The same run root ignores letter case**, as the host's one rule does (`SameRunRoot`, 154A),
+    so a run root retyped in another case restores the review.
+  - **The rest were records**: the Tier 2 bullet on a moved run root narrowed to the restart's own
+    restore, the document rule's path added to the backlog; the dropped Send answer's comments
+    say whoever gave it; the Built item's pointer; and the Tier 2 tests' commit message, which had
+    every fact written first.
 - **Gates** (T400; 2026-11-03), on the cycle's final tree:
   - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,006 passed and 5
     skipped, ten of them this cycle's new cases. Its two warnings are neither of this cycle: the
@@ -8127,5 +8153,5 @@ ticked.
     none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or
     live test ran.
   - The whole suites on the final tree: recorded once they run.
-  - *Changed 2026-11-03:* the tree above came before the Tier 2 review's fixes, whose gates are
-    T400's sub-item in [tasks.md](tasks.md).
+  - *Changed 2026-11-03:* the tree above came before the Tier 2 review's fixes and the read-only
+    check's, whose gates are T400's two sub-items in [tasks.md](tasks.md).
