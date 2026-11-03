@@ -221,7 +221,10 @@ SOLIDWORKS closes during step 5.3, follow its item C before anything else, and g
    findings document: its full stamp, the moment you pressed Review, goes in `notes\timing.txt`
    with its start and end times, so that no private figure can be worked out from the findings
    document (decision 195A). Its runtime, from start to end, and every other duration of it go in
-   `notes\timing.txt` too, never in the findings document (decision 196A). A review not timed,
+   `notes\timing.txt` too, never in the findings document (decision 196A). `Save-TimingNote`
+   writes them there once the review has ended (step 4.1): its full stamp, start and end times,
+   runtime and every duration the plan's commands print for it, so you copy none of them by hand;
+   the six minutes and the update's minutes you still type. A review not timed,
    B's among them, keeps its full stamp and its durations. Copy a log
    line only as far as the end of its `gated=`
    list; if it has `target=`, write that it did and how many paths, never the paths; replace any
@@ -506,6 +509,31 @@ function Show-SetupTime {
     else { 'no POST /sessions 201 line after session.started in the backend logs' }
 }
 
+function Save-TimingNote {
+    param([string] $run, [string] $letter)
+    $run = $run.TrimEnd('\')
+    $name = Split-Path $run -Leaf
+    $session = $null
+    if ($name -match '^\d{8}-\d{6}-' -and (Test-Path -LiteralPath "$run\session.json") -and (Test-Path -LiteralPath "$run\events.jsonl")) { $session = Get-Content -LiteralPath "$run\session.json" -Raw -Encoding UTF8 | ConvertFrom-Json }
+    if (-not $session.ended_at) { 'not the run folder of a review that has ended: nothing written'; return }
+    if (-not $letter) { 'give the review''s letter too, as in Save-TimingNote $run ''A'': nothing written'; return }
+    $invariant = [Globalization.CultureInfo]::InvariantCulture
+    $start = [DateTimeOffset][datetime]::ParseExact($name.Substring(0, 15), 'yyyyMMdd-HHmmss', $invariant)
+    $end = ([DateTimeOffset]$session.ended_at).ToLocalTime()
+    $facts = @(Show-ReviewFacts $run)
+    $block = @('', "$($name.Substring(0, 8))-$letter", "full stamp: $($name.Substring(0, 15))", "start: $($start.ToString('yyyy-MM-dd HH:mm:ss', $invariant))", "end: $($end.ToString('yyyy-MM-dd HH:mm:ss', $invariant))", "runtime, from start to end: $(($end - $start).TotalMinutes.ToString('0.0', $invariant)) min")
+    foreach ($label in 'drawing phase: ', 'seconds from session.started to the first text.delta: ') {
+        $line = @($facts | Where-Object { $_.StartsWith($label) })
+        $block += $(if ($line) { $line[0] } else { $label + 'not read' })
+    }
+    $block += @(Show-SetupTime $run)
+    $rounds = @(Select-String -LiteralPath "$run\events.jsonl" -Pattern '"type":\s*"usage"' | ForEach-Object { ($_.Line | ConvertFrom-Json).body.latency_s })
+    if ($rounds.Count -eq 0) { $block += 'round times: none' }
+    for ($i = 0; $i -lt $rounds.Count; $i++) { $block += 'round {0}: {1}' -f ($i + 1), $(if ($null -eq $rounds[$i]) { 'unknown' } else { $rounds[$i].ToString('0.00', $invariant) + ' s' }) }
+    Add-Content -LiteralPath "$H\notes\timing.txt" -Value $block -Encoding UTF8 -ErrorAction Stop
+    "appended to $H\notes\timing.txt"
+}
+
 function Show-DrawingReadLog {
     Select-String -Path "$env:LOCALAPPDATA\SwReview\logs\tool-service-*.log" -SimpleMatch 'command=drawing.read' |
         Select-Object -Last 3 | ForEach-Object { $_.Line }
@@ -599,7 +627,7 @@ What the commands do, so you know what you are running (each only reads):
   interference groups judged, which checks ran before the model's first round, its drawings line,
   its questions and answers, and a timing. On a timed review's folder, the `drawing phase` line's
   milliseconds and that timing, `seconds from session.started to the first text.delta`, go in
-  `notes\timing.txt` only (rule 5).
+  `notes\timing.txt` only (rule 5), where `Save-TimingNote` writes them.
 - `Show-SmokeFacts '<run folder>'` prints feature 014's smoke facts: usage events with the served
   model, bodies with a retries field, origin marks, standards profile stamps naming a folder,
   attention.json's line endings, whether it reads as this session's record and its row count,
@@ -609,7 +637,18 @@ What the commands do, so you know what you are running (each only reads):
 - `Show-Documents '<run folder>'` lists a review's documents with their ids: `doc:` and twelve
   letters and digits, like `doc:3f2a9c1b7e04`.
 - `Show-SetupTime '<run folder>'` reads the backend log for how long the review's setup took; on a
-  timed review's folder, its line goes in `notes\timing.txt` only (rule 5).
+  timed review's folder, its line goes in `notes\timing.txt` only (rule 5), where `Save-TimingNote`
+  writes it.
+- `Save-TimingNote '<run folder>' '<letter>'` writes a timed review's figures in `notes\timing.txt`
+  once the review has ended, so that you copy none of them by hand (rule 5). It appends one
+  block, headed by the folder's date and letter (`20261101-A`): the folder's full stamp; the
+  review's start, which is that stamp, the moment Review was pressed, and its end, `session.json`'s
+  `ended_at` in this machine's time; its runtime, from start to end; the `drawing phase` and
+  `text.delta` lines `Show-ReviewFacts` prints and the line `Show-SetupTime` prints; and each
+  model round's time (`round <n>: <s> s`), the usage line's `last round` the last of them. It
+  reads only the run folder and the backend log, writes nothing but that note, never in the run
+  folder, calls no model, and prints only the note's path, never a figure. Given a folder that
+  is not the run folder of a review that has ended, or no letter, it writes nothing and says so.
 - `Show-DrawingReadLog` prints the last three `drawing.read` lines of the tool-service logs; the
   last line printed is the newest.
 - `Show-FindingsByType '<run folder>'` prints, for each group of the run folder's `report.md`
@@ -1725,15 +1764,16 @@ itself, or press its chip. Pressing the chip of the review already on screen doe
 
 ### 4.1 A, the small assembly [008 T103; 009 T079; 007 T059]
 
-Open A resolved and make it active; press Review (the box above). Note the time it started and
-finished in `notes\timing.txt`, with A's minutes (the 007 T060 bullet below), never in the
-findings document: when you watch the whole review, the two times are its supervision (decision
-192A (the owner's answer of 2026-11-01, 13A)). Its run folder's full stamp goes in
-`notes\timing.txt` too: the date and time its name begins with (`20261101-101112`), the moment
-you pressed Review; the findings document writes the folder by its date and letter only, as
-`20261101-A` (rule 5; decision 195A). Its runtime, the minutes from start to end, goes in
-`notes\timing.txt` too, with every other duration of that review, never in the findings document
-(decision 196A).
+Open A resolved and make it active; press Review (the box above). A's review is the one timed:
+`Save-TimingNote` writes its start and end in `notes\timing.txt`, beside A's minutes, which you
+type (the 007 T060 bullet below), never in the findings document: when you watch the whole
+review, the two times are its supervision (decision 192A (the owner's answer of 2026-11-01,
+13A)). Its run folder's full stamp goes in `notes\timing.txt` too: the date and time its name
+begins with (`20261101-101112`), the moment you pressed Review, which is the review's start; the
+findings document writes the folder by its date and letter only, as `20261101-A` (rule 5;
+decision 195A). Its runtime, the minutes from start to end, goes in `notes\timing.txt` too, with
+every other duration of that review, never in the findings document (decision 196A). You note
+none of them by hand: the timing bullet below writes them all once the review has ended.
 
 - 008 T103, pass: the `tokens` line's `input` is **at most 300,000**. The last sitting's reviews of
   the small assembly took 1.47 million and 1.58 million. Fail: above 300,000. The task counts the
@@ -1755,6 +1795,21 @@ you pressed Review; the findings document writes the folder by its date and lett
   their words.
 - If the review asked questions, answer them all in one send (box, item 5) and run
   `Show-ReviewFacts $run` again: record both `tokens` lines, before and after.
+- The timing (rule 5): once the review has ended, after the answers' turn if it asked questions,
+  and before step 4.4 can send it anything, write its figures in `notes\timing.txt`:
+
+  ```powershell
+  Save-TimingNote $run 'A'
+  ```
+
+  It prints `appended to` and the note's path, and nothing else. The block it appended is headed
+  by the folder's date and letter (`20261101-A`) and holds the full stamp, the start and end, the
+  runtime, the `drawing phase` and `text.delta` lines, the setup line and each round's time, the
+  usage line's `last round <n> s` the last of them: copy none of it anywhere else. Have the note
+  closed in Notepad when you run it, what you typed saved first: a Notepad still open on it would
+  save over the block. After a Retry (box, item 6), run it on the stopped run's folder too. If it
+  prints `not the run folder of a review that has ended: nothing written`, the review has not
+  ended yet or `$run` is not its run folder: put that right and run it again.
 - 007 T059, the Review half, as feature 013 changed it (013 T057): once the review has ended
   (after the answers' turn, if it asked questions), Results shows **Findings by type** below the
   summary and the questions: the groups in their fixed order - Interference and fit, Fasteners,
@@ -1811,8 +1866,9 @@ Record: the facts, the headline, the tally line, the not-reached line, the group
 the drawings line (with letters in place of names) and the usage line, but no duration of the
 review: the `drawing phase` line's milliseconds, the `seconds from session.started to the first
 text.delta` line and the usage line's `last round <n> s` go in `notes\timing.txt` only (rule 5;
-decision 196A); never the start and end times or the run folder's full stamp, which stay in
-`notes\timing.txt` (decision 192A (the owner's answer of 2026-11-01, 13A); decision 195A).
+decision 196A), where `Save-TimingNote` wrote them; never the start and end times or the run
+folder's full stamp, which stay in `notes\timing.txt` (decision 192A (the owner's answer of
+2026-11-01, 13A); decision 195A).
 
 Do step 4.11 (014 T221) now on this review's folder, then step 4.2.
 
@@ -2283,7 +2339,9 @@ Record: full sitting or alone; pass or fail for each check, each printed facts l
 in place of names, and its durations in `notes\timing.txt` only: rule 5), the on-screen summary,
 findings and questions, and the run
 folder's date and letter, never its full stamp (rule 5: A's review is the one timed), in
-014 T221's Results row and under step 4.11's record heading in the findings document. Keep the file contents in the run folder, which travels with step 6.3's
+014 T221's Results row and under step 4.11's record heading in the findings document. Step 4.1's
+`Save-TimingNote` has written those durations, and the folder's full stamp, in
+`notes\timing.txt`: copy them nowhere. Keep the file contents in the run folder, which travels with step 6.3's
 evidence; the results sheet
 travels in the handover folder and is committed from the development machine (runbook section 8).
 Nothing of the small assembly, its path or its numbers enters the repository.
