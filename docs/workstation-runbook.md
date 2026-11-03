@@ -46,7 +46,7 @@ is S1, the plan's section "S1: Start readiness" (decision 167A).
 | Run folders (one per review or check: `<stamp>-<doc>`, `-check`, `-standards`) | `Documents\SwReview\runs` by default (`run_root` in the settings file) | **no** |
 | SOLIDWORKS 2024 SP5 and its interops | `C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS`, `api\redist` under it | no |
 | The registration script | `<repo>\extractor\tools\register-addin.ps1` | yes |
-| `swreview-extract.exe`, the console every probe and dump task calls by its bare name | `<repo>\extractor\SwReview.Extractor.Console\bin\x64\Release\net48\swreview-extract.exe` (not the stale `bin\Release\net48` beside it); nothing puts it on PATH, so in each shell: `Set-Alias swreview-extract "<that path>"` (the update script prints the line) | no (build output) |
+| `swreview-extract.exe`, the console every probe and dump task calls by its bare name | `<repo>\extractor\SwReview.Extractor.Console\bin\x64\Release\net48\swreview-extract.exe` (not the stale `bin\Release\net48` beside it); nothing puts it on PATH, so in each shell: `Set-Alias swreview-extract ([Management.Automation.WildcardPattern]::Escape("<that path>"))`, the path escaped since `Set-Alias` reads it as a wildcard (the update script prints the line) | no (build output) |
 | The o200k_base vocabulary every token count reads | `%LOCALAPPDATA%\SwReview\tokenizer\fb374d419588a4632f3f557e76b4b70aebbca790` | **no** |
 
 The add-in is registered by CLSID with a `/codebase` pointing at the DLL path above.
@@ -92,7 +92,7 @@ dotnet test  extractor\SwReview.sln -c Release
 account that uses SOLIDWORKS:
 
 ```powershell
-cd '<repo>'
+cd -LiteralPath '<repo>'
 .\extractor\tools\register-addin.ps1
 ```
 
@@ -110,7 +110,7 @@ Do this whenever the owner says a change landed, and at least once a day the wor
 in use. Every step is safe to repeat.
 
 ```powershell
-cd '<repo>'
+cd -LiteralPath '<repo>'
 git status --porcelain                # must print nothing; see below if it does
 git fetch origin
 git log --oneline HEAD..origin/main   # what is about to arrive; read it
@@ -299,7 +299,7 @@ the versions from section 2, so the owner can reproduce the machine's state.
 
 ```powershell
 # update (SOLIDWORKS closed, non-elevated): pull first, then build with the script that arrived (section 4)
-cd '<repo>'; git status --porcelain; git pull --ff-only origin main
+cd -LiteralPath '<repo>'; git status --porcelain; git pull --ff-only origin main
 .\extractor\tools\update-workstation.ps1 -NoPull  # -TokenizerFrom "<file>", -SolidWorksRoot "<root>" as needed
 # or, instead of the script, the same build and gates by hand
 cd reviewer; uv sync --all-extras; uv run swreview tokenizer fetch
@@ -307,7 +307,7 @@ $env:SWREVIEW_REQUIRE_TOKENIZER = "1"; uv run pytest -q -m "not live"; Remove-It
 dotnet build extractor\SwReview.sln -c Release; dotnet test extractor\SwReview.sln -c Release
 
 # the console the probe and dump tasks call, for this shell
-Set-Alias swreview-extract '<repo>\extractor\SwReview.Extractor.Console\bin\x64\Release\net48\swreview-extract.exe'
+Set-Alias swreview-extract ([Management.Automation.WildcardPattern]::Escape('<repo>\extractor\SwReview.Extractor.Console\bin\x64\Release\net48\swreview-extract.exe'))
 
 # first install only, elevated, SOLIDWORKS closed
 .\extractor\tools\register-addin.ps1

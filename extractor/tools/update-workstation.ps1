@@ -75,7 +75,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+# The checkout and every path in it are read literally: a [ or ] in its path is no wildcard.
+$repo = Convert-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")
 $reviewer = Join-Path $repo "reviewer"
 $solution = Join-Path $repo "extractor\SwReview.sln"
 $swRedist = Join-Path $SolidWorksRoot "api\redist"
@@ -111,7 +112,7 @@ if (-not (Test-Path (Join-Path $swRedist "SolidWorks.Interop.sldworks.dll"))) {
 }
 
 # 2. A dirty tree is a handover waiting to be written, not something to pull over.
-Push-Location $repo
+Push-Location -LiteralPath $repo
 try {
     $dirty = git status --porcelain
     if ($LASTEXITCODE -ne 0) { throw "git status failed; is $repo a checkout?" }
@@ -157,7 +158,7 @@ finally {
 }
 
 # 4. The reviewer.
-Push-Location $reviewer
+Push-Location -LiteralPath $reviewer
 try {
     Invoke-Step "uv sync --all-extras" { uv sync --all-extras }
     # The o200k_base vocabulary every token count uses lives in a per-user cache, never in the
@@ -195,7 +196,9 @@ if (-not $SkipTests) {
 # 6. First install or moved checkout only; the script refuses a non-elevated prompt itself.
 if ($Register) {
     Invoke-Step "register-addin.ps1" {
-        & (Join-Path $PSScriptRoot "register-addin.ps1") -Configuration $Configuration -SolidWorksRoot $SolidWorksRoot
+        # Escaped: the call operator reads a script's path as a wildcard.
+        $registration = Join-Path $PSScriptRoot "register-addin.ps1"
+        & ([Management.Automation.WildcardPattern]::Escape($registration)) -Configuration $Configuration -SolidWorksRoot $SolidWorksRoot
     }
 }
 
@@ -217,9 +220,10 @@ if ($uvOnPath) {
 }
 # Every probe and dump task calls swreview-extract by its bare name; nothing puts it on PATH.
 $extract = Join-Path $repo "extractor\SwReview.Extractor.Console\bin\x64\$Configuration\net48\swreview-extract.exe"
-if (Test-Path $extract) {
+if (Test-Path -LiteralPath $extract) {
     Write-Host "swreview-extract: $extract"
-    Write-Host "      for this shell: Set-Alias swreview-extract `"$extract`""
+    # Escaped, as Set-Alias reads the path it is given as a wildcard.
+    Write-Host "      for this shell: Set-Alias swreview-extract ([Management.Automation.WildcardPattern]::Escape(`"$extract`"))"
 } else {
     Write-Host "swreview-extract: NOT BUILT at $extract"
 }
