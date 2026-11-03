@@ -1704,7 +1704,9 @@ has no parse pin of its own, as before; it was parsed by hand at T102.
   included, none broken. Every changed file LF in the index.
 - No C# or page file changed, so no C# gate, and no words changed. No SOLIDWORKS process, seat
   task, or paid or live test ran.
-- The whole suites on the final tree: recorded once they run.
+- The whole suites on the final tree (`1dbc6016`, 2026-11-03): 19,088 passed and 5 skipped on Python
+  3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; C# with zero warnings,
+  then 10,274 extractor and 4,411 add-in tests passed (T103's line).
 - *Done 2026-11-03, cycle 26 stacked on cycle 25:* the gates above ran on cycle 26 before it was
   stacked on cycle 25 (002 Phase 40, T409 to T412, itself stacked on cycles 24 to 21 and on this
   feature's cycle 20, R14). The two met in five files, records and the plan's pins, none of them a
