@@ -7964,6 +7964,11 @@ date, so a new problem read as old (`docs/review-backlog.md`, cycle 17).
   - **Interference ids are the exception** (should-fix 4): the claim that a live check's rows
     keep every id, on which a record of this review's own dump keeping its ids rests, is corrected
     under Settled.
+- **Read-only check** of those fixes (T396; 2026-11-03): no must-fix and one should-fix, done
+  ([tasks.md](tasks.md), T396's second sub-item). The reload's read replaced the start's dates,
+  and it sees the run root as it is then, within a budget of its own, so a folder deleted
+  meanwhile, or the budget spent before it, took a date a card already named or moved it later.
+  `reload_package` now keeps, for each subject key, the earlier day of its read and the start's.
 - **Gates** (T396; 2026-11-03), on the cycle's final tree:
   - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,010 passed and 5
     skipped, 14 of them this cycle's new cases. Its two warnings are neither of this cycle: the
