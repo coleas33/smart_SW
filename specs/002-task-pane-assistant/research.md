@@ -7636,3 +7636,47 @@ restart, or in a Check again's `report.md`, whose carried withdrawals name an ea
     skipped on Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed;
     C# with zero warnings, then 10,274 extractor and 4,351 add-in tests passed (T386's last
     sub-item).
+
+### Cycle 17. The card names when an earlier review first showed its finding (2026-11-03)
+
+Roadmap run 5's first proposal, from hole H-a-009's route, built ahead of the owner's pick; Tier
+2, no decision id. Owner decision 188A keeps a real finding SwReview first showed at an earlier
+sitting "new and real", with that sitting's date in its note, but nothing showed which findings an
+earlier review showed, so the date rested on recall.
+
+- **Settled**, the defaults taken inside the feature:
+  - **Which side.** The backend: it writes the `finding` event and `report.md`, and it already
+    holds the run root (`ChatServer.run_root`, inside which every `run_dir` lies), so the add-in
+    passes nothing new and no host contract changes. `start_review` takes `run_root`; the CLI's
+    `swreview review` has none and names no date.
+  - **Which earlier reviews count.** The add-in's rule for a document's reviews
+    (`RunFolders.FindNotSentReview`), names first: the run root's folders named
+    `<yyyyMMdd-HHmmss>-<DocumentName(path)>`, with or without a `-N` collision suffix, none a
+    `-check`, `-standards` or `-remodel` folder (`report/first_shown.document_name` is
+    `RunFolders.DocumentName`'s rule). Then the folder's `session.json`, read once, must name the
+    same document: its `design_id` this review's (the root document's path ignoring case, as the
+    extractor hashes it) and, where it names its document (`model_status.document`, a review
+    started unticked), the same path ignoring case and configuration exactly
+    (`PageDocument.IsSameDocument`). A record sent at once names no configuration; each finding's
+    subject key ends with the configuration it was raised in. The review's own folder is never
+    read; a Check again's earlier record, which the re-run already holds, counts. A folder
+    stamped later than this review's start is not an earlier review. Rotated records
+    (`session.N.json`, a retry's or a Check again's earlier attempt) are not read, and no stream is.
+  - **The match and the date.** A flagged finding of such a record with the same subject key
+    (`findings.finding_subject_key`, as Check again's carry finds its finding), whatever its status
+    and severity, since 194A's condition is the carry's for a decision, which a date is not; any
+    number of them. The date is the earliest such folder's name stamp, `YYYY-MM-DD`: the local wall
+    clock the add-in names the folder with when the review starts (`RunFolders.Create`), so no zone
+    is converted, and a Check again keeps its folder, so its earlier record is dated by the review it
+    re-ran. A pass neither gets nor gives one (187A).
+  - **A finding withdrawn** later in an earlier review gives no date: its record no longer holds it,
+    and the record, not the stream, is what a review is taken to have raised.
+  - **The key.** `first_shown` on the `finding` body, after `triage_tally`, only when there is a
+    date, so a body without one keeps its bytes; `ToolContext.finding_body`, the one builder, gives
+    a re-run's fold and a restate theirs. Both snapshots and `report.md` read it back from the
+    session's own stream, the last `finding` body of each id, so `Finding` gains no field and the
+    model never reads it.
+  - **The words.** `labels.first_shown.earlier`, "First shown in the review of {date}.", after
+    `note` and before `source`: the card's head prints it under the title, `{date}` replaced as
+    text, and `report.md` as the first line under the finding's heading. With no labels, or a body
+    without the key, the card prints nothing (009 FR-030).
