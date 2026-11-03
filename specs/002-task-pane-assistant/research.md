@@ -7527,3 +7527,27 @@ the decision register now records 160A as done.
     ending "not 'deferred' again" where it ended "not 'deferred'"; and `test_cli.py`'s
     `test_disposition_on_a_pass_decided_again_without_an_outcome_names_value_error` pins the
     console's line, a guard proved by a mutant.
+
+### Cycle 16. A withdrawal names its finding's title (2026-11-03)
+
+Roadmap run 5's proposal from hole H-c-006's route and the backlog's cycle 13 section, built ahead
+of the owner's pick; Tier 2, no decision id. A line in `report.md`'s "Withdrawn with a decision"
+part, and a read-only restore's Transcript line, named only the finding's id, so after a backend
+restart, or in a Check again's `report.md`, whose carried withdrawals name an earlier session's ids
+(015 cycle 12), nothing said which part or check went (cycle 13's *Left open*, above).
+
+- **Settled**, the defaults taken inside the feature:
+  - **The key.** Each `finding.withdrawn` body the backend writes names the finding's display title
+    as `title`, right after `finding_id`: `ToolContext.withdraw_findings`' (an answer's restate, a
+    decision taken or not) and the runner's fold's (`_announce_folds`), which is the title of the
+    `finding` event it announces next. The display title is the one every `finding` event names
+    (`report/titles.display_title`): whole, its parts named. The events contract takes the key,
+    optional, on `finding.withdrawn` and on `session.started`'s `carried_withdrawals` items, so an
+    older stream stays valid; a re-run carries it with the body it carries.
+  - **The line.** "F-007 (<title>) withdrawn: <reason>; <taken>": the title in parentheses right
+    after the id, in `report.md`'s withdrawn lines (a carried one's before its mark), a read-only
+    restore's lines and the live Transcript's line, which a replay shares
+    (`render.withdrawalMarker`). The parentheses are the line's punctuation, in code as
+    " withdrawn: " is, so no words key moves, nor any pane fixture. A body without a title, or
+    with a blank one, prints as before, and nothing works a title out of an older stream. The page
+    draws it as text; `report.md` prints it as its headings print a display title.
