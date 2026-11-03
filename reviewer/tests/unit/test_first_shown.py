@@ -14,6 +14,21 @@ stream; and the model is sent nothing of it. Every record here is fictional.
 showed the finding, by the record's own clock, and the folder's older records are read too; an
 earlier finding gives none once a component it names is another part's here; the match reads
 oldest first, within a budget; and a review started unticked in another configuration counts.
+
+*Changed 2026-11-03 (cycle 21, T394; roadmap hole H-d-009):* a date is never another subject's.
+An earlier record of another dump than this review's has each id its key holds matched by the
+stable name its own dump gives it, read from the package in its folder - a component by its full
+instance path, an entity by its name in its document - so an instance or entity an edit renumbered
+names none, one whose id moved keeps its date, and an id with no stable name gives none; a record
+of this review's own dump keeps its ids as they are. Cycle 17's cases are of that one dump.
+
+*Changed 2026-11-03 (cycle 21's Tier 2 review, T396):* the dates are read again when a drawing
+read at the engineer's confirmation reloads the package, so a finding on it keeps its earlier date;
+an earlier review's package is opened only within the read budget; and the match is pinned for
+four more kinds and for a part replaced by one of the same file name from another folder.
+
+*Changed 2026-11-03 (its read-only check, T396):* the reload keeps, for each subject key, the
+earlier day of its read and the start's, so a date a card named is never lost or moved later.
 """
 
 from __future__ import annotations
@@ -37,8 +52,26 @@ from swreview.agent.providers import AgentEvent
 from swreview.agent.providers.fake import FakeProvider
 from swreview.benchmark.origins import finding_origin
 from swreview.findings import MODEL_FINDING_CHECK, Finding, SubjectKey, finding_subject_key
-from swreview.ir.loader import load_package
-from swreview.ir.models import SourceRef
+from swreview.ir.loader import PACKAGE_FILE_NAME, LoadedPackage, load_package, save_package
+from swreview.ir.models import (
+    ComponentInstance,
+    CosmeticThread,
+    CutListItem,
+    DisplayDimensionRecord,
+    Document,
+    DrawingAnnotation,
+    DrawingRecord,
+    DrawingSheetRecord,
+    DrawingView,
+    EvidencePackage,
+    Fastener,
+    Feature,
+    Hole,
+    ManifestEntry,
+    ModelDimension,
+    Quantity,
+    SourceRef,
+)
 from swreview.report import first_shown
 from swreview.report.first_shown import document_name, first_shown_dates
 from swreview.report.markdown import render_report
@@ -59,7 +92,7 @@ from swreview.report.titles import pane_finding
 from swreview.tools.context import context_for, new_session
 from tests.support.contracts import contract_validator
 from tests.support.findings import make_finding
-from tests.support.packages import build_package
+from tests.support.packages import build_package, persist_ref
 from tests.support.recording_provider import RecordedRequest, RecordingProvider
 from tests.support.restart import restarted_app
 from tests.unit import test_chat_server as chat
@@ -186,11 +219,14 @@ def sent(session: ReviewSession, at: datetime, *steps: InvestigationStep) -> Rev
     return session
 
 
-def dates(root: Path, **options: Any) -> dict[SubjectKey, str]:
-    """`first_shown_dates` for a review of `PACKAGE` in a folder of its own, started at `BEFORE`."""
+def dates(root: Path, package: EvidencePackage = PACKAGE, **options: Any) -> dict[SubjectKey, str]:
+    """`first_shown_dates` for a review of `package` in a folder of its own, started at `BEFORE`.
+
+    *Changed 2026-11-03 (cycle 21, T394):* of `package`, `PACKAGE` unless a test names another
+    dump."""
     own = root / f"20261103-090000-{LABEL}"
     own.mkdir(parents=True, exist_ok=True)
-    return first_shown_dates(root, own, PACKAGE, before=BEFORE, **options)
+    return first_shown_dates(root, own, package, before=BEFORE, **options)
 
 
 @pytest.fixture
@@ -655,6 +691,597 @@ def test_only_the_documents_review_folders_are_read(tmp_path: Path, reads: list[
     assert sorted(reads) == sorted(tmp_path / name / SESSION_FILE_NAME for name in counted)
 
 
+# --- across two dumps (cycle 21; roadmap hole H-d-009) -----------------------------------------
+
+BOLT, SPACER, DRAWING = "doc:3", "doc:4", "doc:5"
+"""Three more documents of `DESIGN`: a bolt and a spacer, parts of the assembly, and its
+drawing."""
+
+SHEET, VIEW = "Sheet1", "FICT View1"
+"""The drawing's one sheet, and the view a drawing's entities are read from."""
+
+ASSEMBLY, HOUSING = PACKAGE.documents
+HOUSING_ENTRY = PACKAGE.manifest.entries[1]
+
+
+def part(
+    document_id: str, file_name: str, kind: str = "part", folder: str = ""
+) -> tuple[Document, ManifestEntry]:
+    """The document `document_id`, `file_name`, with its manifest entry.
+
+    *Changed 2026-11-03 (cycle 21's Tier 2 review, T396):* in `folder`, a path prefix ending in a
+    slash, when one is named, so two documents can share a file name."""
+    return (
+        HOUSING.model_copy(
+            update={"document_id": document_id, "kind": kind, "file_name": file_name,
+                    "path": f"native/{folder}{file_name}"}
+        ),
+        HOUSING_ENTRY.model_copy(
+            update={"document_id": document_id, "vault_path": f"/Designs/{folder}{file_name}"}
+        ),
+    )
+
+
+ADDED = [
+    part(BOLT, "FICT-bolt.SLDPRT"),
+    part(SPACER, "FICT-spacer.SLDPRT"),
+    part(DRAWING, "cover-assy.SLDDRW", "drawing"),
+]
+
+DESIGN = PACKAGE.model_copy(
+    update={
+        "documents": [*PACKAGE.documents, *(document for document, _ in ADDED)],
+        "manifest": PACKAGE.manifest.model_copy(
+            update={"entries": [*PACKAGE.manifest.entries, *(entry for _, entry in ADDED)]}
+        ),
+    }
+)
+"""`PACKAGE`'s assembly with a bolt, a spacer and a drawing among its documents: what each dump
+below reads, numbering its entities as each test says."""
+
+
+def dumped_as(number: int, **numbered: Any) -> EvidencePackage:
+    """`DESIGN` as dump `number` read it - its own package id, as every extraction makes one - with
+    the entities it numbered, `numbered`."""
+    return DESIGN.model_copy(update={"package_id": UUID(int=number), **numbered})
+
+
+def dumped(root: Path, name: str, dump: EvidencePackage, *findings: Finding) -> Path:
+    """A review folder `name` under `root` as the add-in leaves one: the package it dumped, `dump`,
+    beside the record of `findings` its review raised on it."""
+    folder = earlier(root, name, *findings, package=dump)
+    save_package(dump, folder)
+    return folder
+
+
+def instance(number: int, path: str, document_id: str = HOUSING.document_id) -> ComponentInstance:
+    """The component `cmp:<number>`, the instance `path` of `document_id`."""
+    return PACKAGE.components[0].model_copy(
+        update={"id": f"cmp:{number:04d}", "persist_ref": persist_ref(path), "name": path,
+                "full_path": path, "document_id": document_id}
+    )
+
+
+def hole(number: int, name: str) -> Hole:
+    """`hol:<number>`, the Hole Wizard feature `name` of housing-1."""
+    return PACKAGE.holes[0].model_copy(
+        update={"id": f"hol:{number:04d}", "persist_ref": persist_ref(name), "feature_name": name}
+    )
+
+
+def feature(number: int, name: str) -> Feature:
+    """`feat:<number>`, the feature `name` of the housing's tree."""
+    return Feature(
+        id=f"feat:{number:04d}",
+        persist_ref=persist_ref(name),
+        persist_ref_scope=HOUSING.document_id,
+        document_id=HOUSING.document_id,
+        configuration="Default",
+        name=name,
+        type_name="FICT",
+        description=None,
+        index=number - 1,
+        depth=0,
+        folder_id=None,
+        suppressed=False,
+        error_code=None,
+        child_ids=None,
+        parent_ids=None,
+        sketch=None,
+        fillet=None,
+    )
+
+
+def model_dimension(number: int, name: str) -> ModelDimension:
+    """`mdm:<number>`, the housing's model dimension whose full name is `name`."""
+    return ModelDimension(
+        id=f"mdm:{number:04d}",
+        document_id=HOUSING.document_id,
+        feature_name="FICT Boss1",
+        name=name,
+        dimension_type="linear",
+        nominal=Quantity(value=0.01, unit="m"),
+    )
+
+
+def cut_list_item(number: int, name: str) -> CutListItem:
+    """`cut:<number>`, the housing's cut-list item `name`."""
+    return CutListItem(
+        id=f"cut:{number:04d}",
+        document_id=HOUSING.document_id,
+        configuration="Default",
+        folder_name="FICT Cut-List-Item1",
+        folder_type_name="FICT",
+        name=name,
+    )
+
+
+def fastener(number: int, component: str) -> Fastener:
+    """`fas:<number>`, the fastener the component `component` is."""
+    return PACKAGE.fasteners[0].model_copy(
+        update={"id": f"fas:{number:04d}", "persist_ref": persist_ref(component),
+                "component_id": component}
+    )
+
+
+IN_THE_HOUSING = {
+    "hol": ("holes", hole),
+    "feat": ("features", feature),
+    "mdm": ("model_dimensions", model_dimension),
+    "cut": ("cut_list_items", cut_list_item),
+}
+"""The kinds `renumbered` numbers in the housing, each with the package's list of it and the
+builder of one from its number and name."""
+
+
+def drawing(
+    views: list[str] | None = None,
+    dimensions: list[str] | None = None,
+    annotations: list[str] | None = None,
+) -> DrawingRecord:
+    """The drawing's one sheet, `SHEET`: an empty view for each of `views`; or, with none named,
+    `VIEW` alone, holding a display dimension for each of `dimensions` and an annotation for each
+    of `annotations`. Each is named so and numbered from 1 in that order, as the extractor
+    numbers them."""
+    sheet = "dsh:0001"
+    if views is not None:
+        shown = [
+            DrawingView(id=f"dvw:{number:04d}", sheet_id=sheet, name=name)
+            for number, name in enumerate(views, start=1)
+        ]
+    else:
+        shown = [
+            DrawingView(
+                id="dvw:0001",
+                sheet_id=sheet,
+                name=VIEW,
+                display_dimensions=[
+                    DisplayDimensionRecord(id=f"ddm:{number:04d}", view_id="dvw:0001", name=name)
+                    for number, name in enumerate(dimensions or [], start=1)
+                ],
+                annotations=[
+                    DrawingAnnotation(id=f"dan:{number:04d}", owner_id="dvw:0001", name=name)
+                    for number, name in enumerate(annotations or [], start=1)
+                ],
+            )
+        ]
+    return DrawingRecord(
+        document_id=DRAWING,
+        sheets=[DrawingSheetRecord(id=sheet, name=SHEET, index=0, was_active=True, views=shown)],
+    )
+
+
+def renumbered(kind: str, number: int, names: list[str]) -> EvidencePackage:
+    """Dump `number` of `DESIGN` with an entity of `kind` for each of `names`, in that order, so
+    numbered from 1: holes of housing-1, features of the housing, or the drawing's views,
+    display dimensions or annotations.
+
+    *Changed 2026-11-03 (cycle 21's Tier 2 review, T396):* or the housing's model dimensions or
+    cut-list items (`IN_THE_HOUSING`, which holds the holes and features too); fasteners, each an
+    instance of the bolt whose full path is its name, after housing-1; or the drawing's sheets."""
+    if kind in IN_THE_HOUSING:
+        field, build = IN_THE_HOUSING[kind]
+        return dumped_as(
+            number, **{field: [build(index, name) for index, name in enumerate(names, 1)]}
+        )
+    if kind == "fas":
+        bolts = [instance(index, name, BOLT) for index, name in enumerate(names, 2)]
+        return dumped_as(
+            number,
+            components=[instance(1, "housing-1"), *bolts],
+            fasteners=[fastener(index, bolt.id) for index, bolt in enumerate(bolts, 1)],
+        )
+    if kind == "dsh":
+        sheets = [
+            DrawingSheetRecord(
+                id=f"dsh:{index:04d}", name=name, index=index - 1, was_active=index == 1
+            )
+            for index, name in enumerate(names, 1)
+        ]
+        return dumped_as(
+            number, drawing_records=[DrawingRecord(document_id=DRAWING, sheets=sheets)]
+        )
+    entities = {"dvw": "views", "ddm": "dimensions", "dan": "annotations"}
+    return dumped_as(number, drawing_records=[drawing(**{entities[kind]: names})])
+
+
+def citing_entity(kind: str, package: EvidencePackage, number: int) -> Finding:
+    """A flagged finding of `package` about the entity `<kind>:<number>`, named where the checks
+    name one: a hole among its inputs, on housing-1; a feature among its inputs, the housing's;
+    a view as a drawing finding's place; a display dimension or an annotation as the annotation
+    of its place on the sheet.
+
+    *Changed 2026-11-03 (cycle 21's Tier 2 review, T396):* a fastener among its inputs, on
+    housing-1, as `checks/fastener` names one; a model dimension or a cut-list item among its
+    inputs, the housing's, as a feature; a sheet as a drawing finding's place, by its id."""
+    entity = f"{kind}:{number:04d}"
+    if kind in ("hol", "fas"):
+        return make_finding(package=package, inputs=[entity])
+    if kind in ("feat", "mdm", "cut"):
+        return make_finding(
+            package=package, component_ids=[], document_ids=[HOUSING.document_id], inputs=[entity]
+        )
+    if kind == "dsh":
+        place = SourceRef(document_id=DRAWING, sheet=entity)
+    elif kind == "dvw":
+        place = SourceRef(document_id=DRAWING, sheet=SHEET, view=entity)
+    else:
+        place = SourceRef(document_id=DRAWING, sheet=SHEET, view=VIEW, annotation=entity)
+    return make_finding(
+        package=package,
+        check=MODEL_FINDING_CHECK,
+        component_ids=[],
+        drawing_locations=[place],
+        numeric=False,
+        source="model",
+    )
+
+
+def test_of_two_instances_of_one_part_the_renumbered_second_names_no_date(tmp_path: Path) -> None:
+    """Roadmap hole H-d-009's case (`docs/review-backlog.md`, cycle 17): an earlier review flagged
+    the first of two instances of one bolt, `cmp:0003` beside `cmp:0004`; a spacer removed before
+    them makes the second bolt `cmp:0003`, the earlier finding's very key, and the first
+    `cmp:0002`. Each instance is matched by its full path: the second, a new problem, names no
+    date, and the first, its id moved, names the earlier review's."""
+    before_edit = dumped_as(
+        1,
+        components=[
+            instance(1, "housing-1"),
+            instance(2, "FICT-spacer-1", SPACER),
+            instance(3, "FICT-bolt-1", BOLT),
+            instance(4, "FICT-bolt-2", BOLT),
+        ],
+    )
+    after_edit = dumped_as(
+        2,
+        components=[
+            instance(1, "housing-1"),
+            instance(2, "FICT-bolt-1", BOLT),
+            instance(3, "FICT-bolt-2", BOLT),
+        ],
+    )
+    shown = make_finding(package=before_edit, component_ids=["cmp:0003"])
+    first = make_finding(package=after_edit, component_ids=["cmp:0002"])
+    second = make_finding(package=after_edit, component_ids=["cmp:0003"])
+    dumped(tmp_path, f"20260918-090000-{LABEL}", before_edit, shown)
+
+    assert key(second) == key(shown)
+    assert dates(tmp_path, after_edit) == {key(first): "2026-09-18"}
+
+
+def test_a_part_whose_old_number_another_part_now_holds_keeps_its_date(tmp_path: Path) -> None:
+    """Cycle 21's gain over cycle 17's guard: a second housing added before the bolt gives the bolt
+    `cmp:0003` and the new housing the bolt's old `cmp:0002`. The bolt's finding is matched by its
+    full path and keeps its date, the part guard asked of the bolt as this review numbers it;
+    the housing's finding of the same check, a new problem on another part, names none."""
+    before_edit = dumped_as(
+        1, components=[instance(1, "housing-1"), instance(2, "FICT-bolt-1", BOLT)]
+    )
+    after_edit = dumped_as(
+        2,
+        components=[
+            instance(1, "housing-1"),
+            instance(2, "housing-2"),
+            instance(3, "FICT-bolt-1", BOLT),
+        ],
+    )
+    shown = make_finding(package=before_edit, component_ids=["cmp:0002"])
+    bolt = make_finding(package=after_edit, component_ids=["cmp:0003"])
+    housing = make_finding(package=after_edit, component_ids=["cmp:0002"])
+    dumped(tmp_path, f"20260918-090000-{LABEL}", before_edit, shown)
+
+    assert key(housing) == key(shown)
+    assert dates(tmp_path, after_edit) == {key(bolt): "2026-09-18"}
+
+
+def test_a_part_replaced_by_one_of_the_same_file_name_from_another_folder_names_no_date(
+    tmp_path: Path,
+) -> None:
+    """Cycle 21's Tier 2 review, should-fix 2: the bolt replaced by one of the same file name from
+    another folder keeps its instance's full path, `FICT-bolt-1`, so its id is matched across the
+    two dumps; but its document is another, and the part guard (`_same_parts`), asked of it as
+    this review numbers it, gives the old bolt's date to none. The bolt left as it was keeps its
+    date across the same two dumps."""
+    document, entry = part("doc:6", "FICT-bolt.SLDPRT", folder="FICT-other/")
+    before_edit = dumped_as(
+        1, components=[instance(1, "housing-1"), instance(2, "FICT-bolt-1", BOLT)]
+    )
+    replaced = dumped_as(
+        2,
+        documents=[*DESIGN.documents, document],
+        manifest=DESIGN.manifest.model_copy(
+            update={"entries": [*DESIGN.manifest.entries, entry]}
+        ),
+        components=[instance(1, "housing-1"), instance(2, "FICT-bolt-1", document.document_id)],
+    )
+    shown = make_finding(package=before_edit, component_ids=["cmp:0002"])
+    dumped(tmp_path, f"20260918-090000-{LABEL}", before_edit, shown)
+
+    assert key(make_finding(package=replaced, component_ids=["cmp:0002"])) == key(shown)
+    assert dates(tmp_path, replaced) == {}
+    kept = dumped_as(2, components=before_edit.components)
+    assert dates(tmp_path, kept) == {key(shown): "2026-09-18"}
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["hol", "fas", "feat", "cut", "mdm", "dsh", "dvw", "ddm", "dan"],
+    ids=[
+        "a hole",
+        "a fastener",
+        "a feature",
+        "a cut-list item",
+        "a model dimension",
+        "a drawing sheet",
+        "a drawing view",
+        "a drawing dimension",
+        "a drawing annotation",
+    ],
+)
+def test_an_entity_renumbered_in_an_edited_document_is_matched_by_its_name(
+    tmp_path: Path, kind: str
+) -> None:
+    """Roadmap hole H-d-009: an edit adds an entity before two others of its document - a hole
+    to the housing, a feature to its tree, a view, a dimension or an annotation to the drawing -
+    and each id after it moves up one. An earlier review flagged the second; this review's
+    finding under that id is the first's, a new problem, and names no date, and its finding on
+    the second, under its new id, names the earlier review's: each is matched by the name the
+    dump gives it in its document - the hole's feature, the feature's, the view's, the
+    dimension's full name, the annotation's.
+
+    *Changed 2026-11-03 (cycle 21's Tier 2 review, should-fix 2):* four more kinds, since
+    `stable_names` could drop any of them and fail no case: a fastener added before two others,
+    each its own instance, matched by its component's path; a cut-list item and a model
+    dimension, by their names in the housing; and a sheet added to the drawing, by its name
+    there. The five cases above are unchanged."""
+    before_edit = renumbered(kind, 1, ["FICT one", "FICT two"])
+    after_edit = renumbered(kind, 2, ["FICT new", "FICT one", "FICT two"])
+    shown = citing_entity(kind, before_edit, 2)
+    moved_onto = citing_entity(kind, after_edit, 2)
+    moved = citing_entity(kind, after_edit, 3)
+    dumped(tmp_path, f"20260918-090000-{LABEL}", before_edit, shown)
+
+    assert key(moved_onto) == key(shown)
+    assert dates(tmp_path, after_edit) == {key(moved): "2026-09-18"}
+
+
+NEEDS_A_NAME = make_finding(package=dumped_as(1))
+"""A flagged finding on housing-1, `cmp:0001`, raised on dump 1: matched by the name of its part."""
+
+NEEDS_NONE = [
+    make_finding(
+        package=dumped_as(1),
+        check="FICT.check.document",
+        component_ids=[],
+        document_ids=[HOUSING.document_id],
+    ),
+    make_finding(
+        package=dumped_as(1),
+        check=MODEL_FINDING_CHECK,
+        component_ids=[],
+        drawing_locations=[SourceRef(document_id=DRAWING, sheet=SHEET, view=VIEW)],
+        numeric=False,
+        source="model",
+    ),
+]
+"""Flagged findings whose keys hold no id: a document-scoped one, and a drawing's placed by the
+names of its sheet and view."""
+
+
+@pytest.mark.parametrize("left", ["gone", "cut off", "another dump's"])
+def test_a_folder_without_its_records_package_gives_no_date_to_a_finding_needing_a_name(
+    tmp_path: Path, left: str
+) -> None:
+    """The route's "older record without the names" (roadmap hole H-d-009): the names come from
+    the package in the earlier review's folder, the dump its record's ids number. A folder whose
+    package is gone, cut off, or another dump's than its record's - checked by the package id the
+    record names - gives no date to a finding naming a component, and keeps it for a finding
+    whose key holds no id."""
+    folder = dumped(tmp_path, f"20260918-090000-{LABEL}", dumped_as(1), NEEDS_A_NAME, *NEEDS_NONE)
+    package = folder / PACKAGE_FILE_NAME
+    if left == "gone":
+        package.unlink()
+    elif left == "cut off":
+        whole = package.read_bytes()
+        package.write_bytes(whole[: len(whole) // 2])
+    else:
+        save_package(dumped_as(3), folder)
+
+    assert dates(tmp_path, dumped_as(2)) == {key(finding): "2026-09-18" for finding in NEEDS_NONE}
+
+
+@pytest.mark.parametrize(
+    ("step", "opened"), [(0.5, True), (1.5, False)], ids=["within it", "past it"]
+)
+def test_an_earlier_package_is_opened_only_within_the_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, step: float, opened: bool
+) -> None:
+    """Cycle 21's Tier 2 review, should-fix 3, the default taken: the read budget bounds an
+    earlier review's package as it bounds its folder, so one large package is never opened past
+    it. The folder's record read within the budget, its package is opened while the budget
+    lasts and gives each finding its date; reached past it, the package is not opened, and a
+    finding needing a stable name names none, as when the package is gone, while one needing
+    none keeps its date. Here each look at the clock costs `step` of a two-second budget: the
+    folder is reached at one step, its package at two."""
+    clock = itertools.count(0.0, step)
+    monkeypatch.setattr(first_shown, "monotonic", lambda: next(clock), raising=False)
+    monkeypatch.setattr(first_shown, "READ_BUDGET_S", 2.0, raising=False)
+    loaded: list[Path] = []
+    load = first_shown.load_package
+
+    def counted(directory: Path | str) -> LoadedPackage:
+        loaded.append(Path(directory))
+        return load(directory)
+
+    monkeypatch.setattr(first_shown, "load_package", counted)
+    folder = dumped(tmp_path, f"20260918-090000-{LABEL}", dumped_as(1), NEEDS_A_NAME, *NEEDS_NONE)
+    named = [NEEDS_A_NAME] if opened else []
+
+    shown = dates(tmp_path, dumped_as(2))
+
+    assert shown == {key(finding): "2026-09-18" for finding in [*named, *NEEDS_NONE]}
+    assert loaded == ([folder.resolve()] if opened else [])
+
+
+def test_the_design_dumped_again_keeps_a_named_ids_date_and_gives_none_for_an_unnamed_one(
+    tmp_path: Path,
+) -> None:
+    """The design dumped again, unchanged, is numbered as before, but across two dumps only a
+    stable name says so. A finding on a component, matched by its full path, keeps its date, and
+    so does one holding a document's id, a path hash (`DocumentIds`) the same in every dump; one
+    naming a cosmetic thread, which the dump keeps no name for, or a hole instance the joint map
+    numbers by its faces, `hol:0001#2`, though its hole is named, names none: lost, never
+    another subject's."""
+    thread = CosmeticThread(
+        id="thr:0001",
+        persist_ref=persist_ref("thr:0001"),
+        persist_ref_scope=HOUSING.document_id,
+        component_id="cmp:0001",
+        face_id="fac:0001",
+        designation="M6x1.0",
+        depth=None,
+        is_external=False,
+    )
+    entities = {"threads": [thread], "holes": [hole(1, "FICT Hole1")]}
+    then, now = dumped_as(1, **entities), dumped_as(2, **entities)
+    on_component = make_finding(package=then)
+    on_document = make_finding(
+        package=then,
+        check="FICT.check.document",
+        component_ids=[],
+        document_ids=[HOUSING.document_id],
+        inputs=["doc:123456789012"],
+    )
+    on_thread = make_finding(package=then, check="FICT.check.thread", inputs=["thr:0001"])
+    on_instance = make_finding(package=then, check="FICT.check.joint", inputs=["hol:0001#2"])
+    dumped(tmp_path, f"20260918-090000-{LABEL}", then, on_component, on_document, on_thread,
+           on_instance)
+
+    assert key(on_document)[3] == ("doc:123456789012",)
+    assert dates(tmp_path, now) == {key(on_component): "2026-09-18", key(on_document): "2026-09-18"}
+
+
+def test_a_name_two_entities_share_gives_no_date(tmp_path: Path) -> None:
+    """A name is stable only while one entity of its kind holds it in its dump. Two display
+    dimensions of one view under one name - a full name read back as the bare `Name`, say - leave
+    neither a stable name, so a finding on either names no date across two dumps though the
+    drawing is unchanged, where the dimension named once keeps its date."""
+    names = ["FICT D1", "FICT D1", "FICT D2"]
+    then = dumped_as(1, drawing_records=[drawing(dimensions=names)])
+    now = dumped_as(2, drawing_records=[drawing(dimensions=names)])
+    shared, alone = citing_entity("ddm", then, 1), citing_entity("ddm", then, 3)
+    dumped(tmp_path, f"20260918-090000-{LABEL}", then, shared, alone)
+
+    assert dates(tmp_path, now) == {key(alone): "2026-09-18"}
+
+
+def test_a_record_of_this_reviews_own_dump_keeps_its_ids_as_they_are(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A record of the very dump this review reads - a Check again's earlier record in its folder,
+    or a package copied whole - numbers it as this review does, so its ids are matched as they
+    are, one the dump names no stable way among them, and its folder's package is not read."""
+    on_thread = make_finding(check="FICT.check.thread", inputs=["thr:0001"])
+    earlier(tmp_path, f"20260918-090000-{LABEL}", ON_ONE, on_thread)
+
+    def unread(directory: Path | str) -> None:
+        raise AssertionError(f"read {directory}")
+
+    monkeypatch.setattr(first_shown, "load_package", unread, raising=False)
+
+    assert dates(tmp_path) == {key(ON_ONE): "2026-09-18", key(on_thread): "2026-09-18"}
+
+
+def test_a_drawing_read_at_the_engineers_confirmation_keeps_its_earlier_date(
+    tmp_path: Path,
+) -> None:
+    """Cycle 21's Tier 2 review, should-fix 1: a drawing not open at extraction, read once the
+    engineer confirms it (feature 011), is merged into the review's `package.json`, its ids
+    continuing the package's own, and the package is reloaded (`ToolContext.reload_package`,
+    as `tools/drawings.read_confirmed_candidates` does). An earlier review of another dump that
+    read the same drawing so and flagged an annotation on it gives this review's finding on that
+    annotation its date, as it did before cycle 21: the dates are read again for the package
+    reloaded, whose stable names hold the drawing's, where the review's start had none."""
+    root = tmp_path / "runs"
+    read = drawing(annotations=["FICT D1", "FICT D2"])
+    then = dumped_as(1, drawing_records=[read])
+    dumped(root, f"20260918-090000-{LABEL}", then, citing_entity("dan", then, 2))
+    own = root / f"20261103-090000-{LABEL}"
+    save_package(dumped_as(2), own)
+    run = runner.start_review(
+        own,
+        own,
+        provider=FakeProvider(script=[chat.turn("FICT nothing yet")], model=chat.MODEL),
+        run_root=root,
+    )
+    merged = dumped_as(2, drawing_records=[read])
+    again = citing_entity("dan", merged, 2)
+    assert "first_shown" not in run.context.finding_body(again)
+
+    save_package(merged, own)
+    run.context.reload_package(load_package(own))
+
+    assert run.context.finding_body(again).get("first_shown") == "2026-09-18"
+
+
+@pytest.mark.parametrize("meanwhile", ["deleted", "past the budget", "read only then"])
+def test_a_reload_keeps_the_earlier_day_of_its_read_and_the_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, meanwhile: str
+) -> None:
+    """The read-only check of cycle 21's Tier 2 fixes: the reload reads the dates again over the
+    run root as it is then, within a budget of its own, so it can miss an earlier review the start
+    read - its folder deleted meanwhile, or the budget spent before it - and name a later day, or
+    none, for a finding whose card already named the earlier one. Each subject key keeps the
+    earlier day of the two reads: the start's, `FIRST`'s; or the reload's, when only the reload
+    could read `FIRST`'s record, cut off while the review started."""
+    root = tmp_path / "runs"
+    first = earlier(root, FIRST, ON_ONE)
+    earlier(root, SECOND, ON_ONE)
+    whole = (first / SESSION_FILE_NAME).read_bytes()
+    if meanwhile == "read only then":
+        (first / SESSION_FILE_NAME).write_bytes(whole[: len(whole) // 2])
+    own = root / f"20261103-090000-{LABEL}"
+    save_package(PACKAGE, own)
+    run = runner.start_review(
+        own,
+        own,
+        provider=FakeProvider(script=[chat.turn("FICT nothing yet")], model=chat.MODEL),
+        run_root=root,
+    )
+    started = "2026-09-20" if meanwhile == "read only then" else SHOWN
+    assert run.context.finding_body(ON_ONE).get("first_shown") == started
+
+    if meanwhile == "deleted":
+        shutil.rmtree(first)
+    elif meanwhile == "past the budget":
+        monkeypatch.setattr(first_shown, "READ_BUDGET_S", -1.0)
+    else:
+        (first / SESSION_FILE_NAME).write_bytes(whole)
+    run.context.reload_package(load_package(own))
+
+    assert run.context.finding_body(ON_ONE).get("first_shown") == SHOWN
+
+
 # --- the body, the fold, the snapshot and report.md ---------------------------------------------
 
 
@@ -848,6 +1475,35 @@ def test_the_date_adds_nothing_to_what_the_model_is_sent(
     assert [body["first_shown"] for body in finding_bodies(run_root / SECOND)]
     assert len(first) == len(second) == 2
     for one, two in zip(first, second, strict=True):
+        assert (two.system, two.encoded_tools, two.encoded_history) == (
+            one.system,
+            one.encoded_tools,
+            one.encoded_history,
+        )
+        sent = two.system.encode("utf-8") + two.encoded_tools + b"".join(two.encoded_history)
+        assert SHOWN.encode("utf-8") not in sent
+
+
+def test_a_date_matched_by_name_adds_nothing_to_what_the_model_is_sent(
+    app: Any, client: TestClient, run_root: Path, tmp_package_dir: Path, tmp_path: Path
+) -> None:
+    """Cycle 21 (roadmap hole H-d-009): a review of the design dumped again - another package id,
+    so the first review's ids are matched by their stable names - names the first's date on each
+    finding, and sends the model every request byte for byte as the same dump reviewed with no
+    earlier review does, two turns of them, none naming the date. The review alone runs first,
+    in a folder stamped after the others' starts, so neither counts it."""
+    again, later = tmp_path / "dumped-again", run_root / f"20991231-090000-{LABEL}"
+    save_package(PACKAGE.model_copy(update={"package_id": UUID(int=21)}), again)
+    alone = recorded_review(app, client, later, again)
+    recorded_review(app, client, run_root / FIRST, tmp_package_dir)
+    started_as_named(run_root / FIRST)
+    second = recorded_review(app, client, run_root / SECOND, again)
+
+    bodies = finding_bodies(run_root / SECOND)
+    assert bodies and [body.get("first_shown") for body in bodies] == [SHOWN] * len(bodies)
+    assert all("first_shown" not in body for body in finding_bodies(later))
+    assert len(alone) == len(second) == 2
+    for one, two in zip(alone, second, strict=True):
         assert (two.system, two.encoded_tools, two.encoded_history) == (
             one.system,
             one.encoded_tools,

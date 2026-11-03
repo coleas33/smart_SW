@@ -18,24 +18,39 @@ aside beside it - each read once, must name this review's document, and each is 
 clock (`_day`), since a folder can hold findings shown on several days. The review's own
 `session.json` is never read; a Check again's earlier record, which the re-run already holds, is
 passed in instead.
+
+*Changed 2026-11-03 (002 cycle 21; roadmap hole H-d-009):* a date is never another subject's. The
+key holds each dump's numbering, which an edit shifts, so a record of another dump than this
+review's has each id its key holds matched by the stable name its own dump gives it
+(`stable_names`), read from the package in its folder, the dump its review ran on; an id with no
+stable name on either side gives no date. A record of this review's own dump keeps its ids.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections import Counter
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from pathlib import Path
 from time import monotonic
+from uuid import UUID
 
 from swreview.checks.provenance import PROVENANCE_CHECK
-from swreview.findings import Finding, SubjectKey, finding_subject_key
+from swreview.findings import (
+    ENTITY_ID,
+    Finding,
+    SubjectKey,
+    finding_subject_key,
+    subject_locations,
+)
+from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import SUPPRESSED_STATUS
 from swreview.report.session import SESSION_FILE_NAME, ReviewSession, load_session
 from swreview.report.snapshot import root_document
 
-__all__ = ["document_name", "first_shown_dates"]
+__all__ = ["document_name", "first_shown_dates", "stable_names"]
 
 STAMP = re.compile(r"[0-9]{8}-[0-9]{6}")
 """The stamp a run folder's name begins with: `RunFolders.TimestampFormat`, `yyyyMMdd-HHmmss`, the
@@ -72,7 +87,19 @@ review's own. The folders are read oldest first, so a finding only a review past
 names no date; but each record is dated by its own clock, so one read within the budget can name a
 later day than a review past it showed - a review sent after a restart days after its folder was
 named, say. The match took about 10 ms a record of the big-assembly replay fixture (002
-research.md, cycle 17)."""
+research.md, cycle 17).
+
+*Changed 2026-11-03 (002 cycle 21's Tier 2 review):* an earlier review's package, read for its
+records of another dump (`_dump`), is opened only within the budget too: past it, their findings
+needing a stable name name no date, as when the package is gone. The budget is looked at before
+each read, so a read begun within it - a folder's records, or one package - can end past it."""
+
+PATH_HASHES = ("doc:", "dsn:")
+"""The ids made from a path (`DocumentIds.For` and `DesignId`), the same in every dump of a
+design: matched as they are."""
+
+Name = tuple[str, ...]
+"""An entity's stable name (`stable_names`): its id's kind, then the names that place it."""
 
 
 def document_name(path: str) -> str:
@@ -175,15 +202,118 @@ def _day(finding: Finding, record: ReviewSession, prerun: set[int]) -> str:
     return shown.astimezone().date().isoformat()
 
 
-def _same_parts(finding: Finding, parts: Mapping[str, str]) -> bool:
-    """Whether each component `finding` names is, in this review's package (`parts`, component id
-    to document id), an instance of a document the finding drew on (its `provenance`). A
-    component's id is its place in each dump's numbering, so after an edit to the tree an earlier
-    finding of another part can hold this review's number for a part; it gives no date. A finding
-    naming no component, a component renumbered onto another instance of the same document, or an
-    entity renumbered within one document, is not told apart."""
+def _same_parts(finding: Finding, components: Iterable[str], parts: Mapping[str, str]) -> bool:
+    """Whether each of `components`, the components `finding` names as this review numbers them,
+    is, in this review's package (`parts`, component id to document id), an instance of a
+    document the finding drew on (its `provenance`). A component's id is its place in each dump's
+    numbering, so after an edit to the tree an earlier finding of another part can hold this
+    review's number for a part; it gives no date. A finding naming no component, a component
+    renumbered onto another instance of the same document, or an entity renumbered within one
+    document, is not told apart.
+
+    *Changed 2026-11-03 (cycle 21):* a record of another dump comes renumbered by its ids' stable
+    names (`_renumbered`), which tell those apart; for it this refuses an instance of the same
+    path whose document is another - a part replaced by one of the same file name from another
+    folder, say."""
     drew_on = {entry.document_id for entry in finding.provenance}
-    return all(parts.get(component) in drew_on for component in finding.component_ids)
+    return all(parts.get(component) in drew_on for component in components)
+
+
+def stable_names(package: EvidencePackage) -> dict[str, Name]:
+    """Each entity id of `package` to the stable name the dump gives the entity, where it gives
+    one no other entity of its kind there shares: a component's full instance path
+    (`IComponent2.Name2`); a feature's and a cut-list item's name in their document and
+    configuration, and a model dimension's full name in its document; a hole by its Hole Wizard
+    feature's name in its component's path, and a fastener by its component's path; a drawing
+    sheet by its name in its drawing, and a view, a display dimension (`IDimension.FullName`) and
+    an annotation (`IAnnotation.GetName`) by theirs in their drawing, sheet and view. Each name
+    begins with its id's kind. Nothing else has one: an edit leaves no name of a cosmetic thread,
+    a face, a body, a mate, an interference, a note, a table or a model annotation in the dump,
+    nor of a hole instance the joint map numbers by its faces (`hol:0014#2`); and an empty name,
+    or one two entities share - a sketch the tree lists both at the top and under its feature -
+    is none."""
+    paths = {item.id: item.full_path for item in package.components}
+    named: list[tuple[str, tuple[str | None, ...]]] = [
+        *((item.id, (item.full_path,)) for item in package.components),
+        *(
+            (item.id, (item.document_id, item.configuration, item.name))
+            for item in [*package.features, *package.cut_list_items]
+        ),
+        *((item.id, (item.document_id, item.name)) for item in package.model_dimensions),
+        *((item.id, (paths.get(item.component_id), item.feature_name)) for item in package.holes),
+        *((item.id, (paths.get(item.component_id),)) for item in package.fasteners),
+    ]
+    for drawing in package.drawing_records:
+        for sheet in drawing.sheets:
+            named.append((sheet.id, (drawing.document_id, sheet.name)))
+            for view in sheet.views:
+                place = (drawing.document_id, sheet.name, view.name)
+                named.append((view.id, place))
+                named += [(item.id, (*place, item.name)) for item in view.display_dimensions]
+                named += [(item.id, (*place, item.name)) for item in view.annotations]
+    kinded = [
+        (identifier, (identifier.partition(":")[0], *parts))
+        for identifier, parts in named
+        if all(parts)
+    ]
+    held = Counter(name for _, name in kinded)
+    return {identifier: name for identifier, name in kinded if held[name] == 1}
+
+
+def _renumbered(
+    key: SubjectKey, then: Mapping[str, Name], here: Mapping[Name, str]
+) -> SubjectKey | None:
+    """`key`, an earlier finding's in its own dump's numbering, in this review's: each id it holds
+    - its components, its entity inputs and the ids among its drawing places - replaced by the id
+    whose stable name here (`here`) is the one it had there (`then`); `None` when one has no
+    stable name on either side. A path hash (`PATH_HASHES`), a name and a persistent reference are
+    kept as they are."""
+    check, components, locations, inputs, configuration = key
+    held = {*components, *inputs}
+    held.update(
+        value
+        for location in locations
+        for value in location[1:4]
+        if isinstance(value, str) and ENTITY_ID.fullmatch(value)
+    )
+    moved: dict[str, str] = {}
+    for value in held:
+        if value.startswith(PATH_HASHES):
+            moved[value] = value
+            continue
+        name = then.get(value)
+        renamed = None if name is None else here.get(name)
+        if renamed is None:
+            return None
+        moved[value] = renamed
+    return (
+        check,
+        tuple(sorted(moved[value] for value in components)),
+        subject_locations(
+            (
+                document,
+                moved.get(sheet, sheet),
+                moved.get(view, view),
+                moved.get(annotation, annotation),
+                page,
+                reference,
+            )
+            for document, sheet, view, annotation, page, reference in locations
+        ),
+        tuple(sorted(moved[value] for value in inputs)),
+        configuration,
+    )
+
+
+def _dump(folder: Path) -> tuple[UUID | None, dict[str, Name]]:
+    """The id of the dump whose package `folder` holds, the one the records of the review run in
+    it number, and that dump's stable names (`stable_names`); `(None, {})` when the folder holds
+    no package that can be read."""
+    try:
+        package = load_package(folder).package
+    except (OSError, ValueError):
+        return None, {}
+    return package.package_id, stable_names(package)
 
 
 def first_shown_dates(
@@ -209,12 +339,21 @@ def first_shown_dates(
     A pass gives none (owner decision 187A), and a finding the record no longer holds - one its
     review withdrew - gives none: the record is what the review raised. Nor does a finding on a
     part another part's number now names (`_same_parts`).
+
+    *Changed 2026-11-03 (002 cycle 21; roadmap hole H-d-009):* the map is keyed as this review
+    numbers its subjects. A record of this review's own dump (its `package_id`) - a Check again's,
+    a Send's - keeps its keys. A record of another dump has each key renumbered by its ids' stable
+    names (`_renumbered`), its own dump's read from the package in its folder (`_dump`) once, and
+    only when that package is the record's dump; an id with no stable name on either side, or a
+    folder whose package is gone, unreadable or another dump's, gives that finding none. *Changed
+    2026-11-03 (its Tier 2 review):* that package is opened only within `READ_BUDGET_S`.
     """
     document = root_document(package)
     if document is None:
         return {}
     label = document_name(document["path"])
     parts = {component.id: component.document_id for component in package.components}
+    here = {name: identifier for identifier, name in stable_names(package).items()}
     root, own = Path(run_root).resolve(), Path(run_dir).resolve()
     try:
         names = sorted(child.name for child in root.iterdir())
@@ -235,14 +374,25 @@ def first_shown_dates(
             continue
         else:
             records = _records(folder, own=False)
+        dump: tuple[UUID | None, dict[str, Name]] | None = None
         for record in records:
             if not _names(record, package, document):
                 continue
+            then: Mapping[str, Name] | None = None
+            if record.package_id != package.package_id:
+                if dump is None:
+                    within = monotonic() - started <= READ_BUDGET_S
+                    dump = _dump(folder) if within else (None, {})
+                then = dump[1] if dump[0] == record.package_id else {}
             prerun = {step.index for step in record.steps if step.origin_mark == "prerun"}
             for finding in record.findings:
-                if finding.status == SUPPRESSED_STATUS or not _same_parts(finding, parts):
+                if finding.status == SUPPRESSED_STATUS:
                     continue
                 key = finding_subject_key(finding)
+                if then is not None:
+                    key = _renumbered(key, then, here)
+                if key is None or not _same_parts(finding, key[1], parts):
+                    continue
                 day = _day(finding, record, prerun)
                 if key not in dates or day < dates[key]:
                     dates[key] = day

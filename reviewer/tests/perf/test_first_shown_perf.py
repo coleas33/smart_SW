@@ -18,11 +18,12 @@ from __future__ import annotations
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
 from swreview.findings import finding_subject_key
-from swreview.ir.loader import load_package
+from swreview.ir.loader import load_package, save_package
 from swreview.report.attention import SUPPRESSED_STATUS
 from swreview.report.first_shown import document_name, first_shown_dates
 from swreview.report.session import SESSION_FILE_NAME, load_session, save_session
@@ -37,9 +38,18 @@ BUDGET_S = 2.0
 
 
 @pytest.mark.perf
-def test_thirty_earlier_reviews_are_matched_inside_the_budget(tmp_path: Path) -> None:
+@pytest.mark.parametrize("own_dumps", [False, True], ids=["one dump", "a dump each"])
+def test_thirty_earlier_reviews_are_matched_inside_the_budget(
+    tmp_path: Path, own_dumps: bool
+) -> None:
     """*Changed 2026-11-03 (T392, the Tier 2 review's must-fix):* each record starts when its
-    folder's name says, since a record is now dated by its own clock."""
+    folder's name says, since a record is now dated by its own clock.
+
+    *Changed 2026-11-03 (cycle 21, T394; roadmap hole H-d-009):* timed twice: every earlier record
+    of this review's own dump, its ids matched as they are, and each earlier review its own dump of
+    the design, as on a seat - its folder holding its package under its own package id, which the
+    match reads to match each id by its stable name. Every flagged key still names the first
+    review's date: the fixture's keys hold components and Hole Wizard holes, each named once."""
     package = load_package(SOURCE).package
     document = root_document(package)
     assert document is not None
@@ -49,6 +59,10 @@ def test_thirty_earlier_reviews_are_matched_inside_the_budget(tmp_path: Path) ->
     for day in range(1, EARLIER_REVIEWS + 1):
         folder = tmp_path / f"202609{day:02d}-090000-{label}"
         session.started_at = datetime(2026, 9, day, 9, 0).astimezone(UTC)
+        if own_dumps:
+            dump = package.model_copy(update={"package_id": UUID(int=day)})
+            session.package_id = dump.package_id
+            save_package(dump, folder)
         save_session(session, folder / SESSION_FILE_NAME)
         (tmp_path / f"202609{day:02d}-091500-{label}-check").mkdir()
     own = tmp_path / f"20261103-090000-{label}"
@@ -58,8 +72,8 @@ def test_thirty_earlier_reviews_are_matched_inside_the_budget(tmp_path: Path) ->
     dates = first_shown_dates(tmp_path, own, package, before=datetime(2026, 11, 3, 9, 0))
     elapsed = time.perf_counter() - started
     print(
-        f"matching {EARLIER_REVIEWS} earlier reviews of {len(record)} bytes each: "
-        f"{elapsed:.3f}s (budget {BUDGET_S:.1f}s)"
+        f"matching {EARLIER_REVIEWS} earlier reviews of {len(record)} bytes each, "
+        f"{'a dump each' if own_dumps else 'one dump'}: {elapsed:.3f}s (budget {BUDGET_S:.1f}s)"
     )
 
     flagged = {

@@ -7816,3 +7816,184 @@ earlier review showed, so the date rested on recall.
     skipped on Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed;
     C# with zero warnings, then 10,274 extractor and 4,357 add-in tests passed (T392's last
     sub-item).
+
+### Cycle 21. The first-shown date only for the same instance or entity (2026-11-03)
+
+Roadmap hole H-d-009, opened by run 6; the owner picked it on 2026-11-03 from run 6's brief, with
+its default: match each instance by its full path. Review Tier 2; no decision id. Cycle 17 dates a
+flagged finding by the earliest earlier review of the same document whose record held a flagged
+finding with the same subject key, and the key holds each dump's numbering: every allocator numbers
+in sequence, so an edit that adds or removes a component, a hole, a feature, a view or a dimension
+shifts every id after it. `_same_parts` refused only a component renumbered onto another
+document's instance; one renumbered onto another instance of the same document - of two instances
+of one bolt, the second takes the first's number once a component before them is removed - or an
+entity renumbered within one document, a drawing's `dan:0012` say, carried the earlier finding's
+date, so a new problem read as old (`docs/review-backlog.md`, cycle 17).
+
+- **Settled**, the defaults taken inside the feature:
+  - **The match.** A date is never another subject's; it may be missing. An earlier record of
+    another dump than this review's (its `package_id`, which the record names) has each id its
+    subject key holds - its components, its entity inputs and the ids among its drawing places -
+    matched by the stable name its own dump gives it (`report/first_shown.stable_names`): the
+    earlier finding's key is renumbered into this review's numbering, each id replaced by the id
+    whose stable name here is the one it had there, and matched as before. An id with no stable
+    name on either side gives the finding no date. A path hash (`doc:`, `dsn:`, `DocumentIds`) is
+    matched as it is, and so are the names and persistent references the key already holds.
+  - **The stable names.** A component's full instance path (`ComponentInstance.full_path`,
+    `IComponent2.Name2`, unique in the assembly); a feature's and a cut-list item's name in their
+    document and configuration, and a model dimension's full name in its document; a hole by its
+    Hole Wizard feature's name in its component's path (the dump reads one hole a feature an
+    instance) and a fastener by its component's path (one a component); a drawing sheet by its
+    name in its drawing, and a view, a display dimension (`IDimension.FullName`) and an annotation
+    (`IAnnotation.GetName`) by theirs in their drawing, sheet and view. Each name begins with its
+    id's kind, so a component never takes a fastener's id. The dump names nothing else in a way an
+    edit leaves alone: a cosmetic thread (it reads the feature's name but keeps none), a face, a
+    body, a mate, an interference, a note, a revision or other table, a model annotation, and a
+    hole instance the joint map numbers by its faces' order (`hol:0014#2`) have none. An empty
+    name, or one two entities of a kind share in one dump - a sketch the tree lists both at the
+    top and under its feature, say - is none.
+  - **Where the earlier side's names come from: its package.** The earlier review's own package in
+    its folder, `package.json`, not the record. The add-in dumps each review into its own run
+    folder, and a Check again, a Send after a restart and a context review's Retry re-run in that
+    folder without extracting again; a drawing read and a live check's rows are merged into it,
+    keeping every id it had but an interference's: a live interference run replaces the reviewed
+    configuration's interference rows with a fresh detection numbered from `int:0001`
+    (`PackageAppender.Merge`, `ir/loader.append_interference_run`), so after one an earlier
+    record's `int:` id can name another interference. No subject key holds a whole `int:` id -
+    the interference check names its rows in prose inputs - and `stable_names` names none, so no
+    date moves by one (*corrected 2026-11-03*, on the Tier 2 review: this said every id was
+    kept). So the folder holds the dump the record's ids number, which the match checks by its
+    `package_id`. Every record already on the seat, each written before this
+    cycle, so keeps its dates, where a field added to the record would give each of them none for
+    any finding naming a component; and no contract or record changes. A folder whose package is
+    gone, cannot be read or is another dump's than its record gives no date to a finding needing a
+    stable name, and keeps it for one needing none - the route's "older record without the names".
+  - **A record of this review's own dump keeps its ids as they are**: a Check again's or a Send's
+    earlier record in this review's folder, or a package copied whole. Its ids number this very
+    dump, so matching them by name could only lose a date, to an id with no stable name. An
+    interference's is the exception, above, which no key holds (*added 2026-11-03*, on the Tier 2
+    review).
+  - **The rest of cycle 17 kept**: the earliest such review; each record dated by its own clock;
+    the 2 s budget, the other folders read oldest first, an earlier package opened only within it
+    too; the date never sent to the model; the card's and `report.md`'s lines unchanged.
+    `_same_parts` stays, asked of the components as this review numbers them, so an instance of
+    the same path whose document is another - a part replaced by one of the same file name from
+    another folder - still gives none. *Corrected 2026-11-03, on the Tier 2 review:* this said an
+    earlier package was read inside the budget, which was looked at before each folder alone; it
+    is now looked at before each package too, and a read begun within it - a folder's records or
+    one package - can still end past it.
+- **Built** (2026-11-03; T393 to T396 in [tasks.md](tasks.md), Phase 36, each test written first):
+  - The match (T395): `reviewer/src/swreview/report/first_shown.py` - `stable_names`, each
+    entity id of a package to its stable name; `_renumbered`, an earlier finding's key in this
+    review's numbering; `_dump`, an earlier folder's package read once, and only when one of its
+    records is of another dump; `_same_parts` asked of the renumbered components. The map keeps
+    its shape, keyed as this review numbers its subjects, so `ToolContext.finding_body`, the
+    stream, both snapshots, `report.md`, the page and the words read the date as before. Dated
+    notes on FR-031, `findings.finding_subject_key`, `ToolContext.first_shown`,
+    [contracts/README.md](contracts/README.md) and [data-model.md](data-model.md) section 2.
+  - What the engineer sees: after an edit that renumbers ids, a new problem on another instance
+    or entity has no "First shown in the review of ..." line, where it named the date of the
+    finding whose id it took; a finding whose id moved keeps its line, where it lost it. Across
+    two dumps a finding on a subject the dump names no stable way - a joint's hole instance, a
+    cosmetic thread - has none, where it named one; a record of this review's own dump, a Check
+    again's, keeps every line.
+  - The time (T395): on cycle 17's fictional run root of thirty earlier reviews of the
+    big-assembly replay fixture, `reviewer/tests/perf/test_first_shown_perf.py` (`-m perf`, budget
+    2 s), three runs each on the development machine with six other worktrees building beside
+    it: 0.36 to 0.38 s with every earlier record of this review's own dump, its ids matched as they
+    are, as before (0.35 to 0.37 s before the change); 1.39 to 1.48 s with each earlier review its
+    own dump, as on a seat - about 35 ms more an earlier review, its 1.55 MB package read and
+    validated once (about 20 ms of it on an idle run), its 996 stable names in under 1 ms. Every
+    flagged key of the fixture keeps its date: its findings name components and Hole Wizard
+    holes, each named once.
+  - Tests first: T394's twelve cases failed for want of the match by name and its two guards
+    passed, proved by mutants once it was built ([tasks.md](tasks.md), T394 and T395). Changed on
+    purpose, none loosened, each with a dated note: `test_first_shown.py`'s `dates` helper takes
+    the review's package; the perf test is timed with one dump and with a dump each; the 002
+    literal of the specs-README pin (T393, T396). Cycle 17's cases are unchanged: their records
+    are of the review's own dump.
+- **Left open**:
+  - An id the dump names no stable way gives no date across two dumps. A joint's and a tool
+    access finding name hole instances the joint map numbers by their faces' order
+    (`hol:0014#2`), and a thread pitch finding can name a cosmetic thread, whose feature name the
+    dump reads but does not keep; a face, a body, a mate, an interference, a note, a table and a
+    model annotation have none either, and a feature the tree lists twice - a sketch at the top
+    and under its feature - has two ids under one name. A date is lost there, never another's;
+    a stable name for each - an instance by its hole's name and place, a thread by its feature's
+    name kept in the dump - would give one; for the owner.
+  - A renamed instance or entity - a component, a feature, a view or a dimension renamed between
+    the two reviews - loses its date: its stable name is the name the dump gives it.
+  - *Added 2026-11-03 (the Tier 2 review's note):* the other way round, nobody checked whether
+    SOLIDWORKS gives a new instance or feature the name of one deleted before it, a new `bolt-2`
+    or a new `Fillet3`. If it does, the deleted one's earlier finding dates the new one's: the
+    limit the owner's default, matching by full path, comes with (`docs/review-backlog.md`,
+    cycle 21).
+  - Each earlier review now costs its package's read too, about 35 ms at the fixture's size, so
+    fewer fit the 2 s budget: past it, oldest first, a finding only a later review showed names no
+    date. A narrow read of the package's names would fit more; a design, as a narrow read of the
+    record is (`docs/review-backlog.md`, cycle 17). *Changed 2026-11-03 (the Tier 2 review):* the
+    package is now opened only within the budget; the narrow read is left in the backlog's cycle 21
+    section.
+  - The route's caveat stands: a finding keyed by its place alone - a model drawing finding by
+    its sheet and view - shares its key with another on that place without any edit
+    (`test_an_earlier_finding_naming_no_component_keeps_its_date`), and a rules finding whose
+    subjects have no persistent reference tells them apart in prose the key does not hold.
+  - The PDF ingest's labels (`Sheet<n>`, `dim-<page>-<n>`, `note-<page>-<n>`) are positions too,
+    matched as names: the pane reviews only the add-in's native dumps, so none reaches the match,
+    and `swreview review` names no run root.
+- **Tier 2 review** (T396; 2026-11-03): no must-fix and four should-fix, each fixed test first
+  ([tasks.md](tasks.md), T396's sub-item); what the fixes left is in `docs/review-backlog.md`'s
+  cycle 21 section:
+  - **A confirmed drawing's reload reads the dates again** (should-fix 1, the review's option A).
+    A drawing not open at extraction, read once the engineer confirms it (feature 011), is merged
+    into the run folder's package and the package reloaded; the dates were read once, at the
+    start, against a package without that drawing's stable names, so a finding on it lost the date
+    an earlier review that read the same drawing gave it before this cycle. `start_review` now
+    keeps its call on the context (`ToolContext.read_first_shown`), and `reload_package`, the one
+    place a package is replaced, reads the dates again with it, within a budget of their own.
+  - **Four more kinds and a replaced part pinned** (should-fix 2): a fastener, a cut-list item, a
+    model dimension and a drawing sheet renumbered, each of which `stable_names` could drop and
+    fail no case; and a part replaced by one of the same file name from another folder, its
+    instance path matched across the two dumps and its date refused by `_same_parts`, which no
+    case across two dumps had asked.
+  - **An earlier package is opened only within the budget** (should-fix 3, the default taken of
+    the review's two options): the budget is looked at before each package as before each
+    folder, so none is opened past it; past it, a record of another dump is matched as when its
+    package is gone. The other option, a narrow read of the arrays that carry names, is left: a
+    design, as cycle 17's narrow read of the record is.
+  - **Interference ids are the exception** (should-fix 4): the claim that a live check's rows
+    keep every id, on which a record of this review's own dump keeping its ids rests, is corrected
+    under Settled.
+- **Read-only check** of those fixes (T396; 2026-11-03): no must-fix and one should-fix, done
+  ([tasks.md](tasks.md), T396's second sub-item). The reload's read replaced the start's dates,
+  and it sees the run root as it is then, within a budget of its own, so a folder deleted
+  meanwhile, or the budget spent before it, took a date a card already named or moved it later.
+  `reload_package` now keeps, for each subject key, the earlier day of its read and the start's.
+- **Gates** (T396; 2026-11-03), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,010 passed and 5
+    skipped, 14 of them this cycle's new cases. Its two warnings are neither of this cycle: the
+    test client's deprecation, and a serializer warning from `test_ir_loader_append.py`'s
+    invalid row.
+  - On Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the modules the change
+    touches and those that read the files it changed: the 114 unit modules that read the code
+    changed, the goldens and the plan's pins, 5,960 passed and 1 skipped; then
+    `test_first_shown.py` and the plan's pins again after the last edit to the test module's
+    drawing helper, 364 passed, as on 3.12; `-m perf` on 3.11, 0.33 s and 1.43 s.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed; `-m perf`, the match's time
+    above.
+  - No C# or page file changed, so the C# build and its tests did not run for this cycle.
+  - The link check over the cycle's seven changed Markdown files, anchors included, 466 links
+    and none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or
+    paid or live test ran.
+  - The whole suites on the final tree (`3c3bacd1`, 2026-11-03): 19,021 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; no C# or page
+    file changed (T396's line).
+  - *Changed 2026-11-03:* the tree above came before the Tier 2 review's fixes; their checks are
+    T396's sub-item in [tasks.md](tasks.md).
+  - *Done 2026-11-03, cycle 21 stacked on cycle 20:* the gates above ran on cycle 21 before it was
+    stacked on cycle 20 (feature 007's Phase 16, T096 to T099). The two met in `specs/README.md`,
+    which git merged, and in the specs-README pin's docstring in
+    `reviewer/tests/unit/test_workstation_test_plan.py`, resolved by hand. Each kept both cycles'
+    text, cycle 20's first, and 002 stays 388 / 4 / 0. T396's sub-item of the stacking in
+    [tasks.md](tasks.md) names each meeting.

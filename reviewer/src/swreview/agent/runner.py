@@ -48,6 +48,7 @@ from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -2629,14 +2630,16 @@ def start_review(
             context.carry_drawing_read(earlier.drawing_read)
         if run_root is not None:
             # 002 FR-031, cycle 17 (roadmap hole H-a-009): when an earlier review of this
-            # document first showed each finding, read before setup records any.
-            context.first_shown = first_shown_dates(
+            # document first showed each finding, read before setup records any. Kept as a
+            # call (cycle 21's Tier 2 review), so a confirmed drawing's reload reads it again.
+            context.read_first_shown = partial(
+                first_shown_dates,
                 run_root,
                 out,
-                loaded.package,
                 before=session.started_at.astimezone().replace(tzinfo=None),
                 earlier=earlier,
             )
+            context.first_shown = context.read_first_shown(loaded.package)
         # Feature 008 (FR-021): every recorded step of this review - the pre-run's included -
         # keeps its full result in the run folder. Only a review sets this, so a check run
         # and MCP general chat write none.
