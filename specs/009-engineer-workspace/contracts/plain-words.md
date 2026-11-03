@@ -142,9 +142,10 @@ no labels, or a backend that names neither group, the page draws no form (FR-030
 | the minutes form's line after a refused save | `errors` |
 
 *Amended 2026-11-03 (feature 007, cycle 20; its research R14):* `timing_form` gains `all_six`,
-the line under the minutes form's heading, "Type all six, zero for none.", since Save stays off
-while any field is blank. It says zero in a word: no word of the two groups holds a digit. Labels
-that name no such line draw the form without it.
+the line under the minutes form's heading, "Type all six once you know them, zero for none. Each
+replaces what is recorded.", since Save stays off while any field is blank and, since cycle 20's
+Tier 2 review, the form is blank over minutes already recorded. It says zero in a word: no word
+of the two groups holds a digit. Labels that name no such line draw the form without it.
 
 | Surface | Word from |
 |---|---|

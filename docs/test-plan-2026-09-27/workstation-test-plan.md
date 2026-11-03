@@ -1869,15 +1869,19 @@ none of them by hand: the timing bullet below writes them all once the review ha
   the end of Results, to **Minutes for this review**. Type each of the six from `notes\timing.txt`
   in the field that begins with its name: **Baseline**, **Supervision**, **Verification**, **False
   alarms**, **Setup** and **By hand**. Type all six, 0 for none, as the line under the heading says
-  (`Type all six, zero for none.`): **Save minutes** stays off until all six are typed, so no field
-  counts as 0 unless you typed 0. Then press **Save minutes**. Pass: the line `The minutes are
-  recorded.` shows under the button, and your numbers stay in their fields. The form is off while
-  a turn runs: wait for it to end. If a sentence shows in place of that line, nothing was
-  recorded: put right what it says (`Enter each as a number of minutes, 0 or more, then save
-  again.` means a field holds something other than a number, or a number below 0) and press
-  **Save minutes** again. The page writes the minutes in A's run folder, where `swreview timing`
-  writes them, and shows them in their fields only. If the form is gone before you saved them -
-  the backend restarted, or the review failed - step 4.5, item 4, records them at the console.
+  (`Type all six once you know them, zero for none. Each replaces what is recorded.`): **Save
+  minutes** stays off until all six are typed, so no field counts as 0 unless you typed 0. Never
+  type 0 for a figure you do not know yet: save once you know all six. Then press **Save
+  minutes**. Pass: the line `The minutes are recorded.` shows under the button, and your numbers
+  stay in their fields. The form is off while a turn runs: wait for it to end. If a sentence shows
+  in place of that line, nothing was recorded: put right what it says (`Enter each as a number of
+  minutes, 0 or more, then save again.` means a field holds something other than a number, or a
+  number below 0) and press **Save minutes** again. The page writes the minutes in A's run folder,
+  where `swreview timing` writes them, and shows them in their fields only. Once saved, the form is
+  blank again when you come back to the review, after a reload, or after a re-run, which carries
+  the six; each save replaces all six recorded, so to correct one, type all six again from
+  `notes\timing.txt`. If the form is gone before you saved them - the backend restarted, or the
+  review failed - step 4.5, item 4, records them at the console.
 
 Record: the facts, the headline, the tally line, the not-reached line, the groups' goal lines,
 the drawings line (with letters in place of names) and the usage line, but no duration of the

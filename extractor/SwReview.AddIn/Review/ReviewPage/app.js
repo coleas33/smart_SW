@@ -3021,7 +3021,9 @@
 
   /**
    * The form blank again for the review shown next, which never shows, or posts, another review's figures: what was
-   * typed on that review and not saved comes back with it (`showTimingDraft`).
+   * typed on that review and not saved comes back with it (`showTimingDraft`). Drawn again at once, so no Save drawn
+   * over the boxes before they were blanked stays on, posting nulls, while nothing else draws the form - a failed
+   * apply's review waiting for the host's list (cycle 20's Tier 2 review).
    */
   function clearTiming() {
     var boxes = timingBoxes();
@@ -3034,6 +3036,7 @@
     state.turnEnded = false;
     state.timingPending = false;
     state.chatGone = false;
+    renderTiming();
   }
 
   /** What the boxes hold, kept for the review on screen until a save of it is recorded (cycle 18's Tier 2 review). */
