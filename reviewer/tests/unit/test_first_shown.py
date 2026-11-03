@@ -21,6 +21,11 @@ stable name its own dump gives it, read from the package in its folder - a compo
 instance path, an entity by its name in its document - so an instance or entity an edit renumbered
 names none, one whose id moved keeps its date, and an id with no stable name gives none; a record
 of this review's own dump keeps its ids as they are. Cycle 17's cases are of that one dump.
+
+*Changed 2026-11-03 (cycle 21's Tier 2 review, T396):* the dates are read again when a drawing
+read at the engineer's confirmation reloads the package, so a finding on it keeps its earlier date;
+an earlier review's package is opened only within the read budget; and the match is pinned for
+four more kinds and for a part replaced by one of the same file name from another folder.
 """
 
 from __future__ import annotations
@@ -44,10 +49,11 @@ from swreview.agent.providers import AgentEvent
 from swreview.agent.providers.fake import FakeProvider
 from swreview.benchmark.origins import finding_origin
 from swreview.findings import MODEL_FINDING_CHECK, Finding, SubjectKey, finding_subject_key
-from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
+from swreview.ir.loader import PACKAGE_FILE_NAME, LoadedPackage, load_package, save_package
 from swreview.ir.models import (
     ComponentInstance,
     CosmeticThread,
+    CutListItem,
     DisplayDimensionRecord,
     Document,
     DrawingAnnotation,
@@ -55,9 +61,12 @@ from swreview.ir.models import (
     DrawingSheetRecord,
     DrawingView,
     EvidencePackage,
+    Fastener,
     Feature,
     Hole,
     ManifestEntry,
+    ModelDimension,
+    Quantity,
     SourceRef,
 )
 from swreview.report import first_shown
@@ -692,15 +701,20 @@ ASSEMBLY, HOUSING = PACKAGE.documents
 HOUSING_ENTRY = PACKAGE.manifest.entries[1]
 
 
-def part(document_id: str, file_name: str, kind: str = "part") -> tuple[Document, ManifestEntry]:
-    """The document `document_id`, `file_name`, with its manifest entry."""
+def part(
+    document_id: str, file_name: str, kind: str = "part", folder: str = ""
+) -> tuple[Document, ManifestEntry]:
+    """The document `document_id`, `file_name`, with its manifest entry.
+
+    *Changed 2026-11-03 (cycle 21's Tier 2 review, T396):* in `folder`, a path prefix ending in a
+    slash, when one is named, so two documents can share a file name."""
     return (
         HOUSING.model_copy(
             update={"document_id": document_id, "kind": kind, "file_name": file_name,
-                    "path": f"native/{file_name}"}
+                    "path": f"native/{folder}{file_name}"}
         ),
         HOUSING_ENTRY.model_copy(
-            update={"document_id": document_id, "vault_path": f"/Designs/{file_name}"}
+            update={"document_id": document_id, "vault_path": f"/Designs/{folder}{file_name}"}
         ),
     )
 
@@ -775,6 +789,48 @@ def feature(number: int, name: str) -> Feature:
     )
 
 
+def model_dimension(number: int, name: str) -> ModelDimension:
+    """`mdm:<number>`, the housing's model dimension whose full name is `name`."""
+    return ModelDimension(
+        id=f"mdm:{number:04d}",
+        document_id=HOUSING.document_id,
+        feature_name="FICT Boss1",
+        name=name,
+        dimension_type="linear",
+        nominal=Quantity(value=0.01, unit="m"),
+    )
+
+
+def cut_list_item(number: int, name: str) -> CutListItem:
+    """`cut:<number>`, the housing's cut-list item `name`."""
+    return CutListItem(
+        id=f"cut:{number:04d}",
+        document_id=HOUSING.document_id,
+        configuration="Default",
+        folder_name="FICT Cut-List-Item1",
+        folder_type_name="FICT",
+        name=name,
+    )
+
+
+def fastener(number: int, component: str) -> Fastener:
+    """`fas:<number>`, the fastener the component `component` is."""
+    return PACKAGE.fasteners[0].model_copy(
+        update={"id": f"fas:{number:04d}", "persist_ref": persist_ref(component),
+                "component_id": component}
+    )
+
+
+IN_THE_HOUSING = {
+    "hol": ("holes", hole),
+    "feat": ("features", feature),
+    "mdm": ("model_dimensions", model_dimension),
+    "cut": ("cut_list_items", cut_list_item),
+}
+"""The kinds `renumbered` numbers in the housing, each with the package's list of it and the
+builder of one from its number and name."""
+
+
 def drawing(
     views: list[str] | None = None,
     dimensions: list[str] | None = None,
@@ -815,12 +871,32 @@ def drawing(
 def renumbered(kind: str, number: int, names: list[str]) -> EvidencePackage:
     """Dump `number` of `DESIGN` with an entity of `kind` for each of `names`, in that order, so
     numbered from 1: holes of housing-1, features of the housing, or the drawing's views,
-    display dimensions or annotations."""
-    if kind == "hol":
-        return dumped_as(number, holes=[hole(index, name) for index, name in enumerate(names, 1)])
-    if kind == "feat":
+    display dimensions or annotations.
+
+    *Changed 2026-11-03 (cycle 21's Tier 2 review, T396):* or the housing's model dimensions or
+    cut-list items (`IN_THE_HOUSING`, which holds the holes and features too); fasteners, each an
+    instance of the bolt whose full path is its name, after housing-1; or the drawing's sheets."""
+    if kind in IN_THE_HOUSING:
+        field, build = IN_THE_HOUSING[kind]
         return dumped_as(
-            number, features=[feature(index, name) for index, name in enumerate(names, 1)]
+            number, **{field: [build(index, name) for index, name in enumerate(names, 1)]}
+        )
+    if kind == "fas":
+        bolts = [instance(index, name, BOLT) for index, name in enumerate(names, 2)]
+        return dumped_as(
+            number,
+            components=[instance(1, "housing-1"), *bolts],
+            fasteners=[fastener(index, bolt.id) for index, bolt in enumerate(bolts, 1)],
+        )
+    if kind == "dsh":
+        sheets = [
+            DrawingSheetRecord(
+                id=f"dsh:{index:04d}", name=name, index=index - 1, was_active=index == 1
+            )
+            for index, name in enumerate(names, 1)
+        ]
+        return dumped_as(
+            number, drawing_records=[DrawingRecord(document_id=DRAWING, sheets=sheets)]
         )
     entities = {"dvw": "views", "ddm": "dimensions", "dan": "annotations"}
     return dumped_as(number, drawing_records=[drawing(**{entities[kind]: names})])
@@ -830,15 +906,21 @@ def citing_entity(kind: str, package: EvidencePackage, number: int) -> Finding:
     """A flagged finding of `package` about the entity `<kind>:<number>`, named where the checks
     name one: a hole among its inputs, on housing-1; a feature among its inputs, the housing's;
     a view as a drawing finding's place; a display dimension or an annotation as the annotation
-    of its place on the sheet."""
+    of its place on the sheet.
+
+    *Changed 2026-11-03 (cycle 21's Tier 2 review, T396):* a fastener among its inputs, on
+    housing-1, as `checks/fastener` names one; a model dimension or a cut-list item among its
+    inputs, the housing's, as a feature; a sheet as a drawing finding's place, by its id."""
     entity = f"{kind}:{number:04d}"
-    if kind == "hol":
+    if kind in ("hol", "fas"):
         return make_finding(package=package, inputs=[entity])
-    if kind == "feat":
+    if kind in ("feat", "mdm", "cut"):
         return make_finding(
             package=package, component_ids=[], document_ids=[HOUSING.document_id], inputs=[entity]
         )
-    if kind == "dvw":
+    if kind == "dsh":
+        place = SourceRef(document_id=DRAWING, sheet=entity)
+    elif kind == "dvw":
         place = SourceRef(document_id=DRAWING, sheet=SHEET, view=entity)
     else:
         place = SourceRef(document_id=DRAWING, sheet=SHEET, view=VIEW, annotation=entity)
@@ -909,10 +991,49 @@ def test_a_part_whose_old_number_another_part_now_holds_keeps_its_date(tmp_path:
     assert dates(tmp_path, after_edit) == {key(bolt): "2026-09-18"}
 
 
+def test_a_part_replaced_by_one_of_the_same_file_name_from_another_folder_names_no_date(
+    tmp_path: Path,
+) -> None:
+    """Cycle 21's Tier 2 review, should-fix 2: the bolt replaced by one of the same file name from
+    another folder keeps its instance's full path, `FICT-bolt-1`, so its id is matched across the
+    two dumps; but its document is another, and the part guard (`_same_parts`), asked of it as
+    this review numbers it, gives the old bolt's date to none. The bolt left as it was keeps its
+    date across the same two dumps."""
+    document, entry = part("doc:6", "FICT-bolt.SLDPRT", folder="FICT-other/")
+    before_edit = dumped_as(
+        1, components=[instance(1, "housing-1"), instance(2, "FICT-bolt-1", BOLT)]
+    )
+    replaced = dumped_as(
+        2,
+        documents=[*DESIGN.documents, document],
+        manifest=DESIGN.manifest.model_copy(
+            update={"entries": [*DESIGN.manifest.entries, entry]}
+        ),
+        components=[instance(1, "housing-1"), instance(2, "FICT-bolt-1", document.document_id)],
+    )
+    shown = make_finding(package=before_edit, component_ids=["cmp:0002"])
+    dumped(tmp_path, f"20260918-090000-{LABEL}", before_edit, shown)
+
+    assert key(make_finding(package=replaced, component_ids=["cmp:0002"])) == key(shown)
+    assert dates(tmp_path, replaced) == {}
+    kept = dumped_as(2, components=before_edit.components)
+    assert dates(tmp_path, kept) == {key(shown): "2026-09-18"}
+
+
 @pytest.mark.parametrize(
     "kind",
-    ["hol", "feat", "dvw", "ddm", "dan"],
-    ids=["a hole", "a feature", "a drawing view", "a drawing dimension", "a drawing annotation"],
+    ["hol", "fas", "feat", "cut", "mdm", "dsh", "dvw", "ddm", "dan"],
+    ids=[
+        "a hole",
+        "a fastener",
+        "a feature",
+        "a cut-list item",
+        "a model dimension",
+        "a drawing sheet",
+        "a drawing view",
+        "a drawing dimension",
+        "a drawing annotation",
+    ],
 )
 def test_an_entity_renumbered_in_an_edited_document_is_matched_by_its_name(
     tmp_path: Path, kind: str
@@ -923,7 +1044,13 @@ def test_an_entity_renumbered_in_an_edited_document_is_matched_by_its_name(
     finding under that id is the first's, a new problem, and names no date, and its finding on
     the second, under its new id, names the earlier review's: each is matched by the name the
     dump gives it in its document - the hole's feature, the feature's, the view's, the
-    dimension's full name, the annotation's."""
+    dimension's full name, the annotation's.
+
+    *Changed 2026-11-03 (cycle 21's Tier 2 review, should-fix 2):* four more kinds, since
+    `stable_names` could drop any of them and fail no case: a fastener added before two others,
+    each its own instance, matched by its component's path; a cut-list item and a model
+    dimension, by their names in the housing; and a sheet added to the drawing, by its name
+    there. The five cases above are unchanged."""
     before_edit = renumbered(kind, 1, ["FICT one", "FICT two"])
     after_edit = renumbered(kind, 2, ["FICT new", "FICT one", "FICT two"])
     shown = citing_entity(kind, before_edit, 2)
@@ -978,6 +1105,39 @@ def test_a_folder_without_its_records_package_gives_no_date_to_a_finding_needing
         save_package(dumped_as(3), folder)
 
     assert dates(tmp_path, dumped_as(2)) == {key(finding): "2026-09-18" for finding in NEEDS_NONE}
+
+
+@pytest.mark.parametrize(
+    ("step", "opened"), [(0.5, True), (1.5, False)], ids=["within it", "past it"]
+)
+def test_an_earlier_package_is_opened_only_within_the_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, step: float, opened: bool
+) -> None:
+    """Cycle 21's Tier 2 review, should-fix 3, the default taken: the read budget bounds an
+    earlier review's package as it bounds its folder, so one large package is never opened past
+    it. The folder's record read within the budget, its package is opened while the budget
+    lasts and gives each finding its date; reached past it, the package is not opened, and a
+    finding needing a stable name names none, as when the package is gone, while one needing
+    none keeps its date. Here each look at the clock costs `step` of a two-second budget: the
+    folder is reached at one step, its package at two."""
+    clock = itertools.count(0.0, step)
+    monkeypatch.setattr(first_shown, "monotonic", lambda: next(clock), raising=False)
+    monkeypatch.setattr(first_shown, "READ_BUDGET_S", 2.0, raising=False)
+    loaded: list[Path] = []
+    load = first_shown.load_package
+
+    def counted(directory: Path | str) -> LoadedPackage:
+        loaded.append(Path(directory))
+        return load(directory)
+
+    monkeypatch.setattr(first_shown, "load_package", counted)
+    folder = dumped(tmp_path, f"20260918-090000-{LABEL}", dumped_as(1), NEEDS_A_NAME, *NEEDS_NONE)
+    named = [NEEDS_A_NAME] if opened else []
+
+    shown = dates(tmp_path, dumped_as(2))
+
+    assert shown == {key(finding): "2026-09-18" for finding in [*named, *NEEDS_NONE]}
+    assert loaded == ([folder.resolve()] if opened else [])
 
 
 def test_the_design_dumped_again_keeps_a_named_ids_date_and_gives_none_for_an_unnamed_one(
@@ -1047,6 +1207,38 @@ def test_a_record_of_this_reviews_own_dump_keeps_its_ids_as_they_are(
     monkeypatch.setattr(first_shown, "load_package", unread, raising=False)
 
     assert dates(tmp_path) == {key(ON_ONE): "2026-09-18", key(on_thread): "2026-09-18"}
+
+
+def test_a_drawing_read_at_the_engineers_confirmation_keeps_its_earlier_date(
+    tmp_path: Path,
+) -> None:
+    """Cycle 21's Tier 2 review, should-fix 1: a drawing not open at extraction, read once the
+    engineer confirms it (feature 011), is merged into the review's `package.json`, its ids
+    continuing the package's own, and the package is reloaded (`ToolContext.reload_package`,
+    as `tools/drawings.read_confirmed_candidates` does). An earlier review of another dump that
+    read the same drawing so and flagged an annotation on it gives this review's finding on that
+    annotation its date, as it did before cycle 21: the dates are read again for the package
+    reloaded, whose stable names hold the drawing's, where the review's start had none."""
+    root = tmp_path / "runs"
+    read = drawing(annotations=["FICT D1", "FICT D2"])
+    then = dumped_as(1, drawing_records=[read])
+    dumped(root, f"20260918-090000-{LABEL}", then, citing_entity("dan", then, 2))
+    own = root / f"20261103-090000-{LABEL}"
+    save_package(dumped_as(2), own)
+    run = runner.start_review(
+        own,
+        own,
+        provider=FakeProvider(script=[chat.turn("FICT nothing yet")], model=chat.MODEL),
+        run_root=root,
+    )
+    merged = dumped_as(2, drawing_records=[read])
+    again = citing_entity("dan", merged, 2)
+    assert "first_shown" not in run.context.finding_body(again)
+
+    save_package(merged, own)
+    run.context.reload_package(load_package(own))
+
+    assert run.context.finding_body(again).get("first_shown") == "2026-09-18"
 
 
 # --- the body, the fold, the snapshot and report.md ---------------------------------------------
