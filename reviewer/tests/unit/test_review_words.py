@@ -91,6 +91,9 @@ PLACEHOLDERS: dict[str, set[str]] = {
     # Transcript line ends with when the finding held a decision.
     "withdrawn.took": {"decision"},
     "withdrawn.took_with_triage": {"decision", "triage"},
+    # *Added 2026-11-02 on purpose (015 T123; cycle 12's Codex review):* the mark on an earlier
+    # record's withdrawal in a re-run's `report.md` names the session that withdrew it.
+    "withdrawn.earlier": {"session_id"},
     "resume.without": set(),
     "finding_group_text.one": set(),
     "finding_group_text.many": {"n"},
@@ -306,9 +309,16 @@ def test_the_withdrawn_clause_names_the_decision_and_its_triage() -> None:
 def test_an_earlier_records_withdrawal_is_marked_as_the_earlier_check_runs() -> None:
     """015 T123 (cycle 12's Tier 1 review, point 4): a re-run's `report.md` names its earlier
     record's withdrawals with a decision before its own, under ids that are that record's and may
-    name another finding here, so each such line ends with these words, after the clause. Printed
-    as it stands: no placeholder."""
-    assert load_words().withdrawn.earlier == " (earlier check run)"
+    name another finding here, so each such line ends with these words, after the clause.
+
+    *Changed 2026-11-02 on purpose (015 T123; cycle 12's Codex review):* the words name the session
+    that withdrew the finding, `{session_id}`, in full as that record's `report.md` heads itself,
+    since finding ids restart in each session and a chain of Check agains names several records'
+    withdrawals; they were printed as they stood, with no placeholder."""
+    session_id = "00000000-0000-0000-0000-00000000000c"
+    assert load_words().withdrawn.earlier.format(session_id=session_id) == (
+        f" (earlier check run, session {session_id})"
+    )
 
 
 def test_the_three_owner_labels_are_decide_fix_verify() -> None:

@@ -141,13 +141,16 @@ def waited(run: runner.ReviewRun) -> ReviewSession:
     return load_session(run.session_path)
 
 
-def set_aside(folder: Path) -> None:
-    """What the re-run's rotation leaves: the earlier stream and results moved to index 1."""
-    (folder / "events.jsonl").rename(folder / "events.1.jsonl")
+def set_aside(folder: Path, index: int = 1) -> None:
+    """What the re-run's rotation leaves: the earlier stream and results moved to `index`.
+
+    *Changed 2026-11-02 on purpose (015 T123; cycle 12's Codex review):* `index` added, so a
+    chain's second rotation lands at 2; every earlier caller sets aside at 1 as before."""
+    (folder / "events.jsonl").rename(folder / f"events.{index}.jsonl")
     results = folder / "tool-results"
     if results.is_dir():
-        results.rename(folder / "tool-results.1")
-    shutil.copyfile(folder / "session.json", folder / "session.1.json")
+        results.rename(folder / f"tool-results.{index}")
+    shutil.copyfile(folder / "session.json", folder / f"session.{index}.json")
 
 
 def silent_seat() -> ScriptedReviewBridge:
@@ -2067,6 +2070,28 @@ def cleared_on(
     )
 
 
+def rejected_by_an_answer(finding_id: str) -> dict[str, Any]:
+    """The `finding.withdrawn` body of an earlier answer that took `finding_id` with its Reject
+    (015 T123, cycle 12's Codex review)."""
+    rejected = Disposition(
+        decision="rejected", note="FICT not here", by="FICT engineer", at=FIRST_DECIDED,
+        triage="wrong",
+    )
+    return {
+        "finding_id": finding_id,
+        "reason": "bought part (your answer to ER-001)",
+        "disposition": rejected.model_dump(mode="json"),
+        "taken": "your Reject (wrong) went with it",
+    }
+
+
+def withdrawn_of(report: list[str]) -> list[str]:
+    """The lines a rendered `report.md`, split into `report`, prints under "Withdrawn with a
+    decision" (015 T123, cycle 12's Codex review)."""
+    start = report.index("## Withdrawn with a decision") + 2
+    return report[start : report.index("", start)]
+
+
 def test_the_carry_keeps_an_undecided_findings_cleared_line_on_the_finding_it_lands_on(
     bare: Any,
 ) -> None:
@@ -2204,21 +2229,15 @@ def test_a_re_run_names_the_earlier_withdrawals_first_under_an_id_it_numbers_aga
 
     *Changed 2026-11-02 on purpose (015 T123; cycle 12's Tier 1 review, point 4):* the earlier
     withdrawal's line ends marked as the earlier check run's, since its id is that record's and
-    here names an undecided finding of the re-run; the re-run's own is as before."""
+    here names an undecided finding of the re-run; the re-run's own is as before. *Changed
+    2026-11-02 on purpose (015 T123; cycle 12's Codex review):* the start's body names the session
+    that withdrew it, the earlier record's, and the mark names that session in full; the body is
+    built, and the part read, by the helpers the review's two new cases share."""
     folder = package_folder(tmp_path, live_prerun_package())
     earlier = waited(checks_only(folder, None))
     set_aside(folder)
     gone = earlier.findings.pop(0)
-    rejected = Disposition(
-        decision="rejected", note="FICT not here", by="FICT engineer", at=FIRST_DECIDED,
-        triage="wrong",
-    )
-    took = {
-        "finding_id": gone.id,
-        "reason": "bought part (your answer to ER-001)",
-        "disposition": rejected.model_dump(mode="json"),
-        "taken": "your Reject (wrong) went with it",
-    }
+    took = rejected_by_an_answer(gone.id)
     earlier_stream(
         folder,
         earlier,
@@ -2234,12 +2253,10 @@ def test_a_re_run_names_the_earlier_withdrawals_first_under_an_id_it_numbers_aga
         stream = list(replay_events(folder / "events.jsonl"))
 
         assert gone.id in {finding.id for finding in rerun.session.findings}
-        assert stream[0].body["carried_withdrawals"] == [took]
-        report = render_report(rerun.session, events=stream).splitlines()
-        start = report.index("## Withdrawn with a decision") + 2
-        assert report[start : report.index("", start)] == [
+        assert stream[0].body["carried_withdrawals"] == [{**took, "session_id": str(EARLIER_ID)}]
+        assert withdrawn_of(render_report(rerun.session, events=stream).splitlines()) == [
             f"- {gone.id} withdrawn: bought part (your answer to ER-001); "
-            "your Reject (wrong) went with it (earlier check run)",
+            f"your Reject (wrong) went with it (earlier check run, session {EARLIER_ID})",
             f"- {own} withdrawn: FICT a later answer; your Accept went with it",
         ]
     finally:
@@ -2337,7 +2354,10 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
     `report.md` ends the earlier withdrawal's line marked as the earlier check run's, since its id
     is that record's; the earlier record's own report names it as before. *And (point 2):* a
     second Check again, after another restart, names it still, from the first re-run's own
-    `carried_withdrawals`, so a chain of Check agains keeps it."""
+    `carried_withdrawals`, so a chain of Check agains keeps it. *Changed 2026-11-02 on purpose
+    (015 T123; cycle 12's Codex review):* the start's body and the mark name the session that
+    withdrew the pin's finding, the waiting review's, in full as its own `report.md` heads itself,
+    and the second Check again keeps that session, not the first re-run's."""
     review = chat.regraded_review(
         client, run_root / "FICT-recheck-withdrawn", ticked=False, answer="All bought"
     )
@@ -2349,7 +2369,10 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
     ]
     named = [f"- {review.pin} withdrawn: {withdrawal['reason']}; {withdrawal['taken']}"]
     assert chat.withdrawn_part(folder) == named
-    earlier = [f"{named[0]} (earlier check run)"]
+    first = chat.events_of(folder)[0]["body"]["session_id"]
+    assert f"- Session: {first}" in (folder / "report.md").read_text(encoding="utf-8").splitlines()
+    carried = {**withdrawal, "session_id": first}
+    earlier = [f"{named[0]} (earlier check run, session {first})"]
     settings = server_settings(provider_control, models, silent)
     with restarted_app(run_root, settings) as fresh:
         rechecked = recheck(fresh, folder)
@@ -2357,7 +2380,7 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
 
         assert chat.withdrawn_part(folder) == earlier
         events = chat.events_of(folder)
-        assert events[0]["body"].get("carried_withdrawals") == [withdrawal]
+        assert events[0]["body"].get("carried_withdrawals") == [carried]
         contract_validator("chat-events.schema.json").validate(events[0])
         assert not [
             event
@@ -2381,7 +2404,7 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
         assert twice.status_code == 201, twice.text
 
     assert chat.withdrawn_part(folder) == earlier
-    assert chat.events_of(folder)[0]["body"].get("carried_withdrawals") == [withdrawal]
+    assert chat.events_of(folder)[0]["body"].get("carried_withdrawals") == [carried]
 
 
 def test_check_again_names_no_withdrawal_its_earlier_record_never_caught_up_with(
@@ -2612,6 +2635,96 @@ def test_a_second_check_again_still_names_what_the_first_did_not_carry(
     ]
     restored = chat.restored_snapshot_of(run_root, provider_control, models, folder.name)
     assert recheck_reasons(restored) == [row]
+
+
+# --- cycle 12's Codex review (015 T123) -------------------------------------------------------
+
+
+def test_an_earlier_withdrawal_names_its_session_beside_another_finding_with_its_id(
+    tmp_path: Path,
+) -> None:
+    """015 T123 (cycle 12's Codex review), on the runner: finding ids restart in each session. The
+    earlier record lost its F-001 to an answer with the Reject recorded on it and numbered the rest
+    from F-002. The re-run, which raises that finding no more, numbers afresh, so its F-001 is
+    another finding, the earlier F-002's, and the engineer accepts it. `report.md`'s line for the
+    earlier withdrawal names the session that withdrew it in full, as that record's own report
+    heads itself, so it cannot be read as the accepted F-001's, which the report names under the
+    re-run's own session."""
+    folder = package_folder(tmp_path, live_prerun_package())
+    earlier = waited(checks_only(folder, None))
+    set_aside(folder)
+    earlier.findings[:] = [
+        finding.model_copy(update={"id": f"F-{number:03d}"})
+        for number, finding in enumerate(earlier.findings, start=2)
+    ]
+    earlier_stream(folder, earlier, ("finding.withdrawn", rejected_by_an_answer("F-001")))
+    rerun = checks_only(folder, None, earlier=earlier)
+    try:
+        [reused] = [finding for finding in rerun.session.findings if finding.id == "F-001"]
+        assert finding_subject_key(reused) == finding_subject_key(earlier.findings[0])
+        set_disposition(rerun.session, "F-001", "accepted", "FICT as modelled", "FICT engineer")
+        report = render_report(
+            rerun.session, events=replay_events(folder / "events.jsonl")
+        ).splitlines()
+
+        assert f"- Session: {EARLIER_ID}" in render_report(earlier).splitlines()
+        assert withdrawn_of(report) == [
+            "- F-001 withdrawn: bought part (your answer to ER-001); your Reject (wrong) went with "
+            f"it (earlier check run, session {EARLIER_ID})"
+        ]
+        assert rerun.session.session_id != EARLIER_ID
+        assert f"- Session: {rerun.session.session_id}" in report
+        assert chat.reported_disposition(report, "F-001", 2) == [
+            "- Disposition:",
+            "  - decision: accepted",
+        ]
+    finally:
+        rerun.close()
+
+
+def test_a_chain_of_check_agains_names_each_withdrawal_with_the_session_that_withdrew_it(
+    tmp_path: Path,
+) -> None:
+    """015 T123 (cycle 12's Codex review), on the runner: a chain of Check agains, A, then B, then
+    C. A lost its first finding to an answer with the Reject recorded on it; B, A's re-run,
+    carried that withdrawal and lost a finding of its own with an Accept. C's start names both,
+    A's with A's session, as B's start carried it, then B's with B's, and C's `report.md` names
+    each withdrawal with the session that withdrew it, so neither id is read as another record's,
+    nor as C's own."""
+    folder = package_folder(tmp_path, live_prerun_package())
+    first = waited(checks_only(folder, None))
+    set_aside(folder)
+    gone = first.findings.pop(0)
+    took = rejected_by_an_answer(gone.id)
+    earlier_stream(folder, first, ("finding.withdrawn", took))
+    middle = checks_only(folder, None, earlier=first)
+    own = middle.session.findings[-1].id
+    set_disposition(middle.session, own, "accepted", "FICT as modelled", "FICT engineer")
+    middle.context.withdraw_findings([own], "FICT a later answer")
+    second = waited(middle)
+    set_aside(folder, 2)
+    [its_own] = [
+        event.body
+        for event in replay_events(folder / "events.2.jsonl")
+        if event.type == "finding.withdrawn" and "taken" in event.body
+    ]
+    last = checks_only(folder, None, earlier=second)
+    try:
+        stream = list(replay_events(folder / "events.jsonl"))
+
+        assert second.session_id not in {EARLIER_ID, last.session.session_id}
+        assert stream[0].body["carried_withdrawals"] == [
+            {**took, "session_id": str(EARLIER_ID)},
+            {**its_own, "session_id": str(second.session_id)},
+        ]
+        assert withdrawn_of(render_report(last.session, events=stream).splitlines()) == [
+            f"- {gone.id} withdrawn: bought part (your answer to ER-001); "
+            f"your Reject (wrong) went with it (earlier check run, session {EARLIER_ID})",
+            f"- {own} withdrawn: FICT a later answer; "
+            f"your Accept went with it (earlier check run, session {second.session_id})",
+        ]
+    finally:
+        last.close()
 
 
 def _request(request_id: str, question: str, *, answer: str | None = None) -> EvidenceRequest:
