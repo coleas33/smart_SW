@@ -397,20 +397,21 @@ class IllegalTransition(ChatError):
 
 class TriageAlreadyRecorded(ChatError):
     """A second triage on an Accept or Reject that holds one (roadmap hole H-g-012; 185A takes a
-    triage once): the record's `TriageAlreadyRecordedError`. A class of its own because the page
-    shows its class's sentence, and `IllegalTransition`'s reads as a refused decision where this
-    one says the triage recorded stands."""
+    triage once), or on a Defer (cycle 15's Tier 2 review): the record's
+    `TriageAlreadyRecordedError`. A class of its own because the page shows its class's sentence,
+    and `IllegalTransition`'s reads as a refused decision where this one says the triage recorded
+    stands."""
 
     status = 409
     error_class = "TriageAlreadyRecorded"
 
 
 class OutcomeNeeded(ChatError):
-    """The decision recorded without a triage, sent again with none (roadmap hole H-c-010): the
-    record's `OutcomeNeededError`, the repair press a card's no-triage line names, made with no
-    outcome picked. A class of its own because the page shows its class's sentence, which says to
-    pick an outcome first, where `IllegalTransition`'s says to reload the review, and a reload
-    draws the note box from the record, losing a note typed for the retry."""
+    """The decision recorded without a triage, sent again with none (roadmap hole H-c-010), on a
+    flagged finding: the record's `OutcomeNeededError`, the repair press a card's no-triage line
+    names, made with no outcome picked. A class of its own because the page shows its class's
+    sentence, which says to pick an outcome first, where `IllegalTransition`'s says to reload the
+    review, and a reload draws the note box from the record, losing a note typed for the retry."""
 
     status = 409
     error_class = "OutcomeNeeded"
