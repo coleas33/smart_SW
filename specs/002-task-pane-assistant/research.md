@@ -7625,3 +7625,10 @@ restart, or in a Check again's `report.md`, whose carried withdrawals name an ea
     ran.
   - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes; their gates are T386's
     sub-item in [tasks.md](tasks.md), and the whole suites run on the final tree next.
+  - *Done 2026-11-03, cycle 16 stacked on cycle 15:* the gates above ran on cycle 16 before it was
+    stacked on cycle 15 (H-c-010, above). The two met in the records, the specs-README pin and one
+    class summary, and each kept both cycles' text, cycle 15's first; 002 is recounted on the
+    stacked tasks, 378 / 4 / 0. The pane fixtures' three generators wrote every fixture
+    byte-identical, and the goldens did not move. T386's sub-item of the stacking in
+    [tasks.md](tasks.md) names each meeting; the whole suites on the stacked tree run next, and
+    T386's last sub-item records them.
