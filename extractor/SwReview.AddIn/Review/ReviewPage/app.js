@@ -1089,7 +1089,8 @@
    * Both writers go through here - the `disposition` event from the stream and the reply to the
    * engineer's own press - so a decided finding looks the same whichever recorded it, and the
    * "decided" class agrees with the one `render.findingCard` puts on a card it builds fresh. The
-   * triage row shows the recorded triage pressed, in place of any pick (owner decision 185A).
+   * triage row shows the recorded triage pressed, in place of any pick (owner decision 185A), and
+   * the note box the recorded note, in place of what was typed (owner decision 198A).
    *
    * It also keeps what is recorded in the finding's body, the page's one memory of it, which
    * `placeFinding` holds from the finding as sent and `decide` shows again after a refusal
@@ -1112,6 +1113,7 @@
     status.className = render.dispositionClass(text);
     status.textContent = text;
     render.pressTriage(card, disposition ? disposition.triage : null);
+    render.showNote(card, disposition);
     // The head says it has no triage until the record holds one (roadmap hole H-c-008); a card the
     // review no longer holds has no record here to read.
     if (entry) {
@@ -2693,11 +2695,13 @@
       }
     }).catch(function (error) {
       // Refused, so the record is as it was (roadmap hole H-g-012): the card shows it again - its
-      // triage pressed, or none, in place of the pick, and its sentence above the refusal. Which
-      // press is refused is the backend's rule; the page compares nothing.
+      // triage pressed, or none, in place of the pick, its note in the box in place of what was
+      // typed (owner decision 198A), and its sentence above the refusal. Which press is refused is
+      // the backend's rule; the page compares nothing.
       var entry = entryOf(card);
       var recorded = entry ? entry.body.disposition : null;
       render.pressTriage(card, recorded ? recorded.triage : null);
+      render.showNote(card, recorded);
       cardError(card, error, error.errorClass + ': ' + error.message);
       var text = render.dispositionText(recorded, state.labels);
       var status = card.querySelector('.card-status');
